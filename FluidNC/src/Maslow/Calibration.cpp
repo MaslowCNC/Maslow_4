@@ -327,7 +327,14 @@ void Calibration::home() {
                 Maslow.axisBR.stop();
                 complyALL = false;
                 sys.set_state(State::Idle);
-                requestStateChange(UNKNOWN);
+                //If the current state is ExtendedOut, or ReadyToCut then we need to set the state back to extended out
+                if(currentState == EXTENDEDOUT || currentState == READY_TO_CUT) {
+                    requestStateChange(EXTENDEDOUT);
+                }
+                else{
+                    //If we are not in either of those states then we need to set the state back to unknown
+                    requestStateChange(UNKNOWN);
+                }
             }
             break;
         case CALIBRATION_IN_PROGRESS:
