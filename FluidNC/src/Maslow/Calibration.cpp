@@ -208,10 +208,6 @@ bool Calibration::requestStateChange(int newState){
                 extendingALL    = false;
                 complyALL       = true;
                 
-                // Set the target lengths of upper belts to their current lengths to prevent jerking
-                Maslow.axisTL.setTarget(Maslow.axisTL.getPosition());
-                Maslow.axisTR.setTarget(Maslow.axisTR.getPosition());
-                
                 Maslow.axisTL.reset(); //This just resets the thresholds for pull tight
                 Maslow.axisTR.reset();
                 Maslow.axisBL.reset();
