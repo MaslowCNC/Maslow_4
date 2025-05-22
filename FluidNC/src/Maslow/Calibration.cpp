@@ -329,10 +329,14 @@ void Calibration::home() {
                 sys.set_state(State::Idle);
                 //If the current state is ExtendedOut, or ReadyToCut then we need to set the state back to extended out
                 if(currentState == EXTENDEDOUT || currentState == READY_TO_CUT) {
+                    log_info("First one");
+                    log_info("Releasing tension from state " << stateNames[currentState].name << " transitioning to extended out");
                     requestStateChange(EXTENDEDOUT);
                 }
                 else{
                     //If we are not in either of those states then we need to set the state back to unknown
+                    log_info("Second one");
+                    log_info("Releasing tension from state " << stateNames[currentState].name << " transitioning to unknown");
                     requestStateChange(UNKNOWN);
                 }
             }
