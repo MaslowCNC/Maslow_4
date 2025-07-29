@@ -71,6 +71,7 @@ namespace Kinematics {
         float getBrZ() const { return _brZ; }
         float getBeltEndExtension() const { return _beltEndExtension; }
         float getArmLength() const { return _armLength; }
+        float getMaterialThickness() const { return _materialThickness; }
         float getCenterX() const { return _centerX; }
         float getCenterY() const { return _centerY; }
 
@@ -106,6 +107,9 @@ namespace Kinematics {
         // Belt and arm parameters (in mm)
         float _beltEndExtension = 30.0f;   // Belt end extension
         float _armLength = 123.4f;         // Arm length
+        
+        // Material thickness offset (in mm) - accounts for spoil board + wood thickness
+        float _materialThickness = 0.0f;   // Added to all anchor heights uniformly
         
         // Center offset for coordinate system transformation
         float _centerX = 0.0f;  // Will be calculated from frame dimensions

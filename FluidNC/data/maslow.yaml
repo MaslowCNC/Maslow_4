@@ -53,6 +53,7 @@ kinematics:
     brZ: 78.000000
     beltEndExtension: 30.000000
     armLength: 123.400002
+    materialThickness: 0.000000
 
 axes: 
   shared_stepper_disable_pin: NO_PIN
