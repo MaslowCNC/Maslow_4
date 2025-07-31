@@ -94,6 +94,11 @@ namespace Kinematics {
                                    (target[Y_AXIS] - position[Y_AXIS]) * (target[Y_AXIS] - position[Y_AXIS]));
             bool is_z_only_move = (xy_distance < 0.001f); // Consider moves < 0.001mm as Z-only
 
+            // IMPORTANT: The following feed rate scaling addresses the core issue where
+            // belt movements are much longer than cartesian movements, requiring rate scaling.
+            // However, excessive scaling can cause position errors when the hardware cannot
+            // keep up. We apply conservative limits to prevent this issue during file execution.
+
             if (is_z_only_move) {
                 // For Z-only moves: Scale feed rate by Z motor movement ratio
                 // The Z motor moves directly with cartesian Z, so ratio should be 1:1,
@@ -107,7 +112,25 @@ namespace Kinematics {
                 float z_cartesian_distance = fabs(target[Z_AXIS] - position[Z_AXIS]);
                 
                 if (z_cartesian_distance > 0) {
-                    pl_data->feed_rate = pl_data->feed_rate * z_motor_distance / z_cartesian_distance;
+                    float scaling_factor = z_motor_distance / z_cartesian_distance;
+                    float scaled_feed_rate = pl_data->feed_rate * scaling_factor;
+                    
+                    // Z axis has max rate of 1500 mm/min, apply conservative limiting
+                    const float MAX_SAFE_Z_FEED_RATE = 1200.0f; // Conservative limit for Z motor
+                    
+                    if (scaled_feed_rate > MAX_SAFE_Z_FEED_RATE) {
+                        // Only log this occasionally to avoid spam
+                        static int z_log_counter = 0;
+                        if (z_log_counter % 20 == 0) { // Log every 20th occurrence
+                            log_info("Z feedrate limited: " << scaled_feed_rate 
+                                     << " -> " << MAX_SAFE_Z_FEED_RATE 
+                                     << " mm/min (scale: " << scaling_factor << ")");
+                        }
+                        z_log_counter++;
+                        pl_data->feed_rate = MAX_SAFE_Z_FEED_RATE;
+                    } else {
+                        pl_data->feed_rate = scaled_feed_rate;
+                    }
                 }
             } else {
                 // For X/Y moves or combined moves: Scale feed rate by motor/cartesian ratio
@@ -119,7 +142,27 @@ namespace Kinematics {
                 // Calculate distance considering all belt motors for proper feed rate scaling
                 float motor_distance = vector_distance(motors, last_motors, n_axis);
                 
-                pl_data->feed_rate = pl_data->feed_rate * motor_distance / cartesian_distance;
+                float scaling_factor = motor_distance / cartesian_distance;
+                float scaled_feed_rate = pl_data->feed_rate * scaling_factor;
+                
+                // Apply conservative limiting to prevent position errors during file execution
+                // The belt axes have max rates of 2200 mm/min, so we limit the scaled feed rate
+                // to ensure the motion planning system can handle it reliably
+                const float MAX_SAFE_SCALED_FEED_RATE = 1800.0f; // Conservative limit for belt motors
+                
+                if (scaled_feed_rate > MAX_SAFE_SCALED_FEED_RATE) {
+                    // Only log this occasionally to avoid spam, but help users understand rate limiting
+                    static int log_counter = 0;
+                    if (log_counter % 50 == 0) { // Log every 50th occurrence
+                        log_info("Feedrate limited: " << scaled_feed_rate 
+                                 << " -> " << MAX_SAFE_SCALED_FEED_RATE 
+                                 << " mm/min (scale: " << scaling_factor << ")");
+                    }
+                    log_counter++;
+                    pl_data->feed_rate = MAX_SAFE_SCALED_FEED_RATE;
+                } else {
+                    pl_data->feed_rate = scaled_feed_rate;
+                }
             }
             }
         }
