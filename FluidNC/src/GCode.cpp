@@ -1606,11 +1606,44 @@ Error gc_execute_line(char* line) {
                 if (!Kinematics::getMaslowKinematics()) {
                     pl_data->motion.rapidMotion = 1;  // Set rapid motion flag for non-Maslow systems.
                 } else {
-                    // For Maslow systems, limit G0 feed rate to prevent belt slack and positioning errors.
-                    // Cap at 500 mm/min which is safe for coordinated belt movement.
-                    const float MASLOW_MAX_G0_FEED_RATE = 500.0f; // mm/min
-                    if (pl_data->feed_rate > MASLOW_MAX_G0_FEED_RATE) {
-                        pl_data->feed_rate = MASLOW_MAX_G0_FEED_RATE;
+                    // For Maslow systems, compute maximum safe feedrate based on belt speed limits
+                    auto maslowKinematics = Kinematics::getMaslowKinematics();
+                    if (maslowKinematics) {
+                        // Compute belt movements for this XY motion
+                        float target_motors[MAX_N_AXIS], current_motors[MAX_N_AXIS];
+                        maslowKinematics->transform_cartesian_to_motors(target_motors, gc_block.values.xyz);
+                        maslowKinematics->transform_cartesian_to_motors(current_motors, gc_state.position);
+                        
+                        // Calculate XY distance for this move
+                        float xy_distance = sqrt((gc_block.values.xyz[X_AXIS] - gc_state.position[X_AXIS]) * 
+                                                (gc_block.values.xyz[X_AXIS] - gc_state.position[X_AXIS]) + 
+                                                (gc_block.values.xyz[Y_AXIS] - gc_state.position[Y_AXIS]) * 
+                                                (gc_block.values.xyz[Y_AXIS] - gc_state.position[Y_AXIS]));
+                        
+                        if (xy_distance > 0.001f) { // Only limit if there's significant XY movement
+                            float max_safe_feedrate = pl_data->feed_rate; // Start with current feed rate
+                            
+                            // Check each belt axis (A, B, C, D = motors 0-3) for speed limits
+                            for (int belt = 0; belt < 4; belt++) {
+                                if (config->_axes->_axis[belt]) {
+                                    float belt_distance = fabs(target_motors[belt] - current_motors[belt]);
+                                    float belt_max_rate = config->_axes->_axis[belt]->_maxRate; // mm/min
+                                    
+                                    if (belt_distance > 0.001f) {
+                                        // Calculate what XY feedrate would max out this belt
+                                        float safe_xy_feedrate = (belt_max_rate * xy_distance) / belt_distance;
+                                        if (safe_xy_feedrate < max_safe_feedrate) {
+                                            max_safe_feedrate = safe_xy_feedrate;
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            // Apply the computed limit
+                            if (max_safe_feedrate < pl_data->feed_rate) {
+                                pl_data->feed_rate = max_safe_feedrate;
+                            }
+                        }
                     }
                 }
                 mc_linear(gc_block.values.xyz, pl_data, gc_state.position);
