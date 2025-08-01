@@ -83,7 +83,10 @@ namespace Kinematics {
         float motors[n_axis];
         transform_cartesian_to_motors(motors, target);
 
-        if (!pl_data->motion.rapidMotion) {
+        // For Maslow machines, always apply feed rate scaling to maintain belt synchronization
+        // This treats G0 (rapid) and G1 (linear) motions identically to keep belts tight
+        // if (!pl_data->motion.rapidMotion) {  // Original condition - now ignored for Maslow
+        {
             // Calculate vector distance of the motion in cartesian coordinates (X,Y,Z only)
             float cartesian_distance = vector_distance(target, position, 3); // Only X,Y,Z for cartesian
             
