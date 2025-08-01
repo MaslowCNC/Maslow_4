@@ -1605,6 +1605,13 @@ Error gc_execute_line(char* line) {
                 // movement and prevent belt slack. Skip setting rapidMotion flag for Maslow.
                 if (!Kinematics::getMaslowKinematics()) {
                     pl_data->motion.rapidMotion = 1;  // Set rapid motion flag for non-Maslow systems.
+                } else {
+                    // For Maslow systems, limit G0 feed rate to prevent belt slack and positioning errors.
+                    // Cap at 500 mm/min which is safe for coordinated belt movement.
+                    const float MASLOW_MAX_G0_FEED_RATE = 500.0f; // mm/min
+                    if (pl_data->feed_rate > MASLOW_MAX_G0_FEED_RATE) {
+                        pl_data->feed_rate = MASLOW_MAX_G0_FEED_RATE;
+                    }
                 }
                 mc_linear(gc_block.values.xyz, pl_data, gc_state.position);
             } else if ((gc_state.modal.motion == Motion::CwArc) || (gc_state.modal.motion == Motion::CcwArc)) {
