@@ -95,10 +95,8 @@ namespace Kinematics {
             bool is_z_only_move = (xy_distance < 0.001f); // Consider moves < 0.001mm as Z-only
 
             if (is_z_only_move) {
-                // For Z-only moves: Scale feed rate by Z motor movement ratio
-                // The Z motor moves directly with cartesian Z, so ratio should be 1:1,
-                // but we need to account for the fact that FluidNC's motion planning
-                // expects proper feed rate scaling for all motor movements
+                // For Z-only moves: Calculate Z motor vs cartesian distance for debugging
+                // Feedrate scaling has been removed - cartesian movement happens at target feedrate
                 float last_motors[n_axis];
                 transform_cartesian_to_motors(last_motors, position);
                 
@@ -107,31 +105,30 @@ namespace Kinematics {
                 float z_cartesian_distance = fabs(target[Z_AXIS] - position[Z_AXIS]);
                 
                 if (z_cartesian_distance > 0) {
-                    float original_feed_rate = pl_data->feed_rate;
+                    float target_feed_rate = pl_data->feed_rate;
                     float scaling_factor = z_motor_distance / z_cartesian_distance;
-                    pl_data->feed_rate = pl_data->feed_rate * scaling_factor;
-                    log_info("Z-only move: target_feedrate=" << original_feed_rate 
+                    // Feedrate scaling removed - cartesian movement happens at target feedrate
+                    log_info("Z-only move: target_feedrate=" << target_feed_rate 
                              << " scaling_factor=" << scaling_factor 
-                             << " actual_feedrate=" << pl_data->feed_rate
+                             << " actual_feedrate=" << target_feed_rate
                              << " z_motor_dist=" << z_motor_distance
                              << " z_cart_dist=" << z_cartesian_distance);
                 }
             } else {
-                // For X/Y moves or combined moves: Scale feed rate by motor/cartesian ratio
-                // This accounts for the fact that belt movements are longer than cartesian movements
-                // and ensures the actual belt speed matches the programmed feed rate
+                // For X/Y moves or combined moves: Calculate motor vs cartesian distance for debugging
+                // Feedrate scaling has been removed - cartesian movement happens at target feedrate
                 float last_motors[n_axis];
                 transform_cartesian_to_motors(last_motors, position);
                 
-                // Calculate distance considering all belt motors for proper feed rate scaling
+                // Calculate distance considering all belt motors for debugging purposes
                 float motor_distance = vector_distance(motors, last_motors, n_axis);
                 
-                float original_feed_rate = pl_data->feed_rate;
+                float target_feed_rate = pl_data->feed_rate;
                 float scaling_factor = motor_distance / cartesian_distance;
-                pl_data->feed_rate = pl_data->feed_rate * scaling_factor;
-                log_info("XY move: target_feedrate=" << original_feed_rate 
+                // Feedrate scaling removed - cartesian movement happens at target feedrate
+                log_info("XY move: target_feedrate=" << target_feed_rate 
                          << " scaling_factor=" << scaling_factor 
-                         << " actual_feedrate=" << pl_data->feed_rate
+                         << " actual_feedrate=" << target_feed_rate
                          << " motor_dist=" << motor_distance
                          << " cart_dist=" << cartesian_distance);
             }
