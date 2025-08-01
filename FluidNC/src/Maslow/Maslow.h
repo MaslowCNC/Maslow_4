@@ -120,6 +120,7 @@ public:
     double getTargetY();
     double getTargetZ();
     void   recomputePID();
+    void   syncThicknessSettings();
 
     //Save and load z-axis position, set z-stop
     void saveZPos();
@@ -188,6 +189,10 @@ public:
     double y;
     float scaleX = 1.0;
     float scaleY = 1.0;
+    
+    // Material thickness parameters for height offset calculations
+    float spoilboardThickness = 0.0f;
+    float workThickness = 0.0f;
 
     bool   test = false;
 

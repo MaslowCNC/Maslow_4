@@ -88,4 +88,21 @@ Test(MaslowKinematicsMaterialThickness, CalibrationTest) {
     // Test that the getter functions work correctly (defaults should be 0)
     Assert(kinematics.getSpoilboardThickness() == 0.0f, "Default spoilboard thickness should be 0");
     Assert(kinematics.getWorkThickness() == 0.0f, "Default work thickness should be 0");
+    
+    // Test setter functions
+    float testSpoilboardThickness = 6.35f;  // 1/4" in mm
+    float testWorkThickness = 19.05f;       // 3/4" in mm
+    
+    kinematics.setSpoilboardThickness(testSpoilboardThickness);
+    kinematics.setWorkThickness(testWorkThickness);
+    
+    // Verify that the values were set correctly
+    Assert(kinematics.getSpoilboardThickness() == testSpoilboardThickness, "Spoilboard thickness should be set correctly");
+    Assert(kinematics.getWorkThickness() == testWorkThickness, "Work thickness should be set correctly");
+    
+    // Test that the thickness affects belt length calculations
+    float lengthWithMaterial = kinematics.computeTL(testX, testY, testZ);
+    
+    // The belt should be longer when material thickness is added (since the Z offset increases the distance)
+    Assert(lengthWithMaterial > lengthWithoutMaterial, "Belt length should increase with added material thickness");
 }

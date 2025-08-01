@@ -11,6 +11,8 @@ Maslow_Acceptable_Calibration_Threshold: 0.450000
 Maslow_Extend_Dist: 1700.000000
 Maslow_Scale_X: 1.000000
 Maslow_Scale_Y: 1.000000
+Maslow_spoilboardThickness: 0.000000
+Maslow_workThickness: 0.000000
 stepping: 
   engine: Timed
   idle_ms: 240

@@ -361,6 +361,15 @@ void Maslow_::recomputePID() {
     }
 }
 
+void Maslow_::syncThicknessSettings() {
+    using namespace Kinematics;
+    MaslowKinematics* kinematics = getMaslowKinematics();
+    if (kinematics) {
+        kinematics->setSpoilboardThickness(spoilboardThickness);
+        kinematics->setWorkThickness(workThickness);
+    }
+}
+
 
 //------------
 // Z-Axis Functions

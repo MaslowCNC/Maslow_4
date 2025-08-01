@@ -86,6 +86,8 @@ namespace Kinematics {
                                    float trX, float trY, float trZ,
                                    float blX, float blY, float blZ,
                                    float brX, float brY, float brZ);
+        void setSpoilboardThickness(float thickness);
+        void setWorkThickness(float thickness);
 
     private:
         // Anchor point coordinates (in mm)

@@ -393,6 +393,16 @@ namespace Kinematics {
         log_info("Anchor coordinates updated manually");
     }
 
+    void MaslowKinematics::setSpoilboardThickness(float thickness) {
+        _spoilboardThickness = thickness;
+        log_info("Spoilboard thickness updated to: " << thickness << " mm");
+    }
+
+    void MaslowKinematics::setWorkThickness(float thickness) {
+        _workThickness = thickness;
+        log_info("Work thickness updated to: " << thickness << " mm");
+    }
+
     // Destructor - clear global pointer
     MaslowKinematics::~MaslowKinematics() {
         if (g_maslowKinematics == this) {
