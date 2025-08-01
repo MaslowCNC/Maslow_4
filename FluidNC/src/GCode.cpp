@@ -16,6 +16,7 @@
 #include "Platform.h"             // WEAK_LINK
 
 #include "Machine/MachineConfig.h"
+#include "Kinematics/MaslowKinematics.h"
 
 #include <string.h>  // memset
 #include <math.h>    // sqrt etc.
@@ -1600,7 +1601,11 @@ Error gc_execute_line(char* line) {
             if (gc_state.modal.motion == Motion::Linear) {
                 mc_linear(gc_block.values.xyz, pl_data, gc_state.position);
             } else if (gc_state.modal.motion == Motion::Seek) {
-                pl_data->motion.rapidMotion = 1;  // Set rapid motion flag.
+                // For Maslow CNC, G0 commands should be handled like G1 to maintain coordinated
+                // movement and prevent belt slack. Skip setting rapidMotion flag for Maslow.
+                if (!Kinematics::getMaslowKinematics()) {
+                    pl_data->motion.rapidMotion = 1;  // Set rapid motion flag for non-Maslow systems.
+                }
                 mc_linear(gc_block.values.xyz, pl_data, gc_state.position);
             } else if ((gc_state.modal.motion == Motion::CwArc) || (gc_state.modal.motion == Motion::CcwArc)) {
                 mc_arc(gc_block.values.xyz,
