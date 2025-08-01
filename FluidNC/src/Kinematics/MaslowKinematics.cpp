@@ -83,58 +83,6 @@ namespace Kinematics {
         float motors[n_axis];
         transform_cartesian_to_motors(motors, target);
 
-        if (!pl_data->motion.rapidMotion) {
-            // Calculate vector distance of the motion in cartesian coordinates (X,Y,Z only)
-            float cartesian_distance = vector_distance(target, position, 3); // Only X,Y,Z for cartesian
-            
-            if (cartesian_distance > 0) {
-
-            // Check if this is a Z-only move by examining X,Y changes
-            float xy_distance = sqrt((target[X_AXIS] - position[X_AXIS]) * (target[X_AXIS] - position[X_AXIS]) + 
-                                   (target[Y_AXIS] - position[Y_AXIS]) * (target[Y_AXIS] - position[Y_AXIS]));
-            bool is_z_only_move = (xy_distance < 0.001f); // Consider moves < 0.001mm as Z-only
-
-            if (is_z_only_move) {
-                // For Z-only moves: Calculate Z motor vs cartesian distance for debugging
-                // Feedrate scaling has been removed - cartesian movement happens at target feedrate
-                float last_motors[n_axis];
-                transform_cartesian_to_motors(last_motors, position);
-                
-                // For Z-only moves, only consider the Z motor distance
-                float z_motor_distance = fabs(motors[4] - last_motors[4]); // Z is at index 4
-                float z_cartesian_distance = fabs(target[Z_AXIS] - position[Z_AXIS]);
-                
-                if (z_cartesian_distance > 0) {
-                    float target_feed_rate = pl_data->feed_rate;
-                    float scaling_factor = z_motor_distance / z_cartesian_distance;
-                    // Feedrate scaling removed - cartesian movement happens at target feedrate
-                    log_info("Z-only move: target_feedrate=" << target_feed_rate 
-                             << " scaling_factor=" << scaling_factor 
-                             << " actual_feedrate=" << target_feed_rate
-                             << " z_motor_dist=" << z_motor_distance
-                             << " z_cart_dist=" << z_cartesian_distance);
-                }
-            } else {
-                // For X/Y moves or combined moves: Calculate motor vs cartesian distance for debugging
-                // Feedrate scaling has been removed - cartesian movement happens at target feedrate
-                float last_motors[n_axis];
-                transform_cartesian_to_motors(last_motors, position);
-                
-                // Calculate distance considering all belt motors for debugging purposes
-                float motor_distance = vector_distance(motors, last_motors, n_axis);
-                
-                float target_feed_rate = pl_data->feed_rate;
-                float scaling_factor = motor_distance / cartesian_distance;
-                // Feedrate scaling removed - cartesian movement happens at target feedrate
-                log_info("XY move: target_feedrate=" << target_feed_rate 
-                         << " scaling_factor=" << scaling_factor 
-                         << " actual_feedrate=" << target_feed_rate
-                         << " motor_dist=" << motor_distance
-                         << " cart_dist=" << cartesian_distance);
-            }
-            }
-        }
-
         return mc_move_motors(motors, pl_data);
     }
 
