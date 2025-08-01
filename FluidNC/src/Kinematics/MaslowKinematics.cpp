@@ -33,7 +33,8 @@ kinematics:
     brZ: 78.0
     beltEndExtension: 30.0
     armLength: 123.4
-    materialThickness: 0.0
+    spoilboardThickness: 0.0
+    workThickness: 0.0
 
 This implements the cable-driven kinematics for the Maslow CNC system.
 The system has 5 axes:
@@ -229,7 +230,7 @@ namespace Kinematics {
         y = y + _centerY;
         float a = _tlX - x; // X dist from corner to router center
         float b = _tlY - y; // Y dist from corner to router center
-        float c = 0.0f - (z + _tlZ + _materialThickness); // Z dist from corner to router center (includes material thickness)
+        float c = 0.0f - (z + _tlZ + _spoilboardThickness + _workThickness); // Z dist from corner to router center (includes material thickness)
 
         float XYlength = sqrt(a * a + b * b); // Get the distance in the XY plane from the corner to the router center
         float XYBeltLength = XYlength - (_beltEndExtension + _armLength); // Subtract the belt end extension and arm length to get the belt length
@@ -250,7 +251,7 @@ namespace Kinematics {
         y = y + _centerY;
         float a = _trX - x;
         float b = _trY - y;
-        float c = 0.0f - (z + _trZ + _materialThickness);
+        float c = 0.0f - (z + _trZ + _spoilboardThickness + _workThickness);
         
         float XYlength = sqrt(a * a + b * b); // Get the distance in the XY plane from the corner to the router center
         float XYBeltLength = XYlength - (_beltEndExtension + _armLength); // Subtract the belt end extension and arm length to get the belt length
@@ -265,7 +266,7 @@ namespace Kinematics {
         y = y + _centerY;
         float a = _blX - x; // X dist from corner to router center
         float b = _blY - y; // Y dist from corner to router center
-        float c = 0.0f - (z + _blZ + _materialThickness); // Z dist from corner to router center (includes material thickness)
+        float c = 0.0f - (z + _blZ + _spoilboardThickness + _workThickness); // Z dist from corner to router center (includes material thickness)
 
         float XYlength = sqrt(a * a + b * b); // Get the distance in the XY plane from the corner to the router center
         float XYBeltLength = XYlength - (_beltEndExtension + _armLength); // Subtract the belt end extension and arm length to get the belt length
@@ -280,7 +281,7 @@ namespace Kinematics {
         y = y + _centerY;
         float a = _brX - x;
         float b = _brY - y;
-        float c = 0.0f - (z + _brZ + _materialThickness);
+        float c = 0.0f - (z + _brZ + _spoilboardThickness + _workThickness);
 
         float XYlength = sqrt(a * a + b * b); // Get the distance in the XY plane from the corner to the router center
         float XYBeltLength = XYlength - (_beltEndExtension + _armLength); // Subtract the belt end extension and arm length to get the belt length
@@ -352,7 +353,8 @@ namespace Kinematics {
         handler.item("brZ", _brZ);
         handler.item("beltEndExtension", _beltEndExtension);
         handler.item("armLength", _armLength);
-        handler.item("materialThickness", _materialThickness);
+        handler.item("spoilboardThickness", _spoilboardThickness);
+        handler.item("workThickness", _workThickness);
     }
 
     // Setter methods for calibration system to update frame parameters

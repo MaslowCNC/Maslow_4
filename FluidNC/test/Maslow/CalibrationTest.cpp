@@ -54,7 +54,7 @@ Test(MaslowKinematicsUpdateAnchors, CalibrationTest) {
     Assert(kinematics.getBrZ() == brZ, "Bottom right Z not set correctly");
 }
 
-// Test material thickness functionality
+// Test spoilboard and work thickness functionality
 Test(MaslowKinematicsMaterialThickness, CalibrationTest) {
     using namespace Kinematics;
     
@@ -63,15 +63,9 @@ Test(MaslowKinematicsMaterialThickness, CalibrationTest) {
     
     // Set known anchor coordinates and test parameters
     float testX = 100.0f, testY = 100.0f, testZ = 10.0f;
-    float materialThickness = 5.0f;
     
-    // Calculate belt length without material thickness (default is 0)
+    // Calculate belt length without any material thickness (defaults are 0)
     float lengthWithoutMaterial = kinematics.computeTL(testX, testY, testZ);
-    
-    // Now set material thickness through configuration
-    // Since we can't easily test config parsing in unit tests, we'll verify
-    // the behavior by checking that material thickness affects belt calculations
-    // The specific implementation detail is that material thickness gets added to anchor Z
     
     // Test that the functions are callable and return reasonable values
     float tlLength = kinematics.computeTL(testX, testY, testZ);
@@ -90,4 +84,8 @@ Test(MaslowKinematicsMaterialThickness, CalibrationTest) {
     Assert(trLength < 10000, "TR belt length should be reasonable");
     Assert(blLength < 10000, "BL belt length should be reasonable");
     Assert(brLength < 10000, "BR belt length should be reasonable");
+    
+    // Test that the getter functions work correctly (defaults should be 0)
+    Assert(kinematics.getSpoilboardThickness() == 0.0f, "Default spoilboard thickness should be 0");
+    Assert(kinematics.getWorkThickness() == 0.0f, "Default work thickness should be 0");
 }
