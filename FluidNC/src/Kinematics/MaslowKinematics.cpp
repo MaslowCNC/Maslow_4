@@ -99,6 +99,7 @@ namespace Kinematics {
         // Apply to both feed moves and rapid moves to ensure consistent belt tension
         if (!_isSegmenting && !is_z_only_move && cartesian_distance > _maxSegmentLength) {
             log_info("MaslowKinematics: Segmenting long move of " << cartesian_distance << "mm into smaller segments");
+            log_info("MaslowKinematics: Move from (" << position[X_AXIS] << "," << position[Y_AXIS] << "," << position[Z_AXIS] << ") to (" << target[X_AXIS] << "," << target[Y_AXIS] << "," << target[Z_AXIS] << ")");
             
             // For very long moves, use smaller segments to minimize belt slack
             // Adaptive segmentation: longer moves need smaller segments due to increased kinematic non-linearity
@@ -150,6 +151,8 @@ namespace Kinematics {
                         intermediate_target[axis] = position[axis] + (increment_per_segment[axis] * i);
                     }
                     
+                    log_info("MaslowKinematics: Submitting segment " << i << "/" << segments << " to (" << intermediate_target[X_AXIS] << "," << intermediate_target[Y_AXIS] << "," << intermediate_target[Z_AXIS] << ")");
+                    
                     // Create a copy of plan data for this segment
                     plan_line_data_t segment_pl_data = *pl_data;
                     segment_pl_data.feed_rate = original_feedrate; // Reset to original before scaling
@@ -158,6 +161,7 @@ namespace Kinematics {
                     // This is similar to how arc segmentation works - use mc_linear() 
                     // which will call cartesian_to_motors() for proper kinematics transformation
                     if (!mc_linear(intermediate_target, &segment_pl_data, segment_position)) {
+                        log_error("MaslowKinematics: Failed to submit segment " << i);
                         return false; // If any segment fails, fail the whole move
                     }
                     
@@ -178,12 +182,18 @@ namespace Kinematics {
                 
                 // Clear the segmentation flag
                 _isSegmenting = false;
+                
+                log_info("MaslowKinematics: Completed submitting " << (segments-1) << " intermediate segments, preparing final segment");
             }
         }
         
         // Handle the final segment (or the entire move if no segmentation was needed)
+        log_info("MaslowKinematics: Processing " << (_isSegmenting ? "intermediate segment" : "final segment/complete move") << " to (" << target[X_AXIS] << "," << target[Y_AXIS] << "," << target[Z_AXIS] << ")");
+        
         float motors[n_axis];
         transform_cartesian_to_motors(motors, target);
+        
+        log_info("MaslowKinematics: Computed belt lengths - TL:" << motors[0] << " TR:" << motors[1] << " BL:" << motors[2] << " BR:" << motors[3] << " Z:" << motors[4]);
 
         if (!pl_data->motion.rapidMotion && cartesian_distance > 0) {
             if (is_z_only_move) {
@@ -218,6 +228,7 @@ namespace Kinematics {
             }
         }
 
+        log_info("MaslowKinematics: Submitting move to motors via mc_move_motors()");
         return mc_move_motors(motors, pl_data);
     }
 
@@ -252,11 +263,8 @@ namespace Kinematics {
             cartesian[X_AXIS] = x;
             cartesian[Y_AXIS] = y;
             
-            static int debug_count = 0;
-            if (debug_count < 5) {
-                log_info("motors_to_cartesian: TL=" << tlBeltLength << " TR=" << trBeltLength << " -> X=" << x << " Y=" << y);
-                debug_count++;
-            }
+            // Add debug logging for motors_to_cartesian (removed count limit for debugging)
+            log_info("motors_to_cartesian: TL=" << tlBeltLength << " TR=" << trBeltLength << " -> X=" << x << " Y=" << y);
         } else {
             // If we can't solve the kinematics, fall back to (0,0)
             // This can happen if belt lengths are inconsistent
@@ -287,6 +295,8 @@ namespace Kinematics {
         float y = cartesian[Y_AXIS];  // Y_AXIS = 1
         float z = cartesian[Z_AXIS];  // Z_AXIS = 2
 
+        log_info("MaslowKinematics: transform_cartesian_to_motors called for position (" << x << "," << y << "," << z << ")");
+
         // Check if belts are ready to cut - if not, don't compute belt movements
         // This allows the Z-axis to move independently when belts are not calibrated
         if (Maslow.calibration.currentState == READY_TO_CUT) {
@@ -295,6 +305,8 @@ namespace Kinematics {
             motors[1] = computeTR(x, y, z);  // Top Right -> B axis
             motors[2] = computeBL(x, y, z);  // Bottom Left -> C axis
             motors[3] = computeBR(x, y, z);  // Bottom Right -> D axis
+            
+            log_info("MaslowKinematics: Computed NEW belt lengths - TL:" << motors[0] << " TR:" << motors[1] << " BL:" << motors[2] << " BR:" << motors[3]);
         } else {
             // When belts are not ready, keep them at their current positions
             // This prevents the motion planner from synchronizing Z-axis with large belt movements
@@ -302,6 +314,8 @@ namespace Kinematics {
             motors[1] = steps_to_mpos(get_axis_motor_steps(1), 1);  // Keep TR at current position  
             motors[2] = steps_to_mpos(get_axis_motor_steps(2), 2);  // Keep BL at current position
             motors[3] = steps_to_mpos(get_axis_motor_steps(3), 3);  // Keep BR at current position
+            
+            log_info("MaslowKinematics: Belts not ready to cut, keeping CURRENT positions - TL:" << motors[0] << " TR:" << motors[1] << " BL:" << motors[2] << " BR:" << motors[3]);
         }
         
         motors[4] = z;                   // Z position -> Z axis (pass through)
@@ -324,15 +338,12 @@ namespace Kinematics {
         float b = _tlY - y; // Y dist from corner to router center
         float c = 0.0f - (z + _tlZ); // Z dist from corner to router center
 
-        float XYlength = sqrt(a * a + b * b); // Get the distance in the XY plane from the corner to the router center
+        float XYlength = sqrt(a * a + b * b); // Get the distance in the XY plane from the corner to router center
         float XYBeltLength = XYlength - (_beltEndExtension + _armLength); // Subtract the belt end extension and arm length to get the belt length
         float length = sqrt(XYBeltLength * XYBeltLength + c * c); // Get the angled belt length
 
-        static int tl_debug_count = 0;
-        if (tl_debug_count < 5) {
-            log_info("computeTL: input(" << orig_x << "," << orig_y << "," << z << ") -> frame(" << x << "," << y << ") -> length=" << length);
-            tl_debug_count++;
-        }
+        // Add debug logging for TL belt computation (removed count limit for debugging)
+        log_info("computeTL: input(" << orig_x << "," << orig_y << "," << z << ") -> frame(" << x << "," << y << ") -> length=" << length);
 
         return length;
     }
