@@ -280,9 +280,9 @@ Error gc_execute_line(char* line) {
                         break;
 
                     // Modal Group G1 - motion commands
-                    case 0:  // G0 - linear rapid traverse
+                    case 0:  // G0 - linear move (treated identically to G1)
                         axis_command          = AxisCommand::MotionMode;
-                        gc_block.modal.motion = Motion::Seek;
+                        gc_block.modal.motion = Motion::Linear;
                         mg_word_bit           = ModalGroup::MG1;
                         break;
                     case 1:  // G1 - linear feedrate move
@@ -801,7 +801,7 @@ Error gc_execute_line(char* line) {
         if (gc_block.modal.feed_rate == FeedRate::InverseTime) {  // = G93
             // NOTE: G38 can also operate in inverse time, but is undefined as an error. Missing F word check added here.
             if (axis_command == AxisCommand::MotionMode) {
-                if ((gc_block.modal.motion != Motion::None) || (gc_block.modal.motion != Motion::Seek)) {
+                if ((gc_block.modal.motion != Motion::None) && (gc_block.modal.motion != Motion::Linear)) {
                     if (bitnum_is_false(value_words, GCodeWord::F)) {
                         FAIL(Error::GcodeUndefinedFeedRate);  // [F word missing]
                     }
@@ -1080,7 +1080,7 @@ Error gc_execute_line(char* line) {
                 case NonModal::AbsoluteOverride:
                     // [G53 Errors]: G0 and G1 are not active. Cutter compensation is enabled.
                     // NOTE: All explicit axis word commands are in this modal group. So no implicit check necessary.
-                    if (!(probeExplicit || gc_block.modal.motion == Motion::Seek || gc_block.modal.motion == Motion::Linear)) {
+                    if (!(probeExplicit || gc_block.modal.motion == Motion::Linear)) {
                         FAIL(Error::GcodeG53InvalidMotionMode);  // [G53 G0/1 not active]
                     }
                     break;
@@ -1098,31 +1098,20 @@ Error gc_execute_line(char* line) {
         // Check remaining motion modes, if axis word are implicit (exist and not used by G10/28/30/92), or
         // was explicitly commanded in the g-code block.
     } else if (axis_command == AxisCommand::MotionMode) {
-        if (gc_block.modal.motion == Motion::Seek) {
-            // [G0 Errors]: Axis letter not configured or without real value (done.)
-            // Axis words are optional. If missing, set axis command flag to ignore execution.
-            if (!axis_words) {
-                axis_command = AxisCommand::None;
-            }
-            // All remaining motion modes (all but G0 and G80), require a valid feed rate value. In units per mm mode,
-            // the value must be positive. In inverse time mode, a positive value must be passed with each block.
-        } else {
-            // Check if feed rate is defined for the motion modes that require it.
-            if (gc_block.values.f == 0.0) {
-                FAIL(Error::GcodeUndefinedFeedRate);  // [Feed rate undefined]
-            }
-            switch (gc_block.modal.motion) {
-                case Motion::None:
-                    break;  // Feed rate is unnecessary
-                case Motion::Seek:
-                    break;  // Feed rate is unnecessary
-                case Motion::Linear:
-                    // [G1 Errors]: Feed rate undefined. Axis letter not configured or without real value.
-                    // Axis words are optional. If missing, set axis command flag to ignore execution.
-                    if (!axis_words) {
-                        axis_command = AxisCommand::None;
-                    }
-                    break;
+        // Check if feed rate is defined for the motion modes that require it.
+        if (gc_block.values.f == 0.0) {
+            FAIL(Error::GcodeUndefinedFeedRate);  // [Feed rate undefined]
+        }
+        switch (gc_block.modal.motion) {
+            case Motion::None:
+                break;  // Feed rate is unnecessary
+            case Motion::Linear:
+                // [G0/G1 Errors]: Feed rate undefined. Axis letter not configured or without real value.
+                // Axis words are optional. If missing, set axis command flag to ignore execution.
+                if (!axis_words) {
+                    axis_command = AxisCommand::None;
+                }
+                break;
                 case Motion::CwArc:
                     clockwiseArc = true;  // No break intentional.
                 case Motion::CcwArc:
@@ -1598,9 +1587,6 @@ Error gc_execute_line(char* line) {
         if (axis_command == AxisCommand::MotionMode) {
             GCUpdatePos gc_update_pos = GCUpdatePos::Target;
             if (gc_state.modal.motion == Motion::Linear) {
-                mc_linear(gc_block.values.xyz, pl_data, gc_state.position);
-            } else if (gc_state.modal.motion == Motion::Seek) {
-                pl_data->motion.rapidMotion = 1;  // Set rapid motion flag.
                 mc_linear(gc_block.values.xyz, pl_data, gc_state.position);
             } else if ((gc_state.modal.motion == Motion::CwArc) || (gc_state.modal.motion == Motion::CcwArc)) {
                 mc_arc(gc_block.values.xyz,

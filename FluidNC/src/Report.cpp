@@ -246,11 +246,8 @@ void report_gcode_modes(Channel& channel) {
         case Motion::None:
             msg << "G80";
             break;
-        case Motion::Seek:
-            msg << "G0";
-            break;
         case Motion::Linear:
-            msg << "G1";
+            msg << "G1";  // Both G0 and G1 now use Motion::Linear
             break;
         case Motion::CwArc:
             msg << "G2";
