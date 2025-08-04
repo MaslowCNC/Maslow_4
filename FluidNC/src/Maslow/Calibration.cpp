@@ -97,7 +97,7 @@ bool Calibration::requestStateChange(int newState){
                 extendedBL = false;
                 extendedBR = false;
 
-                updateCenterXY(); //Why is this needed here?
+                // updateCenterXY(); //Removed: center should not change during belt operations
                 success =  true;
                 break;
             }
@@ -160,8 +160,8 @@ bool Calibration::requestStateChange(int newState){
                 Maslow.targetZ = 0;
                 Maslow.setZStop();
 
-                //Recalculate the center position because the machine dimensions may have been updated
-                updateCenterXY();
+                //Recalculate the center position only if the machine dimensions have actually been updated
+                //updateCenterXY(); //Removed: center should only change when frame dimensions are updated, not during regular calibration
 
 
                 //At this point it's likely that we have just sent the machine new cordinates for the anchor points so we need to figure out our new XY
@@ -1422,17 +1422,19 @@ float Calibration::measurementFromXYPlane(float xyPlaneDistance, float zHeight){
     return sqrt(lengthInXY * lengthInXY + zHeight * zHeight); //Calculate the angled belt length
 }
 
-/* Calculates and updates the center (X, Y) position based on the coordinates of the four corners
-* (top-left, top-right, bottom-left, bottom-right) of a rectangular area. The center is determined
-* by finding the intersection of the diagonals of the rectangle.
+/* Logs the current center (X, Y) position from MaslowKinematics. 
+* The center coordinates are calculated based only on the physical frame geometry 
+* and should not change due to work coordinate offset changes (like G92 commands).
+* The center should only change when physical machine dimensions are updated.
 */
 void Calibration::updateCenterXY() {
-    // The MaslowKinematics system handles center calculation automatically
-    // We no longer maintain separate center coordinates in the Maslow class
+    // The MaslowKinematics system calculates center based on physical frame only
+    // This function only logs the current values - it doesn't recalculate anything
     auto kinematics = getKinematics();
     if (kinematics) {
-        // The center is already calculated in MaslowKinematics and accessible via getters
-        log_info("Center coordinates updated in MaslowKinematics: X=" << kinematics->getCenterX() << " Y=" << kinematics->getCenterY());
+        // The center is calculated from physical anchor points and should remain constant
+        // unless the physical machine frame dimensions change
+        log_info("Machine frame center (fixed): X=" << kinematics->getCenterX() << " Y=" << kinematics->getCenterY());
     }
 }
 

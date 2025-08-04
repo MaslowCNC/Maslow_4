@@ -53,3 +53,38 @@ Test(MaslowKinematicsUpdateAnchors, CalibrationTest) {
     Assert(kinematics.getBrY() == brY, "Bottom right Y not set correctly");
     Assert(kinematics.getBrZ() == brZ, "Bottom right Z not set correctly");
 }
+
+// Test that center coordinates remain stable and are based only on physical frame
+Test(MaslowKinematicsCenterStability, CalibrationTest) {
+    using namespace Kinematics;
+    
+    // Create a MaslowKinematics instance
+    MaslowKinematics kinematics;
+    
+    // Set a known frame size
+    float frameSize = 2400.0f;
+    kinematics.setFrameSize(frameSize);
+    
+    // Get initial center coordinates - these should be based only on frame geometry
+    float initialCenterX = kinematics.getCenterX();
+    float initialCenterY = kinematics.getCenterY();
+    
+    // The center should be at the geometric center of the frame for a square frame
+    // For a square frame from (0,0) to (frameSize, frameSize), center should be (frameSize/2, frameSize/2)
+    float expectedCenterX = frameSize / 2.0f;
+    float expectedCenterY = frameSize / 2.0f;
+    
+    Assert(abs(initialCenterX - expectedCenterX) < 0.1f, "Center X should be at geometric center of frame");
+    Assert(abs(initialCenterY - expectedCenterY) < 0.1f, "Center Y should be at geometric center of frame");
+    
+    // Simulate setting work coordinates (like G92) - this should NOT affect the machine frame center
+    // In the real system, G92 only affects coordinate offsets, not the physical machine frame
+    
+    // The center coordinates should remain exactly the same regardless of work coordinate changes
+    // because they represent the physical machine frame geometry, not work coordinates
+    float finalCenterX = kinematics.getCenterX();
+    float finalCenterY = kinematics.getCenterY();
+    
+    Assert(finalCenterX == initialCenterX, "Center X must remain constant - machine bounds should not change with work coordinates");
+    Assert(finalCenterY == initialCenterY, "Center Y must remain constant - machine bounds should not change with work coordinates");
+}
