@@ -148,6 +148,10 @@ bool Calibration::requestStateChange(int newState){
             if(currentState == EXTENDEDOUT || currentState == READY_TO_CUT || currentState == CALIBRATION_COMPUTING){
                 currentState = CALIBRATION_IN_PROGRESS;
                 sys.set_state(State::Homing);
+                
+                // Log the calibration orientation mode for debugging
+                log_info("Calibration starting in " << (orientation == VERTICAL ? "VERTICAL" : "HORIZONTAL") << " orientation mode");
+                
                 //If we are at the first point we need to generate the grid before we can start
                 if (waypoint == 0) {
                     if(!generate_calibration_grid()){ //Fail out if the grid cannot be generated

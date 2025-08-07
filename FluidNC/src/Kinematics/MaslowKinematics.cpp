@@ -12,6 +12,7 @@
 #include "../NutsBolts.h"
 #include "../MotionControl.h"
 #include <cmath>
+#include <algorithm>
 #include "../Maslow/Maslow.h"
 
 /*
@@ -35,12 +36,16 @@ kinematics:
     armLength: 123.4
     spoilboardThickness: 0.0
     workThickness: 0.0
+    maxSegmentLength: 5.0
 
 This implements the cable-driven kinematics for the Maslow CNC system.
 The system has 5 axes:
 - A, B, C, D (belt motors: TL, TR, BL, BR mapped to motors 0-3)
 - Z (cartesian Z coordinate mapped to motor 4)
 
+The maxSegmentLength parameter controls belt length synchronization during long moves.
+Moves longer than this distance (in mm) will be automatically segmented to ensure
+correct belt lengths are computed at intermediate points, preventing belt slack.
 */
 
 namespace Kinematics {
@@ -49,7 +54,6 @@ namespace Kinematics {
     static MaslowKinematics* g_maslowKinematics = nullptr;
     
     void MaslowKinematics::init() {
-        log_info("Kinematic system: " << name());
         calculateCenter();
         g_maslowKinematics = this;  // Set global pointer for access
         init_position();
@@ -70,7 +74,7 @@ namespace Kinematics {
         _centerX = (_brY - (B * _brX) + (A * _trX) - _trY) / (A - B);
         _centerY = A * (_centerX - _trX) + _trY;
         
-        log_info("Maslow center calculated: X=" << _centerX << " Y=" << _centerY);
+        //log_info("Maslow center calculated: X=" << _centerX << " Y=" << _centerY);
     }
 
     bool MaslowKinematics::cartesian_to_motors(float* target, plan_line_data_t* pl_data, float* position) {
@@ -82,49 +86,106 @@ namespace Kinematics {
             return false;
         }
 
+        // Calculate cartesian distance of the move (X,Y,Z only)
+        float cartesian_distance = vector_distance(target, position, 3); // Only X,Y,Z for cartesian
+        
+        // Check if this is a Z-only move by examining X,Y changes
+        float xy_distance = sqrt((target[X_AXIS] - position[X_AXIS]) * (target[X_AXIS] - position[X_AXIS]) + 
+                               (target[Y_AXIS] - position[Y_AXIS]) * (target[Y_AXIS] - position[Y_AXIS]));
+        bool is_z_only_move = (xy_distance < 0.001f); // Consider moves < 0.001mm as Z-only
+        
+        // For long XY moves, segment the path to maintain belt length synchronization
+        // This prevents linear interpolation in motor space from causing belt slack
+        // Only segment if we're not already in a segmentation to prevent recursion
+        // Apply to both feed moves and rapid moves to ensure consistent belt tension
+        if (!_isSegmenting && !is_z_only_move && cartesian_distance > _maxSegmentLength) {
+            
+            // For very long moves, use smaller segments to minimize belt slack
+            // Adaptive segmentation: longer moves need smaller segments due to increased kinematic non-linearity
+            float effectiveSegmentLength = _maxSegmentLength;
+            if (cartesian_distance > 100.0f) {
+                // For moves longer than 100mm, progressively smaller segments
+                // Formula: smaller segments for longer moves to minimize non-linear interpolation errors
+                float scaleFactor = 100.0f / cartesian_distance; // Gets smaller as distance increases
+                effectiveSegmentLength = _maxSegmentLength * scaleFactor;
+                effectiveSegmentLength = std::max(effectiveSegmentLength, 1.0f); // Minimum 1mm segments
+            }
+            
+            // Calculate number of segments needed with adaptive length
+            uint16_t segments = uint16_t(ceilf(cartesian_distance / effectiveSegmentLength));
+            
+            if (segments > 1 && segments <= 1000) { // Increased limit for better belt synchronization
+                // Set flag to prevent recursion
+                _isSegmenting = true;
+                
+                // Similar to arc segmentation in MotionControl.cpp
+                // Multiply inverse feed_rate to compensate for the fact that this movement is approximated
+                // by a number of discrete segments. The inverse feed_rate should be correct for the sum of
+                // all segments.
+                if (pl_data->motion.inverseTime) {
+                    pl_data->feed_rate *= segments;
+                    pl_data->motion.inverseTime = 0;  // Force as feed absolute mode over segments.
+                }
+                
+                // Calculate increments per segment
+                float increment_per_segment[MAX_N_AXIS];
+                for (size_t axis = 0; axis < n_axis && axis < MAX_N_AXIS; axis++) {
+                    increment_per_segment[axis] = (target[axis] - position[axis]) / segments;
+                }
+                
+                // Current position for segmentation
+                float segment_position[MAX_N_AXIS];
+                for (size_t axis = 0; axis < n_axis && axis < MAX_N_AXIS; axis++) {
+                    segment_position[axis] = position[axis];
+                }
+                
+                float original_feedrate = pl_data->feed_rate;  // Save original for proper distribution
+                
+                // Submit each segment except the last one
+                for (uint16_t i = 1; i < segments; i++) {
+                    // Calculate intermediate target position
+                    float intermediate_target[MAX_N_AXIS];
+                    for (size_t axis = 0; axis < n_axis && axis < MAX_N_AXIS; axis++) {
+                        intermediate_target[axis] = position[axis] + (increment_per_segment[axis] * i);
+                    }
+                    
+                    // Create a copy of plan data for this segment
+                    plan_line_data_t segment_pl_data = *pl_data;
+                    segment_pl_data.feed_rate = original_feedrate; // Reset to original before scaling
+                    
+                    // Submit this segment to the motion controller in cartesian space
+                    // This is similar to how arc segmentation works - use mc_linear() 
+                    // which will call cartesian_to_motors() for proper kinematics transformation
+                    if (!mc_linear(intermediate_target, &segment_pl_data, segment_position)) {
+                        return false; // If any segment fails, fail the whole move
+                    }
+                    
+                    // Update segment position for next iteration
+                    for (size_t axis = 0; axis < n_axis && axis < MAX_N_AXIS; axis++) {
+                        segment_position[axis] = intermediate_target[axis];
+                    }
+                }
+                
+                // Fall through to handle the final segment to the target position
+                // Update position to be the last segment position for final segment calculation
+                for (size_t axis = 0; axis < n_axis && axis < MAX_N_AXIS; axis++) {
+                    position[axis] = segment_position[axis];
+                }
+                
+                // Reset feed rate for final segment
+                pl_data->feed_rate = original_feedrate;
+                
+                // Clear the segmentation flag
+                _isSegmenting = false;
+            }
+        }
+        
+        // Handle the final segment (or the entire move if no segmentation was needed)
         float motors[n_axis];
         transform_cartesian_to_motors(motors, target);
 
-        if (!pl_data->motion.rapidMotion) {
-            // Calculate vector distance of the motion in cartesian coordinates (X,Y,Z only)
-            float cartesian_distance = vector_distance(target, position, 3); // Only X,Y,Z for cartesian
-            
-            if (cartesian_distance > 0) {
-
-            // Check if this is a Z-only move by examining X,Y changes
-            float xy_distance = sqrt((target[X_AXIS] - position[X_AXIS]) * (target[X_AXIS] - position[X_AXIS]) + 
-                                   (target[Y_AXIS] - position[Y_AXIS]) * (target[Y_AXIS] - position[Y_AXIS]));
-            bool is_z_only_move = (xy_distance < 0.001f); // Consider moves < 0.001mm as Z-only
-
-            if (is_z_only_move) {
-                // For Z-only moves: Scale feed rate by Z motor movement ratio
-                // The Z motor moves directly with cartesian Z, so ratio should be 1:1,
-                // but we need to account for the fact that FluidNC's motion planning
-                // expects proper feed rate scaling for all motor movements
-                float last_motors[n_axis];
-                transform_cartesian_to_motors(last_motors, position);
-                
-                // For Z-only moves, only consider the Z motor distance
-                float z_motor_distance = fabs(motors[4] - last_motors[4]); // Z is at index 4
-                float z_cartesian_distance = fabs(target[Z_AXIS] - position[Z_AXIS]);
-                
-                if (z_cartesian_distance > 0) {
-                    pl_data->feed_rate = pl_data->feed_rate * z_motor_distance / z_cartesian_distance;
-                }
-            } else {
-                // For X/Y moves or combined moves: Scale feed rate by motor/cartesian ratio
-                // This accounts for the fact that belt movements are longer than cartesian movements
-                // and ensures the actual belt speed matches the programmed feed rate
-                float last_motors[n_axis];
-                transform_cartesian_to_motors(last_motors, position);
-                
-                // Calculate distance considering all belt motors for proper feed rate scaling
-                float motor_distance = vector_distance(motors, last_motors, n_axis);
-                
-                pl_data->feed_rate = pl_data->feed_rate * motor_distance / cartesian_distance;
-            }
-            }
-        }
+        // Feedrate scaling removed: feedrate now stays in XY coordinates
+        // The machine will move at the set feedrate in XY coordinates rather than scaling to belt space
 
         return mc_move_motors(motors, pl_data);
     }
@@ -159,12 +220,6 @@ namespace Kinematics {
         if (computeXYfromBeltLengths(tlXYDistance, trXYDistance, x, y)) {
             cartesian[X_AXIS] = x;
             cartesian[Y_AXIS] = y;
-            
-            static int debug_count = 0;
-            if (debug_count < 5) {
-                log_info("motors_to_cartesian: TL=" << tlBeltLength << " TR=" << trBeltLength << " -> X=" << x << " Y=" << y);
-                debug_count++;
-            }
         } else {
             // If we can't solve the kinematics, fall back to (0,0)
             // This can happen if belt lengths are inconsistent
@@ -235,12 +290,6 @@ namespace Kinematics {
         float XYlength = sqrt(a * a + b * b); // Get the distance in the XY plane from the corner to the router center
         float XYBeltLength = XYlength - (_beltEndExtension + _armLength); // Subtract the belt end extension and arm length to get the belt length
         float length = sqrt(XYBeltLength * XYBeltLength + c * c); // Get the angled belt length
-
-        static int tl_debug_count = 0;
-        if (tl_debug_count < 5) {
-            log_info("computeTL: input(" << orig_x << "," << orig_y << "," << z << ") -> frame(" << x << "," << y << ") -> length=" << length);
-            tl_debug_count++;
-        }
 
         return length;
     }
@@ -355,6 +404,7 @@ namespace Kinematics {
         handler.item("armLength", _armLength);
         handler.item("spoilboardThickness", _spoilboardThickness);
         handler.item("workThickness", _workThickness);
+        handler.item("maxSegmentLength", _maxSegmentLength);
     }
 
     // Setter methods for calibration system to update frame parameters
@@ -372,10 +422,6 @@ namespace Kinematics {
         
         // Recalculate center coordinates
         calculateCenter();
-        
-        log_info("Frame size updated to: " << frameSize << " x " << frameSize);
-        log_info("Anchor points updated - TL: (" << _tlX << "," << _tlY << "), TR: (" << _trX << "," << _trY << 
-                "), BL: (" << _blX << "," << _blY << "), BR: (" << _brX << "," << _brY << ")");
     }
 
     void MaslowKinematics::updateAnchorCoordinates(float tlX, float tlY, float tlZ, 
