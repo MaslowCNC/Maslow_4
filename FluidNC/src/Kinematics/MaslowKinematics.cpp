@@ -35,6 +35,7 @@ kinematics:
     armLength: 123.4
     spoilboardThickness: 0.0
     workThickness: 0.0
+    maxSegmentLength: 5.0
 
 This implements the cable-driven kinematics for the Maslow CNC system.
 The system has 5 axes:
@@ -355,6 +356,7 @@ namespace Kinematics {
         handler.item("armLength", _armLength);
         handler.item("spoilboardThickness", _spoilboardThickness);
         handler.item("workThickness", _workThickness);
+        handler.item("maxSegmentLength", _maxSegmentLength);
     }
 
     // Setter methods for calibration system to update frame parameters
