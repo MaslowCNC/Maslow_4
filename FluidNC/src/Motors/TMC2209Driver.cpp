@@ -124,6 +124,13 @@ namespace MotorDrivers {
         return true;
     }
 
+    uint16_t TMC2209Driver::read_current_sense() {
+        if (tmc2209 == nullptr) {
+            return 0;
+        }
+        return tmc2209->cs_actual();
+    }
+
     // Configuration registration
     namespace {
         MotorFactory::InstanceBuilder<TMC2209Driver> registration("tmc_2209");

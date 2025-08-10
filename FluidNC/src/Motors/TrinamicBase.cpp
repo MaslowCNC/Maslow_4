@@ -13,15 +13,31 @@ namespace MotorDrivers {
                                  EnumItem(TrinamicMode::StealthChop) };
 
     std::vector<TrinamicBase*> TrinamicBase::_instances;  // static list of all drivers for stallguard reporting
+    int TrinamicBase::_log_counter = 0;  // Static counter for 1-second logging
 
     // Another approach would be to register a separate timer for each instance.
     // I think that timers are cheap so having only a single timer might not buy us much
     void TrinamicBase::read_sg(TimerHandle_t timer) {
         if (inMotionState()) {
+            _log_counter++;
+            bool should_log = (_log_counter >= 5);  // Log every 5 * 200ms = 1 second
+            if (should_log) {
+                _log_counter = 0;
+            }
+
             for (TrinamicBase* t : _instances) {
                 if (t->_stallguardDebugMode) {
                     //log_info("SG:" << t->_stallguardDebugMode);
                     t->debug_message();
+                }
+
+                // Monitor current when system is in run state (moving)
+                uint16_t current_raw = t->read_current_sense();
+                t->update_current_average(current_raw);
+
+                // Log current info once per second
+                if (should_log) {
+                    log_info("Motor " << t->axisName() << " current: " << t->_current_average << " (raw: " << current_raw << ")");
                 }
             }
         }
@@ -159,5 +175,26 @@ namespace MotorDrivers {
         _instances.push_back(this);
 
         config_message();
+    }
+
+    void TrinamicBase::update_current_average(uint16_t current_raw) {
+        // Take absolute value (though current_raw should already be positive from cs_actual)
+        float current_abs = static_cast<float>(current_raw);
+        
+        // Add to circular buffer
+        _current_samples[_current_sample_index] = current_abs;
+        _current_sample_index = (_current_sample_index + 1) % CURRENT_SAMPLE_SIZE;
+        
+        // Update sample count for initial fill
+        if (_current_sample_count < CURRENT_SAMPLE_SIZE) {
+            _current_sample_count++;
+        }
+        
+        // Calculate simple moving average
+        float sum = 0.0f;
+        for (int i = 0; i < _current_sample_count; i++) {
+            sum += _current_samples[i];
+        }
+        _current_average = sum / _current_sample_count;
     }
 }
