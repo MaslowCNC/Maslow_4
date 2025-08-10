@@ -105,14 +105,6 @@ namespace MotorDrivers {
         }
     }
 
-    uint16_t TMC2130Driver::read_current_sense() {
-        if (tmc2130 == nullptr) {
-            return 0;
-        }
-        // TMC2130 returns uint8_t, cast to uint16_t for consistency
-        return static_cast<uint16_t>(tmc2130->cs_actual());
-    }
-
     // Configuration registration
     namespace {
         MotorFactory::InstanceBuilder<TMC2130Driver> registration("tmc_2130");

@@ -114,14 +114,6 @@ namespace MotorDrivers {
         }
     }
 
-    uint16_t TMC5160Driver::read_current_sense() {
-        if (tmc5160 == nullptr) {
-            return 0;
-        }
-        // TMC5160 should have cs_actual, cast to uint16_t for consistency
-        return static_cast<uint16_t>(tmc5160->cs_actual());
-    }
-
     // Configuration registration
     namespace {
         MotorFactory::InstanceBuilder<TMC5160Driver> registration("tmc_5160");

@@ -4,12 +4,16 @@
 
 #include "MotorUnit.h"
 #include "../Report.h"
+#include "../System.h"
 #include "Maslow.h"
 
 // PID controller tuning
 #define P 300
 #define I 0
 #define D 0
+
+// Static variable for current monitoring logging (1 second intervals)
+static unsigned long lastCurrentLogTime = 0;
 
 //------------------------------------------------------
 //------------------------------------------------------ Core utility functions
@@ -111,6 +115,21 @@ void MotorUnit::update() {
             motorCurrentBuffer[i] = motorCurrentBuffer[i + 1];
         }
         motorCurrentBuffer[9] = motor.readCurrent();
+    }
+
+    // Current monitoring with logging every second when in motion
+    if (inMotionState() && (millis() - lastCurrentLogTime > 1000)) {
+        lastCurrentLogTime = millis();
+        
+        // Get the current reading and calculate average
+        int currentRaw = motor.readCurrent();
+        double currentAvg = getMotorCurrent();
+        
+        // Get axis label for logging
+        String axisLabel = Maslow.axis_id_to_label(_encoderAddress);
+        
+        // Log the current information
+        log_info("Motor " << axisLabel.c_str() << " current: " << currentAvg << " (raw: " << currentRaw << ")");
     }
 }
 

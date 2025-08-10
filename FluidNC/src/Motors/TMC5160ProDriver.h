@@ -66,8 +66,5 @@ namespace MotorDrivers {
 
         bool test();
         void set_registers(bool isHoming);
-        
-        // Current monitoring implementation
-        uint16_t read_current_sense() override;
     };
 }

@@ -24,14 +24,6 @@ namespace MotorDrivers {
 
         static std::vector<TrinamicBase*> _instances;
 
-        // Current monitoring
-        static const int CURRENT_SAMPLE_SIZE = 10;  // Simple moving average window
-        float _current_samples[CURRENT_SAMPLE_SIZE];
-        int _current_sample_index;
-        int _current_sample_count;
-        float _current_average;
-        static int _log_counter;  // For 1-second logging (200ms * 5 = 1000ms)
-
     protected:
         uint32_t calc_tstep(float speed, float percent);
 
@@ -76,17 +68,8 @@ namespace MotorDrivers {
 
         void registration();
 
-        // Current monitoring methods
-        virtual uint16_t read_current_sense() = 0;  // Pure virtual - each driver implements this
-        void update_current_average(uint16_t current_raw);
-
     public:
-        TrinamicBase() : _current_sample_index(0), _current_sample_count(0), _current_average(0.0f) {
-            // Initialize current samples array to zero
-            for (int i = 0; i < CURRENT_SAMPLE_SIZE; i++) {
-                _current_samples[i] = 0.0f;
-            }
-        }
+        TrinamicBase() = default;
 
         void group(Configuration::HandlerBase& handler) override {
             StandardStepper::group(handler);
