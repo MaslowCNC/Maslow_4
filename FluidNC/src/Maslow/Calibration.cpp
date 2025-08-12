@@ -32,6 +32,7 @@ static Kinematics::MaslowKinematics* getKinematics() {
 // Constructor
 Calibration::Calibration() {
     currentState = UNKNOWN;
+    resetStaticVariables = false;
 }
 
 //------------------------------------------------------
@@ -148,6 +149,9 @@ bool Calibration::requestStateChange(int newState){
             if(currentState == EXTENDEDOUT || currentState == READY_TO_CUT || currentState == CALIBRATION_COMPUTING){
                 currentState = CALIBRATION_IN_PROGRESS;
                 sys.set_state(State::Homing);
+                
+                // Reset all static variables for a clean calibration run
+                resetCalibrationStaticVariables();
                 
                 // Log the calibration orientation mode for debugging
                 log_info("Calibration starting in " << (orientation == VERTICAL ? "VERTICAL" : "HORIZONTAL") << " orientation mode");
@@ -403,11 +407,20 @@ void Calibration::home() {
 void Calibration::calibration_loop() {
     static int  direction             = UP;
     static bool measurementInProgress = true; //We start by taking a measurement, then we move
+    
+    // Reset static variables if requested
+    if (resetStaticVariables) {
+        direction = UP;
+        measurementInProgress = true;
+        log_info("Calibration loop static variables reset");
+    }
+    
     if(waypoint > pointCount){ //Point count is the total number of points to measure so if waypoint > pointcount then the overall measurement process is complete
         calibrationInProgress = false;
         //Reset all of the calibration variables to the defaults so that calibraiton can be run again
         waypoint              = 0;
         recomputeCountIndex   = 0;
+        resetStaticVariables  = false; // Clear the reset flag when calibration completes
         deallocateCalibrationMemory();
         requestStateChange(READY_TO_CUT);
         log_info("Calibration complete");
@@ -466,6 +479,14 @@ bool Calibration::takeSlackFunc() {
     static unsigned long holdTimer = millis();
     static float startingX    = 0;
     static float startingY    = 0;
+    
+    // Reset static variables if requested
+    if (resetStaticVariables) {
+        takeSlackState = 0;
+        holdTimer = millis();
+        startingX = 0;
+        startingY = 0;
+    }
 
     //Take a measurement
     if(takeSlackState == 0){
@@ -622,6 +643,13 @@ bool Calibration::take_measurement(float result[4], int dir, int run, int curren
         //first we pull two bottom belts tight one after another, if x<0 we pull left belt first, if x>0 we pull right belt first
         static bool BL_tight = false;
         static bool BR_tight = false;
+        
+        // Reset static variables if requested
+        if (resetStaticVariables) {
+            BL_tight = false;
+            BR_tight = false;
+        }
+        
         Maslow.axisTL.recomputePID();
         Maslow.axisTR.recomputePID();
 
@@ -684,6 +712,17 @@ bool Calibration::take_measurement(float result[4], int dir, int run, int curren
         static MotorUnit* holdAxis2;
         static bool       pull1_tight = false;
         static bool       pull2_tight = false;
+        
+        // Reset static variables if requested
+        if (resetStaticVariables) {
+            pullAxis1 = nullptr;
+            pullAxis2 = nullptr;
+            holdAxis1 = nullptr;
+            holdAxis2 = nullptr;
+            pull1_tight = false;
+            pull2_tight = false;
+        }
+        
         switch (dir) {
             case UP:
                 holdAxis1 = &Maslow.axisTL;
@@ -799,6 +838,16 @@ bool Calibration::take_measurement_avg_with_check(int waypoint, int dir) {
     static float         avg                = 0;
     static float         sum                = 0;
     static bool          measureFlex        = false;
+    static int           criticalCounter    = 0;
+    
+    // Reset static variables if requested
+    if (resetStaticVariables) {
+        run = 0;
+        avg = 0;
+        sum = 0;
+        measureFlex = false;
+        criticalCounter = 0;
+    }
 
     if (measurements == nullptr) {
         allocateMeasurements(); //This is structured [[tl],[tr],[bl],[br]],[[tl],[tr],[bl],[br]],[[tl],[tr],[bl],[br]],[[tl],[tr],[bl],[br]]
@@ -821,6 +870,11 @@ bool Calibration::take_measurement_avg_with_check(int waypoint, int dir) {
         static int criticalCounter = 0;
         if (run > 5) {
             run = 0;
+
+            // Reset criticalCounter if requested during a reset cycle
+            if (resetStaticVariables) {
+                criticalCounter = 0;
+            }
 
             //check if all measurements are within 1mm of each other
             float maxDeviation[4] = { 0 };
@@ -984,6 +1038,19 @@ bool Calibration::move_with_slack(double fromX, double fromY, double toX, double
     static bool trExtending = false;
     static bool blExtending = false;
     static bool brExtending = false;
+    
+    // Reset static variables if requested
+    if (resetStaticVariables) {
+        moveBeginTimer = millis();
+        decompress = true;
+        direction = UP;
+        xStepSize = 1;
+        yStepSize = 1;
+        tlExtending = false;
+        trExtending = false;
+        blExtending = false;
+        brExtending = false;
+    }
     
     bool withSlack = true;
     if(waypoint > recomputePoints[0]){ //If we have completed the first round of calibraiton
@@ -1405,6 +1472,15 @@ void Calibration::deallocateCalibrationMemory() {
         }
     delete[] calibration_data;
     calibration_data = nullptr;
+}
+
+// Function to reset all static variables used in calibration functions
+// This ensures clean state for each calibration run
+void Calibration::resetCalibrationStaticVariables() {
+    log_info("Resetting calibration static variables for new calibration run");
+    
+    // Set the flag that will trigger reset of static variables in each function
+    resetStaticVariables = true;
 }
 
 

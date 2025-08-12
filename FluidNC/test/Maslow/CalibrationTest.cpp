@@ -2,6 +2,9 @@
 #include "../../src/Maslow/Calibration.h"
 #include "../../src/Kinematics/MaslowKinematics.h"
 
+// Include calibration state constants
+#include "../../src/Maslow/Calibration.h"
+
 // Simple test to verify that MaslowKinematics setFrameSize works correctly
 Test(MaslowKinematicsFrameSize, CalibrationTest) {
     using namespace Kinematics;
@@ -131,4 +134,43 @@ Test(MaslowKinematicsThicknessConfiguration, CalibrationTest) {
     // Test that all belt computation functions are working consistently
     Assert(originalTL > 0 && originalTR > 0 && originalBL > 0 && originalBR > 0, 
            "All original belt lengths should be positive");
+}
+
+// Test calibration state reset functionality
+Test(CalibrationStateReset, CalibrationTest) {
+    // Create a Calibration instance
+    Calibration calibration;
+    
+    // Test that the instance starts with correct initial state
+    Assert(calibration.getCurrentState() == UNKNOWN, "Initial state should be UNKNOWN");
+    
+    // Test that the reset function can be called without error
+    calibration.resetCalibrationStaticVariables();
+    
+    // Test state transitions to calibration
+    bool success = calibration.requestStateChange(RETRACTING);
+    Assert(success, "Should be able to transition to RETRACTING state");
+    
+    success = calibration.requestStateChange(RETRACTED);
+    Assert(success, "Should be able to transition to RETRACTED state");
+    
+    success = calibration.requestStateChange(EXTENDING);
+    Assert(success, "Should be able to transition to EXTENDING state");
+    
+    success = calibration.requestStateChange(EXTENDEDOUT);
+    Assert(success, "Should be able to transition to EXTENDEDOUT state");
+    
+    // Test that we can initiate calibration
+    success = calibration.requestStateChange(CALIBRATION_IN_PROGRESS);
+    Assert(success, "Should be able to transition to CALIBRATION_IN_PROGRESS state");
+    Assert(calibration.getCurrentState() == CALIBRATION_IN_PROGRESS, "State should be CALIBRATION_IN_PROGRESS");
+    
+    // Simulate calibration completion
+    success = calibration.requestStateChange(READY_TO_CUT);
+    Assert(success, "Should be able to transition to READY_TO_CUT state");
+    
+    // Test that we can start calibration again (this is where the bug was)
+    success = calibration.requestStateChange(CALIBRATION_IN_PROGRESS);
+    Assert(success, "Should be able to start calibration again without issues");
+    Assert(calibration.getCurrentState() == CALIBRATION_IN_PROGRESS, "State should be CALIBRATION_IN_PROGRESS again");
 }

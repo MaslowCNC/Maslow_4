@@ -61,6 +61,7 @@ public:
 
     void allocateCalibrationMemory();
     void deallocateCalibrationMemory();
+    void resetCalibrationStaticVariables();
 
     void comply();
 
@@ -104,6 +105,9 @@ public:
 
     //State machine variables
     int currentState = UNKNOWN;
+    
+    // Flag to indicate that static variables should be reset on next function call
+    bool resetStaticVariables = false;
 
 private:
 
