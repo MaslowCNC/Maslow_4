@@ -88,16 +88,16 @@ void Maslow_::begin(void (*sys_rt)()) {
 
     lastCallToUpdate = millis();
 
-    loadZPos(); //Loads the z-axis position from EEPROM
+    loadZPos();  //Loads the z-axis position from EEPROM
 
     stopMotors();
 
     Wire.setTimeOut(10);
 
     if (error) {
-        log_error(M+" failed to initialize - fix errors and restart");
+        log_error(M + " failed to initialize - fix errors and restart");
     } else {
-        log_info("Starting "+M+" Version " << VERSION_NUMBER);
+        log_info("Starting " + M + " Version " << VERSION_NUMBER);
     }
 }
 
@@ -108,7 +108,7 @@ void Maslow_::update() {
     //If we are in an error state, blink the LED and stop the motors
     if (error) {
         static unsigned long timer = millis();
-        static bool          st    = true; //This is used to blink the LED
+        static bool          st    = true;  //This is used to blink the LED
         if (millis() - timer > 300) {
             stopMotors();
             st = !st;
@@ -154,8 +154,11 @@ void Maslow_::update() {
         //quick solution for delay without blocking
         if (calibration.holding && millis() - calibration.holdTimer > calibration.holdTime) {
             calibration.holding = false;
-        } else if (calibration.holding)
+        } else if (calibration.holding) {
+            // Even during calibration holding, continue motor current logging
+            print_motor_currents();
             return;
+        }
 
         //temp test function...This is used for debugging when the test command is sent
         if (test) {
@@ -168,18 +171,18 @@ void Maslow_::update() {
         if (sys.state() == State::Jog || sys.state() == State::Cycle) {
             // With MaslowKinematics, read belt motor positions directly from the axis system
             // Axis mapping: A=TL, B=TR, C=BL, D=BR, Z=Router
-            float tlBeltLength = steps_to_mpos(get_axis_motor_steps(0), 0); // TL from A axis (axis 0)
-            float trBeltLength = steps_to_mpos(get_axis_motor_steps(1), 1); // TR from B axis (axis 1)
-            float blBeltLength = steps_to_mpos(get_axis_motor_steps(2), 2); // BL from C axis (axis 2)
-            float brBeltLength = steps_to_mpos(get_axis_motor_steps(3), 3); // BR from D axis (axis 3)
-            float zPosition = steps_to_mpos(get_axis_motor_steps(4), 4);    // Z from Z axis (axis 4)
-            
+            float tlBeltLength = steps_to_mpos(get_axis_motor_steps(0), 0);  // TL from A axis (axis 0)
+            float trBeltLength = steps_to_mpos(get_axis_motor_steps(1), 1);  // TR from B axis (axis 1)
+            float blBeltLength = steps_to_mpos(get_axis_motor_steps(2), 2);  // BL from C axis (axis 2)
+            float brBeltLength = steps_to_mpos(get_axis_motor_steps(3), 3);  // BR from D axis (axis 3)
+            float zPosition    = steps_to_mpos(get_axis_motor_steps(4), 4);  // Z from Z axis (axis 4)
+
             // Set individual belt targets using the computed positions
             axisTL.setTarget(tlBeltLength);
             axisTR.setTarget(trBeltLength);
             axisBL.setTarget(blBeltLength);
             axisBR.setTarget(brBeltLength);
-            
+
             // Update internal target tracking for getTargetX/Y/Z functions
             // For now, we'll use the Z position directly and estimate X,Y from frame center
             // A full implementation would require solving inverse kinematics from belt lengths
@@ -235,10 +238,8 @@ void Maslow_::update() {
         print_motor_currents();
     }
 
-    prevState = sys.state(); //Store for next time
+    prevState = sys.state();  //Store for next time
 }
-
-
 
 //------------------------------------------------------
 //------------------------------------------------------ Position Control Functions
@@ -363,16 +364,14 @@ void Maslow_::recomputePID() {
     }
 }
 
-
 //------------
 // Z-Axis Functions
 //------------
 
-
 //This function saves the current z-axis position to the non-volitle storage
 void Maslow_::saveZPos() {
     nvs_handle_t nvsHandle;
-    esp_err_t ret = nvs_open("maslow", NVS_READWRITE, &nvsHandle);
+    esp_err_t    ret = nvs_open("maslow", NVS_READWRITE, &nvsHandle);
     if (ret != ESP_OK) {
         log_info("Error " + std::string(esp_err_to_name(ret)) + " opening NVS handle!\n");
         return;
@@ -388,12 +387,12 @@ void Maslow_::saveZPos() {
 
     // Write - Convert the float to an int32_t and write only if it has changed
     union FloatInt32 {
-        float f;
+        float   f;
         int32_t i;
     };
     FloatInt32 fi;
     fi.f = targetZ;
-    if (ret == ESP_ERR_NVS_NOT_FOUND || currentZPos != fi.i) { // Only write if the value has changed
+    if (ret == ESP_ERR_NVS_NOT_FOUND || currentZPos != fi.i) {  // Only write if the value has changed
         ret = nvs_set_i32(nvsHandle, "zPos", fi.i);
         if (ret != ESP_OK) {
             log_info("Error " + std::string(esp_err_to_name(ret)) + " writing to NVS!\n");
@@ -412,7 +411,7 @@ void Maslow_::saveZPos() {
 //This function loads the z-axis position from the non-volitle storage
 void Maslow_::loadZPos() {
     nvs_handle_t nvsHandle;
-    esp_err_t ret = nvs_open("maslow", NVS_READWRITE, &nvsHandle);
+    esp_err_t    ret = nvs_open("maslow", NVS_READWRITE, &nvsHandle);
     if (ret != ESP_OK) {
         log_info("Error " + std::string(esp_err_to_name(ret)) + " opening NVS handle!\n");
         return;
@@ -425,21 +424,21 @@ void Maslow_::loadZPos() {
         log_info("Error " + std::string(esp_err_to_name(ret)) + " reading from NVS!");
     } else {
         union FloatInt32 {
-            float f;
+            float   f;
             int32_t i;
         };
         FloatInt32 fi;
-        fi.i = value2;
+        fi.i    = value2;
         targetZ = fi.f;
 
         // Use Z_AXIS constant (2) for cartesian coordinate, not motor index (4)
-        float* mpos = get_mpos();
+        float* mpos  = get_mpos();
         mpos[Z_AXIS] = targetZ;
         set_motor_steps_from_mpos(mpos);
 
         log_info("Current z-axis position loaded as: " << targetZ);
 
-        gc_sync_position();//This updates the Gcode engine with the new position from the stepping engine that we set with set_motor_steps
+        gc_sync_position();  //This updates the Gcode engine with the new position from the stepping engine that we set with set_motor_steps
         plan_sync_position();
     }
 }
@@ -451,21 +450,17 @@ void Maslow_::setZStop() {
     targetZ = 0;
 
     // Use Z_AXIS constant (2) for cartesian coordinate, not motor index (4)
-    float* mpos = get_mpos();
+    float* mpos  = get_mpos();
     mpos[Z_AXIS] = targetZ;
     set_motor_steps_from_mpos(mpos);
 
-    gc_sync_position();//This updates the Gcode engine with the new position from the stepping engine that we set with set_motor_steps
+    gc_sync_position();  //This updates the Gcode engine with the new position from the stepping engine that we set with set_motor_steps
     plan_sync_position();
 }
-
-
 
 //------------------------------------------------------
 //------------------------------------------------------ Utility Functions
 //------------------------------------------------------
-
-
 
 // int to string name conversion for axis labels
 String Maslow_::axis_id_to_label(int axis_id) {
@@ -554,11 +549,46 @@ void Maslow_::blinkIPAddress() {
 //Print the motor currents. Used for monitioring the power consumption of each motor.
 void Maslow_::print_motor_currents() {
     static unsigned long lastExecutionTime = 0;
-    unsigned long currentTime = millis();
+    unsigned long        currentTime       = millis();
 
     if (currentTime - lastExecutionTime >= 1000) {
-        log_info("TLC: " << axisTL.getMotorCurrent() << " TRC: " << axisTR.getMotorCurrent()
-                 << " BLC: " << axisBL.getMotorCurrent() << " BRC: " << axisBR.getMotorCurrent());
+        // Include system state in the log to clarify when logging occurs in different states
+        const char* stateStr = "Unknown";
+        switch (sys.state()) {
+            case State::Idle:
+                stateStr = "Idle";
+                break;
+            case State::Alarm:
+                stateStr = "Alarm";
+                break;
+            case State::CheckMode:
+                stateStr = "CheckMode";
+                break;
+            case State::Homing:
+                stateStr = "Homing";
+                break;
+            case State::Cycle:
+                stateStr = "Cycle";
+                break;
+            case State::Hold:
+                stateStr = "Hold";
+                break;
+            case State::Jog:
+                stateStr = "Jog";
+                break;
+            case State::SafetyDoor:
+                stateStr = "SafetyDoor";
+                break;
+            case State::Sleep:
+                stateStr = "Sleep";
+                break;
+            case State::ConfigAlarm:
+                stateStr = "ConfigAlarm";
+                break;
+        }
+
+        log_info("State: " << stateStr << " TLC: " << axisTL.getMotorCurrent() << " TRC: " << axisTR.getMotorCurrent()
+                           << " BLC: " << axisBL.getMotorCurrent() << " BRC: " << axisBR.getMotorCurrent());
         lastExecutionTime = currentTime;
     }
 }
@@ -578,15 +608,15 @@ void Maslow_::reset_all_axis() {
 // Stop all motors and reset all state variables
 void Maslow_::stop() {
     stopMotors();
-    retractingTL          = false;
-    retractingTR          = false;
-    retractingBL          = false;
-    retractingBR          = false;
-    extendingALL          = false;
-    complyALL             = false;
+    retractingTL                      = false;
+    retractingTR                      = false;
+    retractingBL                      = false;
+    retractingBR                      = false;
+    extendingALL                      = false;
+    complyALL                         = false;
     calibration.calibrationInProgress = false;
-    test                  = false;
-    takeSlack             = false;
+    test                              = false;
+    takeSlack                         = false;
 
     axisTL.reset();
     axisTR.reset();
@@ -621,7 +651,7 @@ void Maslow_::eStop(String message) {
     log_error("Emergency stop! Stopping all motors");
     log_warn("The machine will not respond until turned off and back on again");
     stop();
-    error = true;
+    error        = true;
     errorMessage = message;
     stopEverything();
 }
@@ -634,8 +664,8 @@ void Maslow_::safety_control() {
     static int           tresholdHitsBeforePanic = 150;
     static int           panicCounter[4]         = { 0 };
 
-    static int           positionErrorCounter[4] = { 0 };
-    static float         previousPositionError[4] = { 0, 0, 0, 0 };
+    static int   positionErrorCounter[4]  = { 0 };
+    static float previousPositionError[4] = { 0, 0, 0, 0 };
 
     MotorUnit* axis[4] = { &axisTL, &axisTR, &axisBL, &axisBR };
     for (int i = 0; i < 4; i++) {
@@ -643,7 +673,7 @@ void Maslow_::safety_control() {
         if (axis[i]->getMotorCurrent() > 4000 && !tick[i]) {
             panicCounter[i]++;
             if (panicCounter[i] > tresholdHitsBeforePanic) {
-                if(sys.state() == State::Jog || sys.state() == State::Cycle){
+                if (sys.state() == State::Jog || sys.state() == State::Cycle) {
                     log_warn("Motor current on " << axis_id_to_label(i).c_str() << " axis exceeded threshold of " << 4000);
                     //Maslow.panic();
                 }
@@ -687,14 +717,13 @@ void Maslow_::safety_control() {
         if ((abs(axis[i]->getPositionError()) > 15) && (sys.state() == State::Cycle)) {
             positionErrorCounter[i]++;
             log_warn("Position error on " << axis_id_to_label(i).c_str() << " axis exceeded 15mm while running. Error is "
-                                            << axis[i]->getPositionError() << "mm" << " Counter: " << positionErrorCounter[i]);
+                                          << axis[i]->getPositionError() << "mm" << " Counter: " << positionErrorCounter[i]);
             log_warn("Previous error was " << previousPositionError[i] << "mm");
 
-            if(positionErrorCounter[i] > 5){
+            if (positionErrorCounter[i] > 5) {
                 Maslow.eStop("Position error > 15mm while running. E-Stop triggered.");
             }
-        }
-        else{
+        } else {
             positionErrorCounter[i] = 0;
         }
     }
@@ -707,32 +736,19 @@ void Maslow_::safety_control() {
     }
 }
 
-
-
-
-
-
-
 //---------------
 // Telemetry
 //---------------
 
-
-
 // Prints out state
 void Maslow_::getInfo() {
     log_data("MINFO: { \"homed\": " << (calibration.all_axis_homed() ? "true" : "false") << ","
-          << "\"calibrationInProgress\": " << (calibration.calibrationInProgress ? "true" : "false") << ","
-          << "\"tl\": " << axisTL.getPosition() << ","
-          << "\"tr\": " << axisTR.getPosition() << ","
-          << "\"br\": " << axisBR.getPosition() << ","
-          << "\"bl\": " << axisBL.getPosition() << ","
-          << "\"etl\": " << axisTL.getPositionError() << ","
-          << "\"etr\": " << axisTR.getPositionError() << ","
-          << "\"ebr\": " << axisBR.getPositionError() << ","
-          << "\"ebl\": " << axisBL.getPositionError() << ","
-          << "\"extended\": " << (calibration.allAxisExtended() ? "true" : "false")
-          << "}");
+                                    << "\"calibrationInProgress\": " << (calibration.calibrationInProgress ? "true" : "false") << ","
+                                    << "\"tl\": " << axisTL.getPosition() << "," << "\"tr\": " << axisTR.getPosition() << ","
+                                    << "\"br\": " << axisBR.getPosition() << "," << "\"bl\": " << axisBL.getPosition() << ","
+                                    << "\"etl\": " << axisTL.getPositionError() << "," << "\"etr\": " << axisTR.getPositionError() << ","
+                                    << "\"ebr\": " << axisBR.getPositionError() << "," << "\"ebl\": " << axisBL.getPositionError() << ","
+                                    << "\"extended\": " << (calibration.allAxisExtended() ? "true" : "false") << "}");
 }
 
 void Maslow_::set_telemetry(bool enabled) {
@@ -743,7 +759,7 @@ void Maslow_::set_telemetry(bool enabled) {
         TelemetryFileHeader header;
         header.structureSize = sizeof(TelemetryData);
         strcpy(header.version, VERSION_NUMBER);
-        file->write(reinterpret_cast<uint8_t *>(&header), sizeof(TelemetryFileHeader));
+        file->write(reinterpret_cast<uint8_t*>(&header), sizeof(TelemetryFileHeader));
         file->flush();
         delete file;
     } else {
@@ -758,105 +774,33 @@ void Maslow_::set_telemetry(bool enabled) {
         // }
     }
     telemetry_enabled = enabled;
-    log_info("Telemetry: " << (enabled? "enabled" : "disabled"));
+    log_info("Telemetry: " << (enabled ? "enabled" : "disabled"));
 }
 
 void Maslow_::log_telem_hdr_csv() {
-    log_data(
-       "millis," <<
-       "tlCurrent," <<
-       "trCurrent," <<
-       "blCurrent," <<
-       "brCurrent," <<
-       "tlPower," <<
-       "trPower," <<
-       "blPower," <<
-       "brPower," <<
-       "tlSpeed," <<
-       "trSpeed," <<
-       "blSpeed," <<
-       "brSpeed," <<
-       "tlPos," <<
-       "trPos," <<
-       "blPos," <<
-       "brPos," <<
-       "extendedTL," <<
-       "extendedTR," <<
-       "extendedBL," <<
-       "extendedBR," <<
-       "extendingALL," <<
-       "complyALL," <<
-       "takeSlack," <<
-       "safetyOn," <<
-       "targetX," <<
-       "targetY," <<
-       "targetZ," <<
-       "x," <<
-       "y," <<
-       "test," <<
-       "pointCount," <<
-       "waypoint," <<
-       "calibrationGridSize," <<
-       "holdTimer," <<
-       "holding," <<
-       "holdTime," <<
-       "centerX," <<
-       "centerY," <<
-       "lastCallToPID," <<
-       "lastMiss," <<
-       "lastCallToUpdate," <<
-       "extendCallTimer," <<
-       "complyCallTimer");
+    log_data("millis," << "tlCurrent," << "trCurrent," << "blCurrent," << "brCurrent," << "tlPower," << "trPower," << "blPower,"
+                       << "brPower," << "tlSpeed," << "trSpeed," << "blSpeed," << "brSpeed," << "tlPos," << "trPos," << "blPos," << "brPos,"
+                       << "extendedTL," << "extendedTR," << "extendedBL," << "extendedBR," << "extendingALL," << "complyALL,"
+                       << "takeSlack," << "safetyOn," << "targetX," << "targetY," << "targetZ," << "x," << "y," << "test," << "pointCount,"
+                       << "waypoint," << "calibrationGridSize," << "holdTimer," << "holding," << "holdTime," << "centerX," << "centerY,"
+                       << "lastCallToPID," << "lastMiss," << "lastCallToUpdate," << "extendCallTimer," << "complyCallTimer");
 }
 
-void Maslow_::log_telem_pt_csv(TelemetryData data) {
-    log_data(
-       std::to_string(data.timestamp) + ","
-       + std::to_string(data.tlCurrent) + ","
-       + std::to_string(data.trCurrent)  + ","
-       + std::to_string(data.blCurrent)  + ","
-       + std::to_string(data.brCurrent)  + ","
-       + std::to_string(data.tlPower) + ","
-       + std::to_string(data.trPower) + ","
-       + std::to_string(data.blPower) + ","
-       + std::to_string(data.brPower) + ","
-       + std::to_string(data.tlSpeed) + ","
-       + std::to_string(data.trSpeed) + ","
-       + std::to_string(data.blSpeed) + ","
-       + std::to_string(data.brSpeed) + ","
-       + std::to_string(data.tlPos) + ","
-       + std::to_string(data.trPos) + ","
-       + std::to_string(data.blPos) + ","
-       + std::to_string(data.brPos) + ","
-       + std::to_string(data.extendedTL) + ","
-       + std::to_string(data.extendedTR) + ","
-       + std::to_string(data.extendedBL) + ","
-       + std::to_string(data.extendedBR) + ","
-       + std::to_string(data.extendingALL) + ","
-       + std::to_string(data.complyALL) + ","
-       + std::to_string(data.takeSlack) + ","
-       + std::to_string(data.safetyOn) + ","
-       + std::to_string(data.targetX) + ","
-       + std::to_string(data.targetY) + ","
-       + std::to_string(data.targetZ) + ","
-       + std::to_string(data.x) + ","
-       + std::to_string(data.y) + ","
-       + std::to_string(data.test) + ","
-       + std::to_string(data.pointCount) + ","
-       + std::to_string(data.waypoint) + ","
-       + std::to_string(data.calibrationGridSize) + ","
-       + std::to_string(data.holdTimer) + ","
-       + std::to_string(data.holding) + ","
-       + std::to_string(data.holdTime) + ","
-       + std::to_string(data.centerX) + ","
-       + std::to_string(data.centerY) + ","
-       + std::to_string(data.lastCallToPID) + ","
-       + std::to_string(data.lastMiss) + ","
-       + std::to_string(data.lastCallToUpdate) + ","
-       + std::to_string(data.extendCallTimer) + ","
-       + std::to_string(data.complyCallTimer)
-    )
-}
+void Maslow_::log_telem_pt_csv(TelemetryData data) { log_data(
+    std::to_string(data.timestamp) + "," + std::to_string(data.tlCurrent) + "," + std::to_string(data.trCurrent) + "," +
+    std::to_string(data.blCurrent) + "," + std::to_string(data.brCurrent) + "," + std::to_string(data.tlPower) + "," +
+    std::to_string(data.trPower) + "," + std::to_string(data.blPower) + "," + std::to_string(data.brPower) + "," +
+    std::to_string(data.tlSpeed) + "," + std::to_string(data.trSpeed) + "," + std::to_string(data.blSpeed) + "," +
+    std::to_string(data.brSpeed) + "," + std::to_string(data.tlPos) + "," + std::to_string(data.trPos) + "," + std::to_string(data.blPos) +
+    "," + std::to_string(data.brPos) + "," + std::to_string(data.extendedTL) + "," + std::to_string(data.extendedTR) + "," +
+    std::to_string(data.extendedBL) + "," + std::to_string(data.extendedBR) + "," + std::to_string(data.extendingALL) + "," +
+    std::to_string(data.complyALL) + "," + std::to_string(data.takeSlack) + "," + std::to_string(data.safetyOn) + "," +
+    std::to_string(data.targetX) + "," + std::to_string(data.targetY) + "," + std::to_string(data.targetZ) + "," + std::to_string(data.x) +
+    "," + std::to_string(data.y) + "," + std::to_string(data.test) + "," + std::to_string(data.pointCount) + "," +
+    std::to_string(data.waypoint) + "," + std::to_string(data.calibrationGridSize) + "," + std::to_string(data.holdTimer) + "," +
+    std::to_string(data.holding) + "," + std::to_string(data.holdTime) + "," + std::to_string(data.centerX) + "," +
+    std::to_string(data.centerY) + "," + std::to_string(data.lastCallToPID) + "," + std::to_string(data.lastMiss) + "," +
+    std::to_string(data.lastCallToUpdate) + "," + std::to_string(data.extendCallTimer) + "," + std::to_string(data.complyCallTimer)) }
 
 TelemetryData Maslow_::get_telemetry_data() {
     TelemetryData data;
@@ -886,20 +830,20 @@ TelemetryData Maslow_::get_telemetry_data() {
     data.blPos = axisBL.getPosition();
     data.brPos = axisBR.getPosition();
 
-    data.extendedTL          = extendedTL;
-    data.extendedTR          = extendedTR;
-    data.extendedBL          = extendedBL;
-    data.extendedBR          = extendedBR;
-    data.extendingALL        = extendingALL;
-    data.complyALL           = complyALL;
-    data.takeSlack           = takeSlack;
-    data.safetyOn            = safetyOn;
-    data.targetX             = targetX;
-    data.targetY             = targetY;
-    data.targetZ             = targetZ;
-    data.x                   = x;
-    data.y                   = y;
-    data.test                = test;
+    data.extendedTL   = extendedTL;
+    data.extendedTR   = extendedTR;
+    data.extendedBL   = extendedBL;
+    data.extendedBR   = extendedBR;
+    data.extendingALL = extendingALL;
+    data.complyALL    = complyALL;
+    data.takeSlack    = takeSlack;
+    data.safetyOn     = safetyOn;
+    data.targetX      = targetX;
+    data.targetY      = targetY;
+    data.targetZ      = targetZ;
+    data.x            = x;
+    data.y            = y;
+    data.test         = test;
     // data.pointCount          = calibration.pointCount;
     // data.waypoint            = calibration.waypoint;
     data.calibrationGridSize = calibration.calibrationGridSize;
@@ -908,13 +852,13 @@ TelemetryData Maslow_::get_telemetry_data() {
     data.holdTime            = calibration.holdTime;
     using namespace Kinematics;
     MaslowKinematics* kinematics = getMaslowKinematics();
-    data.centerX             = kinematics ? kinematics->getCenterX() : 0.0f;
-    data.centerY             = kinematics ? kinematics->getCenterY() : 0.0f;
-    data.lastCallToPID       = lastCallToPID;
-    data.lastMiss            = lastMiss;
-    data.lastCallToUpdate    = lastCallToUpdate;
-    data.extendCallTimer     = extendCallTimer;
-    data.complyCallTimer     = complyCallTimer;
+    data.centerX                 = kinematics ? kinematics->getCenterX() : 0.0f;
+    data.centerY                 = kinematics ? kinematics->getCenterY() : 0.0f;
+    data.lastCallToPID           = lastCallToPID;
+    data.lastMiss                = lastMiss;
+    data.lastCallToUpdate        = lastCallToUpdate;
+    data.extendCallTimer         = extendCallTimer;
+    data.complyCallTimer         = complyCallTimer;
     // xSemaphoreGive(telemetry_mutex);
     //}
     return data;
@@ -958,7 +902,7 @@ void Maslow_::dump_telemetry(const char* file) {
         delete[] buffer;
         // delete the data
         delete data;
-    } else{
+    } else {
         log_info("File not found")
     }
     delete f;
@@ -967,8 +911,8 @@ void Maslow_::dump_telemetry(const char* file) {
 // Called on utility core as a task to gather telemetry and write it to an SD log
 void telemetry_loop(void* unused) {
     const int bufferSize = 5000;
-    uint8_t buffer[bufferSize];
-    int bufferIndex = 0;
+    uint8_t   buffer[bufferSize];
+    int       bufferIndex = 0;
 
     while (true) {
         if (Maslow.telemetry_enabled) {
