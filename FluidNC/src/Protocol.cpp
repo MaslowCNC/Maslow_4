@@ -188,12 +188,12 @@ void start_telemetry() {
     if (telemetryTask) {
         vTaskResume(telemetryTask);
     } else {
-        xTaskCreatePinnedToCore(telemetry_loop,  // task
-                                "telemetry",     // name for task
+        xTaskCreatePinnedToCore(telemetry_loop,    // task
+                                "telemetry",       // name for task
                                 16000,             // size of task stack
                                 0,                 // parameters
                                 1,                 // priority
-                                &telemetryTask,       // task handle
+                                &telemetryTask,    // task handle
                                 SUPPORT_TASK_CORE  // core
         );
     }
@@ -284,7 +284,7 @@ static void check_startup_state() {
         }
     }
     Maslow.begin(&protocol_exec_rt_system);
-    
+
     // Run startup self-test if Maslow initialized successfully
     if (!Maslow.error) {
         log_info("Running startup self-test...");
@@ -401,7 +401,6 @@ void protocol_execute_realtime() {
     if (sys.suspend().value) {
         protocol_exec_rt_suspend();
     }
-
 }
 
 static void alarm_msg(ExecAlarm alarm_code) {
@@ -862,7 +861,6 @@ void protocol_exec_rt_system() {
     //Maslow.recomputePID(); //This one works as an alternative to having recomputePID called in DCServo.cpp
 
     protocol_handle_events();
-
 
     //do all the Maslow stuff here
     Maslow.update();
