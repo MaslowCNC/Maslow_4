@@ -284,6 +284,12 @@ static void check_startup_state() {
         }
     }
     Maslow.begin(&protocol_exec_rt_system);
+    
+    // Run startup self-test if Maslow initialized successfully
+    if (!Maslow.error) {
+        log_info("Running startup self-test...");
+        Maslow.test_();
+    }
 }
 
 const uint32_t heapWarnThreshold = 15000;
