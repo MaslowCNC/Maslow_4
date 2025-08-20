@@ -152,7 +152,7 @@ namespace WebUI {
             // if DNSServer is started with "*" for domain name, it will reply with
             // provided IP to all DNS request
             dnsServer.start(DNS_PORT, "*", WiFi.softAPIP());
-            log_info("Captive Portal Started");
+            log_info("Captive Portal Started - DNS request logging enabled");
             _webserver->on("/generate_204", HTTP_ANY, handle_root);
             _webserver->on("/gconnectivitycheck.gstatic.com", HTTP_ANY, handle_root);
             //do not forget the / at the end
