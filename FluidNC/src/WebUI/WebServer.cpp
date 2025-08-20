@@ -23,6 +23,50 @@
 #    include <ESPmDNS.h>
 #    include <ESP32SSDP.h>
 #    include <DNSServer.h>
+
+// Redirect DNS debug output to FluidNC logging
+#define DEBUG_ESP_DNS
+#define DEBUG_OUTPUT dnsDebugLogger
+
+// Custom logger for DNS debug output  
+class DNSDebugLogger : public Print {
+public:
+    size_t write(uint8_t c) override {
+        _buffer += (char)c;
+        if (c == '\n') {
+            // Remove trailing newline and log
+            if (_buffer.length() > 0 && _buffer[_buffer.length()-1] == '\n') {
+                _buffer.pop_back();
+            }
+            if (_buffer.length() > 0) {
+                log_info(_buffer.c_str());
+            }
+            _buffer.clear();
+        }
+        return 1;
+    }
+    
+    // Handle printf calls from DEBUG_OUTPUT.printf
+    template<typename... Args>
+    void printf(const char* format, Args... args) {
+        char buffer[256];
+        int len = snprintf(buffer, sizeof(buffer), format, args...);
+        if (len > 0) {
+            write((const uint8_t*)buffer, len);
+        }
+    }
+    
+    size_t write(const uint8_t *buffer, size_t size) override {
+        for (size_t i = 0; i < size; i++) {
+            write(buffer[i]);
+        }
+        return size;
+    }
+    
+private:
+    std::string _buffer;
+} dnsDebugLogger;
+
 #    include "WebSettings.h"
 
 #    include "WSChannel.h"
