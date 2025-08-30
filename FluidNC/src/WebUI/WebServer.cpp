@@ -155,8 +155,13 @@ namespace WebUI {
             // provided IP to all DNS request
             dnsServer.start(DNS_PORT, "*", WiFi.softAPIP());
             log_info("Captive Portal Started");
-            _webserver->on("/generate_204", HTTP_ANY, handle_root);
-            _webserver->on("/gconnectivitycheck.gstatic.com", HTTP_ANY, handle_root);
+            _webserver->on("/generate_204", HTTP_GET, [this]() { send_204(); });
+            _webserver->on("/gen_204", HTTP_GET, [this]() { send_204(); });
+            _webserver->on("/hotspot-detect.html", HTTP_GET, send_success);
+            _webserver->on("/library/test/success.html", HTTP_GET, send_success);
+            _webserver->on("/connecttest.txt", HTTP_GET, send_microsoft_current);
+            _webserver->on("/ncsi.txt", HTTP_GET, send_microsoft_legacy);
+            _webserver->on("/check_network_status.txt", HTTP_GET, send_gnome);
             //do not forget the / at the end
             _webserver->on("/fwlink/", HTTP_ANY, handle_root);
         }
@@ -326,10 +331,89 @@ namespace WebUI {
         "\n{\nclearInterval(interval);\nwindow.location.href='/';\n}\n},1000);\n</script>\n</CENTER>\n</BODY>\n</HTML>\n\n";
 
     void Web_Server::send404Page() {
+        log_debug((_webserver->hostHeader()).c_str());
+        log_debug( _webserver->urlDecode(_webserver->uri()).c_str() );
         sendWithOurAddress(PAGE_404, 404);
     }
 
+    void Web_Server::send_204() {
+        // For Google (Android/ChromeOS)
+        // http://connectivitycheck.gstatic.com/generate_204
+        // http://clients3.google.com/generate_204
+        // HTTP status code 204 with an empty body
+        log_debug((_webserver->hostHeader()).c_str());
+        log_debug( _webserver->urlDecode(_webserver->uri()).c_str() );
+        _webserver->sendHeader("Cache-Control", "no-cache");
+        _webserver->sendHeader("Pragma", "no-cache");
+        _webserver->send(204);
+        return;
+    }
+
+    // Captive Portal Page for use in AP mode
+    const char PAGE_SUCCESS[] =
+        "<HTML>\n<HEAD>\n<title>Success</title> \n</HEAD>\n<BODY>\nSuccess\n</BODY>\n</HTML>\n\n";
+
+    void Web_Server::send_success() {
+        // for apple
+	// http://captive.apple.com/hotspot-detect.html
+	// Legacy: http://www.apple.com/library/test/success.html 
+	// HTML with "Success" in both the title and body text.
+        log_debug((_webserver->hostHeader()).c_str());
+        log_debug( _webserver->urlDecode(_webserver->uri()).c_str() );
+
+	sendWithOurAddress(PAGE_SUCCESS, 200);
+        return;
+    }
+
+    void Web_Server::send_microsoft_current() {
+        // Microsoft Connect Test
+	// Current (Windows 10 1607 and later):
+	// http://www.msftconnecttest.com/connecttest.txt 
+        log_debug((_webserver->hostHeader()).c_str());
+        log_debug( _webserver->urlDecode(_webserver->uri()).c_str() );
+        _webserver->send(200, "text/plain", "Microsoft Connect Test");
+        return;
+    }
+
+    void Web_Server::send_microsoft_legacy() {
+        // Microsoft legacy
+	// Legacy (Prior to Windows 10 1607)
+	// http://www.msftncsi.com/ncsi.txt
+	// "Microsoft NCSI" (plain text)
+        log_debug((_webserver->hostHeader()).c_str());
+        log_debug( _webserver->urlDecode(_webserver->uri()).c_str() );
+        _webserver->send(200, "text/plain", "Microsoft NCSI");
+    }
+
+    void Web_Server::send_gnome() {
+        // NetworkManager (GNOME)
+	// http://nmcheck.gnome.org/check_network_status.txt
+	// "NetworkManager is online"
+        log_debug((_webserver->hostHeader()).c_str());
+        log_debug( _webserver->urlDecode(_webserver->uri()).c_str() );
+        _webserver->send(200, "text/plain", "NetworkManager is online");
+    }
+
+    void Web_Server::send_ok() {
+        // NetworkManager (KDE Plasma)
+	// http://networkcheck.kde.org/
+	// "OK" 
+        log_debug((_webserver->hostHeader()).c_str());
+        log_debug( _webserver->urlDecode(_webserver->uri()).c_str() );
+        _webserver->send(200, "text/plain", "OK");
+    }
+
     void Web_Server::handle_root() {
+        log_debug((_webserver->hostHeader()).c_str());
+        log_debug( _webserver->urlDecode(_webserver->uri()).c_str() );
+        if (WiFi.getMode() == WIFI_AP && _webserver->hostHeader() == "networkcheck.kde.org") {
+            send_ok();
+            return;
+        }
+        if (WiFi.getMode() == WIFI_AP && _webserver->hostHeader() == "connectivity-check.ubuntu.com.") {
+		    send_ok();
+            return;
+        }
         if (!(_webserver->hasArg("forcefallback") && _webserver->arg("forcefallback") == "yes")) {
             if (myStreamFile("/index.html")) {
                 return;
@@ -343,6 +427,8 @@ namespace WebUI {
 
     // Handle filenames and other things that are not explicitly registered
     void Web_Server::handle_not_found() {
+        log_debug((_webserver->hostHeader()).c_str());
+        log_debug( _webserver->urlDecode(_webserver->uri()).c_str() );
         if (is_authenticated() == AuthenticationLevel::LEVEL_GUEST) {
             _webserver->sendHeader(LOCATION_HEADER, "/");
             _webserver->send(302);
