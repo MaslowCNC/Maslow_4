@@ -727,7 +727,7 @@ static Error setGPIOInput(const char* value, WebUI::AuthenticationLevel auth_lev
     }
 
     pins[value]->setAttr(Pin::Attr::Input);
-    log_info("Pin " << value << " set to input");
+    log_debug("Pin " << value << " set to input");
 
     return Error::Ok;
 }
@@ -739,7 +739,7 @@ static Error setGPIOOutput(const char* value, WebUI::AuthenticationLevel auth_le
     }
 
     pins[value]->setAttr(Pin::Attr::Output);
-    log_info("Pin " << value << " set to output");
+    log_debug("Pin " << value << " set to output");
 
     return Error::Ok;
 }
@@ -752,7 +752,7 @@ static Error readGPIO(const char* value, WebUI::AuthenticationLevel auth_level, 
     }
 
     const auto v = pins[value]->read() ? "on" : "off";
-    log_info("Pin " << value << " reads " << v);
+    log_debug("Pin " << value << " reads " << v);
 
     return Error::Ok;
 }
@@ -765,7 +765,7 @@ static Error writeGPIOOn(const char* value, WebUI::AuthenticationLevel auth_leve
     }
 
     pins[value]->synchronousWrite(true);
-    log_info("Pin " << value << " is on");
+    log_debug("Pin " << value << " is on");
 
     return Error::Ok;
 }
@@ -778,7 +778,7 @@ static Error writeGPIOOff(const char* value, WebUI::AuthenticationLevel auth_lev
     }
 
     pins[value]->synchronousWrite(0);
-    log_info("Pin " << value << " is off");
+    log_debug("Pin " << value << " is off");
 
     return Error::Ok;
 }

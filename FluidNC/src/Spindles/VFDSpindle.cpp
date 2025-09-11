@@ -402,7 +402,7 @@ namespace Spindles {
             action.arg      = uint32_t(mode);
             action.critical = critical;
             if (xQueueSend(vfd_cmd_queue, &action, 0) != pdTRUE) {
-                log_info("VFD Queue Full");
+                log_debug("VFD Queue Full");
             }
         }
     }
@@ -420,7 +420,7 @@ namespace Spindles {
             action.arg      = dev_speed;
             action.critical = (dev_speed == 0);
             if (xQueueSendFromISR(vfd_cmd_queue, &action, 0) != pdTRUE) {
-                log_info("VFD Queue Full");
+                log_debug("VFD Queue Full");
             }
         }
     }
@@ -432,7 +432,7 @@ namespace Spindles {
             action.arg      = dev_speed;
             action.critical = dev_speed == 0;
             if (xQueueSend(vfd_cmd_queue, &action, 0) != pdTRUE) {
-                log_info("VFD Queue Full");
+                log_debug("VFD Queue Full");
             }
         }
     }

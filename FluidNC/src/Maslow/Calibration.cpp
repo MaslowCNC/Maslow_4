@@ -1643,7 +1643,7 @@ void Calibration::BRO() {
 */
 void Calibration::handleMotorOverides() {
     if (TLIOveride) {
-        log_info(int(millis() - overideTimer));
+        log_verbose(int(millis() - overideTimer));
         if (millis() - overideTimer < 200) {
             Maslow.axisTL.fullIn();
         } else {
@@ -1652,7 +1652,7 @@ void Calibration::handleMotorOverides() {
         }
     }
     if (BRIOveride) {
-        log_info(int(millis() - overideTimer));
+        log_verbose(int(millis() - overideTimer));
         if (millis() - overideTimer < 200) {
             Maslow.axisBR.fullIn();
         } else {
@@ -1661,7 +1661,7 @@ void Calibration::handleMotorOverides() {
         }
     }
     if (TRIOveride) {
-        log_info(int(millis() - overideTimer));
+        log_verbose(int(millis() - overideTimer));
         if (millis() - overideTimer < 200) {
             Maslow.axisTR.fullIn();
         } else {
@@ -1670,7 +1670,7 @@ void Calibration::handleMotorOverides() {
         }
     }
     if (BLIOveride) {
-        log_info(int(millis() - overideTimer));
+        log_verbose(int(millis() - overideTimer));
         if (millis() - overideTimer < 200) {
             Maslow.axisBL.fullIn();
         } else {
@@ -1679,7 +1679,7 @@ void Calibration::handleMotorOverides() {
         }
     }
     if (TLOOveride) {
-        log_info(int(millis() - overideTimer));
+        log_verbose(int(millis() - overideTimer));
         if (millis() - overideTimer < 200) {
             Maslow.axisTL.fullOut();
         } else {
@@ -1688,7 +1688,7 @@ void Calibration::handleMotorOverides() {
         }
     }
     if (BROOveride) {
-        log_info(int(millis() - overideTimer));
+        log_verbose(int(millis() - overideTimer));
         if (millis() - overideTimer < 200) {
             Maslow.axisBR.fullOut();
         } else {
@@ -1697,7 +1697,7 @@ void Calibration::handleMotorOverides() {
         }
     }
     if (TROOveride) {
-        log_info(int(millis() - overideTimer));
+        log_verbose(int(millis() - overideTimer));
         if (millis() - overideTimer < 200) {
             Maslow.axisTR.fullOut();
         } else {
@@ -1706,7 +1706,7 @@ void Calibration::handleMotorOverides() {
         }
     }
     if (BLOOveride) {
-        log_info(int(millis() - overideTimer));
+        log_verbose(int(millis() - overideTimer));
         if (millis() - overideTimer < 200) {
             Maslow.axisBL.fullOut();
         } else {

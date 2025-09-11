@@ -99,7 +99,7 @@ namespace MotorDrivers {
                 log_error(axisName() << " driver test failed. Check motor power");
                 return false;
             default:
-                log_info(axisName() << " driver test passed");
+                log_debug(axisName() << " driver test passed");
                 return true;
         }
     }
@@ -109,12 +109,12 @@ namespace MotorDrivers {
             log_error(axisName() << " TMC driver not detected - expected 0x" << to_hex(expected) << " got 0x" << to_hex(got));
             return false;
         }
-        log_info(axisName() << " driver test passed");
+        log_debug(axisName() << " driver test passed");
         return true;
     }
 
     void TrinamicBase::reportCommsFailure(void) {
-        log_info(axisName() << " communications check failed");
+        log_debug(axisName() << " communications check failed");
     }
 
     bool TrinamicBase::startDisable(bool disable) {
