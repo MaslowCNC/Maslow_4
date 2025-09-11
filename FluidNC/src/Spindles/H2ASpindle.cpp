@@ -82,7 +82,7 @@ namespace Spindles {
 
                 static_cast<H2A*>(vfd)->_maxRPM = uint32_t(maxRPM);
 
-                log_info("H2A spindle initialized at " << maxRPM << " RPM");
+                log_debug("H2A spindle initialized at " << maxRPM << " RPM");
 
                 return true;
             };

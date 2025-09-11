@@ -77,7 +77,7 @@ namespace Extenders {
         auto i2c = _i2cBus;
         Assert(i2c != nullptr, "I2C pin extender only works when I2C bus is configured.");
 
-        log_info("Setting up I2C pin extender on I2C" << _i2cBusId);
+        log_debug("Setting up I2C pin extender on I2C" << _i2cBusId);
 
         _isrQueue = xQueueCreate(16, sizeof(void*));
         xTaskCreatePinnedToCore(isrTaskLoop,                      // task
