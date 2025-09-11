@@ -9,7 +9,7 @@ namespace Kinematics {
 
     void Midtbot::init() {
         _x_scaler = 2.0;
-        log_info("Kinematic system: " << name());
+        log_debug("Kinematic system: " << name());
     }
 
     // Configuration registration

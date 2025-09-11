@@ -37,19 +37,19 @@ namespace Machine {
         }
 
         int nDevices = 0;
-        log_info("Scanning...");
+        log_debug("Scanning...");
         for (uint8_t address = 1; address < 127; address++) {
             uint8_t buf[1];
             auto    error = i2c_write(_busNumber, address, buf, 0);
             if (error == 0) {
-                log_info("I2C device found at address " << int(address));
+                log_debug("I2C device found at address " << int(address));
                 nDevices++;
             }
         }
         if (nDevices == 0) {
-            log_info("No I2C devices found");
+            log_debug("No I2C devices found");
         } else {
-            log_info("done");
+            log_debug("done");
         }
     }
 
@@ -58,7 +58,7 @@ namespace Machine {
             return -1;
         }
 
-        log_info("I2C write: " << int(address); for (int i = 0; i < count; ++i) { ss << ' ' << int(data[i]); });
+        log_verbose("I2C write: " << int(address); for (int i = 0; i < count; ++i) { ss << ' ' << int(data[i]); });
 
         return i2c_write(_busNumber, address, data, count);
     }
@@ -67,7 +67,7 @@ namespace Machine {
         if (_error) {
             return -1;
         }
-        log_info("I2C read: " << int(address));
+        log_verbose("I2C read: " << int(address));
         return i2c_read(_busNumber, address, data, count);
     }
     */
@@ -88,7 +88,7 @@ namespace Machine {
     }
 
     void I2CBus::init() {
-        log_info("I2C SDA: " << _sda.name() << ", SCL: " << _scl.name() << ", Freq: " << _frequency << ", Bus #: " << _busNumber);
+        log_debug("I2C SDA: " << _sda.name() << ", SCL: " << _scl.name() << ", Freq: " << _frequency << ", Bus #: " << _busNumber);
 
         auto sdaPin = _sda.getNative(Pin::Capabilities::Native | Pin::Capabilities::Input | Pin::Capabilities::Output);
         auto sclPin = _scl.getNative(Pin::Capabilities::Native | Pin::Capabilities::Input | Pin::Capabilities::Output);
@@ -103,19 +103,19 @@ namespace Machine {
         i2c->begin(int(sdaPin), int(sclPin), _frequency);
 
         int nDevices = 0;
-        log_info("Scanning...");
+        log_debug("Scanning...");
         for (uint8_t address = 1; address < 127; address++) {
             i2c->beginTransmission(address);
             auto error = i2c->endTransmission();
             if (error == 0) {
-                log_info("I2C device found at address " << int(address));
+                log_debug("I2C device found at address " << int(address));
                 nDevices++;
             }
         }
         if (nDevices == 0) {
-            log_info("No I2C devices found");
+            log_debug("No I2C devices found");
         } else {
-            log_info("done");
+            log_debug("done");
         }
     }
 

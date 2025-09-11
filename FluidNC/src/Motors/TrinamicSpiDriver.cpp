@@ -39,7 +39,7 @@ namespace MotorDrivers {
     This is the startup message showing the basic definition
     */
     void TrinamicSpiDriver::config_message() {
-        log_info("    " << name() << " Step:" << _step_pin.name() << " Dir:" << _dir_pin.name() << " CS:" << _cs_pin.name()
+        log_debug("    " << name() << " Step:" << _step_pin.name() << " Dir:" << _dir_pin.name() << " CS:" << _cs_pin.name()
                         << " Disable:" << _disable_pin.name() << " Index:" << _spi_index << " R:" << _r_sense);
     }
 

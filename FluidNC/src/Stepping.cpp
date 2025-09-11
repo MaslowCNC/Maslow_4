@@ -17,7 +17,7 @@ namespace Machine {
                              EnumItem(Stepping::TIMED) };
 
     void Stepping::init() {
-        log_info("Stepping:" << stepTypes[_engine].name << " Pulse:" << _pulseUsecs << "us Dsbl Delay:" << _disableDelayUsecs
+        log_debug("Stepping:" << stepTypes[_engine].name << " Pulse:" << _pulseUsecs << "us Dsbl Delay:" << _disableDelayUsecs
                              << "us Dir Delay:" << _directionDelayUsecs << "us Idle Delay:" << _idleMsecs << "ms");
 
         // Prepare stepping interrupt callbacks.  The one that is actually

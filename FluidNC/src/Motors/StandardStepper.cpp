@@ -90,7 +90,7 @@ namespace MotorDrivers {
     }
 
     void StandardStepper::config_message() {
-        log_info("    " << name() << " Step:" << _step_pin.name() << " Dir:" << _dir_pin.name() << " Disable:" << _disable_pin.name());
+        log_debug("    " << name() << " Step:" << _step_pin.name() << " Dir:" << _dir_pin.name() << " Disable:" << _disable_pin.name());
     }
 
     void IRAM_ATTR StandardStepper::step() {

@@ -31,7 +31,7 @@ namespace MotorDrivers {
         This is the startup message showing the basic definition. 
     */
     void TrinamicUartDriver::config_message() {  //TODO: The RX/TX pin could be added to the msg.
-        log_info("    " << name() << " UART" << _uart_num << " Addr:" << _addr << " Step:" << _step_pin.name() << " Dir:" << _dir_pin.name()
+        log_debug("    " << name() << " UART" << _uart_num << " Addr:" << _addr << " Step:" << _step_pin.name() << " Dir:" << _dir_pin.name()
                         << " Disable:" << _disable_pin.name() << " R:" << _r_sense);
     }
 

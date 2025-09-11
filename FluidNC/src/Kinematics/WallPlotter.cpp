@@ -18,7 +18,7 @@ namespace Kinematics {
     }
 
     void WallPlotter::init() {
-        log_info("Kinematic system: " << name());
+        log_debug("Kinematic system: " << name());
 
         // We assume the machine starts at cartesian (0, 0, 0).
         // The motors assume they start from (0, 0, 0).

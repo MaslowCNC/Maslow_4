@@ -6,7 +6,7 @@
 
 namespace Kinematics {
     void Cartesian::init() {
-        log_info("Kinematic system: " << name());
+        log_debug("Kinematic system: " << name());
         init_position();
     }
 

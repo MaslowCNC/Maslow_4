@@ -30,7 +30,7 @@ namespace Kinematics {
     void CoreXY::group(Configuration::HandlerBase& handler) {}
 
     void CoreXY::init() {
-        log_info("Kinematic system: " << name());
+        log_debug("Kinematic system: " << name());
 
         // A limit switch on either axis stops both motors
         config->_axes->_axis[X_AXIS]->_motors[0]->limitOtherAxis(Y_AXIS);

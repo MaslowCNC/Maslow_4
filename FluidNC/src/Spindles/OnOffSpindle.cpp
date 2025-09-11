@@ -29,7 +29,7 @@ namespace Spindles {
 
     // prints the startup message of the spindle config
     void OnOff ::config_message() {
-        log_info(name() << " Spindle Ena:" << _enable_pin.name() << " Out:" << _output_pin.name() << " Dir:" << _direction_pin.name());
+        log_debug(name() << " Spindle Ena:" << _enable_pin.name() << " Out:" << _output_pin.name() << " Dir:" << _direction_pin.name());
     }
 
     void OnOff::setState(SpindleState state, SpindleSpeed speed) {
