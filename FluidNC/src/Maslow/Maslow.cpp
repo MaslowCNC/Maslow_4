@@ -317,6 +317,40 @@ void Maslow_::setTargets(float xTarget, float yTarget, float zTarget, bool tl, b
         return;
     }
 
+    // DEBUG: Log when setTargets is called during calibration
+    if (calibration.getCurrentState() == CALIBRATION_IN_PROGRESS) {
+        log_info("DEBUG: setTargets called during calibration - Target: X=" << xTarget << " Y=" << yTarget << " Z=" << zTarget);
+        
+        // Log current belt positions before setting new targets
+        log_info("DEBUG: Current belt positions before setTargets - TL:" << axisTL.getPosition() << " TR:" << axisTR.getPosition() 
+                 << " BL:" << axisBL.getPosition() << " BR:" << axisBR.getPosition());
+        
+        // Calculate new target belt lengths
+        float tlTarget = kinematics->computeTL(xTarget, yTarget, zTarget);
+        float trTarget = kinematics->computeTR(xTarget, yTarget, zTarget);
+        float blTarget = kinematics->computeBL(xTarget, yTarget, zTarget);
+        float brTarget = kinematics->computeBR(xTarget, yTarget, zTarget);
+        
+        log_info("DEBUG: Computed target belt lengths - TL:" << tlTarget << " TR:" << trTarget << " BL:" << blTarget << " BR:" << brTarget);
+        
+        // Calculate movement distances
+        float tlMove = tlTarget - axisTL.getPosition();
+        float trMove = trTarget - axisTR.getPosition();
+        float blMove = blTarget - axisBL.getPosition();
+        float brMove = brTarget - axisBR.getPosition();
+        
+        log_info("DEBUG: Belt movement distances - TL:" << tlMove << " TR:" << trMove << " BL:" << blMove << " BR:" << brMove);
+        
+        // Calculate total movement magnitude
+        float totalMovement = sqrt(tlMove*tlMove + trMove*trMove + blMove*blMove + brMove*brMove);
+        log_info("DEBUG: Total belt movement magnitude: " << totalMovement << "mm");
+        
+        if (totalMovement > 100.0) {  // Large movement threshold
+            log_error("DEBUG: LARGE MOVEMENT DETECTED! Total magnitude: " << totalMovement << "mm");
+            log_error("DEBUG: This may be the source of the sudden movement issue!");
+        }
+    }
+
     if (tl) {
         axisTL.setTarget(kinematics->computeTL(xTarget, yTarget, zTarget));
     }

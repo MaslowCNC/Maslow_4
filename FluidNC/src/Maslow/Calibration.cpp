@@ -170,10 +170,26 @@ bool Calibration::requestStateChange(int newState) {
                 float x          = 0;
                 float y          = 0;
                 auto  kinematics = getKinematics();
-                if (kinematics && computeXYfromLengths(measurementToXYPlane(Maslow.axisTL.getPosition(), kinematics->getTlZ()),
-                                                       measurementToXYPlane(Maslow.axisTR.getPosition(), kinematics->getTrZ()),
-                                                       x,
-                                                       y)) {
+                
+                // DEBUG: Log current system state before position calculation
+                float* current_mpos = get_mpos();
+                log_info("DEBUG: Starting calibration position sync");
+                log_info("DEBUG: Current mpos before sync: X=" << current_mpos[0] << " Y=" << current_mpos[1] << " Z=" << current_mpos[2]);
+                log_info("DEBUG: Current target position: X=" << Maslow.getTargetX() << " Y=" << Maslow.getTargetY() << " Z=" << Maslow.getTargetZ());
+                
+                // DEBUG: Log hardware belt positions
+                float tlBeltPos = Maslow.axisTL.getPosition();
+                float trBeltPos = Maslow.axisTR.getPosition();
+                float blBeltPos = Maslow.axisBL.getPosition();
+                float brBeltPos = Maslow.axisBR.getPosition();
+                log_info("DEBUG: Hardware belt positions - TL:" << tlBeltPos << " TR:" << trBeltPos << " BL:" << blBeltPos << " BR:" << brBeltPos);
+                
+                // DEBUG: Log XY plane distances
+                float tlXYPlane = measurementToXYPlane(tlBeltPos, kinematics->getTlZ());
+                float trXYPlane = measurementToXYPlane(trBeltPos, kinematics->getTrZ());
+                log_info("DEBUG: XY plane distances - TL:" << tlXYPlane << " TR:" << trXYPlane);
+                
+                if (kinematics && computeXYfromLengths(tlXYPlane, trXYPlane, x, y)) {
                     //We reset the last waypoint to where it actually is so that we can move from the updated position to the next waypoint
                     if (waypoint > 0) {
                         calibrationGrid[waypoint - 1][0] = x;
@@ -181,6 +197,20 @@ bool Calibration::requestStateChange(int newState) {
                     }
 
                     log_info("Machine Position found as X: " << x << " Y: " << y);
+
+                    // DEBUG: Calculate what belt lengths kinematics expects for this position
+                    float expectedTL = kinematics->computeTL(x, y, 0);
+                    float expectedTR = kinematics->computeTR(x, y, 0);
+                    float expectedBL = kinematics->computeBL(x, y, 0);
+                    float expectedBR = kinematics->computeBR(x, y, 0);
+                    log_info("DEBUG: Expected belt lengths at computed position - TL:" << expectedTL << " TR:" << expectedTR << " BL:" << expectedBL << " BR:" << expectedBR);
+                    
+                    // DEBUG: Calculate differences between hardware and expected positions
+                    float diffTL = tlBeltPos - expectedTL;
+                    float diffTR = trBeltPos - expectedTR;
+                    float diffBL = blBeltPos - expectedBL;
+                    float diffBR = brBeltPos - expectedBR;
+                    log_info("DEBUG: Belt position differences (Hardware - Expected) - TL:" << diffTL << " TR:" << diffTR << " BL:" << diffBL << " BR:" << diffBR);
 
                     //Set the internal machine position using actual belt positions to avoid synchronization issues
                     // Get current belt positions from hardware and set motor steps directly
@@ -192,16 +222,33 @@ bool Calibration::requestStateChange(int newState) {
                     log_info("Setting motor positions from hardware readings:");
                     log_info("TL: " << tlBeltLength << " TR: " << trBeltLength << " BL: " << blBeltLength << " BR: " << brBeltLength);
 
+                    // DEBUG: Log motor step conversions
+                    int32_t tlSteps = mpos_to_steps(tlBeltLength, 0);
+                    int32_t trSteps = mpos_to_steps(trBeltLength, 1);
+                    int32_t blSteps = mpos_to_steps(blBeltLength, 2);
+                    int32_t brSteps = mpos_to_steps(brBeltLength, 3);
+                    int32_t zSteps = mpos_to_steps(0.0, 4);
+                    log_info("DEBUG: Motor steps - TL:" << tlSteps << " TR:" << trSteps << " BL:" << blSteps << " BR:" << brSteps << " Z:" << zSteps);
+
                     // Set motor positions directly from hardware readings
                     // Axis mapping: A=TL(0), B=TR(1), C=BL(2), D=BR(3), Z=router(4)
-                    set_motor_steps(0, mpos_to_steps(tlBeltLength, 0));  // A axis = TL belt
-                    set_motor_steps(1, mpos_to_steps(trBeltLength, 1));  // B axis = TR belt
-                    set_motor_steps(2, mpos_to_steps(blBeltLength, 2));  // C axis = BL belt
-                    set_motor_steps(3, mpos_to_steps(brBeltLength, 3));  // D axis = BR belt
-                    set_motor_steps(4, mpos_to_steps(0.0, 4));           // Z axis = 0 (surface level) during calibration
+                    set_motor_steps(0, tlSteps);  // A axis = TL belt
+                    set_motor_steps(1, trSteps);  // B axis = TR belt
+                    set_motor_steps(2, blSteps);  // C axis = BL belt
+                    set_motor_steps(3, brSteps);  // D axis = BR belt
+                    set_motor_steps(4, zSteps);   // Z axis = 0 (surface level) during calibration
+                    
+                    // DEBUG: Log motor positions after setting
+                    float* mpos_after = get_mpos();
+                    log_info("DEBUG: mpos after motor step setting: X=" << mpos_after[0] << " Y=" << mpos_after[1] << " Z=" << mpos_after[2]);
 
                     gc_sync_position();  //This updates the Gcode engine with the new position from the stepping engine that we set with set_motor_steps
                     plan_sync_position();
+                    
+                    // DEBUG: Log final synchronized positions
+                    float* mpos_final = get_mpos();
+                    log_info("DEBUG: Final mpos after gc_sync/plan_sync: X=" << mpos_final[0] << " Y=" << mpos_final[1] << " Z=" << mpos_final[2]);
+                    log_info("DEBUG: Final target position: X=" << Maslow.getTargetX() << " Y=" << Maslow.getTargetY() << " Z=" << Maslow.getTargetZ());
                 }
 
                 sys.set_state(State::Homing);
@@ -420,6 +467,13 @@ void Calibration::calibration_loop() {
 
     //Move to the next point in the grid
     else {
+        // DEBUG: Log movement details for the first few waypoints
+        if (waypoint <= 3) {
+            log_info("DEBUG: Calibration loop moving to waypoint " << waypoint);
+            log_info("DEBUG: From: X=" << calibrationGrid[waypoint - 1][0] << " Y=" << calibrationGrid[waypoint - 1][1]);
+            log_info("DEBUG: To: X=" << calibrationGrid[waypoint][0] << " Y=" << calibrationGrid[waypoint][1]);
+        }
+        
         if (move_with_slack(calibrationGrid[waypoint - 1][0],
                             calibrationGrid[waypoint - 1][1],
                             calibrationGrid[waypoint][0],
@@ -1015,6 +1069,12 @@ bool Calibration::take_measurement_avg_with_check(int waypoint, int dir) {
                 calibrationGrid[4][1] = y + 150;
                 calibrationGrid[5][0] = x - 150;
                 calibrationGrid[5][1] = y;
+                
+                // DEBUG: Log the computed calibration grid points
+                log_info("DEBUG: Calibration grid points computed from position X=" << x << " Y=" << y);
+                for (int i = 0; i <= 5; i++) {
+                    log_info("DEBUG: Grid[" << i << "] = X:" << calibrationGrid[i][0] << " Y:" << calibrationGrid[i][1]);
+                }
             }
 
             //This is the exit to indicate that the measurement was successful
@@ -1102,6 +1162,7 @@ bool Calibration::move_with_slack(double fromX, double fromY, double toX, double
         }
 
         //Set the target to the starting position
+        log_info("DEBUG: move_with_slack setting initial target - From: X=" << fromX << " Y=" << fromY << " To: X=" << toX << " Y=" << toY);
         Maslow.setTargets(fromX, fromY, 0);
     }
 
@@ -1144,6 +1205,14 @@ bool Calibration::move_with_slack(double fromX, double fromY, double toX, double
     }
 
     //Set the targets
+    // DEBUG: Log incremental movement steps for first few moves
+    static int moveCallCount = 0;
+    if (waypoint <= 2 && moveCallCount < 20) {
+        log_info("DEBUG: move_with_slack step " << moveCallCount << " - Current target: X=" << Maslow.getTargetX() << " Y=" << Maslow.getTargetY());
+        log_info("DEBUG: Step size: X=" << xStepSize << " Y=" << yStepSize << " - New target: X=" << (Maslow.getTargetX() + xStepSize) << " Y=" << (Maslow.getTargetY() + yStepSize));
+        moveCallCount++;
+    }
+    
     Maslow.setTargets(Maslow.getTargetX() + xStepSize, Maslow.getTargetY() + yStepSize, 0);
 
     //Check to see if we have reached our target position
