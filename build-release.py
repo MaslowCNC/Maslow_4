@@ -13,7 +13,36 @@ verbose = '-v' in sys.argv
 environ = dict(os.environ)
 
 platformio = r"/Users/barsmith/.platformio/penv/bin/platformio" #"/Users/barsmith/.platformio/penv/bin/platformio"
-version = "1.11"
+
+# Generate version using git-version.py
+try:
+    # Run git-version.py to generate version information
+    subprocess.run(["python", "git-version.py"], check=True)
+    
+    # Read the generated version from version.cpp
+    version_file = "FluidNC/src/version.cpp"
+    if os.path.exists(version_file):
+        with open(version_file, 'r') as f:
+            content = f.read()
+            # Extract VERSION_NUMBER from the generated file
+            for line in content.split('\n'):
+                if 'VERSION_NUMBER' in line and '=' in line:
+                    # Extract version string between quotes
+                    start = line.find('"') + 1
+                    end = line.rfind('"')
+                    if start > 0 and end > start:
+                        version = line[start:end]
+                        # Remove 'v' prefix if present for consistency with existing tag format
+                        if version.startswith('v'):
+                            version = version[1:]
+                        break
+            else:
+                version = "1.11"  # fallback
+    else:
+        version = "1.11"  # fallback
+except:
+    version = "1.11"  # fallback
+
 os.chdir(os.path.dirname(os.path.realpath(r"/Users/barsmith/Documents/GitHub/FluidNC/.pio"))) #"/Users/barsmith/Documents/GitHub/FluidNC/.pio"
 #change path to the project folder (the folder with platformio.ini)
 tag = "maslow4-"+version
