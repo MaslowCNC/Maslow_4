@@ -43,6 +43,7 @@ void setup() {
         uartInit();       // Setup serial port
         Uart0.println();  // create some white space after ESP32 boot info
 
+
         // Setup input polling loop after loading the configuration,
         // because the polling may depend on the config
         allChannels.init();
