@@ -61,4 +61,4 @@ pio run -e wifi_s3 -t  erase
 
 pio run -e wifi_s3 -t uploadfs
 
-to erase and upload the file system if the UI is not responding.
+to erase and upload the file system if the UI is not responding. 
