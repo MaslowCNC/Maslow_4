@@ -55,20 +55,20 @@ git_info = '%s%s' % (tag, rev)
 
 # Generate VERSION_NUMBER using git describe --tags --always --dirty for Maslow-specific version
 if gitFail:
-    version_number = "unknown"
+    VERSION_NUMBER = "unknown"
     compile_warning = ""
 else:
     try:
-        version_number = (
+        VERSION_NUMBER = (
             subprocess.check_output(["git", "describe", "--tags", "--always", "--dirty"], stderr=subprocess.DEVNULL)
             .strip()
             .decode("utf-8")
         )
     except:
-        version_number = "unknown"
+        VERSION_NUMBER = "unknown"
     
     # Check if version contains "-" to trigger warning for non-tagged versions
-    if "-" in version_number:
+    if "-" in VERSION_NUMBER:
         compile_warning = '#warning "You are not compiling a tagged version, this should not be a release"'
     else:
         compile_warning = ""
@@ -78,7 +78,7 @@ final = "FluidNC/src/version.cpp"
 with open(provisional, "w") as fp:
     fp.write('const char* grbl_version = \"' + grbl_version + '\";\n')
     fp.write('const char* git_info     = \"' + git_info + '\";\n')
-    fp.write('const char* version_number = \"' + version_number + '\";\n')
+    fp.write('const char* VERSION_NUMBER = \"' + VERSION_NUMBER + '\";\n')
     if compile_warning:
         fp.write(compile_warning + '\n')
 

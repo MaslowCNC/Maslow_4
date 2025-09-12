@@ -96,7 +96,7 @@ void Maslow_::begin(void (*sys_rt)()) {
     if (error) {
         log_error(M + " failed to initialize - fix errors and restart");
     } else {
-        log_info("Starting " + M + " Version " << version_number);
+        log_info("Starting " + M + " Version " << VERSION_NUMBER);
     }
 }
 
@@ -480,7 +480,7 @@ String Maslow_::axis_id_to_label(int axis_id) {
 
 //Runs the self test feature
 void Maslow_::test_() {
-    log_info("Firmware Version: " << version_number);
+    log_info("Firmware Version: " << VERSION_NUMBER);
 
     log_info("I2C Timeout: ");
     log_info(Wire.getTimeOut());
@@ -723,7 +723,7 @@ void Maslow_::set_telemetry(bool enabled) {
         // write header
         TelemetryFileHeader header;
         header.structureSize = sizeof(TelemetryData);
-        strcpy(header.version, version_number);
+        strcpy(header.version, VERSION_NUMBER);
         file->write(reinterpret_cast<uint8_t*>(&header), sizeof(TelemetryFileHeader));
         file->flush();
         delete file;
