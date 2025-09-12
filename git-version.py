@@ -53,11 +53,34 @@ else:
 grbl_version = tag.replace('v','').rpartition('.')[0]
 git_info = '%s%s' % (tag, rev)
 
+# Generate VERSION_NUMBER using git describe --tags --always --dirty for Maslow-specific version
+if gitFail:
+    version_number = "unknown"
+    compile_warning = ""
+else:
+    try:
+        version_number = (
+            subprocess.check_output(["git", "describe", "--tags", "--always", "--dirty"], stderr=subprocess.DEVNULL)
+            .strip()
+            .decode("utf-8")
+        )
+    except:
+        version_number = "unknown"
+    
+    # Check if version contains "-" to trigger warning for non-tagged versions
+    if "-" in version_number:
+        compile_warning = '#warning "You are not compiling a tagged version, this should not be a release"'
+    else:
+        compile_warning = ""
+
 provisional = "FluidNC/src/version.cxx"
 final = "FluidNC/src/version.cpp"
 with open(provisional, "w") as fp:
     fp.write('const char* grbl_version = \"' + grbl_version + '\";\n')
     fp.write('const char* git_info     = \"' + git_info + '\";\n')
+    fp.write('const char* version_number = \"' + version_number + '\";\n')
+    if compile_warning:
+        fp.write(compile_warning + '\n')
 
 if not os.path.exists(final):
     # No version.cpp so rename version.cxx to version.cpp

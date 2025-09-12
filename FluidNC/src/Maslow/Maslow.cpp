@@ -11,7 +11,7 @@
 #include "../Kinematics/MaslowKinematics.h"
 
 // Maslow specific defines
-#define VERSION_NUMBER "1.11"
+// VERSION_NUMBER is now dynamically generated - see git-version.py and version.cpp
 
 #define TLEncoderLine 2
 #define TREncoderLine 1
@@ -97,7 +97,7 @@ void Maslow_::begin(void (*sys_rt)()) {
     if (error) {
         log_error(M + " failed to initialize - fix errors and restart");
     } else {
-        log_info("Starting " + M + " Version " << VERSION_NUMBER);
+        log_info("Starting " + M + " Version " << version_number);
     }
 }
 
@@ -481,7 +481,7 @@ String Maslow_::axis_id_to_label(int axis_id) {
 
 //Runs the self test feature
 void Maslow_::test_() {
-    log_info("Firmware Version: " << VERSION_NUMBER);
+    log_info("Firmware Version: " << version_number);
 
     log_info("I2C Timeout: ");
     log_info(Wire.getTimeOut());
@@ -724,7 +724,7 @@ void Maslow_::set_telemetry(bool enabled) {
         // write header
         TelemetryFileHeader header;
         header.structureSize = sizeof(TelemetryData);
-        strcpy(header.version, VERSION_NUMBER);
+        strcpy(header.version, version_number);
         file->write(reinterpret_cast<uint8_t*>(&header), sizeof(TelemetryFileHeader));
         file->flush();
         delete file;
