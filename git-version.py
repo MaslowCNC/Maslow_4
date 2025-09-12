@@ -3,6 +3,9 @@ import filecmp, tempfile, shutil, os
 
 # Thank you https://docs.platformio.org/en/latest/projectconf/section_env_build.html !
 
+# Define fallback value once
+FALLBACK_VERSION = "unknown-not-built-from-git"
+
 gitFail = False
 try:
     subprocess.check_call(["git", "status"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -10,7 +13,7 @@ except:
     gitFail = True
 
 if gitFail:
-    tag = "v3.0.x"
+    tag = FALLBACK_VERSION
     rev = " (noGit)"
 else:
     try:
@@ -20,7 +23,7 @@ else:
             .decode("utf-8")
         )
     except:
-        tag = "v3.0.x"
+        tag = FALLBACK_VERSION
 
     # Check to see if the head commit exactly matches a tag.
     # If so, the revision is "release", otherwise it is BRANCH-COMMIT
@@ -55,7 +58,7 @@ git_info = '%s%s' % (tag, rev)
 
 # Generate VERSION_NUMBER using git describe --tags --always --dirty for Maslow-specific version
 if gitFail:
-    VERSION_NUMBER = "unknown"
+    VERSION_NUMBER = FALLBACK_VERSION
     compile_warning = ""
 else:
     try:
@@ -65,7 +68,7 @@ else:
             .decode("utf-8")
         )
     except:
-        VERSION_NUMBER = "unknown"
+        VERSION_NUMBER = FALLBACK_VERSION
     
     # Check if version contains "-" to trigger warning for non-tagged versions
     if "-" in VERSION_NUMBER:
