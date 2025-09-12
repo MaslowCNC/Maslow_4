@@ -157,11 +157,9 @@ bool Calibration::requestStateChange(int newState) {
                 }
                 Maslow.stop();
 
-                // Preserve current Z position to avoid sudden movement when starting calibration
-                // The belt positions were set based on the current Z, so changing Z would cause movement
-                float* currentMpos = get_mpos();
-                float currentZ = currentMpos[Z_AXIS];
-                log_info("Preserving current Z position: " << currentZ << " mm during calibration start");
+                //Save the z-axis 'stop' position
+                Maslow.targetZ = 0;
+                Maslow.setZStop();
 
                 //Recalculate the center position because the machine dimensions may have been updated
                 updateCenterXY();
@@ -200,10 +198,7 @@ bool Calibration::requestStateChange(int newState) {
                     set_motor_steps(1, mpos_to_steps(trBeltLength, 1));  // B axis = TR belt
                     set_motor_steps(2, mpos_to_steps(blBeltLength, 2));  // C axis = BL belt
                     set_motor_steps(3, mpos_to_steps(brBeltLength, 3));  // D axis = BR belt
-                    set_motor_steps(4, mpos_to_steps(currentZ, 4));       // Z axis = current position (preserve to avoid sudden movement)
-
-                    // Update target Z to match the preserved position
-                    Maslow.targetZ = currentZ;
+                    set_motor_steps(4, mpos_to_steps(0.0, 4));           // Z axis = 0 (surface level) during calibration
 
                     gc_sync_position();  //This updates the Gcode engine with the new position from the stepping engine that we set with set_motor_steps
                     plan_sync_position();
@@ -1085,30 +1080,29 @@ bool Calibration::move_with_slack(double fromX, double fromY, double toX, double
         if (!kinematics)
             return false;
 
-        float currentZ = Maslow.getTargetZ();  // Use current Z position instead of hardcoded 0
-        if (kinematics->computeTL(fromX, fromY, currentZ) < kinematics->computeTL(toX, toY, currentZ)) {
+        if (kinematics->computeTL(fromX, fromY, 0) < kinematics->computeTL(toX, toY, 0)) {
             tlExtending = true;
         } else {
             tlExtending = false;
         }
-        if (kinematics->computeTR(fromX, fromY, currentZ) < kinematics->computeTR(toX, toY, currentZ)) {
+        if (kinematics->computeTR(fromX, fromY, 0) < kinematics->computeTR(toX, toY, 0)) {
             trExtending = true;
         } else {
             trExtending = false;
         }
-        if (kinematics->computeBL(fromX, fromY, currentZ) < kinematics->computeBL(toX, toY, currentZ)) {
+        if (kinematics->computeBL(fromX, fromY, 0) < kinematics->computeBL(toX, toY, 0)) {
             blExtending = true;
         } else {
             blExtending = false;
         }
-        if (kinematics->computeBR(fromX, fromY, currentZ) < kinematics->computeBR(toX, toY, currentZ)) {
+        if (kinematics->computeBR(fromX, fromY, 0) < kinematics->computeBR(toX, toY, 0)) {
             brExtending = true;
         } else {
             brExtending = false;
         }
 
         //Set the target to the starting position
-        Maslow.setTargets(fromX, fromY, Maslow.getTargetZ());
+        Maslow.setTargets(fromX, fromY, 0);
     }
 
     //Decompress belts for 500ms...this happens by returning right away before running any of the rest of the code
@@ -1150,7 +1144,7 @@ bool Calibration::move_with_slack(double fromX, double fromY, double toX, double
     }
 
     //Set the targets
-    Maslow.setTargets(Maslow.getTargetX() + xStepSize, Maslow.getTargetY() + yStepSize, Maslow.getTargetZ());
+    Maslow.setTargets(Maslow.getTargetX() + xStepSize, Maslow.getTargetY() + yStepSize, 0);
 
     //Check to see if we have reached our target position
     if (abs(Maslow.getTargetX() - toX) < 5 && abs(Maslow.getTargetY() - toY) < 5) {
