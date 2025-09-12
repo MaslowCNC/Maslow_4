@@ -37,11 +37,11 @@ try:
                             version = version[1:]
                         break
             else:
-                version = "1.11"  # fallback
+                version = "unknown-not-built-from-git"  # fallback
     else:
-        version = "1.11"  # fallback
+        version = "unknown-not-built-from-git"  # fallback
 except:
-    version = "1.11"  # fallback
+    version = "unknown-not-built-from-git"  # fallback
 
 os.chdir(os.path.dirname(os.path.realpath(r"/Users/barsmith/Documents/GitHub/FluidNC/.pio"))) #"/Users/barsmith/Documents/GitHub/FluidNC/.pio"
 #change path to the project folder (the folder with platformio.ini)

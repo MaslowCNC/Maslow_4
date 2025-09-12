@@ -11,7 +11,6 @@
 #include "../Kinematics/MaslowKinematics.h"
 
 // Maslow specific defines
-// VERSION_NUMBER is now dynamically generated - see git-version.py and version.cpp
 
 #define TLEncoderLine 2
 #define TREncoderLine 1
