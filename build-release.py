@@ -12,6 +12,9 @@ verbose = '-v' in sys.argv
 
 environ = dict(os.environ)
 
+# Define fallback value once
+FALLBACK_VERSION = "unknown-not-built-from-git"
+
 platformio = r"/Users/barsmith/.platformio/penv/bin/platformio" #"/Users/barsmith/.platformio/penv/bin/platformio"
 
 # Generate version using git-version.py
@@ -37,11 +40,11 @@ try:
                             version = version[1:]
                         break
             else:
-                version = "unknown-not-built-from-git"  # fallback
+                version = FALLBACK_VERSION  # fallback
     else:
-        version = "unknown-not-built-from-git"  # fallback
+        version = FALLBACK_VERSION  # fallback
 except:
-    version = "unknown-not-built-from-git"  # fallback
+    version = FALLBACK_VERSION  # fallback
 
 os.chdir(os.path.dirname(os.path.realpath(r"/Users/barsmith/Documents/GitHub/FluidNC/.pio"))) #"/Users/barsmith/Documents/GitHub/FluidNC/.pio"
 #change path to the project folder (the folder with platformio.ini)
