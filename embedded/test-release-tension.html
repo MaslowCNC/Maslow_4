@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Release Tension Button Test</title>
+    <style>
+        /* Make Release Tension button green in all states */
+        .calibration-modal-button {
+            background-color: #4aa85c !important;
+        }
+        
+        /* Demo styles */
+        .calibration-modal-button {
+            padding: 15px;
+            font-size: 16px;
+            cursor: pointer;
+            border: none;
+            min-width: 150px;
+            height: 75px;
+            color: #fff;
+            text-transform: uppercase;
+            margin: 10px;
+            border-radius: 5px;
+        }
+        
+        .comparison {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            margin: 20px;
+        }
+        
+        .old-style {
+            background-color: #b69fcb !important;
+        }
+    </style>
+</head>
+<body>
+    <h1>Release Tension Button Color Fix</h1>
+    
+    <div class="comparison">
+        <div>
+            <h3>Before (Purple/Gray)</h3>
+            <button class="calibration-modal-button old-style">Release Tension</button>
+        </div>
+        
+        <div>
+            <h3>After (Green)</h3>
+            <button class="calibration-modal-button" id="tablettab_cal_relax">Release Tension</button>
+        </div>
+    </div>
+    
+    <p>The "Release Tension" button is now green (#4aa85c) instead of purple/gray (#b69fcb) in all states.</p>
+</body>
+</html>
