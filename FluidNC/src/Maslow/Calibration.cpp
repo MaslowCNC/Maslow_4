@@ -509,8 +509,11 @@ bool Calibration::takeSlackFunc() {
 
     //Take a measurement
     if (takeSlackState == 0) {
-        if (take_measurement_avg_with_check(
-                0, UP)) {  //We really shouldn't be using the first position to store the data, it should have it's own array
+        log_info("DEBUG: APPLY_TENSION - About to call take_measurement_avg_with_check(0, UP)");
+        bool measurementResult = take_measurement_avg_with_check(0, UP);
+        log_info("DEBUG: APPLY_TENSION - take_measurement_avg_with_check returned: " << (measurementResult ? "true" : "false"));
+        
+        if (measurementResult) {  //We really shouldn't be using the first position to store the data, it should have it's own array
             
             log_info("DEBUG: APPLY_TENSION - Measurement completed, raw calibration_data[0]: TL=" << calibration_data[0][0] << " TR=" << calibration_data[0][1] << " BL=" << calibration_data[0][2] << " BR=" << calibration_data[0][3]);
 
@@ -699,8 +702,11 @@ bool Calibration::computeXYfromLengths(double TL, double TR, float& x, float& y)
  * @return True when the measurement is done, false otherwise.
  */
 bool Calibration::take_measurement(float result[4], int dir, int run, int current, int waypoint) {
+    log_info("DEBUG: APPLY_TENSION - take_measurement called with dir=" << dir << " run=" << run << " current=" << current << " waypoint=" << waypoint << " orientation=" << (orientation ? "HORIZONTAL" : "VERTICAL"));
+    
     //Shouldn't this be handled with the same code as below but with the direction set to UP?
     if (orientation == VERTICAL) {
+        log_info("DEBUG: APPLY_TENSION - Processing VERTICAL orientation measurement");
         //first we pull two bottom belts tight one after another, if x<0 we pull left belt first, if x>0 we pull right belt first
         static bool BL_tight = false;
         static bool BR_tight = false;
@@ -761,8 +767,10 @@ bool Calibration::take_measurement(float result[4], int dir, int run, int curren
     }
     // in HoRIZONTAL orientation we pull on the belts depending on the direction of the last move. This is important because the other two belts are likely slack
     else if (orientation == HORIZONTAL) {
+        log_info("DEBUG: APPLY_TENSION - Processing HORIZONTAL orientation measurement");
         // For the first waypoint (waypoint == 0), use a two-phase approach to ensure proper tension
         if (waypoint == 0) {
+            log_info("DEBUG: APPLY_TENSION - First waypoint measurement (waypoint=0)");
             static bool tl_tight                 = false;
             static bool tr_tight                 = false;
             static bool bl_tight                 = false;
@@ -962,7 +970,10 @@ bool Calibration::take_measurement_avg_with_check(int waypoint, int dir) {
     static float sum         = 0;
     static bool  measureFlex = false;
 
+    log_info("DEBUG: APPLY_TENSION - take_measurement_avg_with_check called with waypoint=" << waypoint << " dir=" << dir << " run=" << run);
+
     if (measurements == nullptr) {
+        log_info("DEBUG: APPLY_TENSION - Allocating measurements array");
         allocateMeasurements();  //This is structured [[tl],[tr],[bl],[br]],[[tl],[tr],[bl],[br]],[[tl],[tr],[bl],[br]],[[tl],[tr],[bl],[br]]
     }
 
@@ -971,12 +982,18 @@ bool Calibration::take_measurement_avg_with_check(int waypoint, int dir) {
         howHardToPull = calibrationCurrentThreshold + 500;
     }
 
-    if (take_measurement(measurements[max(run - 2, 0)], dir, run, howHardToPull, waypoint)) {  //Throw away measurements are stored in [0]
+    log_info("DEBUG: APPLY_TENSION - About to call take_measurement with run=" << run << " howHardToPull=" << howHardToPull);
+    bool measurementResult = take_measurement(measurements[max(run - 2, 0)], dir, run, howHardToPull, waypoint);
+    log_info("DEBUG: APPLY_TENSION - take_measurement returned: " << (measurementResult ? "true" : "false"));
+    
+    if (measurementResult) {  //Throw away measurements are stored in [0]
         if (run < 2) {
+            log_info("DEBUG: APPLY_TENSION - Discarding measurement run " << run << ", incrementing run counter");
             run++;
             return false;  //discard the first two measurements
         }
 
+        log_info("DEBUG: APPLY_TENSION - Valid measurement completed for run " << run);
         run++;
 
         static int criticalCounter = 0;
