@@ -164,6 +164,20 @@ bool Calibration::requestStateChange(int newState) {
                 //Recalculate the center position because the machine dimensions may have been updated
                 updateCenterXY();
 
+                // Reset belt targets to current hardware positions to prevent sudden movement
+                // when calibration starts. This addresses the issue where moving z-axis while in Extended
+                // state updates belt targets, but then calibration resets z to 0 without updating belt targets.
+                float currentTL = Maslow.axisTL.getPosition();
+                float currentTR = Maslow.axisTR.getPosition();
+                float currentBL = Maslow.axisBL.getPosition();
+                float currentBR = Maslow.axisBR.getPosition();
+                
+                // Set belt targets to their current hardware positions to prevent unwinding
+                Maslow.axisTL.setTarget(currentTL);
+                Maslow.axisTR.setTarget(currentTR);
+                Maslow.axisBL.setTarget(currentBL);
+                Maslow.axisBR.setTarget(currentBR);
+
                 //At this point it's likely that we have just sent the machine new cordinates for the anchor points so we need to figure out our new XY
                 //cordinates by looking at the current lengths of the top two belts.
                 //If we can't load the position, that's OK, we can still go ahead with the calibration and the first point will make a guess for it
