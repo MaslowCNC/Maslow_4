@@ -236,28 +236,17 @@ bool MotorUnit::pull_tight(int currentThreshold) {
         incrementalThresholdHits = 0;
     }
 
-    // Add detailed debug logging for pull_tight operation
-    String encAddrLabel = Maslow.axis_id_to_label(_encoderAddress);
-    log_info("DEBUG: PULL_TIGHT [" << encAddrLabel.c_str() << "] - retract_speed=" << retract_speed 
-             << " current=" << currentMeasurement << " baseline=" << retract_baseline 
-             << " threshold=" << currentThreshold << " inc_hits=" << incrementalThresholdHits);
-
     if (retract_speed > 15) {  //20 is not the actual speed, it is the amount of time so we don't trigger immediately
         if (currentMeasurement > currentThreshold || incrementalThresholdHits > 2) {
             //stop motor, reset variables
-            log_info("DEBUG: PULL_TIGHT [" << encAddrLabel.c_str() << "] - SUCCESS: current=" << currentMeasurement 
-                     << " exceeded threshold=" << currentThreshold << " OR inc_hits=" << incrementalThresholdHits << " > 2");
             stop();
             retract_speed    = 0;
             retract_baseline = 700;
             return true;
         } else {
-            log_info("DEBUG: PULL_TIGHT [" << encAddrLabel.c_str() << "] - WAITING: current=" << currentMeasurement 
-                     << " below threshold=" << currentThreshold << " AND inc_hits=" << incrementalThresholdHits << " <= 2");
             return false;
         }
     }
-    log_info("DEBUG: PULL_TIGHT [" << encAddrLabel.c_str() << "] - RAMPING UP: retract_speed=" << retract_speed << " <= 15");
     return false;
 }
 
