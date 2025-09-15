@@ -505,10 +505,14 @@ bool Calibration::takeSlackFunc() {
     static float         startingX = 0;
     static float         startingY = 0;
 
+    log_info("DEBUG: takeSlackFunc() called with takeSlackState=" << takeSlackState);
+
     //Take a measurement
     if (takeSlackState == 0) {
         if (take_measurement_avg_with_check(
                 0, UP)) {  //We really shouldn't be using the first position to store the data, it should have it's own array
+            
+            log_info("DEBUG: APPLY_TENSION - Measurement completed, raw calibration_data[0]: TL=" << calibration_data[0][0] << " TR=" << calibration_data[0][1] << " BL=" << calibration_data[0][2] << " BR=" << calibration_data[0][3]);
 
             float x = 0;
             float y = 0;
@@ -516,6 +520,8 @@ bool Calibration::takeSlackFunc() {
                 log_error("Failed to compute XY from lengths");
                 return true;
             }
+            
+            log_info("DEBUG: APPLY_TENSION - Computed position from measurements: X=" << x << " Y=" << y);
 
             auto kinematics = getKinematics();
             if (!kinematics)
@@ -565,12 +571,48 @@ bool Calibration::takeSlackFunc() {
                 log_info("TL belt: " << tlBeltLength << " TR belt: " << trBeltLength);
                 log_info("BL belt: " << blBeltLength << " BR belt: " << brBeltLength);
 
+                // DEBUG: Log before setting motor positions
+                float* current_mpos_before = get_mpos();
+                log_info("DEBUG: APPLY_TENSION - Current mpos before motor position update: X=" << current_mpos_before[0] << " Y=" << current_mpos_before[1] << " Z=" << current_mpos_before[2] << " A=" << current_mpos_before[3] << " B=" << current_mpos_before[4]);
+                
+                // DEBUG: Calculate step differences to detect large movements
+                int32_t currentTLSteps = mpos_to_steps(current_mpos_before[0], 0);
+                int32_t currentTRSteps = mpos_to_steps(current_mpos_before[1], 1);
+                int32_t currentBLSteps = mpos_to_steps(current_mpos_before[2], 2);
+                int32_t currentBRSteps = mpos_to_steps(current_mpos_before[3], 3);
+                
+                int32_t newTLSteps = mpos_to_steps(tlBeltLength, 0);
+                int32_t newTRSteps = mpos_to_steps(trBeltLength, 1);
+                int32_t newBLSteps = mpos_to_steps(blBeltLength, 2);
+                int32_t newBRSteps = mpos_to_steps(brBeltLength, 3);
+                
+                int32_t diffTLSteps = newTLSteps - currentTLSteps;
+                int32_t diffTRSteps = newTRSteps - currentTRSteps;
+                int32_t diffBLSteps = newBLSteps - currentBLSteps;
+                int32_t diffBRSteps = newBRSteps - currentBRSteps;
+                
+                log_info("DEBUG: APPLY_TENSION - Step differences: TL=" << diffTLSteps << " TR=" << diffTRSteps << " BL=" << diffBLSteps << " BR=" << diffBRSteps);
+                
+                // Convert step differences to mm for easier interpretation
+                float diffTLmm = steps_to_mpos(diffTLSteps, 0);
+                float diffTRmm = steps_to_mpos(diffTRSteps, 1);
+                float diffBLmm = steps_to_mpos(diffBLSteps, 2);
+                float diffBRmm = steps_to_mpos(diffBRSteps, 3);
+                
+                log_info("DEBUG: APPLY_TENSION - Movement distances (mm): TL=" << diffTLmm << " TR=" << diffTRmm << " BL=" << diffBLmm << " BR=" << diffBRmm);
+                
+                // Check for large movements (>100mm)
+                if (abs(diffTLmm) > 100 || abs(diffTRmm) > 100 || abs(diffBLmm) > 100 || abs(diffBRmm) > 100) {
+                    log_error("DEBUG: APPLY_TENSION - LARGE MOVEMENT DETECTED! Movement over 100mm threshold");
+                }
+
                 // Set motor positions directly from measured belt lengths
                 // Axis mapping: A=TL(0), B=TR(1), C=BL(2), D=BR(3), Z=router(4)
-                set_motor_steps(0, mpos_to_steps(tlBeltLength, 0));  // A axis = TL belt
-                set_motor_steps(1, mpos_to_steps(trBeltLength, 1));  // B axis = TR belt
-                set_motor_steps(2, mpos_to_steps(blBeltLength, 2));  // C axis = BL belt
-                set_motor_steps(3, mpos_to_steps(brBeltLength, 3));  // D axis = BR belt
+                log_info("DEBUG: APPLY_TENSION - Setting motor steps: TL=" << newTLSteps << " TR=" << newTRSteps << " BL=" << newBLSteps << " BR=" << newBRSteps);
+                set_motor_steps(0, newTLSteps);  // A axis = TL belt
+                set_motor_steps(1, newTRSteps);  // B axis = TR belt
+                set_motor_steps(2, newBLSteps);  // C axis = BL belt
+                set_motor_steps(3, newBRSteps);  // D axis = BR belt
                 // Z axis is left unchanged during Apply Tension process
 
                 // Verify that the position was set correctly by reading back from motors
