@@ -31,6 +31,8 @@ Calibration::Calibration() {
     // Initialize calibration loop state variables
     calibrationDirection  = UP;
     measurementInProgress = true;
+    // Initialize orientation to VERTICAL as default (can be overridden by configuration)
+    orientation = VERTICAL;
 }
 
 //------------------------------------------------------
@@ -702,11 +704,11 @@ bool Calibration::computeXYfromLengths(double TL, double TR, float& x, float& y)
  * @return True when the measurement is done, false otherwise.
  */
 bool Calibration::take_measurement(float result[4], int dir, int run, int current, int waypoint) {
-    log_info("DEBUG: APPLY_TENSION - take_measurement called with dir=" << dir << " run=" << run << " current=" << current << " waypoint=" << waypoint << " orientation=" << (orientation ? "HORIZONTAL" : "VERTICAL"));
+    log_info("DEBUG: APPLY_TENSION - take_measurement called with dir=" << dir << " run=" << run << " current=" << current << " waypoint=" << waypoint << " orientation=" << (orientation == VERTICAL ? "VERTICAL" : "HORIZONTAL"));
     
     //Shouldn't this be handled with the same code as below but with the direction set to UP?
     if (orientation == VERTICAL) {
-        log_info("DEBUG: APPLY_TENSION - Processing VERTICAL orientation measurement");
+        log_info("DEBUG: APPLY_TENSION - Processing VERTICAL orientation measurement, current position X=" << Maslow.x << " Y=" << Maslow.y);
         //first we pull two bottom belts tight one after another, if x<0 we pull left belt first, if x>0 we pull right belt first
         static bool BL_tight = false;
         static bool BR_tight = false;
@@ -715,17 +717,24 @@ bool Calibration::take_measurement(float result[4], int dir, int run, int curren
 
         //On the left side of the sheet we want to pull the left belt tight first
         if (Maslow.x < 0) {
+            log_info("DEBUG: APPLY_TENSION - Left side detected (X=" << Maslow.x << "), pulling BL first then BR");
             if (!BL_tight) {
+                log_info("DEBUG: APPLY_TENSION - Attempting to pull BL tight with current=" << current);
                 if (Maslow.axisBL.pull_tight(current)) {
                     BL_tight = true;
-                    //log_info("Pulled BL tight");
+                    log_info("DEBUG: APPLY_TENSION - BL pulled tight successfully");
+                } else {
+                    log_info("DEBUG: APPLY_TENSION - BL not tight yet, returning false");
                 }
                 return false;
             }
             if (!BR_tight) {
+                log_info("DEBUG: APPLY_TENSION - BL already tight, attempting to pull BR tight with current=" << current);
                 if (Maslow.axisBR.pull_tight(current)) {
                     BR_tight = true;
-                    //log_info("Pulled BR tight");
+                    log_info("DEBUG: APPLY_TENSION - BR pulled tight successfully");
+                } else {
+                    log_info("DEBUG: APPLY_TENSION - BR not tight yet, returning false");
                 }
                 return false;
             }
@@ -733,17 +742,24 @@ bool Calibration::take_measurement(float result[4], int dir, int run, int curren
 
         //On the right side of the sheet we want to pull the right belt tight first
         else {
+            log_info("DEBUG: APPLY_TENSION - Right side detected (X=" << Maslow.x << "), pulling BR first then BL");
             if (!BR_tight) {
+                log_info("DEBUG: APPLY_TENSION - Attempting to pull BR tight with current=" << current);
                 if (Maslow.axisBR.pull_tight(current)) {
                     BR_tight = true;
-                    //log_info("Pulled BR tight");
+                    log_info("DEBUG: APPLY_TENSION - BR pulled tight successfully");
+                } else {
+                    log_info("DEBUG: APPLY_TENSION - BR not tight yet, returning false");
                 }
                 return false;
             }
             if (!BL_tight) {
+                log_info("DEBUG: APPLY_TENSION - BR already tight, attempting to pull BL tight with current=" << current);
                 if (Maslow.axisBL.pull_tight(current)) {
                     BL_tight = true;
-                    //log_info("Pulled BL tight");
+                    log_info("DEBUG: APPLY_TENSION - BL pulled tight successfully");
+                } else {
+                    log_info("DEBUG: APPLY_TENSION - BL not tight yet, returning false");
                 }
                 return false;
             }
@@ -751,18 +767,23 @@ bool Calibration::take_measurement(float result[4], int dir, int run, int curren
 
         //once both belts are pulled, take a measurement
         if (BR_tight && BL_tight) {
+            log_info("DEBUG: APPLY_TENSION - Both belts tight, taking measurement");
             auto kinematics = getKinematics();
-            if (!kinematics)
+            if (!kinematics) {
+                log_error("DEBUG: APPLY_TENSION - Failed to get kinematics, returning false");
                 return false;
+            }
             //take measurement and record it to the calibration data array.
             result[0] = measurementToXYPlane(Maslow.axisTL.getPosition(), kinematics->getTlZ());
             result[1] = measurementToXYPlane(Maslow.axisTR.getPosition(), kinematics->getTrZ());
             result[2] = measurementToXYPlane(Maslow.axisBL.getPosition(), kinematics->getBlZ());
             result[3] = measurementToXYPlane(Maslow.axisBR.getPosition(), kinematics->getBrZ());
+            log_info("DEBUG: APPLY_TENSION - Measurement completed: TL=" << result[0] << " TR=" << result[1] << " BL=" << result[2] << " BR=" << result[3]);
             BR_tight  = false;
             BL_tight  = false;
             return true;
         }
+        log_info("DEBUG: APPLY_TENSION - Belts not both tight yet (BR_tight=" << BR_tight << " BL_tight=" << BL_tight << "), returning false");
         return false;
     }
     // in HoRIZONTAL orientation we pull on the belts depending on the direction of the last move. This is important because the other two belts are likely slack
