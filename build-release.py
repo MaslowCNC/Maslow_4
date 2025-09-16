@@ -18,6 +18,8 @@ FALLBACK_VERSION = "unknown-not-built-from-git"
 platformio = r"/Users/barsmith/.platformio/penv/bin/platformio" #"/Users/barsmith/.platformio/penv/bin/platformio"
 
 # Generate version using git-version.py
+version = FALLBACK_VERSION
+
 try:
     # Run git-version.py to generate version information
     subprocess.run(["python", "git-version.py"], check=True)
@@ -39,12 +41,8 @@ try:
                         if version.startswith('v'):
                             version = version[1:]
                         break
-            else:
-                version = FALLBACK_VERSION  # fallback
-    else:
-        version = FALLBACK_VERSION  # fallback
 except:
-    version = FALLBACK_VERSION  # fallback
+    pass  # Keep fallback value
 
 os.chdir(os.path.dirname(os.path.realpath(r"/Users/barsmith/Documents/GitHub/FluidNC/.pio"))) #"/Users/barsmith/Documents/GitHub/FluidNC/.pio"
 #change path to the project folder (the folder with platformio.ini)
