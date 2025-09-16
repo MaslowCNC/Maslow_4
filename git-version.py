@@ -57,10 +57,10 @@ grbl_version = tag.replace('v','').rpartition('.')[0]
 git_info = '%s%s' % (tag, rev)
 
 # Generate VERSION_NUMBER using git describe --tags --always --dirty for Maslow-specific version
-if gitFail:
-    VERSION_NUMBER = FALLBACK_VERSION
-    compile_warning = ""
-else:
+VERSION_NUMBER = FALLBACK_VERSION
+compile_warning = ""
+
+if not gitFail:
     try:
         VERSION_NUMBER = (
             subprocess.check_output(["git", "describe", "--tags", "--always", "--dirty"], stderr=subprocess.DEVNULL)
@@ -68,13 +68,11 @@ else:
             .decode("utf-8")
         )
     except:
-        VERSION_NUMBER = FALLBACK_VERSION
+        pass  # Keep fallback value
     
     # Check if version contains "-" to trigger warning for non-tagged versions
-    if "-" in VERSION_NUMBER:
+    if "-" in VERSION_NUMBER and VERSION_NUMBER != FALLBACK_VERSION:
         compile_warning = '#warning "You are not compiling a tagged version, this should not be a release"'
-    else:
-        compile_warning = ""
 
 provisional = "FluidNC/src/version.cxx"
 final = "FluidNC/src/version.cpp"
