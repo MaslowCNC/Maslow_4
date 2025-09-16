@@ -37,9 +37,6 @@ try:
                     end = line.rfind('"')
                     if start > 0 and end > start:
                         version = line[start:end]
-                        # Remove 'v' prefix if present for consistency with existing tag format
-                        if version.startswith('v'):
-                            version = version[1:]
                         break
 except:
     pass  # Keep fallback value
