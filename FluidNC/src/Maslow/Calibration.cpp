@@ -317,8 +317,8 @@ void Calibration::home() {
 
             break;
         case EXTENDING:
-            //decompress belts for the first half second
-            if (millis() - extendCallTimer < 700) {
+            //decompress belts for the first half second (only if relaxToExtend is enabled)
+            if (relaxToExtend && millis() - extendCallTimer < 700) {
                 if (millis() - extendCallTimer > 0)
                     Maslow.axisBR.decompressBelt();
                 if (millis() - extendCallTimer > 150)

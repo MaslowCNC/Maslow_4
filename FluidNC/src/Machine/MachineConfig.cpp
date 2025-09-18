@@ -104,6 +104,7 @@ namespace Machine {
         handler.item(M + "_Calibration_Current_Threshold", Maslow.calibration.calibrationCurrentThreshold, 0, 3500);
         handler.item(M + "_Acceptable_Calibration_Threshold", Maslow.calibration.acceptableCalibrationThreshold, 0, 1);
         handler.item(M + "_Extend_Dist", Maslow.calibration.extendDist, 0, 4250);
+        handler.item(M + "_relaxToExtend", Maslow.calibration.relaxToExtend);
 
         handler.item(M + "_Scale_X", Maslow.scaleX, .8, 1.2);
         handler.item(M + "_Scale_Y", Maslow.scaleY, .8, 1.2);
@@ -214,7 +215,7 @@ namespace Machine {
     const std::string dcM4ZAxis = M + "_tlZ: 100\n" + M + "_trZ: 56\n" + M + "_blZ: 34\n" + M + "_brZ: 78\n";
 
     const std::string dcM4CurrentThreshold = M + "_Retract_Current_Threshold: 1300\n" + M + "_Calibration_Current_Threshold: 1500\n" + M +
-                                             "_Acceptable_Calibration_Threshold: 0.5\n";
+                                             "_Acceptable_Calibration_Threshold: 0.5\n" + M + "_relaxToExtend: false\n";
 
     const std::string dcM4Thickness = M + "_spoilboardThickness: 0.0\n" + M + "_workThickness: 0.0\n";
 

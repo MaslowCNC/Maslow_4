@@ -90,7 +90,8 @@ public:
     bool axisTLHomed;
 
     //Variables used by extension
-    float extendDist = 1700;
+    float extendDist    = 1700;
+    bool  relaxToExtend = false;
 
     //Variables used by calibration
     bool  orientation;

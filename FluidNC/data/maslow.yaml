@@ -9,6 +9,7 @@ Maslow_Retract_Current_Threshold: 1300
 Maslow_Calibration_Current_Threshold: 1000
 Maslow_Acceptable_Calibration_Threshold: 0.450000
 Maslow_Extend_Dist: 2600.000000
+Maslow_relaxToExtend: false
 Maslow_Scale_X: 1.000000
 Maslow_Scale_Y: 1.000000
 Maslow_debugEnabled: false
