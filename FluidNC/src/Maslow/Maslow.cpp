@@ -88,7 +88,8 @@ void Maslow_::begin(void (*sys_rt)()) {
 
     lastCallToUpdate = millis();
 
-    loadZPos();  //Loads the z-axis position from EEPROM
+    loadZPos();           //Loads the z-axis position from EEPROM
+    loadBeltPositions();  //Loads the belt positions from EEPROM
 
     stopMotors();
 
@@ -133,6 +134,7 @@ void Maslow_::update() {
     //Save the z-axis position if the prevous state was jog or cycle and the current state is idle
     if ((prevState == State::Jog || prevState == State::Cycle) && sys.state() == State::Idle) {
         saveZPos();
+        saveBeltPositions();
     }
 
     blinkIPAddress();
@@ -453,6 +455,150 @@ void Maslow_::setZStop() {
 
     gc_sync_position();  //This updates the Gcode engine with the new position from the stepping engine that we set with set_motor_steps
     plan_sync_position();
+}
+
+//This function saves the current belt positions to non-volatile storage
+void Maslow_::saveBeltPositions() {
+    nvs_handle_t nvsHandle;
+    esp_err_t    ret = nvs_open("maslow", NVS_READWRITE, &nvsHandle);
+    if (ret != ESP_OK) {
+        log_info("Error " + std::string(esp_err_to_name(ret)) + " opening NVS handle for belt positions!\n");
+        return;
+    }
+
+    // Union for float to int32_t conversion
+    union FloatInt32 {
+        float   f;
+        int32_t i;
+    };
+
+    // Get current belt positions
+    float tlPos = axisTL.getPosition();
+    float trPos = axisTR.getPosition();
+    float blPos = axisBL.getPosition();
+    float brPos = axisBR.getPosition();
+
+    // Save TL belt position
+    int32_t currentTLPos;
+    ret = nvs_get_i32(nvsHandle, "tlPos", &currentTLPos);
+    FloatInt32 tlFi;
+    tlFi.f = tlPos;
+    if (ret == ESP_ERR_NVS_NOT_FOUND || currentTLPos != tlFi.i) {
+        ret = nvs_set_i32(nvsHandle, "tlPos", tlFi.i);
+        if (ret != ESP_OK) {
+            log_info("Error " + std::string(esp_err_to_name(ret)) + " writing TL belt position to NVS!\n");
+        }
+    }
+
+    // Save TR belt position
+    int32_t currentTRPos;
+    ret = nvs_get_i32(nvsHandle, "trPos", &currentTRPos);
+    FloatInt32 trFi;
+    trFi.f = trPos;
+    if (ret == ESP_ERR_NVS_NOT_FOUND || currentTRPos != trFi.i) {
+        ret = nvs_set_i32(nvsHandle, "trPos", trFi.i);
+        if (ret != ESP_OK) {
+            log_info("Error " + std::string(esp_err_to_name(ret)) + " writing TR belt position to NVS!\n");
+        }
+    }
+
+    // Save BL belt position
+    int32_t currentBLPos;
+    ret = nvs_get_i32(nvsHandle, "blPos", &currentBLPos);
+    FloatInt32 blFi;
+    blFi.f = blPos;
+    if (ret == ESP_ERR_NVS_NOT_FOUND || currentBLPos != blFi.i) {
+        ret = nvs_set_i32(nvsHandle, "blPos", blFi.i);
+        if (ret != ESP_OK) {
+            log_info("Error " + std::string(esp_err_to_name(ret)) + " writing BL belt position to NVS!\n");
+        }
+    }
+
+    // Save BR belt position
+    int32_t currentBRPos;
+    ret = nvs_get_i32(nvsHandle, "brPos", &currentBRPos);
+    FloatInt32 brFi;
+    brFi.f = brPos;
+    if (ret == ESP_ERR_NVS_NOT_FOUND || currentBRPos != brFi.i) {
+        ret = nvs_set_i32(nvsHandle, "brPos", brFi.i);
+        if (ret != ESP_OK) {
+            log_info("Error " + std::string(esp_err_to_name(ret)) + " writing BR belt position to NVS!\n");
+        }
+    }
+
+    // Commit all changes to non-volatile storage
+    ret = nvs_commit(nvsHandle);
+    if (ret != ESP_OK) {
+        log_info("Error " + std::string(esp_err_to_name(ret)) + " committing belt position changes to NVS!\n");
+    }
+
+    nvs_close(nvsHandle);
+}
+
+//This function loads the belt positions from non-volatile storage
+void Maslow_::loadBeltPositions() {
+    nvs_handle_t nvsHandle;
+    esp_err_t    ret = nvs_open("maslow", NVS_READWRITE, &nvsHandle);
+    if (ret != ESP_OK) {
+        log_info("Error " + std::string(esp_err_to_name(ret)) + " opening NVS handle for belt positions!\n");
+        return;
+    }
+
+    // Union for int32_t to float conversion
+    union FloatInt32 {
+        float   f;
+        int32_t i;
+    };
+
+    // Load TL belt position
+    int32_t tlValue;
+    ret = nvs_get_i32(nvsHandle, "tlPos", &tlValue);
+    if (ret == ESP_OK) {
+        FloatInt32 tlFi;
+        tlFi.i = tlValue;
+        axisTL.setTarget(tlFi.f);
+        log_info("TL belt position loaded as: " << tlFi.f);
+    } else if (ret != ESP_ERR_NVS_NOT_FOUND) {
+        log_info("Error " + std::string(esp_err_to_name(ret)) + " reading TL belt position from NVS!");
+    }
+
+    // Load TR belt position
+    int32_t trValue;
+    ret = nvs_get_i32(nvsHandle, "trPos", &trValue);
+    if (ret == ESP_OK) {
+        FloatInt32 trFi;
+        trFi.i = trValue;
+        axisTR.setTarget(trFi.f);
+        log_info("TR belt position loaded as: " << trFi.f);
+    } else if (ret != ESP_ERR_NVS_NOT_FOUND) {
+        log_info("Error " + std::string(esp_err_to_name(ret)) + " reading TR belt position from NVS!");
+    }
+
+    // Load BL belt position
+    int32_t blValue;
+    ret = nvs_get_i32(nvsHandle, "blPos", &blValue);
+    if (ret == ESP_OK) {
+        FloatInt32 blFi;
+        blFi.i = blValue;
+        axisBL.setTarget(blFi.f);
+        log_info("BL belt position loaded as: " << blFi.f);
+    } else if (ret != ESP_ERR_NVS_NOT_FOUND) {
+        log_info("Error " + std::string(esp_err_to_name(ret)) + " reading BL belt position from NVS!");
+    }
+
+    // Load BR belt position
+    int32_t brValue;
+    ret = nvs_get_i32(nvsHandle, "brPos", &brValue);
+    if (ret == ESP_OK) {
+        FloatInt32 brFi;
+        brFi.i = brValue;
+        axisBR.setTarget(brFi.f);
+        log_info("BR belt position loaded as: " << brFi.f);
+    } else if (ret != ESP_ERR_NVS_NOT_FOUND) {
+        log_info("Error " + std::string(esp_err_to_name(ret)) + " reading BR belt position from NVS!");
+    }
+
+    nvs_close(nvsHandle);
 }
 
 //------------------------------------------------------
