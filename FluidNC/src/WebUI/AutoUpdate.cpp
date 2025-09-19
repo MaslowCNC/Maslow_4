@@ -10,6 +10,7 @@
 #include "../Settings.h"
 #include "../Config.h"
 #include "../Logging.h"
+#include "../Report.h"
 
 #include <WiFiClientSecure.h>
 #include <Update.h>
@@ -116,42 +117,56 @@ namespace WebUI {
         log_info("AutoUpdate: Latest release: " << tagName);
         
         // Check if this is a newer version than current
-        // For simplicity, we'll just check if the tag name is different from current build
-        if (tagName == git_info) {
-            log_info("AutoUpdate: Already running the latest version");
+        // Compare tag names - if they're different, consider it a new version
+        // This is a simple approach; a production system might use semantic versioning
+        std::string currentVersion = git_info;
+        if (tagName == currentVersion || tagName.empty()) {
+            log_info("AutoUpdate: Already running the latest version (" << currentVersion << ")");
             return false;
         }
+        
+        log_info("AutoUpdate: Current version: " << currentVersion << ", Latest: " << tagName);
         
         // Look for firmware.bin and index.html.gz in assets
         std::string firmwareUrl, webUIUrl;
         
-        // Find firmware.bin URL
-        size_t firmwarePos = jsonResponse.find("\"firmware.bin\"");
+        // Find firmware.bin URL - look for exact filename match
+        size_t firmwarePos = jsonResponse.find("\"name\":\"firmware.bin\"");
         if (firmwarePos != std::string::npos) {
-            // Search backwards for browser_download_url
-            size_t urlPos = jsonResponse.rfind("\"browser_download_url\":", firmwarePos);
-            if (urlPos != std::string::npos) {
-                size_t urlStart = jsonResponse.find("\"", urlPos + 23);
-                if (urlStart != std::string::npos) {
-                    size_t urlEnd = jsonResponse.find("\"", urlStart + 1);
-                    if (urlEnd != std::string::npos) {
-                        firmwareUrl = jsonResponse.substr(urlStart + 1, urlEnd - urlStart - 1);
+            // Search for the asset object containing this name
+            size_t assetStart = jsonResponse.rfind("{", firmwarePos);
+            if (assetStart != std::string::npos) {
+                size_t assetEnd = jsonResponse.find("}", firmwarePos);
+                if (assetEnd != std::string::npos) {
+                    std::string assetObj = jsonResponse.substr(assetStart, assetEnd - assetStart);
+                    size_t urlPos = assetObj.find("\"browser_download_url\":\"");
+                    if (urlPos != std::string::npos) {
+                        size_t urlStart = urlPos + 24; // length of "browser_download_url":"
+                        size_t urlEnd = assetObj.find("\"", urlStart);
+                        if (urlEnd != std::string::npos) {
+                            firmwareUrl = assetObj.substr(urlStart, urlEnd - urlStart);
+                        }
                     }
                 }
             }
         }
         
-        // Find index.html.gz URL
-        size_t webUIPos = jsonResponse.find("\"index.html.gz\"");
+        // Find index.html.gz URL - look for exact filename match
+        size_t webUIPos = jsonResponse.find("\"name\":\"index.html.gz\"");
         if (webUIPos != std::string::npos) {
-            // Search backwards for browser_download_url
-            size_t urlPos = jsonResponse.rfind("\"browser_download_url\":", webUIPos);
-            if (urlPos != std::string::npos) {
-                size_t urlStart = jsonResponse.find("\"", urlPos + 23);
-                if (urlStart != std::string::npos) {
-                    size_t urlEnd = jsonResponse.find("\"", urlStart + 1);
-                    if (urlEnd != std::string::npos) {
-                        webUIUrl = jsonResponse.substr(urlStart + 1, urlEnd - urlStart - 1);
+            // Search for the asset object containing this name
+            size_t assetStart = jsonResponse.rfind("{", webUIPos);
+            if (assetStart != std::string::npos) {
+                size_t assetEnd = jsonResponse.find("}", webUIPos);
+                if (assetEnd != std::string::npos) {
+                    std::string assetObj = jsonResponse.substr(assetStart, assetEnd - assetStart);
+                    size_t urlPos = assetObj.find("\"browser_download_url\":\"");
+                    if (urlPos != std::string::npos) {
+                        size_t urlStart = urlPos + 24; // length of "browser_download_url":"
+                        size_t urlEnd = assetObj.find("\"", urlStart);
+                        if (urlEnd != std::string::npos) {
+                            webUIUrl = assetObj.substr(urlStart, urlEnd - urlStart);
+                        }
                     }
                 }
             }
@@ -326,22 +341,53 @@ namespace WebUI {
     }
     
     bool AutoUpdate::downloadAndInstallUpdate(const std::string& firmwareUrl, const std::string& webUIUrl) {
+        // Safety checks
+        if (firmwareUrl.empty() || webUIUrl.empty()) {
+            log_error("AutoUpdate: Invalid URLs provided");
+            return false;
+        }
+        
+        // Only proceed if we have sufficient free space
+        // This is a rough check - in practice you'd want more sophisticated space checking
+        log_info("AutoUpdate: Starting download and installation process...");
+        
         // Download files to temporary location
         std::string tempFirmware = "/tmp/firmware.bin";
         std::string tempWebUI = "/tmp/index.html.gz";
         
-        log_info("AutoUpdate: Downloading firmware...");
+        log_info("AutoUpdate: Downloading firmware from: " << firmwareUrl);
         if (!downloadFile(firmwareUrl, tempFirmware)) {
             log_error("AutoUpdate: Failed to download firmware");
             return false;
         }
         
-        log_info("AutoUpdate: Downloading WebUI...");
+        log_info("AutoUpdate: Downloading WebUI from: " << webUIUrl);
         if (!downloadFile(webUIUrl, tempWebUI)) {
             log_error("AutoUpdate: Failed to download WebUI");
             remove(tempFirmware.c_str());
             return false;
         }
+        
+        // Verify downloads by checking file sizes
+        FILE* firmwareFile = fopen(tempFirmware.c_str(), "rb");
+        if (!firmwareFile) {
+            log_error("AutoUpdate: Downloaded firmware file not found");
+            remove(tempFirmware.c_str());
+            remove(tempWebUI.c_str());
+            return false;
+        }
+        fseek(firmwareFile, 0, SEEK_END);
+        size_t firmwareSize = ftell(firmwareFile);
+        fclose(firmwareFile);
+        
+        if (firmwareSize < 100000) { // Firmware should be at least 100KB
+            log_error("AutoUpdate: Downloaded firmware file too small (" << firmwareSize << " bytes)");
+            remove(tempFirmware.c_str());
+            remove(tempWebUI.c_str());
+            return false;
+        }
+        
+        log_info("AutoUpdate: Firmware file size: " << firmwareSize << " bytes");
         
         // Install WebUI first (less risky)
         if (!installWebUI(tempWebUI)) {
@@ -363,8 +409,8 @@ namespace WebUI {
         remove(tempFirmware.c_str());
         remove(tempWebUI.c_str());
         
-        log_info("AutoUpdate: Update completed successfully. Restarting...");
-        delay(1000);
+        log_info("AutoUpdate: Update completed successfully. Restarting in 3 seconds...");
+        delay(3000);
         ESP.restart();
         
         return true;
