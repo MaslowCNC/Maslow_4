@@ -49,6 +49,11 @@ namespace WebUI {
     // Private function to add a name enclosed with quotes.
     void JSONencoder::quoted(const char* s) {
         add('"');
+        // Handle null pointer case - output empty string instead of crashing
+        if (s == nullptr) {
+            add('"');
+            return;
+        }
         char c;
         while ((c = *s++) != '\0') {
             // Escape JSON special characters
@@ -177,7 +182,17 @@ namespace WebUI {
     // Creates a "tag":"value" member from a C-style string
     void JSONencoder::member(const char* tag, const char* value) {
         begin_member(tag);
-        quoted(value);
+        // Handle null value case - provide fallback for critical fields like "status"
+        if (value == nullptr) {
+            if (tag && strcmp(tag, "status") == 0) {
+                // For status field, provide a meaningful default instead of empty string
+                quoted("unknown");
+            } else {
+                quoted("");
+            }
+        } else {
+            quoted(value);
+        }
     }
 
     // Creates a "tag":"value" member from a C++ string

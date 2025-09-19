@@ -748,7 +748,8 @@ namespace WebUI {
         std::string s;
         JSONencoder j(false, &s);
         j.begin();
-        j.member("status", status);
+        // Ensure status always has a valid value - fallback to "error" if null
+        j.member("status", status ? status : "error");
         j.end();
         sendJSON(code, s);
     }
