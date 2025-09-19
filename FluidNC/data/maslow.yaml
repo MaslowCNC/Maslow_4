@@ -12,6 +12,7 @@ Maslow_Extend_Dist: 2600.000000
 Maslow_Scale_X: 1.000000
 Maslow_Scale_Y: 1.000000
 Maslow_debugEnabled: false
+MaslowAutoUpdate: false
 stepping: 
   engine: Timed
   idle_ms: 240

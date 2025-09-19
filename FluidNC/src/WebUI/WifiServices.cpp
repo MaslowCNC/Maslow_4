@@ -26,6 +26,7 @@ namespace WebUI {
 #    include "TelnetServer.h"
 #    include "NotificationsService.h"
 #    include "Commands.h"
+#    include "AutoUpdate.h"
 
 #    include <WiFi.h>
 #    include "Driver/localfs.h"
@@ -104,6 +105,15 @@ namespace WebUI {
 
         //be sure we are not is mixed mode in setup
         WiFi.scanNetworks(true);
+        
+        // Check for auto-update if configured and not in AP mode
+        if (WiFi.getMode() == WIFI_STA) {
+            // Run auto-update check in background to avoid blocking startup
+            // Small delay to ensure WiFi is fully connected
+            delay(2000);
+            AutoUpdate::checkForUpdate();
+        }
+        
         return no_error;
     }
     void WiFiServices::end() {
