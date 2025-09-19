@@ -79,12 +79,6 @@ namespace WebUI {
             return false;
         }
 
-        // Only check if auto-update is enabled
-        if (!config->_maslowAutoUpdate) {
-            log_debug("AutoUpdate: Auto-update disabled in configuration");
-            return false;
-        }
-
         log_info("AutoUpdate: Checking for new release...");
 
         std::string jsonResponse = getLatestReleaseInfo();
@@ -126,6 +120,12 @@ namespace WebUI {
         }
 
         log_info("AutoUpdate: Current version: " << currentVersion << ", Latest: " << tagName);
+
+        // Only proceed with download/install if auto-update is enabled
+        if (!config->_maslowAutoUpdate) {
+            log_info("AutoUpdate: New version available but auto-update is disabled in configuration");
+            return false;
+        }
 
         // Look for firmware.bin and index.html.gz in assets
         std::string firmwareUrl, webUIUrl;
