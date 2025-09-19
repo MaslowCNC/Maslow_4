@@ -111,6 +111,7 @@ namespace Machine {
 
         // Auto-update configuration
         handler.item(M + "AutoUpdate", _maslowAutoUpdate);
+        handler.item((M + "UpdateURL").c_str(), _maslowUpdateURL);
 
         // Material thickness parameters - temporary storage for machine-level config
         handler.item(M + "_spoilboardThickness", _tempSpoilboardThickness, 0.0, 50.0);

@@ -13,6 +13,7 @@ Maslow_Scale_X: 1.000000
 Maslow_Scale_Y: 1.000000
 Maslow_debugEnabled: false
 MaslowAutoUpdate: false
+MaslowUpdateURL: https://api.github.com/repos/BarbourSmith/FluidNC/releases/latest
 stepping: 
   engine: Timed
   idle_ms: 240

@@ -109,6 +109,7 @@ namespace Machine {
 
         // Auto-update configuration
         bool _maslowAutoUpdate = false;
+        std::string _maslowUpdateURL = "https://api.github.com/repos/BarbourSmith/FluidNC/releases/latest";
 
         std::string _board = "None";
         std::string _name  = "None";

@@ -18,25 +18,32 @@
 
 namespace WebUI {
 
-    static const char* GITHUB_API_HOST  = "api.github.com";
-    static const int   GITHUB_API_PORT  = 443;
-    static const char* RELEASE_API_PATH = "/repos/BarbourSmith/FluidNC/releases/latest";
+    static const int HTTPS_PORT = 443;
 
     std::string AutoUpdate::getLatestReleaseInfo() {
         WiFiClientSecure client;
         client.setInsecure();  // For simplicity, disable certificate verification
 
-        if (!client.connect(GITHUB_API_HOST, GITHUB_API_PORT)) {
-            log_error("AutoUpdate: Failed to connect to GitHub API");
+        // Get the configurable update URL
+        std::string updateURL = config->_maslowUpdateURL;
+        
+        // Parse URL to extract host and path
+        size_t hostStart = updateURL.find("://") + 3;
+        size_t pathStart = updateURL.find("/", hostStart);
+        std::string host = updateURL.substr(hostStart, pathStart - hostStart);
+        std::string path = updateURL.substr(pathStart);
+
+        if (!client.connect(host.c_str(), HTTPS_PORT)) {
+            log_error("AutoUpdate: Failed to connect to " << host);
             return "";
         }
 
         // Send HTTP request
         client.print("GET ");
-        client.print(RELEASE_API_PATH);
+        client.print(path.c_str());
         client.print(" HTTP/1.1\r\n");
         client.print("Host: ");
-        client.print(GITHUB_API_HOST);
+        client.print(host.c_str());
         client.print("\r\n");
         client.print("User-Agent: FluidNC-AutoUpdate\r\n");
         client.print("Accept: application/vnd.github.v3+json\r\n");
