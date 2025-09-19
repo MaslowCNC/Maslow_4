@@ -16,7 +16,7 @@ namespace WebUI {
     private:
         static std::string getLatestReleaseInfo();
         static bool        downloadFile(const std::string& url, const std::string& filename);
-        static bool        installFirmware(const std::string& filename);
+        static bool        downloadAndInstallFirmware(const std::string& firmwareUrl);
         static bool        installWebUI(const std::string& filename);
     };
 }

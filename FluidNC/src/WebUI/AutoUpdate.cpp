@@ -250,55 +250,103 @@ namespace WebUI {
         return totalBytes > 0;
     }
 
-    bool AutoUpdate::installFirmware(const std::string& filename) {
-        FILE* file = fopen(filename.c_str(), "rb");
-        if (!file) {
-            log_error("AutoUpdate: Failed to open firmware file: " << filename);
+    bool AutoUpdate::downloadAndInstallFirmware(const std::string& firmwareUrl) {
+        WiFiClientSecure client;
+        client.setInsecure();
+
+        // Parse URL to get host and path
+        size_t hostStart = firmwareUrl.find("://") + 3;
+        size_t pathStart = firmwareUrl.find("/", hostStart);
+        std::string host = firmwareUrl.substr(hostStart, pathStart - hostStart);
+        std::string path = firmwareUrl.substr(pathStart);
+
+        if (!client.connect(host.c_str(), 443)) {
+            log_error("AutoUpdate: Failed to connect for firmware download: " << host);
             return false;
         }
 
-        // Get file size
-        fseek(file, 0, SEEK_END);
-        size_t fileSize = ftell(file);
-        fseek(file, 0, SEEK_SET);
+        // Send HTTP request
+        client.print("GET ");
+        client.print(path.c_str());
+        client.print(" HTTP/1.1\r\n");
+        client.print("Host: ");
+        client.print(host.c_str());
+        client.print("\r\n");
+        client.print("User-Agent: FluidNC-AutoUpdate\r\n");
+        client.print("Connection: close\r\n\r\n");
 
-        log_info("AutoUpdate: Installing firmware (" << fileSize << " bytes)...");
+        // Wait for response and get content length
+        bool headersPassed = false;
+        size_t contentLength = 0;
+        while (client.connected() && !headersPassed) {
+            String line = client.readStringUntil('\n');
+            if (line.startsWith("Content-Length: ")) {
+                contentLength = line.substring(16).toInt();
+            }
+            if (line.length() <= 2) {
+                headersPassed = true;
+            }
+        }
 
-        if (!Update.begin(fileSize)) {
+        if (!headersPassed) {
+            log_error("AutoUpdate: Failed to read firmware download headers");
+            client.stop();
+            return false;
+        }
+
+        if (contentLength == 0) {
+            log_error("AutoUpdate: No content length found in firmware download");
+            client.stop();
+            return false;
+        }
+
+        if (contentLength < 100000) { // Firmware should be at least 100KB
+            log_error("AutoUpdate: Firmware file too small (" << contentLength << " bytes)");
+            client.stop();
+            return false;
+        }
+
+        log_info("AutoUpdate: Installing firmware directly (" << contentLength << " bytes)...");
+
+        if (!Update.begin(contentLength)) {
             log_error("AutoUpdate: Failed to begin firmware update");
-            fclose(file);
+            client.stop();
             return false;
         }
 
         uint8_t buffer[1024];
-        size_t  bytesWritten = 0;
+        size_t bytesWritten = 0;
 
-        while (bytesWritten < fileSize) {
-            size_t bytesToRead = std::min(sizeof(buffer), fileSize - bytesWritten);
-            size_t bytesRead   = fread(buffer, 1, bytesToRead, file);
-
-            if (bytesRead == 0) {
-                break;
+        while (client.connected() || client.available()) {
+            if (client.available()) {
+                size_t bytesRead = client.readBytes(buffer, sizeof(buffer));
+                if (bytesRead > 0) {
+                    if (Update.write(buffer, bytesRead) != bytesRead) {
+                        log_error("AutoUpdate: Failed to write firmware data");
+                        Update.abort();
+                        client.stop();
+                        return false;
+                    }
+                    bytesWritten += bytesRead;
+                }
             }
-
-            if (Update.write(buffer, bytesRead) != bytesRead) {
-                log_error("AutoUpdate: Failed to write firmware data");
-                Update.abort();
-                fclose(file);
-                return false;
-            }
-
-            bytesWritten += bytesRead;
+            delay(1);
         }
 
-        fclose(file);
+        client.stop();
+
+        if (bytesWritten != contentLength) {
+            log_error("AutoUpdate: Incomplete firmware download (" << bytesWritten << "/" << contentLength << " bytes)");
+            Update.abort();
+            return false;
+        }
 
         if (!Update.end(true)) {
             log_error("AutoUpdate: Failed to complete firmware update");
             return false;
         }
 
-        log_info("AutoUpdate: Firmware update completed successfully");
+        log_info("AutoUpdate: Firmware update completed successfully (" << bytesWritten << " bytes)");
         return true;
     }
 
@@ -351,63 +399,31 @@ namespace WebUI {
         // This is a rough check - in practice you'd want more sophisticated space checking
         log_info("AutoUpdate: Starting download and installation process...");
 
-        // Download files to temporary location
-        std::string tempFirmware = "/tmp/firmware.bin";
-        std::string tempWebUI    = "/tmp/index.html.gz";
-
-        log_info("AutoUpdate: Downloading firmware from: " << firmwareUrl);
-        if (!downloadFile(firmwareUrl, tempFirmware)) {
-            log_error("AutoUpdate: Failed to download firmware");
-            return false;
-        }
+        // Download WebUI to temporary location (small file, should fit in flash)
+        std::string tempWebUI = "/tmp/index.html.gz";
 
         log_info("AutoUpdate: Downloading WebUI from: " << webUIUrl);
         if (!downloadFile(webUIUrl, tempWebUI)) {
             log_error("AutoUpdate: Failed to download WebUI");
-            remove(tempFirmware.c_str());
             return false;
         }
-
-        // Verify downloads by checking file sizes
-        FILE* firmwareFile = fopen(tempFirmware.c_str(), "rb");
-        if (!firmwareFile) {
-            log_error("AutoUpdate: Downloaded firmware file not found");
-            remove(tempFirmware.c_str());
-            remove(tempWebUI.c_str());
-            return false;
-        }
-        fseek(firmwareFile, 0, SEEK_END);
-        size_t firmwareSize = ftell(firmwareFile);
-        fclose(firmwareFile);
-
-        if (firmwareSize < 100000) {  // Firmware should be at least 100KB
-            log_error("AutoUpdate: Downloaded firmware file too small (" << firmwareSize << " bytes)");
-            remove(tempFirmware.c_str());
-            remove(tempWebUI.c_str());
-            return false;
-        }
-
-        log_info("AutoUpdate: Firmware file size: " << firmwareSize << " bytes");
 
         // Install WebUI first (less risky)
         if (!installWebUI(tempWebUI)) {
             log_error("AutoUpdate: Failed to install WebUI");
-            remove(tempFirmware.c_str());
             remove(tempWebUI.c_str());
             return false;
         }
 
-        // Install firmware (this will trigger a restart)
-        if (!installFirmware(tempFirmware)) {
-            log_error("AutoUpdate: Failed to install firmware");
-            remove(tempFirmware.c_str());
-            remove(tempWebUI.c_str());
-            return false;
-        }
-
-        // Clean up temporary files
-        remove(tempFirmware.c_str());
+        // Clean up WebUI temporary file
         remove(tempWebUI.c_str());
+
+        // Download and install firmware directly (no temporary file)
+        log_info("AutoUpdate: Downloading and installing firmware from: " << firmwareUrl);
+        if (!downloadAndInstallFirmware(firmwareUrl)) {
+            log_error("AutoUpdate: Failed to download and install firmware");
+            return false;
+        }
 
         log_info("AutoUpdate: Update completed successfully. Restarting in 3 seconds...");
         delay(3000);
