@@ -382,6 +382,7 @@ namespace WebUI {
         bool headersPassed = false;
         int  httpStatus    = 0;
         int  contentLength = -1;
+        std::string redirectLocation;
         
         while (client.connected() && !headersPassed) {
             if (client.available()) {
@@ -404,6 +405,13 @@ namespace WebUI {
                     log_info("AutoUpdate: Content-Length: " << contentLength);
                 }
                 
+                // Parse Location header for redirects
+                if (line.startsWith("Location:")) {
+                    redirectLocation = line.substring(9).c_str();
+                    redirectLocation.erase(0, redirectLocation.find_first_not_of(" \t\r\n"));
+                    log_info("AutoUpdate: Redirect location: " << redirectLocation);
+                }
+                
                 if (line.length() == 0) {  // Empty line means end of headers
                     headersPassed = true;
                 }
@@ -415,6 +423,13 @@ namespace WebUI {
             log_error("AutoUpdate: Failed to read download headers");
             client.stop();
             return false;
+        }
+        
+        // Handle redirects (301, 302, 303, 307, 308)
+        if (httpStatus >= 301 && httpStatus <= 308 && !redirectLocation.empty()) {
+            log_info("AutoUpdate: Following redirect to: " << redirectLocation);
+            client.stop();
+            return downloadFileToLocalFS(redirectLocation, filename);  // Recursive call to follow redirect
         }
         
         if (httpStatus != 200) {
