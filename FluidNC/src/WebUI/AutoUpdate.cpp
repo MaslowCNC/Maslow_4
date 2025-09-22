@@ -475,27 +475,21 @@ namespace WebUI {
         // This is a rough check - in practice you'd want more sophisticated space checking
         log_info("AutoUpdate: Starting download and installation process...");
 
-        // Download WebUI to temporary location (small file, should fit in flash)
-        std::string tempWebUI = "/localfs/index.html.gz.tmp";
+        // Download WebUI directly to final destination (small file, should be fine)
+        std::string webUIPath = "/localfs/index.html.gz";
 
         log_info("AutoUpdate: Downloading WebUI from: " << webUIUrl);
-        if (!downloadFile(webUIUrl, tempWebUI)) {
+        if (!downloadFile(webUIUrl, webUIPath)) {
             log_error("AutoUpdate: Failed to download WebUI");
             return false;
         }
 
-        // Install WebUI first (less risky)
-        if (!installWebUI(tempWebUI)) {
-            log_error("AutoUpdate: Failed to install WebUI");
-            remove(tempWebUI.c_str());
+        // WebUI is already in place, now download and install firmware directly
+        log_info("AutoUpdate: Downloading and installing firmware from: " << firmwareUrl);
+        if (!downloadAndInstallFirmware(firmwareUrl)) {
+            log_error("AutoUpdate: Failed to download and install firmware");
             return false;
         }
-
-        // Clean up WebUI temporary file
-        remove(tempWebUI.c_str());
-
-        // Download and install firmware directly (no temporary file)
-        log_info("AutoUpdate: Downloading and installing firmware from: " << firmwareUrl);
         if (!downloadAndInstallFirmware(firmwareUrl)) {
             log_error("AutoUpdate: Failed to download and install firmware");
             return false;
