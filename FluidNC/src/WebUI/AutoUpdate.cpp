@@ -159,10 +159,22 @@ namespace WebUI {
             // Search for the asset object containing this name
             size_t assetStart = jsonResponse.rfind("{", firmwarePos);
             if (assetStart != std::string::npos) {
-                size_t assetEnd = jsonResponse.find("}", firmwarePos);
-                if (assetEnd != std::string::npos) {
-                    std::string assetObj = jsonResponse.substr(assetStart, assetEnd - assetStart);
-                    size_t      urlPos   = assetObj.find("\"browser_download_url\":\"");
+                // Find the matching closing brace by counting braces
+                size_t assetEnd = assetStart + 1;
+                int braceCount = 1;
+                while (assetEnd < jsonResponse.length() && braceCount > 0) {
+                    if (jsonResponse[assetEnd] == '{') {
+                        braceCount++;
+                    } else if (jsonResponse[assetEnd] == '}') {
+                        braceCount--;
+                    }
+                    if (braceCount > 0) assetEnd++;
+                }
+                
+                if (braceCount == 0) {
+                    std::string assetObj = jsonResponse.substr(assetStart, assetEnd - assetStart + 1);
+                    log_info("AutoUpdate: Extracted asset object for firmware.bin");
+                    size_t urlPos = assetObj.find("\"browser_download_url\":\"");
                     if (urlPos != std::string::npos) {
                         size_t urlStart = urlPos + 24;  // length of "browser_download_url":"
                         size_t urlEnd   = assetObj.find("\"", urlStart);
@@ -174,9 +186,12 @@ namespace WebUI {
                         }
                     } else {
                         log_error("AutoUpdate: Could not find browser_download_url for firmware");
+                        // Debug: log part of the asset object to see what's there
+                        std::string debugObj = assetObj.length() > 200 ? assetObj.substr(0, 200) + "..." : assetObj;
+                        log_info("AutoUpdate: Asset object preview: " << debugObj);
                     }
                 } else {
-                    log_error("AutoUpdate: Could not find end of firmware asset object");
+                    log_error("AutoUpdate: Could not find matching closing brace for firmware asset object");
                 }
             } else {
                 log_error("AutoUpdate: Could not find start of firmware asset object");
@@ -192,10 +207,22 @@ namespace WebUI {
             // Search for the asset object containing this name
             size_t assetStart = jsonResponse.rfind("{", webUIPos);
             if (assetStart != std::string::npos) {
-                size_t assetEnd = jsonResponse.find("}", webUIPos);
-                if (assetEnd != std::string::npos) {
-                    std::string assetObj = jsonResponse.substr(assetStart, assetEnd - assetStart);
-                    size_t      urlPos   = assetObj.find("\"browser_download_url\":\"");
+                // Find the matching closing brace by counting braces
+                size_t assetEnd = assetStart + 1;
+                int braceCount = 1;
+                while (assetEnd < jsonResponse.length() && braceCount > 0) {
+                    if (jsonResponse[assetEnd] == '{') {
+                        braceCount++;
+                    } else if (jsonResponse[assetEnd] == '}') {
+                        braceCount--;
+                    }
+                    if (braceCount > 0) assetEnd++;
+                }
+                
+                if (braceCount == 0) {
+                    std::string assetObj = jsonResponse.substr(assetStart, assetEnd - assetStart + 1);
+                    log_info("AutoUpdate: Extracted asset object for index.html.gz");
+                    size_t urlPos = assetObj.find("\"browser_download_url\":\"");
                     if (urlPos != std::string::npos) {
                         size_t urlStart = urlPos + 24;  // length of "browser_download_url":"
                         size_t urlEnd   = assetObj.find("\"", urlStart);
@@ -207,9 +234,12 @@ namespace WebUI {
                         }
                     } else {
                         log_error("AutoUpdate: Could not find browser_download_url for WebUI");
+                        // Debug: log part of the asset object to see what's there
+                        std::string debugObj = assetObj.length() > 200 ? assetObj.substr(0, 200) + "..." : assetObj;
+                        log_info("AutoUpdate: Asset object preview: " << debugObj);
                     }
                 } else {
-                    log_error("AutoUpdate: Could not find end of WebUI asset object");
+                    log_error("AutoUpdate: Could not find matching closing brace for WebUI asset object");
                 }
             } else {
                 log_error("AutoUpdate: Could not find start of WebUI asset object");
