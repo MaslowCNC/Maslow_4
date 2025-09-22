@@ -55,7 +55,6 @@ kinematics:
     beltEndExtension: 30.000000
     armLength: 123.400002
     maxSegmentLength: 5.000000
-    fixedZ: false
 
 axes: 
   shared_stepper_disable_pin: NO_PIN

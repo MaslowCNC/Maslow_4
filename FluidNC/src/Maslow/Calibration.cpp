@@ -2,7 +2,6 @@
 #include "Maslow.h"
 #include "../Kinematics/MaslowKinematics.h"
 #include "../System.h"
-#include "SquareCalculation.h"
 
 // Helper function to get MaslowKinematics instance
 static Kinematics::MaslowKinematics* getKinematics() {
@@ -113,10 +112,6 @@ bool Calibration::requestStateChange(int newState) {
             if (currentState == EXTENDEDOUT) {
                 currentState = TAKING_SLACK;
 
-                //Reset the axis targets at the beginning of taking slack
-                Maslow.axisTL.setTarget(Maslow.axisTL.getPosition());
-                Maslow.axisTR.setTarget(Maslow.axisTR.getPosition());
-
                 retractingTL = false;  //Should be replaced by state now
                 retractingTR = false;
                 retractingBL = false;
@@ -144,11 +139,6 @@ bool Calibration::requestStateChange(int newState) {
         case CALIBRATION_IN_PROGRESS:  //We can enter calibration in progress from EXTENDEDOUT, READY_TO_CUT, or CALIBRATION_COMPUTING
             if (currentState == EXTENDEDOUT || currentState == READY_TO_CUT || currentState == CALIBRATION_COMPUTING) {
                 currentState = CALIBRATION_IN_PROGRESS;
-
-                //Reset the axis targets at the beginning of calibration
-                Maslow.axisTL.setTarget(Maslow.axisTL.getPosition());
-                Maslow.axisTR.setTarget(Maslow.axisTR.getPosition());
-
                 sys.set_state(State::Homing);
 
                 // Log the calibration orientation mode for debugging
@@ -1372,23 +1362,26 @@ bool Calibration::generate_calibration_grid() {
 
 /*
 * This function takes a single measurement and adjusts the frame dimensions to find a valid frame size that matches the measurement
-* Uses the algorithm described in https://math.stackexchange.com/questions/5013127/find-square-size-from-inscribed-triangles?noredirect=1#comment10752043_5013127 for calculating square size from distances to vertices
 */
 bool Calibration::adjustFrameSizeToMatchFirstMeasurement() {
-    //Get the last measurements
-    double tlLen = measurements[0][0];  // distance to A (top-left)
-    double trLen = measurements[0][1];  // distance to B (top-right)
-    double blLen = measurements[0][2];  // distance to C (bottom-left)
-    double brLen = measurements[0][3];  // distance to D (bottom-right)
+    //Get the last measurments
+    double tlLen = measurements[0][0];
+    double trLen = measurements[0][1];
+    double blLen = measurements[0][2];
+    double brLen = measurements[0][3];
 
-    // Use the Stack Exchange algorithm to compute the square side length
-    // The algorithm works for any interior point E inside the square
-    double L = SquareCalculation::calculateSquareSideLength(tlLen, trLen, blLen, brLen);
-
-    if (L < 500.0 || L > 5000.0) {  // Sanity check on square size
-        log_error("Unable to adjust frame size. Calculated size " << L << "mm is outside reasonable range");
+    //Check that we are in fact on the center line. The math assumes that we are roughly centered on the frame and so
+    //the topleft and topright measurements should be roughly the same. It doesn't need to be exact.
+    if (std::abs(tlLen - trLen) > 20) {
+        log_error("Unable to adjust frame size. Not centered.");  //There exists a more generalized solution which should be implimented here: https://math.stackexchange.com/questions/5013127/find-square-size-from-inscribed-triangles?noredirect=1#comment10752043_5013127
         return false;
     }
+
+    //Compute the size of the frame from the given measurements
+
+    double numerator   = sqrt(pow(tlLen, 2) + sqrt(-pow(tlLen, 4) + 6 * pow(tlLen, 2) * pow(blLen, 2) - pow(blLen, 4)) + pow(blLen, 2));
+    double denominator = sqrt(2);
+    float  L           = numerator / denominator;
 
     //Adjust the frame size to match the computed size
     auto kinematics = getKinematics();

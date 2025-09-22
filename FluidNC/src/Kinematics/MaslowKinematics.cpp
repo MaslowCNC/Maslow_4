@@ -298,10 +298,8 @@ namespace Kinematics {
         y       = y + _centerY;
         float a = _tlX - x;  // X dist from corner to router center
         float b = _tlY - y;  // Y dist from corner to router center
-        // When fixedZ is true, don't use current Z position - only use fixed anchor Z values
-        float effectiveZ = _fixedZ ? 0.0f : z;
         float c =
-            0.0f - (effectiveZ + _tlZ + _spoilboardThickness + _workThickness);  // Z dist from corner to router center (includes material thickness)
+            0.0f - (z + _tlZ + _spoilboardThickness + _workThickness);  // Z dist from corner to router center (includes material thickness)
 
         float XYlength = sqrt(a * a + b * b);  // Get the distance in the XY plane from the corner to the router center
         float XYBeltLength =
@@ -317,10 +315,8 @@ namespace Kinematics {
         y       = y + _centerY;
         float a = _trX - x;
         float b = _trY - y;
-        // When fixedZ is true, don't use current Z position - only use fixed anchor Z values
-        float effectiveZ = _fixedZ ? 0.0f : z;
         float c =
-            0.0f - (effectiveZ + _trZ + _spoilboardThickness + _workThickness);  // Z dist from corner to router center (includes material thickness)
+            0.0f - (z + _trZ + _spoilboardThickness + _workThickness);  // Z dist from corner to router center (includes material thickness)
 
         float XYlength = sqrt(a * a + b * b);  // Get the distance in the XY plane from the corner to the router center
         float XYBeltLength =
@@ -336,10 +332,8 @@ namespace Kinematics {
         y       = y + _centerY;
         float a = _blX - x;  // X dist from corner to router center
         float b = _blY - y;  // Y dist from corner to router center
-        // When fixedZ is true, don't use current Z position - only use fixed anchor Z values
-        float effectiveZ = _fixedZ ? 0.0f : z;
         float c =
-            0.0f - (effectiveZ + _blZ + _spoilboardThickness + _workThickness);  // Z dist from corner to router center (includes material thickness)
+            0.0f - (z + _blZ + _spoilboardThickness + _workThickness);  // Z dist from corner to router center (includes material thickness)
 
         float XYlength = sqrt(a * a + b * b);  // Get the distance in the XY plane from the corner to the router center
         float XYBeltLength =
@@ -355,10 +349,8 @@ namespace Kinematics {
         y       = y + _centerY;
         float a = _brX - x;
         float b = _brY - y;
-        // When fixedZ is true, don't use current Z position - only use fixed anchor Z values
-        float effectiveZ = _fixedZ ? 0.0f : z;
         float c =
-            0.0f - (effectiveZ + _brZ + _spoilboardThickness + _workThickness);  // Z dist from corner to router center (includes material thickness)
+            0.0f - (z + _brZ + _spoilboardThickness + _workThickness);  // Z dist from corner to router center (includes material thickness)
 
         float XYlength = sqrt(a * a + b * b);  // Get the distance in the XY plane from the corner to the router center
         float XYBeltLength =
@@ -435,7 +427,6 @@ namespace Kinematics {
         handler.item("beltEndExtension", _beltEndExtension);
         handler.item("armLength", _armLength);
         handler.item("maxSegmentLength", _maxSegmentLength);
-        handler.item("fixedZ", _fixedZ);
     }
 
     // Setter methods for calibration system to update frame parameters

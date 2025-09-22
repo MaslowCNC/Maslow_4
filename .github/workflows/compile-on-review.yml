@@ -10,7 +10,7 @@ jobs:
   compile-firmware:
     runs-on: ubuntu-latest
     
-    # Run when MaslowBot is requested as reviewer OR when specific build commands are used in a comment on a PR
+    # Run when MaslowBot is requested as reviewer OR when MaslowBot is mentioned in a comment on a PR
     # Handles both single reviewer (requested_reviewer) and multiple reviewers (requested_reviewers) scenarios
     # Also handles issue_comment trigger for Copilot-created PRs  
     if: |
@@ -20,7 +20,7 @@ jobs:
       )) ||
       (github.event_name == 'issue_comment' && 
         github.event.issue.pull_request != null &&
-        (contains(github.event.comment.body, 'please build') || contains(github.event.comment.body, '/build'))
+        (contains(github.event.comment.body, '@MaslowBot') || contains(github.event.comment.body, '/build'))
       )
     
     steps:
@@ -84,28 +84,11 @@ jobs:
       run: |
         pio run -e wifi_s3
         
-    - name: Prepare firmware artifact folder
-      run: |
-        mkdir -p firmware-package
-        cp .pio/build/wifi_s3/firmware.bin firmware-package/
-        cat > firmware-package/README.txt << 'EOF'
-        FluidNC Firmware Package
-        ========================
-
-        Please unzip this folder and then install the included firmware.bin file as normal to test these changes.
-
-        Installation Instructions:
-        1. Extract this entire folder to your desired location
-        2. Upload to the machine as normal.
-
-        This firmware was automatically compiled from the pull request changes.
-        EOF
-        
     - name: Upload firmware as artifact
       uses: actions/upload-artifact@v4
       with:
-        name: firmware-package
-        path: firmware-package/
+        name: firmware.bin
+        path: .pio/build/wifi_s3/firmware.bin
         retention-days: 30
         
     - name: Comment on PR with firmware info
@@ -149,7 +132,16 @@ jobs:
           - Build time: ~2 minutes
           
           **Download:**
-          The firmware package (containing firmware.bin and installation instructions) has been uploaded as a build artifact named "firmware-package" and can be downloaded from the [Actions tab](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}).
+          The compiled firmware.bin file has been uploaded as a build artifact and can be downloaded from the [Actions tab](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}).
+          
+          **Installation:**
+          Use the install scripts in the \`install_scripts\` directory or flash directly with esptool.py:
+          \`\`\`bash
+          esptool.py --chip esp32s3 --baud 921600 \\
+            --before default_reset --after hard_reset write_flash \\
+            -z --flash_mode dio --flash_freq 80m --flash_size detect \\
+            0x10000 firmware.bin
+          \`\`\`
           
           ${triggerText}`;
           
