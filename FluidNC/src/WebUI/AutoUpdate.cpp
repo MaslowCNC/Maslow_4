@@ -375,12 +375,33 @@ namespace WebUI {
             return false;
         }
 
-        // Skip headers
+        // Parse HTTP response headers
         bool headersPassed = false;
+        int  httpStatus    = 0;
+        int  contentLength = -1;
+        
         while (client.connected() && !headersPassed) {
             if (client.available()) {
                 String line = client.readStringUntil('\n');
-                if (line.length() == 1) {  // Just \r means end of headers
+                line.trim();
+                
+                // Parse HTTP status line
+                if (line.startsWith("HTTP/")) {
+                    int statusStart = line.indexOf(' ') + 1;
+                    int statusEnd   = line.indexOf(' ', statusStart);
+                    if (statusStart > 0 && statusEnd > statusStart) {
+                        httpStatus = line.substring(statusStart, statusEnd).toInt();
+                        log_info("AutoUpdate: HTTP Status: " << httpStatus);
+                    }
+                }
+                
+                // Parse Content-Length header
+                if (line.startsWith("Content-Length:")) {
+                    contentLength = line.substring(15).toInt();
+                    log_info("AutoUpdate: Content-Length: " << contentLength);
+                }
+                
+                if (line.length() == 0) {  // Empty line means end of headers
                     headersPassed = true;
                 }
             }
@@ -389,6 +410,12 @@ namespace WebUI {
 
         if (!headersPassed) {
             log_error("AutoUpdate: Failed to read download headers");
+            client.stop();
+            return false;
+        }
+        
+        if (httpStatus != 200) {
+            log_error("AutoUpdate: HTTP error status: " << httpStatus);
             client.stop();
             return false;
         }
@@ -424,6 +451,13 @@ namespace WebUI {
         client.stop();
 
         log_info("AutoUpdate: Downloaded " << totalBytes << " bytes to " << fpath.c_str());
+        
+        // Validate download size if Content-Length was provided
+        if (contentLength > 0 && totalBytes != contentLength) {
+            log_error("AutoUpdate: Download size mismatch. Expected: " << contentLength << ", Got: " << totalBytes);
+            return false;
+        }
+        
         return totalBytes > 0;
     }
 
