@@ -155,6 +155,7 @@ namespace WebUI {
         // Find firmware.bin URL - look for exact filename match
         size_t firmwarePos = jsonResponse.find("\"name\":\"firmware.bin\"");
         if (firmwarePos != std::string::npos) {
+            log_info("AutoUpdate: Searching for firmware.bin download URL...");
             // Search for the asset object containing this name
             size_t assetStart = jsonResponse.rfind("{", firmwarePos);
             if (assetStart != std::string::npos) {
@@ -168,15 +169,26 @@ namespace WebUI {
                         if (urlEnd != std::string::npos) {
                             firmwareUrl = assetObj.substr(urlStart, urlEnd - urlStart);
                             log_info("AutoUpdate: Found firmware URL: " << firmwareUrl);
+                        } else {
+                            log_error("AutoUpdate: Could not find end quote for firmware URL");
                         }
+                    } else {
+                        log_error("AutoUpdate: Could not find browser_download_url for firmware");
                     }
+                } else {
+                    log_error("AutoUpdate: Could not find end of firmware asset object");
                 }
+            } else {
+                log_error("AutoUpdate: Could not find start of firmware asset object");
             }
+        } else {
+            log_error("AutoUpdate: firmware.bin not found in assets");
         }
 
         // Find index.html.gz URL - look for exact filename match
         size_t webUIPos = jsonResponse.find("\"name\":\"index.html.gz\"");
         if (webUIPos != std::string::npos) {
+            log_info("AutoUpdate: Searching for index.html.gz download URL...");
             // Search for the asset object containing this name
             size_t assetStart = jsonResponse.rfind("{", webUIPos);
             if (assetStart != std::string::npos) {
@@ -190,90 +202,20 @@ namespace WebUI {
                         if (urlEnd != std::string::npos) {
                             webUIUrl = assetObj.substr(urlStart, urlEnd - urlStart);
                             log_info("AutoUpdate: Found WebUI URL: " << webUIUrl);
+                        } else {
+                            log_error("AutoUpdate: Could not find end quote for WebUI URL");
                         }
+                    } else {
+                        log_error("AutoUpdate: Could not find browser_download_url for WebUI");
                     }
+                } else {
+                    log_error("AutoUpdate: Could not find end of WebUI asset object");
                 }
+            } else {
+                log_error("AutoUpdate: Could not find start of WebUI asset object");
             }
-        }
-
-        // If exact matches not found, try alternative names or patterns
-        if (firmwareUrl.empty()) {
-            log_info("AutoUpdate: firmware.bin not found, looking for alternative firmware files...");
-            // Look for any .bin file
-            size_t binPos = jsonResponse.find(".bin\"");
-            while (binPos != std::string::npos) {
-                // Find the start of the filename
-                size_t nameStart = jsonResponse.rfind("\"name\":\"", binPos) + 8;
-                if (nameStart != std::string::npos + 8) {
-                    size_t nameEnd = jsonResponse.find("\"", nameStart);
-                    if (nameEnd != std::string::npos && nameEnd == binPos + 4) {
-                        std::string assetName = jsonResponse.substr(nameStart, nameEnd - nameStart);
-                        log_info("AutoUpdate: Found potential firmware file: " << assetName);
-                        
-                        // Get the download URL for this asset
-                        size_t assetStart = jsonResponse.rfind("{", nameStart);
-                        if (assetStart != std::string::npos) {
-                            size_t assetEnd = jsonResponse.find("}", binPos);
-                            if (assetEnd != std::string::npos) {
-                                std::string assetObj = jsonResponse.substr(assetStart, assetEnd - assetStart);
-                                size_t      urlPos   = assetObj.find("\"browser_download_url\":\"");
-                                if (urlPos != std::string::npos) {
-                                    size_t urlStart = urlPos + 24;
-                                    size_t urlEnd   = assetObj.find("\"", urlStart);
-                                    if (urlEnd != std::string::npos) {
-                                        firmwareUrl = assetObj.substr(urlStart, urlEnd - urlStart);
-                                        log_info("AutoUpdate: Using firmware URL: " << firmwareUrl);
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                binPos = jsonResponse.find(".bin\"", binPos + 1);
-            }
-        }
-
-        if (webUIUrl.empty()) {
-            log_info("AutoUpdate: index.html.gz not found, looking for alternative WebUI files...");
-            // Look for any .gz file that might be the WebUI
-            size_t gzPos = jsonResponse.find(".html.gz\"");
-            if (gzPos == std::string::npos) {
-                gzPos = jsonResponse.find(".gz\"");
-            }
-            while (gzPos != std::string::npos) {
-                // Find the start of the filename
-                size_t nameStart = jsonResponse.rfind("\"name\":\"", gzPos) + 8;
-                if (nameStart != std::string::npos + 8) {
-                    size_t nameEnd = jsonResponse.find("\"", nameStart);
-                    if (nameEnd != std::string::npos) {
-                        std::string assetName = jsonResponse.substr(nameStart, nameEnd - nameStart);
-                        if (assetName.find("html") != std::string::npos || assetName.find("web") != std::string::npos || assetName.find("ui") != std::string::npos) {
-                            log_info("AutoUpdate: Found potential WebUI file: " << assetName);
-                            
-                            // Get the download URL for this asset
-                            size_t assetStart = jsonResponse.rfind("{", nameStart);
-                            if (assetStart != std::string::npos) {
-                                size_t assetEnd = jsonResponse.find("}", gzPos);
-                                if (assetEnd != std::string::npos) {
-                                    std::string assetObj = jsonResponse.substr(assetStart, assetEnd - assetStart);
-                                    size_t      urlPos   = assetObj.find("\"browser_download_url\":\"");
-                                    if (urlPos != std::string::npos) {
-                                        size_t urlStart = urlPos + 24;
-                                        size_t urlEnd   = assetObj.find("\"", urlStart);
-                                        if (urlEnd != std::string::npos) {
-                                            webUIUrl = assetObj.substr(urlStart, urlEnd - urlStart);
-                                            log_info("AutoUpdate: Using WebUI URL: " << webUIUrl);
-                                            break;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                gzPos = jsonResponse.find(".gz\"", gzPos + 1);
-            }
+        } else {
+            log_error("AutoUpdate: index.html.gz not found in assets");
         }
 
         if (firmwareUrl.empty() || webUIUrl.empty()) {
