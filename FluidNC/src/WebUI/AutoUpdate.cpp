@@ -476,7 +476,7 @@ namespace WebUI {
         log_info("AutoUpdate: Starting download and installation process...");
 
         // Download WebUI to temporary location (small file, should fit in flash)
-        std::string tempWebUI = "/tmp/index.html.gz";
+        std::string tempWebUI = "/localfs/index.html.gz.tmp";
 
         log_info("AutoUpdate: Downloading WebUI from: " << webUIUrl);
         if (!downloadFile(webUIUrl, tempWebUI)) {
