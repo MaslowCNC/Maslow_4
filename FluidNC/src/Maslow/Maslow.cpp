@@ -11,6 +11,7 @@
 #include "../Kinematics/MaslowKinematics.h"
 
 // Maslow specific defines
+#define VERSION_NUMBER "1.12"
 
 #define TLEncoderLine 2
 #define TREncoderLine 1
