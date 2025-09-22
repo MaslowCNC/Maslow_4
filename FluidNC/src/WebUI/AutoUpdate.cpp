@@ -335,11 +335,14 @@ namespace WebUI {
             return false;
         }
 
-        // Create FluidPath to handle proper filesystem mounting and path resolution
+        // Use temporary filename during download
+        std::string tempFilename = filename + ".tmp";
+        
+        // Create FluidPath to handle proper filesystem mounting and path resolution for temp file
         std::error_code ec;
-        FluidPath fpath(filename, localfsName, ec);
+        FluidPath tempPath(tempFilename, localfsName, ec);
         if (ec) {
-            log_error("AutoUpdate: Failed to create filesystem path: " << ec.message());
+            log_error("AutoUpdate: Failed to create temporary filesystem path: " << ec.message());
             return false;
         }
 
@@ -420,10 +423,10 @@ namespace WebUI {
             return false;
         }
 
-        // Save file using proper filesystem path
-        FILE* file = fopen(fpath.c_str(), "wb");
+        // Save to temporary file using proper filesystem path
+        FILE* file = fopen(tempPath.c_str(), "wb");
         if (!file) {
-            log_error("AutoUpdate: Failed to create file: " << fpath.c_str());
+            log_error("AutoUpdate: Failed to create temporary file: " << tempPath.c_str());
             client.stop();
             return false;
         }
@@ -436,7 +439,7 @@ namespace WebUI {
                 size_t bytesRead = client.readBytes(buffer, sizeof(buffer));
                 if (bytesRead > 0) {
                     if (fwrite(buffer, 1, bytesRead, file) != bytesRead) {
-                        log_error("AutoUpdate: Failed to write data to file");
+                        log_error("AutoUpdate: Failed to write data to temporary file");
                         fclose(file);
                         client.stop();
                         return false;
@@ -450,7 +453,7 @@ namespace WebUI {
         fclose(file);
         client.stop();
 
-        log_info("AutoUpdate: Downloaded " << totalBytes << " bytes to " << fpath.c_str());
+        log_info("AutoUpdate: Downloaded " << totalBytes << " bytes to " << tempPath.c_str());
         
         // Validate download size if Content-Length was provided
         if (contentLength > 0 && totalBytes != contentLength) {
@@ -458,7 +461,24 @@ namespace WebUI {
             return false;
         }
         
-        return totalBytes > 0;
+        if (totalBytes == 0) {
+            return false;
+        }
+
+        // Move temporary file to final location
+        FluidPath finalPath(filename, localfsName, ec);
+        if (ec) {
+            log_error("AutoUpdate: Failed to create final filesystem path: " << ec.message());
+            return false;
+        }
+        
+        if (rename(tempPath.c_str(), finalPath.c_str()) != 0) {
+            log_error("AutoUpdate: Failed to rename temporary file to final location");
+            return false;
+        }
+
+        log_info("AutoUpdate: Successfully moved file to " << finalPath.c_str());
+        return true;
     }
 
     bool AutoUpdate::downloadAndInstallFirmware(const std::string& firmwareUrl) {
