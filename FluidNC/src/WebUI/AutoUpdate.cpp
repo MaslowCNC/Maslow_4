@@ -11,6 +11,8 @@
 #    include "../Config.h"
 #    include "../Logging.h"
 #    include "../Report.h"
+#    include "Driver/localfs.h"
+#    include "../FluidPath.h"
 
 #    include <WiFiClientSecure.h>
 #    include <Update.h>
@@ -326,6 +328,105 @@ namespace WebUI {
         return totalBytes > 0;
     }
 
+    bool AutoUpdate::downloadFileToLocalFS(const std::string& url, const std::string& filename) {
+        // Check if local filesystem is available
+        if (!localfsName) {
+            log_error("AutoUpdate: Local filesystem not available");
+            return false;
+        }
+
+        // Create FluidPath to handle proper filesystem mounting and path resolution
+        std::error_code ec;
+        FluidPath fpath(filename, localfsName, ec);
+        if (ec) {
+            log_error("AutoUpdate: Failed to create filesystem path: " << ec.message());
+            return false;
+        }
+
+        WiFiClientSecure client;
+        client.setInsecure();
+
+        // Parse URL to get host and path
+        size_t      hostStart = url.find("://") + 3;
+        size_t      pathStart = url.find("/", hostStart);
+        std::string host      = url.substr(hostStart, pathStart - hostStart);
+        std::string path      = url.substr(pathStart);
+
+        if (!client.connect(host.c_str(), 443)) {
+            log_error("AutoUpdate: Failed to connect for download: " << host);
+            return false;
+        }
+
+        // Send HTTP request
+        client.print(("GET " + path + " HTTP/1.1\r\n").c_str());
+        client.print(("Host: " + host + "\r\n").c_str());
+        client.print("User-Agent: FluidNC-AutoUpdate\r\n");
+        client.print("Connection: close\r\n\r\n");
+
+        // Wait for response
+        unsigned long timeout = millis() + 10000;
+        while (!client.available() && millis() < timeout) {
+            delay(10);
+        }
+
+        if (!client.available()) {
+            log_error("AutoUpdate: Download request timeout");
+            client.stop();
+            return false;
+        }
+
+        // Skip headers
+        bool headersPassed = false;
+        while (client.connected() && !headersPassed) {
+            if (client.available()) {
+                String line = client.readStringUntil('\n');
+                if (line.length() == 1) {  // Just \r means end of headers
+                    headersPassed = true;
+                }
+            }
+            delay(1);
+        }
+
+        if (!headersPassed) {
+            log_error("AutoUpdate: Failed to read download headers");
+            client.stop();
+            return false;
+        }
+
+        // Save file using proper filesystem path
+        FILE* file = fopen(fpath.c_str(), "wb");
+        if (!file) {
+            log_error("AutoUpdate: Failed to create file: " << fpath.c_str());
+            client.stop();
+            return false;
+        }
+
+        uint8_t buffer[1024];
+        size_t  totalBytes = 0;
+
+        while (client.connected() || client.available()) {
+            if (client.available()) {
+                size_t bytesRead = client.readBytes(buffer, sizeof(buffer));
+                if (bytesRead > 0) {
+                    if (fwrite(buffer, 1, bytesRead, file) != bytesRead) {
+                        log_error("AutoUpdate: Failed to write data to file");
+                        fclose(file);
+                        client.stop();
+                        return false;
+                    }
+                    totalBytes += bytesRead;
+                }
+            }
+            delay(1);
+        }
+
+        fclose(file);
+        client.stop();
+
+        log_info("AutoUpdate: Downloaded " << totalBytes << " bytes to " << fpath.c_str());
+        return totalBytes > 0;
+    }
+
     bool AutoUpdate::downloadAndInstallFirmware(const std::string& firmwareUrl) {
         WiFiClientSecure client;
         client.setInsecure();
@@ -475,11 +576,11 @@ namespace WebUI {
         // This is a rough check - in practice you'd want more sophisticated space checking
         log_info("AutoUpdate: Starting download and installation process...");
 
-        // Download WebUI directly to final destination (small file, should be fine)
-        std::string webUIPath = "/localfs/index.html.gz";
+        // Download WebUI directly to final destination using proper filesystem handling
+        std::string webUIFilename = "index.html.gz";
 
         log_info("AutoUpdate: Downloading WebUI from: " << webUIUrl);
-        if (!downloadFile(webUIUrl, webUIPath)) {
+        if (!downloadFileToLocalFS(webUIUrl, webUIFilename)) {
             log_error("AutoUpdate: Failed to download WebUI");
             return false;
         }
