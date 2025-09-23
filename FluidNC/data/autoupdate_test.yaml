@@ -1,0 +1,27 @@
+// Test configuration parsing for autoupdate options
+
+board: Maslow
+name: Maslow S3 Board Test
+meta: AutoUpdate Test Configuration
+
+# Test autoupdate configuration options
+MaslowAutoUpdate: true
+MaslowUpdateURL: https://example.com/test-releases
+
+# Minimal config to test parsing
+stepping: 
+  engine: Timed
+  idle_ms: 240
+  pulse_us: 4
+
+axes: 
+  shared_stepper_disable_pin: NO_PIN
+  a: 
+    steps_per_mm: 80.000000
+    max_rate_mm_per_min: 2000.000000
+    acceleration_mm_per_sec2: 50.000000
+    max_travel_mm: 5000.000000
+    motor0: 
+      null_motor: 
+
+NoSpindle: 
