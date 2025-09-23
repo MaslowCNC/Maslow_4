@@ -107,6 +107,10 @@ namespace Machine {
         float _tempSpoilboardThickness = 0.0f;
         float _tempWorkThickness       = 0.0f;
 
+        // Maslow autoupdate configuration
+        bool        _maslowAutoUpdate = false;
+        std::string _maslowUpdateURL  = "https://github.com/BarbourSmith/FluidNC/releases";
+
         std::string _board = "None";
         std::string _name  = "None";
         std::string _meta  = "";

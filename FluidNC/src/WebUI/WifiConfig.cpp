@@ -5,6 +5,7 @@
 
 #include "../Settings.h"
 #include "../Machine/MachineConfig.h"
+#include "../Maslow/AutoUpdate.h"
 #include <sstream>
 #include <iomanip>
 
@@ -557,6 +558,12 @@ namespace WebUI {
     void WiFiConfig::WiFiEvent(WiFiEvent_t event) {
         switch (event) {
             case SYSTEM_EVENT_STA_GOT_IP:
+                log_info("WiFi STA Got IP: " << WiFi.localIP().toString().c_str());
+#ifdef ENABLE_WIFI
+                // Reset the autoupdate timer when we get connected
+                // The actual check will happen after the configured delay
+                Maslow::AutoUpdate::checkForUpdate();
+#endif
                 break;
             case SYSTEM_EVENT_STA_DISCONNECTED:
                 log_info("WiFi Disconnected");
@@ -838,6 +845,11 @@ namespace WebUI {
      */
     void WiFiConfig::handle() {
         wifi_services.handle();
+        
+#ifdef ENABLE_WIFI
+        // Check for autoupdate periodically
+        Maslow::AutoUpdate::checkForUpdate();
+#endif
     }
 
     // Used by js/scanwifidlg.js

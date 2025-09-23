@@ -112,6 +112,10 @@ namespace Machine {
         // Material thickness parameters - temporary storage for machine-level config
         handler.item(M + "_spoilboardThickness", _tempSpoilboardThickness, 0.0, 50.0);
         handler.item(M + "_workThickness", _tempWorkThickness, 0.0, 50.0);
+
+        // Autoupdate configuration
+        handler.item((M + "AutoUpdate").c_str(), _maslowAutoUpdate);
+        handler.item((M + "UpdateURL").c_str(), _maslowUpdateURL, 0, 512);
     }
 
     void MachineConfig::afterParse() {
