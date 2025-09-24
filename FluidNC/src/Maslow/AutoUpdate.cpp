@@ -19,6 +19,7 @@ namespace Maslow {
     bool AutoUpdate::_updateInProgress = false;
     uint32_t AutoUpdate::_lastUpdateCheck = 0;
     uint32_t AutoUpdate::_lastFailedUpdate = 0;
+    bool AutoUpdate::_updateCheckCompleted = false;
 
     std::string AutoUpdate::getCurrentVersion() {
         // Extract version from git_info (format: "v3.7.x (Maslow-Main-abc123)")
@@ -560,51 +561,53 @@ namespace Maslow {
         // Only proceed if autoupdate is enabled and WiFi is in STA mode
         auto config = Machine::MachineConfig::instance();
         if (!config || !config->_maslowAutoUpdate) {
-            log_debug("AutoUpdate: Feature disabled or config not available");
-            return;
+            return; // Silently return if feature is disabled
+        }
+        
+        // ONE-SHOT CHECK: If we've already completed the update check for this session, don't check again
+        if (_updateCheckCompleted) {
+            return; // Silently return - no need to log repeatedly
         }
         
         if (WiFi.getMode() != WIFI_STA && WiFi.getMode() != WIFI_AP_STA) {
-            log_debug("AutoUpdate: WiFi not in STA mode (current mode: " << WiFi.getMode() << "), skipping update check");
-            return;
+            return; // Silently return until WiFi is in correct mode
         }
         
         if (!WiFi.isConnected()) {
-            log_debug("AutoUpdate: WiFi not connected, skipping update check");
-            return;
+            return; // Silently return until WiFi is connected
         }
         
         uint32_t now = millis();
         
         // Check if we recently failed an update (prevent retry loops)
         if (_lastFailedUpdate != 0 && (now - _lastFailedUpdate) < FAILED_UPDATE_RETRY_INTERVAL) {
-            uint32_t timeLeft = FAILED_UPDATE_RETRY_INTERVAL - (now - _lastFailedUpdate);
-            log_debug("AutoUpdate: Skipping check due to recent failure, retry in " << (timeLeft / 1000) << " seconds");
+            if (!_updateCheckCompleted) {
+                uint32_t timeLeft = FAILED_UPDATE_RETRY_INTERVAL - (now - _lastFailedUpdate);
+                log_info("AutoUpdate: Skipping check due to recent failure, retry in " << (timeLeft / 3600000) << " hours");
+                _updateCheckCompleted = true; // Mark as completed so we don't log this repeatedly
+            }
             return;
         }
         
         // Check if we should perform an update check (30 seconds after connection)
         if (_lastUpdateCheck == 0) {
             _lastUpdateCheck = now;
-            log_info("AutoUpdate: Marking initial connection time, will check for updates in " << (UPDATE_CHECK_INTERVAL / 1000) << " seconds");
+            log_info("AutoUpdate: One-shot update check scheduled - will check for updates in " << (UPDATE_CHECK_INTERVAL / 1000) << " seconds");
             return;
         }
         
         if (now - _lastUpdateCheck < UPDATE_CHECK_INTERVAL) {
-            uint32_t timeLeft = UPDATE_CHECK_INTERVAL - (now - _lastUpdateCheck);
-            log_debug("AutoUpdate: Not time yet, waiting " << (timeLeft / 1000) << " more seconds");
-            return; // Not time yet
+            return; // Silently wait - no need to log repeatedly
         }
         
         if (_updateInProgress) {
-            log_debug("AutoUpdate: Update already in progress, skipping");
             return; // Update already in progress
         }
         
-        // Reset check time to prevent repeated checks (only try once per session unless failed)
-        _lastUpdateCheck = now + 86400000; // Next check in 24 hours
+        // MARK AS COMPLETED IMMEDIATELY - This is a one-shot operation
+        _updateCheckCompleted = true;
         
-        log_info("AutoUpdate: Starting update check");
+        log_info("AutoUpdate: Starting one-shot update check");
         log_info("AutoUpdate: Free heap before update check: " << ESP.getFreeHeap() << " bytes");
         
         std::string currentVersion = getCurrentVersion();
@@ -630,7 +633,7 @@ namespace Maslow {
                     log_error("AutoUpdate: Failed to retrieve latest version information");
                 }
             } else {
-                log_info("AutoUpdate: No update available or failed to check");
+                log_info("AutoUpdate: No update available - one-shot check completed");
                 updateCheckSuccess = true; // Not finding an update is not a failure
             }
         } catch (...) {
@@ -638,15 +641,22 @@ namespace Maslow {
             updateCheckSuccess = false;
         }
         
-        // Track failed attempts to prevent immediate retry loops
+        // Track failed attempts for future sessions (but don't retry this session)
         if (!updateCheckSuccess) {
             _lastFailedUpdate = now;
-            log_error("AutoUpdate: Update attempt failed, will retry in " << (FAILED_UPDATE_RETRY_INTERVAL / 1000) << " seconds");
+            log_error("AutoUpdate: One-shot update attempt failed - will not retry until next boot or 24 hours pass");
         } else {
             _lastFailedUpdate = 0; // Clear failure flag on success
         }
         
-        log_info("AutoUpdate: Update check completed, success: " << (updateCheckSuccess ? "true" : "false"));
+        log_info("AutoUpdate: One-shot update check completed, success: " << (updateCheckSuccess ? "true" : "false"));
+    }
+    
+    void AutoUpdate::resetUpdateCheck() {
+        // Reset the one-shot flag to allow a new update check on WiFi reconnection
+        _updateCheckCompleted = false;
+        _lastUpdateCheck = 0;
+        log_debug("AutoUpdate: Reset one-shot update check for new WiFi connection");
     }
 }
 

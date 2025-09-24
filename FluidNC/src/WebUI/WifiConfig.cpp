@@ -560,9 +560,8 @@ namespace WebUI {
             case SYSTEM_EVENT_STA_GOT_IP:
                 log_info("WiFi STA Got IP: " << WiFi.localIP().toString().c_str());
 #ifdef ENABLE_WIFI
-                // Reset the autoupdate timer when we get connected
-                // The actual check will happen after the configured delay
-                Maslow::AutoUpdate::checkForUpdate();
+                // Reset the one-shot autoupdate check for this new connection
+                Maslow::AutoUpdate::resetUpdateCheck();
 #endif
                 break;
             case SYSTEM_EVENT_STA_DISCONNECTED:

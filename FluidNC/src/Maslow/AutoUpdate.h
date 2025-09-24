@@ -18,6 +18,7 @@ namespace Maslow {
         static bool isUpdateAvailable(const std::string& updateUrl, const std::string& currentVersion);
         static bool downloadAndInstallUpdate(const std::string& updateUrl, const std::string& newVersion);
         static void checkForUpdate();
+        static void resetUpdateCheck(); // Reset one-shot flag for new WiFi connection
         
     private:
         static std::string getCurrentVersion();
@@ -32,6 +33,7 @@ namespace Maslow {
         static bool _updateInProgress;
         static uint32_t _lastUpdateCheck;
         static uint32_t _lastFailedUpdate;  // Track last failed update attempt
+        static bool _updateCheckCompleted;   // Track if one-shot check has been completed this session
         static const uint32_t UPDATE_CHECK_INTERVAL = 30000; // 30 seconds after WiFi connection
         static const uint32_t FAILED_UPDATE_RETRY_INTERVAL = 86400000; // 24 hours between retry attempts after failure
     };
