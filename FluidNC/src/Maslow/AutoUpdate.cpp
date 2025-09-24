@@ -18,6 +18,7 @@ extern const char* git_info;  // From version.cpp
 namespace Maslow {
     bool AutoUpdate::_updateInProgress = false;
     uint32_t AutoUpdate::_lastUpdateCheck = 0;
+    uint32_t AutoUpdate::_lastFailedUpdate = 0;
 
     std::string AutoUpdate::getCurrentVersion() {
         // Extract version from git_info (format: "v3.7.x (Maslow-Main-abc123)")
@@ -158,38 +159,50 @@ namespace Maslow {
         // Follow redirects to get the actual download URL
         std::string finalUrl = followRedirects(http, url, 5);
         if (finalUrl.empty()) {
-            log_error("AutoUpdate: Failed to resolve download URL");
+            log_error("AutoUpdate: Failed to resolve download URL, starting URL was: " << url);
             return false;
         }
         
+        if (finalUrl != url) {
+            log_debug("AutoUpdate: Following redirects from " << url << " to " << finalUrl);
+        }
+        
+        log_debug("AutoUpdate: Starting download from: " << finalUrl);
+        
         http.begin(client, finalUrl.c_str());
         http.addHeader("User-Agent", "FluidNC-AutoUpdate/1.0");
-        http.setTimeout(30000); // 30 second timeout for downloads
+        http.setTimeout(60000); // 60 second timeout for downloads
         
         int httpCode = http.GET();
-        log_debug("AutoUpdate: Download response code: " << httpCode);
+        log_debug("AutoUpdate: Download HTTP response code: " << httpCode);
         
         if (httpCode == HTTP_CODE_OK) {
             int contentLength = http.getSize();
-            log_debug("AutoUpdate: Content length: " << contentLength);
+            log_info("AutoUpdate: Content length: " << contentLength << " bytes");
+            
+            if (expectedSize > 0 && expectedSize != contentLength) {
+                log_warn("AutoUpdate: Expected size (" << expectedSize << ") differs from actual size (" << contentLength << ")");
+            }
             
             // Determine the appropriate file system
             FILE* file = nullptr;
             if (filePath.find("/sdcard/") == 0) {
                 // SD card file
                 if (!SD.exists("/")) {
-                    log_error("AutoUpdate: SD card not available");
+                    log_error("AutoUpdate: SD card not available for file: " << filePath);
                     http.end();
                     return false;
                 }
+                log_debug("AutoUpdate: Writing to SD card: " << filePath);
                 file = fopen(filePath.c_str(), "wb");
             } else {
                 // Local filesystem file
+                log_debug("AutoUpdate: Writing to local filesystem: " << filePath);
                 file = fopen(filePath.c_str(), "wb");
             }
             
             if (!file) {
-                log_error("AutoUpdate: Failed to create file: " << filePath);
+                log_error("AutoUpdate: Failed to create file: " << filePath << " (errno: " << errno << ")");
                 http.end();
                 return false;
             }
@@ -197,16 +210,35 @@ namespace Maslow {
             WiFiClient* stream = http.getStreamPtr();
             size_t bytesDownloaded = 0;
             uint8_t buffer[1024];
+            uint32_t lastProgressLog = millis();
+            
+            log_info("AutoUpdate: Starting file transfer");
             
             while (http.connected() && bytesDownloaded < contentLength) {
                 int bytesRead = stream->readBytes(buffer, sizeof(buffer));
                 if (bytesRead > 0) {
-                    fwrite(buffer, 1, bytesRead, file);
+                    size_t bytesWritten = fwrite(buffer, 1, bytesRead, file);
+                    if (bytesWritten != bytesRead) {
+                        log_error("AutoUpdate: Write error, expected " << bytesRead << " bytes, wrote " << bytesWritten);
+                        fclose(file);
+                        http.end();
+                        return false;
+                    }
                     bytesDownloaded += bytesRead;
                     
-                    if (bytesDownloaded % 10240 == 0) { // Log every 10KB
-                        log_debug("AutoUpdate: Downloaded " << bytesDownloaded << " / " << contentLength << " bytes");
+                    // Log progress every 10KB or every 5 seconds
+                    uint32_t now = millis();
+                    if (bytesDownloaded % 10240 == 0 || (now - lastProgressLog) > 5000) {
+                        int percent = (bytesDownloaded * 100) / contentLength;
+                        log_info("AutoUpdate: Downloaded " << bytesDownloaded << " / " << contentLength << " bytes (" << percent << "%)");
+                        lastProgressLog = now;
                     }
+                } else if (bytesRead == 0) {
+                    log_debug("AutoUpdate: No bytes read, stream may be finished or blocked");
+                    delay(10); // Small delay to prevent tight loop
+                } else {
+                    log_error("AutoUpdate: Read error: " << bytesRead);
+                    break;
                 }
                 delay(1); // Yield to other tasks
             }
@@ -214,16 +246,22 @@ namespace Maslow {
             fclose(file);
             http.end();
             
-            log_info("AutoUpdate: Download completed. Total bytes: " << bytesDownloaded);
+            log_info("AutoUpdate: Download completed. Total bytes: " << bytesDownloaded << " / " << contentLength);
+            
+            if (bytesDownloaded != contentLength) {
+                log_error("AutoUpdate: Download incomplete. Expected: " << contentLength << ", got: " << bytesDownloaded);
+                return false;
+            }
             
             if (expectedSize > 0 && bytesDownloaded != expectedSize) {
                 log_error("AutoUpdate: Download size mismatch. Expected: " << expectedSize << ", got: " << bytesDownloaded);
                 return false;
             }
             
+            log_info("AutoUpdate: File download successful: " << filePath);
             return true;
         } else {
-            log_error("AutoUpdate: Download failed with HTTP code: " << httpCode);
+            log_error("AutoUpdate: Download failed with HTTP code: " << httpCode << " for URL: " << finalUrl);
             http.end();
             return false;
         }
@@ -336,6 +374,7 @@ namespace Maslow {
 
     bool AutoUpdate::downloadAndInstallUpdate(const std::string& updateUrl, const std::string& newVersion) {
         log_info("AutoUpdate: Starting download and installation for version: " << newVersion);
+        log_debug("AutoUpdate: Free heap at start: " << ESP.getFreeHeap() << " bytes");
         
         if (_updateInProgress) {
             log_warn("AutoUpdate: Update already in progress");
@@ -343,6 +382,7 @@ namespace Maslow {
         }
         
         _updateInProgress = true;
+        log_debug("AutoUpdate: Set update in progress flag");
         
         // Get release information from GitHub API
         HTTPClient http;
@@ -356,87 +396,135 @@ namespace Maslow {
             if (releasesPos != std::string::npos) {
                 std::string repoPath = apiUrl.substr(githubPos + 11, releasesPos - (githubPos + 11));
                 apiUrl = "https://api.github.com/repos/" + repoPath + "/releases/tags/" + newVersion;
+                log_debug("AutoUpdate: Converted to API URL: " << apiUrl);
+            } else {
+                log_error("AutoUpdate: Invalid GitHub URL format - missing /releases");
+                _updateInProgress = false;
+                return false;
             }
+        } else {
+            log_error("AutoUpdate: Not a GitHub URL: " << updateUrl);
+            _updateInProgress = false;
+            return false;
         }
         
-        log_debug("AutoUpdate: Release API URL: " << apiUrl);
+        log_info("AutoUpdate: Fetching release information from GitHub API");
         
         http.begin(client, apiUrl.c_str());
         http.addHeader("User-Agent", "FluidNC-AutoUpdate/1.0");
+        http.setTimeout(15000); // 15 second timeout
         
         int httpCode = http.GET();
+        log_debug("AutoUpdate: GitHub API HTTP response code: " << httpCode);
+        
         if (httpCode != HTTP_CODE_OK) {
-            log_error("AutoUpdate: Failed to get release information, HTTP code: " << httpCode);
+            log_error("AutoUpdate: Failed to get release information, HTTP code: " << httpCode << ", URL: " << apiUrl);
             _updateInProgress = false;
             http.end();
             return false;
         }
         
         String payload = http.getString();
+        int payloadLength = payload.length();
         http.end();
+        
+        log_debug("AutoUpdate: Received " << payloadLength << " bytes from GitHub API");
+        log_debug("AutoUpdate: Free heap after API call: " << ESP.getFreeHeap() << " bytes");
         
         DynamicJsonDocument doc(16384);
         DeserializationError error = deserializeJson(doc, payload);
         
         if (error) {
             log_error("AutoUpdate: Failed to parse release information: " << error.c_str());
+            log_debug("AutoUpdate: JSON payload preview: " << payload.substring(0, 200).c_str());
             _updateInProgress = false;
             return false;
         }
+        
+        log_info("AutoUpdate: Successfully parsed release information");
         
         JsonArray assets = doc["assets"];
         std::string indexGzUrl = "";
         std::string firmwareBinUrl = "";
         
+        int assetCount = assets.size();
+        log_debug("AutoUpdate: Found " << assetCount << " assets in release");
+        
         // Find the required assets
         for (JsonObject asset : assets) {
             std::string name = asset["name"].as<std::string>();
             std::string downloadUrl = asset["browser_download_url"].as<std::string>();
+            size_t assetSize = asset["size"].as<size_t>();
+            
+            log_debug("AutoUpdate: Found asset: " << name << " (" << assetSize << " bytes)");
             
             if (name == "index.html.gz") {
                 indexGzUrl = downloadUrl;
-                log_debug("AutoUpdate: Found index.html.gz at: " << indexGzUrl);
+                log_info("AutoUpdate: Found index.html.gz at: " << indexGzUrl << " (" << assetSize << " bytes)");
             } else if (name == "firmware.bin") {
                 firmwareBinUrl = downloadUrl;
-                log_debug("AutoUpdate: Found firmware.bin at: " << firmwareBinUrl);
+                log_info("AutoUpdate: Found firmware.bin at: " << firmwareBinUrl << " (" << assetSize << " bytes)");
             }
         }
         
         if (indexGzUrl.empty() || firmwareBinUrl.empty()) {
             log_error("AutoUpdate: Required assets not found in release");
+            log_error("AutoUpdate: index.html.gz found: " << (!indexGzUrl.empty() ? "YES" : "NO"));
+            log_error("AutoUpdate: firmware.bin found: " << (!firmwareBinUrl.empty() ? "YES" : "NO"));
             _updateInProgress = false;
             return false;
         }
+        
+        log_info("AutoUpdate: Starting file downloads");
         
         // Download index.html.gz to local filesystem
         std::string tempWebUIPath = "/index_temp.html.gz";
+        log_info("AutoUpdate: Downloading web UI to: " << tempWebUIPath);
+        
         if (!downloadFile(indexGzUrl, tempWebUIPath)) {
-            log_error("AutoUpdate: Failed to download index.html.gz");
+            log_error("AutoUpdate: Failed to download index.html.gz from: " << indexGzUrl);
             _updateInProgress = false;
             return false;
         }
         
+        log_info("AutoUpdate: Web UI download completed successfully");
+        log_debug("AutoUpdate: Free heap after web UI download: " << ESP.getFreeHeap() << " bytes");
+        
         // Download firmware.bin to SD card
         std::string firmwarePath = "/sdcard/firmware_update.bin";
+        log_info("AutoUpdate: Downloading firmware to: " << firmwarePath);
+        
         if (!downloadFile(firmwareBinUrl, firmwarePath)) {
-            log_error("AutoUpdate: Failed to download firmware.bin");
+            log_error("AutoUpdate: Failed to download firmware.bin from: " << firmwareBinUrl);
+            log_info("AutoUpdate: Cleaning up web UI temp file");
             remove(tempWebUIPath.c_str());
             _updateInProgress = false;
             return false;
         }
         
+        log_info("AutoUpdate: Firmware download completed successfully");
+        log_debug("AutoUpdate: Free heap after firmware download: " << ESP.getFreeHeap() << " bytes");
+        
         // Install web UI first
+        log_info("AutoUpdate: Installing web UI");
+        
         if (!installWebUI(tempWebUIPath)) {
             log_error("AutoUpdate: Failed to install web UI");
+            log_info("AutoUpdate: Cleaning up downloaded files");
             remove(tempWebUIPath.c_str());
             SD.remove(firmwarePath.c_str());
             _updateInProgress = false;
             return false;
         }
         
+        log_info("AutoUpdate: Web UI installation completed successfully");
+        
         // Install firmware (this will trigger a reboot)
+        log_info("AutoUpdate: Installing firmware - this will reboot the system");
+        
         if (!installFirmware(firmwarePath)) {
             log_error("AutoUpdate: Failed to install firmware");
+            log_info("AutoUpdate: Cleaning up firmware file");
             SD.remove(firmwarePath.c_str());
             _updateInProgress = false;
             return false;
@@ -445,10 +533,12 @@ namespace Maslow {
         // Clean up
         SD.remove(firmwarePath.c_str());
         
-        log_info("AutoUpdate: Update completed successfully. System will reboot.");
+        log_info("AutoUpdate: Update completed successfully. System will reboot in 3 seconds...");
+        
+        // Give some time for the log message to be sent
+        delay(3000);
         
         // Reboot to apply firmware update
-        delay(1000);
         ESP.restart();
         
         return true;
@@ -470,11 +560,12 @@ namespace Maslow {
         // Only proceed if autoupdate is enabled and WiFi is in STA mode
         auto config = Machine::MachineConfig::instance();
         if (!config || !config->_maslowAutoUpdate) {
+            log_debug("AutoUpdate: Feature disabled or config not available");
             return;
         }
         
         if (WiFi.getMode() != WIFI_STA && WiFi.getMode() != WIFI_AP_STA) {
-            log_debug("AutoUpdate: WiFi not in STA mode, skipping update check");
+            log_debug("AutoUpdate: WiFi not in STA mode (current mode: " << WiFi.getMode() << "), skipping update check");
             return;
         }
         
@@ -485,25 +576,36 @@ namespace Maslow {
         
         uint32_t now = millis();
         
+        // Check if we recently failed an update (prevent retry loops)
+        if (_lastFailedUpdate != 0 && (now - _lastFailedUpdate) < FAILED_UPDATE_RETRY_INTERVAL) {
+            uint32_t timeLeft = FAILED_UPDATE_RETRY_INTERVAL - (now - _lastFailedUpdate);
+            log_debug("AutoUpdate: Skipping check due to recent failure, retry in " << (timeLeft / 1000) << " seconds");
+            return;
+        }
+        
         // Check if we should perform an update check (30 seconds after connection)
         if (_lastUpdateCheck == 0) {
             _lastUpdateCheck = now;
-            log_debug("AutoUpdate: Marking initial connection time");
+            log_info("AutoUpdate: Marking initial connection time, will check for updates in " << (UPDATE_CHECK_INTERVAL / 1000) << " seconds");
             return;
         }
         
         if (now - _lastUpdateCheck < UPDATE_CHECK_INTERVAL) {
+            uint32_t timeLeft = UPDATE_CHECK_INTERVAL - (now - _lastUpdateCheck);
+            log_debug("AutoUpdate: Not time yet, waiting " << (timeLeft / 1000) << " more seconds");
             return; // Not time yet
         }
         
         if (_updateInProgress) {
+            log_debug("AutoUpdate: Update already in progress, skipping");
             return; // Update already in progress
         }
         
-        // Reset check time to prevent repeated checks
+        // Reset check time to prevent repeated checks (only try once per session unless failed)
         _lastUpdateCheck = now + 86400000; // Next check in 24 hours
         
         log_info("AutoUpdate: Starting update check");
+        log_info("AutoUpdate: Free heap before update check: " << ESP.getFreeHeap() << " bytes");
         
         std::string currentVersion = getCurrentVersion();
         std::string updateUrl = config->_maslowUpdateURL;
@@ -511,16 +613,40 @@ namespace Maslow {
         log_info("AutoUpdate: Current version: " << currentVersion);
         log_info("AutoUpdate: Update URL: " << updateUrl);
         
-        if (isUpdateAvailable(updateUrl, currentVersion)) {
-            log_info("AutoUpdate: Update available, starting download and installation");
-            
-            std::string latestVersion = getLatestVersionFromGitHub(updateUrl);
-            if (!latestVersion.empty()) {
-                downloadAndInstallUpdate(updateUrl, latestVersion);
+        // Attempt the update check
+        bool updateCheckSuccess = false;
+        try {
+            if (isUpdateAvailable(updateUrl, currentVersion)) {
+                log_info("AutoUpdate: Update available, starting download and installation");
+                
+                std::string latestVersion = getLatestVersionFromGitHub(updateUrl);
+                if (!latestVersion.empty()) {
+                    log_info("AutoUpdate: Latest version found: " << latestVersion);
+                    updateCheckSuccess = downloadAndInstallUpdate(updateUrl, latestVersion);
+                    if (!updateCheckSuccess) {
+                        log_error("AutoUpdate: Download and installation failed");
+                    }
+                } else {
+                    log_error("AutoUpdate: Failed to retrieve latest version information");
+                }
+            } else {
+                log_info("AutoUpdate: No update available or failed to check");
+                updateCheckSuccess = true; // Not finding an update is not a failure
             }
-        } else {
-            log_info("AutoUpdate: No update available");
+        } catch (...) {
+            log_error("AutoUpdate: Exception occurred during update check");
+            updateCheckSuccess = false;
         }
+        
+        // Track failed attempts to prevent immediate retry loops
+        if (!updateCheckSuccess) {
+            _lastFailedUpdate = now;
+            log_error("AutoUpdate: Update attempt failed, will retry in " << (FAILED_UPDATE_RETRY_INTERVAL / 1000) << " seconds");
+        } else {
+            _lastFailedUpdate = 0; // Clear failure flag on success
+        }
+        
+        log_info("AutoUpdate: Update check completed, success: " << (updateCheckSuccess ? "true" : "false"));
     }
 }
 

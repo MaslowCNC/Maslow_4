@@ -31,7 +31,9 @@ namespace Maslow {
         
         static bool _updateInProgress;
         static uint32_t _lastUpdateCheck;
+        static uint32_t _lastFailedUpdate;  // Track last failed update attempt
         static const uint32_t UPDATE_CHECK_INTERVAL = 30000; // 30 seconds after WiFi connection
+        static const uint32_t FAILED_UPDATE_RETRY_INTERVAL = 86400000; // 24 hours between retry attempts after failure
     };
 }
 
