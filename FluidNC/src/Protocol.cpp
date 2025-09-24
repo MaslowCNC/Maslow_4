@@ -19,6 +19,7 @@
 #include "Settings.h"       // settings_execute_startup
 #include "Machine/LimitPin.h"
 #include "./Maslow/Maslow.h"
+#include "WebUI/WifiConfig.h"  // For WiFi handling
 
 volatile ExecAlarm rtAlarm;  // Global realtime executor bitflag variable for setting various alarms.
 
@@ -858,6 +859,12 @@ void protocol_exec_rt_system() {
 
     //do all the Maslow stuff here
     Maslow.update();
+    
+#ifdef ENABLE_WIFI
+    // Handle WiFi tasks including autoupdate checking
+    WebUI::wifi_config.handle();
+#endif
+    
     // Reload step segment buffer
     switch (sys.state()) {
         case State::ConfigAlarm:
