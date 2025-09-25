@@ -131,6 +131,10 @@ namespace WebUI {
         ArduinoOTA.handle();
         webServer.handle();
         telnetServer.handle();
+        
+        // Handle WiFi configuration tasks including autoupdate
+        extern WiFiConfig wifi_config;
+        wifi_config.handle();
     }
 }
 #endif
