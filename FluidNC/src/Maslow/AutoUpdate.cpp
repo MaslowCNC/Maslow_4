@@ -18,7 +18,6 @@ extern const char* git_info;  // From version.cpp
 namespace Maslow {
     bool AutoUpdate::_updateInProgress = false;
     uint32_t AutoUpdate::_lastUpdateCheck = 0;
-    uint32_t AutoUpdate::_lastFailedUpdate = 0;
     bool AutoUpdate::_updateCheckCompleted = false;
 
     std::string AutoUpdate::getCurrentVersion() {
@@ -579,16 +578,6 @@ namespace Maslow {
         
         uint32_t now = millis();
         
-        // Check if we recently failed an update (prevent retry loops)
-        if (_lastFailedUpdate != 0 && (now - _lastFailedUpdate) < FAILED_UPDATE_RETRY_INTERVAL) {
-            if (!_updateCheckCompleted) {
-                uint32_t timeLeft = FAILED_UPDATE_RETRY_INTERVAL - (now - _lastFailedUpdate);
-                log_info("AutoUpdate: Skipping check due to recent failure, retry in " << (timeLeft / 3600000) << " hours");
-                _updateCheckCompleted = true; // Mark as completed so we don't log this repeatedly
-            }
-            return;
-        }
-        
         // Check if we should perform an update check (30 seconds after connection)
         if (_lastUpdateCheck == 0) {
             _lastUpdateCheck = now;
@@ -604,10 +593,10 @@ namespace Maslow {
             return; // Update already in progress
         }
         
-        // MARK AS COMPLETED IMMEDIATELY - This is a one-shot operation
+        // MARK AS COMPLETED IMMEDIATELY - This is a one-shot operation with no retries
         _updateCheckCompleted = true;
         
-        log_info("AutoUpdate: Starting one-shot update check");
+        log_info("AutoUpdate: Starting one-shot update check (no retries)");
         log_info("AutoUpdate: Free heap before update check: " << ESP.getFreeHeap() << " bytes");
         
         std::string currentVersion = getCurrentVersion();
@@ -616,7 +605,7 @@ namespace Maslow {
         log_info("AutoUpdate: Current version: " << currentVersion);
         log_info("AutoUpdate: Update URL: " << updateUrl);
         
-        // Attempt the update check
+        // Attempt the update check - this is the only attempt
         bool updateCheckSuccess = false;
         try {
             if (isUpdateAvailable(updateUrl, currentVersion)) {
@@ -627,29 +616,21 @@ namespace Maslow {
                     log_info("AutoUpdate: Latest version found: " << latestVersion);
                     updateCheckSuccess = downloadAndInstallUpdate(updateUrl, latestVersion);
                     if (!updateCheckSuccess) {
-                        log_error("AutoUpdate: Download and installation failed");
+                        log_error("AutoUpdate: Download and installation failed - no retries will be attempted");
                     }
                 } else {
-                    log_error("AutoUpdate: Failed to retrieve latest version information");
+                    log_error("AutoUpdate: Failed to retrieve latest version information - no retries will be attempted");
                 }
             } else {
                 log_info("AutoUpdate: No update available - one-shot check completed");
                 updateCheckSuccess = true; // Not finding an update is not a failure
             }
         } catch (...) {
-            log_error("AutoUpdate: Exception occurred during update check");
+            log_error("AutoUpdate: Exception occurred during update check - no retries will be attempted");
             updateCheckSuccess = false;
         }
         
-        // Track failed attempts for future sessions (but don't retry this session)
-        if (!updateCheckSuccess) {
-            _lastFailedUpdate = now;
-            log_error("AutoUpdate: One-shot update attempt failed - will not retry until next boot or 24 hours pass");
-        } else {
-            _lastFailedUpdate = 0; // Clear failure flag on success
-        }
-        
-        log_info("AutoUpdate: One-shot update check completed, success: " << (updateCheckSuccess ? "true" : "false"));
+        log_info("AutoUpdate: One-shot update check completed, success: " << (updateCheckSuccess ? "true" : "false") << " (no retries)");
     }
     
     void AutoUpdate::resetUpdateCheck() {
