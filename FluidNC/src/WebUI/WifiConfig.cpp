@@ -843,7 +843,8 @@ namespace WebUI {
      * Handle not critical actions that must be done in sync environment
      */
     void WiFiConfig::handle() {
-        wifi_services.handle();
+        // Note: wifi_services.handle() is now called from WiFiServices::handle() 
+        // to avoid infinite recursion when WiFiServices calls this method
         
 #ifdef ENABLE_WIFI
         // Check for autoupdate periodically
