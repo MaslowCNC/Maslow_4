@@ -125,7 +125,7 @@ namespace Maslow {
             log_debug("Autoupdate: Free heap before JSON parse: " << ESP.getFreeHeap() << " bytes");
             
             // Use smaller JSON document size and filter for only needed fields
-            DynamicJsonDocument doc(2048);  // Reduced from 8192
+            DynamicJsonDocument doc(1024);  // Further reduced to minimal size for memory constraints
             DeserializationError error = deserializeJson(doc, payload);
             
             if (error) {
@@ -435,7 +435,7 @@ namespace Maslow {
         log_debug("Autoupdate: Free heap after API call: " << ESP.getFreeHeap() << " bytes");
         
         // Use smaller JSON document and parse incrementally to save memory
-        DynamicJsonDocument doc(4096);  // Reduced from 16384
+        DynamicJsonDocument doc(2048);  // Further reduced to minimal size for memory constraints
         DeserializationError error = deserializeJson(doc, payload);
         
         if (error) {
