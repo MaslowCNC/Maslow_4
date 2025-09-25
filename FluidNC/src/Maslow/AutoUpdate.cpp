@@ -570,7 +570,13 @@ namespace Maslow {
         }
         
         if (!config->_maslowAutoUpdate) {
-            log_debug("Autoupdate: Feature disabled in configuration (MaslowAutoUpdate: false)");
+            // Throttle this message to once per minute to avoid log spam
+            static uint32_t lastDisabledLogTime = 0;
+            uint32_t now = millis();
+            if (now - lastDisabledLogTime > 60000) { // 60 seconds
+                log_debug("Autoupdate: Feature disabled in configuration (MaslowAutoUpdate: false)");
+                lastDisabledLogTime = now;
+            }
             return;
         }
         
