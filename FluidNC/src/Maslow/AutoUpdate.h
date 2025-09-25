@@ -33,7 +33,7 @@ namespace Maslow {
         static bool _updateInProgress;
         static uint32_t _lastUpdateCheck;
         static bool _updateCheckCompleted;   // Track if one-shot check has been completed this session
-        static const uint32_t UPDATE_CHECK_INTERVAL = 30000; // 30 seconds after WiFi connection
+        static const uint32_t UPDATE_CHECK_INTERVAL = 3000; // 3 seconds after WiFi connection
     };
 }
 

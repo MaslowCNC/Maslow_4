@@ -578,7 +578,7 @@ namespace Maslow {
         
         uint32_t now = millis();
         
-        // Check if we should perform an update check (30 seconds after connection)
+        // Check if we should perform an update check (3 seconds after connection)
         if (_lastUpdateCheck == 0) {
             _lastUpdateCheck = now;
             log_info("Autoupdate: One-shot update check scheduled - will check for updates in " << (UPDATE_CHECK_INTERVAL / 1000) << " seconds");
