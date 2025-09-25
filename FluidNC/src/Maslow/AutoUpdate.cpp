@@ -559,8 +559,14 @@ namespace Maslow {
     void AutoUpdate::checkForUpdate() {
         // Only proceed if autoupdate is enabled and WiFi is in STA mode
         auto config = Machine::MachineConfig::instance();
-        if (!config || !config->_maslowAutoUpdate) {
-            return; // Silently return if feature is disabled
+        if (!config) {
+            log_debug("Autoupdate: MachineConfig instance not available");
+            return;
+        }
+        
+        if (!config->_maslowAutoUpdate) {
+            log_debug("Autoupdate: Feature disabled in configuration (MaslowAutoUpdate: false)");
+            return;
         }
         
         // ONE-SHOT CHECK: If we've already completed the update check for this session, don't check again
@@ -569,12 +575,16 @@ namespace Maslow {
         }
         
         if (WiFi.getMode() != WIFI_STA && WiFi.getMode() != WIFI_AP_STA) {
-            return; // Silently return until WiFi is in correct mode
+            log_debug("Autoupdate: WiFi not in STA mode (current mode: " << WiFi.getMode() << ")");
+            return;
         }
         
         if (!WiFi.isConnected()) {
-            return; // Silently return until WiFi is connected
+            log_debug("Autoupdate: WiFi not connected");
+            return;
         }
+        
+        log_debug("Autoupdate: Feature enabled and WiFi connected, checking timing...");
         
         uint32_t now = millis();
         
@@ -637,7 +647,7 @@ namespace Maslow {
         // Reset the one-shot flag to allow a new update check on WiFi reconnection
         _updateCheckCompleted = false;
         _lastUpdateCheck = 0;
-        log_debug("Autoupdate: Reset one-shot update check for new WiFi connection");
+        log_info("Autoupdate: Reset one-shot update check for new WiFi connection");
     }
 }
 

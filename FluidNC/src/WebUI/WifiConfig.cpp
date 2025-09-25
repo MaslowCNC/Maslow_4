@@ -847,6 +847,13 @@ namespace WebUI {
         
 #ifdef ENABLE_WIFI
         // Check for autoupdate periodically
+        static uint32_t lastLogTime = 0;
+        uint32_t now = millis();
+        // Log every 10 seconds to show we're calling checkForUpdate
+        if (now - lastLogTime > 10000) {
+            log_debug("Autoupdate: WiFiConfig::handle() calling checkForUpdate()");
+            lastLogTime = now;
+        }
         Maslow::AutoUpdate::checkForUpdate();
 #endif
     }
