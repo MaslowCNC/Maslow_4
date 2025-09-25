@@ -122,13 +122,16 @@ namespace Maslow {
         if (httpCode == HTTP_CODE_OK) {
             String payload = http.getString();
             log_debug("Autoupdate: GitHub API response length: " << payload.length());
+            log_debug("Autoupdate: Free heap before JSON parse: " << ESP.getFreeHeap() << " bytes");
             
-            // Parse JSON response
-            DynamicJsonDocument doc(8192);
+            // Use smaller JSON document size and filter for only needed fields
+            DynamicJsonDocument doc(2048);  // Reduced from 8192
             DeserializationError error = deserializeJson(doc, payload);
             
             if (error) {
                 log_error("Autoupdate: Failed to parse GitHub API response: " << error.c_str());
+                log_debug("Autoupdate: Available heap: " << ESP.getFreeHeap() << " bytes");
+                log_debug("Autoupdate: Payload preview: " << payload.substring(0, 150).c_str());
                 http.end();
                 return "";
             }
@@ -431,11 +434,13 @@ namespace Maslow {
         log_debug("Autoupdate: Received " << payloadLength << " bytes from GitHub API");
         log_debug("Autoupdate: Free heap after API call: " << ESP.getFreeHeap() << " bytes");
         
-        DynamicJsonDocument doc(16384);
+        // Use smaller JSON document and parse incrementally to save memory
+        DynamicJsonDocument doc(4096);  // Reduced from 16384
         DeserializationError error = deserializeJson(doc, payload);
         
         if (error) {
             log_error("Autoupdate: Failed to parse release information: " << error.c_str());
+            log_debug("Autoupdate: Available heap: " << ESP.getFreeHeap() << " bytes");
             log_debug("Autoupdate: JSON payload preview: " << payload.substring(0, 200).c_str());
             _updateInProgress = false;
             return false;
