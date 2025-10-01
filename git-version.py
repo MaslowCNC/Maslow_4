@@ -69,7 +69,7 @@ if not gitFail:
         )
     except:
         pass  # Keep fallback value
-    
+
     # Check if version contains "-" to trigger warning for non-tagged versions
     if "-" in VERSION_NUMBER and VERSION_NUMBER != FALLBACK_VERSION:
         compile_warning = '#warning "You are not compiling a tagged version, this should not be a release"'
