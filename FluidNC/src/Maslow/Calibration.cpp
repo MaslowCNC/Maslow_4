@@ -164,6 +164,48 @@ bool Calibration::requestStateChange(int newState) {
                         return false;
                     }
                 }
+                // After the first recompute (after first 6 measurements), regenerate grid if auto-compute is enabled
+                // Check: coming from CALIBRATION_COMPUTING, past first 6 measurements, and auto-compute mode enabled
+                else if (currentState == CALIBRATION_COMPUTING && waypoint > 6 && 
+                         calibration_grid_width_mm_X == 0.0f && calibration_grid_height_mm_Y == 0.0f) {
+                    log_info("Auto-computing calibration grid size based on anchor points");
+                    
+                    auto kinematics = getKinematics();
+                    if (kinematics) {
+                        // Compute grid dimensions as 50% of the frame dimensions
+                        float frameWidth = kinematics->getTrX() - kinematics->getTlX();
+                        float frameHeight = kinematics->getTlY() - kinematics->getBlY();
+                        
+                        calibration_grid_width_mm_X = frameWidth * 0.5f;
+                        calibration_grid_height_mm_Y = frameHeight * 0.5f;
+                        
+                        log_info("Auto-computed grid width: " << calibration_grid_width_mm_X << " mm");
+                        log_info("Auto-computed grid height: " << calibration_grid_height_mm_Y << " mm");
+                        
+                        // Compute optimal grid size based on spacing
+                        // Find the smallest grid size that keeps spacing under 500mm threshold
+                        int optimalGridSize = 9;  // Start with maximum and work down
+                        for (int testSize : {9, 7, 5, 3}) {
+                            float xSpacing = calibration_grid_width_mm_X / (testSize - 1);
+                            float ySpacing = calibration_grid_height_mm_Y / (testSize - 1);
+                            float maxSpacing = max(xSpacing, ySpacing);
+                            
+                            // Use a reasonable spacing threshold (e.g., 500mm max spacing)
+                            if (maxSpacing <= 500.0f) {
+                                optimalGridSize = testSize;
+                            }
+                        }
+                        
+                        calibrationGridSize = optimalGridSize;
+                        log_info("Auto-computed grid size: " << calibrationGridSize << "x" << calibrationGridSize);
+                        
+                        // Regenerate the grid with the new dimensions
+                        if (!generate_calibration_grid()) {
+                            log_error("Failed to regenerate calibration grid with auto-computed dimensions");
+                            return false;
+                        }
+                    }
+                }
                 Maslow.stop();
 
                 //Save the z-axis 'stop' position
