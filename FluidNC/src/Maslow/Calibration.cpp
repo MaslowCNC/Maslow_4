@@ -1360,6 +1360,34 @@ bool Calibration::generate_calibration_grid() {
     float gridWidth = 2.0f * fabs(pointBX - centerX);
     float gridHeight = 2.0f * fabs(pointBY - centerY);
     
+    // Apply safety constraints
+    // 1. Grid must be at least 16" (406.4mm) smaller than frame in each dimension
+    //    to prevent sled (16" diameter) from hitting frame edges
+    const float sledDiameter = 406.4f;  // 16 inches in mm
+    float frameWidth = fabs(trX - tlX);  // Approximate frame width
+    float frameHeight = fabs(tlY - blY);  // Approximate frame height
+    
+    float maxGridWidth = frameWidth - sledDiameter;
+    float maxGridHeight = frameHeight - sledDiameter;
+    
+    if (gridWidth > maxGridWidth) {
+        gridWidth = maxGridWidth;
+    }
+    if (gridHeight > maxGridHeight) {
+        gridHeight = maxGridHeight;
+    }
+    
+    // 2. Ensure minimum grid dimensions to accommodate at least 3 points in each direction
+    //    For 3 points, we need at least 2 intervals, so minimum spacing should be reasonable
+    //    Minimum grid dimension = 50mm to ensure 3 points can be placed with 25mm spacing
+    const float minGridDimension = 50.0f;  // mm
+    if (gridWidth < minGridDimension) {
+        gridWidth = minGridDimension;
+    }
+    if (gridHeight < minGridDimension) {
+        gridHeight = minGridDimension;
+    }
+    
     // Update the grid dimensions
     calibration_grid_width_mm_X = gridWidth;
     calibration_grid_height_mm_Y = gridHeight;
