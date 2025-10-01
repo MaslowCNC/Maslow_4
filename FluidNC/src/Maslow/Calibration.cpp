@@ -1277,6 +1277,95 @@ bool Calibration::generate_calibration_grid() {
     //Allocate memory for the calibration grid
     allocateCalibrationMemory();
 
+    // Calculate grid dimensions based on frame geometry to stay "in the green"
+    auto kinematics = getKinematics();
+    if (!kinematics) {
+        log_error("generate_calibration_grid: MaslowKinematics not available");
+        return false;
+    }
+
+    // Get anchor coordinates
+    float tlX = kinematics->getTlX();
+    float tlY = kinematics->getTlY();
+    float trX = kinematics->getTrX();
+    float trY = kinematics->getTrY();
+    float blX = kinematics->getBlX();
+    float blY = kinematics->getBlY();
+    float brX = kinematics->getBrX();
+    float brY = kinematics->getBrY();
+
+    // Get center point (already calculated in kinematics)
+    float centerX = kinematics->getCenterX();
+    float centerY = kinematics->getCenterY();
+
+    // Calculate direction vector from center to top-left anchor
+    float dirX = tlX - centerX;
+    float dirY = tlY - centerY;
+    float dirLength = sqrt(dirX * dirX + dirY * dirY);
+    
+    // Normalize direction vector
+    dirX /= dirLength;
+    dirY /= dirLength;
+
+    // We need to find point A on the line from center to TL where angle BL-A-TR is 130 degrees
+    // Using binary search to find the point
+    const float targetAngleDeg = 130.0f;
+    const float targetAngleRad = targetAngleDeg * M_PI / 180.0f;
+    
+    float minDist = 0.0f;
+    float maxDist = dirLength * 2.0f;  // Search up to 2x the distance to TL
+    float optimalDist = maxDist / 2.0f;
+    
+    // Binary search for the point where angle is closest to 130 degrees
+    for (int iter = 0; iter < 30; iter++) {
+        float testDist = (minDist + maxDist) / 2.0f;
+        float testX = centerX + dirX * testDist;
+        float testY = centerY + dirY * testDist;
+        
+        // Calculate vectors from test point to BL and TR
+        float toBLX = blX - testX;
+        float toBLY = blY - testY;
+        float toTRX = trX - testX;
+        float toTRY = trY - testY;
+        
+        // Calculate angle between vectors using dot product
+        float lenBL = sqrt(toBLX * toBLX + toBLY * toBLY);
+        float lenTR = sqrt(toTRX * toTRX + toTRY * toTRY);
+        
+        if (lenBL > 0 && lenTR > 0) {
+            float dotProduct = (toBLX * toTRX + toBLY * toTRY) / (lenBL * lenTR);
+            dotProduct = constrain(dotProduct, -1.0f, 1.0f);  // Clamp to avoid numerical issues
+            float angle = acos(dotProduct);
+            
+            // Adjust search range
+            if (angle < targetAngleRad) {
+                maxDist = testDist;
+            } else {
+                minDist = testDist;
+            }
+            
+            optimalDist = testDist;
+        }
+    }
+    
+    // Point A is at optimalDist from center along the line to TL
+    float pointAX = centerX + dirX * optimalDist;
+    float pointAY = centerY + dirY * optimalDist;
+    
+    // Point B is at 80% of the distance from center to point A
+    float pointBX = centerX + dirX * optimalDist * 0.8f;
+    float pointBY = centerY + dirY * optimalDist * 0.8f;
+    
+    // Calculate grid dimensions as 2x the distance from B to center
+    float gridWidth = 2.0f * fabs(pointBX - centerX);
+    float gridHeight = 2.0f * fabs(pointBY - centerY);
+    
+    // Update the grid dimensions
+    calibration_grid_width_mm_X = gridWidth;
+    calibration_grid_height_mm_Y = gridHeight;
+    
+    log_info("Calculated calibration grid dimensions: width=" << gridWidth << "mm, height=" << gridHeight << "mm");
+
     float xSpacing = calibration_grid_width_mm_X / (calibrationGridSize - 1);
     float ySpacing = calibration_grid_height_mm_Y / (calibrationGridSize - 1);
 
