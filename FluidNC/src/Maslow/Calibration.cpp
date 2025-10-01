@@ -191,22 +191,32 @@ bool Calibration::requestStateChange(int newState) {
                         log_info("Auto-computed grid width: " << calibration_grid_width_mm_X << " mm");
                         log_info("Auto-computed grid height: " << calibration_grid_height_mm_Y << " mm");
 
-                        // Compute optimal grid size based on spacing
-                        // Find the smallest grid size that keeps spacing under 500mm threshold
-                        int optimalGridSize = 9;  // Start with maximum and work down
-                        for (int testSize : { 9, 7, 5, 3 }) {
-                            float xSpacing   = calibration_grid_width_mm_X / (testSize - 1);
-                            float ySpacing   = calibration_grid_height_mm_Y / (testSize - 1);
-                            float maxSpacing = max(xSpacing, ySpacing);
+                        // Compute grid points based on spacing parameter
+                        // Calculate number of points in each direction based on calibrationGridSpacing
+                        calibrationGridPointsX = (int)(calibration_grid_width_mm_X / calibrationGridSpacing) + 1;
+                        calibrationGridPointsY = (int)(calibration_grid_height_mm_Y / calibrationGridSpacing) + 1;
 
-                            // Use a reasonable spacing threshold (e.g., 500mm max spacing)
-                            if (maxSpacing <= 500.0f) {
-                                optimalGridSize = testSize;
-                            }
+                        // Ensure minimum of 3 points in each direction
+                        if (calibrationGridPointsX < 3) {
+                            calibrationGridPointsX = 3;
+                        }
+                        if (calibrationGridPointsY < 3) {
+                            calibrationGridPointsY = 3;
                         }
 
-                        calibrationGridSize = optimalGridSize;
-                        log_info("Auto-computed grid size: " << calibrationGridSize << "x" << calibrationGridSize);
+                        // Ensure odd number of points for symmetrical pattern (center point)
+                        if (calibrationGridPointsX % 2 == 0) {
+                            calibrationGridPointsX++;
+                        }
+                        if (calibrationGridPointsY % 2 == 0) {
+                            calibrationGridPointsY++;
+                        }
+
+                        log_info("Auto-computed grid size: " << calibrationGridPointsX << "x" << calibrationGridPointsY << " with spacing "
+                                                             << calibrationGridSpacing << "mm");
+
+                        // Clear legacy calibrationGridSize to avoid confusion
+                        calibrationGridSize = 0;
 
                         // Regenerate the grid with the new dimensions
                         if (!generate_calibration_grid()) {
@@ -218,7 +228,9 @@ bool Calibration::requestStateChange(int newState) {
                         // Use reasonable defaults
                         calibration_grid_width_mm_X  = 1000.0f;
                         calibration_grid_height_mm_Y = 1000.0f;
-                        calibrationGridSize          = 5;
+                        calibrationGridPointsX       = 3;
+                        calibrationGridPointsY       = 3;
+                        calibrationGridSize          = 0;
                         if (!generate_calibration_grid()) {
                             log_error("Failed to regenerate calibration grid with default dimensions");
                             return false;
@@ -1333,94 +1345,113 @@ bool Calibration::move_with_slack(double fromX, double fromY, double toX, double
     return false;  //We have not yet reached our target position
 }
 
-//The number of points high and wide  must be an odd number
+//The number of points high and wide can now be different (non-symmetrical grid)
 bool Calibration::generate_calibration_grid() {
     //Allocate memory for the calibration grid
     allocateCalibrationMemory();
 
-    float xSpacing = calibration_grid_width_mm_X / (calibrationGridSize - 1);
-    float ySpacing = calibration_grid_height_mm_Y / (calibrationGridSize - 1);
+    // Determine number of points in X and Y directions
+    int numPointsX, numPointsY;
 
-    int numberOfCycles = 0;
-
-    switch (calibrationGridSize) {
-        case 3:
-            numberOfCycles = 1;  // 3x3 grid
-            break;
-        case 5:
-            numberOfCycles = 2;  // 5x5 grid
-            break;
-        case 7:
-            numberOfCycles = 3;  // 7x7 grid
-            break;
-        case 9:
-            numberOfCycles = 4;  // 9x9 grid
-            break;
-        default:
-            log_error("Invalid " + M + "_calibration_grid_size: " << calibrationGridSize);
-            return false;  // return false or handle error appropriately
+    if (calibrationGridPointsX > 0 && calibrationGridPointsY > 0) {
+        // Use explicitly set values
+        numPointsX = calibrationGridPointsX;
+        numPointsY = calibrationGridPointsY;
+    } else if (calibrationGridSize > 0) {
+        // Use legacy symmetrical grid size for backward compatibility
+        numPointsX = calibrationGridSize;
+        numPointsY = calibrationGridSize;
+    } else {
+        // This shouldn't happen, but provide a fallback
+        log_error("No grid size specified, using 5x5 default");
+        numPointsX = 5;
+        numPointsY = 5;
     }
 
-    pointCount         = 6;  //The first four points are computed dynamically
+    // Validate grid dimensions
+    if (numPointsX < 3 || numPointsY < 3) {
+        log_error("Grid dimensions must be at least 3x3, got " << numPointsX << "x" << numPointsY);
+        return false;
+    }
+
+    // Calculate spacing
+    float xSpacing = calibration_grid_width_mm_X / (numPointsX - 1);
+    float ySpacing = calibration_grid_height_mm_Y / (numPointsY - 1);
+
+    log_info("Generating " << numPointsX << "x" << numPointsY << " calibration grid with spacing: " << xSpacing << "mm x " << ySpacing
+                           << "mm");
+
+    pointCount         = 6;  //The first 6 points are computed dynamically
     recomputePoints[0] = 5;
 
     //The point in the center
     calibrationGrid[pointCount][0] = 0;
     calibrationGrid[pointCount][1] = 0;
-
     pointCount++;
 
-    int maxX = 1;
-    int maxY = 1;
+    recomputeCount = 1;
+
+    // Generate grid in a spiral pattern from center outward
+    // This maintains the same movement pattern as the original implementation
+    int maxX = (numPointsX - 1) / 2;  // Half width in grid units
+    int maxY = (numPointsY - 1) / 2;  // Half height in grid units
 
     int currentX = 0;
     int currentY = -1;
 
-    recomputeCount = 1;
+    int layer = 1;
 
-    while (maxX <= numberOfCycles) {  //4 produces a 9x9 grid
-        while (currentX > -1 * maxX) {
+    while (layer <= max(maxX, maxY)) {
+        int layerMaxX = min(layer, maxX);
+        int layerMaxY = min(layer, maxY);
+
+        // Move left
+        while (currentX > -layerMaxX) {
             calibrationGrid[pointCount][0] = currentX * xSpacing;
             calibrationGrid[pointCount][1] = currentY * ySpacing;
             pointCount++;
             currentX--;
         }
-        while (currentY < maxY) {
+
+        // Move up
+        while (currentY < layerMaxY) {
             calibrationGrid[pointCount][0] = currentX * xSpacing;
             calibrationGrid[pointCount][1] = currentY * ySpacing;
             pointCount++;
             currentY++;
         }
-        while (currentX < maxX) {
+
+        // Move right
+        while (currentX < layerMaxX) {
             calibrationGrid[pointCount][0] = currentX * xSpacing;
             calibrationGrid[pointCount][1] = currentY * ySpacing;
             pointCount++;
             currentX++;
         }
-        while (currentY > -1 * maxY) {
+
+        // Move down
+        while (currentY > -layerMaxY) {
             calibrationGrid[pointCount][0] = currentX * xSpacing;
             calibrationGrid[pointCount][1] = currentY * ySpacing;
             pointCount++;
             currentY--;
         }
 
-        //Add the last point to the recompute list
+        // Add the last point of this layer to the recompute list
         calibrationGrid[pointCount][0] = currentX * xSpacing;
         calibrationGrid[pointCount][1] = currentY * ySpacing;
         pointCount++;
 
-        recomputePoints[recomputeCount] = pointCount - 1;  //Minus one because we increment after each point is generated
+        recomputePoints[recomputeCount] = pointCount - 1;
         recomputeCount++;
 
-        maxX = maxX + 1;
-        maxY = maxY + 1;
-
-        currentY = currentY + -1;
+        layer++;
+        currentY--;
     }
 
     //Move back to the center
     calibrationGrid[pointCount][0] = 0;
-    calibrationGrid[pointCount][1] = (currentY + 1) * ySpacing;  //The last loop added an nunecessary -1 to the y position
+    calibrationGrid[pointCount][1] = (currentY + 1) * ySpacing;
     pointCount++;
 
     calibrationGrid[pointCount][0] = 0;
