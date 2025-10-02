@@ -996,6 +996,17 @@ bool Calibration::take_measurement_avg_with_check(int waypoint, int dir) {
                         requestStateChange(EXTENDEDOUT);
                         return false;
                     }
+                    
+                    // Regenerate the calibration grid with the newly adjusted frame size
+                    log_info("Regenerating calibration grid with adjusted frame dimensions");
+                    if (!generate_calibration_grid()) {
+                        Maslow.eStop("Unable to regenerate calibration grid after frame size adjustment");
+                        resetCalibrationState();
+                        criticalCounter = 0;
+                        freeMeasurements();
+                        requestStateChange(EXTENDEDOUT);
+                        return false;
+                    }
                 }
 
                 //Compute the current XY position from the top two belt measurements...needs to be redone because we've adjusted the frame size by here
