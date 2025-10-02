@@ -105,6 +105,11 @@ public:
     int currentState = UNKNOWN;
 
 private:
+    // Internal variables for calculated grid dimensions during calibration
+    // These are used during calibration but don't overwrite the YAML config values
+    float _calculated_grid_width_mm  = 0.0f;
+    float _calculated_grid_height_mm = 0.0f;
+
     //Variables used for retracting state
     bool axis_homed[4] = { false, false, false, false };
     bool retractingTL  = false;

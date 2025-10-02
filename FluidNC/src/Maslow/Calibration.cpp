@@ -1478,9 +1478,10 @@ bool Calibration::generate_calibration_grid() {
         log_info("Grid height reduced in " << sanityCheckIterations << " iterations to pass sanity check");
     }
     
-    // Update the grid dimensions
-    calibration_grid_width_mm_X = gridWidth;
-    calibration_grid_height_mm_Y = gridHeight;
+    // Store calculated dimensions in internal variables
+    // This preserves the original YAML config values (e.g., 0.0 for auto-calculate)
+    _calculated_grid_width_mm = gridWidth;
+    _calculated_grid_height_mm = gridHeight;
     
     // Calculate calibration area and report details
     float calibrationArea = gridWidth * gridHeight;  // in mm²
@@ -1495,8 +1496,8 @@ bool Calibration::generate_calibration_grid() {
     log_info("Clearance from edges: " << (frameWidth - gridWidth) / 2.0f << "mm (width), " 
              << (frameHeight - gridHeight) / 2.0f << "mm (height)");
 
-    float xSpacing = calibration_grid_width_mm_X / (calibrationGridSize - 1);
-    float ySpacing = calibration_grid_height_mm_Y / (calibrationGridSize - 1);
+    float xSpacing = _calculated_grid_width_mm / (calibrationGridSize - 1);
+    float ySpacing = _calculated_grid_height_mm / (calibrationGridSize - 1);
 
     int numberOfCycles = 0;
 
