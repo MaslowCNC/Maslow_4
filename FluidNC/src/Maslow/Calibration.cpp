@@ -1390,31 +1390,68 @@ bool Calibration::generate_calibration_grid() {
     
     // 3. Sanity check: Verify angle constraint at top of calibration area
     //    Check that angle from TL anchor to point at (centerX, centerY + gridHeight/2) to TR anchor is < 140 degrees
-    float yDistFromCenter = gridHeight / 2.0f;
-    float checkPointX = centerX;
-    float checkPointY = centerY + yDistFromCenter;
+    //    If the angle is too large, reduce the grid height until it passes
+    const float maxTopAngleDeg = 140.0f;
+    const float maxTopAngleRad = maxTopAngleDeg * M_PI / 180.0f;
+    float topAngleDeg = 0.0f;
+    int sanityCheckIterations = 0;
+    const int maxSanityCheckIterations = 20;
     
-    // Calculate vectors from check point to TL and TR anchors
-    float toTLX = tlX - checkPointX;
-    float toTLY = tlY - checkPointY;
-    float toTRX = trX - checkPointX;
-    float toTRY = trY - checkPointY;
-    
-    // Calculate angle between vectors
-    float lenTL = sqrt(toTLX * toTLX + toTLY * toTLY);
-    float lenTR = sqrt(toTRX * toTRX + toTRY * toTRY);
-    
-    if (lenTL > 0 && lenTR > 0) {
-        float dotProduct = (toTLX * toTRX + toTLY * toTRY) / (lenTL * lenTR);
-        dotProduct = constrain(dotProduct, -1.0f, 1.0f);
-        float topAngle = acos(dotProduct);
-        float topAngleDeg = topAngle * 180.0f / M_PI;
+    while (sanityCheckIterations < maxSanityCheckIterations) {
+        float yDistFromCenter = gridHeight / 2.0f;
+        float checkPointX = centerX;
+        float checkPointY = centerY + yDistFromCenter;
         
-        log_info("Calibration area sanity check: angle at top = " << topAngleDeg << " degrees (should be < 140)");
+        // Calculate vectors from check point to TL and TR anchors
+        float toTLX = tlX - checkPointX;
+        float toTLY = tlY - checkPointY;
+        float toTRX = trX - checkPointX;
+        float toTRY = trY - checkPointY;
         
-        if (topAngleDeg >= 140.0f) {
-            log_warn("Calibration area may be too large - top angle is " << topAngleDeg << " degrees (>= 140)");
+        // Calculate angle between vectors
+        float lenTL = sqrt(toTLX * toTLX + toTLY * toTLY);
+        float lenTR = sqrt(toTRX * toTRX + toTRY * toTRY);
+        
+        if (lenTL > 0 && lenTR > 0) {
+            float dotProduct = (toTLX * toTRX + toTLY * toTRY) / (lenTL * lenTR);
+            dotProduct = constrain(dotProduct, -1.0f, 1.0f);
+            float topAngle = acos(dotProduct);
+            topAngleDeg = topAngle * 180.0f / M_PI;
+            
+            if (topAngleDeg < maxTopAngleDeg) {
+                // Sanity check passed
+                break;
+            }
+            
+            // Sanity check failed - reduce grid height by 5%
+            float oldGridHeight = gridHeight;
+            gridHeight *= 0.95f;
+            
+            // Check if we hit minimum
+            if (gridHeight < minGridDimension) {
+                gridHeight = minGridDimension;
+                log_warn("Grid height reduced to minimum (" << minGridDimension << "mm) but sanity check still fails");
+                break;
+            }
+            
+            if (sanityCheckIterations == 0) {
+                log_info("Calibration area sanity check failed: angle at top = " << topAngleDeg 
+                         << " degrees (>= " << maxTopAngleDeg << "), reducing grid height...");
+            }
+        } else {
+            break;
         }
+        
+        sanityCheckIterations++;
+    }
+    
+    log_info("Calibration area sanity check: angle at top = " << topAngleDeg 
+             << " degrees (should be < " << maxTopAngleDeg << ")");
+    
+    if (topAngleDeg >= maxTopAngleDeg) {
+        log_warn("Warning: Calibration area sanity check failed after " << sanityCheckIterations << " reduction attempts");
+    } else if (sanityCheckIterations > 0) {
+        log_info("Grid height reduced in " << sanityCheckIterations << " iterations to pass sanity check");
     }
     
     // Update the grid dimensions
