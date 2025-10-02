@@ -1388,11 +1388,51 @@ bool Calibration::generate_calibration_grid() {
         gridHeight = minGridDimension;
     }
     
+    // 3. Sanity check: Verify angle constraint at top of calibration area
+    //    Check that angle from TL anchor to point at (centerX, centerY + gridHeight/2) to TR anchor is < 140 degrees
+    float yDistFromCenter = gridHeight / 2.0f;
+    float checkPointX = centerX;
+    float checkPointY = centerY + yDistFromCenter;
+    
+    // Calculate vectors from check point to TL and TR anchors
+    float toTLX = tlX - checkPointX;
+    float toTLY = tlY - checkPointY;
+    float toTRX = trX - checkPointX;
+    float toTRY = trY - checkPointY;
+    
+    // Calculate angle between vectors
+    float lenTL = sqrt(toTLX * toTLX + toTLY * toTLY);
+    float lenTR = sqrt(toTRX * toTRX + toTRY * toTRY);
+    
+    if (lenTL > 0 && lenTR > 0) {
+        float dotProduct = (toTLX * toTRX + toTLY * toTRY) / (lenTL * lenTR);
+        dotProduct = constrain(dotProduct, -1.0f, 1.0f);
+        float topAngle = acos(dotProduct);
+        float topAngleDeg = topAngle * 180.0f / M_PI;
+        
+        log_info("Calibration area sanity check: angle at top = " << topAngleDeg << " degrees (should be < 140)");
+        
+        if (topAngleDeg >= 140.0f) {
+            log_warn("Calibration area may be too large - top angle is " << topAngleDeg << " degrees (>= 140)");
+        }
+    }
+    
     // Update the grid dimensions
     calibration_grid_width_mm_X = gridWidth;
     calibration_grid_height_mm_Y = gridHeight;
     
-    log_info("Calculated calibration grid dimensions: width=" << gridWidth << "mm, height=" << gridHeight << "mm");
+    // Calculate calibration area and report details
+    float calibrationArea = gridWidth * gridHeight;  // in mm²
+    float calibrationAreaM2 = calibrationArea / 1000000.0f;  // in m²
+    int totalPoints = calibrationGridSize * calibrationGridSize;
+    
+    log_info("=== Calibration Grid Configuration ===");
+    log_info("Grid dimensions: " << gridWidth << "mm × " << gridHeight << "mm");
+    log_info("Calibration area: " << calibrationAreaM2 << " m² (" << calibrationArea << " mm²)");
+    log_info("Grid size: " << calibrationGridSize << "×" << calibrationGridSize << " = " << totalPoints << " points");
+    log_info("Frame dimensions: " << frameWidth << "mm × " << frameHeight << "mm");
+    log_info("Clearance from edges: " << (frameWidth - gridWidth) / 2.0f << "mm (width), " 
+             << (frameHeight - gridHeight) / 2.0f << "mm (height)");
 
     float xSpacing = calibration_grid_width_mm_X / (calibrationGridSize - 1);
     float ySpacing = calibration_grid_height_mm_Y / (calibrationGridSize - 1);
