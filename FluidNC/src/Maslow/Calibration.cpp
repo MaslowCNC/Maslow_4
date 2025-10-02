@@ -1361,7 +1361,20 @@ bool Calibration::generate_calibration_grid() {
     float gridHeight = 2.0f * fabs(pointBY - centerY);
     
     // Apply safety constraints
-    // 1. Grid must be at least 16" (406.4mm) smaller than frame in each dimension
+    // 1. Maximum calibration area limits (8' wide × 4' high)
+    const float maxCalibrationWidth = 8.0f * 12.0f * 25.4f;   // 8 feet = 96 inches = 2438.4mm
+    const float maxCalibrationHeight = 4.0f * 12.0f * 25.4f;  // 4 feet = 48 inches = 1219.2mm
+    
+    if (gridWidth > maxCalibrationWidth) {
+        gridWidth = maxCalibrationWidth;
+        log_info("Grid width limited to maximum: " << maxCalibrationWidth << "mm (8 feet)");
+    }
+    if (gridHeight > maxCalibrationHeight) {
+        gridHeight = maxCalibrationHeight;
+        log_info("Grid height limited to maximum: " << maxCalibrationHeight << "mm (4 feet)");
+    }
+    
+    // 2. Grid must be at least 16" (406.4mm) smaller than frame in each dimension
     //    to prevent sled (16" diameter) from hitting frame edges
     const float sledDiameter = 406.4f;  // 16 inches in mm
     float frameWidth = fabs(trX - tlX);  // Approximate frame width
@@ -1377,7 +1390,7 @@ bool Calibration::generate_calibration_grid() {
         gridHeight = maxGridHeight;
     }
     
-    // 2. Ensure minimum grid dimensions to accommodate at least 3 points in each direction
+    // 3. Ensure minimum grid dimensions to accommodate at least 3 points in each direction
     //    For 3 points, we need at least 2 intervals, so minimum spacing should be reasonable
     //    Minimum grid dimension = 50mm to ensure 3 points can be placed with 25mm spacing
     const float minGridDimension = 50.0f;  // mm
@@ -1388,7 +1401,7 @@ bool Calibration::generate_calibration_grid() {
         gridHeight = minGridDimension;
     }
     
-    // 3. Sanity check: Verify angle constraint at top of calibration area
+    // 4. Sanity check: Verify angle constraint at top of calibration area
     //    Check that angle from TL anchor to point at (centerX, centerY + gridHeight/2) to TR anchor is < 140 degrees
     //    If the angle is too large, reduce the grid height until it passes
     const float maxTopAngleDeg = 140.0f;
