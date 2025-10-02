@@ -1372,9 +1372,9 @@ bool Calibration::generate_calibration_grid() {
     float gridHeight = 2.0f * fabs(pointBY - centerY);
     
     // Apply safety constraints
-    // 1. Maximum calibration area limits (7' wide × 4' high)
+    // 1. Maximum calibration area limits (7' wide × 3' high)
     const float maxCalibrationWidth = 7.0f * 12.0f * 25.4f;   // 7 feet = 84 inches = 2133.6mm
-    const float maxCalibrationHeight = 4.0f * 12.0f * 25.4f;  // 4 feet = 48 inches = 1219.2mm
+    const float maxCalibrationHeight = 3.0f * 12.0f * 25.4f;  // 3 feet = 36 inches = 914.4mm
     
     if (gridWidth > maxCalibrationWidth) {
         gridWidth = maxCalibrationWidth;
@@ -1382,7 +1382,7 @@ bool Calibration::generate_calibration_grid() {
     }
     if (gridHeight > maxCalibrationHeight) {
         gridHeight = maxCalibrationHeight;
-        log_info("Grid height limited to maximum: " << maxCalibrationHeight << "mm (4 feet)");
+        log_info("Grid height limited to maximum: " << maxCalibrationHeight << "mm (3 feet)");
     }
     
     // 2. Grid must be at least 16" (406.4mm) smaller than frame in each dimension
