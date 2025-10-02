@@ -96,11 +96,9 @@ namespace Machine {
 
     void MachineConfig::groupM4Items(Configuration::HandlerBase& handler) {
         handler.item(M + "_vertical", Maslow.calibration.orientation);
-        handler.item(M + "_calibration_grid_width_mm_X", Maslow.calibration.calibration_grid_width_mm_X, 0, 3000);
-        handler.item(M + "_calibration_grid_height_mm_Y", Maslow.calibration.calibration_grid_height_mm_Y, 0, 3000);
-        handler.item(M + "_calibration_grid_spacing", Maslow.calibration.calibrationGridSpacing, 100, 1000);
-        // Legacy parameter for backward compatibility - will be migrated in afterParse
-        handler.item(M + "_calibration_grid_size", Maslow.calibration.calibrationGridSize, 0, 9);
+        handler.item(M + "_calibration_grid_width_mm_X", Maslow.calibration.calibration_grid_width_mm_X, 100, 3000);
+        handler.item(M + "_calibration_grid_height_mm_Y", Maslow.calibration.calibration_grid_height_mm_Y, 100, 3000);
+        handler.item(M + "_calibration_grid_size", Maslow.calibration.calibrationGridSize, 3, 9);
 
         handler.item(M + "_Retract_Current_Threshold", Maslow.calibration.retractCurrentThreshold, 0, 3500);
         handler.item(M + "_Calibration_Current_Threshold", Maslow.calibration.calibrationCurrentThreshold, 0, 3500);
@@ -169,31 +167,6 @@ namespace Machine {
             maslowKinematics->setWorkThickness(_tempWorkThickness);
         }
 
-        // Migrate legacy calibrationGridSize to calibrationGridSpacing if needed
-        if (Maslow.calibration.calibrationGridSize > 0 && Maslow.calibration.calibrationGridSpacing == 400.0f) {
-            // Legacy configuration detected - compute spacing from grid size
-            // Assuming typical grid dimensions, compute the spacing that would give this grid size
-            float gridWidth  = Maslow.calibration.calibration_grid_width_mm_X;
-            float gridHeight = Maslow.calibration.calibration_grid_height_mm_Y;
-
-            if (gridWidth > 0 && gridHeight > 0) {
-                // Calculate spacing based on the legacy grid size
-                float xSpacing = gridWidth / (Maslow.calibration.calibrationGridSize - 1);
-                float ySpacing = gridHeight / (Maslow.calibration.calibrationGridSize - 1);
-
-                // Use the larger spacing to ensure the grid fits
-                Maslow.calibration.calibrationGridSpacing = max(xSpacing, ySpacing);
-
-                log_info("Migrated legacy calibrationGridSize " << Maslow.calibration.calibrationGridSize << " to calibrationGridSpacing "
-                                                                << Maslow.calibration.calibrationGridSpacing << "mm");
-
-                // Clear the legacy parameter
-                Maslow.calibration.calibrationGridSize = 0;
-
-                // Note: The config will be saved with the new parameter next time settings are written
-            }
-        }
-
         // We do not auto-create an I2SO bus config node
         // Only if an i2so section is present will config->_i2so be non-null
         // control, start, parking all run with their FluidNC defaults
@@ -238,7 +211,7 @@ namespace Machine {
     const std::string dcBoard = "name: Default (" + M + " S3 Board)\nboard: " + M + "\n";
 
     const std::string dcM4Vert            = M + "_vertical: false\n";
-    const std::string dcM4CalibrationGrid = mcgrid + "width_mm_X: 0\n" + mcgrid + "height_mm_Y: 0\n" + mcgrid + "spacing: 400\n";
+    const std::string dcM4CalibrationGrid = mcgrid + "width_mm_X: 2000\n" + mcgrid + "height_mm_Y: 1000\n" + mcgrid + "size: 9\n";
 
     const std::string dcM4Anchors = M + "_tlX: -27.6\n" + M + "_tlY: 2064.9\n" + M + "_trX: 2924.3\n" + M + "_trY: 2066.5\n" + M +
                                     "_blX: 0\n" + M + "_blY: 0\n" + M + "_brX: 2953.2\n" + M + "_brY: 0\n";

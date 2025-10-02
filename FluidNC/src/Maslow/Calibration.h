@@ -99,7 +99,6 @@ public:
     int   calibrationGridSize            = 9;
     float calibration_grid_width_mm_X    = 2000;  // mm offset from the edge of the frame
     float calibration_grid_height_mm_Y   = 1000;  // mm offset from the edge of the frame
-    float calibrationGridSpacing         = 400;   // mm spacing between grid points
     bool  calibrationInProgress;                  //Used to turn off regular movements during calibration
 
     //State machine variables
@@ -127,17 +126,15 @@ private:
     //Variables used by take slack
     bool takeSlack = false;
 
-    //Variables used by calibration - internal state (not user-configurable)
-    int     calibrationGridPointsX = 0;  // Number of points in X direction (calculated during calibration)
-    int     calibrationGridPointsY = 0;  // Number of points in Y direction (calculated during calibration)
-    float** calibration_data       = nullptr;
-    int     pointCount             = 0;     //number of actual points in the grid,  < GRID_SIZE_MAX
-    int     waypoint               = 0;     //The current waypoint in the calibration process
-    int     calibrationDirection   = 0;     //Direction for calibration measurements (replaces static variable)
-    bool    measurementInProgress  = true;  //Whether currently taking measurement or moving (replaces static variable)
-    int     frame_dimention_MIN    = 400;   //Is this used? This should be enforced by the user settings. TODO.
-    int     frame_dimention_MAX    = 15000;
-    float (*calibrationGrid)[2]    = nullptr;
+    //Variables used by calibration
+    float** calibration_data      = nullptr;
+    int     pointCount            = 0;     //number of actual points in the grid,  < GRID_SIZE_MAX
+    int     waypoint              = 0;     //The current waypoint in the calibration process
+    int     calibrationDirection  = 0;     //Direction for calibration measurements (replaces static variable)
+    bool    measurementInProgress = true;  //Whether currently taking measurement or moving (replaces static variable)
+    int     frame_dimention_MIN   = 400;   //Is this used? This should be enforced by the user settings. TODO.
+    int     frame_dimention_MAX   = 15000;
+    float (*calibrationGrid)[2]   = nullptr;
     int    recomputePoints[10];          // Stores the index of the points where we want to trigger a recompute
     int    recomputeCountIndex    = 0;   // Stores the index of the recompute point we are currently on
     int    recomputeCount         = 0;   // Stores the number of recompute points
