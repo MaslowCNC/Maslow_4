@@ -231,6 +231,12 @@ bool Calibration::requestStateChange(int newState) {
                             log_error("Failed to regenerate calibration grid with auto-computed dimensions");
                             return false;
                         }
+
+                        // Log the generated calibration grid for debugging
+                        log_info("Generated calibration grid with " << pointCount << " points:");
+                        for (int i = 0; i < pointCount; i++) {
+                            log_info("  Point " << i << ": X=" << calibrationGrid[i][0] << "mm, Y=" << calibrationGrid[i][1] << "mm");
+                        }
                     } else {
                         log_error("Kinematics not available for auto-computing grid, using defaults");
                         // Use reasonable defaults
@@ -251,6 +257,12 @@ bool Calibration::requestStateChange(int newState) {
                         if (!success) {
                             log_error("Failed to regenerate calibration grid with default dimensions");
                             return false;
+                        }
+
+                        // Log the generated calibration grid for debugging
+                        log_info("Generated calibration grid with " << pointCount << " points:");
+                        for (int i = 0; i < pointCount; i++) {
+                            log_info("  Point " << i << ": X=" << calibrationGrid[i][0] << "mm, Y=" << calibrationGrid[i][1] << "mm");
                         }
                     }
                 }
@@ -519,6 +531,15 @@ void Calibration::calibration_loop() {
 
     //Move to the next point in the grid
     else {
+        // Log move start and end points for debugging
+        static int lastLoggedWaypoint = -1;
+        if (waypoint != lastLoggedWaypoint) {
+            log_info("Calibration move to waypoint " << waypoint << ": from (" << calibrationGrid[waypoint - 1][0] << "mm, "
+                                                     << calibrationGrid[waypoint - 1][1] << "mm) to (" << calibrationGrid[waypoint][0]
+                                                     << "mm, " << calibrationGrid[waypoint][1] << "mm)");
+            lastLoggedWaypoint = waypoint;
+        }
+
         if (move_with_slack(calibrationGrid[waypoint - 1][0],
                             calibrationGrid[waypoint - 1][1],
                             calibrationGrid[waypoint][0],
