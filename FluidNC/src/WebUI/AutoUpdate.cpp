@@ -481,6 +481,24 @@ namespace WebUI {
         }
 
         log_info("AutoUpdate: Downloaded " << totalBytes << " bytes to " << tempPath.c_str());
+        return true;
+    }
+
+    bool AutoUpdate::installWebUI(const std::string& filename) {
+        // Check if local filesystem is available
+        if (!localfsName) {
+            log_error("AutoUpdate: Local filesystem not available");
+            return false;
+        }
+
+        std::string tempFilename = filename + ".tmp";
+        std::error_code ec;
+        
+        FluidPath tempPath(tempFilename, localfsName, ec);
+        if (ec) {
+            log_error("AutoUpdate: Failed to create temporary filesystem path: " << ec.message());
+            return false;
+        }
 
         // Move temporary file to final location
         FluidPath finalPath(filename, localfsName, ec);
@@ -494,11 +512,11 @@ namespace WebUI {
             return false;
         }
 
-        log_info("AutoUpdate: Successfully moved file to " << finalPath.c_str());
+        log_info("AutoUpdate: Successfully installed WebUI to " << finalPath.c_str());
         return true;
     }
 
-    bool AutoUpdate::downloadAndInstallFirmware(const std::string& firmwareUrl) {
+    bool AutoUpdate::downloadFirmware(const std::string& firmwareUrl) {
         WiFiClientSecure client;
         client.setInsecure();
 
@@ -558,9 +576,33 @@ namespace WebUI {
         }
 
         log_info("AutoUpdate: Firmware downloaded to SD card successfully (" << bytesDownloaded << " bytes)");
+        return true;
+    }
 
-        // Now install firmware from the saved file
-        log_info("AutoUpdate: Installing firmware from SD card...");
+    bool AutoUpdate::installFirmware() {
+        std::error_code ec;
+        
+        // Get the temporary firmware file path
+        FluidPath firmwareTempPath("firmware.bin.tmp", sdName, ec);
+        if (ec) {
+            log_error("AutoUpdate: Failed to create temporary SD firmware path: " << ec.message());
+            return false;
+        }
+
+        // Check if temporary firmware file exists
+        FILE* tempFile = fopen(firmwareTempPath.c_str(), "rb");
+        if (!tempFile) {
+            log_error("AutoUpdate: Temporary firmware file not found: " << firmwareTempPath.c_str());
+            return false;
+        }
+
+        // Get file size
+        fseek(tempFile, 0, SEEK_END);
+        size_t bytesDownloaded = ftell(tempFile);
+        fseek(tempFile, 0, SEEK_SET);
+        fclose(tempFile);
+
+        log_info("AutoUpdate: Installing firmware from SD card (" << bytesDownloaded << " bytes)...");
         
         // Move temporary file to final location
         FluidPath firmwareFinalPath("firmware.bin", sdName, ec);
@@ -628,6 +670,13 @@ namespace WebUI {
         return true;
     }
 
+    bool AutoUpdate::downloadAndInstallFirmware(const std::string& firmwareUrl) {
+        if (!downloadFirmware(firmwareUrl)) {
+            return false;
+        }
+        return installFirmware();
+    }
+
     bool AutoUpdate::downloadAndInstallUpdate(const std::string& firmwareUrl, const std::string& webUIUrl) {
         // Safety checks
         if (firmwareUrl.empty() || webUIUrl.empty()) {
@@ -635,11 +684,9 @@ namespace WebUI {
             return false;
         }
 
-        // Only proceed if we have sufficient free space
-        // This is a rough check - in practice you'd want more sophisticated space checking
         log_info("AutoUpdate: Starting download and installation process...");
 
-        // Download WebUI directly to final destination using proper filesystem handling
+        // Phase 1: Download both files to temporary locations
         std::string webUIFilename = "index.html.gz";
 
         log_info("AutoUpdate: Downloading WebUI from: " << webUIUrl);
@@ -648,10 +695,25 @@ namespace WebUI {
             return false;
         }
 
-        // WebUI is already in place, now download and install firmware directly
-        log_info("AutoUpdate: Downloading and installing firmware from: " << firmwareUrl);
-        if (!downloadAndInstallFirmware(firmwareUrl)) {
-            log_error("AutoUpdate: Failed to download and install firmware");
+        log_info("AutoUpdate: Downloading firmware from: " << firmwareUrl);
+        if (!downloadFirmware(firmwareUrl)) {
+            log_error("AutoUpdate: Failed to download firmware");
+            return false;
+        }
+
+        log_info("AutoUpdate: Both downloads completed successfully");
+
+        // Phase 2: Install WebUI first (less critical, can be re-downloaded if needed)
+        log_info("AutoUpdate: Installing WebUI...");
+        if (!installWebUI(webUIFilename)) {
+            log_error("AutoUpdate: Failed to install WebUI");
+            return false;
+        }
+
+        // Phase 3: Install firmware (will reboot on success)
+        log_info("AutoUpdate: Installing firmware...");
+        if (!installFirmware()) {
+            log_error("AutoUpdate: Failed to install firmware");
             return false;
         }
 
