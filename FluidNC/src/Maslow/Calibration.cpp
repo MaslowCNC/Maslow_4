@@ -176,27 +176,31 @@ bool Calibration::requestStateChange(int newState) {
                         float frameWidth  = kinematics->getTrX() - kinematics->getTlX();
                         float frameHeight = kinematics->getTlY() - kinematics->getBlY();
 
+                        // Use temporary variables for computed dimensions to preserve 0,0 config values
+                        float computedWidth;
+                        float computedHeight;
+
                         // Validate frame dimensions are reasonable
                         if (frameWidth <= 0 || frameHeight <= 0) {
                             log_error("Invalid frame dimensions detected: width=" << frameWidth << " height=" << frameHeight);
                             log_error("Cannot auto-compute grid, using default values");
                             // Fall back to reasonable defaults for a typical Maslow
-                            calibration_grid_width_mm_X  = 1000.0f;
-                            calibration_grid_height_mm_Y = 1000.0f;
+                            computedWidth  = 1000.0f;
+                            computedHeight = 1000.0f;
                         } else {
-                            calibration_grid_width_mm_X  = frameWidth * 0.5f;
-                            calibration_grid_height_mm_Y = frameHeight * 0.5f;
+                            computedWidth  = frameWidth * 0.5f;
+                            computedHeight = frameHeight * 0.5f;
                         }
 
-                        log_info("Auto-computed grid width: " << calibration_grid_width_mm_X << " mm");
-                        log_info("Auto-computed grid height: " << calibration_grid_height_mm_Y << " mm");
+                        log_info("Auto-computed grid width: " << computedWidth << " mm");
+                        log_info("Auto-computed grid height: " << computedHeight << " mm");
 
                         // Compute optimal grid size based on spacing
                         // Find the smallest grid size that keeps spacing under 500mm threshold
                         int optimalGridSize = 9;  // Start with maximum and work down
                         for (int testSize : { 9, 7, 5, 3 }) {
-                            float xSpacing   = calibration_grid_width_mm_X / (testSize - 1);
-                            float ySpacing   = calibration_grid_height_mm_Y / (testSize - 1);
+                            float xSpacing   = computedWidth / (testSize - 1);
+                            float ySpacing   = computedHeight / (testSize - 1);
                             float maxSpacing = max(xSpacing, ySpacing);
 
                             // Use a reasonable spacing threshold (e.g., 500mm max spacing)
@@ -208,18 +212,43 @@ bool Calibration::requestStateChange(int newState) {
                         calibrationGridSize = optimalGridSize;
                         log_info("Auto-computed grid size: " << calibrationGridSize << "x" << calibrationGridSize);
 
+                        // Temporarily set the computed values for grid generation
+                        // Store original values to restore after grid generation
+                        float originalWidth  = calibration_grid_width_mm_X;
+                        float originalHeight = calibration_grid_height_mm_Y;
+
+                        calibration_grid_width_mm_X  = computedWidth;
+                        calibration_grid_height_mm_Y = computedHeight;
+
                         // Regenerate the grid with the new dimensions
-                        if (!generate_calibration_grid()) {
+                        bool success = generate_calibration_grid();
+
+                        // Restore original 0,0 values so they persist in config
+                        calibration_grid_width_mm_X  = originalWidth;
+                        calibration_grid_height_mm_Y = originalHeight;
+
+                        if (!success) {
                             log_error("Failed to regenerate calibration grid with auto-computed dimensions");
                             return false;
                         }
                     } else {
                         log_error("Kinematics not available for auto-computing grid, using defaults");
                         // Use reasonable defaults
+                        // Temporarily set values for grid generation
+                        float originalWidth  = calibration_grid_width_mm_X;
+                        float originalHeight = calibration_grid_height_mm_Y;
+
                         calibration_grid_width_mm_X  = 1000.0f;
                         calibration_grid_height_mm_Y = 1000.0f;
                         calibrationGridSize          = 5;
-                        if (!generate_calibration_grid()) {
+
+                        bool success = generate_calibration_grid();
+
+                        // Restore original 0,0 values
+                        calibration_grid_width_mm_X  = originalWidth;
+                        calibration_grid_height_mm_Y = originalHeight;
+
+                        if (!success) {
                             log_error("Failed to regenerate calibration grid with default dimensions");
                             return false;
                         }
