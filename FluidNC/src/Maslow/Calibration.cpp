@@ -1483,6 +1483,16 @@ bool Calibration::generate_calibration_grid() {
     _calculated_grid_width_mm = gridWidth;
     _calculated_grid_height_mm = gridHeight;
     
+    // Warn if calculated values are outside typical range (100-3000mm)
+    const float minTypicalDimension = 100.0f;   // mm
+    const float maxTypicalDimension = 3000.0f;  // mm
+    if (gridWidth < minTypicalDimension || gridWidth > maxTypicalDimension) {
+        log_warn("Calculated grid width (" << gridWidth << "mm) is outside typical range (100-3000mm)");
+    }
+    if (gridHeight < minTypicalDimension || gridHeight > maxTypicalDimension) {
+        log_warn("Calculated grid height (" << gridHeight << "mm) is outside typical range (100-3000mm)");
+    }
+    
     // Calculate calibration area and report details
     float calibrationArea = gridWidth * gridHeight;  // in mm²
     float calibrationAreaM2 = calibrationArea / 1000000.0f;  // in m²

@@ -96,8 +96,8 @@ namespace Machine {
 
     void MachineConfig::groupM4Items(Configuration::HandlerBase& handler) {
         handler.item(M + "_vertical", Maslow.calibration.orientation);
-        handler.item(M + "_calibration_grid_width_mm_X", Maslow.calibration.calibration_grid_width_mm_X, 0, 3000);   // 0 = auto-calculate
-        handler.item(M + "_calibration_grid_height_mm_Y", Maslow.calibration.calibration_grid_height_mm_Y, 0, 3000); // 0 = auto-calculate
+        handler.item(M + "_calibration_grid_width_mm_X", Maslow.calibration.calibration_grid_width_mm_X);   // No constraint - 0 = auto-calculate
+        handler.item(M + "_calibration_grid_height_mm_Y", Maslow.calibration.calibration_grid_height_mm_Y); // No constraint - 0 = auto-calculate
         handler.item(M + "_calibration_grid_size", Maslow.calibration.calibrationGridSize, 3, 99);  // Deprecated, use _X and _Y instead
         handler.item(M + "_calibration_grid_size_X", Maslow.calibration.calibrationGridSizeX, 3, 99);
         handler.item(M + "_calibration_grid_size_Y", Maslow.calibration.calibrationGridSizeY, 3, 99);
