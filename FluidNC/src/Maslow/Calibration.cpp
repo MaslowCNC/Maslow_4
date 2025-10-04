@@ -160,28 +160,34 @@ bool Calibration::requestStateChange(int newState) {
                     calibrationDirection  = UP;
                     measurementInProgress = true;
 
-                    if (!generate_calibration_grid()) {  //Fail out if the grid cannot be generated
-                        return false;
-                    }
-
-                    // Log grid summary and all points in compact format
-                    log_info("Generated calibration grid with " << pointCount << " points");
-                    log_info("Grid dimensions: " << calibration_grid_width_mm_X << "mm x " << calibration_grid_height_mm_Y
-                                                 << "mm, size: " << calibrationGridSize << "x" << calibrationGridSize);
-
-                    // Print all points in groups of 5 per line to avoid buffer overflow
-                    if (pointCount > 0) {
-                        for (int i = 0; i < pointCount; i += 5) {
-                            String pointsLine = "Points ";
-                            int    endIdx     = min(i + 5, pointCount);
-                            for (int j = i; j < endIdx; j++) {
-                                if (j > i)
-                                    pointsLine += "; ";
-                                pointsLine +=
-                                    "p" + String(j) + ", x" + String(calibrationGrid[j][0], 2) + ", y" + String(calibrationGrid[j][1], 2);
-                            }
-                            log_info(pointsLine.c_str());
+                    // Only generate grid if dimensions are non-zero (manual configuration)
+                    // If dimensions are 0,0, grid will be generated after first 6 measurements
+                    if (calibration_grid_width_mm_X > 0 && calibration_grid_height_mm_Y > 0) {
+                        if (!generate_calibration_grid()) {  //Fail out if the grid cannot be generated
+                            return false;
                         }
+
+                        // Log grid summary and all points in compact format
+                        log_info("Generated calibration grid with " << pointCount << " points");
+                        log_info("Grid dimensions: " << calibration_grid_width_mm_X << "mm x " << calibration_grid_height_mm_Y
+                                                     << "mm, size: " << calibrationGridSize << "x" << calibrationGridSize);
+
+                        // Print all points in groups of 5 per line to avoid buffer overflow
+                        if (pointCount > 0) {
+                            for (int i = 0; i < pointCount; i += 5) {
+                                String pointsLine = "Points ";
+                                int    endIdx     = min(i + 5, pointCount);
+                                for (int j = i; j < endIdx; j++) {
+                                    if (j > i)
+                                        pointsLine += "; ";
+                                    pointsLine +=
+                                        "p" + String(j) + ", x" + String(calibrationGrid[j][0], 2) + ", y" + String(calibrationGrid[j][1], 2);
+                                }
+                                log_info(pointsLine.c_str());
+                            }
+                        }
+                    } else {
+                        log_info("Grid dimensions set to 0,0 - will auto-compute after initial measurements");
                     }
                 }
                 // After the first recompute (after first 6 measurements), regenerate grid if auto-compute is enabled
@@ -243,20 +249,37 @@ bool Calibration::requestStateChange(int newState) {
                         // Regenerate the grid with the new dimensions
                         bool success = generate_calibration_grid();
 
-                        // Restore original 0,0 values so they persist in config
-                        calibration_grid_width_mm_X  = originalWidth;
-                        calibration_grid_height_mm_Y = originalHeight;
-
                         if (!success) {
                             log_error("Failed to regenerate calibration grid with auto-computed dimensions");
+                            // Restore original 0,0 values
+                            calibration_grid_width_mm_X  = originalWidth;
+                            calibration_grid_height_mm_Y = originalHeight;
                             return false;
                         }
 
-                        // Log the generated calibration grid for debugging
-                        log_info("Generated calibration grid with " << pointCount << " points:");
-                        for (int i = 0; i < pointCount; i++) {
-                            log_info("  Point " << i << ": X=" << calibrationGrid[i][0] << "mm, Y=" << calibrationGrid[i][1] << "mm");
+                        // Log grid summary and all points in compact format (before restoring 0,0)
+                        log_info("Generated calibration grid with " << pointCount << " points");
+                        log_info("Grid dimensions: " << computedWidth << "mm x " << computedHeight << "mm, size: " << calibrationGridSize
+                                                     << "x" << calibrationGridSize);
+
+                        // Print all points in groups of 5 per line to avoid buffer overflow
+                        if (pointCount > 0) {
+                            for (int i = 0; i < pointCount; i += 5) {
+                                String pointsLine = "Points ";
+                                int    endIdx     = min(i + 5, pointCount);
+                                for (int j = i; j < endIdx; j++) {
+                                    if (j > i)
+                                        pointsLine += "; ";
+                                    pointsLine +=
+                                        "p" + String(j) + ", x" + String(calibrationGrid[j][0], 2) + ", y" + String(calibrationGrid[j][1], 2);
+                                }
+                                log_info(pointsLine.c_str());
+                            }
                         }
+
+                        // Restore original 0,0 values so they persist in config
+                        calibration_grid_width_mm_X  = originalWidth;
+                        calibration_grid_height_mm_Y = originalHeight;
                     } else {
                         log_error("Kinematics not available for auto-computing grid, using defaults");
                         // Use reasonable defaults
@@ -270,20 +293,36 @@ bool Calibration::requestStateChange(int newState) {
 
                         bool success = generate_calibration_grid();
 
-                        // Restore original 0,0 values
-                        calibration_grid_width_mm_X  = originalWidth;
-                        calibration_grid_height_mm_Y = originalHeight;
-
                         if (!success) {
                             log_error("Failed to regenerate calibration grid with default dimensions");
+                            // Restore original 0,0 values
+                            calibration_grid_width_mm_X  = originalWidth;
+                            calibration_grid_height_mm_Y = originalHeight;
                             return false;
                         }
 
-                        // Log the generated calibration grid for debugging
-                        log_info("Generated calibration grid with " << pointCount << " points:");
-                        for (int i = 0; i < pointCount; i++) {
-                            log_info("  Point " << i << ": X=" << calibrationGrid[i][0] << "mm, Y=" << calibrationGrid[i][1] << "mm");
+                        // Log grid summary and all points in compact format (before restoring 0,0)
+                        log_info("Generated calibration grid with " << pointCount << " points");
+                        log_info("Grid dimensions: 1000mm x 1000mm, size: 5x5 (default fallback)");
+
+                        // Print all points in groups of 5 per line to avoid buffer overflow
+                        if (pointCount > 0) {
+                            for (int i = 0; i < pointCount; i += 5) {
+                                String pointsLine = "Points ";
+                                int    endIdx     = min(i + 5, pointCount);
+                                for (int j = i; j < endIdx; j++) {
+                                    if (j > i)
+                                        pointsLine += "; ";
+                                    pointsLine +=
+                                        "p" + String(j) + ", x" + String(calibrationGrid[j][0], 2) + ", y" + String(calibrationGrid[j][1], 2);
+                                }
+                                log_info(pointsLine.c_str());
+                            }
                         }
+
+                        // Restore original 0,0 values
+                        calibration_grid_width_mm_X  = originalWidth;
+                        calibration_grid_height_mm_Y = originalHeight;
                     }
                 }
                 Maslow.stop();
