@@ -163,6 +163,12 @@ bool Calibration::requestStateChange(int newState) {
                     if (!generate_calibration_grid()) {  //Fail out if the grid cannot be generated
                         return false;
                     }
+
+                    // Log the generated calibration grid for debugging
+                    log_info("Generated calibration grid with " << pointCount << " points:");
+                    for (int i = 0; i < pointCount; i++) {
+                        log_info("  Point " << i << ": X=" << calibrationGrid[i][0] << "mm, Y=" << calibrationGrid[i][1] << "mm");
+                    }
                 }
                 // After the first recompute (after first 6 measurements), regenerate grid if auto-compute is enabled
                 // Check: coming from CALIBRATION_COMPUTING, past first 6 measurements, and auto-compute mode enabled
