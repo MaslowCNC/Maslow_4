@@ -688,16 +688,24 @@ void Maslow_::markBeltPositionsStale() {
         return;
     }
 
-    // Mark the data as invalid by setting validity marker to 0
-    ret = nvs_set_i32(nvsHandle, "beltValid", 0);
-    if (ret != ESP_OK) {
-        log_info("Error " + std::string(esp_err_to_name(ret)) + " writing belt validity marker to NVS!\n");
-    }
+    // Read the current validity marker value
+    int32_t currentValid;
+    ret = nvs_get_i32(nvsHandle, "beltValid", &currentValid);
 
-    // Commit the change
-    ret = nvs_commit(nvsHandle);
-    if (ret != ESP_OK) {
-        log_info("Error " + std::string(esp_err_to_name(ret)) + " committing belt validity change to NVS!\n");
+    // Only write if the value needs to change (not already 0)
+    // This preserves NVS write cycles since NVS has a finite write limit
+    if (ret == ESP_ERR_NVS_NOT_FOUND || currentValid != 0) {
+        // Mark the data as invalid by setting validity marker to 0
+        ret = nvs_set_i32(nvsHandle, "beltValid", 0);
+        if (ret != ESP_OK) {
+            log_info("Error " + std::string(esp_err_to_name(ret)) + " writing belt validity marker to NVS!\n");
+        } else {
+            // Commit the change
+            ret = nvs_commit(nvsHandle);
+            if (ret != ESP_OK) {
+                log_info("Error " + std::string(esp_err_to_name(ret)) + " committing belt validity change to NVS!\n");
+            }
+        }
     }
 
     nvs_close(nvsHandle);
