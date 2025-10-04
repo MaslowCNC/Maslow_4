@@ -379,6 +379,7 @@ void Maslow_::saveZPos() {
     ret = nvs_get_i32(nvsHandle, "zPos", &currentZPos);
     if (ret != ESP_OK && ret != ESP_ERR_NVS_NOT_FOUND) {
         log_info("Error " + std::string(esp_err_to_name(ret)) + " reading from NVS!\n");
+        nvs_close(nvsHandle);
         return;
     }
 
@@ -403,6 +404,7 @@ void Maslow_::saveZPos() {
             }
         }
     }
+    nvs_close(nvsHandle);
 }
 
 //This function loads the z-axis position from the non-volitle storage
@@ -438,6 +440,7 @@ void Maslow_::loadZPos() {
         gc_sync_position();  //This updates the Gcode engine with the new position from the stepping engine that we set with set_motor_steps
         plan_sync_position();
     }
+    nvs_close(nvsHandle);
 }
 
 /** Sets the 'bottom' Z position, this is a 'stop' beyond which travel cannot continue */
