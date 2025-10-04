@@ -164,21 +164,23 @@ bool Calibration::requestStateChange(int newState) {
                         return false;
                     }
 
-                    // Log grid summary with first and last few points only to avoid overwhelming the log
+                    // Log grid summary and all points in compact format
                     log_info("Generated calibration grid with " << pointCount << " points");
                     log_info("Grid dimensions: " << calibration_grid_width_mm_X << "mm x " << calibration_grid_height_mm_Y
                                                  << "mm, size: " << calibrationGridSize << "x" << calibrationGridSize);
+
+                    // Print all points in groups of 5 per line to avoid buffer overflow
                     if (pointCount > 0) {
-                        int pointsToShow = min(3, pointCount);
-                        log_info("First " << pointsToShow << " points:");
-                        for (int i = 0; i < pointsToShow; i++) {
-                            log_info("  Point " << i << ": (" << calibrationGrid[i][0] << ", " << calibrationGrid[i][1] << ")");
-                        }
-                        if (pointCount > 6) {
-                            log_info("Last 3 points:");
-                            for (int i = pointCount - 3; i < pointCount; i++) {
-                                log_info("  Point " << i << ": (" << calibrationGrid[i][0] << ", " << calibrationGrid[i][1] << ")");
+                        for (int i = 0; i < pointCount; i += 5) {
+                            String pointsLine = "Points ";
+                            int    endIdx     = min(i + 5, pointCount);
+                            for (int j = i; j < endIdx; j++) {
+                                if (j > i)
+                                    pointsLine += "; ";
+                                pointsLine +=
+                                    "p" + String(j) + ", x" + String(calibrationGrid[j][0], 2) + ", y" + String(calibrationGrid[j][1], 2);
                             }
+                            log_info(pointsLine.c_str());
                         }
                     }
                 }
