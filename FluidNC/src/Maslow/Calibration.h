@@ -96,7 +96,9 @@ public:
     bool  orientation;
     int   calibrationCurrentThreshold    = 1300;
     float acceptableCalibrationThreshold = 0.5;
-    int   calibrationGridSize            = 9;
+    int   calibrationGridSize            = 9;  // Deprecated: kept for backward compatibility, use calibrationGridSizeX/Y instead
+    int   calibrationGridSizeX           = 9;  // Number of calibration points in X direction
+    int   calibrationGridSizeY           = 9;  // Number of calibration points in Y direction
     float calibration_grid_width_mm_X    = 2000;  // mm offset from the edge of the frame
     float calibration_grid_height_mm_Y   = 1000;  // mm offset from the edge of the frame
     bool  calibrationInProgress;                  //Used to turn off regular movements during calibration
@@ -105,6 +107,11 @@ public:
     int currentState = UNKNOWN;
 
 private:
+    // Internal variables for calculated grid dimensions during calibration
+    // These are used during calibration but don't overwrite the YAML config values
+    float _calculated_grid_width_mm  = 0.0f;
+    float _calculated_grid_height_mm = 0.0f;
+
     //Variables used for retracting state
     bool axis_homed[4] = { false, false, false, false };
     bool retractingTL  = false;
