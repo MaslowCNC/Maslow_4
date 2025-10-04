@@ -556,6 +556,8 @@ void Maslow_::loadBeltPositions() {
     if (ret == ESP_OK) {
         FloatInt32 tlFi;
         tlFi.i = tlValue;
+        // Set motor steps directly for TL belt (A axis = motor 0)
+        set_motor_steps(0, mpos_to_steps(tlFi.f, 0));
         axisTL.setTarget(tlFi.f);
         log_info("TL belt position loaded as: " << tlFi.f);
     } else if (ret != ESP_ERR_NVS_NOT_FOUND) {
@@ -568,6 +570,8 @@ void Maslow_::loadBeltPositions() {
     if (ret == ESP_OK) {
         FloatInt32 trFi;
         trFi.i = trValue;
+        // Set motor steps directly for TR belt (B axis = motor 1)
+        set_motor_steps(1, mpos_to_steps(trFi.f, 1));
         axisTR.setTarget(trFi.f);
         log_info("TR belt position loaded as: " << trFi.f);
     } else if (ret != ESP_ERR_NVS_NOT_FOUND) {
@@ -580,6 +584,8 @@ void Maslow_::loadBeltPositions() {
     if (ret == ESP_OK) {
         FloatInt32 blFi;
         blFi.i = blValue;
+        // Set motor steps directly for BL belt (C axis = motor 2)
+        set_motor_steps(2, mpos_to_steps(blFi.f, 2));
         axisBL.setTarget(blFi.f);
         log_info("BL belt position loaded as: " << blFi.f);
     } else if (ret != ESP_ERR_NVS_NOT_FOUND) {
@@ -592,6 +598,8 @@ void Maslow_::loadBeltPositions() {
     if (ret == ESP_OK) {
         FloatInt32 brFi;
         brFi.i = brValue;
+        // Set motor steps directly for BR belt (D axis = motor 3)
+        set_motor_steps(3, mpos_to_steps(brFi.f, 3));
         axisBR.setTarget(brFi.f);
         log_info("BR belt position loaded as: " << brFi.f);
     } else if (ret != ESP_ERR_NVS_NOT_FOUND) {
@@ -599,6 +607,10 @@ void Maslow_::loadBeltPositions() {
     }
 
     nvs_close(nvsHandle);
+
+    // Sync position with G-code parser and planner
+    gc_sync_position();
+    plan_sync_position();
 }
 
 //------------------------------------------------------
