@@ -131,6 +131,7 @@ public:
     //Save and load belt positions
     void saveBeltPositions();
     void loadBeltPositions();
+    void markBeltPositionsStale();
 
     void stopMotors();
 

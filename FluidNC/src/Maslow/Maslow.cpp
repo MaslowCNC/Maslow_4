@@ -140,7 +140,23 @@ void Maslow_::update() {
     //Save the z-axis position if the prevous state was jog or cycle and the current state is idle
     if ((prevState == State::Jog || prevState == State::Cycle) && sys.state() == State::Idle) {
         saveZPos();
-        saveBeltPositions();
+        // Only save belt positions when in READY_TO_CUT or RETRACTED state (belts are tight and valid)
+        int currentMaslowState = calibration.getCurrentState();
+        if (currentMaslowState == READY_TO_CUT || currentMaslowState == RETRACTED) {
+            saveBeltPositions();
+        }
+    }
+
+    // Track state changes and mark belt positions as stale when leaving READY_TO_CUT or RETRACTED
+    static int prevMaslowState    = calibration.getCurrentState();
+    int        currentMaslowState = calibration.getCurrentState();
+    if (prevMaslowState != currentMaslowState) {
+        // If we're leaving READY_TO_CUT or RETRACTED, mark positions as stale
+        if ((prevMaslowState == READY_TO_CUT || prevMaslowState == RETRACTED) &&
+            (currentMaslowState != READY_TO_CUT && currentMaslowState != RETRACTED)) {
+            markBeltPositionsStale();
+        }
+        prevMaslowState = currentMaslowState;
     }
 
     blinkIPAddress();
@@ -465,6 +481,13 @@ void Maslow_::setZStop() {
 
 //This function saves the current belt positions to non-volatile storage
 void Maslow_::saveBeltPositions() {
+    // Only save if in a valid state (belts are tight)
+    int currentState = calibration.getCurrentState();
+    if (currentState != READY_TO_CUT && currentState != RETRACTED) {
+        log_debug("Belt positions NOT saved - invalid state (not READY_TO_CUT or RETRACTED), currentState=" << currentState);
+        return;
+    }
+
     nvs_handle_t nvsHandle;
     esp_err_t    ret = nvs_open("maslow", NVS_READWRITE, &nvsHandle);
     if (ret != ESP_OK) {
@@ -532,6 +555,12 @@ void Maslow_::saveBeltPositions() {
         }
     }
 
+    // Mark the data as valid
+    ret = nvs_set_i32(nvsHandle, "beltValid", 1);
+    if (ret != ESP_OK) {
+        log_info("Error " + std::string(esp_err_to_name(ret)) + " writing belt validity marker to NVS!\n");
+    }
+
     // Commit all changes to non-volatile storage
     ret = nvs_commit(nvsHandle);
     if (ret != ESP_OK) {
@@ -539,6 +568,10 @@ void Maslow_::saveBeltPositions() {
     }
 
     nvs_close(nvsHandle);
+
+    // Log the save operation
+    log_debug("Belt positions saved to NVS: TL=" << tlPos << " TR=" << trPos << " BL=" << blPos << " BR=" << brPos
+                                                 << " state=" << currentState);
 }
 
 //This function loads the belt positions from non-volatile storage
@@ -550,6 +583,15 @@ void Maslow_::loadBeltPositions() {
         return;
     }
 
+    // Check if the data is valid
+    int32_t validityMarker;
+    ret = nvs_get_i32(nvsHandle, "beltValid", &validityMarker);
+    if (ret != ESP_OK || validityMarker != 1) {
+        log_debug("Belt positions NOT loaded from NVS - data is stale/invalid or not found");
+        nvs_close(nvsHandle);
+        return;
+    }
+
     // Union for int32_t to float conversion
     union FloatInt32 {
         float   f;
@@ -558,56 +600,60 @@ void Maslow_::loadBeltPositions() {
 
     // Load TL belt position
     int32_t tlValue;
-    ret = nvs_get_i32(nvsHandle, "tlPos", &tlValue);
+    ret         = nvs_get_i32(nvsHandle, "tlPos", &tlValue);
+    float tlPos = 0;
     if (ret == ESP_OK) {
         FloatInt32 tlFi;
         tlFi.i = tlValue;
+        tlPos  = tlFi.f;
         // Set motor steps directly for TL belt (A axis = motor 0)
         set_motor_steps(0, mpos_to_steps(tlFi.f, 0));
         axisTL.setTarget(tlFi.f);
-        log_info("TL belt position loaded as: " << tlFi.f);
     } else if (ret != ESP_ERR_NVS_NOT_FOUND) {
         log_info("Error " + std::string(esp_err_to_name(ret)) + " reading TL belt position from NVS!");
     }
 
     // Load TR belt position
     int32_t trValue;
-    ret = nvs_get_i32(nvsHandle, "trPos", &trValue);
+    ret         = nvs_get_i32(nvsHandle, "trPos", &trValue);
+    float trPos = 0;
     if (ret == ESP_OK) {
         FloatInt32 trFi;
         trFi.i = trValue;
+        trPos  = trFi.f;
         // Set motor steps directly for TR belt (B axis = motor 1)
         set_motor_steps(1, mpos_to_steps(trFi.f, 1));
         axisTR.setTarget(trFi.f);
-        log_info("TR belt position loaded as: " << trFi.f);
     } else if (ret != ESP_ERR_NVS_NOT_FOUND) {
         log_info("Error " + std::string(esp_err_to_name(ret)) + " reading TR belt position from NVS!");
     }
 
     // Load BL belt position
     int32_t blValue;
-    ret = nvs_get_i32(nvsHandle, "blPos", &blValue);
+    ret         = nvs_get_i32(nvsHandle, "blPos", &blValue);
+    float blPos = 0;
     if (ret == ESP_OK) {
         FloatInt32 blFi;
         blFi.i = blValue;
+        blPos  = blFi.f;
         // Set motor steps directly for BL belt (C axis = motor 2)
         set_motor_steps(2, mpos_to_steps(blFi.f, 2));
         axisBL.setTarget(blFi.f);
-        log_info("BL belt position loaded as: " << blFi.f);
     } else if (ret != ESP_ERR_NVS_NOT_FOUND) {
         log_info("Error " + std::string(esp_err_to_name(ret)) + " reading BL belt position from NVS!");
     }
 
     // Load BR belt position
     int32_t brValue;
-    ret = nvs_get_i32(nvsHandle, "brPos", &brValue);
+    ret         = nvs_get_i32(nvsHandle, "brPos", &brValue);
+    float brPos = 0;
     if (ret == ESP_OK) {
         FloatInt32 brFi;
         brFi.i = brValue;
+        brPos  = brFi.f;
         // Set motor steps directly for BR belt (D axis = motor 3)
         set_motor_steps(3, mpos_to_steps(brFi.f, 3));
         axisBR.setTarget(brFi.f);
-        log_info("BR belt position loaded as: " << brFi.f);
     } else if (ret != ESP_ERR_NVS_NOT_FOUND) {
         log_info("Error " + std::string(esp_err_to_name(ret)) + " reading BR belt position from NVS!");
     }
@@ -617,6 +663,47 @@ void Maslow_::loadBeltPositions() {
     // Sync position with G-code parser and planner
     gc_sync_position();
     plan_sync_position();
+
+    // Determine the state based on belt lengths
+    // If all belt lengths are zero, go to RETRACTED state, otherwise READY_TO_CUT
+    bool allZero  = (tlPos == 0 && trPos == 0 && blPos == 0 && brPos == 0);
+    int  newState = allZero ? RETRACTED : READY_TO_CUT;
+
+    // Set the state and disable alarm
+    calibration.requestStateChange(newState);
+    if (sys.state() == State::Alarm) {
+        sys.set_state(State::Idle);
+    }
+
+    log_debug("Belt positions loaded from NVS: TL=" << tlPos << " TR=" << trPos << " BL=" << blPos << " BR=" << brPos
+                                                    << " newState=" << newState);
+}
+
+//This function marks the belt positions in NVS as stale/invalid
+void Maslow_::markBeltPositionsStale() {
+    nvs_handle_t nvsHandle;
+    esp_err_t    ret = nvs_open("maslow", NVS_READWRITE, &nvsHandle);
+    if (ret != ESP_OK) {
+        log_info("Error " + std::string(esp_err_to_name(ret)) + " opening NVS handle for belt positions!\n");
+        return;
+    }
+
+    // Mark the data as invalid by setting validity marker to 0
+    ret = nvs_set_i32(nvsHandle, "beltValid", 0);
+    if (ret != ESP_OK) {
+        log_info("Error " + std::string(esp_err_to_name(ret)) + " writing belt validity marker to NVS!\n");
+    }
+
+    // Commit the change
+    ret = nvs_commit(nvsHandle);
+    if (ret != ESP_OK) {
+        log_info("Error " + std::string(esp_err_to_name(ret)) + " committing belt validity change to NVS!\n");
+    }
+
+    nvs_close(nvsHandle);
+
+    int currentState = calibration.getCurrentState();
+    log_debug("Belt positions marked as stale/invalid in NVS, state=" << currentState);
 }
 
 //------------------------------------------------------
