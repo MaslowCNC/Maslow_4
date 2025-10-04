@@ -164,10 +164,22 @@ bool Calibration::requestStateChange(int newState) {
                         return false;
                     }
 
-                    // Log the generated calibration grid for debugging
-                    log_info("Generated calibration grid with " << pointCount << " points:");
-                    for (int i = 0; i < pointCount; i++) {
-                        log_info("  Point " << i << ": X=" << calibrationGrid[i][0] << "mm, Y=" << calibrationGrid[i][1] << "mm");
+                    // Log grid summary with first and last few points only to avoid overwhelming the log
+                    log_info("Generated calibration grid with " << pointCount << " points");
+                    log_info("Grid dimensions: " << calibration_grid_width_mm_X << "mm x " << calibration_grid_height_mm_Y
+                                                 << "mm, size: " << calibrationGridSize << "x" << calibrationGridSize);
+                    if (pointCount > 0) {
+                        int pointsToShow = min(3, pointCount);
+                        log_info("First " << pointsToShow << " points:");
+                        for (int i = 0; i < pointsToShow; i++) {
+                            log_info("  Point " << i << ": (" << calibrationGrid[i][0] << ", " << calibrationGrid[i][1] << ")");
+                        }
+                        if (pointCount > 6) {
+                            log_info("Last 3 points:");
+                            for (int i = pointCount - 3; i < pointCount; i++) {
+                                log_info("  Point " << i << ": (" << calibrationGrid[i][0] << ", " << calibrationGrid[i][1] << ")");
+                            }
+                        }
                     }
                 }
                 // After the first recompute (after first 6 measurements), regenerate grid if auto-compute is enabled
