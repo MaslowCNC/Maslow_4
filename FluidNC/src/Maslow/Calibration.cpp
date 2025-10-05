@@ -160,7 +160,9 @@ bool Calibration::requestStateChange(int newState) {
                     // Initialize calibration loop state for fresh start
                     calibrationDirection  = UP;
                     measurementInProgress = true;
-                    // Grid generation is deferred until after waypoint 5 calibration calculation
+                    // Allocate memory for at least the first 6 waypoints (0-5)
+                    // The full grid will be generated and allocated after waypoint 5 calibration calculation
+                    allocateCalibrationMemory(6);
                 }
 
                 // If transitioning from CALIBRATION_COMPUTING after waypoint 5 (waypoint == 6), generate the calibration grid
@@ -168,6 +170,9 @@ bool Calibration::requestStateChange(int newState) {
                 // Only generate once - not on subsequent CALIBRATION_COMPUTING cycles
                 if (currentState == CALIBRATION_COMPUTING && waypoint == 6) {
                     log_info("Generating calibration grid after waypoint 5 calculation with updated anchor positions");
+                    // First deallocate the initial 6-point allocation
+                    deallocateCalibrationMemory();
+                    // Now generate the full grid which will allocate the correct amount
                     if (!generate_calibration_grid()) {
                         log_error("Failed to generate calibration grid after waypoint 5 calculation");
                         return false;
