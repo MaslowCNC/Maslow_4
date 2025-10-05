@@ -169,10 +169,14 @@ bool MotorUnit::isEncoderStale() {
         return true;
     }
     
-    // If motor is commanding significant power and encoder hasn't updated in 500ms, it's stale
-    // This detects the case where motors are running but encoders are frozen
-    if (abs(_commandPWM) > 100 && (millis() - _lastEncoderUpdateTime) > 500) {
-        return true;
+    // Only check for staleness if motor is commanding significant power
+    // This avoids false positives when motor is stopped or barely moving
+    if (abs(_commandPWM) > 100) {
+        // If encoder hasn't updated in 500ms while motor is running, it's stale
+        // This detects the case where motors are running but encoders are frozen
+        if ((millis() - _lastEncoderUpdateTime) > 500) {
+            return true;
+        }
     }
     
     return false;
