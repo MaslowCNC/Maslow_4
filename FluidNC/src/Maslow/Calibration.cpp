@@ -134,7 +134,8 @@ bool Calibration::requestStateChange(int newState) {
                 takeSlack = true;
 
                 //Alocate the memory to store the measurements in. This is used here because take slack will use the same memory as the calibration
-                allocateCalibrationMemory();
+                // Only need 1 measurement point for take slack
+                allocateCalibrationMemory(1);
                 success = true;
                 break;
             } else {
@@ -457,10 +458,10 @@ void Calibration::calibration_loop() {
 /*
 * This function is used to take up the slack in the belts and confirm that the calibration values are resonable
 * It is run when the "Apply Tension" button is pressed in the UI
-* It does this by retracting the two lower belts and taking a measurement. The machine's position is then calculated 
+* It does this by retracting the two lower belts and taking a measurement. The machine's position is then calculated
 * from the lenghts of the two upper belts. The lengths of the two lower belts are then compared to their expected calculated lengths
 * If the difference is beyond a threshold we know that the stored anchor point locations do not match the real dimensons and and error is thrown
-* Returns true when it is finished regardless of result. Otherwise returns false. 
+* Returns true when it is finished regardless of result. Otherwise returns false.
 */
 bool Calibration::takeSlackFunc() {
     static int takeSlackState = 0;  //0 -> Starting, 1-> Moving to (0,0), 2-> Taking a measurement. Where should this be defined correctly?
@@ -600,18 +601,18 @@ bool Calibration::computeXYfromLengths(double TL, double TR, float& x, float& y)
 /**
  * Takes one measurement and returns true when it's done. The result is stored in the passed array.
  * Each measurement is the raw belt length processed into XY plane coordinates.
- * 
+ *
  * The function handles two orientations: VERTICAL and HORIZONTAL.
- * 
+ *
  * In VERTICAL orientation:
  * - Pulls two bottom belts tight one after another based on the x-coordinate.
  * - Takes a measurement once both belts are tight and stores it in the calibration data array.
- * 
+ *
  * In HORIZONTAL orientation:
  * - For the first waypoint (waypoint == 0), pulls all 4 belts tight to ensure proper initial tension
  * - For subsequent waypoints, pulls belts tight based on the direction of the last move.
  * - Takes a measurement once both belts are tight and stores it in the calibration data array.
- * 
+ *
  * @param result The array to store the measurement result.
  * @param dir The direction of the last move (UP, DOWN, LEFT, RIGHT). This is used to decide which belts to tighten first
  * @param run The measurement run number at current waypoint (0-3, with first 2 discarded).
@@ -1285,15 +1286,21 @@ bool Calibration::move_with_slack(double fromX, double fromY, double toX, double
 
 //The number of points high and wide  must be an odd number
 bool Calibration::generate_calibration_grid() {
-    //Allocate memory for the calibration grid
-    allocateCalibrationMemory();
-
     // Calculate grid dimensions based on frame geometry to stay "in the green"
     auto kinematics = getKinematics();
     if (!kinematics) {
         log_error("generate_calibration_grid: MaslowKinematics not available");
         return false;
     }
+
+    // Use separate X and Y grid sizes, fall back to single gridSize for backward compatibility
+    int gridSizeX = (calibrationGridSizeX > 0) ? calibrationGridSizeX : calibrationGridSize;
+    int gridSizeY = (calibrationGridSizeY > 0) ? calibrationGridSizeY : calibrationGridSize;
+
+    // Calculate the number of points needed and allocate memory accordingly
+    int estimatedPoints = calculateGridPointCount(gridSizeX, gridSizeY);
+    log_info("Allocating memory for " << estimatedPoints << " calibration points");
+    allocateCalibrationMemory(estimatedPoints);
 
     // Get anchor coordinates
     float tlX = kinematics->getTlX();
@@ -1497,9 +1504,7 @@ bool Calibration::generate_calibration_grid() {
     float calibrationArea = gridWidth * gridHeight;  // in mm²
     float calibrationAreaM2 = calibrationArea / 1000000.0f;  // in m²
 
-    // Use separate X and Y grid sizes, fall back to single gridSize for backward compatibility
-    int gridSizeX = (calibrationGridSizeX > 0) ? calibrationGridSizeX : calibrationGridSize;
-    int gridSizeY = (calibrationGridSizeY > 0) ? calibrationGridSizeY : calibrationGridSize;
+    // gridSizeX and gridSizeY already calculated earlier
     int totalPoints = gridSizeX * gridSizeY;
 
     log_info("=== Calibration Grid Configuration ===");
@@ -1743,27 +1748,70 @@ int Calibration::get_direction(double x, double y, double targetX, double target
 }
 
 // Function to allocate memory for calibration arrays
-void Calibration::allocateCalibrationMemory() {
+// Function to calculate the number of points that will be in the calibration grid
+// This is used to allocate the right amount of memory before generating the grid
+int Calibration::calculateGridPointCount(int gridSizeX, int gridSizeY) {
+    // The grid starts with 6 fixed points (waypoints 0-5)
+    int count = 7;  // Points 0-5 plus the center point at index 6
+
+    // Calculate number of cycles dynamically based on grid size
+    int numberOfCyclesX = (gridSizeX - 1) / 2;
+    int numberOfCyclesY = (gridSizeY - 1) / 2;
+    int numberOfCycles = max(numberOfCyclesX, numberOfCyclesY);
+
+    // Simulate the spiral pattern to count points
+    for (int cycle = 1; cycle <= numberOfCycles; cycle++) {
+        int maxX = cycle;
+        int maxY = cycle;
+
+        // Count points in each direction of the spiral
+        if (maxX <= numberOfCyclesX) {
+            count += maxX;  // Left movement
+            count += maxX;  // Right movement
+        }
+        if (maxY <= numberOfCyclesY) {
+            count += maxY;  // Up movement
+            count += maxY;  // Down movement
+        }
+        count++;  // The corner point at the end of each cycle
+    }
+
+    // Add the final two center points
+    count += 2;
+
+    return count;
+}
+
+// Function to allocate memory for calibration arrays based on actual grid size
+void Calibration::allocateCalibrationMemory(int numPoints) {
     if (calibrationGrid == nullptr) {  //Check to prevent realocating
-        calibrationGrid = new float[CALIBRATION_GRID_SIZE_MAX][2];
+        calibrationGrid = new float[numPoints][2];
     }
     if (calibration_data == nullptr) {
-        calibration_data = new float*[CALIBRATION_GRID_SIZE_MAX];
-        for (int i = 0; i < CALIBRATION_GRID_SIZE_MAX; ++i) {
+        calibration_data = new float*[numPoints];
+        for (int i = 0; i < numPoints; ++i) {
             calibration_data[i] = new float[4];
         }
     }
+    // Store the allocated size for later deallocation
+    allocatedPoints = numPoints;
+    pointCount = 0;  // Will be populated during grid generation
 }
 
 // Function to deallocate memory for calibration arrays
 void Calibration::deallocateCalibrationMemory() {
-    delete[] calibrationGrid;
-    calibrationGrid = nullptr;
-    for (int i = 0; i < CALIBRATION_GRID_SIZE_MAX; ++i) {
-        delete[] calibration_data[i];
+    if (calibrationGrid != nullptr) {
+        delete[] calibrationGrid;
+        calibrationGrid = nullptr;
     }
-    delete[] calibration_data;
-    calibration_data = nullptr;
+    if (calibration_data != nullptr) {
+        for (int i = 0; i < allocatedPoints; ++i) {
+            delete[] calibration_data[i];
+        }
+        delete[] calibration_data;
+        calibration_data = nullptr;
+    }
+    allocatedPoints = 0;
 }
 
 // Function to reset all calibration state variables to initial values

@@ -58,8 +58,9 @@ public:
     void  calibrationDataRecieved();
     void  checkCalibrationData();
 
-    void allocateCalibrationMemory();
+    void allocateCalibrationMemory(int numPoints);
     void deallocateCalibrationMemory();
+    int  calculateGridPointCount(int gridSizeX, int gridSizeY);
     void resetCalibrationState();
 
     void comply();
@@ -136,6 +137,7 @@ private:
     //Variables used by calibration
     float** calibration_data      = nullptr;
     int     pointCount            = 0;     //number of actual points in the grid,  < GRID_SIZE_MAX
+    int     allocatedPoints       = 0;     //number of points allocated in memory for calibration arrays
     int     waypoint              = 0;     //The current waypoint in the calibration process
     int     calibrationDirection  = 0;     //Direction for calibration measurements (replaces static variable)
     bool    measurementInProgress = true;  //Whether currently taking measurement or moving (replaces static variable)
