@@ -678,8 +678,13 @@ void Maslow_::loadBeltPositions() {
     bool allZero  = (tlPos == 0 && trPos == 0 && blPos == 0 && brPos == 0);
     int  newState = allZero ? RETRACTED : READY_TO_CUT;
 
-    // Set the state and disable alarm
-    calibration.requestStateChange(newState);
+    // Set the state directly (bypass requestStateChange validation)
+    // This is appropriate when restoring a known-good saved state at boot time
+    // requestStateChange() would reject READY_TO_CUT from UNKNOWN state
+    calibration.currentState = newState;
+    log_info("Belt position load: Set currentState directly to " << (newState == READY_TO_CUT ? "READY_TO_CUT" : "RETRACTED"));
+    
+    // Disable alarm if present
     if (sys.state() == State::Alarm) {
         sys.set_state(State::Idle);
     }
