@@ -161,7 +161,7 @@ bool Calibration::requestStateChange(int newState) {
                     measurementInProgress = true;
                     // Grid generation is deferred until after waypoint 5 calibration calculation
                 }
-                
+
                 // If transitioning from CALIBRATION_COMPUTING (after waypoint 5), generate the calibration grid
                 // This ensures the grid uses the updated anchor positions from the calibration calculation
                 if (currentState == CALIBRATION_COMPUTING && waypoint > 5) {
