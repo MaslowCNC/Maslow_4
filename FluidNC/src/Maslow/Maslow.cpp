@@ -61,20 +61,13 @@ int ENCODER_READ_FREQUENCY_HZ = 1000;  //max frequency for polling the encoders
 
 // Initialization function
 void Maslow_::begin(void (*sys_rt)()) {
-    log_info("Maslow_::begin() ENTRY - first line of function");
     Wire.begin(5, 4, 200000);
-    log_info("Wire.begin() completed");
     I2CMux.begin(TCAADDR, Wire);
-    log_info("I2CMux.begin() completed");
 
     axisTL.begin(tlIn1Pin, tlIn2Pin, tlADCPin, TLEncoderLine, tlIn1Channel, tlIn2Channel);
-    log_info("axisTL.begin() completed");
     axisTR.begin(trIn1Pin, trIn2Pin, trADCPin, TREncoderLine, trIn1Channel, trIn2Channel);
-    log_info("axisTR.begin() completed");
     axisBL.begin(blIn1Pin, blIn2Pin, blADCPin, BLEncoderLine, blIn1Channel, blIn2Channel);
-    log_info("axisBL.begin() completed");
     axisBR.begin(brIn1Pin, brIn2Pin, brADCPin, BREncoderLine, brIn1Channel, brIn2Channel);
-    log_info("axisBR.begin() completed");
 
     calibration.axisBLHomed = false;
     calibration.axisBRHomed = false;
@@ -691,13 +684,8 @@ void Maslow_::loadBeltPositions() {
     bool allZero  = (tlPos == 0 && trPos == 0 && blPos == 0 && brPos == 0);
     int  newState = allZero ? RETRACTED : READY_TO_CUT;
 
-    // Set the state directly (bypass requestStateChange validation)
-    // This is appropriate when restoring a known-good saved state at boot time
-    // requestStateChange() would reject READY_TO_CUT from UNKNOWN state
-    calibration.currentState = newState;
-    log_info("Belt position load: Set currentState directly to " << (newState == READY_TO_CUT ? "READY_TO_CUT" : "RETRACTED"));
-    
-    // Disable alarm if present
+    // Set the state and disable alarm
+    calibration.requestStateChange(newState);
     if (sys.state() == State::Alarm) {
         sys.set_state(State::Idle);
     }
