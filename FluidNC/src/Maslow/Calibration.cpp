@@ -162,9 +162,10 @@ bool Calibration::requestStateChange(int newState) {
                     // Grid generation is deferred until after waypoint 5 calibration calculation
                 }
 
-                // If transitioning from CALIBRATION_COMPUTING (after waypoint 5), generate the calibration grid
-                // This ensures the grid uses the updated anchor positions from the calibration calculation
-                if (currentState == CALIBRATION_COMPUTING && waypoint > 5) {
+                // If transitioning from CALIBRATION_COMPUTING after waypoint 5 (waypoint == 6), generate the calibration grid
+                // This ensures the grid uses the updated anchor positions from the first calibration calculation
+                // Only generate once - not on subsequent CALIBRATION_COMPUTING cycles
+                if (currentState == CALIBRATION_COMPUTING && waypoint == 6) {
                     log_info("Generating calibration grid after waypoint 5 calculation with updated anchor positions");
                     if (!generate_calibration_grid()) {
                         log_error("Failed to generate calibration grid after waypoint 5 calculation");
