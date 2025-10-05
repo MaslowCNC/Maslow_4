@@ -61,13 +61,20 @@ int ENCODER_READ_FREQUENCY_HZ = 1000;  //max frequency for polling the encoders
 
 // Initialization function
 void Maslow_::begin(void (*sys_rt)()) {
+    log_info("Maslow_::begin() ENTRY - first line of function");
     Wire.begin(5, 4, 200000);
+    log_info("Wire.begin() completed");
     I2CMux.begin(TCAADDR, Wire);
+    log_info("I2CMux.begin() completed");
 
     axisTL.begin(tlIn1Pin, tlIn2Pin, tlADCPin, TLEncoderLine, tlIn1Channel, tlIn2Channel);
+    log_info("axisTL.begin() completed");
     axisTR.begin(trIn1Pin, trIn2Pin, trADCPin, TREncoderLine, trIn1Channel, trIn2Channel);
+    log_info("axisTR.begin() completed");
     axisBL.begin(blIn1Pin, blIn2Pin, blADCPin, BLEncoderLine, blIn1Channel, blIn2Channel);
+    log_info("axisBL.begin() completed");
     axisBR.begin(brIn1Pin, brIn2Pin, brADCPin, BREncoderLine, brIn1Channel, brIn2Channel);
+    log_info("axisBR.begin() completed");
 
     calibration.axisBLHomed = false;
     calibration.axisBRHomed = false;
