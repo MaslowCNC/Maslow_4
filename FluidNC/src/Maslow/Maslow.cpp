@@ -298,6 +298,13 @@ bool Maslow_::updateEncoderPositions() {
             encoderFailCounter[i] = 0;
             encoderFailTimer      = millis();
         }
+        
+        // Additional safety check: if all encoders are stale simultaneously, trigger emergency stop
+        // This catches the case where encoders are reading but returning frozen values
+        if (axisTL.isEncoderStale() && axisTR.isEncoderStale() && axisBL.isEncoderStale() && axisBR.isEncoderStale()) {
+            log_error("All encoders stale - emergency stop to prevent belt spooling");
+            Maslow.panic();
+        }
     }
 
     return success;

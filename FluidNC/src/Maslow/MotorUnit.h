@@ -41,6 +41,7 @@ public:
     double getMotorPower();
     void   update();
     bool   onTarget(double precision);
+    bool   isEncoderStale();
 
 private:
     int     _encoderAddress;
@@ -58,6 +59,11 @@ private:
     double  mostRecentCumulativeEncoderReading = 0;
     double  encoderReadFailurePrintTime        = millis();
     //unsigned long lastCallGetPos = millis();
+    
+    // Encoder staleness detection to prevent belt spooling when encoders fail
+    double        _lastEncoderReading     = 0;
+    unsigned long _lastEncoderUpdateTime  = 0;
+    bool          _encoderDataValid       = false;
 
     //variables to keep track of the motor current and belt speed
     double        beltSpeed             = 0;

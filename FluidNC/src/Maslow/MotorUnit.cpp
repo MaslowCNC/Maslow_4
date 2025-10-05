@@ -121,7 +121,7 @@ bool MotorUnit::updateEncoderPosition() {
     String encAddrLabel = Maslow.axis_id_to_label(_encoderAddress);
 
     if (encoder.isConnected()) {                                               //this func has 50ms timeout (or worse?, hard to tell)
-        mostRecentCumulativeEncoderReading = encoder.getCumulativePosition();  //This updates and returns the encoder value
+        double newReading = encoder.getCumulativePosition();  //This updates and returns the encoder value
         
         // Check for I2C communication errors using new AS5600 error handling
         int error = encoder.lastError();
@@ -130,14 +130,25 @@ bool MotorUnit::updateEncoderPosition() {
                 encoderReadFailurePrintTime = millis();
                 log_warn("Encoder I2C error " << error << " on " << encAddrLabel.c_str());
             }
+            _encoderDataValid = false;
             return false;
         }
+        
+        // Check if encoder reading has changed (indicating valid updates)
+        if (newReading != _lastEncoderReading) {
+            _lastEncoderReading = newReading;
+            _lastEncoderUpdateTime = millis();
+            _encoderDataValid = true;
+        }
+        
+        mostRecentCumulativeEncoderReading = newReading;
         return true;
     } else if (millis() - encoderReadFailurePrintTime > 5000) {
         encoderReadFailurePrintTime = millis();
         log_warn("Encoder read failure on " << encAddrLabel.c_str());
         //Maslow.panic();
     }
+    _encoderDataValid = false;
     return false;
 }
 
@@ -148,8 +159,35 @@ double MotorUnit::getPositionError() {
     return getPosition() - setpoint;
 }
 
+/*!
+ *  @brief  Check if encoder data is stale (hasn't updated recently during motor operation)
+ *  @return true if encoder appears to be frozen/stale, false if data is fresh
+ */
+bool MotorUnit::isEncoderStale() {
+    // If encoder data was never valid, it's stale
+    if (!_encoderDataValid) {
+        return true;
+    }
+    
+    // If motor is commanding significant power and encoder hasn't updated in 500ms, it's stale
+    // This detects the case where motors are running but encoders are frozen
+    if (abs(_commandPWM) > 100 && (millis() - _lastEncoderUpdateTime) > 500) {
+        return true;
+    }
+    
+    return false;
+}
+
 // Recomputes the PID and drives the output
 double MotorUnit::recomputePID() {
+    // Safety check: if encoder data is stale, stop the motor immediately
+    if (isEncoderStale()) {
+        String encAddrLabel = Maslow.axis_id_to_label(_encoderAddress);
+        log_warn("Encoder stale on " << encAddrLabel.c_str() << ", stopping motor to prevent belt spooling");
+        stop();
+        return 0;
+    }
+    
     _commandPWM = positionPID.getOutput(getPosition(), setpoint);
 
     motor.runAtPWM(_commandPWM);
