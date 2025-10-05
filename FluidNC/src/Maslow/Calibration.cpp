@@ -154,13 +154,20 @@ bool Calibration::requestStateChange(int newState) {
                 // Log the calibration orientation mode for debugging
                 log_info("Calibration starting in " << (orientation == VERTICAL ? "VERTICAL" : "HORIZONTAL") << " orientation mode");
 
-                //If we are at the first point we need to generate the grid before we can start
+                //If we are at the first point, initialize calibration state
                 if (waypoint == 0) {
                     // Initialize calibration loop state for fresh start
                     calibrationDirection  = UP;
                     measurementInProgress = true;
-
-                    if (!generate_calibration_grid()) {  //Fail out if the grid cannot be generated
+                    // Grid generation is deferred until after waypoint 5 calibration calculation
+                }
+                
+                // If transitioning from CALIBRATION_COMPUTING (after waypoint 5), generate the calibration grid
+                // This ensures the grid uses the updated anchor positions from the calibration calculation
+                if (currentState == CALIBRATION_COMPUTING && waypoint > 5) {
+                    log_info("Generating calibration grid after waypoint 5 calculation with updated anchor positions");
+                    if (!generate_calibration_grid()) {
+                        log_error("Failed to generate calibration grid after waypoint 5 calculation");
                         return false;
                     }
                 }
@@ -997,16 +1004,8 @@ bool Calibration::take_measurement_avg_with_check(int waypoint, int dir) {
                         return false;
                     }
 
-                    // Regenerate the calibration grid with the newly adjusted frame size
-                    log_info("Regenerating calibration grid with adjusted frame dimensions");
-                    if (!generate_calibration_grid()) {
-                        Maslow.eStop("Unable to regenerate calibration grid after frame size adjustment");
-                        resetCalibrationState();
-                        criticalCounter = 0;
-                        freeMeasurements();
-                        requestStateChange(EXTENDEDOUT);
-                        return false;
-                    }
+                    // Frame size adjusted - grid will be generated after waypoint 5 calibration calculation
+                    log_info("Frame size adjusted based on first measurement");
                 }
 
                 //Compute the current XY position from the top two belt measurements...needs to be redone because we've adjusted the frame size by here
