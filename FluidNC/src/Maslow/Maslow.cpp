@@ -588,6 +588,12 @@ void Maslow_::loadBeltPositions() {
     ret = nvs_get_i32(nvsHandle, "beltValid", &validityMarker);
     if (ret != ESP_OK || validityMarker != 1) {
         log_debug("Belt positions NOT loaded from NVS - data is stale/invalid or not found");
+        if (ret == ESP_ERR_NVS_NOT_FOUND) {
+            log_info("No saved belt positions found in NVS - machine will remain in UNKNOWN state until belts are calibrated/extended");
+        } else if (validityMarker != 1) {
+            log_info("Saved belt positions in NVS are marked as stale/invalid - machine will remain in UNKNOWN state until belts are "
+                     "calibrated/extended");
+        }
         nvs_close(nvsHandle);
         return;
     }
