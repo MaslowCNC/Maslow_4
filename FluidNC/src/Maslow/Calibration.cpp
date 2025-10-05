@@ -170,12 +170,36 @@ bool Calibration::requestStateChange(int newState) {
                 // Only generate once - not on subsequent CALIBRATION_COMPUTING cycles
                 if (currentState == CALIBRATION_COMPUTING && waypoint == 6) {
                     log_info("Generating calibration grid after waypoint 5 calculation with updated anchor positions");
-                    // First deallocate the initial 6-point allocation
+
+                    // Save the calibration data from the first 6 waypoints before deallocation
+                    float savedCalibrationData[6][4];
+                    float savedCalibrationGrid[6][2];
+                    for (int i = 0; i < 6; i++) {
+                        for (int j = 0; j < 4; j++) {
+                            savedCalibrationData[i][j] = calibration_data[i][j];
+                        }
+                        for (int j = 0; j < 2; j++) {
+                            savedCalibrationGrid[i][j] = calibrationGrid[i][j];
+                        }
+                    }
+
+                    // Deallocate the initial 6-point allocation
                     deallocateCalibrationMemory();
-                    // Now generate the full grid which will allocate the correct amount
+
+                    // Generate the full grid which will allocate the correct amount
                     if (!generate_calibration_grid()) {
                         log_error("Failed to generate calibration grid after waypoint 5 calculation");
                         return false;
+                    }
+
+                    // Restore the calibration data from the first 6 waypoints
+                    for (int i = 0; i < 6; i++) {
+                        for (int j = 0; j < 4; j++) {
+                            calibration_data[i][j] = savedCalibrationData[i][j];
+                        }
+                        for (int j = 0; j < 2; j++) {
+                            calibrationGrid[i][j] = savedCalibrationGrid[i][j];
+                        }
                     }
                 }
                 Maslow.stop();
