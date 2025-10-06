@@ -175,6 +175,25 @@ public:
     MotorUnit axisBL;
     MotorUnit axisBR;
 
+    // Motor configuration parameters (with defaults matching hardcoded values)
+    // These can be configured via YAML and will use these defaults if not specified
+    struct MotorConfig {
+        int forwardPin;
+        int backwardPin;
+        int readbackPin;
+        int encoderAddress;
+        int pwmChannel1;
+        int pwmChannel2;
+        float mmPerRevolution;
+        bool directionInverted;
+        std::string encoderType;
+    };
+    
+    MotorConfig tlMotorConfig = {45, 21, 18, 2, 0, 1, 43.975f, false, "AS5600"};  // TL motor defaults
+    MotorConfig trMotorConfig = {42, 41, 6, 1, 2, 3, 43.975f, false, "AS5600"};   // TR motor defaults
+    MotorConfig blMotorConfig = {37, 36, 8, 3, 4, 5, 43.975f, false, "AS5600"};   // BL motor defaults
+    MotorConfig brMotorConfig = {9, 3, 7, 0, 6, 7, 43.975f, false, "AS5600"};     // BR motor defaults
+
     bool readingFromSD = false;  //Used to turn off reading from the encoders when reading from the - i dont think we need this anymore TODO
     bool using_default_config = false;
     QWIICMUX I2CMux;

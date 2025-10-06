@@ -64,10 +64,42 @@ void Maslow_::begin(void (*sys_rt)()) {
     Wire.begin(5, 4, 200000);
     I2CMux.begin(TCAADDR, Wire);
 
+    // Initialize motors using configuration parameters (with fallback to hardcoded defines if needed)
+    // NOTE: The fallback defines can be removed once all users have updated their config files
+    #ifdef USE_HARDCODED_MOTOR_PINS
+    // Fallback to hardcoded values (can be removed in future version)
     axisTL.begin(tlIn1Pin, tlIn2Pin, tlADCPin, TLEncoderLine, tlIn1Channel, tlIn2Channel);
     axisTR.begin(trIn1Pin, trIn2Pin, trADCPin, TREncoderLine, trIn1Channel, trIn2Channel);
     axisBL.begin(blIn1Pin, blIn2Pin, blADCPin, BLEncoderLine, blIn1Channel, blIn2Channel);
     axisBR.begin(brIn1Pin, brIn2Pin, brADCPin, BREncoderLine, brIn1Channel, brIn2Channel);
+    #else
+    // Use configuration values
+    axisTL.begin(tlMotorConfig.forwardPin, tlMotorConfig.backwardPin, tlMotorConfig.readbackPin, 
+                 tlMotorConfig.encoderAddress, tlMotorConfig.pwmChannel1, tlMotorConfig.pwmChannel2);
+    axisTR.begin(trMotorConfig.forwardPin, trMotorConfig.backwardPin, trMotorConfig.readbackPin,
+                 trMotorConfig.encoderAddress, trMotorConfig.pwmChannel1, trMotorConfig.pwmChannel2);
+    axisBL.begin(blMotorConfig.forwardPin, blMotorConfig.backwardPin, blMotorConfig.readbackPin,
+                 blMotorConfig.encoderAddress, blMotorConfig.pwmChannel1, blMotorConfig.pwmChannel2);
+    axisBR.begin(brMotorConfig.forwardPin, brMotorConfig.backwardPin, brMotorConfig.readbackPin,
+                 brMotorConfig.encoderAddress, brMotorConfig.pwmChannel1, brMotorConfig.pwmChannel2);
+    #endif
+
+    // Apply motor configuration parameters
+    axisTL.setMmPerRevolution(tlMotorConfig.mmPerRevolution);
+    axisTL.setDirectionInverted(tlMotorConfig.directionInverted);
+    axisTL.setEncoderType(String(tlMotorConfig.encoderType.c_str()));
+
+    axisTR.setMmPerRevolution(trMotorConfig.mmPerRevolution);
+    axisTR.setDirectionInverted(trMotorConfig.directionInverted);
+    axisTR.setEncoderType(String(trMotorConfig.encoderType.c_str()));
+
+    axisBL.setMmPerRevolution(blMotorConfig.mmPerRevolution);
+    axisBL.setDirectionInverted(blMotorConfig.directionInverted);
+    axisBL.setEncoderType(String(blMotorConfig.encoderType.c_str()));
+
+    axisBR.setMmPerRevolution(brMotorConfig.mmPerRevolution);
+    axisBR.setDirectionInverted(brMotorConfig.directionInverted);
+    axisBR.setEncoderType(String(brMotorConfig.encoderType.c_str()));
 
     calibration.axisBLHomed = false;
     calibration.axisBRHomed = false;

@@ -14,6 +14,52 @@ Maslow_Scale_Y: 1.000000
 Maslow_debugEnabled: false
 MaslowAutoUpdate: false
 MaslowUpdateURL: https://api.github.com/repos/BarbourSmith/FluidNC/releases/latest
+
+# Motor configuration parameters
+# TL (Top-Left) Motor - A axis
+Maslow_motor_tl_forward_pin: 45
+Maslow_motor_tl_backward_pin: 21
+Maslow_motor_tl_readback_pin: 18
+Maslow_motor_tl_encoder_address: 2
+Maslow_motor_tl_pwm_channel_1: 0
+Maslow_motor_tl_pwm_channel_2: 1
+Maslow_motor_tl_mm_per_revolution: 43.975
+Maslow_motor_tl_direction_inverted: false
+Maslow_motor_tl_encoder_type: AS5600
+
+# TR (Top-Right) Motor - B axis
+Maslow_motor_tr_forward_pin: 42
+Maslow_motor_tr_backward_pin: 41
+Maslow_motor_tr_readback_pin: 6
+Maslow_motor_tr_encoder_address: 1
+Maslow_motor_tr_pwm_channel_1: 2
+Maslow_motor_tr_pwm_channel_2: 3
+Maslow_motor_tr_mm_per_revolution: 43.975
+Maslow_motor_tr_direction_inverted: false
+Maslow_motor_tr_encoder_type: AS5600
+
+# BL (Bottom-Left) Motor - C axis
+Maslow_motor_bl_forward_pin: 37
+Maslow_motor_bl_backward_pin: 36
+Maslow_motor_bl_readback_pin: 8
+Maslow_motor_bl_encoder_address: 3
+Maslow_motor_bl_pwm_channel_1: 4
+Maslow_motor_bl_pwm_channel_2: 5
+Maslow_motor_bl_mm_per_revolution: 43.975
+Maslow_motor_bl_direction_inverted: false
+Maslow_motor_bl_encoder_type: AS5600
+
+# BR (Bottom-Right) Motor - D axis
+Maslow_motor_br_forward_pin: 9
+Maslow_motor_br_backward_pin: 3
+Maslow_motor_br_readback_pin: 7
+Maslow_motor_br_encoder_address: 0
+Maslow_motor_br_pwm_channel_1: 6
+Maslow_motor_br_pwm_channel_2: 7
+Maslow_motor_br_mm_per_revolution: 43.975
+Maslow_motor_br_direction_inverted: false
+Maslow_motor_br_encoder_type: AS5600
+
 stepping: 
   engine: Timed
   idle_ms: 240
