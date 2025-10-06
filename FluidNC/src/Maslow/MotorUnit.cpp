@@ -406,3 +406,13 @@ void MotorUnit::setDirectionInverted(bool inverted) {
 bool MotorUnit::getDirectionInverted() {
     return _directionInverted;
 }
+
+// Sets the encoder type
+void MotorUnit::setEncoderType(String encoderType) {
+    _encoderType = encoderType;
+}
+
+// Gets the encoder type
+String MotorUnit::getEncoderType() {
+    return _encoderType;
+}
