@@ -170,10 +170,10 @@ bool Calibration::requestStateChange(int newState) {
                     recomputeCountIndex = 0;
                 }
 
-                // If transitioning from CALIBRATION_COMPUTING after waypoint 5 (waypoint == 6), generate the calibration grid
+                // If at waypoint 6 and grid hasn't been generated yet (pointCount still 6), generate the calibration grid
                 // This ensures the grid uses the updated anchor positions from the first calibration calculation
                 // Only generate once - not on subsequent CALIBRATION_COMPUTING cycles
-                if (currentState == CALIBRATION_COMPUTING && waypoint == 6) {
+                if (waypoint == 6 && pointCount == 6) {
                     log_info("Generating calibration grid after waypoint 5 calculation with updated anchor positions");
 
                     // Save the calibration data from the first 6 waypoints before deallocation
