@@ -1329,6 +1329,32 @@ bool Calibration::generate_calibration_grid() {
     int gridSizeX = (calibrationGridSizeX > 0) ? calibrationGridSizeX : calibrationGridSize;
     int gridSizeY = (calibrationGridSizeY > 0) ? calibrationGridSizeY : calibrationGridSize;
 
+    // If grid size is 0, calculate it from the grid dimensions and spacing
+    if (gridSizeX == 0 && _calculated_grid_width_mm > 0 && calibrationGridSpacing > 0) {
+        gridSizeX = (int)(_calculated_grid_width_mm / calibrationGridSpacing) + 1;
+        // Ensure at least 3 points
+        if (gridSizeX < 3) {
+            gridSizeX = 3;
+        }
+        // Cap at 99 points
+        if (gridSizeX > 99) {
+            gridSizeX = 99;
+        }
+        log_info("Auto-calculated gridSizeX from spacing: " << gridSizeX << " points (" << calibrationGridSpacing << "mm spacing)");
+    }
+    if (gridSizeY == 0 && _calculated_grid_height_mm > 0 && calibrationGridSpacing > 0) {
+        gridSizeY = (int)(_calculated_grid_height_mm / calibrationGridSpacing) + 1;
+        // Ensure at least 3 points
+        if (gridSizeY < 3) {
+            gridSizeY = 3;
+        }
+        // Cap at 99 points
+        if (gridSizeY > 99) {
+            gridSizeY = 99;
+        }
+        log_info("Auto-calculated gridSizeY from spacing: " << gridSizeY << " points (" << calibrationGridSpacing << "mm spacing)");
+    }
+
     // Calculate the number of points needed and allocate memory accordingly
     int estimatedPoints = calculateGridPointCount(gridSizeX, gridSizeY);
     log_info("Allocating memory for " << estimatedPoints << " calibration points");

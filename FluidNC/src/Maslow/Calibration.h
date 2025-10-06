@@ -102,6 +102,7 @@ public:
     int   calibrationGridSizeY           = 9;  // Number of calibration points in Y direction
     float calibration_grid_width_mm_X    = 2000;  // mm offset from the edge of the frame
     float calibration_grid_height_mm_Y   = 1000;  // mm offset from the edge of the frame
+    float calibrationGridSpacing         = 400;   // mm spacing between calibration points (used when grid size is 0 for auto-calculation)
     bool  calibrationInProgress;                  //Used to turn off regular movements during calibration
 
     //State machine variables
