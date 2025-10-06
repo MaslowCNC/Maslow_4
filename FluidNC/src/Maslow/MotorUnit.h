@@ -44,6 +44,8 @@ public:
 
     void setMmPerRevolution(double mmPerRevolution);
     double getMmPerRevolution();
+    void setDirectionInverted(bool inverted);
+    bool getDirectionInverted();
 
 private:
     int     _encoderAddress;
@@ -52,6 +54,7 @@ private:
     DCMotor motor;
     double  setpoint                           = 0.0;
     double  _mmPerRevolution                   = 43.975;  //If the amount of belt extended is too long, this number needs to be bigger
+    bool    _directionInverted                 = false;  //If true, motor runs in opposite direction
     int     _stallThreshold                    = 25;      //The number of times in a row needed to trigger a warning
     int     _stallCurrent                      = 27;      //The current threshold needed to count
     int     _stallCount                        = 0;

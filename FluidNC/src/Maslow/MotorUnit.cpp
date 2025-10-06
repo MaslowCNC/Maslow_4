@@ -152,7 +152,9 @@ double MotorUnit::getPositionError() {
 double MotorUnit::recomputePID() {
     _commandPWM = positionPID.getOutput(getPosition(), setpoint);
 
-    motor.runAtPWM(_commandPWM);
+    // Apply direction inversion if configured
+    double pwm = _directionInverted ? -_commandPWM : _commandPWM;
+    motor.runAtPWM(pwm);
 
     return _commandPWM;
 }
@@ -175,7 +177,11 @@ bool MotorUnit::comply() {
     //If the belt is moving out, let's keep it moving out
     if (distMoved > .1) {  //EXPERIMENTAL
 
-        motor.forward(amtToMove);
+        if (_directionInverted) {
+            motor.backward(amtToMove);
+        } else {
+            motor.forward(amtToMove);
+        }
 
         if (amtToMove < 100)
             amtToMove = 100;
@@ -187,7 +193,11 @@ bool MotorUnit::comply() {
     //Finally if the belt is not moving we want to spool things down
     else {
         amtToMove = amtToMove / 1.25;
-        motor.forward(amtToMove);
+        if (_directionInverted) {
+            motor.backward(amtToMove);
+        } else {
+            motor.forward(amtToMove);
+        }
     }
 
     _commandPWM  = amtToMove;  //update actual motor power, so the get motor power isn't lying to us
@@ -222,8 +232,13 @@ bool MotorUnit::pull_tight(int currentThreshold) {
         retract_speed = min(retract_speed + 1, 1023);
     }
 
-    motor.backward(retract_speed);
-    _commandPWM = -retract_speed;  //This is only used for the getPWM function. There's got to be a tidier way to do this.
+    if (_directionInverted) {
+        motor.forward(retract_speed);
+        _commandPWM = retract_speed;  //This is only used for the getPWM function. There's got to be a tidier way to do this.
+    } else {
+        motor.backward(retract_speed);
+        _commandPWM = -retract_speed;  //This is only used for the getPWM function. There's got to be a tidier way to do this.
+    }
 
     //When taught
     int currentMeasurement = motor.readCurrent();
@@ -329,18 +344,30 @@ bool MotorUnit::onTarget(double precision) {
 //Runs the motor to extend at full speed
 void MotorUnit::decompressBelt() {
     int decompressSpeed = 800;
-    motor.forward(decompressSpeed);
+    if (_directionInverted) {
+        motor.backward(decompressSpeed);
+    } else {
+        motor.forward(decompressSpeed);
+    }
     _commandPWM = decompressSpeed;
 }
 
 //Runs the motor at full speed out
 void MotorUnit::fullOut() {
-    motor.fullOut();
+    if (_directionInverted) {
+        motor.fullIn();
+    } else {
+        motor.fullOut();
+    }
     _commandPWM = 1023;
 }
 //Runs the motor at full speed in
 void MotorUnit::fullIn() {
-    motor.fullIn();
+    if (_directionInverted) {
+        motor.fullOut();
+    } else {
+        motor.fullIn();
+    }
     _commandPWM = 1023;
 }
 
@@ -368,4 +395,14 @@ void MotorUnit::setMmPerRevolution(double mmPerRevolution) {
 // Gets the mm per revolution value
 double MotorUnit::getMmPerRevolution() {
     return _mmPerRevolution;
+}
+
+// Sets the direction inverted flag
+void MotorUnit::setDirectionInverted(bool inverted) {
+    _directionInverted = inverted;
+}
+
+// Gets the direction inverted flag
+bool MotorUnit::getDirectionInverted() {
+    return _directionInverted;
 }
