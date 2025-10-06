@@ -1,0 +1,87 @@
+name: Assign Issue Author to PR
+
+on:
+  pull_request:
+    types: [opened]
+
+jobs:
+  assign-issue-author:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Assign issue author to PR
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.USER_GITHUB_TOKEN }}
+          script: |
+            const pr = context.payload.pull_request;
+            const prBody = pr.body || '';
+            
+            console.log('PR #' + pr.number + ' opened by @' + pr.user.login);
+            console.log('PR body:', prBody);
+            
+            // Look for issue references in the PR body
+            // Matches patterns like: #123, fixes #123, closes #123, resolves #123, etc.
+            const issuePatterns = [
+              /(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)/gi,
+              /(?:^|\s)#(\d+)(?:\s|$)/g
+            ];
+            
+            const issueNumbers = new Set();
+            
+            for (const pattern of issuePatterns) {
+              let match;
+              while ((match = pattern.exec(prBody)) !== null) {
+                issueNumbers.add(match[1]);
+              }
+            }
+            
+            if (issueNumbers.size === 0) {
+              console.log('No issue references found in PR body');
+              return;
+            }
+            
+            console.log('Found issue references:', Array.from(issueNumbers));
+            
+            // Get the first referenced issue to find its author
+            const issueNumber = Array.from(issueNumbers)[0];
+            
+            try {
+              const { data: issue } = await github.rest.issues.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: parseInt(issueNumber)
+              });
+              
+              const issueAuthor = issue.user.login;
+              console.log('Issue #' + issueNumber + ' was created by @' + issueAuthor);
+              
+              // Check if the issue author is already assigned to the PR
+              const currentAssignees = pr.assignees.map(a => a.login);
+              if (currentAssignees.includes(issueAuthor)) {
+                console.log('@' + issueAuthor + ' is already assigned to the PR');
+                return;
+              }
+              
+              // Add the issue author as an assignee to the PR
+              await github.rest.issues.addAssignees({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                assignees: [issueAuthor]
+              });
+              
+              console.log('Successfully added @' + issueAuthor + ' as assignee to PR #' + pr.number);
+              
+              // Optionally add a comment to the PR
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                body: '✅ Automatically assigned @' + issueAuthor + ' (issue author) to this PR.'
+              });
+              
+            } catch (error) {
+              console.error('Error processing issue #' + issueNumber + ':', error.message);
+              // Don't fail the workflow if there's an error, just log it
+            }

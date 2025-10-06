@@ -72,6 +72,9 @@ public:
     int  getCurrentState();
     void printCurrentState();
     bool requestStateChange(int newState);
+    
+    // Set extended state variables (used when restoring from NVS)
+    void setExtendedState(bool tl, bool tr, bool bl, bool br);
 
     //Public Variables
     //hold

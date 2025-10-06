@@ -45,6 +45,14 @@ void Calibration::printCurrentState() {
     log_info("Current state: " << currentState);
 }
 
+// Set extended state variables (used when restoring from NVS)
+void Calibration::setExtendedState(bool tl, bool tr, bool bl, bool br) {
+    extendedTL = tl;
+    extendedTR = tr;
+    extendedBL = bl;
+    extendedBR = br;
+}
+
 //Request a state change to a new state. Returns true on success and false on failure (although return value is never used atm)
 bool Calibration::requestStateChange(int newState) {
     log_info("Requesting state change from " << stateNames[currentState].name << " to " << stateNames[newState].name);
@@ -109,8 +117,8 @@ bool Calibration::requestStateChange(int newState) {
             } else {
                 break;
             }
-        case TAKING_SLACK:  //We can enter taking slack from extended only
-            if (currentState == EXTENDEDOUT) {
+        case TAKING_SLACK:  //We can enter taking slack from extended or ready to cut
+            if (currentState == EXTENDEDOUT || currentState == READY_TO_CUT) {
                 currentState = TAKING_SLACK;
 
                 //Reset the axis targets at the beginning of taking slack
@@ -1537,7 +1545,6 @@ void Calibration::resetCalibrationState() {
     waypoint               = 0;
     pointCount             = 0;
     recomputeCountIndex    = 0;
-    recomputeCount         = 0;  // Reset recompute count to ensure consistent grid generation
     calibrationInProgress  = false;
     calibrationDataWaiting = -1;
 

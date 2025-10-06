@@ -451,3 +451,22 @@ int MotorUnit::getPwmChannel1() {
 int MotorUnit::getPwmChannel2() {
     return _pwmChannel2;
 }
+
+//sets the encoder position to a specific value (for restoring from NVS)
+void MotorUnit::setPosition(double position) {
+    // Convert position in mm to encoder counts
+    // Formula: encoderCounts = -(position_mm * 4096.0) / _mmPerRevolution
+    int32_t encoderCounts = (int32_t)(-(position * 4096.0) / _mmPerRevolution);
+
+    Maslow.I2CMux.setPort(_encoderAddress);
+    encoder.resetCumulativePosition(encoderCounts);
+
+    // Update our cached value
+    mostRecentCumulativeEncoderReading = encoderCounts;
+}
+
+//Gets the current raw encoder angle (0-4095)
+uint16_t MotorUnit::getRawEncoderAngle() {
+    Maslow.I2CMux.setPort(_encoderAddress);
+    return encoder.readAngle();
+}
