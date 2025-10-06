@@ -163,6 +163,9 @@ bool Calibration::requestStateChange(int newState) {
                     // Allocate memory for at least the first 6 waypoints (0-5)
                     // The full grid will be generated and allocated after waypoint 5 calibration calculation
                     allocateCalibrationMemory(6);
+                    // Set the first recompute point to waypoint 5
+                    recomputePoints[0] = 5;
+                    recomputeCountIndex = 0;
                 }
 
                 // If transitioning from CALIBRATION_COMPUTING after waypoint 5 (waypoint == 6), generate the calibration grid
