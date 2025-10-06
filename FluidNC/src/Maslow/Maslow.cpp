@@ -174,6 +174,31 @@ void Maslow_::update() {
             float brBeltLength = steps_to_mpos(get_axis_motor_steps(3), 3);  // BR from D axis (axis 3)
             float zPosition    = steps_to_mpos(get_axis_motor_steps(4), 4);  // Z from Z axis (axis 4)
 
+            // Debug logging for Z-axis moves without X/Y movement
+            static double lastLoggedTargetX = 0;
+            static double lastLoggedTargetY = 0;
+            static double lastLoggedTargetZ = 0;
+            static bool   zMoveInProgress   = false;
+            
+            // Detect Z-axis movement with minimal X/Y movement (threshold 0.1mm)
+            double xyMovement = sqrt((targetX - lastLoggedTargetX) * (targetX - lastLoggedTargetX) + 
+                                    (targetY - lastLoggedTargetY) * (targetY - lastLoggedTargetY));
+            double zMovement = abs(zPosition - lastLoggedTargetZ);
+            
+            if (zMovement > 0.1 && xyMovement < 0.1) {
+                if (!zMoveInProgress) {
+                    log_info("Z-axis move START: Z=" << zPosition << " (X=" << targetX << ", Y=" << targetY << ")");
+                    zMoveInProgress = true;
+                }
+            } else if (zMoveInProgress && zMovement < 0.01) {
+                log_info("Z-axis move STOP: Z=" << zPosition << " (X=" << targetX << ", Y=" << targetY << ")");
+                zMoveInProgress = false;
+            }
+            
+            lastLoggedTargetX = targetX;
+            lastLoggedTargetY = targetY;
+            lastLoggedTargetZ = zPosition;
+
             // Set individual belt targets using the computed positions
             axisTL.setTarget(tlBeltLength);
             axisTR.setTarget(trBeltLength);
@@ -299,11 +324,10 @@ bool Maslow_::updateEncoderPositions() {
             encoderFailTimer      = millis();
         }
         
-        // Additional safety check: if all encoders are stale simultaneously, trigger emergency stop
+        // Additional safety check: if all encoders are stale simultaneously, log warning
         // This catches the case where encoders are reading but returning frozen values
         if (axisTL.isEncoderStale() && axisTR.isEncoderStale() && axisBL.isEncoderStale() && axisBR.isEncoderStale()) {
-            log_error("All encoders stale - emergency stop to prevent belt spooling");
-            Maslow.panic();
+            log_warn("All encoders stale - potential belt spooling risk");
         }
     }
 
