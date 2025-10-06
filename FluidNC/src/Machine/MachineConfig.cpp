@@ -117,49 +117,49 @@ namespace Machine {
         handler.item(M + "_spoilboardThickness", _tempSpoilboardThickness, 0.0, 50.0);
         handler.item(M + "_workThickness", _tempWorkThickness, 0.0, 50.0);
 
-        // Motor configuration parameters - TL (Top-Left) motor
-        handler.item(M + "_motor_tl_forward_pin", Maslow.tlMotorConfig.forwardPin, 0, 50);
-        handler.item(M + "_motor_tl_backward_pin", Maslow.tlMotorConfig.backwardPin, 0, 50);
-        handler.item(M + "_motor_tl_readback_pin", Maslow.tlMotorConfig.readbackPin, 0, 50);
-        handler.item(M + "_motor_tl_encoder_address", Maslow.tlMotorConfig.encoderAddress, 0, 3);
-        handler.item(M + "_motor_tl_pwm_channel_1", Maslow.tlMotorConfig.pwmChannel1, 0, 7);
-        handler.item(M + "_motor_tl_pwm_channel_2", Maslow.tlMotorConfig.pwmChannel2, 0, 7);
-        handler.item(M + "_motor_tl_mm_per_revolution", Maslow.tlMotorConfig.mmPerRevolution, 1.0f, 200.0f);
-        handler.item(M + "_motor_tl_direction_inverted", Maslow.tlMotorConfig.directionInverted);
-        handler.item((M + "_motor_tl_encoder_type").c_str(), Maslow.tlMotorConfig.encoderType);
+        // Motor configuration parameters - A axis (Top-Left)
+        handler.item(M + "_motor_a_forward_pin", Maslow.aMotorConfig.forwardPin, 0, 50);
+        handler.item(M + "_motor_a_backward_pin", Maslow.aMotorConfig.backwardPin, 0, 50);
+        handler.item(M + "_motor_a_readback_pin", Maslow.aMotorConfig.readbackPin, 0, 50);
+        handler.item(M + "_motor_a_encoder_address", Maslow.aMotorConfig.encoderAddress, 0, 3);
+        handler.item(M + "_motor_a_pwm_channel_1", Maslow.aMotorConfig.pwmChannel1, 0, 7);
+        handler.item(M + "_motor_a_pwm_channel_2", Maslow.aMotorConfig.pwmChannel2, 0, 7);
+        handler.item(M + "_motor_a_mm_per_revolution", Maslow.aMotorConfig.mmPerRevolution, 1.0f, 200.0f);
+        handler.item(M + "_motor_a_direction_inverted", Maslow.aMotorConfig.directionInverted);
+        handler.item((M + "_motor_a_encoder_type").c_str(), Maslow.aMotorConfig.encoderType);
 
-        // Motor configuration parameters - TR (Top-Right) motor
-        handler.item(M + "_motor_tr_forward_pin", Maslow.trMotorConfig.forwardPin, 0, 50);
-        handler.item(M + "_motor_tr_backward_pin", Maslow.trMotorConfig.backwardPin, 0, 50);
-        handler.item(M + "_motor_tr_readback_pin", Maslow.trMotorConfig.readbackPin, 0, 50);
-        handler.item(M + "_motor_tr_encoder_address", Maslow.trMotorConfig.encoderAddress, 0, 3);
-        handler.item(M + "_motor_tr_pwm_channel_1", Maslow.trMotorConfig.pwmChannel1, 0, 7);
-        handler.item(M + "_motor_tr_pwm_channel_2", Maslow.trMotorConfig.pwmChannel2, 0, 7);
-        handler.item(M + "_motor_tr_mm_per_revolution", Maslow.trMotorConfig.mmPerRevolution, 1.0f, 200.0f);
-        handler.item(M + "_motor_tr_direction_inverted", Maslow.trMotorConfig.directionInverted);
-        handler.item((M + "_motor_tr_encoder_type").c_str(), Maslow.trMotorConfig.encoderType);
+        // Motor configuration parameters - B axis (Top-Right)
+        handler.item(M + "_motor_b_forward_pin", Maslow.bMotorConfig.forwardPin, 0, 50);
+        handler.item(M + "_motor_b_backward_pin", Maslow.bMotorConfig.backwardPin, 0, 50);
+        handler.item(M + "_motor_b_readback_pin", Maslow.bMotorConfig.readbackPin, 0, 50);
+        handler.item(M + "_motor_b_encoder_address", Maslow.bMotorConfig.encoderAddress, 0, 3);
+        handler.item(M + "_motor_b_pwm_channel_1", Maslow.bMotorConfig.pwmChannel1, 0, 7);
+        handler.item(M + "_motor_b_pwm_channel_2", Maslow.bMotorConfig.pwmChannel2, 0, 7);
+        handler.item(M + "_motor_b_mm_per_revolution", Maslow.bMotorConfig.mmPerRevolution, 1.0f, 200.0f);
+        handler.item(M + "_motor_b_direction_inverted", Maslow.bMotorConfig.directionInverted);
+        handler.item((M + "_motor_b_encoder_type").c_str(), Maslow.bMotorConfig.encoderType);
 
-        // Motor configuration parameters - BL (Bottom-Left) motor
-        handler.item(M + "_motor_bl_forward_pin", Maslow.blMotorConfig.forwardPin, 0, 50);
-        handler.item(M + "_motor_bl_backward_pin", Maslow.blMotorConfig.backwardPin, 0, 50);
-        handler.item(M + "_motor_bl_readback_pin", Maslow.blMotorConfig.readbackPin, 0, 50);
-        handler.item(M + "_motor_bl_encoder_address", Maslow.blMotorConfig.encoderAddress, 0, 3);
-        handler.item(M + "_motor_bl_pwm_channel_1", Maslow.blMotorConfig.pwmChannel1, 0, 7);
-        handler.item(M + "_motor_bl_pwm_channel_2", Maslow.blMotorConfig.pwmChannel2, 0, 7);
-        handler.item(M + "_motor_bl_mm_per_revolution", Maslow.blMotorConfig.mmPerRevolution, 1.0f, 200.0f);
-        handler.item(M + "_motor_bl_direction_inverted", Maslow.blMotorConfig.directionInverted);
-        handler.item((M + "_motor_bl_encoder_type").c_str(), Maslow.blMotorConfig.encoderType);
+        // Motor configuration parameters - C axis (Bottom-Left)
+        handler.item(M + "_motor_c_forward_pin", Maslow.cMotorConfig.forwardPin, 0, 50);
+        handler.item(M + "_motor_c_backward_pin", Maslow.cMotorConfig.backwardPin, 0, 50);
+        handler.item(M + "_motor_c_readback_pin", Maslow.cMotorConfig.readbackPin, 0, 50);
+        handler.item(M + "_motor_c_encoder_address", Maslow.cMotorConfig.encoderAddress, 0, 3);
+        handler.item(M + "_motor_c_pwm_channel_1", Maslow.cMotorConfig.pwmChannel1, 0, 7);
+        handler.item(M + "_motor_c_pwm_channel_2", Maslow.cMotorConfig.pwmChannel2, 0, 7);
+        handler.item(M + "_motor_c_mm_per_revolution", Maslow.cMotorConfig.mmPerRevolution, 1.0f, 200.0f);
+        handler.item(M + "_motor_c_direction_inverted", Maslow.cMotorConfig.directionInverted);
+        handler.item((M + "_motor_c_encoder_type").c_str(), Maslow.cMotorConfig.encoderType);
 
-        // Motor configuration parameters - BR (Bottom-Right) motor
-        handler.item(M + "_motor_br_forward_pin", Maslow.brMotorConfig.forwardPin, 0, 50);
-        handler.item(M + "_motor_br_backward_pin", Maslow.brMotorConfig.backwardPin, 0, 50);
-        handler.item(M + "_motor_br_readback_pin", Maslow.brMotorConfig.readbackPin, 0, 50);
-        handler.item(M + "_motor_br_encoder_address", Maslow.brMotorConfig.encoderAddress, 0, 3);
-        handler.item(M + "_motor_br_pwm_channel_1", Maslow.brMotorConfig.pwmChannel1, 0, 7);
-        handler.item(M + "_motor_br_pwm_channel_2", Maslow.brMotorConfig.pwmChannel2, 0, 7);
-        handler.item(M + "_motor_br_mm_per_revolution", Maslow.brMotorConfig.mmPerRevolution, 1.0f, 200.0f);
-        handler.item(M + "_motor_br_direction_inverted", Maslow.brMotorConfig.directionInverted);
-        handler.item((M + "_motor_br_encoder_type").c_str(), Maslow.brMotorConfig.encoderType);
+        // Motor configuration parameters - D axis (Bottom-Right)
+        handler.item(M + "_motor_d_forward_pin", Maslow.dMotorConfig.forwardPin, 0, 50);
+        handler.item(M + "_motor_d_backward_pin", Maslow.dMotorConfig.backwardPin, 0, 50);
+        handler.item(M + "_motor_d_readback_pin", Maslow.dMotorConfig.readbackPin, 0, 50);
+        handler.item(M + "_motor_d_encoder_address", Maslow.dMotorConfig.encoderAddress, 0, 3);
+        handler.item(M + "_motor_d_pwm_channel_1", Maslow.dMotorConfig.pwmChannel1, 0, 7);
+        handler.item(M + "_motor_d_pwm_channel_2", Maslow.dMotorConfig.pwmChannel2, 0, 7);
+        handler.item(M + "_motor_d_mm_per_revolution", Maslow.dMotorConfig.mmPerRevolution, 1.0f, 200.0f);
+        handler.item(M + "_motor_d_direction_inverted", Maslow.dMotorConfig.directionInverted);
+        handler.item((M + "_motor_d_encoder_type").c_str(), Maslow.dMotorConfig.encoderType);
     }
 
     void MachineConfig::afterParse() {

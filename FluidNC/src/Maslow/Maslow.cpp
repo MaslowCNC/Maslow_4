@@ -74,32 +74,32 @@ void Maslow_::begin(void (*sys_rt)()) {
     axisBR.begin(brIn1Pin, brIn2Pin, brADCPin, BREncoderLine, brIn1Channel, brIn2Channel);
     #else
     // Use configuration values
-    axisTL.begin(tlMotorConfig.forwardPin, tlMotorConfig.backwardPin, tlMotorConfig.readbackPin, 
-                 tlMotorConfig.encoderAddress, tlMotorConfig.pwmChannel1, tlMotorConfig.pwmChannel2);
-    axisTR.begin(trMotorConfig.forwardPin, trMotorConfig.backwardPin, trMotorConfig.readbackPin,
-                 trMotorConfig.encoderAddress, trMotorConfig.pwmChannel1, trMotorConfig.pwmChannel2);
-    axisBL.begin(blMotorConfig.forwardPin, blMotorConfig.backwardPin, blMotorConfig.readbackPin,
-                 blMotorConfig.encoderAddress, blMotorConfig.pwmChannel1, blMotorConfig.pwmChannel2);
-    axisBR.begin(brMotorConfig.forwardPin, brMotorConfig.backwardPin, brMotorConfig.readbackPin,
-                 brMotorConfig.encoderAddress, brMotorConfig.pwmChannel1, brMotorConfig.pwmChannel2);
+    axisTL.begin(aMotorConfig.forwardPin, aMotorConfig.backwardPin, aMotorConfig.readbackPin, 
+                 aMotorConfig.encoderAddress, aMotorConfig.pwmChannel1, aMotorConfig.pwmChannel2);
+    axisTR.begin(bMotorConfig.forwardPin, bMotorConfig.backwardPin, bMotorConfig.readbackPin,
+                 bMotorConfig.encoderAddress, bMotorConfig.pwmChannel1, bMotorConfig.pwmChannel2);
+    axisBL.begin(cMotorConfig.forwardPin, cMotorConfig.backwardPin, cMotorConfig.readbackPin,
+                 cMotorConfig.encoderAddress, cMotorConfig.pwmChannel1, cMotorConfig.pwmChannel2);
+    axisBR.begin(dMotorConfig.forwardPin, dMotorConfig.backwardPin, dMotorConfig.readbackPin,
+                 dMotorConfig.encoderAddress, dMotorConfig.pwmChannel1, dMotorConfig.pwmChannel2);
     #endif
 
     // Apply motor configuration parameters
-    axisTL.setMmPerRevolution(tlMotorConfig.mmPerRevolution);
-    axisTL.setDirectionInverted(tlMotorConfig.directionInverted);
-    axisTL.setEncoderType(String(tlMotorConfig.encoderType.c_str()));
+    axisTL.setMmPerRevolution(aMotorConfig.mmPerRevolution);
+    axisTL.setDirectionInverted(aMotorConfig.directionInverted);
+    axisTL.setEncoderType(String(aMotorConfig.encoderType.c_str()));
 
-    axisTR.setMmPerRevolution(trMotorConfig.mmPerRevolution);
-    axisTR.setDirectionInverted(trMotorConfig.directionInverted);
-    axisTR.setEncoderType(String(trMotorConfig.encoderType.c_str()));
+    axisTR.setMmPerRevolution(bMotorConfig.mmPerRevolution);
+    axisTR.setDirectionInverted(bMotorConfig.directionInverted);
+    axisTR.setEncoderType(String(bMotorConfig.encoderType.c_str()));
 
-    axisBL.setMmPerRevolution(blMotorConfig.mmPerRevolution);
-    axisBL.setDirectionInverted(blMotorConfig.directionInverted);
-    axisBL.setEncoderType(String(blMotorConfig.encoderType.c_str()));
+    axisBL.setMmPerRevolution(cMotorConfig.mmPerRevolution);
+    axisBL.setDirectionInverted(cMotorConfig.directionInverted);
+    axisBL.setEncoderType(String(cMotorConfig.encoderType.c_str()));
 
-    axisBR.setMmPerRevolution(brMotorConfig.mmPerRevolution);
-    axisBR.setDirectionInverted(brMotorConfig.directionInverted);
-    axisBR.setEncoderType(String(brMotorConfig.encoderType.c_str()));
+    axisBR.setMmPerRevolution(dMotorConfig.mmPerRevolution);
+    axisBR.setDirectionInverted(dMotorConfig.directionInverted);
+    axisBR.setEncoderType(String(dMotorConfig.encoderType.c_str()));
 
     calibration.axisBLHomed = false;
     calibration.axisBRHomed = false;
