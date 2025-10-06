@@ -17,6 +17,11 @@
 
 void MotorUnit::begin(int forwardPin, int backwardPin, int readbackPin, int encoderAddress, int channel1, int channel2) {
     _encoderAddress = encoderAddress;
+    _forwardPin     = forwardPin;
+    _backwardPin    = backwardPin;
+    _readbackPin    = readbackPin;
+    _pwmChannel1    = channel1;
+    _pwmChannel2    = channel2;
 
     String encAddrLabel = Maslow.axis_id_to_label(_encoderAddress);
 
@@ -415,4 +420,34 @@ void MotorUnit::setEncoderType(String encoderType) {
 // Gets the encoder type
 String MotorUnit::getEncoderType() {
     return _encoderType;
+}
+
+// Gets the forward pin
+int MotorUnit::getForwardPin() {
+    return _forwardPin;
+}
+
+// Gets the backward pin
+int MotorUnit::getBackwardPin() {
+    return _backwardPin;
+}
+
+// Gets the readback pin
+int MotorUnit::getReadbackPin() {
+    return _readbackPin;
+}
+
+// Gets the encoder address
+int MotorUnit::getEncoderAddress() {
+    return _encoderAddress;
+}
+
+// Gets PWM channel 1
+int MotorUnit::getPwmChannel1() {
+    return _pwmChannel1;
+}
+
+// Gets PWM channel 2
+int MotorUnit::getPwmChannel2() {
+    return _pwmChannel2;
 }

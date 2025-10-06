@@ -48,6 +48,14 @@ public:
     bool getDirectionInverted();
     void setEncoderType(String encoderType);
     String getEncoderType();
+    
+    // Pin configuration getters
+    int getForwardPin();
+    int getBackwardPin();
+    int getReadbackPin();
+    int getEncoderAddress();
+    int getPwmChannel1();
+    int getPwmChannel2();
 
 private:
     int     _encoderAddress;
@@ -58,6 +66,13 @@ private:
     double  _mmPerRevolution                   = 43.975;  //If the amount of belt extended is too long, this number needs to be bigger
     bool    _directionInverted                 = false;  //If true, motor runs in opposite direction
     String  _encoderType                       = "AS5600";  //Encoder type, currently only AS5600 is supported
+    
+    // Pin configurations
+    int     _forwardPin    = -1;
+    int     _backwardPin   = -1;
+    int     _readbackPin   = -1;
+    int     _pwmChannel1   = -1;
+    int     _pwmChannel2   = -1;
     int     _stallThreshold                    = 25;      //The number of times in a row needed to trigger a warning
     int     _stallCurrent                      = 27;      //The current threshold needed to count
     int     _stallCount                        = 0;
