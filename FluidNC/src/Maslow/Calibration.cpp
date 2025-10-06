@@ -1355,6 +1355,12 @@ bool Calibration::generate_calibration_grid() {
         log_info("Auto-calculated gridSizeY from spacing: " << gridSizeY << " points (" << calibrationGridSpacing << "mm spacing)");
     }
 
+    // Final validation: ensure we have valid grid sizes
+    if (gridSizeX < 3 || gridSizeY < 3) {
+        log_error("Invalid grid size configuration: gridSizeX=" << gridSizeX << ", gridSizeY=" << gridSizeY << " (minimum 3 required)");
+        return false;
+    }
+
     // Calculate the number of points needed and allocate memory accordingly
     int estimatedPoints = calculateGridPointCount(gridSizeX, gridSizeY);
     log_info("Allocating memory for " << estimatedPoints << " calibration points");
