@@ -42,6 +42,9 @@ public:
     void   update();
     bool   onTarget(double precision);
 
+    void setMmPerRevolution(double mmPerRevolution);
+    double getMmPerRevolution();
+
 private:
     int     _encoderAddress;
     AS5600  encoder;

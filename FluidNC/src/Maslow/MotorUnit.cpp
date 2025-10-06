@@ -359,3 +359,13 @@ void MotorUnit::zero() {
     Maslow.I2CMux.setPort(_encoderAddress);
     encoder.resetCumulativePosition();
 }
+
+// Sets the mm per revolution value
+void MotorUnit::setMmPerRevolution(double mmPerRevolution) {
+    _mmPerRevolution = mmPerRevolution;
+}
+
+// Gets the mm per revolution value
+double MotorUnit::getMmPerRevolution() {
+    return _mmPerRevolution;
+}
