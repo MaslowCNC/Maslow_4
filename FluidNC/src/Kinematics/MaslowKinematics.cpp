@@ -300,8 +300,8 @@ namespace Kinematics {
         float b = _tlY - y;  // Y dist from corner to router center
         // When fixedZ is true, don't use current Z position - only use fixed anchor Z values
         float effectiveZ = _fixedZ ? 0.0f : z;
-        float c =
-            0.0f - (effectiveZ + _tlZ + _spoilboardThickness + _workThickness);  // Z dist from corner to router center (includes material thickness)
+        float c          = 0.0f - (effectiveZ + _tlZ + _spoilboardThickness +
+                          _workThickness);  // Z dist from corner to router center (includes material thickness)
 
         float XYlength = sqrt(a * a + b * b);  // Get the distance in the XY plane from the corner to the router center
         float XYBeltLength =
@@ -319,8 +319,8 @@ namespace Kinematics {
         float b = _trY - y;
         // When fixedZ is true, don't use current Z position - only use fixed anchor Z values
         float effectiveZ = _fixedZ ? 0.0f : z;
-        float c =
-            0.0f - (effectiveZ + _trZ + _spoilboardThickness + _workThickness);  // Z dist from corner to router center (includes material thickness)
+        float c          = 0.0f - (effectiveZ + _trZ + _spoilboardThickness +
+                          _workThickness);  // Z dist from corner to router center (includes material thickness)
 
         float XYlength = sqrt(a * a + b * b);  // Get the distance in the XY plane from the corner to the router center
         float XYBeltLength =
@@ -338,8 +338,8 @@ namespace Kinematics {
         float b = _blY - y;  // Y dist from corner to router center
         // When fixedZ is true, don't use current Z position - only use fixed anchor Z values
         float effectiveZ = _fixedZ ? 0.0f : z;
-        float c =
-            0.0f - (effectiveZ + _blZ + _spoilboardThickness + _workThickness);  // Z dist from corner to router center (includes material thickness)
+        float c          = 0.0f - (effectiveZ + _blZ + _spoilboardThickness +
+                          _workThickness);  // Z dist from corner to router center (includes material thickness)
 
         float XYlength = sqrt(a * a + b * b);  // Get the distance in the XY plane from the corner to the router center
         float XYBeltLength =
@@ -357,8 +357,8 @@ namespace Kinematics {
         float b = _brY - y;
         // When fixedZ is true, don't use current Z position - only use fixed anchor Z values
         float effectiveZ = _fixedZ ? 0.0f : z;
-        float c =
-            0.0f - (effectiveZ + _brZ + _spoilboardThickness + _workThickness);  // Z dist from corner to router center (includes material thickness)
+        float c          = 0.0f - (effectiveZ + _brZ + _spoilboardThickness +
+                          _workThickness);  // Z dist from corner to router center (includes material thickness)
 
         float XYlength = sqrt(a * a + b * b);  // Get the distance in the XY plane from the corner to the router center
         float XYBeltLength =
@@ -477,13 +477,17 @@ namespace Kinematics {
     }
 
     void MaslowKinematics::setSpoilboardThickness(float thickness) {
-        _spoilboardThickness = thickness;
-        log_info("Spoilboard thickness set to " << thickness << " mm");
+        if (_spoilboardThickness != thickness) {
+            _spoilboardThickness = thickness;
+            log_info("Spoilboard thickness: " << thickness << "mm");
+        }
     }
 
     void MaslowKinematics::setWorkThickness(float thickness) {
-        _workThickness = thickness;
-        log_info("Work thickness set to " << thickness << " mm");
+        if (_workThickness != thickness) {
+            _workThickness = thickness;
+            log_info("Work thickness: " << thickness << "mm");
+        }
     }
 
     void MaslowKinematics::validate() {
