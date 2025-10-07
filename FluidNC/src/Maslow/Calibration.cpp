@@ -168,6 +168,36 @@ bool Calibration::requestStateChange(int newState) {
                     calibrationDirection  = UP;
                     measurementInProgress = true;
 
+                    // Auto-calculate calibration grid parameters if any are set to 0
+                    // Changed from AND logic to OR logic as per issue requirement
+                    auto kinematics = getKinematics();
+                    if (kinematics && (calibration_grid_width_mm_X == 0 || calibration_grid_height_mm_Y == 0 || calibrationGridSize == 0)) {
+                        // Get frame dimensions from anchor points
+                        float frameWidth  = kinematics->getBrX() - kinematics->getBlX();
+                        float frameHeight = kinematics->getTlY() - kinematics->getBlY();
+
+                        // Auto-calculate all four parameters based on frame dimensions
+                        // Use 80% of frame dimensions for safety margin
+                        calibration_grid_width_mm_X  = frameWidth * 0.8f;
+                        calibration_grid_height_mm_Y = frameHeight * 0.8f;
+
+                        // Auto-calculate grid size based on frame dimensions
+                        // Use 9x9 for large frames, 7x7 for medium, 5x5 for small, 3x3 for very small
+                        if (frameWidth > 2500 || frameHeight > 2000) {
+                            calibrationGridSize = 9;
+                        } else if (frameWidth > 1800 || frameHeight > 1400) {
+                            calibrationGridSize = 7;
+                        } else if (frameWidth > 1200 || frameHeight > 900) {
+                            calibrationGridSize = 5;
+                        } else {
+                            calibrationGridSize = 3;
+                        }
+
+                        log_info("Auto-calculated calibration grid: width=" << calibration_grid_width_mm_X
+                                                                            << "mm, height=" << calibration_grid_height_mm_Y
+                                                                            << "mm, size=" << calibrationGridSize);
+                    }
+
                     if (!generate_calibration_grid()) {  //Fail out if the grid cannot be generated
                         return false;
                     }
