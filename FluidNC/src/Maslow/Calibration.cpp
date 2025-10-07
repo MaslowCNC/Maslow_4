@@ -1561,7 +1561,9 @@ bool Calibration::generate_calibration_grid() {
 
     // Step 2: Now handle grid sizes
     // Use separate X and Y grid sizes, fall back to single gridSize for backward compatibility
-    int gridSizeX, gridSizeY;
+    // Initialize to safe defaults first
+    int gridSizeX = 9;
+    int gridSizeY = 9;
 
     if (autoCalculateFromGeometry) {
         // Auto-calculate grid sizes from dimensions and spacing
@@ -1575,9 +1577,8 @@ bool Calibration::generate_calibration_grid() {
             if (gridSizeX > 99) {
                 gridSizeX = 99;
             }
-            log_info("Auto-calculated gridSizeX from spacing: " << gridSizeX << " points (" << calibrationGridSpacing << "mm spacing)");
+            log_info("Auto-calculated gridSizeX: " << gridSizeX << " points");
         } else {
-            gridSizeX = 9;  // Default fallback
             log_warn("Failed to auto-calculate gridSizeX, using default: " << gridSizeX);
         }
 
@@ -1591,9 +1592,8 @@ bool Calibration::generate_calibration_grid() {
             if (gridSizeY > 99) {
                 gridSizeY = 99;
             }
-            log_info("Auto-calculated gridSizeY from spacing: " << gridSizeY << " points (" << calibrationGridSpacing << "mm spacing)");
+            log_info("Auto-calculated gridSizeY: " << gridSizeY << " points");
         } else {
-            gridSizeY = 9;  // Default fallback
             log_warn("Failed to auto-calculate gridSizeY, using default: " << gridSizeY);
         }
     } else {
