@@ -1337,8 +1337,13 @@ bool Calibration::generate_calibration_grid() {
 
     // Check if any of the four parameters is 0 - if so, auto-calculate all four from geometry
     // Changed from AND logic to OR logic: if ANY parameter is 0, calculate ALL from geometry
-    bool autoCalculateFromGeometry =
-        (calibration_grid_width_mm_X == 0 || calibration_grid_height_mm_Y == 0 || calibrationGridSizeX == 0 || calibrationGridSizeY == 0);
+    // Copy to local variables first to ensure proper alignment and avoid potential access issues
+    float widthParam  = calibration_grid_width_mm_X;
+    float heightParam = calibration_grid_height_mm_Y;
+    int   sizeXParam  = calibrationGridSizeX;
+    int   sizeYParam  = calibrationGridSizeY;
+
+    bool autoCalculateFromGeometry = (widthParam == 0.0f || heightParam == 0.0f || sizeXParam == 0 || sizeYParam == 0);
 
     float gridWidth, gridHeight;
     float frameWidth, frameHeight;  // Declare here so they're available later
