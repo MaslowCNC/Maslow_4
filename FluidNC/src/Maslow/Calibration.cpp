@@ -117,8 +117,8 @@ bool Calibration::requestStateChange(int newState) {
             } else {
                 break;
             }
-        case TAKING_SLACK:  //We can enter taking slack from extended or ready to cut
-            if (currentState == EXTENDEDOUT || currentState == READY_TO_CUT) {
+        case TAKING_SLACK:  //We can enter taking slack from extended only
+            if (currentState == EXTENDEDOUT) {
                 currentState = TAKING_SLACK;
 
                 //Reset the axis targets at the beginning of taking slack
@@ -142,7 +142,8 @@ bool Calibration::requestStateChange(int newState) {
                 takeSlack = true;
 
                 //Alocate the memory to store the measurements in. This is used here because take slack will use the same memory as the calibration
-                allocateCalibrationMemory();
+                // Only need 1 measurement point for take slack
+                allocateCalibrationMemory(1);
                 success = true;
                 break;
             } else {
@@ -162,44 +163,56 @@ bool Calibration::requestStateChange(int newState) {
                 // Log the calibration orientation mode for debugging
                 log_info("Calibration starting in " << (orientation == VERTICAL ? "VERTICAL" : "HORIZONTAL") << " orientation mode");
 
-                //If we are at the first point we need to generate the grid before we can start
+                //If we are at the first point, initialize calibration state
                 if (waypoint == 0) {
                     // Initialize calibration loop state for fresh start
                     calibrationDirection  = UP;
                     measurementInProgress = true;
+                    // Allocate memory for at least the first 6 waypoints (0-5)
+                    // The full grid will be generated and allocated after waypoint 5 calibration calculation
+                    allocateCalibrationMemory(6);
+                    // Set pointCount to 6 for the initial waypoints (will be updated after grid generation)
+                    pointCount = 6;
+                    // Set the first recompute point to waypoint 5
+                    recomputePoints[0]  = 5;
+                    recomputeCountIndex = 0;
+                }
 
-                    // Auto-calculate calibration grid parameters if any are set to 0
-                    // Changed from AND logic to OR logic as per issue requirement
-                    auto kinematics = getKinematics();
-                    if (kinematics && (calibration_grid_width_mm_X == 0 || calibration_grid_height_mm_Y == 0 || calibrationGridSize == 0)) {
-                        // Get frame dimensions from anchor points
-                        float frameWidth  = kinematics->getBrX() - kinematics->getBlX();
-                        float frameHeight = kinematics->getTlY() - kinematics->getBlY();
+                // If at waypoint 6 and grid hasn't been generated yet (pointCount still 6), generate the calibration grid
+                // This ensures the grid uses the updated anchor positions from the first calibration calculation
+                // Only generate once - not on subsequent CALIBRATION_COMPUTING cycles
+                if (waypoint == 6 && pointCount == 6) {
+                    log_info("Generating calibration grid after waypoint 5 calculation with updated anchor positions");
 
-                        // Auto-calculate all four parameters based on frame dimensions
-                        // Use 80% of frame dimensions for safety margin
-                        calibration_grid_width_mm_X  = frameWidth * 0.8f;
-                        calibration_grid_height_mm_Y = frameHeight * 0.8f;
-
-                        // Auto-calculate grid size based on frame dimensions
-                        // Use 9x9 for large frames, 7x7 for medium, 5x5 for small, 3x3 for very small
-                        if (frameWidth > 2500 || frameHeight > 2000) {
-                            calibrationGridSize = 9;
-                        } else if (frameWidth > 1800 || frameHeight > 1400) {
-                            calibrationGridSize = 7;
-                        } else if (frameWidth > 1200 || frameHeight > 900) {
-                            calibrationGridSize = 5;
-                        } else {
-                            calibrationGridSize = 3;
+                    // Save the calibration data from the first 6 waypoints before deallocation
+                    float savedCalibrationData[6][4];
+                    float savedCalibrationGrid[6][2];
+                    for (int i = 0; i < 6; i++) {
+                        for (int j = 0; j < 4; j++) {
+                            savedCalibrationData[i][j] = calibration_data[i][j];
                         }
-
-                        log_info("Auto-calculated calibration grid: width=" << calibration_grid_width_mm_X
-                                                                            << "mm, height=" << calibration_grid_height_mm_Y
-                                                                            << "mm, size=" << calibrationGridSize);
+                        for (int j = 0; j < 2; j++) {
+                            savedCalibrationGrid[i][j] = calibrationGrid[i][j];
+                        }
                     }
 
-                    if (!generate_calibration_grid()) {  //Fail out if the grid cannot be generated
+                    // Deallocate the initial 6-point allocation
+                    deallocateCalibrationMemory();
+
+                    // Generate the full grid which will allocate the correct amount
+                    if (!generate_calibration_grid()) {
+                        log_error("Failed to generate calibration grid after waypoint 5 calculation");
                         return false;
+                    }
+
+                    // Restore the calibration data from the first 6 waypoints
+                    for (int i = 0; i < 6; i++) {
+                        for (int j = 0; j < 4; j++) {
+                            calibration_data[i][j] = savedCalibrationData[i][j];
+                        }
+                        for (int j = 0; j < 2; j++) {
+                            calibrationGrid[i][j] = savedCalibrationGrid[i][j];
+                        }
                     }
                 }
                 Maslow.stop();
@@ -487,10 +500,10 @@ void Calibration::calibration_loop() {
 /*
 * This function is used to take up the slack in the belts and confirm that the calibration values are resonable
 * It is run when the "Apply Tension" button is pressed in the UI
-* It does this by retracting the two lower belts and taking a measurement. The machine's position is then calculated 
+* It does this by retracting the two lower belts and taking a measurement. The machine's position is then calculated
 * from the lenghts of the two upper belts. The lengths of the two lower belts are then compared to their expected calculated lengths
 * If the difference is beyond a threshold we know that the stored anchor point locations do not match the real dimensons and and error is thrown
-* Returns true when it is finished regardless of result. Otherwise returns false. 
+* Returns true when it is finished regardless of result. Otherwise returns false.
 */
 bool Calibration::takeSlackFunc() {
     static int takeSlackState = 0;  //0 -> Starting, 1-> Moving to (0,0), 2-> Taking a measurement. Where should this be defined correctly?
@@ -630,18 +643,18 @@ bool Calibration::computeXYfromLengths(double TL, double TR, float& x, float& y)
 /**
  * Takes one measurement and returns true when it's done. The result is stored in the passed array.
  * Each measurement is the raw belt length processed into XY plane coordinates.
- * 
+ *
  * The function handles two orientations: VERTICAL and HORIZONTAL.
- * 
+ *
  * In VERTICAL orientation:
  * - Pulls two bottom belts tight one after another based on the x-coordinate.
  * - Takes a measurement once both belts are tight and stores it in the calibration data array.
- * 
+ *
  * In HORIZONTAL orientation:
  * - For the first waypoint (waypoint == 0), pulls all 4 belts tight to ensure proper initial tension
  * - For subsequent waypoints, pulls belts tight based on the direction of the last move.
  * - Takes a measurement once both belts are tight and stores it in the calibration data array.
- * 
+ *
  * @param result The array to store the measurement result.
  * @param dir The direction of the last move (UP, DOWN, LEFT, RIGHT). This is used to decide which belts to tighten first
  * @param run The measurement run number at current waypoint (0-3, with first 2 discarded).
@@ -1034,6 +1047,9 @@ bool Calibration::take_measurement_avg_with_check(int waypoint, int dir) {
                         requestStateChange(EXTENDEDOUT);
                         return false;
                     }
+
+                    // Frame size adjusted - grid will be generated after waypoint 5 calibration calculation
+                    log_info("Frame size adjusted based on first measurement");
                 }
 
                 //Compute the current XY position from the top two belt measurements...needs to be redone because we've adjusted the frame size by here
@@ -1312,31 +1328,314 @@ bool Calibration::move_with_slack(double fromX, double fromY, double toX, double
 
 //The number of points high and wide  must be an odd number
 bool Calibration::generate_calibration_grid() {
-    //Allocate memory for the calibration grid
-    allocateCalibrationMemory();
-
-    float xSpacing = calibration_grid_width_mm_X / (calibrationGridSize - 1);
-    float ySpacing = calibration_grid_height_mm_Y / (calibrationGridSize - 1);
-
-    int numberOfCycles = 0;
-
-    switch (calibrationGridSize) {
-        case 3:
-            numberOfCycles = 1;  // 3x3 grid
-            break;
-        case 5:
-            numberOfCycles = 2;  // 5x5 grid
-            break;
-        case 7:
-            numberOfCycles = 3;  // 7x7 grid
-            break;
-        case 9:
-            numberOfCycles = 4;  // 9x9 grid
-            break;
-        default:
-            log_error("Invalid " + M + "_calibration_grid_size: " << calibrationGridSize);
-            return false;  // return false or handle error appropriately
+    // Calculate grid dimensions based on frame geometry to stay "in the green"
+    auto kinematics = getKinematics();
+    if (!kinematics) {
+        log_error("generate_calibration_grid: MaslowKinematics not available");
+        return false;
     }
+
+    // Check if any of the four parameters is 0 - if so, auto-calculate all four from geometry
+    // Changed from AND logic to OR logic: if ANY parameter is 0, calculate ALL from geometry
+    bool autoCalculateFromGeometry =
+        (calibration_grid_width_mm_X == 0 || calibration_grid_height_mm_Y == 0 || calibrationGridSizeX == 0 || calibrationGridSizeY == 0);
+
+    float gridWidth, gridHeight;
+    float frameWidth, frameHeight;  // Declare here so they're available later
+
+    if (autoCalculateFromGeometry) {
+        log_info("Auto-calculating calibration grid parameters from frame geometry (at least one parameter set to 0)");
+
+        // Step 1: Calculate grid dimensions from geometry
+        // Get anchor coordinates
+        float tlX = kinematics->getTlX();
+        float tlY = kinematics->getTlY();
+        float trX = kinematics->getTrX();
+        float trY = kinematics->getTrY();
+        float blX = kinematics->getBlX();
+        float blY = kinematics->getBlY();
+        float brX = kinematics->getBrX();
+        float brY = kinematics->getBrY();
+
+        // Get center point (already calculated in kinematics)
+        float centerX = kinematics->getCenterX();
+        float centerY = kinematics->getCenterY();
+
+        // Calculate direction vector from center to top-left anchor
+        float dirX      = tlX - centerX;
+        float dirY      = tlY - centerY;
+        float dirLength = sqrt(dirX * dirX + dirY * dirY);
+
+        // Normalize direction vector
+        dirX /= dirLength;
+        dirY /= dirLength;
+
+        // We need to find point A on the line from center to TL where angle BL-A-TR is 130 degrees
+        // Using binary search to find the point
+        const float targetAngleDeg = 130.0f;
+        const float targetAngleRad = targetAngleDeg * M_PI / 180.0f;
+
+        float minDist     = 0.0f;
+        float maxDist     = dirLength * 2.0f;  // Search up to 2x the distance to TL
+        float optimalDist = maxDist / 2.0f;
+
+        // Binary search for the point where angle is closest to 130 degrees
+        for (int iter = 0; iter < 30; iter++) {
+            float testDist = (minDist + maxDist) / 2.0f;
+            float testX    = centerX + dirX * testDist;
+            float testY    = centerY + dirY * testDist;
+
+            // Calculate vectors from test point to BL and TR
+            float toBLX = blX - testX;
+            float toBLY = blY - testY;
+            float toTRX = trX - testX;
+            float toTRY = trY - testY;
+
+            // Calculate angle between vectors using dot product
+            float lenBL = sqrt(toBLX * toBLX + toBLY * toBLY);
+            float lenTR = sqrt(toTRX * toTRX + toTRY * toTRY);
+
+            if (lenBL > 0 && lenTR > 0) {
+                float dotProduct = (toBLX * toTRX + toBLY * toTRY) / (lenBL * lenTR);
+                dotProduct       = constrain(dotProduct, -1.0f, 1.0f);  // Clamp to avoid numerical issues
+                float angle      = acos(dotProduct);
+
+                // Adjust search range
+                if (angle < targetAngleRad) {
+                    maxDist = testDist;
+                } else {
+                    minDist = testDist;
+                }
+
+                optimalDist = testDist;
+            }
+        }
+
+        // Point A is at optimalDist from center along the line to TL
+        float pointAX = centerX + dirX * optimalDist;
+        float pointAY = centerY + dirY * optimalDist;
+
+        // Point B is at 80% of the distance from center to point A
+        float pointBX = centerX + dirX * optimalDist * 0.8f;
+        float pointBY = centerY + dirY * optimalDist * 0.8f;
+
+        // Calculate grid dimensions as 2x the distance from B to center
+        float gridWidth  = 2.0f * fabs(pointBX - centerX);
+        float gridHeight = 2.0f * fabs(pointBY - centerY);
+
+        // Apply safety constraints
+        // 1. Maximum calibration area limits (7' wide × 3' high)
+        const float maxCalibrationWidth  = 7.0f * 12.0f * 25.4f;  // 7 feet = 84 inches = 2133.6mm
+        const float maxCalibrationHeight = 3.0f * 12.0f * 25.4f;  // 3 feet = 36 inches = 914.4mm
+
+        if (gridWidth > maxCalibrationWidth) {
+            gridWidth = maxCalibrationWidth;
+            log_info("Grid width limited to maximum: " << maxCalibrationWidth << "mm (7 feet)");
+        }
+        if (gridHeight > maxCalibrationHeight) {
+            gridHeight = maxCalibrationHeight;
+            log_info("Grid height limited to maximum: " << maxCalibrationHeight << "mm (3 feet)");
+        }
+
+        // 2. Grid must be at least 16" (406.4mm) smaller than frame in each dimension
+        //    to prevent sled (16" diameter) from hitting frame edges
+        const float sledDiameter = 406.4f;           // 16 inches in mm
+        float       frameWidth   = fabs(trX - tlX);  // Approximate frame width
+        float       frameHeight  = fabs(tlY - blY);  // Approximate frame height
+
+        float maxGridWidth  = frameWidth - sledDiameter;
+        float maxGridHeight = frameHeight - sledDiameter;
+
+        if (gridWidth > maxGridWidth) {
+            gridWidth = maxGridWidth;
+        }
+        if (gridHeight > maxGridHeight) {
+            gridHeight = maxGridHeight;
+        }
+
+        // 3. Ensure minimum grid dimensions to accommodate at least 3 points in each direction
+        //    For 3 points, we need at least 2 intervals, so minimum spacing should be reasonable
+        //    Minimum grid dimension = 50mm to ensure 3 points can be placed with 25mm spacing
+        const float minGridDimension = 50.0f;  // mm
+        if (gridWidth < minGridDimension) {
+            gridWidth = minGridDimension;
+        }
+        if (gridHeight < minGridDimension) {
+            gridHeight = minGridDimension;
+        }
+
+        // 4. Sanity check: Verify angle constraint at top of calibration area
+        //    Check that angle from TL anchor to point at (centerX, centerY + gridHeight/2) to TR anchor is < 140 degrees
+        //    If the angle is too large, reduce the grid height until it passes
+        const float maxTopAngleDeg           = 140.0f;
+        const float maxTopAngleRad           = maxTopAngleDeg * M_PI / 180.0f;
+        float       topAngleDeg              = 0.0f;
+        int         sanityCheckIterations    = 0;
+        const int   maxSanityCheckIterations = 20;
+
+        while (sanityCheckIterations < maxSanityCheckIterations) {
+            float yDistFromCenter = gridHeight / 2.0f;
+            float checkPointX     = centerX;
+            float checkPointY     = centerY + yDistFromCenter;
+
+            // Calculate vectors from check point to TL and TR anchors
+            float toTLX = tlX - checkPointX;
+            float toTLY = tlY - checkPointY;
+            float toTRX = trX - checkPointX;
+            float toTRY = trY - checkPointY;
+
+            // Calculate angle between vectors
+            float lenTL = sqrt(toTLX * toTLX + toTLY * toTLY);
+            float lenTR = sqrt(toTRX * toTRX + toTRY * toTRY);
+
+            if (lenTL > 0 && lenTR > 0) {
+                float dotProduct = (toTLX * toTRX + toTLY * toTRY) / (lenTL * lenTR);
+                dotProduct       = constrain(dotProduct, -1.0f, 1.0f);
+                float topAngle   = acos(dotProduct);
+                topAngleDeg      = topAngle * 180.0f / M_PI;
+
+                if (topAngleDeg < maxTopAngleDeg) {
+                    // Sanity check passed
+                    break;
+                }
+
+                // Sanity check failed - reduce grid height by 5%
+                float oldGridHeight = gridHeight;
+                gridHeight *= 0.95f;
+
+                // Check if we hit minimum
+                if (gridHeight < minGridDimension) {
+                    gridHeight = minGridDimension;
+                    log_warn("Grid height reduced to minimum (" << minGridDimension << "mm) but sanity check still fails");
+                    break;
+                }
+
+                if (sanityCheckIterations == 0) {
+                    log_info("Calibration area sanity check failed: angle at top = " << topAngleDeg << " degrees (>= " << maxTopAngleDeg
+                                                                                     << "), reducing grid height...");
+                }
+            } else {
+                break;
+            }
+
+            sanityCheckIterations++;
+        }
+
+        log_info("Calibration area sanity check: angle at top = " << topAngleDeg << " degrees (should be < " << maxTopAngleDeg << ")");
+
+        if (topAngleDeg >= maxTopAngleDeg) {
+            log_warn("Warning: Calibration area sanity check failed after " << sanityCheckIterations << " reduction attempts");
+        } else if (sanityCheckIterations > 0) {
+            log_info("Grid height reduced in " << sanityCheckIterations << " iterations to pass sanity check");
+        }
+    } else {
+        // User has provided all four parameters - use them directly
+        log_info("Using user-provided calibration grid parameters (all four parameters set to non-zero values)");
+        gridWidth  = calibration_grid_width_mm_X;
+        gridHeight = calibration_grid_height_mm_Y;
+
+        // Calculate frame dimensions for logging purposes
+        float tlX   = kinematics->getTlX();
+        float tlY   = kinematics->getTlY();
+        float brX   = kinematics->getBrX();
+        float blY   = kinematics->getBlY();
+        frameWidth  = fabs(brX - tlX);
+        frameHeight = fabs(tlY - blY);
+    }
+
+    // Store calculated or user-provided dimensions in internal variables
+    // This preserves the original YAML config values (e.g., 0.0 for auto-calculate)
+    _calculated_grid_width_mm  = gridWidth;
+    _calculated_grid_height_mm = gridHeight;
+
+    // Step 2: Now handle grid sizes
+    // Use separate X and Y grid sizes, fall back to single gridSize for backward compatibility
+    int gridSizeX, gridSizeY;
+
+    if (autoCalculateFromGeometry) {
+        // Auto-calculate grid sizes from dimensions and spacing
+        if (_calculated_grid_width_mm > 0 && calibrationGridSpacing > 0) {
+            gridSizeX = (int)(_calculated_grid_width_mm / calibrationGridSpacing) + 1;
+            // Ensure at least 3 points
+            if (gridSizeX < 3) {
+                gridSizeX = 3;
+            }
+            // Cap at 99 points
+            if (gridSizeX > 99) {
+                gridSizeX = 99;
+            }
+            log_info("Auto-calculated gridSizeX from spacing: " << gridSizeX << " points (" << calibrationGridSpacing << "mm spacing)");
+        } else {
+            gridSizeX = 9;  // Default fallback
+            log_warn("Failed to auto-calculate gridSizeX, using default: " << gridSizeX);
+        }
+
+        if (_calculated_grid_height_mm > 0 && calibrationGridSpacing > 0) {
+            gridSizeY = (int)(_calculated_grid_height_mm / calibrationGridSpacing) + 1;
+            // Ensure at least 3 points
+            if (gridSizeY < 3) {
+                gridSizeY = 3;
+            }
+            // Cap at 99 points
+            if (gridSizeY > 99) {
+                gridSizeY = 99;
+            }
+            log_info("Auto-calculated gridSizeY from spacing: " << gridSizeY << " points (" << calibrationGridSpacing << "mm spacing)");
+        } else {
+            gridSizeY = 9;  // Default fallback
+            log_warn("Failed to auto-calculate gridSizeY, using default: " << gridSizeY);
+        }
+    } else {
+        // Use user-provided grid sizes
+        gridSizeX = (calibrationGridSizeX > 0) ? calibrationGridSizeX : calibrationGridSize;
+        gridSizeY = (calibrationGridSizeY > 0) ? calibrationGridSizeY : calibrationGridSize;
+    }
+
+    // Final validation: ensure we have valid grid sizes
+    if (gridSizeX < 3 || gridSizeY < 3) {
+        log_error("Invalid grid size configuration: gridSizeX=" << gridSizeX << ", gridSizeY=" << gridSizeY << " (minimum 3 required)");
+        return false;
+    }
+
+    // Step 3: Calculate the number of points needed and allocate memory accordingly
+    int estimatedPoints = calculateGridPointCount(gridSizeX, gridSizeY);
+    log_info("Allocating memory for " << estimatedPoints << " calibration points");
+    allocateCalibrationMemory(estimatedPoints);
+
+    // Warn if calculated values are outside typical range (100-3000mm)
+    const float minTypicalDimension = 100.0f;   // mm
+    const float maxTypicalDimension = 3000.0f;  // mm
+    if (gridWidth < minTypicalDimension || gridWidth > maxTypicalDimension) {
+        log_warn("Calculated grid width (" << gridWidth << "mm) is outside typical range (100-3000mm)");
+    }
+    if (gridHeight < minTypicalDimension || gridHeight > maxTypicalDimension) {
+        log_warn("Calculated grid height (" << gridHeight << "mm) is outside typical range (100-3000mm)");
+    }
+
+    // Calculate calibration area and report details
+    float calibrationArea   = gridWidth * gridHeight;        // in mm²
+    float calibrationAreaM2 = calibrationArea / 1000000.0f;  // in m²
+
+    // gridSizeX and gridSizeY already calculated earlier
+    int totalPoints = gridSizeX * gridSizeY;
+
+    log_info("=== Calibration Grid Configuration ===");
+    log_info("Grid dimensions: " << gridWidth << "mm × " << gridHeight << "mm");
+    log_info("Calibration area: " << calibrationAreaM2 << " m² (" << calibrationArea << " mm²)");
+    log_info("Grid size: " << gridSizeX << "×" << gridSizeY << " = " << totalPoints << " points");
+    log_info("Frame dimensions: " << frameWidth << "mm × " << frameHeight << "mm");
+    log_info("Clearance from edges: " << (frameWidth - gridWidth) / 2.0f << "mm (width), " << (frameHeight - gridHeight) / 2.0f
+                                      << "mm (height)");
+
+    float xSpacing = _calculated_grid_width_mm / (gridSizeX - 1);
+    float ySpacing = _calculated_grid_height_mm / (gridSizeY - 1);
+
+    // Calculate number of cycles dynamically based on grid size
+    // For an NxM grid, we need (N-1)/2 cycles in X and (M-1)/2 cycles in Y
+    // Use the maximum to ensure we cover the full grid with the spiral pattern
+    int numberOfCyclesX = (gridSizeX - 1) / 2;
+    int numberOfCyclesY = (gridSizeY - 1) / 2;
+    int numberOfCycles  = max(numberOfCyclesX, numberOfCyclesY);
 
     pointCount         = 6;  //The first four points are computed dynamically
     recomputePoints[0] = 5;
@@ -1355,30 +1654,45 @@ bool Calibration::generate_calibration_grid() {
 
     recomputeCount = 1;
 
-    while (maxX <= numberOfCycles) {  //4 produces a 9x9 grid
-        while (currentX > -1 * maxX) {
-            calibrationGrid[pointCount][0] = currentX * xSpacing;
-            calibrationGrid[pointCount][1] = currentY * ySpacing;
-            pointCount++;
-            currentX--;
+    while (maxX <= numberOfCycles || maxY <= numberOfCycles) {
+        // Move left (decreasing X) - only if we haven't reached the X boundary
+        if (maxX <= numberOfCyclesX) {
+            while (currentX > -1 * maxX) {
+                calibrationGrid[pointCount][0] = currentX * xSpacing;
+                calibrationGrid[pointCount][1] = currentY * ySpacing;
+                pointCount++;
+                currentX--;
+            }
         }
-        while (currentY < maxY) {
-            calibrationGrid[pointCount][0] = currentX * xSpacing;
-            calibrationGrid[pointCount][1] = currentY * ySpacing;
-            pointCount++;
-            currentY++;
+
+        // Move up (increasing Y) - only if we haven't reached the Y boundary
+        if (maxY <= numberOfCyclesY) {
+            while (currentY < maxY) {
+                calibrationGrid[pointCount][0] = currentX * xSpacing;
+                calibrationGrid[pointCount][1] = currentY * ySpacing;
+                pointCount++;
+                currentY++;
+            }
         }
-        while (currentX < maxX) {
-            calibrationGrid[pointCount][0] = currentX * xSpacing;
-            calibrationGrid[pointCount][1] = currentY * ySpacing;
-            pointCount++;
-            currentX++;
+
+        // Move right (increasing X) - only if we haven't reached the X boundary
+        if (maxX <= numberOfCyclesX) {
+            while (currentX < maxX) {
+                calibrationGrid[pointCount][0] = currentX * xSpacing;
+                calibrationGrid[pointCount][1] = currentY * ySpacing;
+                pointCount++;
+                currentX++;
+            }
         }
-        while (currentY > -1 * maxY) {
-            calibrationGrid[pointCount][0] = currentX * xSpacing;
-            calibrationGrid[pointCount][1] = currentY * ySpacing;
-            pointCount++;
-            currentY--;
+
+        // Move down (decreasing Y) - only if we haven't reached the Y boundary
+        if (maxY <= numberOfCyclesY) {
+            while (currentY > -1 * maxY) {
+                calibrationGrid[pointCount][0] = currentX * xSpacing;
+                calibrationGrid[pointCount][1] = currentY * ySpacing;
+                pointCount++;
+                currentY--;
+            }
         }
 
         //Add the last point to the recompute list
@@ -1546,27 +1860,70 @@ int Calibration::get_direction(double x, double y, double targetX, double target
 }
 
 // Function to allocate memory for calibration arrays
-void Calibration::allocateCalibrationMemory() {
+// Function to calculate the number of points that will be in the calibration grid
+// This is used to allocate the right amount of memory before generating the grid
+int Calibration::calculateGridPointCount(int gridSizeX, int gridSizeY) {
+    // The grid starts with 6 fixed points (waypoints 0-5)
+    int count = 7;  // Points 0-5 plus the center point at index 6
+
+    // Calculate number of cycles dynamically based on grid size
+    int numberOfCyclesX = (gridSizeX - 1) / 2;
+    int numberOfCyclesY = (gridSizeY - 1) / 2;
+    int numberOfCycles  = max(numberOfCyclesX, numberOfCyclesY);
+
+    // Simulate the spiral pattern to count points
+    for (int cycle = 1; cycle <= numberOfCycles; cycle++) {
+        int maxX = cycle;
+        int maxY = cycle;
+
+        // Count points in each direction of the spiral
+        if (maxX <= numberOfCyclesX) {
+            count += maxX;  // Left movement
+            count += maxX;  // Right movement
+        }
+        if (maxY <= numberOfCyclesY) {
+            count += maxY;  // Up movement
+            count += maxY;  // Down movement
+        }
+        count++;  // The corner point at the end of each cycle
+    }
+
+    // Add the final two center points
+    count += 2;
+
+    return count;
+}
+
+// Function to allocate memory for calibration arrays based on actual grid size
+void Calibration::allocateCalibrationMemory(int numPoints) {
     if (calibrationGrid == nullptr) {  //Check to prevent realocating
-        calibrationGrid = new float[CALIBRATION_GRID_SIZE_MAX][2];
+        calibrationGrid = new float[numPoints][2];
     }
     if (calibration_data == nullptr) {
-        calibration_data = new float*[CALIBRATION_GRID_SIZE_MAX];
-        for (int i = 0; i < CALIBRATION_GRID_SIZE_MAX; ++i) {
+        calibration_data = new float*[numPoints];
+        for (int i = 0; i < numPoints; ++i) {
             calibration_data[i] = new float[4];
         }
     }
+    // Store the allocated size for later deallocation
+    allocatedPoints = numPoints;
+    pointCount      = 0;  // Will be populated during grid generation
 }
 
 // Function to deallocate memory for calibration arrays
 void Calibration::deallocateCalibrationMemory() {
-    delete[] calibrationGrid;
-    calibrationGrid = nullptr;
-    for (int i = 0; i < CALIBRATION_GRID_SIZE_MAX; ++i) {
-        delete[] calibration_data[i];
+    if (calibrationGrid != nullptr) {
+        delete[] calibrationGrid;
+        calibrationGrid = nullptr;
     }
-    delete[] calibration_data;
-    calibration_data = nullptr;
+    if (calibration_data != nullptr) {
+        for (int i = 0; i < allocatedPoints; ++i) {
+            delete[] calibration_data[i];
+        }
+        delete[] calibration_data;
+        calibration_data = nullptr;
+    }
+    allocatedPoints = 0;
 }
 
 // Function to reset all calibration state variables to initial values
@@ -1575,6 +1932,7 @@ void Calibration::resetCalibrationState() {
     waypoint               = 0;
     pointCount             = 0;
     recomputeCountIndex    = 0;
+    recomputeCount         = 0;  // Reset recompute count to ensure consistent grid generation
     calibrationInProgress  = false;
     calibrationDataWaiting = -1;
 
