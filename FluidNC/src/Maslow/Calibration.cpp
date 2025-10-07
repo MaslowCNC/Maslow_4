@@ -4,6 +4,12 @@
 #include "../System.h"
 #include "SquareCalculation.h"
 
+// Helper macros for accessing calibrationGrid as 1D array
+// calibrationGrid is allocated as float[numPoints * 2]
+// Each point has X at [i*2] and Y at [i*2+1]
+#define GRID_X(i) (i * 2)
+#define GRID_Y(i) (i * 2 + 1)
+
 // Helper function to get MaslowKinematics instance
 static Kinematics::MaslowKinematics* getKinematics() {
     using namespace Kinematics;
@@ -191,9 +197,8 @@ bool Calibration::requestStateChange(int newState) {
                         for (int j = 0; j < 4; j++) {
                             savedCalibrationData[i][j] = calibration_data[i][j];
                         }
-                        for (int j = 0; j < 2; j++) {
-                            savedCalibrationGrid[i][j] = calibrationGrid[i][j];
-                        }
+                        savedCalibrationGrid[i][0] = calibrationGrid[GRID_X(i)];
+                        savedCalibrationGrid[i][1] = calibrationGrid[GRID_Y(i)];
                     }
 
                     // Deallocate the initial 6-point allocation
@@ -210,9 +215,8 @@ bool Calibration::requestStateChange(int newState) {
                         for (int j = 0; j < 4; j++) {
                             calibration_data[i][j] = savedCalibrationData[i][j];
                         }
-                        for (int j = 0; j < 2; j++) {
-                            calibrationGrid[i][j] = savedCalibrationGrid[i][j];
-                        }
+                        calibrationGrid[GRID_X(i)] = savedCalibrationGrid[i][0];
+                        calibrationGrid[GRID_Y(i)] = savedCalibrationGrid[i][1];
                     }
                 }
                 Maslow.stop();
@@ -236,8 +240,8 @@ bool Calibration::requestStateChange(int newState) {
                                                        y)) {
                     //We reset the last waypoint to where it actually is so that we can move from the updated position to the next waypoint
                     if (waypoint > 0) {
-                        calibrationGrid[waypoint - 1][0] = x;
-                        calibrationGrid[waypoint - 1][1] = y;
+                        calibrationGrid[GRID_X(waypoint - 1)] = x;
+                        calibrationGrid[GRID_Y(waypoint - 1)] = y;
                     }
 
                     log_info("Machine Position found as X: " << x << " Y: " << y);
@@ -480,18 +484,18 @@ void Calibration::calibration_loop() {
 
     //Move to the next point in the grid
     else {
-        if (move_with_slack(calibrationGrid[waypoint - 1][0],
-                            calibrationGrid[waypoint - 1][1],
-                            calibrationGrid[waypoint][0],
-                            calibrationGrid[waypoint][1])) {
+        if (move_with_slack(calibrationGrid[GRID_X(waypoint - 1)],
+                            calibrationGrid[GRID_Y(waypoint - 1)],
+                            calibrationGrid[GRID_X(waypoint)],
+                            calibrationGrid[GRID_Y(waypoint)])) {
             measurementInProgress = true;
             calibrationDirection  = get_direction(
-                calibrationGrid[waypoint - 1][0],
-                calibrationGrid[waypoint - 1][1],
-                calibrationGrid[waypoint][0],
-                calibrationGrid[waypoint][1]);  //This is used to set the order that the belts are pulled tight in the following measurement
-            Maslow.x = calibrationGrid[waypoint][0];  //Are these ever used anywhere?
-            Maslow.y = calibrationGrid[waypoint][1];
+                calibrationGrid[GRID_X(waypoint - 1)],
+                calibrationGrid[GRID_Y(waypoint - 1)],
+                calibrationGrid[GRID_X(waypoint)],
+                calibrationGrid[GRID_Y(waypoint)]);  //This is used to set the order that the belts are pulled tight in the following measurement
+            Maslow.x = calibrationGrid[GRID_X(waypoint)];  //Are these ever used anywhere?
+            Maslow.y = calibrationGrid[GRID_Y(waypoint)];
             hold(250);
         }
     }
@@ -1065,19 +1069,19 @@ bool Calibration::take_measurement_avg_with_check(int waypoint, int dir) {
                 log_info("Machine Position computed as X: " << x << " Y: " << y);
 
                 //Recompute the first four waypoint locations based on the current position
-                calibrationGrid[0][0] =
+                calibrationGrid[GRID_X(0)] =
                     x;  //This first point is never really used because we've already measured here, but it shouldn't be left undefined
-                calibrationGrid[0][1] = y;
-                calibrationGrid[1][0] = x + 150;
-                calibrationGrid[1][1] = y;
-                calibrationGrid[2][0] = x + 150;
-                calibrationGrid[2][1] = y + 150;
-                calibrationGrid[3][0] = x;
-                calibrationGrid[3][1] = y + 150;
-                calibrationGrid[4][0] = x - 150;
-                calibrationGrid[4][1] = y + 150;
-                calibrationGrid[5][0] = x - 150;
-                calibrationGrid[5][1] = y;
+                calibrationGrid[GRID_Y(0)] = y;
+                calibrationGrid[GRID_X(1)] = x + 150;
+                calibrationGrid[GRID_Y(1)] = y;
+                calibrationGrid[GRID_X(2)] = x + 150;
+                calibrationGrid[GRID_Y(2)] = y + 150;
+                calibrationGrid[GRID_X(3)] = x;
+                calibrationGrid[GRID_Y(3)] = y + 150;
+                calibrationGrid[GRID_X(4)] = x - 150;
+                calibrationGrid[GRID_Y(4)] = y + 150;
+                calibrationGrid[GRID_X(5)] = x - 150;
+                calibrationGrid[GRID_Y(5)] = y;
             }
 
             //This is the exit to indicate that the measurement was successful
@@ -1645,8 +1649,8 @@ bool Calibration::generate_calibration_grid() {
     recomputePoints[0] = 5;
 
     //The point in the center
-    calibrationGrid[pointCount][0] = 0;
-    calibrationGrid[pointCount][1] = 0;
+    calibrationGrid[GRID_X(pointCount)] = 0;
+    calibrationGrid[GRID_Y(pointCount)] = 0;
 
     pointCount++;
 
@@ -1662,8 +1666,8 @@ bool Calibration::generate_calibration_grid() {
         // Move left (decreasing X) - only if we haven't reached the X boundary
         if (maxX <= numberOfCyclesX) {
             while (currentX > -1 * maxX) {
-                calibrationGrid[pointCount][0] = currentX * xSpacing;
-                calibrationGrid[pointCount][1] = currentY * ySpacing;
+                calibrationGrid[GRID_X(pointCount)] = currentX * xSpacing;
+                calibrationGrid[GRID_Y(pointCount)] = currentY * ySpacing;
                 pointCount++;
                 currentX--;
             }
@@ -1672,8 +1676,8 @@ bool Calibration::generate_calibration_grid() {
         // Move up (increasing Y) - only if we haven't reached the Y boundary
         if (maxY <= numberOfCyclesY) {
             while (currentY < maxY) {
-                calibrationGrid[pointCount][0] = currentX * xSpacing;
-                calibrationGrid[pointCount][1] = currentY * ySpacing;
+                calibrationGrid[GRID_X(pointCount)] = currentX * xSpacing;
+                calibrationGrid[GRID_Y(pointCount)] = currentY * ySpacing;
                 pointCount++;
                 currentY++;
             }
@@ -1682,8 +1686,8 @@ bool Calibration::generate_calibration_grid() {
         // Move right (increasing X) - only if we haven't reached the X boundary
         if (maxX <= numberOfCyclesX) {
             while (currentX < maxX) {
-                calibrationGrid[pointCount][0] = currentX * xSpacing;
-                calibrationGrid[pointCount][1] = currentY * ySpacing;
+                calibrationGrid[GRID_X(pointCount)] = currentX * xSpacing;
+                calibrationGrid[GRID_Y(pointCount)] = currentY * ySpacing;
                 pointCount++;
                 currentX++;
             }
@@ -1692,16 +1696,16 @@ bool Calibration::generate_calibration_grid() {
         // Move down (decreasing Y) - only if we haven't reached the Y boundary
         if (maxY <= numberOfCyclesY) {
             while (currentY > -1 * maxY) {
-                calibrationGrid[pointCount][0] = currentX * xSpacing;
-                calibrationGrid[pointCount][1] = currentY * ySpacing;
+                calibrationGrid[GRID_X(pointCount)] = currentX * xSpacing;
+                calibrationGrid[GRID_Y(pointCount)] = currentY * ySpacing;
                 pointCount++;
                 currentY--;
             }
         }
 
         //Add the last point to the recompute list
-        calibrationGrid[pointCount][0] = currentX * xSpacing;
-        calibrationGrid[pointCount][1] = currentY * ySpacing;
+        calibrationGrid[GRID_X(pointCount)] = currentX * xSpacing;
+        calibrationGrid[GRID_Y(pointCount)] = currentY * ySpacing;
         pointCount++;
 
         recomputePoints[recomputeCount] = pointCount - 1;  //Minus one because we increment after each point is generated
@@ -1714,12 +1718,12 @@ bool Calibration::generate_calibration_grid() {
     }
 
     //Move back to the center
-    calibrationGrid[pointCount][0] = 0;
-    calibrationGrid[pointCount][1] = (currentY + 1) * ySpacing;  //The last loop added an nunecessary -1 to the y position
+    calibrationGrid[GRID_X(pointCount)] = 0;
+    calibrationGrid[GRID_Y(pointCount)] = (currentY + 1) * ySpacing;  //The last loop added an nunecessary -1 to the y position
     pointCount++;
 
-    calibrationGrid[pointCount][0] = 0;
-    calibrationGrid[pointCount][1] = 0;
+    calibrationGrid[GRID_X(pointCount)] = 0;
+    calibrationGrid[GRID_Y(pointCount)] = 0;
 
     recomputePoints[recomputeCount] = pointCount;
 
@@ -1815,7 +1819,7 @@ void Calibration::hold(unsigned long time) {
 //Print calibration grid
 // void Calibration::printCalibrationGrid() {
 //     for (int i = 0; i <= pointCount; i++) {
-//         log_info("Point " << i << ": " << calibrationGrid[i][0] << ", " << calibrationGrid[i][1]);
+//         log_info("Point " << i << ": " << calibrationGrid[GRID_X(i)] << ", " << calibrationGrid[GRID_Y(i)]);
 //     }
 //     log_info("Max value for pointCount: " << pointCount);
 
@@ -1901,7 +1905,9 @@ int Calibration::calculateGridPointCount(int gridSizeX, int gridSizeY) {
 // Function to allocate memory for calibration arrays based on actual grid size
 void Calibration::allocateCalibrationMemory(int numPoints) {
     if (calibrationGrid == nullptr) {  //Check to prevent realocating
-        calibrationGrid = new float[numPoints][2];
+        // Allocate as 1D array: numPoints * 2 (X and Y for each point)
+        // Access: calibrationGrid[i*2] = X, calibrationGrid[i*2+1] = Y
+        calibrationGrid = new float[numPoints * 2];
     }
     if (calibration_data == nullptr) {
         calibration_data = new float*[numPoints];

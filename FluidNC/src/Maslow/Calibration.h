@@ -147,7 +147,7 @@ private:
     bool    measurementInProgress = true;  //Whether currently taking measurement or moving (replaces static variable)
     int     frame_dimention_MIN   = 400;   //Is this used? This should be enforced by the user settings. TODO.
     int     frame_dimention_MAX   = 15000;
-    float (*calibrationGrid)[2]   = nullptr;
+    float*  calibrationGrid       = nullptr;  // Changed from float(*)[2] to float* for proper allocation
     int    recomputePoints[10];          // Stores the index of the points where we want to trigger a recompute
     int    recomputeCountIndex    = 0;   // Stores the index of the recompute point we are currently on
     int    recomputeCount         = 0;   // Stores the number of recompute points
