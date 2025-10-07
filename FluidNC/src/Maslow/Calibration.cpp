@@ -1610,7 +1610,6 @@ bool Calibration::generate_calibration_grid() {
 
     // Step 3: Calculate the number of points needed and allocate memory accordingly
     int estimatedPoints = calculateGridPointCount(gridSizeX, gridSizeY);
-    log_info("Allocating memory for " << estimatedPoints << " calibration points");
     allocateCalibrationMemory(estimatedPoints);
 
     // Warn if calculated values are outside typical range (100-3000mm)
