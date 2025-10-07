@@ -16,5 +16,6 @@ jobs:
         if: github.event.issue.user.login != 'BarbourSmith'
         run: |
           gh issue edit ${{ github.event.issue.number }} --add-assignee "copilot-swe-agent"
+          gh issue edit ${{ github.event.issue.number }} --add-assignee ithub.event.issue.user.login
         env:
           GH_TOKEN: ${{ secrets.USER_GITHUB_TOKEN }}
