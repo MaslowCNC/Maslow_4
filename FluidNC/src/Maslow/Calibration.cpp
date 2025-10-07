@@ -1630,13 +1630,11 @@ bool Calibration::generate_calibration_grid() {
     // gridSizeX and gridSizeY already calculated earlier
     int totalPoints = gridSizeX * gridSizeY;
 
-    log_info("=== Calibration Grid Configuration ===");
-    log_info("Grid dimensions: " << gridWidth << "mm × " << gridHeight << "mm");
-    log_info("Calibration area: " << calibrationAreaM2 << " m² (" << calibrationArea << " mm²)");
-    log_info("Grid size: " << gridSizeX << "×" << gridSizeY << " = " << totalPoints << " points");
-    log_info("Frame dimensions: " << frameWidth << "mm × " << frameHeight << "mm");
-    log_info("Clearance from edges: " << (frameWidth - gridWidth) / 2.0f << "mm (width), " << (frameHeight - gridHeight) / 2.0f
-                                      << "mm (height)");
+    log_info("=== Calibration Grid ===");
+    log_info("Dimensions: " << gridWidth << "x" << gridHeight << "mm");
+    log_info("Area: " << calibrationAreaM2 << " sq m");
+    log_info("Grid: " << gridSizeX << "x" << gridSizeY << " (" << totalPoints << " pts)");
+    log_info("Frame: " << frameWidth << "x" << frameHeight << "mm");
 
     float xSpacing = _calculated_grid_width_mm / (gridSizeX - 1);
     float ySpacing = _calculated_grid_height_mm / (gridSizeY - 1);
