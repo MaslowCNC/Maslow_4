@@ -1623,16 +1623,11 @@ bool Calibration::generate_calibration_grid() {
         log_warn("Calculated grid height (" << gridHeight << "mm) is outside typical range (100-3000mm)");
     }
 
-    // Calculate calibration area and report details
-    float calibrationArea   = gridWidth * gridHeight;        // in mm²
-    float calibrationAreaM2 = calibrationArea / 1000000.0f;  // in m²
-
     // gridSizeX and gridSizeY already calculated earlier
     int totalPoints = gridSizeX * gridSizeY;
 
     log_info("=== Calibration Grid ===");
     log_info("Dimensions: " << gridWidth << "x" << gridHeight << "mm");
-    log_info("Area: " << calibrationAreaM2 << " sq m");
     log_info("Grid: " << gridSizeX << "x" << gridSizeY << " (" << totalPoints << " pts)");
     log_info("Frame: " << frameWidth << "x" << frameHeight << "mm");
 
