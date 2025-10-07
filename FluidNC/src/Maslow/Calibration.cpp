@@ -1429,7 +1429,7 @@ bool Calibration::generate_calibration_grid() {
         gridHeight = 2.0f * fabs(pointBY - centerY);
 
         // Apply safety constraints
-        // 1. Maximum calibration area limits (7' wide × 3' high)
+        // 1. Maximum calibration area limits (7' wide x 3' high)
         const float maxCalibrationWidth  = 7.0f * 12.0f * 25.4f;  // 7 feet = 84 inches = 2133.6mm
         const float maxCalibrationHeight = 3.0f * 12.0f * 25.4f;  // 3 feet = 36 inches = 914.4mm
 
