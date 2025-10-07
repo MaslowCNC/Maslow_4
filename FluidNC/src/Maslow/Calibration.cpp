@@ -1420,8 +1420,8 @@ bool Calibration::generate_calibration_grid() {
         float pointBY = centerY + dirY * optimalDist * 0.8f;
 
         // Calculate grid dimensions as 2x the distance from B to center
-        float gridWidth  = 2.0f * fabs(pointBX - centerX);
-        float gridHeight = 2.0f * fabs(pointBY - centerY);
+        gridWidth  = 2.0f * fabs(pointBX - centerX);
+        gridHeight = 2.0f * fabs(pointBY - centerY);
 
         // Apply safety constraints
         // 1. Maximum calibration area limits (7' wide × 3' high)
@@ -1440,8 +1440,8 @@ bool Calibration::generate_calibration_grid() {
         // 2. Grid must be at least 16" (406.4mm) smaller than frame in each dimension
         //    to prevent sled (16" diameter) from hitting frame edges
         const float sledDiameter = 406.4f;           // 16 inches in mm
-        float       frameWidth   = fabs(trX - tlX);  // Approximate frame width
-        float       frameHeight  = fabs(tlY - blY);  // Approximate frame height
+        frameWidth               = fabs(trX - tlX);  // Approximate frame width
+        frameHeight              = fabs(tlY - blY);  // Approximate frame height
 
         float maxGridWidth  = frameWidth - sledDiameter;
         float maxGridHeight = frameHeight - sledDiameter;
@@ -1541,6 +1541,12 @@ bool Calibration::generate_calibration_grid() {
         float blY   = kinematics->getBlY();
         frameWidth  = fabs(brX - tlX);
         frameHeight = fabs(tlY - blY);
+    }
+
+    // Validate that we have valid grid dimensions before proceeding
+    if (gridWidth <= 0 || gridHeight <= 0) {
+        log_error("Invalid grid dimensions: gridWidth=" << gridWidth << "mm, gridHeight=" << gridHeight << "mm");
+        return false;
     }
 
     // Store calculated or user-provided dimensions in internal variables
