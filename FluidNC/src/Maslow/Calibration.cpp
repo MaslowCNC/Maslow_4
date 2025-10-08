@@ -1536,10 +1536,7 @@ bool Calibration::generate_calibration_grid() {
     }
 
     //Move back to the center
-    calibrationGrid[pointCount][0] = 0;
-    calibrationGrid[pointCount][1] = (currentY + 1) * ySpacing;  //The last loop added an nunecessary -1 to the y position
-    pointCount++;
-
+    // Don't add intermediate return-to-center point - just go directly to center
     calibrationGrid[pointCount][0] = 0;
     calibrationGrid[pointCount][1] = 0;
 
