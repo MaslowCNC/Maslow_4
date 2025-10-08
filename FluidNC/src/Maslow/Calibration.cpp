@@ -194,12 +194,13 @@ bool Calibration::requestStateChange(int newState) {
                         // pointCount will be updated as measurements progress
                         pointCount = 6;  // First 6 points are computed dynamically
                         recomputePoints[0] = 5;  // After point 5, we'll recompute and generate the full grid
+                        recomputeCount = 1;  // We have one recompute point scheduled
                         log_info("Grid dimensions set to 0,0 - will auto-compute after initial measurements");
                     }
                 }
                 // After the first recompute (after first 6 measurements), regenerate grid if auto-compute is enabled
-                // Check: coming from CALIBRATION_COMPUTING, past first 6 measurements, and auto-compute mode enabled
-                else if (currentState == CALIBRATION_COMPUTING && waypoint > 6 && calibration_grid_width_mm_X == 0.0f &&
+                // Check: coming from CALIBRATION_COMPUTING, at waypoint 6 (after first 6 measurements), and auto-compute mode enabled
+                else if (currentState == CALIBRATION_COMPUTING && waypoint == 6 && calibration_grid_width_mm_X == 0.0f &&
                          calibration_grid_height_mm_Y == 0.0f) {
                     log_info("Auto-computing calibration grid size based on anchor points");
 
