@@ -408,8 +408,8 @@ void Calibration::home() {
 
 // --Maslow calibration loop
 void Calibration::calibration_loop() {
-    if (waypoint >=
-        pointCount) {  //Point count is the total number of points to measure so if waypoint >= pointcount then the overall measurement process is complete
+    if (waypoint >
+        pointCount) {  //Point count is the last waypoint index, so if waypoint > pointCount then the overall measurement process is complete
         //Reset all of the calibration variables to the defaults so that calibration can be run again
         resetCalibrationState();
         requestStateChange(READY_TO_CUT);
@@ -1365,16 +1365,9 @@ bool Calibration::generate_calibration_grid() {
         currentY = currentY + -1;
     }
 
-    //Move back to the center
-    calibrationGrid[pointCount][0] = 0;
-    calibrationGrid[pointCount][1] = (currentY + 1) * ySpacing;  //The last loop added an nunecessary -1 to the y position
-    pointCount++;
-
-    calibrationGrid[pointCount][0] = 0;
-    calibrationGrid[pointCount][1] = 0;
-    pointCount++;  // Increment so pointCount represents total count, not last index
-
-    recomputePoints[recomputeCount] = pointCount - 1;  // Store last index in recomputePoints
+    // Machine will move back to center after completing calibration,
+    // but no measurement is taken at the return-to-center positions
+    recomputePoints[recomputeCount] = pointCount - 1;  // Store last waypoint index for final recompute
 
     return true;
 }
