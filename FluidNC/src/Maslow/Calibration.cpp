@@ -408,8 +408,8 @@ void Calibration::home() {
 
 // --Maslow calibration loop
 void Calibration::calibration_loop() {
-    if (waypoint >
-        pointCount) {  //Point count is the total number of points to measure so if waypoint > pointcount then the overall measurement process is complete
+    if (waypoint >=
+        pointCount) {  //Point count is the total number of points to measure so if waypoint >= pointcount then the overall measurement process is complete
         //Reset all of the calibration variables to the defaults so that calibration can be run again
         resetCalibrationState();
         requestStateChange(READY_TO_CUT);
@@ -1372,8 +1372,9 @@ bool Calibration::generate_calibration_grid() {
 
     calibrationGrid[pointCount][0] = 0;
     calibrationGrid[pointCount][1] = 0;
+    pointCount++;  // Increment so pointCount represents total count, not last index
 
-    recomputePoints[recomputeCount] = pointCount;
+    recomputePoints[recomputeCount] = pointCount - 1;  // Store last index in recomputePoints
 
     return true;
 }
