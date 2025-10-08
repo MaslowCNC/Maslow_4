@@ -160,6 +160,9 @@ bool Calibration::requestStateChange(int newState) {
                     calibrationDirection  = UP;
                     measurementInProgress = true;
 
+                    // Always allocate memory for calibration grid
+                    allocateCalibrationMemory();
+                    
                     // Only generate grid if dimensions are non-zero (manual configuration)
                     // If dimensions are 0,0, grid will be generated after first 6 measurements
                     if (calibration_grid_width_mm_X > 0 && calibration_grid_height_mm_Y > 0) {
@@ -187,6 +190,10 @@ bool Calibration::requestStateChange(int newState) {
                             }
                         }
                     } else {
+                        // Auto-compute mode: set up for first 6 dynamic measurements
+                        // pointCount will be updated as measurements progress
+                        pointCount = 6;  // First 6 points are computed dynamically
+                        recomputePoints[0] = 5;  // After point 5, we'll recompute and generate the full grid
                         log_info("Grid dimensions set to 0,0 - will auto-compute after initial measurements");
                     }
                 }
