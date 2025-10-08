@@ -410,6 +410,15 @@ void Calibration::home() {
 void Calibration::calibration_loop() {
     if (waypoint >
         pointCount) {  //Point count is the last waypoint index, so if waypoint > pointCount then the overall measurement process is complete
+        //Log the calibration data before resetting
+        log_info("Calibration measurements complete. Measured " << pointCount << " waypoints:");
+        for (int i = 0; i < pointCount; i++) {
+            log_info("Waypoint " << i << " belt lengths: TL=" << calibration_data[i][0] 
+                     << " mm, TR=" << calibration_data[i][1] 
+                     << " mm, BL=" << calibration_data[i][2] 
+                     << " mm, BR=" << calibration_data[i][3] << " mm");
+        }
+        
         //Reset all of the calibration variables to the defaults so that calibration can be run again
         resetCalibrationState();
         requestStateChange(READY_TO_CUT);
@@ -1368,6 +1377,14 @@ bool Calibration::generate_calibration_grid() {
     // Machine will move back to center after completing calibration,
     // but no measurement is taken at the return-to-center positions
     recomputePoints[recomputeCount] = pointCount - 1;  // Store last waypoint index for final recompute
+
+    // Log the calibration grid coordinates for debugging
+    log_info("Calibration grid generated with " << pointCount << " waypoints:");
+    log_info("Grid size: " << calibrationGridSize << "x" << calibrationGridSize);
+    log_info("X spacing: " << xSpacing << " mm, Y spacing: " << ySpacing << " mm");
+    for (int i = 0; i < pointCount; i++) {
+        log_info("Waypoint " << i << ": X=" << calibrationGrid[i][0] << " mm, Y=" << calibrationGrid[i][1] << " mm");
+    }
 
     return true;
 }
