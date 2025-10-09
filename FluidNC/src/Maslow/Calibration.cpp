@@ -1379,12 +1379,35 @@ bool Calibration::generate_calibration_grid() {
     // but no measurement is taken at the return-to-center positions
     recomputePoints[recomputeCount] = pointCount - 1;  // Store last waypoint index for final recompute
 
-    // Log the calibration grid for debugging
-    log_info("Calibration grid generated:");
-    log_info("  Total waypoints: " << pointCount);
-    log_info("  Grid size: " << calibrationGridSize << "x" << calibrationGridSize);
-    log_info("  Width: " << calibration_grid_width_mm_X << " mm, Height: " << calibration_grid_height_mm_Y << " mm");
-    log_info("  X spacing: " << xSpacing << " mm, Y spacing: " << ySpacing << " mm");
+    // Get frame dimensions from kinematics for detailed logging
+    auto kinematics = getKinematics();
+    
+    // Log detailed calibration grid configuration
+    log_info("=== Calibration Grid Configuration ===");
+    log_info("Grid dimensions: " << calibration_grid_width_mm_X << "mm x " << calibration_grid_height_mm_Y << "mm");
+    log_info("Grid size: " << calibrationGridSize << "x" << calibrationGridSize << " = " << (calibrationGridSize * calibrationGridSize) << " points");
+    
+    if (kinematics) {
+        float frameWidth = kinematics->getTrX() - kinematics->getTlX();
+        float frameHeight = kinematics->getTlY() - kinematics->getBlY();
+        float clearanceWidth = (frameWidth - calibration_grid_width_mm_X) / 2.0f;
+        float clearanceHeight = (frameHeight - calibration_grid_height_mm_Y) / 2.0f;
+        
+        log_info("Frame dimensions: " << frameWidth << "mm x " << frameHeight << "mm");
+        log_info("Clearance from edges: " << clearanceWidth << "mm (width), " << clearanceHeight << "mm (height)");
+        
+        // Calculate and log angle at top corners for sanity check
+        float topWidth = kinematics->getTrX() - kinematics->getTlX();
+        float topHeight = kinematics->getTlY();
+        if (topWidth > 0 && topHeight > 0) {
+            float angleRad = atan2(topHeight, topWidth / 2.0f);
+            float angleDeg = angleRad * 180.0f / 3.14159265359f;
+            log_info("Calibration area sanity check: angle at top = " << angleDeg << " degrees (should be < 140.000)");
+        }
+    }
+    
+    log_info("X spacing: " << xSpacing << "mm, Y spacing: " << ySpacing << "mm");
+    log_info("Total waypoints: " << pointCount << " (including 6 dynamic initial points)");
     log_info("Waypoint coordinates:");
     for (int i = 0; i < pointCount; i++) {
         log_info("  [" << i << "] X=" << calibrationGrid[i][0] << ", Y=" << calibrationGrid[i][1]);
