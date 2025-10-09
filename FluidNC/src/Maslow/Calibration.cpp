@@ -1066,10 +1066,14 @@ bool Calibration::take_measurement_avg_with_check(int waypoint, int dir) {
             //If the measurements seem valid, take the average and record it to the calibration data array. This is the only place we should be writing to the calibration_data array
             
             // Log individual measurements before averaging for debugging
-            log_info("Waypoint " << waypoint << " individual measurements:");
+            std::stringstream logMsg;
+            logMsg << "Waypoint " << waypoint << " measurements: ";
             for (int j = 0; j < 4; j++) {
-                log_info("  Run " << j << ": TL=" << measurements[j][0] << " TR=" << measurements[j][1] << " BL=" << measurements[j][2] << " BR=" << measurements[j][3]);
+                logMsg << "[" << j << ":TL=" << std::fixed << std::setprecision(2) << measurements[j][0]
+                       << ",TR=" << measurements[j][1] << ",BL=" << measurements[j][2] << ",BR=" << measurements[j][3] << "]";
+                if (j < 3) logMsg << " ";
             }
+            log_info(logMsg.str().c_str());
             
             for (int i = 0; i < 4; i++) {  //For each axis
                 sum                           = measurements[0][i] + measurements[1][i] + measurements[2][i] + measurements[3][i];
