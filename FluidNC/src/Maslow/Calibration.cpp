@@ -2042,19 +2042,19 @@ float Calibration::measurementToXYPlane(float measurement, float zHeight) {
     if (!kinematics)
         return 0.0f;
 
-    // Debug logging for waypoint 0
-    static bool logged = false;
-    if (!logged) {
+    // Debug logging for first few calls to understand the conversion
+    static int logCount = 0;
+    if (logCount < 4) {  // Log first 4 calls (one for each belt on first measurement)
         log_info("measurementToXYPlane DEBUG - measurement: " << measurement << ", zHeight: " << zHeight 
                  << ", beltExt: " << kinematics->getBeltEndExtension() << ", armLen: " << kinematics->getArmLength());
-        logged = true;
     }
 
     float lengthInXY = sqrt(measurement * measurement - zHeight * zHeight);
     float result = lengthInXY + kinematics->getBeltEndExtension() + kinematics->getArmLength();
     
-    if (!logged) {
+    if (logCount < 4) {
         log_info("measurementToXYPlane DEBUG - lengthInXY: " << lengthInXY << ", result: " << result);
+        logCount++;
     }
     
     return result;  //Add the belt end extension and arm length to get the actual distance
