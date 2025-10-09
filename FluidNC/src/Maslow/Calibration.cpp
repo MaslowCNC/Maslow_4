@@ -162,15 +162,21 @@ bool Calibration::requestStateChange(int newState) {
                 // Log the calibration orientation mode for debugging
                 log_info("Calibration starting in " << (orientation == VERTICAL ? "VERTICAL" : "HORIZONTAL") << " orientation mode");
 
-                //If we are at the first point we need to generate the grid before we can start
-                if (waypoint == 0) {
-                    // Initialize calibration loop state for fresh start
+                //Generate the grid after the first calibration compute (after waypoint 5)
+                //At this point, frame dimensions are known from the calibration calculations
+                if (waypoint == 6) {
+                    // Initialize calibration loop state for the main grid
                     calibrationDirection  = UP;
                     measurementInProgress = true;
 
                     if (!generate_calibration_grid()) {  //Fail out if the grid cannot be generated
                         return false;
                     }
+                }
+                //For waypoint 0, just initialize the measurement state
+                else if (waypoint == 0) {
+                    calibrationDirection  = UP;
+                    measurementInProgress = true;
                 }
                 Maslow.stop();
 
