@@ -410,6 +410,20 @@ void Calibration::home() {
 void Calibration::calibration_loop() {
     if (waypoint >
         pointCount) {  //Point count is the total number of points to measure so if waypoint > pointcount then the overall measurement process is complete
+        //Log all belt measurements before resetting calibration state (up to 5 items per log message)
+        log_info("Logging belt measurements for " << waypoint << " waypoints");
+        for (int i = 0; i < waypoint; i += 5) {
+            String logMsg = "Belt lengths [" + String(i) + "-" + String(min(i + 4, waypoint - 1)) + "]: ";
+            for (int j = i; j < min(i + 5, waypoint); j++) {
+                logMsg += "(" + String(j) + ":TL=" + String(calibration_data[j][0], 2) + ",TR=" + String(calibration_data[j][1], 2) +
+                          ",BL=" + String(calibration_data[j][2], 2) + ",BR=" + String(calibration_data[j][3], 2) + ")";
+                if (j < min(i + 4, waypoint - 1)) {
+                    logMsg += " ";
+                }
+            }
+            log_info(logMsg.c_str());
+        }
+
         //Reset all of the calibration variables to the defaults so that calibration can be run again
         resetCalibrationState();
         requestStateChange(READY_TO_CUT);
@@ -1374,6 +1388,19 @@ bool Calibration::generate_calibration_grid() {
     calibrationGrid[pointCount][1] = 0;
 
     recomputePoints[recomputeCount] = pointCount;
+
+    // Log waypoint locations after grid generation completes (up to 30 items per log message)
+    log_info("Calibration grid generated with " << pointCount + 1 << " waypoints");
+    for (int i = 0; i <= pointCount; i += 30) {
+        String logMsg = "Waypoints [" + String(i) + "-" + String(min(i + 29, pointCount)) + "]: ";
+        for (int j = i; j <= min(i + 29, pointCount); j++) {
+            logMsg += "(" + String(j) + ":" + String(calibrationGrid[j][0], 1) + "," + String(calibrationGrid[j][1], 1) + ")";
+            if (j < min(i + 29, pointCount)) {
+                logMsg += " ";
+            }
+        }
+        log_info(logMsg.c_str());
+    }
 
     return true;
 }
