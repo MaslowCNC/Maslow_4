@@ -3,6 +3,8 @@
 #include "../Kinematics/MaslowKinematics.h"
 #include "../System.h"
 #include "SquareCalculation.h"
+#include <sstream>
+#include <iomanip>
 
 // Helper macros for accessing calibrationGrid as 1D array
 // calibrationGrid is allocated as float[numPoints * 2]
@@ -222,15 +224,17 @@ bool Calibration::requestStateChange(int newState) {
                     // Log waypoint locations after grid generation and restoration of first 6 waypoints (up to 30 items per log message)
                     log_info("Calibration grid generated with " << pointCount + 1 << " waypoints");
                     for (int i = 0; i <= pointCount; i += 30) {
-                        String logMsg = "Waypoints [" + String(i) + "-" + String(min(i + 29, pointCount)) + "]: ";
+                        // Build log message more carefully to avoid heap issues
+                        std::stringstream logMsg;
+                        logMsg << "Waypoints [" << i << "-" << min(i + 29, pointCount) << "]: ";
                         for (int j = i; j <= min(i + 29, pointCount); j++) {
-                            logMsg += "(" + String(j) + ":" + String(calibrationGrid[GRID_X(j)], 1) + "," +
-                                      String(calibrationGrid[GRID_Y(j)], 1) + ")";
+                            logMsg << "(" << j << ":" << std::fixed << std::setprecision(1) 
+                                   << calibrationGrid[GRID_X(j)] << "," << calibrationGrid[GRID_Y(j)] << ")";
                             if (j < min(i + 29, pointCount)) {
-                                logMsg += " ";
+                                logMsg << " ";
                             }
                         }
-                        log_info(logMsg.c_str());
+                        log_info(logMsg.str().c_str());
                     }
                 }
                 Maslow.stop();
@@ -474,15 +478,18 @@ void Calibration::calibration_loop() {
         //Log all belt measurements before resetting calibration state (up to 5 items per log message)
         log_info("Logging belt measurements for " << waypoint << " waypoints");
         for (int i = 0; i < waypoint; i += 5) {
-            String logMsg = "Belt lengths [" + String(i) + "-" + String(min(i + 4, waypoint - 1)) + "]: ";
+            // Build log message more carefully to avoid heap issues
+            std::stringstream logMsg;
+            logMsg << "Belt lengths [" << i << "-" << min(i + 4, waypoint - 1) << "]: ";
             for (int j = i; j < min(i + 5, waypoint); j++) {
-                logMsg += "(" + String(j) + ":TL=" + String(calibration_data[j][0], 2) + ",TR=" + String(calibration_data[j][1], 2) +
-                          ",BL=" + String(calibration_data[j][2], 2) + ",BR=" + String(calibration_data[j][3], 2) + ")";
+                logMsg << "(" << j << ":TL=" << std::fixed << std::setprecision(2) << calibration_data[j][0]
+                       << ",TR=" << calibration_data[j][1] << ",BL=" << calibration_data[j][2]
+                       << ",BR=" << calibration_data[j][3] << ")";
                 if (j < min(i + 4, waypoint - 1)) {
-                    logMsg += " ";
+                    logMsg << " ";
                 }
             }
-            log_info(logMsg.c_str());
+            log_info(logMsg.str().c_str());
         }
 
         //Reset all of the calibration variables to the defaults so that calibration can be run again
