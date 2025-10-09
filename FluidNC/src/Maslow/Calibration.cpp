@@ -1931,36 +1931,51 @@ int Calibration::get_direction(double x, double y, double targetX, double target
     return direction;
 }
 
-// Function to allocate memory for calibration arrays
 // Function to calculate the number of points that will be in the calibration grid
 // This is used to allocate the right amount of memory before generating the grid
 int Calibration::calculateGridPointCount(int gridSizeX, int gridSizeY) {
-    // The grid starts with 6 fixed points (waypoints 0-5)
-    int count = 7;  // Points 0-5 plus the center point at index 6
+    // The grid starts with 6 fixed points (waypoints 0-5) plus the center point at index 6
+    int count = 7;  // Points 0-6
 
     // Calculate number of cycles dynamically based on grid size
     int numberOfCyclesX = (gridSizeX - 1) / 2;
     int numberOfCyclesY = (gridSizeY - 1) / 2;
     int numberOfCycles  = max(numberOfCyclesX, numberOfCyclesY);
 
-    // Simulate the spiral pattern to count points
-    for (int cycle = 1; cycle <= numberOfCycles; cycle++) {
-        int maxX = cycle;
-        int maxY = cycle;
-
-        // Count points in each direction of the spiral
+    // Simulate the actual spiral pattern to count points
+    // This must match the logic in generate_calibration_grid exactly
+    int maxX = 1;
+    int maxY = 1;
+    
+    while (maxX <= numberOfCycles || maxY <= numberOfCycles) {
+        // Move left (decreasing X) - only if we haven't reached the X boundary
         if (maxX <= numberOfCyclesX) {
-            count += maxX;  // Left movement
-            count += maxX;  // Right movement
+            count += maxX;  // Left movement adds maxX points
         }
+        
+        // Move up (increasing Y) - only if we haven't reached the Y boundary
         if (maxY <= numberOfCyclesY) {
-            count += maxY;  // Up movement
-            count += maxY;  // Down movement
+            count += maxY;  // Up movement adds maxY points
         }
-        count++;  // The corner point at the end of each cycle
+        
+        // Move right (increasing X) - only if we haven't reached the X boundary
+        if (maxX <= numberOfCyclesX) {
+            count += maxX;  // Right movement adds maxX points
+        }
+        
+        // Move down (decreasing Y) - only if we haven't reached the Y boundary
+        if (maxY <= numberOfCyclesY) {
+            count += maxY;  // Down movement adds maxY points
+        }
+        
+        // Add the corner point at the end of each cycle
+        count++;
+        
+        maxX++;
+        maxY++;
     }
 
-    // Add the final two center points
+    // Add the final two return-to-center points
     count += 2;
 
     return count;
