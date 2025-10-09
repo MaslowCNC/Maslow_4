@@ -1041,6 +1041,12 @@ bool Calibration::take_measurement_avg_with_check(int waypoint, int dir) {
                 calibrationGrid[4][1] = y + 150;
                 calibrationGrid[5][0] = x - 150;
                 calibrationGrid[5][1] = y;
+                
+                // Log the dynamically computed waypoints
+                log_info("Dynamic waypoints computed based on machine position:");
+                for (int i = 0; i < 6; i++) {
+                    log_info("Waypoint " << i << ": X=" << calibrationGrid[i][0] << " mm, Y=" << calibrationGrid[i][1] << " mm");
+                }
             }
 
             //This is the exit to indicate that the measurement was successful
@@ -1379,10 +1385,14 @@ bool Calibration::generate_calibration_grid() {
     recomputePoints[recomputeCount] = pointCount - 1;  // Store last waypoint index for final recompute
 
     // Log the calibration grid coordinates for debugging
+    // Note: Waypoints 0-5 are computed dynamically based on machine position during calibration,
+    // so we only log waypoints 6 onwards here (the static grid pattern)
     log_info("Calibration grid generated with " << pointCount << " waypoints:");
     log_info("Grid size: " << calibrationGridSize << "x" << calibrationGridSize);
     log_info("X spacing: " << xSpacing << " mm, Y spacing: " << ySpacing << " mm");
-    for (int i = 0; i < pointCount; i++) {
+    log_info("Waypoints 0-5 will be computed dynamically during calibration based on machine position");
+    log_info("Static grid waypoints (6 onwards):");
+    for (int i = 6; i < pointCount; i++) {
         log_info("Waypoint " << i << ": X=" << calibrationGrid[i][0] << " mm, Y=" << calibrationGrid[i][1] << " mm");
     }
 
