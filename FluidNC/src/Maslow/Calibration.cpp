@@ -1308,6 +1308,10 @@ bool Calibration::generate_calibration_grid() {
             return false;  // return false or handle error appropriately
     }
 
+    log_info("Generating " << calibrationGridSize << "x" << calibrationGridSize << " calibration grid with " << numberOfCycles << " cycles");
+    log_info("Grid dimensions: width=" << calibration_grid_width_mm_X << "mm, height=" << calibration_grid_height_mm_Y << "mm");
+    log_info("Point spacing: x=" << xSpacing << "mm, y=" << ySpacing << "mm");
+
     pointCount         = 6;  //The first four points are computed dynamically
     recomputePoints[0] = 5;
 
@@ -1374,6 +1378,16 @@ bool Calibration::generate_calibration_grid() {
     calibrationGrid[pointCount][1] = 0;
 
     recomputePoints[recomputeCount] = pointCount;
+
+    log_info("Calibration grid generated successfully");
+    log_info("Total points: " << (pointCount + 1) << " (indices 0 to " << pointCount << ")");
+    log_info("Points breakdown: 6 initial + " << (pointCount + 1 - 6) << " grid/return points");
+    log_info("CALIBRATION_GRID_SIZE_MAX: " << CALIBRATION_GRID_SIZE_MAX << ", used: " << (pointCount + 1));
+    
+    if (pointCount >= CALIBRATION_GRID_SIZE_MAX) {
+        log_error("Point count (" << (pointCount + 1) << ") exceeds CALIBRATION_GRID_SIZE_MAX (" << CALIBRATION_GRID_SIZE_MAX << ")!");
+        return false;
+    }
 
     return true;
 }
