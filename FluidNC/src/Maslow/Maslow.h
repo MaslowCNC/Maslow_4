@@ -14,16 +14,7 @@
 
 #define TCAADDR 0x70
 
-// CALIBRATION_GRID_SIZE_MAX calculation:
-// For a grid of size N×N (where N must be odd):
-//   numberOfCycles = (N-1)/2
-//   Total points = 6 (initial) + 1 (center) + sum of spiral points + number of cycles + 2 (return to center)
-//   Spiral points per cycle i: 8*i, with 1 extra point after each cycle
-//   Formula: 9 + 4*k*(k+1) + k where k = (N-1)/2
-// For 9×9: k=4 → 93 points
-// For 11×11: k=5 → 134 points
-// Using 134 to allow future expansion to 11×11 grids
-#define CALIBRATION_GRID_SIZE_MAX 134
+#define CALIBRATION_GRID_SIZE_MAX (10 * 10) + 2
 
 #define UP 1
 #define DOWN 2
