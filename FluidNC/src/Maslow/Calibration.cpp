@@ -1064,6 +1064,13 @@ bool Calibration::take_measurement_avg_with_check(int waypoint, int dir) {
             */
 
             //If the measurements seem valid, take the average and record it to the calibration data array. This is the only place we should be writing to the calibration_data array
+            
+            // Log individual measurements before averaging for debugging
+            log_info("Waypoint " << waypoint << " individual measurements:");
+            for (int j = 0; j < 4; j++) {
+                log_info("  Run " << j << ": TL=" << measurements[j][0] << " TR=" << measurements[j][1] << " BL=" << measurements[j][2] << " BR=" << measurements[j][3]);
+            }
+            
             for (int i = 0; i < 4; i++) {  //For each axis
                 sum                           = measurements[0][i] + measurements[1][i] + measurements[2][i] + measurements[3][i];
                 avg                           = sum / 4;
@@ -1071,7 +1078,7 @@ bool Calibration::take_measurement_avg_with_check(int waypoint, int dir) {
                 sum                           = 0;
                 criticalCounter               = 0;
             }
-            log_info("Measured waypoint " << waypoint << " - Belt lengths: TL=" << calibration_data[waypoint][0] << " TR=" << calibration_data[waypoint][1] << " BL=" << calibration_data[waypoint][2] << " BR=" << calibration_data[waypoint][3]);
+            log_info("Measured waypoint " << waypoint << " - Averaged belt lengths: TL=" << calibration_data[waypoint][0] << " TR=" << calibration_data[waypoint][1] << " BL=" << calibration_data[waypoint][2] << " BR=" << calibration_data[waypoint][3]);
 
             //A check to see if the results on the first point are within the expected range
             //This logic should only run during calibration, not during Apply Tension
