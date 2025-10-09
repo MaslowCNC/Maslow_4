@@ -410,13 +410,14 @@ void Calibration::home() {
 void Calibration::calibration_loop() {
     if (waypoint >
         pointCount) {  //Point count is the last waypoint index, so if waypoint > pointCount then the overall measurement process is complete
-        //Log the calibration data before resetting
-        log_info("Calibration measurements complete. Measured " << pointCount << " waypoints:");
+        // Log measured belt lengths for all waypoints
+        log_info("Calibration measurements complete for " << pointCount << " waypoints");
+        log_info("Measured belt lengths:");
         for (int i = 0; i < pointCount; i++) {
-            log_info("Waypoint " << i << " belt lengths: TL=" << calibration_data[i][0] 
-                     << " mm, TR=" << calibration_data[i][1] 
-                     << " mm, BL=" << calibration_data[i][2] 
-                     << " mm, BR=" << calibration_data[i][3] << " mm");
+            log_info("  [" << i << "] TL=" << calibration_data[i][0] 
+                     << ", TR=" << calibration_data[i][1]
+                     << ", BL=" << calibration_data[i][2]
+                     << ", BR=" << calibration_data[i][3]);
         }
         
         //Reset all of the calibration variables to the defaults so that calibration can be run again
@@ -1041,12 +1042,6 @@ bool Calibration::take_measurement_avg_with_check(int waypoint, int dir) {
                 calibrationGrid[4][1] = y + 150;
                 calibrationGrid[5][0] = x - 150;
                 calibrationGrid[5][1] = y;
-                
-                // Log the dynamically computed waypoints
-                log_info("Dynamic waypoints computed based on machine position:");
-                for (int i = 0; i < 6; i++) {
-                    log_info("Waypoint " << i << ": X=" << calibrationGrid[i][0] << " mm, Y=" << calibrationGrid[i][1] << " mm");
-                }
             }
 
             //This is the exit to indicate that the measurement was successful
@@ -1384,16 +1379,15 @@ bool Calibration::generate_calibration_grid() {
     // but no measurement is taken at the return-to-center positions
     recomputePoints[recomputeCount] = pointCount - 1;  // Store last waypoint index for final recompute
 
-    // Log the calibration grid coordinates for debugging
-    // Note: Waypoints 0-5 are computed dynamically based on machine position during calibration,
-    // so we only log waypoints 6 onwards here (the static grid pattern)
-    log_info("Calibration grid generated with " << pointCount << " waypoints:");
-    log_info("Grid size: " << calibrationGridSize << "x" << calibrationGridSize);
-    log_info("X spacing: " << xSpacing << " mm, Y spacing: " << ySpacing << " mm");
-    log_info("Waypoints 0-5 will be computed dynamically during calibration based on machine position");
-    log_info("Static grid waypoints (6 onwards):");
-    for (int i = 6; i < pointCount; i++) {
-        log_info("Waypoint " << i << ": X=" << calibrationGrid[i][0] << " mm, Y=" << calibrationGrid[i][1] << " mm");
+    // Log the calibration grid for debugging
+    log_info("Calibration grid generated:");
+    log_info("  Total waypoints: " << pointCount);
+    log_info("  Grid size: " << calibrationGridSize << "x" << calibrationGridSize);
+    log_info("  Width: " << calibration_grid_width_mm_X << " mm, Height: " << calibration_grid_height_mm_Y << " mm");
+    log_info("  X spacing: " << xSpacing << " mm, Y spacing: " << ySpacing << " mm");
+    log_info("Waypoint coordinates:");
+    for (int i = 0; i < pointCount; i++) {
+        log_info("  [" << i << "] X=" << calibrationGrid[i][0] << ", Y=" << calibrationGrid[i][1]);
     }
 
     return true;
