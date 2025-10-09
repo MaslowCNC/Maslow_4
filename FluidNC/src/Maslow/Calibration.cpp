@@ -928,17 +928,143 @@ bool Calibration::take_measurement_avg_with_check(int waypoint, int dir) {
                         log_info(Maslow.axis_id_to_label(i).c_str() << " " << measurements[j][i]);
                     }
                 }
-                //reset the run counter to run the measurements again
-                if (criticalCounter++ > 8) {  //This updates the counter and checks
-                    log_error("Critical error, measurements are not within 1.5mm of each other 8 times in a row, stopping calibration");
-                    resetCalibrationState();
+
+                // Check if only one measurement is off for each axis
+                bool canRecoverByAveraging = true;
+                int  outlierIndices[4]     = { -1, -1, -1, -1 };  // Store which measurement is the outlier for each axis
+
+                for (int axis = 0; axis < 4; axis++) {
+                    // For each axis, check if there's exactly one outlier measurement
+                    int outlierCount = 0;
+                    int outlierIdx   = -1;
+
+                    for (int run = 0; run < 4; run++) {
+                        // Check if this measurement is significantly different from the others
+                        float currentMeasurement = measurements[run][axis];
+                        int   closeCount         = 0;
+
+                        for (int otherRun = 0; otherRun < 4; otherRun++) {
+                            if (otherRun != run) {
+                                if (abs(currentMeasurement - measurements[otherRun][axis]) <= 2.5) {
+                                    closeCount++;
+                                }
+                            }
+                        }
+
+                        // If this measurement is not close to at least 2 other measurements, it's an outlier
+                        if (closeCount < 2) {
+                            outlierCount++;
+                            outlierIdx = run;
+                        }
+                    }
+
+                    if (outlierCount == 1) {
+                        // Exactly one outlier found for this axis
+                        outlierIndices[axis] = outlierIdx;
+                    } else if (outlierCount == 0) {
+                        // No clear outlier, but measurements still vary > 2.5mm
+                        // This can happen if measurements are spread out
+                        canRecoverByAveraging = false;
+                        break;
+                    } else {
+                        // Multiple outliers for this axis - can't recover
+                        canRecoverByAveraging = false;
+                        break;
+                    }
+                }
+
+                if (canRecoverByAveraging) {
+                    // We can recover by averaging the good measurements
+                    log_info("Detected single outlier measurements, averaging the other three");
+                    for (int axis = 0; axis < 4; axis++) {
+                        float sum   = 0;
+                        int   count = 0;
+                        for (int run = 0; run < 4; run++) {
+                            if (run != outlierIndices[axis]) {
+                                sum += measurements[run][axis];
+                                count++;
+                            }
+                        }
+                        calibration_data[waypoint][axis] = sum / count;
+                        log_info("Axis " << Maslow.axis_id_to_label(axis).c_str() << " averaged " << count
+                                         << " measurements, excluding run " << outlierIndices[axis]);
+                    }
                     criticalCounter = 0;
+                    log_info("Measured waypoint " << waypoint << " (with outlier recovery)");
+
+                    // Skip the normal averaging logic and proceed to the validation section
+                    // Continue with the rest of the function starting from waypoint 0 check
+                    if (waypoint == 0 && currentState == CALIBRATION_IN_PROGRESS) {
+                        float x = 0;
+                        float y = 0;
+                        computeXYfromLengths(calibration_data[0][0], calibration_data[0][1], x, y);
+
+                        auto kinematics = getKinematics();
+                        if (!kinematics)
+                            return false;
+
+                        double threshold = 100;
+                        float  diffTL = calibration_data[0][0] - measurementToXYPlane(kinematics->computeTL(x, y, 0), kinematics->getTlZ());
+                        float  diffTR = calibration_data[0][1] - measurementToXYPlane(kinematics->computeTR(x, y, 0), kinematics->getTrZ());
+                        float  diffBL = calibration_data[0][2] - measurementToXYPlane(kinematics->computeBL(x, y, 0), kinematics->getBlZ());
+                        float  diffBR = calibration_data[0][3] - measurementToXYPlane(kinematics->computeBR(x, y, 0), kinematics->getBrZ());
+                        log_info("Center point off by: TL: " << diffTL << " TR: " << diffTR << " BL: " << diffBL << " BR: " << diffBR);
+
+                        if (abs(diffTL) > threshold || abs(diffTR) > threshold || abs(diffBL) > threshold || abs(diffBR) > threshold) {
+                            log_error("Center point off by over " << threshold << "mm");
+
+                            if (!adjustFrameSizeToMatchFirstMeasurement()) {
+                                Maslow.eStop("Unable to find a valid frame size to match the first measurement");
+                                resetCalibrationState();
+                                criticalCounter = 0;
+                                freeMeasurements();
+                                requestStateChange(EXTENDEDOUT);
+                                return false;
+                            }
+                        }
+
+                        if (!computeXYfromLengths(calibration_data[0][0], calibration_data[0][1], x, y)) {
+                            Maslow.eStop("Unable to find machine position from measurements");
+                            resetCalibrationState();
+                            criticalCounter = 0;
+                            freeMeasurements();
+                            requestStateChange(EXTENDEDOUT);
+                            return false;
+                        }
+
+                        log_info("Machine Position computed as X: " << x << " Y: " << y);
+
+                        //Recompute the first four waypoint locations based on the current position
+                        calibrationGrid[0][0] = x;
+                        calibrationGrid[0][1] = y;
+                        calibrationGrid[1][0] = x + 150;
+                        calibrationGrid[1][1] = y;
+                        calibrationGrid[2][0] = x + 150;
+                        calibrationGrid[2][1] = y + 150;
+                        calibrationGrid[3][0] = x;
+                        calibrationGrid[3][1] = y + 150;
+                        calibrationGrid[4][0] = x - 150;
+                        calibrationGrid[4][1] = y + 150;
+                        calibrationGrid[5][0] = x - 150;
+                        calibrationGrid[5][1] = y;
+                    }
+
                     freeMeasurements();
-                    requestStateChange(EXTENDEDOUT);
+                    return true;
+                } else {
+                    // Can't recover, retry the measurements
+                    //reset the run counter to run the measurements again
+                    if (criticalCounter++ > 8) {  //This updates the counter and checks
+                        log_error("Critical error, measurements are not within 1.5mm of each other 8 times in a row, stopping calibration");
+                        resetCalibrationState();
+                        criticalCounter = 0;
+                        freeMeasurements();
+                        requestStateChange(EXTENDEDOUT);
+                        return false;
+                    }
+                    freeMeasurements();
                     return false;
                 }
-                freeMeasurements();
-                return false;
             }
 
             //If we are measurring the flex we don't want to save the result and instead we want to compare it to the last result
