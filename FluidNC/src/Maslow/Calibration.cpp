@@ -2027,9 +2027,22 @@ float Calibration::measurementToXYPlane(float measurement, float zHeight) {
     if (!kinematics)
         return 0.0f;
 
+    // Debug logging for waypoint 0
+    static bool logged = false;
+    if (!logged) {
+        log_info("measurementToXYPlane DEBUG - measurement: " << measurement << ", zHeight: " << zHeight 
+                 << ", beltExt: " << kinematics->getBeltEndExtension() << ", armLen: " << kinematics->getArmLength());
+        logged = true;
+    }
+
     float lengthInXY = sqrt(measurement * measurement - zHeight * zHeight);
-    return lengthInXY + kinematics->getBeltEndExtension() +
-           kinematics->getArmLength();  //Add the belt end extension and arm length to get the actual distance
+    float result = lengthInXY + kinematics->getBeltEndExtension() + kinematics->getArmLength();
+    
+    if (!logged) {
+        log_info("measurementToXYPlane DEBUG - lengthInXY: " << lengthInXY << ", result: " << result);
+    }
+    
+    return result;  //Add the belt end extension and arm length to get the actual distance
 }
 
 //Takes an XY plane distance, subtracts the belt end extension and arm length, then calculates the angled belt measurement.
