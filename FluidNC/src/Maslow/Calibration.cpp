@@ -218,6 +218,20 @@ bool Calibration::requestStateChange(int newState) {
                         calibrationGrid[GRID_X(i)] = savedCalibrationGrid[i][0];
                         calibrationGrid[GRID_Y(i)] = savedCalibrationGrid[i][1];
                     }
+
+                    // Log waypoint locations after grid generation and restoration of first 6 waypoints (up to 30 items per log message)
+                    log_info("Calibration grid generated with " << pointCount + 1 << " waypoints");
+                    for (int i = 0; i <= pointCount; i += 30) {
+                        String logMsg = "Waypoints [" + String(i) + "-" + String(min(i + 29, pointCount)) + "]: ";
+                        for (int j = i; j <= min(i + 29, pointCount); j++) {
+                            logMsg += "(" + String(j) + ":" + String(calibrationGrid[GRID_X(j)], 1) + "," +
+                                      String(calibrationGrid[GRID_Y(j)], 1) + ")";
+                            if (j < min(i + 29, pointCount)) {
+                                logMsg += " ";
+                            }
+                        }
+                        log_info(logMsg.c_str());
+                    }
                 }
                 Maslow.stop();
 
@@ -1740,19 +1754,6 @@ bool Calibration::generate_calibration_grid() {
     calibrationGrid[GRID_Y(pointCount)] = 0;
 
     recomputePoints[recomputeCount] = pointCount;
-
-    // Log waypoint locations after grid generation completes (up to 30 items per log message)
-    log_info("Calibration grid generated with " << pointCount + 1 << " waypoints");
-    for (int i = 0; i <= pointCount; i += 30) {
-        String logMsg = "Waypoints [" + String(i) + "-" + String(min(i + 29, pointCount)) + "]: ";
-        for (int j = i; j <= min(i + 29, pointCount); j++) {
-            logMsg += "(" + String(j) + ":" + String(calibrationGrid[GRID_X(j)], 1) + "," + String(calibrationGrid[GRID_Y(j)], 1) + ")";
-            if (j < min(i + 29, pointCount)) {
-                logMsg += " ";
-            }
-        }
-        log_info(logMsg.c_str());
-    }
 
     return true;
 }
