@@ -1086,7 +1086,7 @@ bool Calibration::take_measurement_avg_with_check(int waypoint, int dir) {
                 //Recompute the machine position with the belt lenths and compare the results to that
                 float x = 0;
                 float y = 0;
-                computeXYfromLengths(measurements[0][0], measurements[0][1], x, y);
+                computeXYfromLengths(calibration_data[0][0], calibration_data[0][1], x, y);
 
                 //If the frame size is way off, we will compute a rough (assumed to be a square) frame size from the first measurmeent
                 auto kinematics = getKinematics();
@@ -1094,10 +1094,10 @@ bool Calibration::take_measurement_avg_with_check(int waypoint, int dir) {
                     return false;
 
                 double threshold = 100;
-                float  diffTL    = measurements[0][0] - measurementToXYPlane(kinematics->computeTL(x, y, 0), kinematics->getTlZ());
-                float  diffTR    = measurements[0][1] - measurementToXYPlane(kinematics->computeTR(x, y, 0), kinematics->getTrZ());
-                float  diffBL    = measurements[0][2] - measurementToXYPlane(kinematics->computeBL(x, y, 0), kinematics->getBlZ());
-                float  diffBR    = measurements[0][3] - measurementToXYPlane(kinematics->computeBR(x, y, 0), kinematics->getBrZ());
+                float  diffTL    = calibration_data[0][0] - measurementToXYPlane(kinematics->computeTL(x, y, 0), kinematics->getTlZ());
+                float  diffTR    = calibration_data[0][1] - measurementToXYPlane(kinematics->computeTR(x, y, 0), kinematics->getTrZ());
+                float  diffBL    = calibration_data[0][2] - measurementToXYPlane(kinematics->computeBL(x, y, 0), kinematics->getBlZ());
+                float  diffBR    = calibration_data[0][3] - measurementToXYPlane(kinematics->computeBR(x, y, 0), kinematics->getBrZ());
                 log_info("Center point off by: TL: " << diffTL << " TR: " << diffTR << " BL: " << diffBL << " BR: " << diffBR);
 
                 if (abs(diffTL) > threshold || abs(diffTR) > threshold || abs(diffBL) > threshold || abs(diffBR) > threshold) {
