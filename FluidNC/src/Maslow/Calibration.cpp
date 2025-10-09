@@ -1053,7 +1053,7 @@ bool Calibration::take_measurement_avg_with_check(int waypoint, int dir) {
                 sum                           = 0;
                 criticalCounter               = 0;
             }
-            log_info("Measured waypoint " << waypoint);
+            log_info("Measured waypoint " << waypoint << " - Belt lengths: TL=" << calibration_data[waypoint][0] << " TR=" << calibration_data[waypoint][1] << " BL=" << calibration_data[waypoint][2] << " BR=" << calibration_data[waypoint][3]);
 
             //A check to see if the results on the first point are within the expected range
             //This logic should only run during calibration, not during Apply Tension
