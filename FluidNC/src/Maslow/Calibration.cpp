@@ -583,6 +583,7 @@ void Calibration::calibration_loop() {
                 calibrationGrid[GRID_Y(waypoint)]);  //This is used to set the order that the belts are pulled tight in the following measurement
             Maslow.x = calibrationGrid[GRID_X(waypoint)];  //Are these ever used anywhere?
             Maslow.y = calibrationGrid[GRID_Y(waypoint)];
+            log_info("Moving to waypoint " << waypoint << " at X=" << Maslow.x << " Y=" << Maslow.y);
             hold(250);
         }
     }
@@ -1116,7 +1117,18 @@ bool Calibration::take_measurement_avg_with_check(int waypoint, int dir) {
                 sum                           = 0;
                 criticalCounter               = 0;
             }
-            log_info("Measured waypoint " << waypoint << " - Averaged belt lengths: TL=" << calibration_data[waypoint][0] << " TR=" << calibration_data[waypoint][1] << " BL=" << calibration_data[waypoint][2] << " BR=" << calibration_data[waypoint][3]);
+            
+            // For waypoint 0, coordinates are calculated after measurement
+            // For other waypoints, they're already in calibrationGrid
+            float logX = Maslow.x;
+            float logY = Maslow.y;
+            
+            log_info("Measured waypoint " << waypoint 
+                    << " at X=" << logX << " Y=" << logY
+                    << " - Averaged belt lengths: TL=" << calibration_data[waypoint][0] 
+                    << " TR=" << calibration_data[waypoint][1] 
+                    << " BL=" << calibration_data[waypoint][2] 
+                    << " BR=" << calibration_data[waypoint][3]);
 
             //A check to see if the results on the first point are within the expected range
             //This logic should only run during calibration, not during Apply Tension
@@ -1165,6 +1177,7 @@ bool Calibration::take_measurement_avg_with_check(int waypoint, int dir) {
                 }
 
                 log_info("Machine Position computed as X: " << x << " Y: " << y);
+                log_info("Waypoint 0 actual position: X=" << x << " Y=" << y);
 
                 //Recompute the first four waypoint locations based on the current position
                 calibrationGrid[GRID_X(0)] =
