@@ -199,6 +199,22 @@ bool Calibration::requestStateChange(int newState) {
                     // Set the first recompute point to waypoint 5
                     recomputePoints[0]  = 5;
                     recomputeCountIndex = 0;
+                    
+                    // Log the expected calibration parameters before starting
+                    log_info("=== Starting Calibration ===");
+                    log_info("Orientation: " << (orientation == VERTICAL ? "VERTICAL" : "HORIZONTAL"));
+                    log_info("Grid size: " << calibrationGridSize << "x" << calibrationGridSize);
+                    log_info("Grid dimensions: " << calibration_grid_width_mm_X << "x" << calibration_grid_height_mm_Y << "mm");
+                    log_info("First 6 waypoints will be measured to determine machine position");
+                    log_info("Full calibration grid will be generated after waypoint 5");
+                    
+                    // Calculate expected number of waypoints for user information
+                    // Use calibrationGridSize (or calibrationGridSizeX/Y if those are used)
+                    int expectedGridSizeX = (calibrationGridSizeX > 0) ? calibrationGridSizeX : calibrationGridSize;
+                    int expectedGridSizeY = (calibrationGridSizeY > 0) ? calibrationGridSizeY : calibrationGridSize;
+                    int expectedTotalWaypoints = 6 + (expectedGridSizeX * expectedGridSizeY) + 2;
+                    log_info("Expected total waypoints: " << expectedTotalWaypoints 
+                            << " (6 initial + " << (expectedGridSizeX * expectedGridSizeY) << " grid + 2 return)");
                 }
 
                 // If at waypoint 6 and grid hasn't been generated yet (pointCount still 6), generate the calibration grid
@@ -255,11 +271,14 @@ bool Calibration::requestStateChange(int newState) {
                     }
 
                     // Log waypoint locations after grid generation and restoration of first 6 waypoints (up to 30 items per log message)
-                    log_info("Calibration grid generated with " << pointCount + 1 << " waypoints");
+                    log_info("=== Calibration Grid Generated ===");
+                    log_info("Total waypoints: " << pointCount + 1 << " (waypoints 0-" << pointCount << ")");
+                    log_info("Grid points: " << (pointCount + 1 - 6 - 2) << " (after 6 initial, before 2 return-to-center)");
+                    log_info("Waypoint coordinates:");
                     for (int i = 0; i <= pointCount; i += 30) {
                         // Build log message more carefully to avoid heap issues
                         std::stringstream logMsg;
-                        logMsg << "Waypoints [" << i << "-" << min(i + 29, pointCount) << "]: ";
+                        logMsg << "  [" << i << "-" << min(i + 29, pointCount) << "]: ";
                         for (int j = i; j <= min(i + 29, pointCount); j++) {
                             logMsg << "(" << j << ":" << std::fixed << std::setprecision(1) 
                                    << calibrationGrid[GRID_X(j)] << "," << calibrationGrid[GRID_Y(j)] << ")";
