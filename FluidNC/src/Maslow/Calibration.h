@@ -176,8 +176,8 @@ private:
 
     //A structure to hold the state names
     struct StateName {
-        int   state;
-        char* name;
+        int         state;
+        const char* name;
     };
     StateName stateNames[11] = { { UNKNOWN, "Unknown" },
                                  { RETRACTING, "Retracting Belts" },
