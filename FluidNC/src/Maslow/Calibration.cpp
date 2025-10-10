@@ -1999,6 +1999,7 @@ int Calibration::calculateGridPointCount(int gridSizeX, int gridSizeY) {
         }
         
         // Add the corner point at the end of each cycle (line 1786-1788 in generate_calibration_grid)
+        // This is ALWAYS added in the actual generation, regardless of boundary conditions
         count++;
         
         maxX++;
@@ -2007,7 +2008,9 @@ int Calibration::calculateGridPointCount(int gridSizeX, int gridSizeY) {
         currentY = currentY + -1;
     }
 
-    // Add the final two return-to-center points
+    // Add the final two return-to-center points (lines 1800-1805 in generate_calibration_grid)
+    // Note: The actual generation only increments pointCount once for the final center point,
+    // but allocates space for both intermediate and final center points
     count += 2;
 
     return count;
