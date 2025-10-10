@@ -162,6 +162,12 @@ bool Calibration::requestStateChange(int newState) {
             if (currentState == EXTENDEDOUT || currentState == READY_TO_CUT || currentState == CALIBRATION_COMPUTING) {
                 currentState = CALIBRATION_IN_PROGRESS;
 
+                //Update encoder positions before reading them to ensure fresh values
+                Maslow.axisTL.updateEncoderPosition();
+                Maslow.axisTR.updateEncoderPosition();
+                Maslow.axisBL.updateEncoderPosition();
+                Maslow.axisBR.updateEncoderPosition();
+
                 //Reset the axis targets at the beginning of calibration
                 float tlPos = Maslow.axisTL.getPosition();
                 float trPos = Maslow.axisTR.getPosition();
