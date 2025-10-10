@@ -15,37 +15,39 @@
 
 class MotorUnit {
 public:
-    void   begin(int forwardPin, int backwardPin, int readbackPin, int encoderAddress, int channel1, int channel2);
-    void   zero();
-    void   setTarget(double newTarget);
-    double getTarget();
-    double getPosition();
-    void   setPosition(double position);  // Set encoder position from saved value
-    uint16_t getRawEncoderAngle();  // Get current raw encoder angle (0-4095)
-    double getCurrent();
-    double getPositionError();
-    void   stop();
-    bool   updateEncoderPosition();
-    double recomputePID();
-    void   decompressBelt();
-    bool   comply();
-    bool   retract();
-    bool   extend(double targetLength);
-    bool   pull_tight(int currentThreshold);
-    bool   motor_test();
-    void   fullOut();
-    void   fullIn();
-    bool   test();
-    void   reset();  //resetting variables here, because of non-blocking, maybe there's a better way to do this
+    void     begin(int forwardPin, int backwardPin, int readbackPin, int encoderAddress, int channel1, int channel2);
+    void     zero();
+    void     setTarget(double newTarget);
+    double   getTarget();
+    double   getPosition();
+    void     setPosition(double position);  // Set encoder position from saved value
+    uint16_t getRawEncoderAngle();          // Get current raw encoder angle (0-4095)
+    double   getCurrent();
+    double   getPositionError();
+    void     stop();
+    bool     updateEncoderPosition();
+    double   recomputePID();
+    void     decompressBelt();
+    bool     comply();
+    bool     retract();
+    bool     extend(double targetLength);
+    bool     pull_tight(int currentThreshold);
+    bool     motor_test();
+    void     fullOut();
+    void     fullIn();
+    bool     test();
+    void     reset();  //resetting variables here, because of non-blocking, maybe there's a better way to do this
 
     double getMotorCurrent();  //averaged value of the last 10 measurements
     double getBeltSpeed();
     double getMotorPower();
     void   update();
     bool   onTarget(double precision);
+    void   checkSoftLimits();
 
 private:
     int     _encoderAddress;
+    int     _axisIndex;  // FluidNC axis index (A=3, B=4, C=5, D=6)
     AS5600  encoder;
     MiniPID positionPID;  //These are the P,I,D values for the servo motors
     DCMotor motor;

@@ -5,6 +5,8 @@
 #include "MotorUnit.h"
 #include "../Report.h"
 #include "Maslow.h"
+#include "../Machine/MachineConfig.h"
+#include "../Config.h"
 
 // PID controller tuning
 #define P 300
@@ -17,6 +19,27 @@
 
 void MotorUnit::begin(int forwardPin, int backwardPin, int readbackPin, int encoderAddress, int channel1, int channel2) {
     _encoderAddress = encoderAddress;
+
+    // Map encoder address to FluidNC axis index
+    // Encoder 0 (BR) -> Axis D (6), Encoder 1 (TR) -> Axis B (4)
+    // Encoder 2 (TL) -> Axis A (3), Encoder 3 (BL) -> Axis C (5)
+    switch (encoderAddress) {
+        case 0:
+            _axisIndex = 6;
+            break;  // BR -> D
+        case 1:
+            _axisIndex = 4;
+            break;  // TR -> B
+        case 2:
+            _axisIndex = 3;
+            break;  // TL -> A
+        case 3:
+            _axisIndex = 5;
+            break;  // BL -> C
+        default:
+            _axisIndex = -1;
+            break;
+    }
 
     String encAddrLabel = Maslow.axis_id_to_label(_encoderAddress);
 
@@ -113,6 +136,41 @@ void MotorUnit::update() {
     }
 }
 
+// Check if the current belt position exceeds the soft limit
+void MotorUnit::checkSoftLimits() {
+    // Skip if axis index is invalid or no config available
+    if (_axisIndex < 0 || _axisIndex >= MAX_N_AXIS || !config || !config->_axes) {
+        return;
+    }
+
+    auto axisConfig = config->_axes->_axis[_axisIndex];
+    if (!axisConfig || !axisConfig->_softLimits) {
+        return;  // Soft limits not enabled for this axis
+    }
+
+    double currentPosition = getPosition();
+    double maxTravel       = axisConfig->_maxTravel;
+
+    // Belt position is measured from 0 (retracted) to maxTravel (fully extended)
+    // The motor position should be between 0 and maxTravel
+    if (currentPosition > maxTravel) {
+        String encAddrLabel = Maslow.axis_id_to_label(_encoderAddress);
+        String errorMsg     = "Belt on " + encAddrLabel + " has reached maximum extension (" + String(currentPosition, 1) + "mm > " +
+                          String(maxTravel, 1) + "mm). Machine shutdown to prevent damage.";
+
+        log_error(errorMsg.c_str());
+        Maslow.eStop(errorMsg);
+    } else if (currentPosition < 0) {
+        // Also check for negative positions (shouldn't happen but good to validate)
+        String encAddrLabel = Maslow.axis_id_to_label(_encoderAddress);
+        String errorMsg     = "Belt on " + encAddrLabel + " has invalid negative position (" + String(currentPosition, 1) +
+                          "mm < 0mm). Machine shutdown to prevent damage.";
+
+        log_error(errorMsg.c_str());
+        Maslow.eStop(errorMsg);
+    }
+}
+
 // Reads the encoder value and updates it's position
 bool MotorUnit::updateEncoderPosition() {
     if (!Maslow.I2CMux.setPort(_encoderAddress))
@@ -122,7 +180,7 @@ bool MotorUnit::updateEncoderPosition() {
 
     if (encoder.isConnected()) {                                               //this func has 50ms timeout (or worse?, hard to tell)
         mostRecentCumulativeEncoderReading = encoder.getCumulativePosition();  //This updates and returns the encoder value
-        
+
         // Check for I2C communication errors using new AS5600 error handling
         int error = encoder.lastError();
         if (error != 0) {  // AS5600_OK = 0
@@ -150,6 +208,9 @@ double MotorUnit::getPositionError() {
 
 // Recomputes the PID and drives the output
 double MotorUnit::recomputePID() {
+    // Check soft limits before computing PID
+    checkSoftLimits();
+
     _commandPWM = positionPID.getOutput(getPosition(), setpoint);
 
     motor.runAtPWM(_commandPWM);
@@ -365,10 +426,10 @@ void MotorUnit::setPosition(double position) {
     // Convert position in mm to encoder counts
     // Formula: encoderCounts = -(position_mm * 4096.0) / _mmPerRevolution
     int32_t encoderCounts = (int32_t)(-(position * 4096.0) / _mmPerRevolution);
-    
+
     Maslow.I2CMux.setPort(_encoderAddress);
     encoder.resetCumulativePosition(encoderCounts);
-    
+
     // Update our cached value
     mostRecentCumulativeEncoderReading = encoderCounts;
 }
