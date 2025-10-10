@@ -1962,32 +1962,49 @@ int Calibration::calculateGridPointCount(int gridSizeX, int gridSizeY) {
     int maxX = 1;
     int maxY = 1;
     
+    int currentX = 0;
+    int currentY = -1;
+    
     while (maxX <= numberOfCycles || maxY <= numberOfCycles) {
         // Move left (decreasing X) - only if we haven't reached the X boundary
         if (maxX <= numberOfCyclesX) {
-            count += maxX;  // Left movement adds maxX points
+            while (currentX > -1 * maxX) {
+                count++;
+                currentX--;
+            }
         }
         
         // Move up (increasing Y) - only if we haven't reached the Y boundary
         if (maxY <= numberOfCyclesY) {
-            count += maxY;  // Up movement adds maxY points
+            while (currentY < maxY) {
+                count++;
+                currentY++;
+            }
         }
         
         // Move right (increasing X) - only if we haven't reached the X boundary
         if (maxX <= numberOfCyclesX) {
-            count += maxX;  // Right movement adds maxX points
+            while (currentX < maxX) {
+                count++;
+                currentX++;
+            }
         }
         
         // Move down (decreasing Y) - only if we haven't reached the Y boundary
         if (maxY <= numberOfCyclesY) {
-            count += maxY;  // Down movement adds maxY points
+            while (currentY > -1 * maxY) {
+                count++;
+                currentY--;
+            }
         }
         
-        // Add the corner point at the end of each cycle
+        // Add the corner point at the end of each cycle (line 1786-1788 in generate_calibration_grid)
         count++;
         
         maxX++;
         maxY++;
+        
+        currentY = currentY + -1;
     }
 
     // Add the final two return-to-center points
