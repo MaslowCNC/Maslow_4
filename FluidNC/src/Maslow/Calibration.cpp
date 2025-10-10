@@ -203,18 +203,9 @@ bool Calibration::requestStateChange(int newState) {
                     // Log the expected calibration parameters before starting
                     log_info("=== Starting Calibration ===");
                     log_info("Orientation: " << (orientation == VERTICAL ? "VERTICAL" : "HORIZONTAL"));
-                    log_info("Grid size: " << calibrationGridSize << "x" << calibrationGridSize);
-                    log_info("Grid dimensions: " << calibration_grid_width_mm_X << "x" << calibration_grid_height_mm_Y << "mm");
                     log_info("First 6 waypoints will be measured to determine machine position");
                     log_info("Full calibration grid will be generated after waypoint 5");
-                    
-                    // Calculate expected number of waypoints for user information
-                    // Use calibrationGridSize (or calibrationGridSizeX/Y if those are used)
-                    int expectedGridSizeX = (calibrationGridSizeX > 0) ? calibrationGridSizeX : calibrationGridSize;
-                    int expectedGridSizeY = (calibrationGridSizeY > 0) ? calibrationGridSizeY : calibrationGridSize;
-                    int expectedTotalWaypoints = 6 + (expectedGridSizeX * expectedGridSizeY) + 2;
-                    log_info("Expected total waypoints: " << expectedTotalWaypoints 
-                            << " (6 initial + " << (expectedGridSizeX * expectedGridSizeY) << " grid + 2 return)");
+                    log_info("Grid parameters will be calculated and logged after initial measurements");
                 }
 
                 // If at waypoint 6 and grid hasn't been generated yet (pointCount still 6), generate the calibration grid
@@ -1739,11 +1730,13 @@ bool Calibration::generate_calibration_grid() {
     }
 
     // gridSizeX and gridSizeY already calculated earlier
-    int totalPoints = gridSizeX * gridSizeY;
+    int totalGridPoints = gridSizeX * gridSizeY;
+    int totalWaypoints = estimatedPoints; // This includes 6 initial + grid points + 2 return
 
     log_info("=== Calibration Grid ===");
     log_info("Dimensions: " << gridWidth << "x" << gridHeight << "mm");
-    log_info("Grid: " << gridSizeX << "x" << gridSizeY << " (" << totalPoints << " pts)");
+    log_info("Grid: " << gridSizeX << "x" << gridSizeY << " (" << totalGridPoints << " pts)");
+    log_info("Total waypoints: " << totalWaypoints << " (6 initial + " << totalGridPoints << " grid + 2 return)");
     log_info("Frame: " << frameWidth << "x" << frameHeight << "mm");
 
     float xSpacing = _calculated_grid_width_mm / (gridSizeX - 1);
