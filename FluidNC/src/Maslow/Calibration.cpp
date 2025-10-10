@@ -2009,11 +2009,11 @@ int Calibration::calculateGridPointCount(int gridSizeX, int gridSizeY) {
     }
 
     // Add the final return-to-center points (lines 1800-1805 in generate_calibration_grid)
-    // Note: The generation code only increments pointCount once (after line 1801), so only
-    // 1 point is added to the count, even though 2 waypoints are physically generated.
-    // The second waypoint at line 1804-1805 is included in the array but pointCount isn't
-    // incremented after it, so the array size should be count + 1 (not count + 2).
-    count += 1;
+    // Note: The generation code creates 2 waypoints but only increments pointCount once (after line 1801).
+    // However, BOTH waypoints are physically stored in the array, so we need space for both.
+    // The second waypoint at lines 1804-1805 is stored but pointCount isn't incremented,
+    // so we need to allocate count + 2 to account for both physical waypoints in memory.
+    count += 2;
 
     return count;
 }
