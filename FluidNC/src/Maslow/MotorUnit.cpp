@@ -146,11 +146,12 @@ void MotorUnit::update() {
 // The performance overhead is minimal (a few comparisons and a config lookup).
 void MotorUnit::checkSoftLimits() {
     // Skip if axis index is invalid or no config available
-    if (_axisIndex < 0 || _axisIndex >= MAX_N_AXIS || !config || !config->_axes) {
+    if (_axisIndex < 0 || !config || !config->_axes) {
         return;
     }
 
     // Ensure the axis array has enough elements for this axis index
+    // Use the runtime axis count rather than MAX_N_AXIS since Maslow extends beyond standard axes
     if (_axisIndex >= config->_axes->_numberAxis) {
         return;
     }
