@@ -163,10 +163,17 @@ bool Calibration::requestStateChange(int newState) {
                 currentState = CALIBRATION_IN_PROGRESS;
 
                 //Reset the axis targets at the beginning of calibration
-                Maslow.axisTL.setTarget(Maslow.axisTL.getPosition());
-                Maslow.axisTR.setTarget(Maslow.axisTR.getPosition());
-                Maslow.axisBL.setTarget(Maslow.axisBL.getPosition());
-                Maslow.axisBR.setTarget(Maslow.axisBR.getPosition());
+                float tlPos = Maslow.axisTL.getPosition();
+                float trPos = Maslow.axisTR.getPosition();
+                float blPos = Maslow.axisBL.getPosition();
+                float brPos = Maslow.axisBR.getPosition();
+                
+                log_info("Motor positions before setTarget: TL=" << tlPos << " TR=" << trPos << " BL=" << blPos << " BR=" << brPos);
+                
+                Maslow.axisTL.setTarget(tlPos);
+                Maslow.axisTR.setTarget(trPos);
+                Maslow.axisBL.setTarget(blPos);
+                Maslow.axisBR.setTarget(brPos);
 
                 sys.set_state(State::Homing);
 
