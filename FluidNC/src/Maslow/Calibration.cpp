@@ -1686,25 +1686,27 @@ bool Calibration::generate_calibration_grid() {
     // Step 3: Calculate the number of points needed and allocate memory accordingly
     int estimatedPoints = calculateGridPointCount(gridSizeX, gridSizeY);
     allocateCalibrationMemory(estimatedPoints);
+    
+    // Log calibration grid configuration - always log this regardless of auto-calculation or manual settings
     log_info("Allocated memory for " << estimatedPoints << " calibration points");
+    
+    // gridSizeX and gridSizeY already calculated earlier
+    int totalPoints = gridSizeX * gridSizeY;
+    
+    log_info("=== Calibration Grid ===");
+    log_info("Dimensions: " << _calculated_grid_width_mm << "x" << _calculated_grid_height_mm << "mm");
+    log_info("Grid: " << gridSizeX << "x" << gridSizeY << " (" << totalPoints << " pts)");
+    log_info("Frame: " << frameWidth << "x" << frameHeight << "mm");
 
     // Warn if calculated values are outside typical range (100-3000mm)
     const float minTypicalDimension = 100.0f;   // mm
     const float maxTypicalDimension = 3000.0f;  // mm
-    if (gridWidth < minTypicalDimension || gridWidth > maxTypicalDimension) {
-        log_warn("Calculated grid width (" << gridWidth << "mm) is outside typical range (100-3000mm)");
+    if (_calculated_grid_width_mm < minTypicalDimension || _calculated_grid_width_mm > maxTypicalDimension) {
+        log_warn("Grid width (" << _calculated_grid_width_mm << "mm) is outside typical range (100-3000mm)");
     }
-    if (gridHeight < minTypicalDimension || gridHeight > maxTypicalDimension) {
-        log_warn("Calculated grid height (" << gridHeight << "mm) is outside typical range (100-3000mm)");
+    if (_calculated_grid_height_mm < minTypicalDimension || _calculated_grid_height_mm > maxTypicalDimension) {
+        log_warn("Grid height (" << _calculated_grid_height_mm << "mm) is outside typical range (100-3000mm)");
     }
-
-    // gridSizeX and gridSizeY already calculated earlier
-    int totalPoints = gridSizeX * gridSizeY;
-
-    log_info("=== Calibration Grid ===");
-    log_info("Dimensions: " << gridWidth << "x" << gridHeight << "mm");
-    log_info("Grid: " << gridSizeX << "x" << gridSizeY << " (" << totalPoints << " pts)");
-    log_info("Frame: " << frameWidth << "x" << frameHeight << "mm");
 
     float xSpacing = _calculated_grid_width_mm / (gridSizeX - 1);
     float ySpacing = _calculated_grid_height_mm / (gridSizeY - 1);
