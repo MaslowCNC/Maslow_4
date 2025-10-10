@@ -165,6 +165,8 @@ bool Calibration::requestStateChange(int newState) {
                 //Reset the axis targets at the beginning of calibration
                 Maslow.axisTL.setTarget(Maslow.axisTL.getPosition());
                 Maslow.axisTR.setTarget(Maslow.axisTR.getPosition());
+                Maslow.axisBL.setTarget(Maslow.axisBL.getPosition());
+                Maslow.axisBR.setTarget(Maslow.axisBR.getPosition());
 
                 sys.set_state(State::Homing);
 
