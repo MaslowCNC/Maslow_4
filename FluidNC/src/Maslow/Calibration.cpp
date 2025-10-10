@@ -1088,7 +1088,7 @@ bool Calibration::take_measurement_avg_with_check(int waypoint, int dir) {
                        << ",TR=" << measurements[j][1] << ",BL=" << measurements[j][2] << ",BR=" << measurements[j][3] << "]";
                 if (j < 3) logMsg << " ";
             }
-            log_info(logMsg.str().c_str());
+            log_debug(logMsg.str().c_str());
             
             for (int i = 0; i < 4; i++) {  //For each axis
                 sum                           = measurements[0][i] + measurements[1][i] + measurements[2][i] + measurements[3][i];
@@ -2077,7 +2077,7 @@ float Calibration::measurementToXYPlane(float measurement, float zHeight) {
     // Debug logging for first few calls to understand the conversion
     static int logCount = 0;
     if (logCount < 4) {  // Log first 4 calls (one for each belt on first measurement)
-        log_info("measurementToXYPlane DEBUG - measurement: " << measurement << ", zHeight: " << zHeight 
+        log_debug("measurementToXYPlane - measurement: " << measurement << ", zHeight: " << zHeight 
                  << ", beltExt: " << kinematics->getBeltEndExtension() << ", armLen: " << kinematics->getArmLength());
     }
 
@@ -2085,7 +2085,7 @@ float Calibration::measurementToXYPlane(float measurement, float zHeight) {
     float result = lengthInXY + kinematics->getBeltEndExtension() + kinematics->getArmLength();
     
     if (logCount < 4) {
-        log_info("measurementToXYPlane DEBUG - lengthInXY: " << lengthInXY << ", result: " << result);
+        log_debug("measurementToXYPlane - lengthInXY: " << lengthInXY << ", result: " << result);
         logCount++;
     }
     
