@@ -1718,13 +1718,19 @@ bool Calibration::generate_calibration_grid() {
     float ySpacing = _calculated_grid_height_mm / (gridSizeY - 1);
 
     // Calculate number of cycles dynamically based on grid size
-    // For an NxM grid, we need (N-1)/2 cycles in X and (M-1)/2 cycles in Y
-    // Use the maximum to ensure we cover the full grid with the spiral pattern
+    // For odd grids (e.g., 5x5): coords are integers -2,-1,0,1,2, need to reach index 2, so numberOfCycles = 2
+    // For even grids (e.g., 6x6): coords are -2.5,-1.5,-0.5,0.5,1.5,2.5, need to reach 2.5, so numberOfCycles = 2
+    // Formula: numberOfCycles = (gridSize - 1) / 2 for both odd and even (but we use offset for even)
     int numberOfCyclesX = (gridSizeX - 1) / 2;
     int numberOfCyclesY = (gridSizeY - 1) / 2;
     int numberOfCycles  = max(numberOfCyclesX, numberOfCyclesY);
 
-    pointCount         = 6;  //The first four points are computed dynamically
+    // For even-sized grids, we need to use half-integer coordinates (0.5, 1.5, 2.5, etc.)
+    // to properly center the grid around (0,0)
+    float xOffset = (gridSizeX % 2 == 0) ? 0.5f : 0.0f;
+    float yOffset = (gridSizeY % 2 == 0) ? 0.5f : 0.0f;
+
+    pointCount         = 6;  //The first six points are computed dynamically
     recomputePoints[0] = 5;
 
     //The point in the center
@@ -1733,52 +1739,52 @@ bool Calibration::generate_calibration_grid() {
 
     pointCount++;
 
-    int maxX = 1;
-    int maxY = 1;
+    float maxX = 1.0f;
+    float maxY = 1.0f;
 
-    int currentX = 0;
-    int currentY = -1;
+    float currentX = 0.0f + xOffset;
+    float currentY = -1.0f - yOffset;
 
     recomputeCount = 1;
 
-    while (maxX <= numberOfCycles || maxY <= numberOfCycles) {
+    while (maxX <= numberOfCyclesX + xOffset || maxY <= numberOfCyclesY + yOffset) {
         // Move left (decreasing X) - only if we haven't reached the X boundary
-        if (maxX <= numberOfCyclesX) {
-            while (currentX > -1 * maxX) {
+        if (maxX <= numberOfCyclesX + xOffset) {
+            while (currentX > (-1 * maxX - xOffset)) {
                 calibrationGrid[GRID_X(pointCount)] = currentX * xSpacing;
                 calibrationGrid[GRID_Y(pointCount)] = currentY * ySpacing;
                 pointCount++;
-                currentX--;
+                currentX -= 1.0f;
             }
         }
 
         // Move up (increasing Y) - only if we haven't reached the Y boundary
-        if (maxY <= numberOfCyclesY) {
-            while (currentY < maxY) {
+        if (maxY <= numberOfCyclesY + yOffset) {
+            while (currentY < (maxY + yOffset)) {
                 calibrationGrid[GRID_X(pointCount)] = currentX * xSpacing;
                 calibrationGrid[GRID_Y(pointCount)] = currentY * ySpacing;
                 pointCount++;
-                currentY++;
+                currentY += 1.0f;
             }
         }
 
         // Move right (increasing X) - only if we haven't reached the X boundary
-        if (maxX <= numberOfCyclesX) {
-            while (currentX < maxX) {
+        if (maxX <= numberOfCyclesX + xOffset) {
+            while (currentX < (maxX + xOffset)) {
                 calibrationGrid[GRID_X(pointCount)] = currentX * xSpacing;
                 calibrationGrid[GRID_Y(pointCount)] = currentY * ySpacing;
                 pointCount++;
-                currentX++;
+                currentX += 1.0f;
             }
         }
 
         // Move down (decreasing Y) - only if we haven't reached the Y boundary
-        if (maxY <= numberOfCyclesY) {
-            while (currentY > -1 * maxY) {
+        if (maxY <= numberOfCyclesY + yOffset) {
+            while (currentY > (-1 * maxY - yOffset)) {
                 calibrationGrid[GRID_X(pointCount)] = currentX * xSpacing;
                 calibrationGrid[GRID_Y(pointCount)] = currentY * ySpacing;
                 pointCount++;
-                currentY--;
+                currentY -= 1.0f;
             }
         }
 
@@ -1790,10 +1796,10 @@ bool Calibration::generate_calibration_grid() {
         recomputePoints[recomputeCount] = pointCount - 1;  //Minus one because we increment after each point is generated
         recomputeCount++;
 
-        maxX = maxX + 1;
-        maxY = maxY + 1;
+        maxX += 1.0f;
+        maxY += 1.0f;
 
-        currentY = currentY + -1;
+        currentY -= 1.0f;
     }
 
     //Move back to the center
@@ -1955,62 +1961,62 @@ int Calibration::calculateGridPointCount(int gridSizeX, int gridSizeY) {
     // Calculate number of cycles dynamically based on grid size
     int numberOfCyclesX = (gridSizeX - 1) / 2;
     int numberOfCyclesY = (gridSizeY - 1) / 2;
-    int numberOfCycles  = max(numberOfCyclesX, numberOfCyclesY);
+
+    // For even-sized grids, we need to use half-integer coordinates
+    float xOffset = (gridSizeX % 2 == 0) ? 0.5f : 0.0f;
+    float yOffset = (gridSizeY % 2 == 0) ? 0.5f : 0.0f;
 
     // Simulate the actual spiral pattern to count points
     // This must match the logic in generate_calibration_grid exactly
-    int maxX = 1;
-    int maxY = 1;
+    float maxX = 1.0f;
+    float maxY = 1.0f;
     
-    int currentX = 0;
-    int currentY = -1;
+    float currentX = 0.0f + xOffset;
+    float currentY = -1.0f - yOffset;
     
-    while (maxX <= numberOfCycles || maxY <= numberOfCycles) {
+    while (maxX <= numberOfCyclesX + xOffset || maxY <= numberOfCyclesY + yOffset) {
         // Move left (decreasing X) - only if we haven't reached the X boundary
-        if (maxX <= numberOfCyclesX) {
-            while (currentX > -1 * maxX) {
+        if (maxX <= numberOfCyclesX + xOffset) {
+            while (currentX > (-1 * maxX - xOffset)) {
                 count++;
-                currentX--;
+                currentX -= 1.0f;
             }
         }
         
         // Move up (increasing Y) - only if we haven't reached the Y boundary
-        if (maxY <= numberOfCyclesY) {
-            while (currentY < maxY) {
+        if (maxY <= numberOfCyclesY + yOffset) {
+            while (currentY < (maxY + yOffset)) {
                 count++;
-                currentY++;
+                currentY += 1.0f;
             }
         }
         
         // Move right (increasing X) - only if we haven't reached the X boundary
-        if (maxX <= numberOfCyclesX) {
-            while (currentX < maxX) {
+        if (maxX <= numberOfCyclesX + xOffset) {
+            while (currentX < (maxX + xOffset)) {
                 count++;
-                currentX++;
+                currentX += 1.0f;
             }
         }
         
         // Move down (decreasing Y) - only if we haven't reached the Y boundary
-        if (maxY <= numberOfCyclesY) {
-            while (currentY > -1 * maxY) {
+        if (maxY <= numberOfCyclesY + yOffset) {
+            while (currentY > (-1 * maxY - yOffset)) {
                 count++;
-                currentY--;
+                currentY -= 1.0f;
             }
         }
         
-        // Add the corner point at the end of each cycle (line 1786-1788 in generate_calibration_grid)
-        // This is ALWAYS added in the actual generation, regardless of boundary conditions
+        // Add the corner point at the end of each cycle
         count++;
         
-        maxX++;
-        maxY++;
+        maxX += 1.0f;
+        maxY += 1.0f;
         
-        currentY = currentY + -1;
+        currentY -= 1.0f;
     }
 
-    // Add the final two return-to-center points (lines 1800-1805 in generate_calibration_grid)
-    // Note: The actual generation only increments pointCount once for the final center point,
-    // but allocates space for both intermediate and final center points
+    // Add the final two return-to-center points
     count += 2;
 
     return count;
