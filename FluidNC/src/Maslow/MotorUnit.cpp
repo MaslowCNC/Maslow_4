@@ -21,8 +21,13 @@ void MotorUnit::begin(int forwardPin, int backwardPin, int readbackPin, int enco
     _encoderAddress = encoderAddress;
 
     // Map encoder address to FluidNC axis index
-    // Encoder 0 (BR) -> Axis D (6), Encoder 1 (TR) -> Axis B (4)
-    // Encoder 2 (TL) -> Axis A (3), Encoder 3 (BL) -> Axis C (5)
+    // This mapping is specific to the Maslow hardware configuration:
+    // - Each motor is identified by its I2C encoder address (0-3)
+    // - FluidNC axes A,B,C,D (indices 3,4,5,6) control the four belt motors
+    // - Encoder 0 (Bottom Right) -> Axis D (6)
+    // - Encoder 1 (Top Right)    -> Axis B (4)
+    // - Encoder 2 (Top Left)     -> Axis A (3)
+    // - Encoder 3 (Bottom Left)  -> Axis C (5)
     switch (encoderAddress) {
         case 0:
             _axisIndex = 6;
@@ -137,9 +142,16 @@ void MotorUnit::update() {
 }
 
 // Check if the current belt position exceeds the soft limit
+// This is called on every PID cycle to ensure immediate detection of limit violations.
+// The performance overhead is minimal (a few comparisons and a config lookup).
 void MotorUnit::checkSoftLimits() {
     // Skip if axis index is invalid or no config available
     if (_axisIndex < 0 || _axisIndex >= MAX_N_AXIS || !config || !config->_axes) {
+        return;
+    }
+
+    // Ensure the axis array has enough elements for this axis index
+    if (_axisIndex >= config->_axes->_numberAxis) {
         return;
     }
 
@@ -151,8 +163,11 @@ void MotorUnit::checkSoftLimits() {
     double currentPosition = getPosition();
     double maxTravel       = axisConfig->_maxTravel;
 
-    // Belt position is measured from 0 (retracted) to maxTravel (fully extended)
-    // The motor position should be between 0 and maxTravel
+    // Belt position measurement:
+    // - Position 0 = belt fully retracted (wound up on spool)
+    // - Position maxTravel = belt fully extended
+    // - Positions are absolute distances in mm from the zeroed/retracted position
+    // - maxTravel comes from the axis max_travel_mm configuration (e.g., 4000mm)
     if (currentPosition > maxTravel) {
         String encAddrLabel = Maslow.axis_id_to_label(_encoderAddress);
         String errorMsg     = "Belt on " + encAddrLabel + " has reached maximum extension (" + String(currentPosition, 1) + "mm > " +
