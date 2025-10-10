@@ -96,9 +96,12 @@ namespace Machine {
 
     void MachineConfig::groupM4Items(Configuration::HandlerBase& handler) {
         handler.item(M + "_vertical", Maslow.calibration.orientation);
-        handler.item(M + "_calibration_grid_width_mm_X", Maslow.calibration.calibration_grid_width_mm_X, 100, 3000);
-        handler.item(M + "_calibration_grid_height_mm_Y", Maslow.calibration.calibration_grid_height_mm_Y, 100, 3000);
-        handler.item(M + "_calibration_grid_size", Maslow.calibration.calibrationGridSize, 3, 9);
+        handler.item(M + "_calibration_grid_width_mm_X", Maslow.calibration.calibration_grid_width_mm_X);   // No constraint - 0 = auto-calculate
+        handler.item(M + "_calibration_grid_height_mm_Y", Maslow.calibration.calibration_grid_height_mm_Y); // No constraint - 0 = auto-calculate
+        handler.item(M + "_calibration_grid_size", Maslow.calibration.calibrationGridSize, 3, 99);  // Deprecated, use _X and _Y instead
+        handler.item(M + "_calibration_grid_size_X", Maslow.calibration.calibrationGridSizeX, 0, 99);  // 0 = auto-calculate from spacing
+        handler.item(M + "_calibration_grid_size_Y", Maslow.calibration.calibrationGridSizeY, 0, 99);  // 0 = auto-calculate from spacing
+        handler.item(M + "_calibration_grid_spacing", Maslow.calibration.calibrationGridSpacing, 50, 1000);  // mm spacing when grid size is 0
 
         handler.item(M + "_Retract_Current_Threshold", Maslow.calibration.retractCurrentThreshold, 0, 3500);
         handler.item(M + "_Calibration_Current_Threshold", Maslow.calibration.calibrationCurrentThreshold, 0, 3500);
