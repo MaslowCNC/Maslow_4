@@ -1037,9 +1037,9 @@ static Error maslow_swing(const char* value, WebUI::AuthenticationLevel auth_lev
     }
 
     // Parse arguments
-    char   fixedBeltName[10], movingBeltName[10];
-    double distance = 0;
-    double speed    = -1;  // -1 means not specified
+    char  fixedBeltName[10], movingBeltName[10];
+    float distance = 0;
+    float speed    = -1;  // -1 means not specified
 
     // Copy value to a modifiable buffer
     char valueCopy[256];
@@ -1047,7 +1047,7 @@ static Error maslow_swing(const char* value, WebUI::AuthenticationLevel auth_lev
     valueCopy[sizeof(valueCopy) - 1] = '\0';
 
     // Parse with sscanf
-    int numArgs = sscanf(valueCopy, "%s %s %lf %lf", fixedBeltName, movingBeltName, &distance, &speed);
+    int numArgs = sscanf(valueCopy, "%s %s %f %f", fixedBeltName, movingBeltName, &distance, &speed);
 
     if (numArgs < 3) {
         log_error("$swing requires at least 3 arguments: <fixed_belt> <moving_belt> <distance>");

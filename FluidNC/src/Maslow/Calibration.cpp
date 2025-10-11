@@ -1768,7 +1768,7 @@ MotorUnit* Calibration::parseBeltName(const char* name, int& beltIndex) {
 
 // $swing command: pivot on one anchor
 // Returns true on success, false on error
-bool Calibration::swing(const char* fixedBeltName, const char* movingBeltName, double distance, double speed) {
+bool Calibration::swing(const char* fixedBeltName, const char* movingBeltName, float distance, float speed) {
     // Parse belt names
     int        fixedIdx, movingIdx;
     MotorUnit* fixedBelt  = parseBeltName(fixedBeltName, fixedIdx);
@@ -1776,6 +1776,12 @@ bool Calibration::swing(const char* fixedBeltName, const char* movingBeltName, d
 
     if (!fixedBelt || !movingBelt) {
         log_error("Invalid belt name. Use TL, TR, BL, or BR (case insensitive)");
+        return false;
+    }
+
+    // Check that fixed and moving belts are not the same
+    if (fixedIdx == movingIdx) {
+        log_error("Fixed belt and moving belt must not be the same");
         return false;
     }
 
@@ -1797,13 +1803,14 @@ bool Calibration::swing(const char* fixedBeltName, const char* movingBeltName, d
 
     // Put the two non-specified belts in comply mode
     // Store initial positions for comply limit
-    double initialPos[4];
+    float initialPos[4];
     initialPos[0] = Maslow.axisTL.getPosition();
     initialPos[1] = Maslow.axisTR.getPosition();
     initialPos[2] = Maslow.axisBL.getPosition();
     initialPos[3] = Maslow.axisBR.getPosition();
 
     // Reset comply state for belts that should comply
+    // IMPORTANT: Put belts into comply mode BEFORE any other belts start moving
     if (complyBelts[0])
         Maslow.axisTL.reset();
     if (complyBelts[1])
@@ -1814,8 +1821,8 @@ bool Calibration::swing(const char* fixedBeltName, const char* movingBeltName, d
         Maslow.axisBR.reset();
 
     // Calculate target position for moving belt
-    double targetPos          = movingBelt->getPosition() + distance;
-    double maxComplyDistance  = 2000.0;  // Default comply distance limit
+    float         targetPos         = movingBelt->getPosition() + distance;
+    float         maxComplyDistance = 2000.0;  // Default comply distance limit
 
     // Move the moving belt
     bool          movementComplete = false;
@@ -1831,7 +1838,7 @@ bool Calibration::swing(const char* fixedBeltName, const char* movingBeltName, d
         Maslow.updateEncoderPositions();
 
         // Check if moving belt reached target
-        double currentPos = movingBelt->getPosition();
+        float currentPos = movingBelt->getPosition();
         if (distance > 0) {
             if (currentPos >= targetPos) {
                 movementComplete = true;
@@ -1844,7 +1851,7 @@ bool Calibration::swing(const char* fixedBeltName, const char* movingBeltName, d
 
         // Check current on moving belt
         if (movingBelt->getCurrent() > calibrationCurrentThreshold) {
-            log_error("Moving belt hit current limit");
+            log_warn("Moving belt hit current limit");
             hitCurrentLimit  = true;
             movementComplete = true;
         }
@@ -1932,8 +1939,8 @@ bool Calibration::belts(const char* value) {
     struct BeltCommand {
         MotorUnit* motor;
         int        index;
-        double     distance;
-        double     speed;
+        float      distance;
+        float      speed;
         bool       complyMode;
         bool       used;
     };
@@ -1985,9 +1992,9 @@ bool Calibration::belts(const char* value) {
         // Check for comply mode prefix 'c' or 'C'
         if (token[0] == 'c' || token[0] == 'C') {
             commands[beltIdx].complyMode = true;
-            commands[beltIdx].distance   = strtod(token + 1, nullptr);
+            commands[beltIdx].distance   = strtof(token + 1, nullptr);
         } else {
-            commands[beltIdx].distance = strtod(token, nullptr);
+            commands[beltIdx].distance = strtof(token, nullptr);
         }
 
         // Check if next token is a speed (number) or another belt name
@@ -2002,8 +2009,8 @@ bool Calibration::belts(const char* value) {
                 continue;
             } else {
                 // Try to parse as speed
-                char*  endptr;
-                double speedVal = strtod(token, &endptr);
+                char* endptr;
+                float speedVal = strtof(token, &endptr);
                 if (endptr != token) {
                     commands[beltIdx].speed = speedVal;
                     token                   = strtok(nullptr, " \t");
@@ -2024,8 +2031,9 @@ bool Calibration::belts(const char* value) {
     sys.set_state(State::Homing);
 
     // Calculate target positions and initialize comply belts
-    double targetPos[4];
-    double initialPos[4];
+    // IMPORTANT: Put belts into comply mode BEFORE any other belts start moving
+    float targetPos[4];
+    float initialPos[4];
 
     for (int i = 0; i < 4; i++) {
         if (commands[i].used) {
@@ -2057,12 +2065,12 @@ bool Calibration::belts(const char* value) {
             if (!commands[i].used)
                 continue;
 
-            double currentPos = commands[i].motor->getPosition();
-            bool   beltDone   = false;
+            float currentPos = commands[i].motor->getPosition();
+            bool  beltDone   = false;
 
             if (commands[i].complyMode) {
                 // Check comply distance limit
-                double distanceMoved = fabs(currentPos - initialPos[i]);
+                float distanceMoved = fabs(currentPos - initialPos[i]);
                 if (distanceMoved >= fabs(commands[i].distance)) {
                     beltDone = true;
                     commands[i].motor->stop();
@@ -2093,7 +2101,7 @@ bool Calibration::belts(const char* value) {
             // Check current limit for all belts
             if (!beltDone && commands[i].motor->getCurrent() > calibrationCurrentThreshold) {
                 const char* beltNames[] = { "TL", "TR", "BL", "BR" };
-                log_error("Belt " << beltNames[i] << " hit current limit");
+                log_warn("Belt " << beltNames[i] << " hit current limit");
                 hitCurrentLimit  = true;
                 movementComplete = true;
                 break;

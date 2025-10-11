@@ -72,7 +72,7 @@ public:
     void setSafety(bool state);
     
     // Advanced belt control commands
-    bool swing(const char* fixedBeltName, const char* movingBeltName, double distance, double speed);
+    bool swing(const char* fixedBeltName, const char* movingBeltName, float distance, float speed);
     bool belts(const char* value);
 
     //State machine functions
