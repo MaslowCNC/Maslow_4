@@ -501,13 +501,11 @@ void Calibration::home() {
 
 // --Maslow calibration loop
 void Calibration::calibration_loop() {
-    // Debug: Log state at the start of calibration_loop
-    if (waypoint == 6 || waypoint >= pointCount - 1) {
-        log_info("DEBUG calibration_loop: waypoint=" << waypoint << ", pointCount=" << pointCount);
-    }
+    // Completion check: Use > for initial phase (pointCount=6), >= after grid generation (pointCount>6)
+    // This handles both the initial 6 waypoints and the full grid properly
+    bool calibrationComplete = (pointCount == 6) ? (waypoint > pointCount) : (waypoint >= pointCount);
     
-    if (waypoint >=
-        pointCount) {  //pointCount is one past the last valid index, so if waypoint >= pointCount then calibration is complete
+    if (calibrationComplete) {  //Check if calibration is complete
         //Log all belt measurements before resetting calibration state (up to 5 items per log message)
         log_info("Logging belt measurements for " << waypoint << " waypoints");
         log_info("DEBUG: Starting belt measurements loop, allocatedPoints=" << allocatedPoints);
