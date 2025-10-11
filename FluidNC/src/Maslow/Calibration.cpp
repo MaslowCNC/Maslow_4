@@ -1731,94 +1731,110 @@ bool Calibration::generate_calibration_grid() {
     float xSpacing = _calculated_grid_width_mm / (gridSizeX - 1);
     float ySpacing = _calculated_grid_height_mm / (gridSizeY - 1);
 
-    // Calculate number of cycles dynamically based on grid size
-    // For odd grids (e.g., 5x5): coords are integers -2,-1,0,1,2, need to reach index 2, so numberOfCycles = 2
-    // For even grids (e.g., 6x6): coords are -2.5,-1.5,-0.5,0.5,1.5,2.5, need to reach 2.5, so numberOfCycles = 2
-    // Formula: numberOfCycles = (gridSize - 1) / 2 for both odd and even (but we use offset for even)
-    int numberOfCyclesX = (gridSizeX - 1) / 2;
-    int numberOfCyclesY = (gridSizeY - 1) / 2;
-    int numberOfCycles  = max(numberOfCyclesX, numberOfCyclesY);
-
-    // For even-sized grids, we need to use half-integer coordinates (0.5, 1.5, 2.5, etc.)
-    // to properly center the grid around (0,0)
+    // Calculate offsets for even-sized grids to properly center around (0,0)
+    // For even grids, we use half-integer coordinates (0.5, 1.5, 2.5, etc.)
     float xOffset = (gridSizeX % 2 == 0) ? 0.5f : 0.0f;
     float yOffset = (gridSizeY % 2 == 0) ? 0.5f : 0.0f;
+
+    // Calculate number of rings needed for the spiral
+    // For odd grids: points at -n,...,-1,0,1,...,n where n = (size-1)/2
+    // For even grids with offset: similar but with fractional coordinates
+    int maxRingX, maxRingY;
+    
+    if (gridSizeX % 2 == 1) {
+        // Odd: e.g., size 5 -> points at -2,-1,0,1,2, need 2 rings
+        maxRingX = (gridSizeX - 1) / 2;
+    } else {
+        // Even: e.g., size 6 -> points at -2.5,-1.5,-0.5,0.5,1.5,2.5
+        // Distance from center (0.5) to furthest (-2.5) is 3.0, with step 1.0 = 3 rings
+        maxRingX = gridSizeX / 2;
+    }
+    
+    if (gridSizeY % 2 == 1) {
+        maxRingY = (gridSizeY - 1) / 2;
+    } else {
+        maxRingY = gridSizeY / 2;
+    }
+    
+    int maxRing = max(maxRingX, maxRingY);
 
     pointCount         = 6;  //The first six points are computed dynamically
     recomputePoints[0] = 5;
 
-    //The point in the center
+    // Add center point
     calibrationGrid[GRID_X(pointCount)] = 0;
     calibrationGrid[GRID_Y(pointCount)] = 0;
-
     pointCount++;
 
-    float maxX = 1.0f;
-    float maxY = 1.0f;
-
-    float currentX = 0.0f + xOffset;
-    float currentY = -1.0f - yOffset;
+    float centerX = xOffset;
+    float centerY = yOffset;
 
     recomputeCount = 1;
 
-    while (maxX <= numberOfCyclesX + xOffset || maxY <= numberOfCyclesY + yOffset) {
-        // Move left (decreasing X) - only if we haven't reached the X boundary
-        if (maxX <= numberOfCyclesX + xOffset) {
-            while (currentX > (-1 * maxX - xOffset)) {
-                calibrationGrid[GRID_X(pointCount)] = currentX * xSpacing;
-                calibrationGrid[GRID_Y(pointCount)] = currentY * ySpacing;
-                pointCount++;
-                currentX -= 1.0f;
-            }
+    // Generate spiral by rings
+    for (int ring = 1; ring <= maxRing; ring++) {
+        float ringDistX = ring;
+        float ringDistY = ring;
+
+        // Calculate boundaries for this ring, constrained by grid size
+        float leftBound   = max(centerX - ringDistX, -(gridSizeX - 1) / 2.0f - xOffset);
+        float rightBound  = min(centerX + ringDistX, (gridSizeX - 1) / 2.0f + xOffset);
+        float bottomBound = max(centerY - ringDistY, -(gridSizeY - 1) / 2.0f - yOffset);
+        float topBound    = min(centerY + ringDistY, (gridSizeY - 1) / 2.0f + yOffset);
+
+        // Start at bottom center of ring
+        float currentX = centerX;
+        float currentY = bottomBound;
+
+        // Move left along bottom edge
+        while (currentX > leftBound) {
+            calibrationGrid[GRID_X(pointCount)] = currentX * xSpacing;
+            calibrationGrid[GRID_Y(pointCount)] = currentY * ySpacing;
+            pointCount++;
+            currentX -= 1.0f;
         }
 
-        // Move up (increasing Y) - only if we haven't reached the Y boundary
-        if (maxY <= numberOfCyclesY + yOffset) {
-            while (currentY < (maxY + yOffset)) {
-                calibrationGrid[GRID_X(pointCount)] = currentX * xSpacing;
-                calibrationGrid[GRID_Y(pointCount)] = currentY * ySpacing;
-                pointCount++;
-                currentY += 1.0f;
-            }
+        // Move up along left edge
+        while (currentY < topBound) {
+            calibrationGrid[GRID_X(pointCount)] = currentX * xSpacing;
+            calibrationGrid[GRID_Y(pointCount)] = currentY * ySpacing;
+            pointCount++;
+            currentY += 1.0f;
         }
 
-        // Move right (increasing X) - only if we haven't reached the X boundary
-        if (maxX <= numberOfCyclesX + xOffset) {
-            while (currentX < (maxX + xOffset)) {
-                calibrationGrid[GRID_X(pointCount)] = currentX * xSpacing;
-                calibrationGrid[GRID_Y(pointCount)] = currentY * ySpacing;
-                pointCount++;
-                currentX += 1.0f;
-            }
+        // Move right along top edge
+        while (currentX < rightBound) {
+            calibrationGrid[GRID_X(pointCount)] = currentX * xSpacing;
+            calibrationGrid[GRID_Y(pointCount)] = currentY * ySpacing;
+            pointCount++;
+            currentX += 1.0f;
         }
 
-        // Move down (decreasing Y) - only if we haven't reached the Y boundary
-        if (maxY <= numberOfCyclesY + yOffset) {
-            while (currentY > (-1 * maxY - yOffset)) {
-                calibrationGrid[GRID_X(pointCount)] = currentX * xSpacing;
-                calibrationGrid[GRID_Y(pointCount)] = currentY * ySpacing;
-                pointCount++;
-                currentY -= 1.0f;
-            }
+        // Move down along right edge
+        while (currentY > bottomBound) {
+            calibrationGrid[GRID_X(pointCount)] = currentX * xSpacing;
+            calibrationGrid[GRID_Y(pointCount)] = currentY * ySpacing;
+            pointCount++;
+            currentY -= 1.0f;
         }
 
-        //Add the last point to the recompute list
-        calibrationGrid[GRID_X(pointCount)] = currentX * xSpacing;
-        calibrationGrid[GRID_Y(pointCount)] = currentY * ySpacing;
-        pointCount++;
+        // Move left back toward center along bottom edge
+        while (currentX > centerX) {
+            calibrationGrid[GRID_X(pointCount)] = currentX * xSpacing;
+            calibrationGrid[GRID_Y(pointCount)] = currentY * ySpacing;
+            pointCount++;
+            currentX -= 1.0f;
+        }
 
-        recomputePoints[recomputeCount] = pointCount - 1;  //Minus one because we increment after each point is generated
+        // Add recompute point at end of each ring
+        recomputePoints[recomputeCount] = pointCount - 1;
         recomputeCount++;
-
-        maxX += 1.0f;
-        maxY += 1.0f;
-
-        currentY -= 1.0f;
     }
 
-    //Move back to the center
+    // Move back to the center - the spiral ends at (centerX, bottomBound of last ring)
+    // We need to add two more points to return to center
     calibrationGrid[GRID_X(pointCount)] = 0;
-    calibrationGrid[GRID_Y(pointCount)] = (currentY + 1) * ySpacing;  //The last loop added an nunecessary -1 to the y position
+    calibrationGrid[GRID_Y(pointCount)] = 0;
     pointCount++;
 
     calibrationGrid[GRID_X(pointCount)] = 0;
@@ -1972,62 +1988,74 @@ int Calibration::calculateGridPointCount(int gridSizeX, int gridSizeY) {
     // The grid starts with 6 fixed points (waypoints 0-5) plus the center point at index 6
     int count = 7;  // Points 0-6
 
-    // Calculate number of cycles dynamically based on grid size
-    int numberOfCyclesX = (gridSizeX - 1) / 2;
-    int numberOfCyclesY = (gridSizeY - 1) / 2;
-
-    // For even-sized grids, we need to use half-integer coordinates
+    // Calculate offsets for even-sized grids
     float xOffset = (gridSizeX % 2 == 0) ? 0.5f : 0.0f;
     float yOffset = (gridSizeY % 2 == 0) ? 0.5f : 0.0f;
 
+    // Calculate number of rings needed
+    int maxRingX, maxRingY;
+    
+    if (gridSizeX % 2 == 1) {
+        maxRingX = (gridSizeX - 1) / 2;
+    } else {
+        maxRingX = gridSizeX / 2;
+    }
+    
+    if (gridSizeY % 2 == 1) {
+        maxRingY = (gridSizeY - 1) / 2;
+    } else {
+        maxRingY = gridSizeY / 2;
+    }
+    
+    int maxRing = max(maxRingX, maxRingY);
+
     // Simulate the actual spiral pattern to count points
     // This must match the logic in generate_calibration_grid exactly
-    float maxX = 1.0f;
-    float maxY = 1.0f;
+    float centerX = xOffset;
+    float centerY = yOffset;
     
-    float currentX = 0.0f + xOffset;
-    float currentY = -1.0f - yOffset;
-    
-    while (maxX <= numberOfCyclesX + xOffset || maxY <= numberOfCyclesY + yOffset) {
-        // Move left (decreasing X) - only if we haven't reached the X boundary
-        if (maxX <= numberOfCyclesX + xOffset) {
-            while (currentX > (-1 * maxX - xOffset)) {
-                count++;
-                currentX -= 1.0f;
-            }
+    for (int ring = 1; ring <= maxRing; ring++) {
+        float ringDistX = ring;
+        float ringDistY = ring;
+
+        // Calculate boundaries for this ring
+        float leftBound   = max(centerX - ringDistX, -(gridSizeX - 1) / 2.0f - xOffset);
+        float rightBound  = min(centerX + ringDistX, (gridSizeX - 1) / 2.0f + xOffset);
+        float bottomBound = max(centerY - ringDistY, -(gridSizeY - 1) / 2.0f - yOffset);
+        float topBound    = min(centerY + ringDistY, (gridSizeY - 1) / 2.0f + yOffset);
+
+        float currentX = centerX;
+        float currentY = bottomBound;
+
+        // Move left
+        while (currentX > leftBound) {
+            count++;
+            currentX -= 1.0f;
         }
-        
-        // Move up (increasing Y) - only if we haven't reached the Y boundary
-        if (maxY <= numberOfCyclesY + yOffset) {
-            while (currentY < (maxY + yOffset)) {
-                count++;
-                currentY += 1.0f;
-            }
+
+        // Move up
+        while (currentY < topBound) {
+            count++;
+            currentY += 1.0f;
         }
-        
-        // Move right (increasing X) - only if we haven't reached the X boundary
-        if (maxX <= numberOfCyclesX + xOffset) {
-            while (currentX < (maxX + xOffset)) {
-                count++;
-                currentX += 1.0f;
-            }
+
+        // Move right
+        while (currentX < rightBound) {
+            count++;
+            currentX += 1.0f;
         }
-        
-        // Move down (decreasing Y) - only if we haven't reached the Y boundary
-        if (maxY <= numberOfCyclesY + yOffset) {
-            while (currentY > (-1 * maxY - yOffset)) {
-                count++;
-                currentY -= 1.0f;
-            }
+
+        // Move down
+        while (currentY > bottomBound) {
+            count++;
+            currentY -= 1.0f;
         }
-        
-        // Add the corner point at the end of each cycle
-        count++;
-        
-        maxX += 1.0f;
-        maxY += 1.0f;
-        
-        currentY -= 1.0f;
+
+        // Move left back toward center
+        while (currentX > centerX) {
+            count++;
+            currentX -= 1.0f;
+        }
     }
 
     // Add the final two return-to-center points
