@@ -247,12 +247,15 @@ bool Calibration::requestStateChange(int newState) {
                     log_info("=== Calibration Grid Generated ===");
                     log_info("Total waypoints: " << pointCount << " (waypoints 0-" << (pointCount - 1) << ")");
                     log_info("Grid points: " << (pointCount - 6 - 2) << " (after 6 initial, before 2 return-to-center)");
+                    log_info("DEBUG: About to log waypoint coordinates, pointCount=" << pointCount << ", allocatedPoints=" << allocatedPoints);
                     log_info("Waypoint coordinates:");
                     for (int i = 0; i < pointCount; i += 30) {
+                        log_info("DEBUG: Outer loop i=" << i << ", will process waypoints " << i << " to " << min(i + 29, pointCount - 1));
                         // Build log message more carefully to avoid heap issues
                         std::stringstream logMsg;
                         logMsg << "  [" << i << "-" << min(i + 29, pointCount - 1) << "]: ";
                         for (int j = i; j <= min(i + 29, pointCount - 1); j++) {
+                            log_info("DEBUG: About to access calibrationGrid indices GRID_X(" << j << ")=" << GRID_X(j) << " and GRID_Y(" << j << ")=" << GRID_Y(j));
                             logMsg << "(" << j << ":" << std::fixed << std::setprecision(1) 
                                    << calibrationGrid[GRID_X(j)] << "," << calibrationGrid[GRID_Y(j)] << ")";
                             if (j < min(i + 29, pointCount)) {
@@ -505,11 +508,14 @@ void Calibration::calibration_loop() {
     if (calibrationComplete) {  //Check if calibration is complete
         //Log all belt measurements before resetting calibration state (up to 5 items per log message)
         log_info("Logging belt measurements for " << waypoint << " waypoints");
+        log_info("DEBUG: Starting belt measurements loop, allocatedPoints=" << allocatedPoints);
         for (int i = 0; i < waypoint; i += 5) {
+            log_info("DEBUG: Outer loop iteration i=" << i << ", processing waypoints " << i << " to " << min(i + 4, waypoint - 1));
             // Build log message more carefully to avoid heap issues
             std::stringstream logMsg;
             logMsg << "Belt lengths [" << i << "-" << min(i + 4, waypoint - 1) << "]: ";
             for (int j = i; j < min(i + 5, waypoint); j++) {
+                log_info("DEBUG: About to access calibration_data[" << j << "]");
                 logMsg << "(" << j << ":TL=" << std::fixed << std::setprecision(2) << calibration_data[j][0]
                        << ",TR=" << calibration_data[j][1] << ",BL=" << calibration_data[j][2]
                        << ",BR=" << calibration_data[j][3] << ")";
@@ -519,6 +525,7 @@ void Calibration::calibration_loop() {
             }
             log_info(logMsg.str().c_str());
         }
+        log_info("DEBUG: Finished belt measurements loop successfully");
 
         //Reset all of the calibration variables to the defaults so that calibration can be run again
         resetCalibrationState();
@@ -1723,7 +1730,6 @@ bool Calibration::generate_calibration_grid() {
     log_info("Grid: " << gridSizeX << "x" << gridSizeY << " (" << totalGridPoints << " pts)");
     log_info("Total waypoints: " << totalWaypoints << " (6 initial + " << totalGridPoints << " grid + 2 return)");
     log_info("Frame: " << frameWidth << "x" << frameHeight << "mm");
-    log_info("Generating spiral pattern...");
 
     float xSpacing = _calculated_grid_width_mm / (gridSizeX - 1);
     float ySpacing = _calculated_grid_height_mm / (gridSizeY - 1);
@@ -1846,7 +1852,6 @@ bool Calibration::generate_calibration_grid() {
 
     recomputePoints[recomputeCount] = pointCount - 1;  // Last recompute point is at the final waypoint
 
-    log_info("Spiral generation complete - created " << pointCount << " waypoints");
     return true;
 }
 
