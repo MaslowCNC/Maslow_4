@@ -1033,12 +1033,12 @@ static MotorUnit* parseBeltName(const char* name, int& beltIndex) {
     if (!name || !*name) {
         return nullptr;
     }
-    
+
     // Convert to uppercase for comparison
-    char upper[3] = {0};
-    upper[0] = toupper(name[0]);
-    upper[1] = toupper(name[1]);
-    
+    char upper[3] = { 0 };
+    upper[0]      = toupper(name[0]);
+    upper[1]      = toupper(name[1]);
+
     if (strcmp(upper, "TL") == 0) {
         beltIndex = 0;
         return &Maslow.axisTL;
@@ -1052,7 +1052,7 @@ static MotorUnit* parseBeltName(const char* name, int& beltIndex) {
         beltIndex = 3;
         return &Maslow.axisBR;
     }
-    
+
     return nullptr;
 }
 
@@ -1062,56 +1062,56 @@ static Error maslow_swing(const char* value, WebUI::AuthenticationLevel auth_lev
     if (Maslow.using_default_config) {
         return Error::ConfigurationInvalid;
     }
-    
+
     if (!value || !*value) {
         log_error("$swing requires arguments: <fixed_belt> <moving_belt> <distance> [speed]");
         return Error::InvalidStatement;
     }
-    
+
     // Parse arguments
-    char fixedBeltName[10], movingBeltName[10];
+    char   fixedBeltName[10], movingBeltName[10];
     double distance = 0;
-    double speed = -1;  // -1 means not specified
-    
+    double speed    = -1;  // -1 means not specified
+
     // Copy value to a modifiable buffer
     char valueCopy[256];
     strncpy(valueCopy, value, sizeof(valueCopy) - 1);
     valueCopy[sizeof(valueCopy) - 1] = '\0';
-    
+
     // Parse with sscanf
     int numArgs = sscanf(valueCopy, "%s %s %lf %lf", fixedBeltName, movingBeltName, &distance, &speed);
-    
+
     if (numArgs < 3) {
         log_error("$swing requires at least 3 arguments: <fixed_belt> <moving_belt> <distance>");
         return Error::InvalidStatement;
     }
-    
+
     // Parse belt names
-    int fixedIdx, movingIdx;
-    MotorUnit* fixedBelt = parseBeltName(fixedBeltName, fixedIdx);
+    int        fixedIdx, movingIdx;
+    MotorUnit* fixedBelt  = parseBeltName(fixedBeltName, fixedIdx);
     MotorUnit* movingBelt = parseBeltName(movingBeltName, movingIdx);
-    
+
     if (!fixedBelt || !movingBelt) {
         log_error("Invalid belt name. Use TL, TR, BL, or BR (case insensitive)");
         return Error::InvalidStatement;
     }
-    
+
     // Check for conflicting belt pairs (TL+BR or TR+BL)
     if ((fixedIdx == 0 && movingIdx == 3) || (fixedIdx == 3 && movingIdx == 0) ||  // TL+BR or BR+TL
         (fixedIdx == 1 && movingIdx == 2) || (fixedIdx == 2 && movingIdx == 1)) {  // TR+BL or BL+TR
         log_error("Invalid belt combination: cannot use TL+BR or TR+BL together");
         return Error::InvalidStatement;
     }
-    
+
     // Determine which belts should comply (the other two)
-    bool complyBelts[4] = {true, true, true, true};
-    complyBelts[fixedIdx] = false;
+    bool complyBelts[4]    = { true, true, true, true };
+    complyBelts[fixedIdx]  = false;
     complyBelts[movingIdx] = false;
-    
+
     log_info("$swing: fixed=" << fixedBeltName << " moving=" << movingBeltName << " distance=" << distance);
-    
+
     sys.set_state(State::Homing);
-    
+
     // Put the two non-specified belts in comply mode
     // Store initial positions for comply limit
     double initialPos[4];
@@ -1119,30 +1119,34 @@ static Error maslow_swing(const char* value, WebUI::AuthenticationLevel auth_lev
     initialPos[1] = Maslow.axisTR.getPosition();
     initialPos[2] = Maslow.axisBL.getPosition();
     initialPos[3] = Maslow.axisBR.getPosition();
-    
+
     // Reset comply state for belts that should comply
-    if (complyBelts[0]) Maslow.axisTL.reset();
-    if (complyBelts[1]) Maslow.axisTR.reset();
-    if (complyBelts[2]) Maslow.axisBL.reset();
-    if (complyBelts[3]) Maslow.axisBR.reset();
-    
+    if (complyBelts[0])
+        Maslow.axisTL.reset();
+    if (complyBelts[1])
+        Maslow.axisTR.reset();
+    if (complyBelts[2])
+        Maslow.axisBL.reset();
+    if (complyBelts[3])
+        Maslow.axisBR.reset();
+
     // Calculate target position for moving belt
-    double targetPos = movingBelt->getPosition() + distance;
+    double targetPos         = movingBelt->getPosition() + distance;
     double maxComplyDistance = 2000.0;  // Default comply distance limit
-    
+
     // Move the moving belt
-    bool movementComplete = false;
-    bool hitCurrentLimit = false;
-    unsigned long startTime = millis();
-    unsigned long timeout = 120000;  // 120 second timeout
-    
+    bool          movementComplete = false;
+    bool          hitCurrentLimit  = false;
+    unsigned long startTime        = millis();
+    unsigned long timeout          = 120000;  // 120 second timeout
+
     while (!movementComplete && (millis() - startTime) < timeout) {
         // Call system realtime function to allow system to process other events
         protocol_exec_rt_system();
-        
+
         // Update encoder positions
         Maslow.updateEncoderPositions();
-        
+
         // Check if moving belt reached target
         double currentPos = movingBelt->getPosition();
         if (distance > 0) {
@@ -1154,14 +1158,14 @@ static Error maslow_swing(const char* value, WebUI::AuthenticationLevel auth_lev
                 movementComplete = true;
             }
         }
-        
+
         // Check current on moving belt
         if (movingBelt->getCurrent() > Maslow.calibration.calibrationCurrentThreshold) {
             log_error("Moving belt hit current limit");
-            hitCurrentLimit = true;
+            hitCurrentLimit  = true;
             movementComplete = true;
         }
-        
+
         if (!movementComplete) {
             // Apply comply to the complying belts with distance limit
             if (complyBelts[0] && fabs(Maslow.axisTL.getPosition() - initialPos[0]) < maxComplyDistance) {
@@ -1176,37 +1180,37 @@ static Error maslow_swing(const char* value, WebUI::AuthenticationLevel auth_lev
             if (complyBelts[3] && fabs(Maslow.axisBR.getPosition() - initialPos[3]) < maxComplyDistance) {
                 Maslow.axisBR.comply();
             }
-            
+
             // Move the moving belt
             movingBelt->comply();
         }
-        
+
         delay_ms(10);
     }
-    
+
     // Stop all movement
     Maslow.axisTL.stop();
     Maslow.axisTR.stop();
     Maslow.axisBL.stop();
     Maslow.axisBR.stop();
-    
+
     if (!hitCurrentLimit) {
         // Tighten the two comply belts
         log_info("Tightening comply belts");
-        
+
         bool tighteningComplete = false;
-        bool tl_done = !complyBelts[0];
-        bool tr_done = !complyBelts[1];
-        bool bl_done = !complyBelts[2];
-        bool br_done = !complyBelts[3];
-        
+        bool tl_done            = !complyBelts[0];
+        bool tr_done            = !complyBelts[1];
+        bool bl_done            = !complyBelts[2];
+        bool br_done            = !complyBelts[3];
+
         startTime = millis();
-        
+
         while (!tighteningComplete && (millis() - startTime) < timeout) {
             protocol_exec_rt_system();
-            
+
             Maslow.updateEncoderPositions();
-            
+
             if (complyBelts[0] && !tl_done) {
                 tl_done = Maslow.axisTL.pull_tight(Maslow.calibration.calibrationCurrentThreshold);
             }
@@ -1219,22 +1223,22 @@ static Error maslow_swing(const char* value, WebUI::AuthenticationLevel auth_lev
             if (complyBelts[3] && !br_done) {
                 br_done = Maslow.axisBR.pull_tight(Maslow.calibration.calibrationCurrentThreshold);
             }
-            
+
             tighteningComplete = tl_done && tr_done && bl_done && br_done;
-            
+
             delay_ms(5);
         }
-        
+
         // Stop all belts
         Maslow.axisTL.stop();
         Maslow.axisTR.stop();
         Maslow.axisBL.stop();
         Maslow.axisBR.stop();
     }
-    
+
     sys.set_state(State::Idle);
     log_info("$swing complete");
-    
+
     return Error::Ok;
 }
 
@@ -1245,111 +1249,111 @@ static Error maslow_belts(const char* value, WebUI::AuthenticationLevel auth_lev
     if (Maslow.using_default_config) {
         return Error::ConfigurationInvalid;
     }
-    
+
     if (!value || !*value) {
         log_error("$belts requires arguments: <belt> <distance> [speed] ...");
         return Error::InvalidStatement;
     }
-    
+
     // Parse arguments
     struct BeltCommand {
         MotorUnit* motor;
-        int index;
-        double distance;
-        double speed;
-        bool complyMode;
-        bool used;
+        int        index;
+        double     distance;
+        double     speed;
+        bool       complyMode;
+        bool       used;
     };
-    
-    BeltCommand commands[4] = {0};
+
+    BeltCommand commands[4] = { 0 };
     for (int i = 0; i < 4; i++) {
-        commands[i].motor = nullptr;
-        commands[i].used = false;
-        commands[i].speed = -1;  // Default: no speed specified
+        commands[i].motor      = nullptr;
+        commands[i].used       = false;
+        commands[i].speed      = -1;  // Default: no speed specified
         commands[i].complyMode = false;
     }
-    
+
     // Copy value to modifiable buffer
     char valueCopy[1024];
     strncpy(valueCopy, value, sizeof(valueCopy) - 1);
     valueCopy[sizeof(valueCopy) - 1] = '\0';
-    
+
     // Tokenize and parse
-    char* token = strtok(valueCopy, " \t");
-    int cmdCount = 0;
-    
+    char* token    = strtok(valueCopy, " \t");
+    int   cmdCount = 0;
+
     while (token && cmdCount < 4) {
         // First token should be belt name
-        int beltIdx;
+        int        beltIdx;
         MotorUnit* motor = parseBeltName(token, beltIdx);
-        
+
         if (!motor) {
             log_error("Invalid belt name: " << token);
             return Error::InvalidStatement;
         }
-        
+
         // Check if belt already specified
         if (commands[beltIdx].used) {
             log_error("Belt specified multiple times: " << token);
             return Error::InvalidStatement;
         }
-        
+
         commands[beltIdx].motor = motor;
         commands[beltIdx].index = beltIdx;
-        commands[beltIdx].used = true;
-        
+        commands[beltIdx].used  = true;
+
         // Next token should be distance
         token = strtok(nullptr, " \t");
         if (!token) {
             log_error("Missing distance for belt");
             return Error::InvalidStatement;
         }
-        
+
         // Check for comply mode prefix 'c' or 'C'
         if (token[0] == 'c' || token[0] == 'C') {
             commands[beltIdx].complyMode = true;
-            commands[beltIdx].distance = strtod(token + 1, nullptr);
+            commands[beltIdx].distance   = strtod(token + 1, nullptr);
         } else {
             commands[beltIdx].distance = strtod(token, nullptr);
         }
-        
+
         // Check if next token is a speed (number) or another belt name
         token = strtok(nullptr, " \t");
         if (token) {
-            int testIdx;
+            int        testIdx;
             MotorUnit* testMotor = parseBeltName(token, testIdx);
-            
+
             if (testMotor) {
                 // It's a belt name, continue to next belt
                 cmdCount++;
                 continue;
             } else {
                 // Try to parse as speed
-                char* endptr;
+                char*  endptr;
                 double speedVal = strtod(token, &endptr);
                 if (endptr != token) {
                     commands[beltIdx].speed = speedVal;
-                    token = strtok(nullptr, " \t");
+                    token                   = strtok(nullptr, " \t");
                 }
             }
         }
-        
+
         cmdCount++;
     }
-    
+
     if (cmdCount == 0) {
         log_error("No valid belt commands specified");
         return Error::InvalidStatement;
     }
-    
+
     log_info("$belts: moving " << cmdCount << " belts");
-    
+
     sys.set_state(State::Homing);
-    
+
     // Calculate target positions and initialize comply belts
     double targetPos[4];
     double initialPos[4];
-    
+
     for (int i = 0; i < 4; i++) {
         if (commands[i].used) {
             initialPos[i] = commands[i].motor->getPosition();
@@ -1361,27 +1365,28 @@ static Error maslow_belts(const char* value, WebUI::AuthenticationLevel auth_lev
             }
         }
     }
-    
+
     // Move all belts simultaneously
-    bool movementComplete = false;
-    bool hitCurrentLimit = false;
-    char* limitBelt = nullptr;
-    unsigned long startTime = millis();
-    unsigned long timeout = 120000;  // 120 second timeout
-    
+    bool          movementComplete = false;
+    bool          hitCurrentLimit  = false;
+    char*         limitBelt        = nullptr;
+    unsigned long startTime        = millis();
+    unsigned long timeout          = 120000;  // 120 second timeout
+
     while (!movementComplete && (millis() - startTime) < timeout) {
         protocol_exec_rt_system();
-        
+
         Maslow.updateEncoderPositions();
-        
+
         bool allDone = true;
-        
+
         for (int i = 0; i < 4; i++) {
-            if (!commands[i].used) continue;
-            
+            if (!commands[i].used)
+                continue;
+
             double currentPos = commands[i].motor->getPosition();
-            bool beltDone = false;
-            
+            bool   beltDone   = false;
+
             if (commands[i].complyMode) {
                 // Check comply distance limit
                 double distanceMoved = fabs(currentPos - initialPos[i]);
@@ -1405,44 +1410,44 @@ static Error maslow_belts(const char* value, WebUI::AuthenticationLevel auth_lev
                         commands[i].motor->stop();
                     }
                 }
-                
+
                 if (!beltDone) {
                     commands[i].motor->comply();
                     allDone = false;
                 }
             }
-            
+
             // Check current limit for all belts
             if (!beltDone && commands[i].motor->getCurrent() > Maslow.calibration.calibrationCurrentThreshold) {
-                const char* beltNames[] = {"TL", "TR", "BL", "BR"};
+                const char* beltNames[] = { "TL", "TR", "BL", "BR" };
                 log_error("Belt " << beltNames[i] << " hit current limit");
-                hitCurrentLimit = true;
+                hitCurrentLimit  = true;
                 movementComplete = true;
                 break;
             }
         }
-        
+
         if (allDone) {
             movementComplete = true;
         }
-        
+
         delay_ms(10);
     }
-    
+
     // Stop all belts
     Maslow.axisTL.stop();
     Maslow.axisTR.stop();
     Maslow.axisBL.stop();
     Maslow.axisBR.stop();
-    
+
     sys.set_state(State::Idle);
-    
+
     if (hitCurrentLimit) {
         log_info("$belts stopped due to current limit");
     } else {
         log_info("$belts complete");
     }
-    
+
     return Error::Ok;
 }
 
@@ -1538,7 +1543,7 @@ void make_user_commands() {
     new UserCommand("ESTOP", M + "/estop", maslow_estop, anyState);
     new UserCommand("SETZSTOP", M + "/setZStop", maslow_set_zStop, anyState);
     new UserCommand("MINFO", M + "/getInfo", maslow_get_info, anyState);
-    
+
     new UserCommand("SWING", M + "/swing", maslow_swing, anyState);
     new UserCommand("BELTS", M + "/belts", maslow_belts, anyState);
     new UserCommand("GSTATE", M + "/gstate", maslow_get_state, anyState);
