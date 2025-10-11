@@ -2038,13 +2038,15 @@ void Calibration::allocateCalibrationMemory(int numPoints) {
         calibrationGrid = new float[numPoints * 2 + 6];
     }
     if (calibration_data == nullptr) {
-        calibration_data = new float*[numPoints];
-        for (int i = 0; i < numPoints; ++i) {
+        // Allocate extra rows for safety buffer to match calibrationGrid allocation
+        // The +3 accounts for potential miscalculation in calculateGridPointCount
+        calibration_data = new float*[numPoints + 3];
+        for (int i = 0; i < numPoints + 3; ++i) {
             calibration_data[i] = new float[4];
         }
     }
     // Store the allocated size for later deallocation
-    allocatedPoints = numPoints;
+    allocatedPoints = numPoints + 3;
     pointCount      = 0;  // Will be populated during grid generation
 }
 
