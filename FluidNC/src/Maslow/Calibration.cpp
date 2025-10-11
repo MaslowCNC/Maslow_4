@@ -512,9 +512,11 @@ void Calibration::calibration_loop() {
         log_info("Logging belt measurements for " << waypoint << " waypoints");
         for (int i = 0; i < waypoint; i++) {
             // Log each waypoint individually to avoid heap exhaustion
-            log_info("Waypoint " << i << " belt lengths: TL=" << std::fixed << std::setprecision(2) 
-                     << calibration_data[i][0] << " TR=" << calibration_data[i][1] 
-                     << " BL=" << calibration_data[i][2] << " BR=" << calibration_data[i][3]);
+            float tl = calibration_data[i][0];
+            float tr = calibration_data[i][1];
+            float bl = calibration_data[i][2];
+            float br = calibration_data[i][3];
+            log_info("Waypoint " << i << " belt lengths: TL=" << tl << " TR=" << tr << " BL=" << bl << " BR=" << br);
         }
 
         //Reset all of the calibration variables to the defaults so that calibration can be run again
