@@ -1078,9 +1078,10 @@ bool Calibration::move_with_slack(double fromX, double fromY, double toX, double
     static bool blExtending = false;
     static bool brExtending = false;
 
-    bool withSlack = true;
-    if (waypoint > recomputePoints[0]) {  //If we have completed the first round of calibraiton
-        withSlack = false;
+    bool withSlack = false;  // Disable slack/decompression for smooth movement
+    // Only use slack for the very first few points where we don't have calibration data yet
+    if (waypoint <= 3) {  // Only first 3 waypoints use slack
+        withSlack = true;
     }
 
     //This runs once at the beginning of the move
@@ -1327,66 +1328,77 @@ bool Calibration::generate_calibration_grid() {
 
     pointCount++;
 
+    int spiralMaxX = 1;
+    int spiralMaxY = 1;
+
     int currentX = 0;
-    int currentY = 0;
+    int currentY = -1;
 
     recomputeCount = 1;
 
-    // Generate spiral pattern with boundary checking for asymmetric grids
-    for (int cycle = 1; cycle <= numberOfCycles; cycle++) {
-        // Start by moving down (or to first valid position for this cycle)
-        if (currentY > minY && currentY >= -cycle + 1) {
-            currentY--;
-            if (currentX >= minX && currentX <= maxX && currentY >= minY && currentY <= maxY) {
-                calibrationGrid[GRID_X(pointCount)] = currentX * xSpacing;
-                calibrationGrid[GRID_Y(pointCount)] = currentY * ySpacing;
-                pointCount++;
-            }
-        }
-        
-        // Move left (decreasing X) - stop at grid boundary or cycle limit
-        while (currentX > -cycle && currentX > minX) {
+    while (spiralMaxX <= numberOfCycles) {  
+        // LEFT: move from current position leftward, but only within grid bounds
+        int targetX = std::max(-spiralMaxX, minX);  // Don't go beyond grid edge
+        while (currentX > targetX) {
             currentX--;
-            if (currentX >= minX && currentX <= maxX && currentY >= minY && currentY <= maxY) {
+            if (currentY >= minY && currentY <= maxY) {  // currentX is guaranteed in bounds now
                 calibrationGrid[GRID_X(pointCount)] = currentX * xSpacing;
                 calibrationGrid[GRID_Y(pointCount)] = currentY * ySpacing;
                 pointCount++;
             }
         }
         
-        // Move up (increasing Y) - stop at grid boundary or cycle limit
-        while (currentY < cycle && currentY < maxY) {
+        // UP: move upward, but only within grid bounds
+        int targetY = std::min(spiralMaxY, maxY);  // Don't go beyond grid edge
+        while (currentY < targetY) {
             currentY++;
-            if (currentX >= minX && currentX <= maxX && currentY >= minY && currentY <= maxY) {
+            if (currentX >= minX && currentX <= maxX) {  // currentY is guaranteed in bounds now
                 calibrationGrid[GRID_X(pointCount)] = currentX * xSpacing;
                 calibrationGrid[GRID_Y(pointCount)] = currentY * ySpacing;
                 pointCount++;
             }
         }
         
-        // Move right (increasing X) - stop at grid boundary or cycle limit
-        while (currentX < cycle && currentX < maxX) {
+        // RIGHT: move rightward, but only within grid bounds
+        targetX = std::min(spiralMaxX, maxX);  // Don't go beyond grid edge
+        while (currentX < targetX) {
             currentX++;
-            if (currentX >= minX && currentX <= maxX && currentY >= minY && currentY <= maxY) {
+            if (currentY >= minY && currentY <= maxY) {  // currentX is guaranteed in bounds now
                 calibrationGrid[GRID_X(pointCount)] = currentX * xSpacing;
                 calibrationGrid[GRID_Y(pointCount)] = currentY * ySpacing;
                 pointCount++;
             }
         }
         
-        // Move down (decreasing Y) - stop at grid boundary or cycle limit
-        while (currentY > -cycle && currentY > minY) {
+        // DOWN: move downward, but only within grid bounds
+        targetY = std::max(-spiralMaxY, minY);  // Don't go beyond grid edge
+        while (currentY > targetY) {
             currentY--;
-            if (currentX >= minX && currentX <= maxX && currentY >= minY && currentY <= maxY) {
+            if (currentX >= minX && currentX <= maxX) {  // currentY is guaranteed in bounds now
                 calibrationGrid[GRID_X(pointCount)] = currentX * xSpacing;
                 calibrationGrid[GRID_Y(pointCount)] = currentY * ySpacing;
                 pointCount++;
             }
+        }
+
+        // Add the final corner point of this cycle if it's in bounds
+        if (currentX >= minX && currentX <= maxX && currentY >= minY && currentY <= maxY) {
+            calibrationGrid[GRID_X(pointCount)] = currentX * xSpacing;
+            calibrationGrid[GRID_Y(pointCount)] = currentY * ySpacing;
+            pointCount++;
         }
 
         // Mark recompute point at end of each cycle
         recomputePoints[recomputeCount] = pointCount - 1;
         recomputeCount++;
+
+        spiralMaxX = spiralMaxX + 1;
+        spiralMaxY = spiralMaxY + 1;
+
+        // Move down one more for next cycle, but clip to bounds
+        if (currentY > minY) {
+            currentY--;
+        }
     }
 
     //Move back to the center
