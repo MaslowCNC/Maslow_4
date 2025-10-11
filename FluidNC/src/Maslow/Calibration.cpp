@@ -1723,6 +1723,7 @@ bool Calibration::generate_calibration_grid() {
     log_info("Grid: " << gridSizeX << "x" << gridSizeY << " (" << totalGridPoints << " pts)");
     log_info("Total waypoints: " << totalWaypoints << " (6 initial + " << totalGridPoints << " grid + 2 return)");
     log_info("Frame: " << frameWidth << "x" << frameHeight << "mm");
+    log_info("Generating spiral pattern...");
 
     float xSpacing = _calculated_grid_width_mm / (gridSizeX - 1);
     float ySpacing = _calculated_grid_height_mm / (gridSizeY - 1);
@@ -1845,6 +1846,7 @@ bool Calibration::generate_calibration_grid() {
 
     recomputePoints[recomputeCount] = pointCount - 1;  // Last recompute point is at the final waypoint
 
+    log_info("Spiral generation complete - created " << pointCount << " waypoints");
     return true;
 }
 
