@@ -211,7 +211,8 @@ namespace Machine {
     const std::string dcBoard = "name: Default (" + M + " S3 Board)\nboard: " + M + "\n";
 
     const std::string dcM4Vert            = M + "_vertical: false\n";
-    const std::string dcM4CalibrationGrid = mcgrid + "width_mm_X: 2000\n" + mcgrid + "height_mm_Y: 1000\n" + mcgrid + "size: 9\n";
+    const std::string dcM4CalibrationGrid = mcgrid + "width_mm_X: 0\n" + mcgrid + "height_mm_Y: 0\n" + mcgrid + "size: 9\n" + 
+                                            mcgrid + "size_X: 0\n" + mcgrid + "size_Y: 0\n" + mcgrid + "spacing: 400\n";
 
     const std::string dcM4Anchors = M + "_tlX: -27.6\n" + M + "_tlY: 2064.9\n" + M + "_trX: 2924.3\n" + M + "_trY: 2066.5\n" + M +
                                     "_blX: 0\n" + M + "_blY: 0\n" + M + "_brX: 2953.2\n" + M + "_brY: 0\n";
