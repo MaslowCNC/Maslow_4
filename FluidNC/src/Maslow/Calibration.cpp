@@ -247,12 +247,15 @@ bool Calibration::requestStateChange(int newState) {
                     log_info("=== Calibration Grid Generated ===");
                     log_info("Total waypoints: " << pointCount + 1 << " (waypoints 0-" << pointCount << ")");
                     log_info("Grid points: " << (pointCount + 1 - 6 - 2) << " (after 6 initial, before 2 return-to-center)");
+                    log_info("DEBUG: About to log waypoint coordinates, pointCount=" << pointCount << ", allocatedPoints=" << allocatedPoints);
                     log_info("Waypoint coordinates:");
                     for (int i = 0; i <= pointCount; i += 30) {
+                        log_info("DEBUG: Outer loop i=" << i << ", will process waypoints " << i << " to " << min(i + 29, pointCount));
                         // Build log message more carefully to avoid heap issues
                         std::stringstream logMsg;
                         logMsg << "  [" << i << "-" << min(i + 29, pointCount) << "]: ";
                         for (int j = i; j <= min(i + 29, pointCount); j++) {
+                            log_info("DEBUG: About to access calibrationGrid indices GRID_X(" << j << ")=" << GRID_X(j) << " and GRID_Y(" << j << ")=" << GRID_Y(j));
                             logMsg << "(" << j << ":" << std::fixed << std::setprecision(1) 
                                    << calibrationGrid[GRID_X(j)] << "," << calibrationGrid[GRID_Y(j)] << ")";
                             if (j < min(i + 29, pointCount)) {
