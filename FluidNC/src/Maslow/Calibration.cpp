@@ -501,6 +501,11 @@ void Calibration::home() {
 
 // --Maslow calibration loop
 void Calibration::calibration_loop() {
+    // Debug: Log state at the start of calibration_loop
+    if (waypoint == 6 || waypoint >= pointCount - 1) {
+        log_info("DEBUG calibration_loop: waypoint=" << waypoint << ", pointCount=" << pointCount);
+    }
+    
     if (waypoint >=
         pointCount) {  //pointCount is one past the last valid index, so if waypoint >= pointCount then calibration is complete
         //Log all belt measurements before resetting calibration state (up to 5 items per log message)
