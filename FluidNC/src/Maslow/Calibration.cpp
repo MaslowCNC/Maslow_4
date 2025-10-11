@@ -199,6 +199,13 @@ bool Calibration::requestStateChange(int newState) {
                     // Set the first recompute point to waypoint 5
                     recomputePoints[0]  = 5;
                     recomputeCountIndex = 0;
+                    
+                    // Log the expected calibration parameters before starting
+                    log_info("=== Starting Calibration ===");
+                    log_info("Orientation: " << (orientation == VERTICAL ? "VERTICAL" : "HORIZONTAL"));
+                    log_info("First 6 waypoints will be measured to determine machine position");
+                    log_info("Full calibration grid will be generated after waypoint 5");
+                    log_info("Grid parameters will be calculated and logged after initial measurements");
                 }
 
                 // If at waypoint 6 and grid hasn't been generated yet (pointCount still 6), generate the calibration grid
@@ -209,13 +216,10 @@ bool Calibration::requestStateChange(int newState) {
 
                     // Save the calibration data from the first 6 waypoints before deallocation
                     float savedCalibrationData[6][4];
-                    float savedCalibrationGrid[6][2];
                     for (int i = 0; i < 6; i++) {
                         for (int j = 0; j < 4; j++) {
                             savedCalibrationData[i][j] = calibration_data[i][j];
                         }
-                        savedCalibrationGrid[i][0] = calibrationGrid[GRID_X(i)];
-                        savedCalibrationGrid[i][1] = calibrationGrid[GRID_Y(i)];
                     }
 
                     // Deallocate the initial 6-point allocation
@@ -232,16 +236,40 @@ bool Calibration::requestStateChange(int newState) {
                         for (int j = 0; j < 4; j++) {
                             calibration_data[i][j] = savedCalibrationData[i][j];
                         }
-                        calibrationGrid[GRID_X(i)] = savedCalibrationGrid[i][0];
-                        calibrationGrid[GRID_Y(i)] = savedCalibrationGrid[i][1];
+                    }
+
+                    // Recalculate the first 6 waypoint coordinates based on the current machine position
+                    // using the updated anchor positions from the calibration calculations
+                    float x = 0;
+                    float y = 0;
+                    if (computeXYfromLengths(calibration_data[0][0], calibration_data[0][1], x, y)) {
+                        log_info("Recalculating first 6 waypoint coordinates with updated anchors. Machine position: X=" << x << " Y=" << y);
+                        calibrationGrid[GRID_X(0)] = x;
+                        calibrationGrid[GRID_Y(0)] = y;
+                        calibrationGrid[GRID_X(1)] = x + 150;
+                        calibrationGrid[GRID_Y(1)] = y;
+                        calibrationGrid[GRID_X(2)] = x + 150;
+                        calibrationGrid[GRID_Y(2)] = y + 150;
+                        calibrationGrid[GRID_X(3)] = x;
+                        calibrationGrid[GRID_Y(3)] = y + 150;
+                        calibrationGrid[GRID_X(4)] = x - 150;
+                        calibrationGrid[GRID_Y(4)] = y + 150;
+                        calibrationGrid[GRID_X(5)] = x - 150;
+                        calibrationGrid[GRID_Y(5)] = y;
+                    } else {
+                        log_error("Failed to compute machine position for waypoint coordinate recalculation");
+                        return false;
                     }
 
                     // Log waypoint locations after grid generation and restoration of first 6 waypoints (up to 30 items per log message)
-                    log_info("Calibration grid generated with " << pointCount + 1 << " waypoints");
+                    log_info("=== Calibration Grid Generated ===");
+                    log_info("Total waypoints: " << pointCount + 1 << " (waypoints 0-" << pointCount << ")");
+                    log_info("Grid points: " << (pointCount + 1 - 6 - 2) << " (after 6 initial, before 2 return-to-center)");
+                    log_info("Waypoint coordinates:");
                     for (int i = 0; i <= pointCount; i += 30) {
                         // Build log message more carefully to avoid heap issues
                         std::stringstream logMsg;
-                        logMsg << "Waypoints [" << i << "-" << min(i + 29, pointCount) << "]: ";
+                        logMsg << "  [" << i << "-" << min(i + 29, pointCount) << "]: ";
                         for (int j = i; j <= min(i + 29, pointCount); j++) {
                             logMsg << "(" << j << ":" << std::fixed << std::setprecision(1) 
                                    << calibrationGrid[GRID_X(j)] << "," << calibrationGrid[GRID_Y(j)] << ")";
@@ -490,15 +518,21 @@ void Calibration::home() {
 void Calibration::calibration_loop() {
     if (waypoint >
         pointCount) {  //Point count is the total number of points to measure so if waypoint > pointcount then the overall measurement process is complete
-        //Log all belt measurements before resetting calibration state (one waypoint per message to avoid heap issues)
+        //Log all belt measurements before resetting calibration state (up to 5 items per log message)
         log_info("Logging belt measurements for " << waypoint << " waypoints");
-        for (int i = 0; i < waypoint; i++) {
-            // Log each waypoint individually to avoid heap exhaustion
-            float tl = calibration_data[i][0];
-            float tr = calibration_data[i][1];
-            float bl = calibration_data[i][2];
-            float br = calibration_data[i][3];
-            log_info("Waypoint " << i << " belt lengths: TL=" << tl << " TR=" << tr << " BL=" << bl << " BR=" << br);
+        for (int i = 0; i < waypoint; i += 5) {
+            // Build log message more carefully to avoid heap issues
+            std::stringstream logMsg;
+            logMsg << "Belt lengths [" << i << "-" << min(i + 4, waypoint - 1) << "]: ";
+            for (int j = i; j < min(i + 5, waypoint); j++) {
+                logMsg << "(" << j << ":TL=" << std::fixed << std::setprecision(2) << calibration_data[j][0]
+                       << ",TR=" << calibration_data[j][1] << ",BL=" << calibration_data[j][2]
+                       << ",BR=" << calibration_data[j][3] << ")";
+                if (j < min(i + 4, waypoint - 1)) {
+                    logMsg << " ";
+                }
+            }
+            log_info(logMsg.str().c_str());
         }
 
         //Reset all of the calibration variables to the defaults so that calibration can be run again
@@ -540,6 +574,7 @@ void Calibration::calibration_loop() {
                 calibrationGrid[GRID_Y(waypoint)]);  //This is used to set the order that the belts are pulled tight in the following measurement
             Maslow.x = calibrationGrid[GRID_X(waypoint)];  //Are these ever used anywhere?
             Maslow.y = calibrationGrid[GRID_Y(waypoint)];
+            log_info("Moving to waypoint " << waypoint << " at X=" << Maslow.x << " Y=" << Maslow.y);
             hold(250);
         }
     }
@@ -1073,7 +1108,18 @@ bool Calibration::take_measurement_avg_with_check(int waypoint, int dir) {
                 sum                           = 0;
                 criticalCounter               = 0;
             }
-            log_info("Measured waypoint " << waypoint << " - Averaged belt lengths: TL=" << calibration_data[waypoint][0] << " TR=" << calibration_data[waypoint][1] << " BL=" << calibration_data[waypoint][2] << " BR=" << calibration_data[waypoint][3]);
+            
+            // For waypoint 0, coordinates are calculated after measurement
+            // For other waypoints, they're already in calibrationGrid
+            float logX = Maslow.x;
+            float logY = Maslow.y;
+            
+            log_info("Measured waypoint " << waypoint 
+                    << " at X=" << logX << " Y=" << logY
+                    << " - Averaged belt lengths: TL=" << calibration_data[waypoint][0] 
+                    << " TR=" << calibration_data[waypoint][1] 
+                    << " BL=" << calibration_data[waypoint][2] 
+                    << " BR=" << calibration_data[waypoint][3]);
 
             //A check to see if the results on the first point are within the expected range
             //This logic should only run during calibration, not during Apply Tension
@@ -1122,6 +1168,7 @@ bool Calibration::take_measurement_avg_with_check(int waypoint, int dir) {
                 }
 
                 log_info("Machine Position computed as X: " << x << " Y: " << y);
+                log_info("Waypoint 0 actual position: X=" << x << " Y=" << y);
 
                 //Recompute the first four waypoint locations based on the current position
                 calibrationGrid[GRID_X(0)] =
@@ -1670,39 +1717,45 @@ bool Calibration::generate_calibration_grid() {
     // Step 3: Calculate the number of points needed and allocate memory accordingly
     int estimatedPoints = calculateGridPointCount(gridSizeX, gridSizeY);
     allocateCalibrationMemory(estimatedPoints);
-    
-    // Log calibration grid configuration - always log this regardless of auto-calculation or manual settings
     log_info("Allocated memory for " << estimatedPoints << " calibration points");
-    
-    // gridSizeX and gridSizeY already calculated earlier
-    int totalPoints = gridSizeX * gridSizeY;
-    
-    log_info("=== Calibration Grid ===");
-    log_info("Dimensions: " << _calculated_grid_width_mm << "x" << _calculated_grid_height_mm << "mm");
-    log_info("Grid: " << gridSizeX << "x" << gridSizeY << " (" << totalPoints << " pts)");
-    log_info("Frame: " << frameWidth << "x" << frameHeight << "mm");
 
     // Warn if calculated values are outside typical range (100-3000mm)
     const float minTypicalDimension = 100.0f;   // mm
     const float maxTypicalDimension = 3000.0f;  // mm
-    if (_calculated_grid_width_mm < minTypicalDimension || _calculated_grid_width_mm > maxTypicalDimension) {
-        log_warn("Grid width (" << _calculated_grid_width_mm << "mm) is outside typical range (100-3000mm)");
+    if (gridWidth < minTypicalDimension || gridWidth > maxTypicalDimension) {
+        log_warn("Calculated grid width (" << gridWidth << "mm) is outside typical range (100-3000mm)");
     }
-    if (_calculated_grid_height_mm < minTypicalDimension || _calculated_grid_height_mm > maxTypicalDimension) {
-        log_warn("Grid height (" << _calculated_grid_height_mm << "mm) is outside typical range (100-3000mm)");
+    if (gridHeight < minTypicalDimension || gridHeight > maxTypicalDimension) {
+        log_warn("Calculated grid height (" << gridHeight << "mm) is outside typical range (100-3000mm)");
     }
+
+    // gridSizeX and gridSizeY already calculated earlier
+    int totalGridPoints = gridSizeX * gridSizeY;
+    int totalWaypoints = estimatedPoints; // This includes 6 initial + grid points + 2 return
+
+    log_info("=== Calibration Grid ===");
+    log_info("Dimensions: " << gridWidth << "x" << gridHeight << "mm");
+    log_info("Grid: " << gridSizeX << "x" << gridSizeY << " (" << totalGridPoints << " pts)");
+    log_info("Total waypoints: " << totalWaypoints << " (6 initial + " << totalGridPoints << " grid + 2 return)");
+    log_info("Frame: " << frameWidth << "x" << frameHeight << "mm");
 
     float xSpacing = _calculated_grid_width_mm / (gridSizeX - 1);
     float ySpacing = _calculated_grid_height_mm / (gridSizeY - 1);
 
     // Calculate number of cycles dynamically based on grid size
-    // For an NxM grid, we need (N-1)/2 cycles in X and (M-1)/2 cycles in Y
-    // Use the maximum to ensure we cover the full grid with the spiral pattern
+    // For odd grids (e.g., 5x5): coords are integers -2,-1,0,1,2, need to reach index 2, so numberOfCycles = 2
+    // For even grids (e.g., 6x6): coords are -2.5,-1.5,-0.5,0.5,1.5,2.5, need to reach 2.5, so numberOfCycles = 2
+    // Formula: numberOfCycles = (gridSize - 1) / 2 for both odd and even (but we use offset for even)
     int numberOfCyclesX = (gridSizeX - 1) / 2;
     int numberOfCyclesY = (gridSizeY - 1) / 2;
     int numberOfCycles  = max(numberOfCyclesX, numberOfCyclesY);
 
-    pointCount         = 6;  //The first four points are computed dynamically
+    // For even-sized grids, we need to use half-integer coordinates (0.5, 1.5, 2.5, etc.)
+    // to properly center the grid around (0,0)
+    float xOffset = (gridSizeX % 2 == 0) ? 0.5f : 0.0f;
+    float yOffset = (gridSizeY % 2 == 0) ? 0.5f : 0.0f;
+
+    pointCount         = 6;  //The first six points are computed dynamically
     recomputePoints[0] = 5;
 
     //The point in the center
@@ -1711,52 +1764,52 @@ bool Calibration::generate_calibration_grid() {
 
     pointCount++;
 
-    int maxX = 1;
-    int maxY = 1;
+    float maxX = 1.0f;
+    float maxY = 1.0f;
 
-    int currentX = 0;
-    int currentY = -1;
+    float currentX = 0.0f + xOffset;
+    float currentY = -1.0f - yOffset;
 
     recomputeCount = 1;
 
-    while (maxX <= numberOfCycles || maxY <= numberOfCycles) {
+    while (maxX <= numberOfCyclesX + xOffset || maxY <= numberOfCyclesY + yOffset) {
         // Move left (decreasing X) - only if we haven't reached the X boundary
-        if (maxX <= numberOfCyclesX) {
-            while (currentX > -1 * maxX) {
+        if (maxX <= numberOfCyclesX + xOffset) {
+            while (currentX > (-1 * maxX - xOffset)) {
                 calibrationGrid[GRID_X(pointCount)] = currentX * xSpacing;
                 calibrationGrid[GRID_Y(pointCount)] = currentY * ySpacing;
                 pointCount++;
-                currentX--;
+                currentX -= 1.0f;
             }
         }
 
         // Move up (increasing Y) - only if we haven't reached the Y boundary
-        if (maxY <= numberOfCyclesY) {
-            while (currentY < maxY) {
+        if (maxY <= numberOfCyclesY + yOffset) {
+            while (currentY < (maxY + yOffset)) {
                 calibrationGrid[GRID_X(pointCount)] = currentX * xSpacing;
                 calibrationGrid[GRID_Y(pointCount)] = currentY * ySpacing;
                 pointCount++;
-                currentY++;
+                currentY += 1.0f;
             }
         }
 
         // Move right (increasing X) - only if we haven't reached the X boundary
-        if (maxX <= numberOfCyclesX) {
-            while (currentX < maxX) {
+        if (maxX <= numberOfCyclesX + xOffset) {
+            while (currentX < (maxX + xOffset)) {
                 calibrationGrid[GRID_X(pointCount)] = currentX * xSpacing;
                 calibrationGrid[GRID_Y(pointCount)] = currentY * ySpacing;
                 pointCount++;
-                currentX++;
+                currentX += 1.0f;
             }
         }
 
         // Move down (decreasing Y) - only if we haven't reached the Y boundary
-        if (maxY <= numberOfCyclesY) {
-            while (currentY > -1 * maxY) {
+        if (maxY <= numberOfCyclesY + yOffset) {
+            while (currentY > (-1 * maxY - yOffset)) {
                 calibrationGrid[GRID_X(pointCount)] = currentX * xSpacing;
                 calibrationGrid[GRID_Y(pointCount)] = currentY * ySpacing;
                 pointCount++;
-                currentY--;
+                currentY -= 1.0f;
             }
         }
 
@@ -1768,10 +1821,10 @@ bool Calibration::generate_calibration_grid() {
         recomputePoints[recomputeCount] = pointCount - 1;  //Minus one because we increment after each point is generated
         recomputeCount++;
 
-        maxX = maxX + 1;
-        maxY = maxY + 1;
+        maxX += 1.0f;
+        maxY += 1.0f;
 
-        currentY = currentY + -1;
+        currentY -= 1.0f;
     }
 
     //Move back to the center
@@ -1933,64 +1986,62 @@ int Calibration::calculateGridPointCount(int gridSizeX, int gridSizeY) {
     // Calculate number of cycles dynamically based on grid size
     int numberOfCyclesX = (gridSizeX - 1) / 2;
     int numberOfCyclesY = (gridSizeY - 1) / 2;
-    int numberOfCycles  = max(numberOfCyclesX, numberOfCyclesY);
+
+    // For even-sized grids, we need to use half-integer coordinates
+    float xOffset = (gridSizeX % 2 == 0) ? 0.5f : 0.0f;
+    float yOffset = (gridSizeY % 2 == 0) ? 0.5f : 0.0f;
 
     // Simulate the actual spiral pattern to count points
     // This must match the logic in generate_calibration_grid exactly
-    int maxX = 1;
-    int maxY = 1;
+    float maxX = 1.0f;
+    float maxY = 1.0f;
     
-    int currentX = 0;
-    int currentY = -1;
+    float currentX = 0.0f + xOffset;
+    float currentY = -1.0f - yOffset;
     
-    while (maxX <= numberOfCycles || maxY <= numberOfCycles) {
+    while (maxX <= numberOfCyclesX + xOffset || maxY <= numberOfCyclesY + yOffset) {
         // Move left (decreasing X) - only if we haven't reached the X boundary
-        if (maxX <= numberOfCyclesX) {
-            while (currentX > -1 * maxX) {
+        if (maxX <= numberOfCyclesX + xOffset) {
+            while (currentX > (-1 * maxX - xOffset)) {
                 count++;
-                currentX--;
+                currentX -= 1.0f;
             }
         }
         
         // Move up (increasing Y) - only if we haven't reached the Y boundary
-        if (maxY <= numberOfCyclesY) {
-            while (currentY < maxY) {
+        if (maxY <= numberOfCyclesY + yOffset) {
+            while (currentY < (maxY + yOffset)) {
                 count++;
-                currentY++;
+                currentY += 1.0f;
             }
         }
         
         // Move right (increasing X) - only if we haven't reached the X boundary
-        if (maxX <= numberOfCyclesX) {
-            while (currentX < maxX) {
+        if (maxX <= numberOfCyclesX + xOffset) {
+            while (currentX < (maxX + xOffset)) {
                 count++;
-                currentX++;
+                currentX += 1.0f;
             }
         }
         
         // Move down (decreasing Y) - only if we haven't reached the Y boundary
-        if (maxY <= numberOfCyclesY) {
-            while (currentY > -1 * maxY) {
+        if (maxY <= numberOfCyclesY + yOffset) {
+            while (currentY > (-1 * maxY - yOffset)) {
                 count++;
-                currentY--;
+                currentY -= 1.0f;
             }
         }
         
-        // Add the corner point at the end of each cycle (line 1786-1788 in generate_calibration_grid)
-        // This is ALWAYS added after each cycle iteration
+        // Add the corner point at the end of each cycle
         count++;
         
-        maxX++;
-        maxY++;
+        maxX += 1.0f;
+        maxY += 1.0f;
         
-        currentY = currentY + -1;
+        currentY -= 1.0f;
     }
 
-    // Add the final return-to-center points (lines 1800-1805 in generate_calibration_grid)
-    // Note: The generation code creates 2 waypoints but only increments pointCount once (after line 1801).
-    // However, BOTH waypoints are physically stored in the array, so we need space for both.
-    // The second waypoint at lines 1804-1805 is stored but pointCount isn't incremented,
-    // so we need to allocate count + 2 to account for both physical waypoints in memory.
+    // Add the final two return-to-center points
     count += 2;
 
     return count;
