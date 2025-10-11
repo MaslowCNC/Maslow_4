@@ -502,11 +502,14 @@ void Calibration::calibration_loop() {
         pointCount) {  //Point count is the total number of points to measure so if waypoint > pointcount then the overall measurement process is complete
         //Log all belt measurements before resetting calibration state (up to 5 items per log message)
         log_info("Logging belt measurements for " << waypoint << " waypoints");
+        log_info("DEBUG: Starting belt measurements loop, allocatedPoints=" << allocatedPoints);
         for (int i = 0; i < waypoint; i += 5) {
+            log_info("DEBUG: Outer loop iteration i=" << i << ", processing waypoints " << i << " to " << min(i + 4, waypoint - 1));
             // Build log message more carefully to avoid heap issues
             std::stringstream logMsg;
             logMsg << "Belt lengths [" << i << "-" << min(i + 4, waypoint - 1) << "]: ";
             for (int j = i; j < min(i + 5, waypoint); j++) {
+                log_info("DEBUG: About to access calibration_data[" << j << "]");
                 logMsg << "(" << j << ":TL=" << std::fixed << std::setprecision(2) << calibration_data[j][0]
                        << ",TR=" << calibration_data[j][1] << ",BL=" << calibration_data[j][2]
                        << ",BR=" << calibration_data[j][3] << ")";
@@ -516,6 +519,7 @@ void Calibration::calibration_loop() {
             }
             log_info(logMsg.str().c_str());
         }
+        log_info("DEBUG: Finished belt measurements loop successfully");
 
         //Reset all of the calibration variables to the defaults so that calibration can be run again
         resetCalibrationState();
