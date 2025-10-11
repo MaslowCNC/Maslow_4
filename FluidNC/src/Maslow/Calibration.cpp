@@ -1364,6 +1364,12 @@ bool Calibration::generate_calibration_grid() {
             currentY--;
         }
 
+        // Add the final corner point of this cycle (at maxX, -maxY)
+        // The down loop stops at currentY == -maxY, so we need to add this point explicitly
+        calibrationGrid[GRID_X(pointCount)] = currentX * xSpacing;
+        calibrationGrid[GRID_Y(pointCount)] = currentY * ySpacing;
+        pointCount++;
+
         // Mark recompute point at end of each cycle
         recomputePoints[recomputeCount] = pointCount - 1;  //Minus one because we increment after each point is generated
         recomputeCount++;
