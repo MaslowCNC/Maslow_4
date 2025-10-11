@@ -1845,8 +1845,9 @@ bool Calibration::generate_calibration_grid() {
 
     calibrationGrid[GRID_X(pointCount)] = 0;
     calibrationGrid[GRID_Y(pointCount)] = 0;
+    pointCount++;  // Increment after adding the final point
 
-    recomputePoints[recomputeCount] = pointCount;
+    recomputePoints[recomputeCount] = pointCount - 1;  // Last recompute point is at the final waypoint
 
     return true;
 }
