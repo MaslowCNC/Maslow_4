@@ -479,14 +479,14 @@ namespace Kinematics {
     void MaslowKinematics::setSpoilboardThickness(float thickness) {
         if (_spoilboardThickness != thickness) {
             _spoilboardThickness = thickness;
-            log_info("Spoilboard thickness set to " << thickness << " mm");
+            log_info("Spoilboard thickness: " << thickness << "mm");
         }
     }
 
     void MaslowKinematics::setWorkThickness(float thickness) {
         if (_workThickness != thickness) {
             _workThickness = thickness;
-            log_info("Work thickness set to " << thickness << " mm");
+            log_info("Work thickness: " << thickness << "mm");
         }
     }
 
@@ -560,16 +560,19 @@ namespace Kinematics {
         if (topSideLength < MIN_SIDE_LENGTH || topSideLength > MAX_SIDE_LENGTH || rightSideLength < MIN_SIDE_LENGTH ||
             rightSideLength > MAX_SIDE_LENGTH || bottomSideLength < MIN_SIDE_LENGTH || bottomSideLength > MAX_SIDE_LENGTH ||
             leftSideLength < MIN_SIDE_LENGTH || leftSideLength > MAX_SIDE_LENGTH) {
-            // Frame dimensions are out of bounds - this is a critical error that cannot be auto-corrected
-            // Operating with incorrect anchor points could damage the machine
-            log_error("Frame side lengths are outside valid range (500-5000mm). "
-                      << "Top=" << topSideLength << "mm, Right=" << rightSideLength << "mm, "
-                      << "Bottom=" << bottomSideLength << "mm, Left=" << leftSideLength << "mm. "
-                      << "Calibration cannot proceed with these dimensions.");
-            String errorMsg = "Frame dimensions out of bounds. Top=" + String(topSideLength, 1) + "mm, Right=" + 
-                              String(rightSideLength, 1) + "mm, Bottom=" + String(bottomSideLength, 1) + "mm, Left=" + 
-                              String(leftSideLength, 1) + "mm";
-            Maslow.eStop(errorMsg);
+            log_warn("Frame side lengths are outside valid range (500-5000mm). "
+                     << "Top=" << topSideLength << "mm, Right=" << rightSideLength << "mm, " << "Bottom=" << bottomSideLength
+                     << "mm, Left=" << leftSideLength << "mm. " << "Correcting to reasonable defaults.");
+
+            _tlX                 = DEFAULT_TLX;
+            _tlY                 = DEFAULT_TLY;
+            _trX                 = DEFAULT_TRX;
+            _trY                 = DEFAULT_TRY;
+            _blX                 = DEFAULT_BLX;
+            _blY                 = DEFAULT_BLY;
+            _brX                 = DEFAULT_BRX;
+            _brY                 = DEFAULT_BRY;
+            coordinatesCorrected = true;
         }
 
         // Sanity check for reasonable coordinate values (not negative for most coordinates, not excessively large)
