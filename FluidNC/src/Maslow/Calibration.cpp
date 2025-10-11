@@ -1129,42 +1129,30 @@ bool Calibration::move_with_slack(double fromX, double fromY, double toX, double
         Maslow.setTargets(fromX, fromY, 0);
     }
 
-    //Decompress belts for 500ms...this happens by returning right away before running any of the rest of the code
-    if (millis() - moveBeginTimer < 750 && withSlack) {
-        if (orientation == VERTICAL) {
-            Maslow.axisTL.recomputePID();
-            Maslow.axisTR.recomputePID();
-            Maslow.axisBL.decompressBelt();
-            Maslow.axisBR.decompressBelt();
+    // Put extending belts into comply mode instead of decompressing
+    // This allows them to feed out smoothly without active pulling
+    if (withSlack) {
+        // Put extending belts into comply mode, tighten retracting belts
+        if (tlExtending) {
+            Maslow.axisTL.comply();
         } else {
-            switch (direction) {
-                case UP:
-                    Maslow.axisBL.decompressBelt();
-                    Maslow.axisBR.decompressBelt();
-                    break;
-                case DOWN:
-                    Maslow.axisTL.decompressBelt();
-                    Maslow.axisTR.decompressBelt();
-                    break;
-                case LEFT:
-                    Maslow.axisTR.decompressBelt();
-                    Maslow.axisBR.decompressBelt();
-                    break;
-                case RIGHT:
-                    Maslow.axisTL.decompressBelt();
-                    Maslow.axisBL.decompressBelt();
-                    break;
-            }
+            Maslow.axisTL.recomputePID();
         }
-
-        return false;
-    }
-
-    //Stop for 50ms
-    //we need to stop motors after decompression was finished once
-    else if (millis() - moveBeginTimer < 800) {
-        Maslow.stopMotors();
-        return false;
+        if (trExtending) {
+            Maslow.axisTR.comply();
+        } else {
+            Maslow.axisTR.recomputePID();
+        }
+        if (blExtending) {
+            Maslow.axisBL.comply();
+        } else {
+            Maslow.axisBL.recomputePID();
+        }
+        if (brExtending) {
+            Maslow.axisBR.comply();
+        } else {
+            Maslow.axisBR.recomputePID();
+        }
     }
 
     //Set the targets
@@ -1412,6 +1400,16 @@ bool Calibration::generate_calibration_grid() {
     recomputePoints[recomputeCount] = pointCount;
 
     log_info("Generated calibration grid: " << gridSizeX << "x" << gridSizeY << " with " << (pointCount - 6) << " points");
+    
+    // Log the calibration grid points for both auto and legacy modes
+    log_info("Calibration grid waypoints:");
+    for (int i = 0; i <= pointCount; i++) {
+        log_info("  Point " << i << ": (" << calibrationGrid[GRID_X(i)] << ", " << calibrationGrid[GRID_Y(i)] << ")");
+    }
+    log_info("Recompute points: " << recomputeCount);
+    for (int i = 0; i < recomputeCount; i++) {
+        log_info("  Recompute at point: " << recomputePoints[i]);
+    }
 
     return true;
 }
@@ -1487,6 +1485,13 @@ void Calibration::print_calibration_data() {
     HeartBeatEnabled = false;
     log_data(data.c_str());
     HeartBeatEnabled = true;
+    
+    // Log belt lengths for both auto and legacy modes
+    log_info("Belt length measurements:");
+    for (int i = 0; i < waypoint; i++) {
+        log_info("  Point " << i << ": TL=" << calibration_data[i][0] << " TR=" << calibration_data[i][1] 
+                 << " BL=" << calibration_data[i][2] << " BR=" << calibration_data[i][3]);
+    }
 }
 
 //Runs when the calibration data has been acknowledged as received by the computer and the calibration process is progressing
