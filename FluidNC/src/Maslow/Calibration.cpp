@@ -1792,141 +1792,76 @@ bool Calibration::swing(const char* fixedBeltName, const char* movingBeltName, f
         return false;
     }
 
-    // Determine which belts should comply (the other two)
-    bool complyBelts[4]    = { true, true, true, true };
-    complyBelts[fixedIdx]  = false;
-    complyBelts[movingIdx] = false;
-
     log_info("$swing: fixed=" << fixedBeltName << " moving=" << movingBeltName << " distance=" << distance);
 
-    sys.set_state(State::Homing);
+    // Determine which belts should comply (the other two)
+    const char* beltNames[] = { "TL", "TR", "BL", "BR" };
+    bool        complyBelts[4] = { true, true, true, true };
+    complyBelts[fixedIdx]      = false;
+    complyBelts[movingIdx]     = false;
 
-    // Put the two non-specified belts in comply mode
-    // Store initial positions for comply limit
-    float initialPos[4];
-    initialPos[0] = Maslow.axisTL.getPosition();
-    initialPos[1] = Maslow.axisTR.getPosition();
-    initialPos[2] = Maslow.axisBL.getPosition();
-    initialPos[3] = Maslow.axisBR.getPosition();
+    // Build command string for belts() function
+    // Format: "<moving_belt> <distance> <comply_belt1> c2000 <comply_belt2> c2000"
+    char beltsCommand[256];
+    int  pos = 0;
 
-    // Reset comply state for belts that should comply
-    // IMPORTANT: Put belts into comply mode BEFORE any other belts start moving
-    if (complyBelts[0])
-        Maslow.axisTL.reset();
-    if (complyBelts[1])
-        Maslow.axisTR.reset();
-    if (complyBelts[2])
-        Maslow.axisBL.reset();
-    if (complyBelts[3])
-        Maslow.axisBR.reset();
+    // Add moving belt with its distance
+    pos += snprintf(beltsCommand + pos, sizeof(beltsCommand) - pos, "%s %g", movingBeltName, distance);
 
-    // Calculate target position for moving belt
-    float         targetPos         = movingBelt->getPosition() + distance;
-    float         maxComplyDistance = 2000.0;  // Default comply distance limit
-
-    // Move the moving belt
-    bool          movementComplete = false;
-    bool          hitCurrentLimit  = false;
-    unsigned long startTime        = millis();
-    unsigned long timeout          = 120000;  // 120 second timeout
-
-    while (!movementComplete && (millis() - startTime) < timeout) {
-        // Call system realtime function to allow system to process other events
-        protocol_exec_rt_system();
-
-        // Update encoder positions
-        Maslow.updateEncoderPositions();
-
-        // Check if moving belt reached target
-        float currentPos = movingBelt->getPosition();
-        if (distance > 0) {
-            if (currentPos >= targetPos) {
-                movementComplete = true;
-            }
-        } else {
-            if (currentPos <= targetPos) {
-                movementComplete = true;
-            }
+    // Add comply belts with c2000 (comply mode with 2000mm limit)
+    for (int i = 0; i < 4; i++) {
+        if (complyBelts[i]) {
+            pos += snprintf(beltsCommand + pos, sizeof(beltsCommand) - pos, " %s c2000", beltNames[i]);
         }
-
-        // Check current on moving belt
-        if (movingBelt->getCurrent() > calibrationCurrentThreshold) {
-            log_warn("Moving belt hit current limit");
-            hitCurrentLimit  = true;
-            movementComplete = true;
-        }
-
-        if (!movementComplete) {
-            // Apply comply to the complying belts with distance limit
-            if (complyBelts[0] && fabs(Maslow.axisTL.getPosition() - initialPos[0]) < maxComplyDistance) {
-                Maslow.axisTL.comply();
-            }
-            if (complyBelts[1] && fabs(Maslow.axisTR.getPosition() - initialPos[1]) < maxComplyDistance) {
-                Maslow.axisTR.comply();
-            }
-            if (complyBelts[2] && fabs(Maslow.axisBL.getPosition() - initialPos[2]) < maxComplyDistance) {
-                Maslow.axisBL.comply();
-            }
-            if (complyBelts[3] && fabs(Maslow.axisBR.getPosition() - initialPos[3]) < maxComplyDistance) {
-                Maslow.axisBR.comply();
-            }
-
-            // Move the moving belt
-            movingBelt->comply();
-        }
-
-        delay_ms(10);
     }
 
-    // Stop all movement
+    // Call belts() to do the actual movement
+    bool success = belts(beltsCommand);
+    
+    if (!success) {
+        return false;
+    }
+
+    // Tighten the two comply belts
+    log_info("Tightening comply belts");
+
+    bool          tighteningComplete = false;
+    bool          tl_done            = !complyBelts[0];
+    bool          tr_done            = !complyBelts[1];
+    bool          bl_done            = !complyBelts[2];
+    bool          br_done            = !complyBelts[3];
+    unsigned long startTime          = millis();
+    unsigned long timeout            = 120000;  // 120 second timeout
+
+    while (!tighteningComplete && (millis() - startTime) < timeout) {
+        protocol_exec_rt_system();
+
+        Maslow.updateEncoderPositions();
+
+        if (complyBelts[0] && !tl_done) {
+            tl_done = Maslow.axisTL.pull_tight(calibrationCurrentThreshold);
+        }
+        if (complyBelts[1] && !tr_done) {
+            tr_done = Maslow.axisTR.pull_tight(calibrationCurrentThreshold);
+        }
+        if (complyBelts[2] && !bl_done) {
+            bl_done = Maslow.axisBL.pull_tight(calibrationCurrentThreshold);
+        }
+        if (complyBelts[3] && !br_done) {
+            br_done = Maslow.axisBR.pull_tight(calibrationCurrentThreshold);
+        }
+
+        tighteningComplete = tl_done && tr_done && bl_done && br_done;
+
+        delay_ms(5);
+    }
+
+    // Stop all belts
     Maslow.axisTL.stop();
     Maslow.axisTR.stop();
     Maslow.axisBL.stop();
     Maslow.axisBR.stop();
 
-    if (!hitCurrentLimit) {
-        // Tighten the two comply belts
-        log_info("Tightening comply belts");
-
-        bool tighteningComplete = false;
-        bool tl_done            = !complyBelts[0];
-        bool tr_done            = !complyBelts[1];
-        bool bl_done            = !complyBelts[2];
-        bool br_done            = !complyBelts[3];
-
-        startTime = millis();
-
-        while (!tighteningComplete && (millis() - startTime) < timeout) {
-            protocol_exec_rt_system();
-
-            Maslow.updateEncoderPositions();
-
-            if (complyBelts[0] && !tl_done) {
-                tl_done = Maslow.axisTL.pull_tight(calibrationCurrentThreshold);
-            }
-            if (complyBelts[1] && !tr_done) {
-                tr_done = Maslow.axisTR.pull_tight(calibrationCurrentThreshold);
-            }
-            if (complyBelts[2] && !bl_done) {
-                bl_done = Maslow.axisBL.pull_tight(calibrationCurrentThreshold);
-            }
-            if (complyBelts[3] && !br_done) {
-                br_done = Maslow.axisBR.pull_tight(calibrationCurrentThreshold);
-            }
-
-            tighteningComplete = tl_done && tr_done && bl_done && br_done;
-
-            delay_ms(5);
-        }
-
-        // Stop all belts
-        Maslow.axisTL.stop();
-        Maslow.axisTR.stop();
-        Maslow.axisBL.stop();
-        Maslow.axisBR.stop();
-    }
-
-    sys.set_state(State::Idle);
     log_info("$swing complete");
 
     return true;
