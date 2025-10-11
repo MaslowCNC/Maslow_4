@@ -99,7 +99,9 @@ public:
     bool  orientation;
     int   calibrationCurrentThreshold    = 1300;
     float acceptableCalibrationThreshold = 0.5;
-    int   calibrationGridSize            = 9;
+    int   calibrationGridSize            = 9;     // Used when calibrationGridSizeX/Y are not set (backward compatibility)
+    int   calibrationGridSizeX           = 0;     // Number of calibration points in X direction (0 = use calibrationGridSize)
+    int   calibrationGridSizeY           = 0;     // Number of calibration points in Y direction (0 = use calibrationGridSize)
     float calibration_grid_width_mm_X    = 2000;  // mm offset from the edge of the frame
     float calibration_grid_height_mm_Y   = 1000;  // mm offset from the edge of the frame
     bool  calibrationInProgress;                  //Used to turn off regular movements during calibration
