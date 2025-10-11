@@ -2032,10 +2032,10 @@ int Calibration::calculateGridPointCount(int gridSizeX, int gridSizeY) {
 // Function to allocate memory for calibration arrays based on actual grid size
 void Calibration::allocateCalibrationMemory(int numPoints) {
     if (calibrationGrid == nullptr) {  //Check to prevent realocating
-        // Allocate as 1D array: (numPoints * 2) + 2 extra floats for final point
-        // The +2 accounts for the final center point written after the last increment
+        // Allocate as 1D array: (numPoints * 2) + extra floats for safety buffer
+        // The +6 accounts for potential miscalculation in calculateGridPointCount and final center point
         // Access: calibrationGrid[i*2] = X, calibrationGrid[i*2+1] = Y
-        calibrationGrid = new float[numPoints * 2 + 2];
+        calibrationGrid = new float[numPoints * 2 + 6];
     }
     if (calibration_data == nullptr) {
         calibration_data = new float*[numPoints];
