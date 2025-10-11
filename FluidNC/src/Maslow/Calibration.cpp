@@ -1295,28 +1295,33 @@ bool Calibration::generate_calibration_grid() {
     int gridSizeX = (calibrationGridSizeX > 0) ? calibrationGridSizeX : calibrationGridSize;
     int gridSizeY = (calibrationGridSizeY > 0) ? calibrationGridSizeY : calibrationGridSize;
     
-    // Validate grid sizes are odd numbers
-    if (gridSizeX < 3 || gridSizeX > 99 || gridSizeX % 2 == 0) {
-        log_error("Invalid calibration_grid_size_X: " << gridSizeX << " (must be odd number 3-99)");
+    // Validate grid sizes (allow both even and odd numbers)
+    if (gridSizeX < 3 || gridSizeX > 99) {
+        log_error("Invalid calibration_grid_size_X: " << gridSizeX << " (must be 3-99)");
         return false;
     }
-    if (gridSizeY < 3 || gridSizeY > 99 || gridSizeY % 2 == 0) {
-        log_error("Invalid calibration_grid_size_Y: " << gridSizeY << " (must be odd number 3-99)");
+    if (gridSizeY < 3 || gridSizeY > 99) {
+        log_error("Invalid calibration_grid_size_Y: " << gridSizeY << " (must be 3-99)");
         return false;
     }
 
     float xSpacing = calibration_grid_width_mm_X / (gridSizeX - 1);
     float ySpacing = calibration_grid_height_mm_Y / (gridSizeY - 1);
 
-    // Calculate half-dimensions for boundary checking
-    int halfX = (gridSizeX - 1) / 2;
-    int halfY = (gridSizeY - 1) / 2;
-    int numberOfCycles = std::max(halfX, halfY);
+    // Calculate boundaries for spiral
+    // For odd grids (e.g., 5): points at -2, -1, 0, 1, 2 -> minX=-2, maxX=2
+    // For even grids (e.g., 6): points at -3, -2, -1, 0, 1, 2 -> minX=-3, maxX=2
+    int minX = -(gridSizeX / 2);  // For 5: -2, For 6: -3
+    int maxX = (gridSizeX - 1) / 2;  // For 5: 2, For 6: 2
+    int minY = -(gridSizeY / 2);
+    int maxY = (gridSizeY - 1) / 2;
+    
+    int numberOfCycles = std::max(std::max(-minX, maxX), std::max(-minY, maxY));
 
     pointCount         = 6;  //The first four points are computed dynamically
     recomputePoints[0] = 5;
 
-    //The point in the center
+    //The point in the center (or near center for even grids)
     calibrationGrid[GRID_X(pointCount)] = 0;
     calibrationGrid[GRID_Y(pointCount)] = 0;
 
@@ -1332,7 +1337,7 @@ bool Calibration::generate_calibration_grid() {
         // Move left (decreasing X)
         while (currentX > -cycle) {
             // Only add point if within grid boundaries
-            if (abs(currentX) <= halfX && abs(currentY) <= halfY) {
+            if (currentX >= minX && currentX <= maxX && currentY >= minY && currentY <= maxY) {
                 calibrationGrid[GRID_X(pointCount)] = currentX * xSpacing;
                 calibrationGrid[GRID_Y(pointCount)] = currentY * ySpacing;
                 pointCount++;
@@ -1342,7 +1347,7 @@ bool Calibration::generate_calibration_grid() {
         
         // Move up (increasing Y)
         while (currentY < cycle) {
-            if (abs(currentX) <= halfX && abs(currentY) <= halfY) {
+            if (currentX >= minX && currentX <= maxX && currentY >= minY && currentY <= maxY) {
                 calibrationGrid[GRID_X(pointCount)] = currentX * xSpacing;
                 calibrationGrid[GRID_Y(pointCount)] = currentY * ySpacing;
                 pointCount++;
@@ -1352,7 +1357,7 @@ bool Calibration::generate_calibration_grid() {
         
         // Move right (increasing X)
         while (currentX < cycle) {
-            if (abs(currentX) <= halfX && abs(currentY) <= halfY) {
+            if (currentX >= minX && currentX <= maxX && currentY >= minY && currentY <= maxY) {
                 calibrationGrid[GRID_X(pointCount)] = currentX * xSpacing;
                 calibrationGrid[GRID_Y(pointCount)] = currentY * ySpacing;
                 pointCount++;
@@ -1362,7 +1367,7 @@ bool Calibration::generate_calibration_grid() {
         
         // Move down (decreasing Y)
         while (currentY > -cycle) {
-            if (abs(currentX) <= halfX && abs(currentY) <= halfY) {
+            if (currentX >= minX && currentX <= maxX && currentY >= minY && currentY <= maxY) {
                 calibrationGrid[GRID_X(pointCount)] = currentX * xSpacing;
                 calibrationGrid[GRID_Y(pointCount)] = currentY * ySpacing;
                 pointCount++;
@@ -1371,7 +1376,7 @@ bool Calibration::generate_calibration_grid() {
         }
 
         // Add corner point if within boundaries
-        if (abs(currentX) <= halfX && abs(currentY) <= halfY) {
+        if (currentX >= minX && currentX <= maxX && currentY >= minY && currentY <= maxY) {
             calibrationGrid[GRID_X(pointCount)] = currentX * xSpacing;
             calibrationGrid[GRID_Y(pointCount)] = currentY * ySpacing;
             pointCount++;
