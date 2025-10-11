@@ -1,6 +1,9 @@
 #pragma once
 #include <Arduino.h>
 
+// Forward declaration
+class MotorUnit;
+
 //------------------------------------------------------
 //------------------------------------------------------ State Definitions
 //------------------------------------------------------
@@ -67,6 +70,10 @@ public:
     void hold(unsigned long time);
 
     void setSafety(bool state);
+    
+    // Advanced belt control commands
+    bool swing(const char* fixedBeltName, const char* movingBeltName, double distance, double speed);
+    bool belts(const char* value);
 
     //State machine functions
     int  getCurrentState();
@@ -163,6 +170,9 @@ private:
 
     bool safetyOn         = true;
     bool HeartBeatEnabled = true;
+    
+    // Helper method for parsing belt names in swing/belts commands
+    MotorUnit* parseBeltName(const char* name, int& beltIndex);
 
     //A structure to hold the state names
     struct StateName {
