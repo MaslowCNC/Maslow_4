@@ -209,10 +209,13 @@ bool Calibration::requestStateChange(int newState) {
 
                     // Save the calibration data from the first 6 waypoints before deallocation
                     float savedCalibrationData[6][4];
+                    float savedCalibrationGrid[6][2];
                     for (int i = 0; i < 6; i++) {
                         for (int j = 0; j < 4; j++) {
                             savedCalibrationData[i][j] = calibration_data[i][j];
                         }
+                        savedCalibrationGrid[i][0] = calibrationGrid[GRID_X(i)];
+                        savedCalibrationGrid[i][1] = calibrationGrid[GRID_Y(i)];
                     }
 
                     // Deallocate the initial 6-point allocation
@@ -229,29 +232,8 @@ bool Calibration::requestStateChange(int newState) {
                         for (int j = 0; j < 4; j++) {
                             calibration_data[i][j] = savedCalibrationData[i][j];
                         }
-                    }
-
-                    // Recalculate the first 6 waypoint coordinates based on the current machine position
-                    // using the updated anchor positions from the calibration calculations
-                    float x = 0;
-                    float y = 0;
-                    if (computeXYfromLengths(calibration_data[0][0], calibration_data[0][1], x, y)) {
-                        log_info("Recalculating first 6 waypoint coordinates with updated anchors. Machine position: X=" << x << " Y=" << y);
-                        calibrationGrid[GRID_X(0)] = x;
-                        calibrationGrid[GRID_Y(0)] = y;
-                        calibrationGrid[GRID_X(1)] = x + 150;
-                        calibrationGrid[GRID_Y(1)] = y;
-                        calibrationGrid[GRID_X(2)] = x + 150;
-                        calibrationGrid[GRID_Y(2)] = y + 150;
-                        calibrationGrid[GRID_X(3)] = x;
-                        calibrationGrid[GRID_Y(3)] = y + 150;
-                        calibrationGrid[GRID_X(4)] = x - 150;
-                        calibrationGrid[GRID_Y(4)] = y + 150;
-                        calibrationGrid[GRID_X(5)] = x - 150;
-                        calibrationGrid[GRID_Y(5)] = y;
-                    } else {
-                        log_error("Failed to compute machine position for waypoint coordinate recalculation");
-                        return false;
+                        calibrationGrid[GRID_X(i)] = savedCalibrationGrid[i][0];
+                        calibrationGrid[GRID_Y(i)] = savedCalibrationGrid[i][1];
                     }
 
                     // Log waypoint locations after grid generation and restoration of first 6 waypoints (up to 30 items per log message)
