@@ -1032,6 +1032,11 @@ void Maslow_::safety_control() {
     static int   positionErrorCounter[4]  = { 0 };
     static float previousPositionError[4] = { 0, 0, 0, 0 };
 
+    // Track belt feeding out with no encoder movement
+    static unsigned long beltFeedingStartTime[4] = { 0, 0, 0, 0 };
+    static double        beltFeedingStartPos[4]  = { 0, 0, 0, 0 };
+    static bool          beltFeeding[4]          = { false, false, false, false };
+
     MotorUnit* axis[4] = { &axisTL, &axisTR, &axisBL, &axisBR };
     for (int i = 0; i < 4; i++) {
         //If the current exceeds some absolute value, we need to call panic() and stop the machine
@@ -1090,6 +1095,36 @@ void Maslow_::safety_control() {
             }
         } else {
             positionErrorCounter[i] = 0;
+        }
+
+        // Check if belt is feeding out (motor power > 0 means extending/feeding out)
+        double motorPower    = axis[i]->getMotorPower();
+        double currentPos    = axis[i]->getPosition();
+        bool   isFeedingOut  = motorPower > 50;  // Threshold to detect active feeding
+        double positionDelta = abs(currentPos - beltFeedingStartPos[i]);
+
+        if (isFeedingOut) {
+            if (!beltFeeding[i]) {
+                // Belt just started feeding out, record start time and position
+                beltFeeding[i]          = true;
+                beltFeedingStartTime[i] = millis();
+                beltFeedingStartPos[i]  = currentPos;
+            } else {
+                // Belt is still feeding out, check if encoder has moved and if time exceeded
+                unsigned long feedingDuration = millis() - beltFeedingStartTime[i];
+                
+                // If feeding for more than 1 second with no significant encoder movement (< 0.5mm)
+                if (feedingDuration > 1000 && positionDelta < 0.5) {
+                    String label = axis_id_to_label(i);
+                    log_error("Belt feeding out with no encoder movement detected on " << label.c_str());
+                    log_error("Motor power: " << motorPower << ", Position delta: " << positionDelta << "mm over " << (int)feedingDuration << "ms");
+                    Maslow.eStop("Belt " + label + " feeding out with no encoder movement. Check belt and encoder connection.");
+                    beltFeeding[i] = false;  // Reset the flag
+                }
+            }
+        } else {
+            // Motor not actively feeding out, reset tracking
+            beltFeeding[i] = false;
         }
     }
 
