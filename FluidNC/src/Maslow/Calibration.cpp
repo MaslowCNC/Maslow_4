@@ -245,16 +245,16 @@ bool Calibration::requestStateChange(int newState) {
 
                     // Log waypoint locations after grid generation and restoration of first 6 waypoints (up to 30 items per log message)
                     log_info("=== Calibration Grid Generated ===");
-                    log_info("Total waypoints: " << pointCount + 1 << " (waypoints 0-" << pointCount << ")");
-                    log_info("Grid points: " << (pointCount + 1 - 6 - 2) << " (after 6 initial, before 2 return-to-center)");
+                    log_info("Total waypoints: " << pointCount << " (waypoints 0-" << (pointCount - 1) << ")");
+                    log_info("Grid points: " << (pointCount - 6 - 2) << " (after 6 initial, before 2 return-to-center)");
                     log_info("DEBUG: About to log waypoint coordinates, pointCount=" << pointCount << ", allocatedPoints=" << allocatedPoints);
                     log_info("Waypoint coordinates:");
-                    for (int i = 0; i <= pointCount; i += 30) {
-                        log_info("DEBUG: Outer loop i=" << i << ", will process waypoints " << i << " to " << min(i + 29, pointCount));
+                    for (int i = 0; i < pointCount; i += 30) {
+                        log_info("DEBUG: Outer loop i=" << i << ", will process waypoints " << i << " to " << min(i + 29, pointCount - 1));
                         // Build log message more carefully to avoid heap issues
                         std::stringstream logMsg;
-                        logMsg << "  [" << i << "-" << min(i + 29, pointCount) << "]: ";
-                        for (int j = i; j <= min(i + 29, pointCount); j++) {
+                        logMsg << "  [" << i << "-" << min(i + 29, pointCount - 1) << "]: ";
+                        for (int j = i; j <= min(i + 29, pointCount - 1); j++) {
                             log_info("DEBUG: About to access calibrationGrid indices GRID_X(" << j << ")=" << GRID_X(j) << " and GRID_Y(" << j << ")=" << GRID_Y(j));
                             logMsg << "(" << j << ":" << std::fixed << std::setprecision(1) 
                                    << calibrationGrid[GRID_X(j)] << "," << calibrationGrid[GRID_Y(j)] << ")";
@@ -501,8 +501,8 @@ void Calibration::home() {
 
 // --Maslow calibration loop
 void Calibration::calibration_loop() {
-    if (waypoint >
-        pointCount) {  //Point count is the total number of points to measure so if waypoint > pointcount then the overall measurement process is complete
+    if (waypoint >=
+        pointCount) {  //pointCount is one past the last valid index, so if waypoint >= pointCount then calibration is complete
         //Log all belt measurements before resetting calibration state (up to 5 items per log message)
         log_info("Logging belt measurements for " << waypoint << " waypoints");
         log_info("DEBUG: Starting belt measurements loop, allocatedPoints=" << allocatedPoints);
