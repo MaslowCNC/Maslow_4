@@ -1328,66 +1328,65 @@ bool Calibration::generate_calibration_grid() {
     pointCount++;
 
     int currentX = 0;
-    int currentY = -1;
+    int currentY = 0;
 
     recomputeCount = 1;
 
     // Generate spiral pattern with boundary checking for asymmetric grids
     for (int cycle = 1; cycle <= numberOfCycles; cycle++) {
-        // Move left (decreasing X)
-        while (currentX > -cycle) {
-            // Only add point if within grid boundaries
-            if (currentX >= minX && currentX <= maxX && currentY >= minY && currentY <= maxY) {
-                calibrationGrid[GRID_X(pointCount)] = currentX * xSpacing;
-                calibrationGrid[GRID_Y(pointCount)] = currentY * ySpacing;
-                pointCount++;
-            }
-            currentX--;
-        }
-        
-        // Move up (increasing Y)
-        while (currentY < cycle) {
-            if (currentX >= minX && currentX <= maxX && currentY >= minY && currentY <= maxY) {
-                calibrationGrid[GRID_X(pointCount)] = currentX * xSpacing;
-                calibrationGrid[GRID_Y(pointCount)] = currentY * ySpacing;
-                pointCount++;
-            }
-            currentY++;
-        }
-        
-        // Move right (increasing X)
-        while (currentX < cycle) {
-            if (currentX >= minX && currentX <= maxX && currentY >= minY && currentY <= maxY) {
-                calibrationGrid[GRID_X(pointCount)] = currentX * xSpacing;
-                calibrationGrid[GRID_Y(pointCount)] = currentY * ySpacing;
-                pointCount++;
-            }
-            currentX++;
-        }
-        
-        // Move down (decreasing Y)
-        while (currentY > -cycle) {
-            if (currentX >= minX && currentX <= maxX && currentY >= minY && currentY <= maxY) {
-                calibrationGrid[GRID_X(pointCount)] = currentX * xSpacing;
-                calibrationGrid[GRID_Y(pointCount)] = currentY * ySpacing;
-                pointCount++;
-            }
+        // Start by moving down (or to first valid position for this cycle)
+        if (currentY > minY && currentY >= -cycle + 1) {
             currentY--;
+            if (currentX >= minX && currentX <= maxX && currentY >= minY && currentY <= maxY) {
+                calibrationGrid[GRID_X(pointCount)] = currentX * xSpacing;
+                calibrationGrid[GRID_Y(pointCount)] = currentY * ySpacing;
+                pointCount++;
+            }
         }
-
-        // Add corner point if within boundaries
-        if (currentX >= minX && currentX <= maxX && currentY >= minY && currentY <= maxY) {
-            calibrationGrid[GRID_X(pointCount)] = currentX * xSpacing;
-            calibrationGrid[GRID_Y(pointCount)] = currentY * ySpacing;
-            pointCount++;
+        
+        // Move left (decreasing X) - stop at grid boundary or cycle limit
+        while (currentX > -cycle && currentX > minX) {
+            currentX--;
+            if (currentX >= minX && currentX <= maxX && currentY >= minY && currentY <= maxY) {
+                calibrationGrid[GRID_X(pointCount)] = currentX * xSpacing;
+                calibrationGrid[GRID_Y(pointCount)] = currentY * ySpacing;
+                pointCount++;
+            }
+        }
+        
+        // Move up (increasing Y) - stop at grid boundary or cycle limit
+        while (currentY < cycle && currentY < maxY) {
+            currentY++;
+            if (currentX >= minX && currentX <= maxX && currentY >= minY && currentY <= maxY) {
+                calibrationGrid[GRID_X(pointCount)] = currentX * xSpacing;
+                calibrationGrid[GRID_Y(pointCount)] = currentY * ySpacing;
+                pointCount++;
+            }
+        }
+        
+        // Move right (increasing X) - stop at grid boundary or cycle limit
+        while (currentX < cycle && currentX < maxX) {
+            currentX++;
+            if (currentX >= minX && currentX <= maxX && currentY >= minY && currentY <= maxY) {
+                calibrationGrid[GRID_X(pointCount)] = currentX * xSpacing;
+                calibrationGrid[GRID_Y(pointCount)] = currentY * ySpacing;
+                pointCount++;
+            }
+        }
+        
+        // Move down (decreasing Y) - stop at grid boundary or cycle limit
+        while (currentY > -cycle && currentY > minY) {
+            currentY--;
+            if (currentX >= minX && currentX <= maxX && currentY >= minY && currentY <= maxY) {
+                calibrationGrid[GRID_X(pointCount)] = currentX * xSpacing;
+                calibrationGrid[GRID_Y(pointCount)] = currentY * ySpacing;
+                pointCount++;
+            }
         }
 
         // Mark recompute point at end of each cycle
         recomputePoints[recomputeCount] = pointCount - 1;
         recomputeCount++;
-
-        // Prepare for next cycle
-        currentY--;
     }
 
     //Move back to the center
