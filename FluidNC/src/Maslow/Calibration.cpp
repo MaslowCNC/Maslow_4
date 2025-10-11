@@ -1758,6 +1758,12 @@ bool Calibration::generate_calibration_grid() {
     
     int maxRing = max(maxRingX, maxRingY);
 
+    // Calculate the actual grid bounds - same for both odd and even grids
+    float minX = -(gridSizeX - 1) / 2.0f;
+    float maxX = (gridSizeX - 1) / 2.0f;
+    float minY = -(gridSizeY - 1) / 2.0f;
+    float maxY = (gridSizeY - 1) / 2.0f;
+
     pointCount         = 6;  //The first six points are computed dynamically
     recomputePoints[0] = 5;
 
@@ -1777,10 +1783,10 @@ bool Calibration::generate_calibration_grid() {
         float ringDistY = ring;
 
         // Calculate boundaries for this ring, constrained by grid size
-        float leftBound   = max(centerX - ringDistX, -(gridSizeX - 1) / 2.0f - xOffset);
-        float rightBound  = min(centerX + ringDistX, (gridSizeX - 1) / 2.0f + xOffset);
-        float bottomBound = max(centerY - ringDistY, -(gridSizeY - 1) / 2.0f - yOffset);
-        float topBound    = min(centerY + ringDistY, (gridSizeY - 1) / 2.0f + yOffset);
+        float leftBound   = max(centerX - ringDistX, minX);
+        float rightBound  = min(centerX + ringDistX, maxX);
+        float bottomBound = max(centerY - ringDistY, minY);
+        float topBound    = min(centerY + ringDistY, maxY);
 
         // Start at bottom center of ring
         float currentX = centerX;
@@ -2009,6 +2015,12 @@ int Calibration::calculateGridPointCount(int gridSizeX, int gridSizeY) {
     
     int maxRing = max(maxRingX, maxRingY);
 
+    // Calculate the actual grid bounds
+    float minX = -(gridSizeX - 1) / 2.0f;
+    float maxX = (gridSizeX - 1) / 2.0f;
+    float minY = -(gridSizeY - 1) / 2.0f;
+    float maxY = (gridSizeY - 1) / 2.0f;
+
     // Simulate the actual spiral pattern to count points
     // This must match the logic in generate_calibration_grid exactly
     float centerX = xOffset;
@@ -2019,10 +2031,10 @@ int Calibration::calculateGridPointCount(int gridSizeX, int gridSizeY) {
         float ringDistY = ring;
 
         // Calculate boundaries for this ring
-        float leftBound   = max(centerX - ringDistX, -(gridSizeX - 1) / 2.0f - xOffset);
-        float rightBound  = min(centerX + ringDistX, (gridSizeX - 1) / 2.0f + xOffset);
-        float bottomBound = max(centerY - ringDistY, -(gridSizeY - 1) / 2.0f - yOffset);
-        float topBound    = min(centerY + ringDistY, (gridSizeY - 1) / 2.0f + yOffset);
+        float leftBound   = max(centerX - ringDistX, minX);
+        float rightBound  = min(centerX + ringDistX, maxX);
+        float bottomBound = max(centerY - ringDistY, minY);
+        float topBound    = min(centerY + ringDistY, maxY);
 
         float currentX = centerX;
         float currentY = bottomBound;
