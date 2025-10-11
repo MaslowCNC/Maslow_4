@@ -901,6 +901,7 @@ bool Calibration::take_measurement_avg_with_check(int waypoint, int dir) {
         run++;
 
         static int criticalCounter = 0;
+        static int retryCounter    = 0;  // Track retries for current waypoint
         if (run > 5) {
             run = 0;
 
@@ -918,28 +919,38 @@ bool Calibration::take_measurement_avg_with_check(int waypoint, int dir) {
                 maxDeviationAbs = max(maxDeviationAbs, maxDeviation[i]);
             }
             if (maxDeviationAbs > 2.5) {
-                log_error("Measurement error, measurements are not within 2.5 mm of each other, trying again");
-                log_info("Max deviation: " << maxDeviationAbs);
+                retryCounter++;  // Increment retry counter
+
+                log_warn("Measurement error, measurements are not within 2.5 mm of each other (attempt " << retryCounter << " of 3)");
+                log_warn("Max deviation: " << maxDeviationAbs);
 
                 //print all the measurements in readable form:
                 for (int i = 0; i < 4; i++) {
                     for (int j = 0; j < 4; j++) {
                         //use axis id to label:
-                        log_info(Maslow.axis_id_to_label(i).c_str() << " " << measurements[j][i]);
+                        log_warn(Maslow.axis_id_to_label(i).c_str() << " " << measurements[j][i]);
                     }
                 }
+
                 //reset the run counter to run the measurements again
-                if (criticalCounter++ > 8) {  //This updates the counter and checks
-                    log_error("Critical error, measurements are not within 1.5mm of each other 8 times in a row, stopping calibration");
-                    resetCalibrationState();
-                    criticalCounter = 0;
-                    freeMeasurements();
-                    requestStateChange(EXTENDEDOUT);
-                    return false;
+                if (retryCounter >= 3) {          // After 3 retries, increment critical counter
+                    retryCounter = 0;             // Reset retry counter for next waypoint
+                    if (criticalCounter++ > 8) {  //This updates the counter and checks
+                        log_error("Critical error, measurements are not within 2.5mm of each other 8 times in a row, stopping calibration");
+                        resetCalibrationState();
+                        criticalCounter = 0;
+                        freeMeasurements();
+                        requestStateChange(EXTENDEDOUT);
+                        return false;
+                    }
                 }
+
                 freeMeasurements();
                 return false;
             }
+
+            // Reset retry counter on successful measurement
+            retryCounter = 0;
 
             //If we are measurring the flex we don't want to save the result and instead we want to compare it to the last result
             // COMMENTED OUT: Frame flex measurement calculation disabled
