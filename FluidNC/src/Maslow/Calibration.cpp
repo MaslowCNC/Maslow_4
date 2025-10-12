@@ -245,17 +245,33 @@ bool Calibration::requestStateChange(int newState) {
 
                     // Log waypoint locations after grid generation and restoration of first 6 waypoints (up to 30 items per log message)
                     log_info("=== Calibration Grid Generated ===");
-                    log_info("Total waypoints: " << pointCount << " (waypoints 0-" << (pointCount - 1) << ")");
-                    log_info("Grid points: " << (pointCount - 6 - 2) << " (after 6 initial, before 2 return-to-center)");
-                    log_info("DEBUG: About to log waypoint coordinates, pointCount=" << pointCount << ", allocatedPoints=" << allocatedPoints);
+                    
+                    char waypointCountBuf[100];
+                    snprintf(waypointCountBuf, sizeof(waypointCountBuf), "Total waypoints: %d (waypoints 0-%d)", pointCount, pointCount - 1);
+                    log_info(waypointCountBuf);
+                    
+                    char gridPointsBuf[100];
+                    snprintf(gridPointsBuf, sizeof(gridPointsBuf), "Grid points: %d (after 6 initial, before 2 return-to-center)", pointCount - 6 - 2);
+                    log_info(gridPointsBuf);
+                    
+                    char debugLogBuf[150];
+                    snprintf(debugLogBuf, sizeof(debugLogBuf), "DEBUG: About to log waypoint coordinates, pointCount=%d, allocatedPoints=%d", pointCount, allocatedPoints);
+                    log_info(debugLogBuf);
+                    
                     log_info("Waypoint coordinates:");
                     for (int i = 0; i < pointCount; i += 30) {
-                        log_info("DEBUG: Outer loop i=" << i << ", will process waypoints " << i << " to " << min(i + 29, pointCount - 1));
+                        char debugLoopBuf[150];
+                        snprintf(debugLoopBuf, sizeof(debugLoopBuf), "DEBUG: Outer loop i=%d, will process waypoints %d to %d", i, i, min(i + 29, pointCount - 1));
+                        log_info(debugLoopBuf);
+                        
                         // Build log message more carefully to avoid heap issues
                         std::stringstream logMsg;
                         logMsg << "  [" << i << "-" << min(i + 29, pointCount - 1) << "]: ";
                         for (int j = i; j <= min(i + 29, pointCount - 1); j++) {
-                            log_info("DEBUG: About to access calibrationGrid indices GRID_X(" << j << ")=" << GRID_X(j) << " and GRID_Y(" << j << ")=" << GRID_Y(j));
+                            char debugAccessBuf[150];
+                            snprintf(debugAccessBuf, sizeof(debugAccessBuf), "DEBUG: About to access calibrationGrid indices GRID_X(%d)=%d and GRID_Y(%d)=%d", j, GRID_X(j), j, GRID_Y(j));
+                            log_info(debugAccessBuf);
+                            
                             logMsg << "(" << j << ":" << std::fixed << std::setprecision(1) 
                                    << calibrationGrid[GRID_X(j)] << "," << calibrationGrid[GRID_Y(j)] << ")";
                             if (j < min(i + 29, pointCount)) {
@@ -507,15 +523,27 @@ void Calibration::calibration_loop() {
     
     if (calibrationComplete) {  //Check if calibration is complete
         //Log all belt measurements before resetting calibration state (up to 5 items per log message)
-        log_info("Logging belt measurements for " << waypoint << " waypoints");
-        log_info("DEBUG: Starting belt measurements loop, allocatedPoints=" << allocatedPoints);
+        char loggingBuf[100];
+        snprintf(loggingBuf, sizeof(loggingBuf), "Logging belt measurements for %d waypoints", waypoint);
+        log_info(loggingBuf);
+        
+        char debugStartBuf[100];
+        snprintf(debugStartBuf, sizeof(debugStartBuf), "DEBUG: Starting belt measurements loop, allocatedPoints=%d", allocatedPoints);
+        log_info(debugStartBuf);
+        
         for (int i = 0; i < waypoint; i += 5) {
-            log_info("DEBUG: Outer loop iteration i=" << i << ", processing waypoints " << i << " to " << min(i + 4, waypoint - 1));
+            char debugIterBuf[150];
+            snprintf(debugIterBuf, sizeof(debugIterBuf), "DEBUG: Outer loop iteration i=%d, processing waypoints %d to %d", i, i, min(i + 4, waypoint - 1));
+            log_info(debugIterBuf);
+            
             // Build log message more carefully to avoid heap issues
             std::stringstream logMsg;
             logMsg << "Belt lengths [" << i << "-" << min(i + 4, waypoint - 1) << "]: ";
             for (int j = i; j < min(i + 5, waypoint); j++) {
-                log_info("DEBUG: About to access calibration_data[" << j << "]");
+                char debugAccessBuf[80];
+                snprintf(debugAccessBuf, sizeof(debugAccessBuf), "DEBUG: About to access calibration_data[%d]", j);
+                log_info(debugAccessBuf);
+                
                 logMsg << "(" << j << ":TL=" << std::fixed << std::setprecision(2) << calibration_data[j][0]
                        << ",TR=" << calibration_data[j][1] << ",BL=" << calibration_data[j][2]
                        << ",BR=" << calibration_data[j][3] << ")";
