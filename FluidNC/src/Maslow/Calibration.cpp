@@ -596,6 +596,16 @@ void Calibration::calibration_loop() {
         int currXIdx = GRID_X(waypoint);
         int currYIdx = GRID_Y(waypoint);
         
+        // Debug logging for critical waypoint transitions
+        if (waypoint >= 3 && waypoint <= 7) {
+            char debugBuf[150];
+            snprintf(debugBuf, sizeof(debugBuf), 
+                    "DEBUG waypoint %d: prevIdx(%d,%d) currIdx(%d,%d) allocated=%d maxIdx=%d",
+                    waypoint, prevXIdx, prevYIdx, currXIdx, currYIdx,
+                    allocatedPoints, allocatedPoints * 2 - 1);
+            log_info(debugBuf);
+        }
+        
         if (prevXIdx >= allocatedPoints * 2 || prevYIdx >= allocatedPoints * 2 || 
             currXIdx >= allocatedPoints * 2 || currYIdx >= allocatedPoints * 2) {
             log_error("Array bounds error in move: waypoint=" << waypoint << 
