@@ -1031,6 +1031,13 @@ void Maslow_::eStop(String message) {
 
 //This is the function that should prevent machine from damaging itself
 void Maslow_::safety_control() {
+    // Log that safety_control is running (helps diagnose if function is being called)
+    static unsigned long lastSafetyLog = 0;
+    if ((millis() - lastSafetyLog) > 1000) {
+        log_info("Safety control active, safetyOn=" << (safetyOn ? "true" : "false"));
+        lastSafetyLog = millis();
+    }
+
     //We need to keep track of average belt speeds and motor currents for every axis
     static bool          tick[4]                 = { false, false, false, false };
     static unsigned long spamTimer               = millis();
@@ -1046,6 +1053,15 @@ void Maslow_::safety_control() {
     static bool          beltFeeding[4]          = { false, false, false, false };
 
     MotorUnit* axis[4] = { &axisTL, &axisTR, &axisBL, &axisBR };
+    
+    // Log motor power for all axes periodically to help debug
+    static unsigned long lastPowerLog = 0;
+    if ((millis() - lastPowerLog) > 200) {
+        log_info("Motor powers: TL=" << axisTL.getMotorPower() << " TR=" << axisTR.getMotorPower() 
+                                     << " BL=" << axisBL.getMotorPower() << " BR=" << axisBR.getMotorPower());
+        lastPowerLog = millis();
+    }
+    
     for (int i = 0; i < 4; i++) {
         //If the current exceeds some absolute value, we need to call panic() and stop the machine
         if (axis[i]->getMotorCurrent() > 4000 && !tick[i]) {
