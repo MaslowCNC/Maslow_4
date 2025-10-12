@@ -309,7 +309,7 @@ bool Maslow_::updateEncoderPositions() {
     // if more than 1% of readings fail, warn user, if more than 10% fail, stop the machine and raise alarm
     if (millis() - encoderFailTimer > 1000) {
         for (int i = 0; i < 4; i++) {
-            //turn i into proper label
+            //turn i into proper label (i is the encoder line constant value)
             String label = axis_id_to_label(i);
             if (encoderFailCounter[i] > 0.1 * ENCODER_READ_FREQUENCY_HZ) {
                 // log error statement with appropriate label
@@ -1053,6 +1053,8 @@ void Maslow_::safety_control() {
     static bool          beltFeeding[4]          = { false, false, false, false };
 
     MotorUnit* axis[4] = { &axisTL, &axisTR, &axisBL, &axisBR };
+    // Map loop index to encoder line constant for proper label lookup
+    const int axisToEncoderLine[4] = { TLEncoderLine, TREncoderLine, BLEncoderLine, BREncoderLine };
     
     // Log motor power for all axes periodically to help debug
     static unsigned long lastPowerLog = 0;
@@ -1068,7 +1070,7 @@ void Maslow_::safety_control() {
             panicCounter[i]++;
             if (panicCounter[i] > tresholdHitsBeforePanic) {
                 if (sys.state() == State::Jog || sys.state() == State::Cycle) {
-                    log_warn("Motor current on " << axis_id_to_label(i).c_str() << " axis exceeded threshold of " << 4000);
+                    log_warn("Motor current on " << axis_id_to_label(axisToEncoderLine[i]).c_str() << " axis exceeded threshold of " << 4000);
                     //Maslow.panic();
                 }
                 tick[i] = true;
@@ -1088,10 +1090,10 @@ void Maslow_::safety_control() {
         if (axis[i]->getMotorPower() > 450 && abs(axis[i]->getBeltSpeed()) < 0.1 && !tick[i]) {
             axisSlackCounter[i]++;
             if (axisSlackCounter[i] > 3000) {
-                // log_info("SLACK:" << axis_id_to_label(i).c_str() << " motor power is " << int(axis[i]->getMotorPower())
+                // log_info("SLACK:" << axis_id_to_label(axisToEncoderLine[i]).c_str() << " motor power is " << int(axis[i]->getMotorPower())
                 //                   << ", but the belt speed is" << axis[i]->getBeltSpeed());
                 // log_info(axisSlackCounter[i]);
-                // log_info("Pull on " << axis_id_to_label(i).c_str() << " and restart!");
+                // log_info("Pull on " << axis_id_to_label(axisToEncoderLine[i]).c_str() << " and restart!");
                 tick[i]             = true;
                 axisSlackCounter[i] = 0;
                 Maslow.panic();
@@ -1101,7 +1103,7 @@ void Maslow_::safety_control() {
 
         //If the motor has a position error greater than 1mm and we are running a file or jogging
         if ((abs(axis[i]->getPositionError()) > 1) && (sys.state() == State::Jog || sys.state() == State::Cycle) && !tick[i]) {
-            // log_error("Position error on " << axis_id_to_label(i).c_str() << " axis exceeded 1mm, error is " << axis[i]->getPositionError()
+            // log_error("Position error on " << axis_id_to_label(axisToEncoderLine[i]).c_str() << " axis exceeded 1mm, error is " << axis[i]->getPositionError()
             //                                << "mm");
             tick[i] = true;
         }
@@ -1110,7 +1112,7 @@ void Maslow_::safety_control() {
         previousPositionError[i] = axis[i]->getPositionError();
         if ((abs(axis[i]->getPositionError()) > 15) && (sys.state() == State::Cycle)) {
             positionErrorCounter[i]++;
-            log_warn("Position error on " << axis_id_to_label(i).c_str() << " axis exceeded 15mm while running. Error is "
+            log_warn("Position error on " << axis_id_to_label(axisToEncoderLine[i]).c_str() << " axis exceeded 15mm while running. Error is "
                                           << axis[i]->getPositionError() << "mm" << " Counter: " << positionErrorCounter[i]);
             log_warn("Previous error was " << previousPositionError[i] << "mm");
 
@@ -1133,7 +1135,7 @@ void Maslow_::safety_control() {
                 beltFeeding[i]          = true;
                 beltFeedingStartTime[i] = millis();
                 beltFeedingStartPos[i]  = currentPos;
-                String label            = axis_id_to_label(i);
+                String label            = axis_id_to_label(axisToEncoderLine[i]);
                 log_info("Belt feeding started on " << label.c_str() << " at position " << currentPos << "mm, power " << motorPower);
             } else {
                 // Belt is still feeding out, check if encoder has moved and if time exceeded
@@ -1142,7 +1144,7 @@ void Maslow_::safety_control() {
                 // Info logging every 50ms while feeding to help debug
                 static unsigned long lastDebugLog[4] = { 0, 0, 0, 0 };
                 if ((millis() - lastDebugLog[i]) > 50) {
-                    String label = axis_id_to_label(i);
+                    String label = axis_id_to_label(axisToEncoderLine[i]);
                     log_info("Belt feeding on " << label.c_str() << ": duration=" << (int)feedingDuration << "ms, positionDelta="
                                                  << positionDelta << "mm, power=" << motorPower);
                     lastDebugLog[i] = millis();
@@ -1150,7 +1152,7 @@ void Maslow_::safety_control() {
 
                 // If feeding for more than 1 second with no significant encoder movement (< 0.5mm)
                 if (feedingDuration > 1000 && positionDelta < 0.5) {
-                    String label = axis_id_to_label(i);
+                    String label = axis_id_to_label(axisToEncoderLine[i]);
                     log_error("Belt feeding out with no encoder movement detected on " << label.c_str());
                     log_error("Motor power: " << motorPower << ", Position delta: " << positionDelta << "mm over " << (int)feedingDuration
                                               << "ms");
@@ -1162,7 +1164,7 @@ void Maslow_::safety_control() {
         } else {
             // Motor not actively feeding out, reset tracking
             if (beltFeeding[i]) {
-                String label = axis_id_to_label(i);
+                String label = axis_id_to_label(axisToEncoderLine[i]);
                 log_info("Belt feeding stopped on " << label.c_str() << " at position " << currentPos << "mm, motorPower=" << motorPower);
             }
             beltFeeding[i] = false;
