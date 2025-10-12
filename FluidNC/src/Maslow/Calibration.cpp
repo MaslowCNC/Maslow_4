@@ -260,15 +260,8 @@ bool Calibration::requestStateChange(int newState) {
                     // Log heap status before array access
                     log_info("Heap before waypoint logging: free=" << ESP.getFreeHeap() << " min=" << ESP.getMinFreeHeap());
                     
-                    char debugLogBuf[150];
-                    snprintf(debugLogBuf, sizeof(debugLogBuf), "DEBUG: About to log waypoint coordinates, pointCount=%d, allocatedPoints=%d", pointCount, allocatedPoints);
-                    log_info(debugLogBuf);
-                    
                     log_info("Waypoint coordinates:");
                     for (int i = 0; i < pointCount; i += 30) {
-                        char debugLoopBuf[80];
-                        snprintf(debugLoopBuf, sizeof(debugLoopBuf), "DEBUG: Outer loop i=%d, will process waypoints %d to %d", i, i, min(i + 29, pointCount - 1));
-                        log_info(debugLoopBuf);
                         
                         // Build log message using sprintf to avoid heap fragmentation
                         char waypointLogBuf[512];
@@ -286,10 +279,6 @@ bool Calibration::requestStateChange(int newState) {
                                 requestStateChange(EXTENDEDOUT);
                                 return false;
                             }
-                            
-                            char debugAccessBuf[80];
-                            snprintf(debugAccessBuf, sizeof(debugAccessBuf), "DEBUG: Access OK j=%d xIdx=%d yIdx=%d", j, xIdx, yIdx);
-                            log_info(debugAccessBuf);
                             
                             offset += snprintf(waypointLogBuf + offset, sizeof(waypointLogBuf) - offset, "(%d:%.1f,%.1f)", 
                                              j, calibrationGrid[xIdx], calibrationGrid[yIdx]);
