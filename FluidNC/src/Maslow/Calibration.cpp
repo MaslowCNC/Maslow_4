@@ -275,10 +275,10 @@ bool Calibration::requestStateChange(int newState) {
                         int offset = snprintf(waypointLogBuf, sizeof(waypointLogBuf), "  [%d-%d]: ", i, min(i + 29, pointCount - 1));
                         
                         for (int j = i; j <= min(i + 29, pointCount - 1); j++) {
-                            // Bounds check before array access
+                            // Bounds check before array access - each point uses 2 slots (X and Y)
                             int xIdx = GRID_X(j);
                             int yIdx = GRID_Y(j);
-                            if (xIdx >= allocatedPoints || yIdx >= allocatedPoints) {
+                            if (xIdx >= allocatedPoints * 2 || yIdx >= allocatedPoints * 2) {
                                 log_error("Array bounds error: j=" << j << " xIdx=" << xIdx << " yIdx=" << yIdx << " allocatedPoints=" << allocatedPoints);
                                 Maslow.eStop("Calibration array bounds error - please report this crash with logs");
                                 resetCalibrationState();
@@ -601,14 +601,14 @@ void Calibration::calibration_loop() {
 
     //Move to the next point in the grid
     else {
-        // Bounds check before array access
+        // Bounds check before array access - each point uses 2 slots (X and Y)
         int prevXIdx = GRID_X(waypoint - 1);
         int prevYIdx = GRID_Y(waypoint - 1);
         int currXIdx = GRID_X(waypoint);
         int currYIdx = GRID_Y(waypoint);
         
-        if (prevXIdx >= allocatedPoints || prevYIdx >= allocatedPoints || 
-            currXIdx >= allocatedPoints || currYIdx >= allocatedPoints) {
+        if (prevXIdx >= allocatedPoints * 2 || prevYIdx >= allocatedPoints * 2 || 
+            currXIdx >= allocatedPoints * 2 || currYIdx >= allocatedPoints * 2) {
             log_error("Array bounds error in move: waypoint=" << waypoint << 
                      " prevXIdx=" << prevXIdx << " prevYIdx=" << prevYIdx <<
                      " currXIdx=" << currXIdx << " currYIdx=" << currYIdx << 
