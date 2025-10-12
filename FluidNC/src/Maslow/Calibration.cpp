@@ -254,31 +254,47 @@ bool Calibration::requestStateChange(int newState) {
                     snprintf(gridPointsBuf, sizeof(gridPointsBuf), "Grid points: %d (after 6 initial, before 2 return-to-center)", pointCount - 6 - 2);
                     log_info(gridPointsBuf);
                     
+                    // Log heap status before array access
+                    log_info("Heap before waypoint logging: free=" << ESP.getFreeHeap() << " min=" << ESP.getMinFreeHeap());
+                    
                     char debugLogBuf[150];
                     snprintf(debugLogBuf, sizeof(debugLogBuf), "DEBUG: About to log waypoint coordinates, pointCount=%d, allocatedPoints=%d", pointCount, allocatedPoints);
                     log_info(debugLogBuf);
                     
                     log_info("Waypoint coordinates:");
                     for (int i = 0; i < pointCount; i += 30) {
-                        char debugLoopBuf[150];
+                        char debugLoopBuf[80];
                         snprintf(debugLoopBuf, sizeof(debugLoopBuf), "DEBUG: Outer loop i=%d, will process waypoints %d to %d", i, i, min(i + 29, pointCount - 1));
                         log_info(debugLoopBuf);
                         
-                        // Build log message more carefully to avoid heap issues
-                        std::stringstream logMsg;
-                        logMsg << "  [" << i << "-" << min(i + 29, pointCount - 1) << "]: ";
+                        // Build log message using sprintf to avoid heap fragmentation
+                        char waypointLogBuf[512];
+                        int offset = snprintf(waypointLogBuf, sizeof(waypointLogBuf), "  [%d-%d]: ", i, min(i + 29, pointCount - 1));
+                        
                         for (int j = i; j <= min(i + 29, pointCount - 1); j++) {
-                            char debugAccessBuf[150];
-                            snprintf(debugAccessBuf, sizeof(debugAccessBuf), "DEBUG: About to access calibrationGrid indices GRID_X(%d)=%d and GRID_Y(%d)=%d", j, GRID_X(j), j, GRID_Y(j));
+                            // Bounds check before array access
+                            int xIdx = GRID_X(j);
+                            int yIdx = GRID_Y(j);
+                            if (xIdx >= allocatedPoints || yIdx >= allocatedPoints) {
+                                log_error("Array bounds error: j=" << j << " xIdx=" << xIdx << " yIdx=" << yIdx << " allocatedPoints=" << allocatedPoints);
+                                Maslow.eStop("Calibration array bounds error - please report this crash with logs");
+                                resetCalibrationState();
+                                freeMeasurements();
+                                requestStateChange(EXTENDEDOUT);
+                                return false;
+                            }
+                            
+                            char debugAccessBuf[80];
+                            snprintf(debugAccessBuf, sizeof(debugAccessBuf), "DEBUG: Access OK j=%d xIdx=%d yIdx=%d", j, xIdx, yIdx);
                             log_info(debugAccessBuf);
                             
-                            logMsg << "(" << j << ":" << std::fixed << std::setprecision(1) 
-                                   << calibrationGrid[GRID_X(j)] << "," << calibrationGrid[GRID_Y(j)] << ")";
-                            if (j < min(i + 29, pointCount)) {
-                                logMsg << " ";
+                            offset += snprintf(waypointLogBuf + offset, sizeof(waypointLogBuf) - offset, "(%d:%.1f,%.1f)", 
+                                             j, calibrationGrid[xIdx], calibrationGrid[yIdx]);
+                            if (j < min(i + 29, pointCount - 1) && offset < (int)sizeof(waypointLogBuf) - 20) {
+                                offset += snprintf(waypointLogBuf + offset, sizeof(waypointLogBuf) - offset, " ");
                             }
                         }
-                        log_info(logMsg.str().c_str());
+                        log_info(waypointLogBuf);
                     }
                 }
                 Maslow.stop();
@@ -582,18 +598,37 @@ void Calibration::calibration_loop() {
 
     //Move to the next point in the grid
     else {
-        if (move_with_slack(calibrationGrid[GRID_X(waypoint - 1)],
-                            calibrationGrid[GRID_Y(waypoint - 1)],
-                            calibrationGrid[GRID_X(waypoint)],
-                            calibrationGrid[GRID_Y(waypoint)])) {
+        // Bounds check before array access
+        int prevXIdx = GRID_X(waypoint - 1);
+        int prevYIdx = GRID_Y(waypoint - 1);
+        int currXIdx = GRID_X(waypoint);
+        int currYIdx = GRID_Y(waypoint);
+        
+        if (prevXIdx >= allocatedPoints || prevYIdx >= allocatedPoints || 
+            currXIdx >= allocatedPoints || currYIdx >= allocatedPoints) {
+            log_error("Array bounds error in move: waypoint=" << waypoint << 
+                     " prevXIdx=" << prevXIdx << " prevYIdx=" << prevYIdx <<
+                     " currXIdx=" << currXIdx << " currYIdx=" << currYIdx << 
+                     " allocatedPoints=" << allocatedPoints);
+            Maslow.eStop("Calibration array bounds error during move - please report this crash with logs");
+            resetCalibrationState();
+            freeMeasurements();
+            requestStateChange(EXTENDEDOUT);
+            return;
+        }
+        
+        if (move_with_slack(calibrationGrid[prevXIdx],
+                            calibrationGrid[prevYIdx],
+                            calibrationGrid[currXIdx],
+                            calibrationGrid[currYIdx])) {
             measurementInProgress = true;
             calibrationDirection  = get_direction(
-                calibrationGrid[GRID_X(waypoint - 1)],
-                calibrationGrid[GRID_Y(waypoint - 1)],
-                calibrationGrid[GRID_X(waypoint)],
-                calibrationGrid[GRID_Y(waypoint)]);  //This is used to set the order that the belts are pulled tight in the following measurement
-            Maslow.x = calibrationGrid[GRID_X(waypoint)];  //Are these ever used anywhere?
-            Maslow.y = calibrationGrid[GRID_Y(waypoint)];
+                calibrationGrid[prevXIdx],
+                calibrationGrid[prevYIdx],
+                calibrationGrid[currXIdx],
+                calibrationGrid[currYIdx]);  //This is used to set the order that the belts are pulled tight in the following measurement
+            Maslow.x = calibrationGrid[currXIdx];  //Are these ever used anywhere?
+            Maslow.y = calibrationGrid[currYIdx];
             log_info("Moving to waypoint " << waypoint << " at X=" << Maslow.x << " Y=" << Maslow.y);
             hold(250);
         }
@@ -1735,9 +1770,13 @@ bool Calibration::generate_calibration_grid() {
     }
 
     // Step 3: Calculate the number of points needed and allocate memory accordingly
+    log_info("Heap before grid generation: free=" << ESP.getFreeHeap() << " min=" << ESP.getMinFreeHeap());
+    
     int estimatedPoints = calculateGridPointCount(gridSizeX, gridSizeY);
     allocateCalibrationMemory(estimatedPoints);
     log_info("Allocated memory for " << estimatedPoints << " calibration points");
+    
+    log_info("Heap after allocation: free=" << ESP.getFreeHeap() << " min=" << ESP.getMinFreeHeap());
 
     // Warn if calculated values are outside typical range (100-3000mm)
     const float minTypicalDimension = 100.0f;   // mm
