@@ -6,6 +6,9 @@
 #include <sstream>
 #include <iomanip>
 
+// Forward declaration
+void freeMeasurements();
+
 // Helper macros for accessing calibrationGrid as 1D array
 // calibrationGrid is allocated as float[numPoints * 2]
 // Each point has X at [i*2] and Y at [i*2+1]
@@ -279,7 +282,7 @@ bool Calibration::requestStateChange(int newState) {
                                 log_error("Array bounds error: j=" << j << " xIdx=" << xIdx << " yIdx=" << yIdx << " allocatedPoints=" << allocatedPoints);
                                 Maslow.eStop("Calibration array bounds error - please report this crash with logs");
                                 resetCalibrationState();
-                                ::freeMeasurements();
+                                freeMeasurements();
                                 requestStateChange(EXTENDEDOUT);
                                 return false;
                             }
@@ -612,7 +615,7 @@ void Calibration::calibration_loop() {
                      " allocatedPoints=" << allocatedPoints);
             Maslow.eStop("Calibration array bounds error during move - please report this crash with logs");
             resetCalibrationState();
-            ::freeMeasurements();
+            freeMeasurements();
             requestStateChange(EXTENDEDOUT);
             return;
         }
