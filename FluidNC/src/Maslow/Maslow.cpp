@@ -1118,16 +1118,16 @@ void Maslow_::safety_control() {
                 beltFeedingStartTime[i] = millis();
                 beltFeedingStartPos[i]  = currentPos;
                 String label            = axis_id_to_label(i);
-                log_debug("Belt feeding started on " << label.c_str() << " at position " << currentPos << "mm, power " << motorPower);
+                log_info("Belt feeding started on " << label.c_str() << " at position " << currentPos << "mm, power " << motorPower);
             } else {
                 // Belt is still feeding out, check if encoder has moved and if time exceeded
                 unsigned long feedingDuration = millis() - beltFeedingStartTime[i];
 
-                // Debug logging every 500ms while feeding
+                // Info logging every 50ms while feeding to help debug
                 static unsigned long lastDebugLog[4] = { 0, 0, 0, 0 };
-                if (feedingDuration > 500 && (millis() - lastDebugLog[i]) > 500) {
+                if ((millis() - lastDebugLog[i]) > 50) {
                     String label = axis_id_to_label(i);
-                    log_debug("Belt feeding on " << label.c_str() << ": duration=" << (int)feedingDuration << "ms, positionDelta="
+                    log_info("Belt feeding on " << label.c_str() << ": duration=" << (int)feedingDuration << "ms, positionDelta="
                                                  << positionDelta << "mm, power=" << motorPower);
                     lastDebugLog[i] = millis();
                 }
@@ -1147,7 +1147,7 @@ void Maslow_::safety_control() {
             // Motor not actively feeding out, reset tracking
             if (beltFeeding[i]) {
                 String label = axis_id_to_label(i);
-                log_debug("Belt feeding stopped on " << label.c_str() << " at position " << currentPos << "mm");
+                log_info("Belt feeding stopped on " << label.c_str() << " at position " << currentPos << "mm, motorPower=" << motorPower);
             }
             beltFeeding[i] = false;
         }
