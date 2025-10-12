@@ -1031,10 +1031,10 @@ void Maslow_::eStop(String message) {
 
 //This is the function that should prevent machine from damaging itself
 void Maslow_::safety_control() {
-    // Log that safety_control is running (helps diagnose if function is being called)
+    // Reduced frequency safety heartbeat logging (now every 10 seconds instead of 1 second)
     static unsigned long lastSafetyLog = 0;
-    if ((millis() - lastSafetyLog) > 1000) {
-        log_info("Safety control active, safetyOn=" << (safetyOn ? "true" : "false"));
+    if ((millis() - lastSafetyLog) > 10000) {
+        log_debug("Safety control active, safetyOn=" << (safetyOn ? "true" : "false"));
         lastSafetyLog = millis();
     }
 
@@ -1056,13 +1056,13 @@ void Maslow_::safety_control() {
     // Map loop index to encoder line constant for proper label lookup
     const int axisToEncoderLine[4] = { TLEncoderLine, TREncoderLine, BLEncoderLine, BREncoderLine };
     
-    // Log motor power for all axes periodically to help debug
-    static unsigned long lastPowerLog = 0;
-    if ((millis() - lastPowerLog) > 200) {
-        log_info("Motor powers: TL=" << axisTL.getMotorPower() << " TR=" << axisTR.getMotorPower() 
-                                     << " BL=" << axisBL.getMotorPower() << " BR=" << axisBR.getMotorPower());
-        lastPowerLog = millis();
-    }
+    // Disabled verbose motor power logging - can be re-enabled for debugging if needed
+    // static unsigned long lastPowerLog = 0;
+    // if ((millis() - lastPowerLog) > 200) {
+    //     log_info("Motor powers: TL=" << axisTL.getMotorPower() << " TR=" << axisTR.getMotorPower() 
+    //                                  << " BL=" << axisBL.getMotorPower() << " BR=" << axisBR.getMotorPower());
+    //     lastPowerLog = millis();
+    // }
     
     for (int i = 0; i < 4; i++) {
         //If the current exceeds some absolute value, we need to call panic() and stop the machine
