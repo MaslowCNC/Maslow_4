@@ -596,6 +596,23 @@ void Calibration::calibration_loop() {
         int currXIdx = GRID_X(waypoint);
         int currYIdx = GRID_Y(waypoint);
         
+        // DEBUG logging with per-waypoint counter (limit 3 per waypoint)
+        static int lastLoggedWaypoint = -1;
+        static int waypointLogCount = 0;
+        if (waypoint != lastLoggedWaypoint) {
+            lastLoggedWaypoint = waypoint;
+            waypointLogCount = 0;
+        }
+        if (waypointLogCount < 3) {
+            waypointLogCount++;
+            char debugBuf[150];
+            snprintf(debugBuf, sizeof(debugBuf),
+                    "DEBUG waypoint %d attempt %d: prevIdx(%d,%d) currIdx(%d,%d) allocated=%d maxIdx=%d",
+                    waypoint, waypointLogCount, prevXIdx, prevYIdx, currXIdx, currYIdx,
+                    allocatedPoints, allocatedPoints * 2 - 1);
+            log_info(debugBuf);
+        }
+        
         if (prevXIdx >= allocatedPoints * 2 || prevYIdx >= allocatedPoints * 2 || 
             currXIdx >= allocatedPoints * 2 || currYIdx >= allocatedPoints * 2) {
             log_error("Array bounds error in move: waypoint=" << waypoint << 
