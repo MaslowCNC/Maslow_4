@@ -566,7 +566,11 @@ namespace Kinematics {
                       << "Calibration cannot proceed with these dimensions.");
             String errorMsg = "Frame dimensions out of bounds. Top=" + String(topSideLength, 1) + "mm, Right=" + 
                               String(rightSideLength, 1) + "mm, Bottom=" + String(bottomSideLength, 1) + "mm, Left=" + 
-                              String(leftSideLength, 1) + "mm";
+                              String(leftSideLength, 1) + "mm. " +
+                              "Anchor coordinates: tlX=" + String(_tlX, 1) + ", tlY=" + String(_tlY, 1) + 
+                              ", trX=" + String(_trX, 1) + ", trY=" + String(_trY, 1) + 
+                              ", blX=" + String(_blX, 1) + ", blY=" + String(_blY, 1) + 
+                              ", brX=" + String(_brX, 1) + ", brY=" + String(_brY, 1);
             Maslow.eStop(errorMsg);
         }
 
