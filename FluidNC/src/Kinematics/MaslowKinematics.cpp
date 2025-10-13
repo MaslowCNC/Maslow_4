@@ -521,10 +521,9 @@ namespace Kinematics {
         if (_tlX >= _trX) {
             log_error("Top left X coordinate (tlX=" << _tlX << ") should be less than top right X coordinate (trX=" << _trX
                                                     << "). Frame geometry is invalid.");
-            String errorMsg = "Invalid frame geometry: tlX=" + String(_tlX, 1) + "mm >= trX=" + String(_trX, 1) + 
-                              "mm. Anchor coordinates: tlX=" + String(_tlX, 1) + ", tlY=" + String(_tlY, 1) + 
-                              ", trX=" + String(_trX, 1) + ", trY=" + String(_trY, 1) + 
-                              ", blX=" + String(_blX, 1) + ", blY=" + String(_blY, 1) + 
+            String errorMsg = "Invalid frame geometry: tlX=" + String(_tlX, 1) + "mm >= trX=" + String(_trX, 1) +
+                              "mm. Anchor coordinates: tlX=" + String(_tlX, 1) + ", tlY=" + String(_tlY, 1) + ", trX=" + String(_trX, 1) +
+                              ", trY=" + String(_trY, 1) + ", blX=" + String(_blX, 1) + ", blY=" + String(_blY, 1) +
                               ", brX=" + String(_brX, 1) + ", brY=" + String(_brY, 1);
             Maslow.eStop(errorMsg);
         }
@@ -534,12 +533,10 @@ namespace Kinematics {
             log_error("Top anchor points should be above bottom anchor points. tlY=" << _tlY << " should be > blY=" << _blY
                                                                                      << ", trY=" << _trY << " should be > brY=" << _brY
                                                                                      << ". Frame geometry is invalid.");
-            String errorMsg = "Invalid frame geometry: Top anchors not above bottom anchors. " +
-                              String("tlY=") + String(_tlY, 1) + "mm, blY=" + String(_blY, 1) + "mm, " +
-                              "trY=" + String(_trY, 1) + "mm, brY=" + String(_brY, 1) + "mm. " +
-                              "Anchor coordinates: tlX=" + String(_tlX, 1) + ", tlY=" + String(_tlY, 1) + 
-                              ", trX=" + String(_trX, 1) + ", trY=" + String(_trY, 1) + 
-                              ", blX=" + String(_blX, 1) + ", blY=" + String(_blY, 1) + 
+            String errorMsg = "Invalid frame geometry: Top anchors not above bottom anchors. " + String("tlY=") + String(_tlY, 1) +
+                              "mm, blY=" + String(_blY, 1) + "mm, " + "trY=" + String(_trY, 1) + "mm, brY=" + String(_brY, 1) + "mm. " +
+                              "Anchor coordinates: tlX=" + String(_tlX, 1) + ", tlY=" + String(_tlY, 1) + ", trX=" + String(_trX, 1) +
+                              ", trY=" + String(_trY, 1) + ", blX=" + String(_blX, 1) + ", blY=" + String(_blY, 1) +
                               ", brX=" + String(_brX, 1) + ", brY=" + String(_brY, 1);
             Maslow.eStop(errorMsg);
         }
@@ -561,15 +558,12 @@ namespace Kinematics {
             // Frame dimensions are out of bounds - this is a critical error that cannot be auto-corrected
             // Operating with incorrect anchor points could damage the machine
             log_error("Frame side lengths are outside valid range (500-5000mm). "
-                      << "Top=" << topSideLength << "mm, Right=" << rightSideLength << "mm, "
-                      << "Bottom=" << bottomSideLength << "mm, Left=" << leftSideLength << "mm. "
-                      << "Calibration cannot proceed with these dimensions.");
-            String errorMsg = "Frame dimensions out of bounds. Top=" + String(topSideLength, 1) + "mm, Right=" + 
-                              String(rightSideLength, 1) + "mm, Bottom=" + String(bottomSideLength, 1) + "mm, Left=" + 
-                              String(leftSideLength, 1) + "mm. " +
-                              "Anchor coordinates: tlX=" + String(_tlX, 1) + ", tlY=" + String(_tlY, 1) + 
-                              ", trX=" + String(_trX, 1) + ", trY=" + String(_trY, 1) + 
-                              ", blX=" + String(_blX, 1) + ", blY=" + String(_blY, 1) + 
+                      << "Top=" << topSideLength << "mm, Right=" << rightSideLength << "mm, " << "Bottom=" << bottomSideLength
+                      << "mm, Left=" << leftSideLength << "mm. " << "Calibration cannot proceed with these dimensions.");
+            String errorMsg = "Frame dimensions out of bounds. Top=" + String(topSideLength, 1) + "mm, Right=" + String(rightSideLength, 1) +
+                              "mm, Bottom=" + String(bottomSideLength, 1) + "mm, Left=" + String(leftSideLength, 1) + "mm. " +
+                              "Anchor coordinates: tlX=" + String(_tlX, 1) + ", tlY=" + String(_tlY, 1) + ", trX=" + String(_trX, 1) +
+                              ", trY=" + String(_trY, 1) + ", blX=" + String(_blX, 1) + ", blY=" + String(_blY, 1) +
                               ", brX=" + String(_brX, 1) + ", brY=" + String(_brY, 1);
             Maslow.eStop(errorMsg);
         }
@@ -581,10 +575,9 @@ namespace Kinematics {
             _brX > MAX_REASONABLE_COORD) {
             log_error("Anchor coordinates contain unrealistic values. Frame geometry is invalid.");
             String errorMsg = "Invalid frame geometry: Anchor coordinates out of reasonable range (0-10000mm). " +
-                              String("Anchor coordinates: tlX=") + String(_tlX, 1) + ", tlY=" + String(_tlY, 1) + 
-                              ", trX=" + String(_trX, 1) + ", trY=" + String(_trY, 1) + 
-                              ", blX=" + String(_blX, 1) + ", blY=" + String(_blY, 1) + 
-                              ", brX=" + String(_brX, 1) + ", brY=" + String(_brY, 1);
+                              String("Anchor coordinates: tlX=") + String(_tlX, 1) + ", tlY=" + String(_tlY, 1) +
+                              ", trX=" + String(_trX, 1) + ", trY=" + String(_trY, 1) + ", blX=" + String(_blX, 1) +
+                              ", blY=" + String(_blY, 1) + ", brX=" + String(_brX, 1) + ", brY=" + String(_brY, 1);
             Maslow.eStop(errorMsg);
         }
 
