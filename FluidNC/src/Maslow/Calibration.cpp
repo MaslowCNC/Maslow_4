@@ -92,6 +92,7 @@ bool Calibration::requestStateChange(int newState) {
                 break;
             }
         case EXTENDING:  //We can enter extending from retracted or extended out
+            log_info("EXTENDING case: currentState=" << currentState << " (RETRACTED=" << RETRACTED << ", EXTENDEDOUT=" << EXTENDEDOUT << ")");
             if (currentState == RETRACTED || currentState == EXTENDEDOUT) {
                 currentState = EXTENDING;
                 Maslow.stop();
@@ -107,7 +108,7 @@ bool Calibration::requestStateChange(int newState) {
                 success = true;
                 break;
             } else {
-                log_info("Cannot extend the belts until they have been retracted");
+                log_info("Cannot extend the belts until they have been retracted (currentState=" << currentState << ")");
                 break;
             }
         case EXTENDEDOUT:  //We can enter extended from extending or in the event of a failure from taking slack or release tension
