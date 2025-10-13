@@ -25,6 +25,7 @@
 #include "Driver/fluidnc_gpio.h"  // gpio_dump()
 #include "Maslow/Maslow.h"
 #include "Maslow/Calibration.h"
+#include "../esp32/maslow_watchdog.h"
 
 #include "FluidPath.h"
 
@@ -625,6 +626,8 @@ static Error xmodem_receive(const char* value, WebUI::AuthenticationLevel auth_l
         log_info("Cannot open " << value);
         return Error::UploadFailed;
     }
+    // Disarm watchdog for xmodem transfer (60 seconds)
+    MaslowWatchdog::disarm();
     pollingPaused = true;
     bool oldCr    = out.setCr(false);
     delay_ms(1000);
@@ -652,6 +655,8 @@ static Error xmodem_send(const char* value, WebUI::AuthenticationLevel auth_leve
         log_info("Cannot open " << value);
         return Error::DownloadFailed;
     }
+    // Disarm watchdog for xmodem transfer (60 seconds)
+    MaslowWatchdog::disarm();
     bool oldCr = out.setCr(false);
     log_info("Sending " << value << " via XModem");
     int size = xmodemTransmit(&out, infile);
