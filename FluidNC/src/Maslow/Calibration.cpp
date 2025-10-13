@@ -3,6 +3,7 @@
 #include "../Kinematics/MaslowKinematics.h"
 #include "../System.h"
 #include "SquareCalculation.h"
+#include "MaslowWatchdog.h"
 
 // Helper function to get MaslowKinematics instance
 static Kinematics::MaslowKinematics* getKinematics() {
@@ -154,6 +155,9 @@ bool Calibration::requestStateChange(int newState) {
         case CALIBRATION_IN_PROGRESS:  //We can enter calibration in progress from EXTENDEDOUT, READY_TO_CUT, or CALIBRATION_COMPUTING
             if (currentState == EXTENDEDOUT || currentState == READY_TO_CUT || currentState == CALIBRATION_COMPUTING) {
                 currentState = CALIBRATION_IN_PROGRESS;
+
+                // Reset watchdog timer to give calibration a fresh 4-second window
+                MaslowWatchdog::ping();
 
                 //Reset the axis targets at the beginning of calibration
                 Maslow.axisTL.setTarget(Maslow.axisTL.getPosition());
