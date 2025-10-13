@@ -35,7 +35,7 @@
 #    include "Driver/localfs.h"
 
 #    include "src/HashFS.h"
-#    include "../esp32/maslow_watchdog.h"
+#    include "../Maslow/MaslowWatchdog.h"
 #    include <list>
 
 namespace WebUI {

@@ -25,7 +25,7 @@
 #include "Driver/fluidnc_gpio.h"  // gpio_dump()
 #include "Maslow/Maslow.h"
 #include "Maslow/Calibration.h"
-#include "../esp32/maslow_watchdog.h"
+#include "Maslow/MaslowWatchdog.h"
 
 #include "FluidPath.h"
 

@@ -1,8 +1,8 @@
 // Copyright 2024 Maslow CNC
 // Use of this source code is governed by a GPLv3 license that can be found in the LICENSE file.
 
-#include "maslow_watchdog.h"
-#include "src/Config.h"
+#include "MaslowWatchdog.h"
+#include "../Config.h"
 #include <Arduino.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>

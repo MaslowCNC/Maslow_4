@@ -95,8 +95,8 @@ Value:     1 (triggered) / 0 (normal)
 ## Files
 
 ### Implementation
-- `/FluidNC/esp32/maslow_watchdog.h` - Public API
-- `/FluidNC/esp32/maslow_watchdog.cpp` - Core implementation
+- `/FluidNC/src/Maslow/MaslowWatchdog.h` - Public API
+- `/FluidNC/src/Maslow/MaslowWatchdog.cpp` - Core implementation
 
 ### Integration
 - `/FluidNC/src/Protocol.cpp` - Init, ping loop, boot check
@@ -107,7 +107,7 @@ Value:     1 (triggered) / 0 (normal)
 
 ### Initialization
 ```cpp
-#include "esp32/maslow_watchdog.h"
+#include "Maslow/MaslowWatchdog.h"
 
 // Initialize watchdog (call once at startup)
 MaslowWatchdog::init();
