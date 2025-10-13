@@ -83,36 +83,116 @@ Test(MaslowKinematicsValidation, CalibrationTest) {
     Assert(kinematics.getBrY() == 0.0f, "Valid brY should be preserved");
 }
 
-// Test anchor coordinate validation with invalid values
-Test(MaslowKinematicsValidationInvalid, CalibrationTest) {
+// Test anchor coordinate validation with small tolerance issues
+Test(MaslowKinematicsValidationMinorCorrections, CalibrationTest) {
     using namespace Kinematics;
 
     // Create a MaslowKinematics instance
     MaslowKinematics kinematics;
 
-    // Test with invalid coordinates (blX, blY, brY not zero, tlX >= trX)
+    // Test with small tolerance issues (blX, blY, brY slightly off from zero but geometry is valid)
+    kinematics.updateAnchorCoordinates(0.0f,
+                                       2000.0f,
+                                       100.0f,  // tlX, tlY, tlZ
+                                       2000.0f,
+                                       2000.0f,
+                                       56.0f,  // trX, trY, trZ
+                                       0.05f,
+                                       0.08f,
+                                       34.0f,  // blX, blY, blZ (slightly off from 0, should be auto-corrected)
+                                       2000.0f,
+                                       0.03f,
+                                       78.0f  // brX, brY, brZ (brY slightly off from 0)
+    );
+
+    // Run validation to trigger minor corrections
+    kinematics.validate();
+
+    // Verify that small tolerance issues were corrected
+    Assert(kinematics.getBlX() == 0.0f, "blX should be corrected to 0.0");
+    Assert(kinematics.getBlY() == 0.0f, "blY should be corrected to 0.0");
+    Assert(kinematics.getBrY() == 0.0f, "brY should be corrected to 0.0");
+    // Verify other coordinates are preserved (valid geometry)
+    Assert(kinematics.getTlX() == 0.0f, "tlX should be preserved");
+    Assert(kinematics.getTrX() == 2000.0f, "trX should be preserved");
+}
+
+// Test anchor coordinate validation with invalid geometry (tlX >= trX)
+Test(MaslowKinematicsValidationInvalidGeometry, CalibrationTest) {
+    using namespace Kinematics;
+
+    // Create a MaslowKinematics instance
+    MaslowKinematics kinematics;
+
+    // Test with invalid coordinates (tlX > trX - invalid geometry)
     kinematics.updateAnchorCoordinates(3000.0f,
                                        2000.0f,
                                        100.0f,  // tlX, tlY, tlZ (tlX > trX - invalid)
                                        100.0f,
                                        2000.0f,
                                        56.0f,  // trX, trY, trZ
-                                       50.0f,
-                                       10.0f,
-                                       34.0f,  // blX, blY, blZ (should be 0, 0, *)
+                                       0.0f,
+                                       0.0f,
+                                       34.0f,  // blX, blY, blZ
                                        3100.0f,
-                                       5.0f,
-                                       78.0f  // brX, brY, brZ (brY should be 0)
+                                       0.0f,
+                                       78.0f  // brX, brY, brZ
     );
 
-    // Run validation to trigger corrections
-    kinematics.validate();
+    // Run validation - should trigger emergency stop (which throws AssertionFailed in test environment)
+    AssertThrow(kinematics.validate());
+}
 
-    // Verify that invalid coordinates were corrected
-    Assert(kinematics.getBlX() == 0.0f, "blX should be corrected to 0.0");
-    Assert(kinematics.getBlY() == 0.0f, "blY should be corrected to 0.0");
-    Assert(kinematics.getBrY() == 0.0f, "brY should be corrected to 0.0");
-    Assert(kinematics.getTlX() < kinematics.getTrX(), "tlX should be less than trX after correction");
+// Test anchor coordinate validation with top points not above bottom points
+Test(MaslowKinematicsValidationTopNotAboveBottom, CalibrationTest) {
+    using namespace Kinematics;
+
+    // Create a MaslowKinematics instance
+    MaslowKinematics kinematics;
+
+    // Test with invalid coordinates (tlY <= blY - top not above bottom)
+    kinematics.updateAnchorCoordinates(0.0f,
+                                       100.0f,
+                                       100.0f,  // tlX, tlY, tlZ (tlY too low)
+                                       2000.0f,
+                                       100.0f,
+                                       56.0f,  // trX, trY, trZ (trY too low)
+                                       0.0f,
+                                       0.0f,
+                                       34.0f,  // blX, blY, blZ
+                                       2000.0f,
+                                       0.0f,
+                                       78.0f  // brX, brY, brZ
+    );
+
+    // Run validation - should trigger emergency stop
+    AssertThrow(kinematics.validate());
+}
+
+// Test anchor coordinate validation with unrealistic coordinate values
+Test(MaslowKinematicsValidationUnrealisticCoordinates, CalibrationTest) {
+    using namespace Kinematics;
+
+    // Create a MaslowKinematics instance
+    MaslowKinematics kinematics;
+
+    // Test with unrealistic coordinates (negative top Y coordinate)
+    kinematics.updateAnchorCoordinates(0.0f,
+                                       -500.0f,
+                                       100.0f,  // tlX, tlY, tlZ (tlY negative - unrealistic)
+                                       2000.0f,
+                                       2000.0f,
+                                       56.0f,  // trX, trY, trZ
+                                       0.0f,
+                                       0.0f,
+                                       34.0f,  // blX, blY, blZ
+                                       2000.0f,
+                                       0.0f,
+                                       78.0f  // brX, brY, brZ
+    );
+
+    // Run validation - should trigger emergency stop
+    AssertThrow(kinematics.validate());
 }
 
 // Test spoilboard and work thickness functionality
@@ -246,16 +326,8 @@ Test(MaslowKinematicsSideLengthValidationInvalid, CalibrationTest) {
                                        78.0f  // brX, brY, brZ
     );
 
-    // Run validation - should throw an exception instead of auto-correcting
-    bool exceptionThrown = false;
-    try {
-        kinematics.validate();
-    } catch (const AssertionFailed& ex) {
-        exceptionThrown = true;
-    }
-
-    // Verify that an exception was thrown
-    Assert(exceptionThrown, "Validation should throw an exception for frame dimensions that are too small");
+    // Run validation - should trigger emergency stop
+    AssertThrow(kinematics.validate());
 }
 
 // Test side length validation with side lengths that are too large
@@ -280,16 +352,8 @@ Test(MaslowKinematicsSideLengthValidationTooLarge, CalibrationTest) {
                                        78.0f  // brX, brY, brZ
     );
 
-    // Run validation - should throw an exception instead of auto-correcting
-    bool exceptionThrown = false;
-    try {
-        kinematics.validate();
-    } catch (const AssertionFailed& ex) {
-        exceptionThrown = true;
-    }
-
-    // Verify that an exception was thrown
-    Assert(exceptionThrown, "Validation should throw an exception for frame dimensions that are too large");
+    // Run validation - should trigger emergency stop
+    AssertThrow(kinematics.validate());
 }
 
 // Test the new general square finding algorithm (coordinate solving approach)
