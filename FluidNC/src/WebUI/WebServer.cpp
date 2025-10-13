@@ -35,6 +35,7 @@
 #    include "Driver/localfs.h"
 
 #    include "src/HashFS.h"
+#    include "../esp32/maslow_watchdog.h"
 #    include <list>
 
 namespace WebUI {
@@ -704,6 +705,8 @@ namespace WebUI {
         } else {
             if ((_upload_status != UploadStatus::FAILED) || (upload.status == UPLOAD_FILE_START)) {
                 if (upload.status == UPLOAD_FILE_START) {
+                    // Disarm watchdog for file upload (60 seconds)
+                    MaslowWatchdog::disarm();
                     std::string sizeargname(upload.filename.c_str());
                     sizeargname += "S";
                     size_t filesize = _webserver->hasArg(sizeargname.c_str()) ? _webserver->arg(sizeargname.c_str()).toInt() : 0;
@@ -802,6 +805,8 @@ namespace WebUI {
                 //Upload start
                 //**************
                 if (upload.status == UPLOAD_FILE_START) {
+                    // Disarm watchdog for firmware update (60 seconds)
+                    MaslowWatchdog::disarm();
                     log_info("Update Firmware");
                     _upload_status = UploadStatus::ONGOING;
                     std::string sizeargname(upload.filename.c_str());

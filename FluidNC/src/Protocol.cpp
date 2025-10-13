@@ -19,6 +19,7 @@
 #include "Settings.h"       // settings_execute_startup
 #include "Machine/LimitPin.h"
 #include "./Maslow/Maslow.h"
+#include "../esp32/maslow_watchdog.h"
 
 volatile ExecAlarm rtAlarm;  // Global realtime executor bitflag variable for setting various alarms.
 
@@ -255,7 +256,14 @@ static void check_startup_state() {
     // Check for and report alarm state after a reset, error, or an initial power up.
     // NOTE: Sleep mode disables the stepper drivers and position can't be guaranteed.
     // Re-initialize the sleep state as an ALARM mode to ensure user homes or acknowledges.
-    if (sys.state() == State::ConfigAlarm) {
+
+    // Check if we were restarted due to watchdog timeout
+    if (MaslowWatchdog::was_watchdog_reset()) {
+        log_error("WARNING RESTARTING AFTER WATCHDOG TIMEOUT");
+        MaslowWatchdog::clear_watchdog_flag();
+        sys.set_state(State::Alarm);  // Force alarm state
+        report_feedback_message(Message::AlarmLock);
+    } else if (sys.state() == State::ConfigAlarm) {
         report_error_message(Message::ConfigAlarmLock);
     } else {
         // Perform some machine checks to make sure everything is good to go.
@@ -294,11 +302,25 @@ void     protocol_main_loop() {
     start_polling();
     start_telemetry();
 
+    // Initialize and start the watchdog
+    MaslowWatchdog::init();
+    MaslowWatchdog::start();
+
+    // Track time for watchdog ping (200ms interval)
+    static uint32_t last_watchdog_ping = millis();
+
     // ---------------------------------------------------------------------------------
     // Primary loop! Upon a system abort, this exits back to main() to reset the system.
     // This is also where the system idles while waiting for something to do.
     // ---------------------------------------------------------------------------------
     for (;; vTaskDelay(0)) {
+        // Ping watchdog every 200ms
+        uint32_t current_time = millis();
+        if (current_time - last_watchdog_ping >= 200) {
+            MaslowWatchdog::ping();
+            last_watchdog_ping = current_time;
+        }
+
         if (activeChannel) {
             // The input polling task has collected a line of input
 #ifdef DEBUG_REPORT_ECHO_RAW_LINE_RECEIVED
