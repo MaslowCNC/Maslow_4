@@ -643,17 +643,17 @@ void Maslow_::loadBeltPositions() {
             if (angleDiff < -2048) angleDiff += 4096;
             
             // If angle difference is within 1/4 turn (1024 counts), adjust belt position for small movement
-            // OR if belt position is 0 (fully retracted), accept any encoder angle
-            if (abs(angleDiff) < 1024 || tlPos == 0) {
-                // Convert angle difference to belt length change only if not at zero position
+            if (abs(angleDiff) < 1024) {
+                // Convert angle difference to belt length change
                 // Using mmPerRevolution = 43.975
-                if (tlPos != 0) {
-                    float movementMM = (angleDiff / 4096.0) * 43.975 * -1;
-                    tlPos += movementMM;
-                    log_info("TL encoder moved " << angleDiff << " counts (" << movementMM << "mm) since save, adjusting position");
-                } else {
-                    log_info("TL belt is retracted (pos=0), ignoring encoder angle difference of " << angleDiff << " counts");
-                }
+                float movementMM = (angleDiff / 4096.0) * 43.975 * -1;
+                tlPos += movementMM;
+                log_info("TL encoder moved " << angleDiff << " counts (" << movementMM << "mm) since save, adjusting position");
+            } else if (tlPos == 0) {
+                // Special case: belt is fully retracted (position 0)
+                // Position 0 is a mechanical reference (belt fully wound), so encoder angle drift is acceptable
+                // We'll accept the saved position and re-sync the encoder to current angle
+                log_info("TL belt at retracted position (0mm), encoder drifted " << angleDiff << " counts but accepting saved position");
             } else {
                 log_info("TL encoder angle difference too large (" << angleDiff << " counts), treating belt positions as stale");
                 nvs_close(nvsHandle);
@@ -690,17 +690,15 @@ void Maslow_::loadBeltPositions() {
             if (angleDiff > 2048) angleDiff -= 4096;
             if (angleDiff < -2048) angleDiff += 4096;
             
-            // If angle difference is within 1/4 turn (1024 counts), adjust belt position for small movement
-            // OR if belt position is 0 (fully retracted), accept any encoder angle
-            if (abs(angleDiff) < 1024 || trPos == 0) {
-                // Convert angle difference to belt length change only if not at zero position
-                if (trPos != 0) {
-                    float movementMM = (angleDiff / 4096.0) * 43.975 * -1;
-                    trPos += movementMM;
-                    log_info("TR encoder moved " << angleDiff << " counts (" << movementMM << "mm) since save, adjusting position");
-                } else {
-                    log_info("TR belt is retracted (pos=0), ignoring encoder angle difference of " << angleDiff << " counts");
-                }
+            if (abs(angleDiff) < 1024) {
+                float movementMM = (angleDiff / 4096.0) * 43.975 * -1;
+                trPos += movementMM;
+                log_info("TR encoder moved " << angleDiff << " counts (" << movementMM << "mm) since save, adjusting position");
+            } else if (trPos == 0) {
+                // Special case: belt is fully retracted (position 0)
+                // Position 0 is a mechanical reference (belt fully wound), so encoder angle drift is acceptable
+                // We'll accept the saved position and re-sync the encoder to current angle
+                log_info("TR belt at retracted position (0mm), encoder drifted " << angleDiff << " counts but accepting saved position");
             } else {
                 log_info("TR encoder angle difference too large (" << angleDiff << " counts), treating belt positions as stale");
                 nvs_close(nvsHandle);
@@ -736,17 +734,15 @@ void Maslow_::loadBeltPositions() {
             if (angleDiff > 2048) angleDiff -= 4096;
             if (angleDiff < -2048) angleDiff += 4096;
             
-            // If angle difference is within 1/4 turn (1024 counts), adjust belt position for small movement
-            // OR if belt position is 0 (fully retracted), accept any encoder angle
-            if (abs(angleDiff) < 1024 || blPos == 0) {
-                // Convert angle difference to belt length change only if not at zero position
-                if (blPos != 0) {
-                    float movementMM = (angleDiff / 4096.0) * 43.975 * -1;
-                    blPos += movementMM;
-                    log_info("BL encoder moved " << angleDiff << " counts (" << movementMM << "mm) since save, adjusting position");
-                } else {
-                    log_info("BL belt is retracted (pos=0), ignoring encoder angle difference of " << angleDiff << " counts");
-                }
+            if (abs(angleDiff) < 1024) {
+                float movementMM = (angleDiff / 4096.0) * 43.975 * -1;
+                blPos += movementMM;
+                log_info("BL encoder moved " << angleDiff << " counts (" << movementMM << "mm) since save, adjusting position");
+            } else if (blPos == 0) {
+                // Special case: belt is fully retracted (position 0)
+                // Position 0 is a mechanical reference (belt fully wound), so encoder angle drift is acceptable
+                // We'll accept the saved position and re-sync the encoder to current angle
+                log_info("BL belt at retracted position (0mm), encoder drifted " << angleDiff << " counts but accepting saved position");
             } else {
                 log_info("BL encoder angle difference too large (" << angleDiff << " counts), treating belt positions as stale");
                 nvs_close(nvsHandle);
@@ -782,17 +778,15 @@ void Maslow_::loadBeltPositions() {
             if (angleDiff > 2048) angleDiff -= 4096;
             if (angleDiff < -2048) angleDiff += 4096;
             
-            // If angle difference is within 1/4 turn (1024 counts), adjust belt position for small movement
-            // OR if belt position is 0 (fully retracted), accept any encoder angle
-            if (abs(angleDiff) < 1024 || brPos == 0) {
-                // Convert angle difference to belt length change only if not at zero position
-                if (brPos != 0) {
-                    float movementMM = (angleDiff / 4096.0) * 43.975 * -1;
-                    brPos += movementMM;
-                    log_info("BR encoder moved " << angleDiff << " counts (" << movementMM << "mm) since save, adjusting position");
-                } else {
-                    log_info("BR belt is retracted (pos=0), ignoring encoder angle difference of " << angleDiff << " counts");
-                }
+            if (abs(angleDiff) < 1024) {
+                float movementMM = (angleDiff / 4096.0) * 43.975 * -1;
+                brPos += movementMM;
+                log_info("BR encoder moved " << angleDiff << " counts (" << movementMM << "mm) since save, adjusting position");
+            } else if (brPos == 0) {
+                // Special case: belt is fully retracted (position 0)
+                // Position 0 is a mechanical reference (belt fully wound), so encoder angle drift is acceptable
+                // We'll accept the saved position and re-sync the encoder to current angle
+                log_info("BR belt at retracted position (0mm), encoder drifted " << angleDiff << " counts but accepting saved position");
             } else {
                 log_info("BR encoder angle difference too large (" << angleDiff << " counts), treating belt positions as stale");
                 nvs_close(nvsHandle);
