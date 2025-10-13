@@ -1,10 +1,10 @@
 # Watchdog System
 
 ## Overview
-The Maslow CNC firmware includes a watchdog system to protect against firmware hangs and ensure system reliability. If the main thread stops responding for more than 750ms, the watchdog automatically halts all motors, sets a persistent flag, and restarts the system.
+The Maslow CNC firmware includes a watchdog system to protect against firmware hangs and ensure system reliability. If the main thread stops responding for more than 4000ms, the watchdog automatically halts all motors, sets a persistent flag, and restarts the system.
 
 ## Features
-- **Automatic hang detection**: Monitors main thread with 750ms timeout
+- **Automatic hang detection**: Monitors main thread with 4000ms timeout
 - **Motor protection**: Halts all A/B/C/D axis motors before restart
 - **Persistent recovery**: Remembers watchdog restarts across power cycles
 - **Alarm mode**: Forces safe state on recovery boot
@@ -16,7 +16,7 @@ The Maslow CNC firmware includes a watchdog system to protect against firmware h
 1. Watchdog task runs on Core 0 with high priority (2)
 2. Main thread pings watchdog every 200ms
 3. Watchdog monitors time since last ping
-4. If >750ms without ping, watchdog triggers
+4. If >4000ms without ping, watchdog triggers
 
 ### Watchdog Trigger Sequence
 1. Set persistent flag in NVS storage
@@ -33,7 +33,7 @@ The Maslow CNC firmware includes a watchdog system to protect against firmware h
 3. Operator must acknowledge alarm before resuming
 
 ### Long Operations
-For operations that intentionally take >750ms, the watchdog automatically disarms for 60 seconds:
+For operations that intentionally take >4000ms, the watchdog automatically disarms for 60 seconds:
 - Web file uploads
 - Firmware OTA updates
 - Xmodem serial file transfers (send/receive)
@@ -58,14 +58,14 @@ The watchdog has **higher priority** than other Core 0 tasks, ensuring it runs e
 - G-code execution and motion planning
 
 ### WiFi Activity
-WiFi runs on ESP32's internal WiFi stack (typically Core 0). The 750ms timeout accommodates WiFi latency and occasional delays from network operations.
+WiFi runs on ESP32's internal WiFi stack (typically Core 0). The 4000ms timeout accommodates WiFi latency and occasional delays from network operations.
 
 ## Configuration
 
 ### Timing Parameters
 ```cpp
 WATCHDOG_PING_INTERVAL_MS  = 200   // How often main thread pings
-WATCHDOG_TIMEOUT_MS         = 750   // Timeout before triggering
+WATCHDOG_TIMEOUT_MS         = 4000  // Timeout before triggering
 WATCHDOG_DISARM_DURATION_MS = 60000 // Disarm time for long ops
 ```
 

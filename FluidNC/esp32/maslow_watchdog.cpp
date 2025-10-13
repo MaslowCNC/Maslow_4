@@ -21,7 +21,7 @@ namespace MaslowWatchdog {
 
     // Constants
     static const uint32_t WATCHDOG_PING_INTERVAL_MS   = 200;    // Expected ping interval from main thread
-    static const uint32_t WATCHDOG_TIMEOUT_MS         = 750;    // Timeout before triggering watchdog action
+    static const uint32_t WATCHDOG_TIMEOUT_MS         = 4000;   // Timeout before triggering watchdog action
     static const uint32_t WATCHDOG_DISARM_DURATION_MS = 60000;  // Duration for which watchdog is disarmed
     static const char*    NVS_NAMESPACE               = "maslow";
     static const char*    NVS_WATCHDOG_FLAG_KEY       = "wdg_reset";
