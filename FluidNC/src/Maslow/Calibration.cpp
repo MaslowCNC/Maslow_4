@@ -203,9 +203,16 @@ bool Calibration::requestStateChange(int newState) {
                     // Log the expected calibration parameters before starting
                     log_info("=== Starting Calibration ===");
                     log_info("Orientation: " << (orientation == VERTICAL ? "VERTICAL" : "HORIZONTAL"));
+                    log_info("Configuration parameters:");
+                    log_info("  Maslow_calibration_grid_width_mm_X: " << calibration_grid_width_mm_X << "mm (0 = auto-calculate)");
+                    log_info("  Maslow_calibration_grid_height_mm_Y: " << calibration_grid_height_mm_Y << "mm (0 = auto-calculate)");
+                    log_info("  Maslow_calibration_grid_size: " << calibrationGridSize << " (deprecated, use _X and _Y)");
+                    log_info("  Maslow_calibration_grid_size_X: " << calibrationGridSizeX << " (0 = auto-calculate from spacing)");
+                    log_info("  Maslow_calibration_grid_size_Y: " << calibrationGridSizeY << " (0 = auto-calculate from spacing)");
+                    log_info("  Maslow_calibration_grid_spacing: " << calibrationGridSpacing << "mm (used when size is 0)");
                     log_info("First 6 waypoints will be measured to determine machine position");
                     log_info("Full calibration grid will be generated after waypoint 5");
-                    log_info("Grid parameters will be calculated and logged after initial measurements");
+                    log_info("Final grid parameters will be calculated and logged after initial measurements");
                 }
 
                 // If at waypoint 6 and grid hasn't been generated yet (pointCount still 6), generate the calibration grid
