@@ -1312,7 +1312,7 @@ bool Calibration::generate_calibration_grid() {
             return false;  // return false or handle error appropriately
     }
 
-    pointCount         = 6;  //The first four points are computed dynamically
+    pointCount         = 6;  //The first four points are computed dynamically more to test
     recomputePoints[0] = 5;
 
     //The point in the center
