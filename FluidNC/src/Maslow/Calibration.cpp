@@ -1313,7 +1313,7 @@ bool Calibration::generate_calibration_grid() {
 
     //The point in the center
     calibrationGrid[pointCount][0] = 0;
-    calibrationGrid[pointCount][1] = 0;
+    calibrationGrid[pointCount][1] = 0; 
 
     pointCount++;
 
