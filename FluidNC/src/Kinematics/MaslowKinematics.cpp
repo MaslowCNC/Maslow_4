@@ -498,25 +498,6 @@ namespace Kinematics {
         const float TOLERANCE            = 0.1f;  // Allow small floating point differences
         bool        coordinatesCorrected = false;
 
-        // Check that blX, blY, and brY should be zero (or very close to zero)
-        if (std::abs(_blX) > TOLERANCE) {
-            log_warn("Bottom left X coordinate (blX) should be 0.0, but is " << _blX << ". Correcting to 0.0.");
-            _blX                 = 0.0f;
-            coordinatesCorrected = true;
-        }
-
-        if (std::abs(_blY) > TOLERANCE) {
-            log_warn("Bottom left Y coordinate (blY) should be 0.0, but is " << _blY << ". Correcting to 0.0.");
-            _blY                 = 0.0f;
-            coordinatesCorrected = true;
-        }
-
-        if (std::abs(_brY) > TOLERANCE) {
-            log_warn("Bottom right Y coordinate (brY) should be 0.0, but is " << _brY << ". Correcting to 0.0.");
-            _brY                 = 0.0f;
-            coordinatesCorrected = true;
-        }
-
         // Check that tlX < trX (left should be to the left of right)
         if (_tlX >= _trX) {
             log_error("Top left X coordinate (tlX=" << _tlX << ") should be less than top right X coordinate (trX=" << _trX
@@ -579,6 +560,27 @@ namespace Kinematics {
                               ", trX=" + String(_trX, 1) + ", trY=" + String(_trY, 1) + ", blX=" + String(_blX, 1) +
                               ", blY=" + String(_blY, 1) + ", brX=" + String(_brX, 1) + ", brY=" + String(_brY, 1);
             Maslow.eStop(errorMsg);
+        }
+
+        // Check that blX, blY, and brY should be zero (or very close to zero)
+        // These tolerance checks are performed AFTER geometry validation to ensure
+        // that only small floating-point precision issues are auto-corrected
+        if (std::abs(_blX) > TOLERANCE) {
+            log_warn("Bottom left X coordinate (blX) should be 0.0, but is " << _blX << ". Correcting to 0.0.");
+            _blX                 = 0.0f;
+            coordinatesCorrected = true;
+        }
+
+        if (std::abs(_blY) > TOLERANCE) {
+            log_warn("Bottom left Y coordinate (blY) should be 0.0, but is " << _blY << ". Correcting to 0.0.");
+            _blY                 = 0.0f;
+            coordinatesCorrected = true;
+        }
+
+        if (std::abs(_brY) > TOLERANCE) {
+            log_warn("Bottom right Y coordinate (brY) should be 0.0, but is " << _brY << ". Correcting to 0.0.");
+            _brY                 = 0.0f;
+            coordinatesCorrected = true;
         }
 
         if (coordinatesCorrected) {
