@@ -115,8 +115,9 @@ std::map<State, const char*> StateName = {
     { State::SafetyDoor, "SafetyDoor" },
     { State::Sleep, "Sleep" },
     { State::ConfigAlarm, "ConfigAlarm" },
+    { State::Cutting, "Cutting" },
 };
 
 bool inMotionState() {
-    return sys.state() == State::Cycle || sys.state() == State::Homing || sys.state() == State::Jog;
+    return sys.state() == State::Cycle || sys.state() == State::Cutting || sys.state() == State::Homing || sys.state() == State::Jog;
 }

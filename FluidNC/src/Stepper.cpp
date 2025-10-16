@@ -784,6 +784,7 @@ void Stepper::prep_buffer() {
 float Stepper::get_realtime_rate() {
     switch (sys.state()) {
         case State::Cycle:
+        case State::Cutting:
         case State::Homing:
         case State::Hold:
         case State::Jog:

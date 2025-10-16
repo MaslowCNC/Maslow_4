@@ -86,7 +86,7 @@ void Channel::autoReportGCodeState() {
     }
 }
 static bool motionState() {
-    return sys.state() == State::Cycle || sys.state() == State::Homing || sys.state() == State::Jog;
+    return sys.state() == State::Cycle || sys.state() == State::Cutting || sys.state() == State::Homing || sys.state() == State::Jog;
 }
 
 void Channel::autoReport() {

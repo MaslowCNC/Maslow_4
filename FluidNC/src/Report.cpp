@@ -461,6 +461,8 @@ const char* state_name() {
             return "Idle";
         case State::Cycle:
             return "Run";
+        case State::Cutting:
+            return "Cutting";
         case State::Hold:
             if (!(sys.suspend().bit.jogCancel)) {
                 return sys.suspend().bit.holdComplete ? "Hold:0" : "Hold:1";
@@ -580,6 +582,7 @@ void report_realtime_status(Channel& channel) {
         switch (sys.state()) {
             case State::Homing:
             case State::Cycle:
+            case State::Cutting:
             case State::Hold:
             case State::Jog:
             case State::SafetyDoor:
@@ -600,6 +603,7 @@ void report_realtime_status(Channel& channel) {
         switch (sys.state()) {
             case State::Homing:
             case State::Cycle:
+            case State::Cutting:
             case State::Hold:
             case State::Jog:
             case State::SafetyDoor:

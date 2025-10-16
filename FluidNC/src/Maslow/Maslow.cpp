@@ -139,7 +139,7 @@ void Maslow_::update() {
     }
 
     //Save the z-axis position if the prevous state was jog or cycle and the current state is idle
-    if ((prevState == State::Jog || prevState == State::Cycle) && sys.state() == State::Idle) {
+    if ((prevState == State::Jog || prevState == State::Cycle || prevState == State::Cutting) && sys.state() == State::Idle) {
         saveZPos();
         // Only save belt positions when in READY_TO_CUT or RETRACTED state (belts are tight and valid)
         int currentMaslowState = calibration.getCurrentState();
@@ -190,7 +190,7 @@ void Maslow_::update() {
         //------------------------ Maslow State Machine
 
         //-------Jog or G-code execution.
-        if (sys.state() == State::Jog || sys.state() == State::Cycle) {
+        if (sys.state() == State::Jog || sys.state() == State::Cycle || sys.state() == State::Cutting) {
             // With MaslowKinematics, read belt motor positions directly from the axis system
             // Axis mapping: A=TL, B=TR, C=BL, D=BR, Z=Router
             float tlBeltLength = steps_to_mpos(get_axis_motor_steps(0), 0);  // TL from A axis (axis 0)
@@ -1038,7 +1038,7 @@ void Maslow_::safety_control() {
         if (axis[i]->getMotorCurrent() > 4000 && !tick[i]) {
             panicCounter[i]++;
             if (panicCounter[i] > tresholdHitsBeforePanic) {
-                if (sys.state() == State::Jog || sys.state() == State::Cycle) {
+                if (sys.state() == State::Jog || sys.state() == State::Cycle || sys.state() == State::Cutting) {
                     log_warn("Motor current on " << axis_id_to_label(i).c_str() << " axis exceeded threshold of " << 4000);
                     //Maslow.panic();
                 }
@@ -1071,7 +1071,7 @@ void Maslow_::safety_control() {
             axisSlackCounter[i] = 0;
 
         //If the motor has a position error greater than 1mm and we are running a file or jogging
-        if ((abs(axis[i]->getPositionError()) > 1) && (sys.state() == State::Jog || sys.state() == State::Cycle) && !tick[i]) {
+        if ((abs(axis[i]->getPositionError()) > 1) && (sys.state() == State::Jog || sys.state() == State::Cycle || sys.state() == State::Cutting) && !tick[i]) {
             // log_error("Position error on " << axis_id_to_label(i).c_str() << " axis exceeded 1mm, error is " << axis[i]->getPositionError()
             //                                << "mm");
             tick[i] = true;
@@ -1079,7 +1079,7 @@ void Maslow_::safety_control() {
 
         //If the motor has a position error greater than 15mm and we are running a file or jogging
         previousPositionError[i] = axis[i]->getPositionError();
-        if ((abs(axis[i]->getPositionError()) > 15) && (sys.state() == State::Cycle)) {
+        if ((abs(axis[i]->getPositionError()) > 15) && (sys.state() == State::Cycle || sys.state() == State::Cutting)) {
             positionErrorCounter[i]++;
             log_warn("Position error on " << axis_id_to_label(i).c_str() << " axis exceeded 15mm while running. Error is "
                                           << axis[i]->getPositionError() << "mm" << " Counter: " << positionErrorCounter[i]);

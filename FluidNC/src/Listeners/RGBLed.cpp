@@ -40,6 +40,7 @@ namespace Listeners {
                     value = this->homing;
                     break;
                 case State::Cycle:
+                case State::Cutting:
                     value = this->cycle;
                     break;
                 case State::Hold:

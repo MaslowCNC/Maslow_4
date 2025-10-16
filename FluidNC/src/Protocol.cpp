@@ -19,6 +19,7 @@
 #include "Settings.h"       // settings_execute_startup
 #include "Machine/LimitPin.h"
 #include "./Maslow/Maslow.h"
+#include "InputFile.h"      // InputFile::_progress
 
 volatile ExecAlarm rtAlarm;  // Global realtime executor bitflag variable for setting various alarms.
 
@@ -363,7 +364,7 @@ void protocol_buffer_synchronize() {
         if (sys.abort()) {
             return;  // Check for system abort
         }
-    } while (plan_get_current_block() || (sys.state() == State::Cycle));
+    } while (plan_get_current_block() || (sys.state() == State::Cycle || sys.state() == State::Cutting));
 }
 
 // Auto-cycle start triggers when there is a motion ready to execute and if the main program is not
@@ -373,7 +374,7 @@ void protocol_buffer_synchronize() {
 // is finished, single commands), a command that needs to wait for the motions in the buffer to
 // execute calls a buffer sync, or the planner buffer is full and ready to go.
 void protocol_auto_cycle_start() {
-    if (plan_get_current_block() != NULL && sys.state() != State::Cycle &&
+    if (plan_get_current_block() != NULL && sys.state() != State::Cycle && sys.state() != State::Cutting &&
         sys.state() != State::Hold) {           // Check if there are any blocks in the buffer.
         protocol_send_event(&cycleStartEvent);  // If so, execute them
     }
@@ -474,6 +475,7 @@ static void protocol_do_motion_cancel() {
             break;
 
         case State::Cycle:
+        case State::Cutting:
             protocol_start_holding();
             break;
 
@@ -525,6 +527,7 @@ static void protocol_do_feedhold() {
             break;
 
         case State::Cycle:
+        case State::Cutting:
             protocol_start_holding();
             break;
 
@@ -585,6 +588,7 @@ static void protocol_do_safety_door() {
             protocol_hold_complete();
             break;
         case State::Cycle:
+        case State::Cutting:
             protocol_start_holding();
             break;
         case State::Jog:
@@ -623,6 +627,7 @@ static void protocol_do_sleep() {
             break;
 
         case State::Cycle:
+        case State::Cutting:
         case State::Jog:
             protocol_start_holding();
             // Unlike other hold events, sleep does not set jogCancel
@@ -653,7 +658,16 @@ static void protocol_do_initiate_cycle() {
         suspend.value = 0;  // Break suspend state.
         sys.set_suspend(suspend);
 
-        sys.set_state(pb->is_jog ? State::Jog : State::Cycle);
+        // Determine state based on execution context
+        State newState;
+        if (pb->is_jog) {
+            newState = State::Jog;
+        } else if (InputFile::_progress.length()) {
+            newState = State::Cutting;
+        } else {
+            newState = State::Cycle;
+        }
+        sys.set_state(newState);
         Stepper::prep_buffer();  // Initialize step segment buffer before beginning cycle.
         Stepper::wake_up();
     } else {  // Otherwise, do nothing. Set and resume IDLE state.
@@ -714,6 +728,7 @@ static void protocol_do_cycle_start() {
         case State::CheckMode:
         case State::Sleep:
         case State::Cycle:
+        case State::Cutting:
         case State::Jog:
             break;
     }
@@ -779,6 +794,7 @@ void protocol_do_cycle_stop() {
         case State::CheckMode:
         case State::Idle:
         case State::Cycle:
+        case State::Cutting:
         case State::Jog:
             // Motion complete. Includes CYCLE/JOG/HOMING states and jog cancel/motion cancel/soft limit events.
             // NOTE: Motion and jog cancel both immediately return to idle after the hold completes.
@@ -867,6 +883,7 @@ void protocol_exec_rt_system() {
         case State::Sleep:
             break;
         case State::Cycle:
+        case State::Cutting:
         case State::Hold:
         case State::SafetyDoor:
         case State::Homing:
@@ -1066,14 +1083,14 @@ static void protocol_do_accessory_override(void* type) {
         case AccessoryOverride::FloodToggle:
             // NOTE: Since coolant state always performs a planner sync whenever it changes, the current
             // run state can be determined by checking the parser state.
-            if (config->_coolant->hasFlood() && (sys.state() == State::Idle || sys.state() == State::Cycle || sys.state() == State::Hold)) {
+            if (config->_coolant->hasFlood() && (sys.state() == State::Idle || sys.state() == State::Cycle || sys.state() == State::Cutting || sys.state() == State::Hold)) {
                 gc_state.modal.coolant.Flood = !gc_state.modal.coolant.Flood;
                 config->_coolant->set_state(gc_state.modal.coolant);
                 report_ovr_counter = 0;  // Set to report change immediately
             }
             break;
         case AccessoryOverride::MistToggle:
-            if (config->_coolant->hasMist() && (sys.state() == State::Idle || sys.state() == State::Cycle || sys.state() == State::Hold)) {
+            if (config->_coolant->hasMist() && (sys.state() == State::Idle || sys.state() == State::Cycle || sys.state() == State::Cutting || sys.state() == State::Hold)) {
                 gc_state.modal.coolant.Mist = !gc_state.modal.coolant.Mist;
                 config->_coolant->set_state(gc_state.modal.coolant);
                 report_ovr_counter = 0;  // Set to report change immediately
@@ -1091,7 +1108,7 @@ static void protocol_do_limit(void* arg) {
         return;
     }
     log_debug("Limit switch tripped for " << config->_axes->axisName(limit->_axis) << " motor " << limit->_motorNum);
-    if (sys.state() == State::Cycle || sys.state() == State::Jog) {
+    if (sys.state() == State::Cycle || sys.state() == State::Cutting || sys.state() == State::Jog) {
         if (limit->isHard() && rtAlarm == ExecAlarm::None) {
             log_debug("Hard limits");
             mc_reset();                      // Initiate system kill.
