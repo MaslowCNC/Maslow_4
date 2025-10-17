@@ -678,7 +678,14 @@ static void protocol_do_initiate_cycle() {
         suspend.value = 0;  // Break suspend state.
         sys.set_suspend(suspend);
 
-        sys.set_state(State::Idle);
+        // If a file is running, stay in Cutting state even between motion blocks
+        if (InputFile::_progress.length() > 0) {
+            sys.set_state(State::Cutting);
+            log_info("protocol_do_initiate_cycle: No blocks, but file running - staying in Cutting state");
+        } else {
+            sys.set_state(State::Idle);
+            log_info("protocol_do_initiate_cycle: No blocks, no file - setting to Idle");
+        }
     }
 }
 static void protocol_initiate_homing_cycle() {
