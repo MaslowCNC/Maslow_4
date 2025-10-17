@@ -108,8 +108,11 @@ namespace Machine {
         float _tempWorkThickness       = 0.0f;
 
         // Auto-update configuration
-        bool _maslowAutoUpdate = false;
-        std::string _maslowUpdateURL = "https://api.github.com/repos/BarbourSmith/FluidNC/releases/latest";
+        bool        _maslowAutoUpdate = false;
+        std::string _maslowUpdateURL  = "https://api.github.com/repos/BarbourSmith/FluidNC/releases/latest";
+
+        // Watchdog configuration
+        bool _maslowWatchdogEnabled = false;
 
         std::string _board = "None";
         std::string _name  = "None";

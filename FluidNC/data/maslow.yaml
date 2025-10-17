@@ -14,6 +14,7 @@ Maslow_Scale_Y: 1.000000
 Maslow_debugEnabled: false
 MaslowAutoUpdate: false
 MaslowUpdateURL: https://api.github.com/repos/BarbourSmith/FluidNC/releases/latest
+Maslow_watchdog_enabled: false
 Maslow_spoilboardThickness: 0.000000
 Maslow_workThickness: 0.000000
 stepping: 

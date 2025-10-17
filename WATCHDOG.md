@@ -62,6 +62,18 @@ WiFi runs on ESP32's internal WiFi stack (typically Core 0). The 4000ms timeout 
 
 ## Configuration
 
+### Enabling/Disabling the Watchdog
+The watchdog is **disabled by default** and must be enabled in your `maslow.yaml` configuration file:
+
+```yaml
+Maslow_watchdog_enabled: true  # Set to false to disable (default: false)
+```
+
+**Important**: The watchdog is optional because:
+- It adds system complexity and may have unexpected interactions
+- Motors already stop immediately on reboot as part of the boot sequence
+- It should only be enabled if you've experienced genuine firmware hangs
+
 ### Timing Parameters
 ```cpp
 WATCHDOG_PING_INTERVAL_MS  = 200   // How often main thread pings

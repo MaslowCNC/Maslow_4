@@ -3,6 +3,7 @@
 
 #include "MaslowWatchdog.h"
 #include "../Config.h"
+#include "../Machine/MachineConfig.h"
 #include <Arduino.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -36,7 +37,15 @@ namespace MaslowWatchdog {
     static void watchdog_task(void* parameter);
     static void trigger_watchdog_action();
 
+    // Helper function to check if watchdog is enabled
+    static bool is_enabled() {
+        return config && config->_maslowWatchdogEnabled;
+    }
+
     void init() {
+        if (!is_enabled()) {
+            return;  // Watchdog is disabled in configuration
+        }
         // Initialize NVS if not already done
         esp_err_t ret = nvs_flash_init();
         if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -50,6 +59,10 @@ namespace MaslowWatchdog {
     }
 
     void start() {
+        if (!is_enabled()) {
+            return;  // Watchdog is disabled in configuration
+        }
+
         if (watchdog_task_handle != nullptr) {
             return;  // Already started
         }
@@ -69,6 +82,10 @@ namespace MaslowWatchdog {
     }
 
     void ping() {
+        if (!is_enabled()) {
+            return;  // Watchdog is disabled in configuration
+        }
+
         uint32_t current_time = millis();
 
         // If we were disarmed and now we get a ping, re-arm the watchdog
@@ -81,6 +98,10 @@ namespace MaslowWatchdog {
     }
 
     void disarm() {
+        if (!is_enabled()) {
+            return;  // Watchdog is disabled in configuration
+        }
+
         uint32_t current_time = millis();
         disarm_until_ms       = current_time + WATCHDOG_DISARM_DURATION_MS;
         watchdog_armed        = false;

@@ -113,6 +113,9 @@ namespace Machine {
         handler.item(M + "AutoUpdate", _maslowAutoUpdate);
         handler.item((M + "UpdateURL").c_str(), _maslowUpdateURL);
 
+        // Watchdog configuration
+        handler.item(M + "_watchdog_enabled", _maslowWatchdogEnabled);
+
         // Material thickness parameters - temporary storage for machine-level config
         handler.item(M + "_spoilboardThickness", _tempSpoilboardThickness, 0.0, 50.0);
         handler.item(M + "_workThickness", _tempWorkThickness, 0.0, 50.0);
