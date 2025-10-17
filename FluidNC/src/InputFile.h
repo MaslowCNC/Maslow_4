@@ -32,7 +32,6 @@ private:
 
 public:
     static std::string _progress;
-    static bool _is_running;  // True when a file is being executed
 
     // fsname is the default file system on which the file is located, in case the path does not specify
     // path is the full path to the file

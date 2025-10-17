@@ -662,12 +662,15 @@ static void protocol_do_initiate_cycle() {
         State newState;
         if (pb->is_jog) {
             newState = State::Jog;
-        } else if (InputFile::_is_running) {
+        } else if (InputFile::_progress.length() > 0) {
             newState = State::Cutting;
+            log_info("State set to Cutting - file progress: " << InputFile::_progress);
         } else {
             newState = State::Cycle;
+            log_info("State set to Cycle - no file running (progress empty)");
         }
         sys.set_state(newState);
+        log_info("protocol_do_initiate_cycle: final state = " << state_name());
         Stepper::prep_buffer();  // Initialize step segment buffer before beginning cycle.
         Stepper::wake_up();
     } else {  // Otherwise, do nothing. Set and resume IDLE state.

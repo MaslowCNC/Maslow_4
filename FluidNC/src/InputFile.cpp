@@ -7,7 +7,7 @@
 
 InputFile::InputFile(const char* defaultFs, const char* path, WebUI::AuthenticationLevel auth_level, Channel& out) :
     FileStream(path, "r", defaultFs), _auth_level(auth_level), _out(out), _line_num(0) {
-    _is_running = true;  // Mark that a file is now running
+    log_info("InputFile created for file: " << path);
 }
 /*
   Read a line from the file
@@ -55,7 +55,6 @@ void InputFile::ack(Error status) {
 }
 
 std::string InputFile::_progress = "";
-bool InputFile::_is_running = false;
 
 #include <sstream>
 #include <iomanip>
@@ -71,18 +70,19 @@ Channel* InputFile::pollLine(char* line) {
             std::ostringstream s;
             s << "SD:" << std::fixed << std::setprecision(2) << percent_complete() << "," << path().c_str();
             _progress = s.str();
+            log_info("InputFile::pollLine - _progress set to: " << _progress);
         }
             return &allChannels;
         case Error::Eof:
             _progress = "";
-            _is_running = false;  // File finished
+            log_info("InputFile EOF - _progress cleared");
             _notifyf("File job done", "%s file job succeeded", path());
             log_msg(path() << " file job succeeded");
             allChannels.kill(this);
             return nullptr;
         default:
             _progress = "";
-            _is_running = false;  // File ended with error
+            log_info("InputFile error - _progress cleared");
             log_error(static_cast<int>(err) << " (" << errorString(err) << ") in " << path() << " at line " << getLineNumber());
             allChannels.kill(this);
             return nullptr;
@@ -93,11 +93,12 @@ void InputFile::stopJob() {
     //Report print stopped
     _notifyf("File print canceled", "Reset during file job at line: %d", getLineNumber());
     log_info("Reset during file job at line: " << getLineNumber());
-    _is_running = false;  // File cancelled
+    _progress = "";
+    log_info("stopJob - _progress cleared");
     allChannels.kill(this);
 }
 
 InputFile::~InputFile() {
     _progress = "";
-    _is_running = false;  // File closed
+    log_info("InputFile destroyed - _progress cleared");
 }
