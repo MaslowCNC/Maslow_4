@@ -6,7 +6,9 @@
 #include "Report.h"
 
 InputFile::InputFile(const char* defaultFs, const char* path, WebUI::AuthenticationLevel auth_level, Channel& out) :
-    FileStream(path, "r", defaultFs), _auth_level(auth_level), _out(out), _line_num(0) {}
+    FileStream(path, "r", defaultFs), _auth_level(auth_level), _out(out), _line_num(0) {
+    _is_running = true;  // Mark that a file is now running
+}
 /*
   Read a line from the file
   Returns Error::Ok if a line was read, even if the line was empty.
@@ -53,6 +55,7 @@ void InputFile::ack(Error status) {
 }
 
 std::string InputFile::_progress = "";
+bool InputFile::_is_running = false;
 
 #include <sstream>
 #include <iomanip>
@@ -72,12 +75,14 @@ Channel* InputFile::pollLine(char* line) {
             return &allChannels;
         case Error::Eof:
             _progress = "";
+            _is_running = false;  // File finished
             _notifyf("File job done", "%s file job succeeded", path());
             log_msg(path() << " file job succeeded");
             allChannels.kill(this);
             return nullptr;
         default:
             _progress = "";
+            _is_running = false;  // File ended with error
             log_error(static_cast<int>(err) << " (" << errorString(err) << ") in " << path() << " at line " << getLineNumber());
             allChannels.kill(this);
             return nullptr;
@@ -88,9 +93,11 @@ void InputFile::stopJob() {
     //Report print stopped
     _notifyf("File print canceled", "Reset during file job at line: %d", getLineNumber());
     log_info("Reset during file job at line: " << getLineNumber());
+    _is_running = false;  // File cancelled
     allChannels.kill(this);
 }
 
 InputFile::~InputFile() {
     _progress = "";
+    _is_running = false;  // File closed
 }

@@ -662,7 +662,7 @@ static void protocol_do_initiate_cycle() {
         State newState;
         if (pb->is_jog) {
             newState = State::Jog;
-        } else if (InputFile::_progress.length()) {
+        } else if (InputFile::_is_running) {
             newState = State::Cutting;
         } else {
             newState = State::Cycle;
