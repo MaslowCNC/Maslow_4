@@ -245,6 +245,9 @@ bool MotorUnit::comply() {
         return true;
     }
 
+    // Check soft limits before moving
+    checkSoftLimits();
+
     //If we've moved any, then drive the motor outwards to extend the belt
     float positionNow = getPosition();
     float distMoved   = positionNow - lastPosition;
@@ -405,6 +408,9 @@ bool MotorUnit::onTarget(double precision) {
 
 //Runs the motor to extend at full speed
 void MotorUnit::decompressBelt() {
+    // Check soft limits before extending
+    checkSoftLimits();
+
     int decompressSpeed = 800;
     motor.forward(decompressSpeed);
     _commandPWM = decompressSpeed;
@@ -412,6 +418,9 @@ void MotorUnit::decompressBelt() {
 
 //Runs the motor at full speed out
 void MotorUnit::fullOut() {
+    // Check soft limits before extending at full speed
+    checkSoftLimits();
+
     motor.fullOut();
     _commandPWM = 1023;
 }
