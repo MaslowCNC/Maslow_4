@@ -43,7 +43,6 @@ public:
     double getMotorPower();
     void   update();
     bool   onTarget(double precision);
-    void   checkSoftLimits();
 
 private:
     int     _encoderAddress;
@@ -51,16 +50,24 @@ private:
     AS5600  encoder;
     MiniPID positionPID;  //These are the P,I,D values for the servo motors
     DCMotor motor;
-    double  setpoint                           = 0.0;
-    double  _mmPerRevolution                   = 43.975;  //If the amount of belt extended is too long, this number needs to be bigger
-    int     _stallThreshold                    = 25;      //The number of times in a row needed to trigger a warning
-    int     _stallCurrent                      = 27;      //The current threshold needed to count
-    int     _stallCount                        = 0;
-    int     _numPosErrors                      = 0;  //Keeps track of the number of position errors in a row to detect a stall
-    double  _lastPosition                      = 0.0;
-    double  _commandPWM                        = 0;  //The last PWM duty cycle sent to the motor
-    double  mostRecentCumulativeEncoderReading = 0;
-    double  encoderReadFailurePrintTime        = millis();
+
+    // Private motor control methods that enforce soft limits before any movement
+    void   checkSoftLimits();
+    void   safeMotorForward(uint16_t speed);
+    void   safeMotorBackward(uint16_t speed);
+    void   safeMotorRunAtPWM(long signed_speed);
+    void   safeMotorFullOut();
+    void   safeMotorFullIn();
+    double setpoint                           = 0.0;
+    double _mmPerRevolution                   = 43.975;  //If the amount of belt extended is too long, this number needs to be bigger
+    int    _stallThreshold                    = 25;      //The number of times in a row needed to trigger a warning
+    int    _stallCurrent                      = 27;      //The current threshold needed to count
+    int    _stallCount                        = 0;
+    int    _numPosErrors                      = 0;  //Keeps track of the number of position errors in a row to detect a stall
+    double _lastPosition                      = 0.0;
+    double _commandPWM                        = 0;  //The last PWM duty cycle sent to the motor
+    double mostRecentCumulativeEncoderReading = 0;
+    double encoderReadFailurePrintTime        = millis();
     //unsigned long lastCallGetPos = millis();
 
     //variables to keep track of the motor current and belt speed

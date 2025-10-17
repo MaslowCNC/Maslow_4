@@ -187,6 +187,34 @@ void MotorUnit::checkSoftLimits() {
     }
 }
 
+// Private wrapper methods that check soft limits before any motor movement
+// All motor control should go through these methods to ensure consistent enforcement
+
+void MotorUnit::safeMotorForward(uint16_t speed) {
+    checkSoftLimits();
+    motor.forward(speed);
+}
+
+void MotorUnit::safeMotorBackward(uint16_t speed) {
+    checkSoftLimits();
+    motor.backward(speed);
+}
+
+void MotorUnit::safeMotorRunAtPWM(long signed_speed) {
+    checkSoftLimits();
+    motor.runAtPWM(signed_speed);
+}
+
+void MotorUnit::safeMotorFullOut() {
+    checkSoftLimits();
+    motor.fullOut();
+}
+
+void MotorUnit::safeMotorFullIn() {
+    checkSoftLimits();
+    motor.fullIn();
+}
+
 // Reads the encoder value and updates it's position
 bool MotorUnit::updateEncoderPosition() {
     if (!Maslow.I2CMux.setPort(_encoderAddress))
@@ -224,12 +252,9 @@ double MotorUnit::getPositionError() {
 
 // Recomputes the PID and drives the output
 double MotorUnit::recomputePID() {
-    // Check soft limits before computing PID
-    checkSoftLimits();
-
     _commandPWM = positionPID.getOutput(getPosition(), setpoint);
 
-    motor.runAtPWM(_commandPWM);
+    safeMotorRunAtPWM(_commandPWM);
 
     return _commandPWM;
 }
@@ -245,9 +270,6 @@ bool MotorUnit::comply() {
         return true;
     }
 
-    // Check soft limits before moving
-    checkSoftLimits();
-
     //If we've moved any, then drive the motor outwards to extend the belt
     float positionNow = getPosition();
     float distMoved   = positionNow - lastPosition;
@@ -255,7 +277,7 @@ bool MotorUnit::comply() {
     //If the belt is moving out, let's keep it moving out
     if (distMoved > .1) {  //EXPERIMENTAL
 
-        motor.forward(amtToMove);
+        safeMotorForward(amtToMove);
 
         if (amtToMove < 100)
             amtToMove = 100;
@@ -267,7 +289,7 @@ bool MotorUnit::comply() {
     //Finally if the belt is not moving we want to spool things down
     else {
         amtToMove = amtToMove / 1.25;
-        motor.forward(amtToMove);
+        safeMotorForward(amtToMove);
     }
 
     _commandPWM  = amtToMove;  //update actual motor power, so the get motor power isn't lying to us
@@ -302,7 +324,7 @@ bool MotorUnit::pull_tight(int currentThreshold) {
         retract_speed = min(retract_speed + 1, 1023);
     }
 
-    motor.backward(retract_speed);
+    safeMotorBackward(retract_speed);
     _commandPWM = -retract_speed;  //This is only used for the getPWM function. There's got to be a tidier way to do this.
 
     //When taught
@@ -408,25 +430,19 @@ bool MotorUnit::onTarget(double precision) {
 
 //Runs the motor to extend at full speed
 void MotorUnit::decompressBelt() {
-    // Check soft limits before extending
-    checkSoftLimits();
-
     int decompressSpeed = 800;
-    motor.forward(decompressSpeed);
+    safeMotorForward(decompressSpeed);
     _commandPWM = decompressSpeed;
 }
 
 //Runs the motor at full speed out
 void MotorUnit::fullOut() {
-    // Check soft limits before extending at full speed
-    checkSoftLimits();
-
-    motor.fullOut();
+    safeMotorFullOut();
     _commandPWM = 1023;
 }
 //Runs the motor at full speed in
 void MotorUnit::fullIn() {
-    motor.fullIn();
+    safeMotorFullIn();
     _commandPWM = 1023;
 }
 
