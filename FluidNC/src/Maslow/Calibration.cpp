@@ -2000,11 +2000,8 @@ bool Calibration::belts(const char* value) {
 
     // Move all belts simultaneously
     bool          movementComplete = false;
-    bool          hitCurrentLimit  = false;
-    char*         limitBelt        = nullptr;
     unsigned long startTime        = millis();
     unsigned long timeout          = 120000;  // 120 second timeout
-    int           loopCount        = 0;       // Track loop iterations to skip initial current checks
 
     while (!movementComplete && (millis() - startTime) < timeout) {
         protocol_exec_rt_system();
@@ -2012,7 +2009,6 @@ bool Calibration::belts(const char* value) {
         Maslow.updateEncoderPositions();
 
         bool allDone = true;
-        loopCount++;
 
         for (int i = 0; i < 4; i++) {
             if (!commands[i].used)
@@ -2032,34 +2028,29 @@ bool Calibration::belts(const char* value) {
                     allDone = false;
                 }
             } else {
-                // Active movement with PID control
+                // Active movement
                 // Check if reached target (within 1mm tolerance)
                 float error = fabs(currentPos - targetPos[i]);
                 if (error < 1.0) {
                     beltDone = true;
                     commands[i].motor->stop();
                 } else {
-                    // Use PID control to actively move the belt
-                    commands[i].motor->recomputePID();
                     allDone = false;
 
-                    // Check current limit only for actively moving belts (not comply mode)
-                    // Skip current limit check for first 5 iterations to allow motors to start and stabilize
-                    // Comply mode belts respond to external force and shouldn't trigger current limit
-                    // Use custom current limit if specified and retracting, otherwise use default
-                    if (loopCount > 5) {
+                    // For retracting (negative distance), use pull_tight() which handles current limits properly
+                    if (commands[i].distance < 0) {
                         float currentThreshold = calibrationCurrentThreshold;
-                        if (commands[i].currentLimit > 0 && commands[i].distance < 0) {
+                        if (commands[i].currentLimit > 0) {
                             currentThreshold = commands[i].currentLimit;
                         }
 
-                        if (commands[i].motor->getCurrent() > currentThreshold) {
-                            log_warn("Belt " << beltNames[i] << " hit current limit (" << currentThreshold << ") at position "
-                                             << currentPos);
-                            hitCurrentLimit  = true;
-                            movementComplete = true;
-                            break;
+                        if (commands[i].motor->pull_tight((int)currentThreshold)) {
+                            beltDone = true;
+                            log_info("Belt " << beltNames[i] << " hit current limit at position " << currentPos);
                         }
+                    } else {
+                        // For extending (positive distance), use PID control
+                        commands[i].motor->recomputePID();
                     }
                 }
             }
@@ -2085,11 +2076,7 @@ bool Calibration::belts(const char* value) {
 
     // Note: No state changes - preserve current system state
 
-    if (hitCurrentLimit) {
-        log_info("$belts stopped due to current limit");
-    } else {
-        log_info("$belts complete");
-    }
+    log_info("$belts complete");
 
     return true;
 }
