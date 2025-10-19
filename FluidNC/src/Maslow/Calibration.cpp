@@ -1795,7 +1795,7 @@ bool Calibration::swing(const char* fixedBeltName, const char* movingBeltName, f
     log_info("$swing: fixed=" << fixedBeltName << " moving=" << movingBeltName << " distance=" << distance);
 
     // Determine which belts should comply (the other two)
-    const char* beltNames[] = { "TL", "TR", "BL", "BR" };
+    const char* beltNames[]    = { "TL", "TR", "BL", "BR" };
     bool        complyBelts[4] = { true, true, true, true };
     complyBelts[fixedIdx]      = false;
     complyBelts[movingIdx]     = false;
@@ -1817,7 +1817,7 @@ bool Calibration::swing(const char* fixedBeltName, const char* movingBeltName, f
 
     // Call belts() to do the actual movement
     bool success = belts(beltsCommand);
-    
+
     if (!success) {
         return false;
     }
@@ -1871,7 +1871,7 @@ bool Calibration::swing(const char* fixedBeltName, const char* movingBeltName, f
 // Returns true on success, false on error
 bool Calibration::belts(const char* value) {
     log_debug("$belts called with value: " << (value ? value : "NULL"));
-    
+
     // Parse arguments
     struct BeltCommand {
         MotorUnit* motor;
@@ -1979,8 +1979,8 @@ bool Calibration::belts(const char* value) {
 
     // Calculate target positions and initialize comply belts
     // IMPORTANT: Put belts into comply mode BEFORE any other belts start moving
-    float targetPos[4];
-    float initialPos[4];
+    float       targetPos[4];
+    float       initialPos[4];
     const char* beltNames[] = { "TL", "TR", "BL", "BR" };
 
     for (int i = 0; i < 4; i++) {
@@ -2043,19 +2043,21 @@ bool Calibration::belts(const char* value) {
                 }
             }
 
-            // Check current limit for all belts
-            // Use custom current limit if specified and retracting, otherwise use default
-            float currentThreshold = calibrationCurrentThreshold;
-            if (commands[i].currentLimit > 0 && commands[i].distance < 0) {
-                currentThreshold = commands[i].currentLimit;
-            }
-            
-            if (!beltDone && commands[i].motor->getCurrent() > currentThreshold) {
-                log_warn("Belt " << beltNames[i] << " hit current limit (" << currentThreshold 
-                         << ") at position " << currentPos);
-                hitCurrentLimit  = true;
-                movementComplete = true;
-                break;
+            // Check current limit only for actively moving belts (not comply mode)
+            // Comply mode belts respond to external force and shouldn't trigger current limit
+            if (!commands[i].complyMode) {
+                // Use custom current limit if specified and retracting, otherwise use default
+                float currentThreshold = calibrationCurrentThreshold;
+                if (commands[i].currentLimit > 0 && commands[i].distance < 0) {
+                    currentThreshold = commands[i].currentLimit;
+                }
+
+                if (!beltDone && commands[i].motor->getCurrent() > currentThreshold) {
+                    log_warn("Belt " << beltNames[i] << " hit current limit (" << currentThreshold << ") at position " << currentPos);
+                    hitCurrentLimit  = true;
+                    movementComplete = true;
+                    break;
+                }
             }
         }
 
