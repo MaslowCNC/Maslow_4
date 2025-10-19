@@ -2004,6 +2004,7 @@ bool Calibration::belts(const char* value) {
     char*         limitBelt        = nullptr;
     unsigned long startTime        = millis();
     unsigned long timeout          = 120000;  // 120 second timeout
+    int           loopCount        = 0;       // Track loop iterations to skip initial current checks
 
     while (!movementComplete && (millis() - startTime) < timeout) {
         protocol_exec_rt_system();
@@ -2011,6 +2012,7 @@ bool Calibration::belts(const char* value) {
         Maslow.updateEncoderPositions();
 
         bool allDone = true;
+        loopCount++;
 
         for (int i = 0; i < 4; i++) {
             if (!commands[i].used)
@@ -2042,20 +2044,22 @@ bool Calibration::belts(const char* value) {
                     allDone = false;
 
                     // Check current limit only for actively moving belts (not comply mode)
-                    // Only check after belt has had time to start moving (after first iteration)
+                    // Skip current limit check for first 5 iterations to allow motors to start and stabilize
                     // Comply mode belts respond to external force and shouldn't trigger current limit
                     // Use custom current limit if specified and retracting, otherwise use default
-                    float currentThreshold = calibrationCurrentThreshold;
-                    if (commands[i].currentLimit > 0 && commands[i].distance < 0) {
-                        currentThreshold = commands[i].currentLimit;
-                    }
+                    if (loopCount > 5) {
+                        float currentThreshold = calibrationCurrentThreshold;
+                        if (commands[i].currentLimit > 0 && commands[i].distance < 0) {
+                            currentThreshold = commands[i].currentLimit;
+                        }
 
-                    if (commands[i].motor->getCurrent() > currentThreshold) {
-                        log_warn("Belt " << beltNames[i] << " hit current limit (" << currentThreshold << ") at position "
-                                         << currentPos);
-                        hitCurrentLimit  = true;
-                        movementComplete = true;
-                        break;
+                        if (commands[i].motor->getCurrent() > currentThreshold) {
+                            log_warn("Belt " << beltNames[i] << " hit current limit (" << currentThreshold << ") at position "
+                                             << currentPos);
+                            hitCurrentLimit  = true;
+                            movementComplete = true;
+                            break;
+                        }
                     }
                 }
             }
