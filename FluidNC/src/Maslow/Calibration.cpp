@@ -1998,6 +1998,14 @@ bool Calibration::belts(const char* value) {
         }
     }
 
+    // Give extending belts a short pulse to overcome initial slack (like $TLO does)
+    for (int i = 0; i < 4; i++) {
+        if (commands[i].used && !commands[i].complyMode && commands[i].distance > 0) {
+            commands[i].motor->fullOut();
+        }
+    }
+    delay_ms(200);  // 200ms pulse to create slack before PID control
+
     // Move all belts simultaneously
     bool          movementComplete = false;
     unsigned long startTime        = millis();
