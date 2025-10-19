@@ -1870,6 +1870,8 @@ bool Calibration::swing(const char* fixedBeltName, const char* movingBeltName, f
 // $belts command: move multiple belts simultaneously
 // Returns true on success, false on error
 bool Calibration::belts(const char* value) {
+    log_debug("$belts called with value: " << (value ? value : "NULL"));
+    
     // Parse arguments
     struct BeltCommand {
         MotorUnit* motor;
@@ -1884,7 +1886,7 @@ bool Calibration::belts(const char* value) {
     for (int i = 0; i < 4; i++) {
         commands[i].motor      = nullptr;
         commands[i].used       = false;
-        commands[i].speed      = -1;  // Default: no speed specified
+        commands[i].speed      = -1;  // Default: no speed specified (not currently used)
         commands[i].complyMode = false;
     }
 
@@ -1917,6 +1919,8 @@ bool Calibration::belts(const char* value) {
         commands[beltIdx].index = beltIdx;
         commands[beltIdx].used  = true;
 
+        log_debug("Parsing belt " << token << " (index " << beltIdx << ")");
+
         // Next token should be distance
         token = strtok(nullptr, " \t");
         if (!token) {
@@ -1928,8 +1932,10 @@ bool Calibration::belts(const char* value) {
         if (token[0] == 'c' || token[0] == 'C') {
             commands[beltIdx].complyMode = true;
             commands[beltIdx].distance   = strtof(token + 1, nullptr);
+            log_debug("  Comply mode, distance limit: " << commands[beltIdx].distance);
         } else {
             commands[beltIdx].distance = strtof(token, nullptr);
+            log_debug("  Move mode, distance: " << commands[beltIdx].distance);
         }
 
         // Check if next token is a speed (number) or another belt name
@@ -1969,6 +1975,7 @@ bool Calibration::belts(const char* value) {
     // IMPORTANT: Put belts into comply mode BEFORE any other belts start moving
     float targetPos[4];
     float initialPos[4];
+    const char* beltNames[] = { "TL", "TR", "BL", "BR" };
 
     for (int i = 0; i < 4; i++) {
         if (commands[i].used) {
@@ -1976,8 +1983,11 @@ bool Calibration::belts(const char* value) {
             if (commands[i].complyMode) {
                 commands[i].motor->reset();
                 targetPos[i] = initialPos[i];  // Comply belts don't have a target
+                log_debug("Belt " << beltNames[i] << " in comply mode, initial pos: " << initialPos[i]);
             } else {
                 targetPos[i] = initialPos[i] + commands[i].distance;
+                commands[i].motor->setTarget(targetPos[i]);
+                log_debug("Belt " << beltNames[i] << " target set: " << initialPos[i] << " -> " << targetPos[i]);
             }
         }
     }
@@ -2014,29 +2024,22 @@ bool Calibration::belts(const char* value) {
                     allDone = false;
                 }
             } else {
-                // Check if reached target
-                if (commands[i].distance > 0) {
-                    if (currentPos >= targetPos[i]) {
-                        beltDone = true;
-                        commands[i].motor->stop();
-                    }
+                // Active movement with PID control
+                // Check if reached target (within 1mm tolerance)
+                float error = fabs(currentPos - targetPos[i]);
+                if (error < 1.0) {
+                    beltDone = true;
+                    commands[i].motor->stop();
                 } else {
-                    if (currentPos <= targetPos[i]) {
-                        beltDone = true;
-                        commands[i].motor->stop();
-                    }
-                }
-
-                if (!beltDone) {
-                    commands[i].motor->comply();
+                    // Use PID control to actively move the belt
+                    commands[i].motor->recomputePID();
                     allDone = false;
                 }
             }
 
             // Check current limit for all belts
             if (!beltDone && commands[i].motor->getCurrent() > calibrationCurrentThreshold) {
-                const char* beltNames[] = { "TL", "TR", "BL", "BR" };
-                log_warn("Belt " << beltNames[i] << " hit current limit");
+                log_warn("Belt " << beltNames[i] << " hit current limit at position " << currentPos);
                 hitCurrentLimit  = true;
                 movementComplete = true;
                 break;
@@ -2044,10 +2047,15 @@ bool Calibration::belts(const char* value) {
         }
 
         if (allDone) {
+            log_debug("All belts reached target");
             movementComplete = true;
         }
 
         delay_ms(10);
+    }
+
+    if ((millis() - startTime) >= timeout) {
+        log_warn("$belts operation timed out after 120 seconds");
     }
 
     // Stop all belts
