@@ -2040,23 +2040,23 @@ bool Calibration::belts(const char* value) {
                     // Use PID control to actively move the belt
                     commands[i].motor->recomputePID();
                     allDone = false;
-                }
-            }
 
-            // Check current limit only for actively moving belts (not comply mode)
-            // Comply mode belts respond to external force and shouldn't trigger current limit
-            if (!commands[i].complyMode) {
-                // Use custom current limit if specified and retracting, otherwise use default
-                float currentThreshold = calibrationCurrentThreshold;
-                if (commands[i].currentLimit > 0 && commands[i].distance < 0) {
-                    currentThreshold = commands[i].currentLimit;
-                }
+                    // Check current limit only for actively moving belts (not comply mode)
+                    // Only check after belt has had time to start moving (after first iteration)
+                    // Comply mode belts respond to external force and shouldn't trigger current limit
+                    // Use custom current limit if specified and retracting, otherwise use default
+                    float currentThreshold = calibrationCurrentThreshold;
+                    if (commands[i].currentLimit > 0 && commands[i].distance < 0) {
+                        currentThreshold = commands[i].currentLimit;
+                    }
 
-                if (!beltDone && commands[i].motor->getCurrent() > currentThreshold) {
-                    log_warn("Belt " << beltNames[i] << " hit current limit (" << currentThreshold << ") at position " << currentPos);
-                    hitCurrentLimit  = true;
-                    movementComplete = true;
-                    break;
+                    if (commands[i].motor->getCurrent() > currentThreshold) {
+                        log_warn("Belt " << beltNames[i] << " hit current limit (" << currentThreshold << ") at position "
+                                         << currentPos);
+                        hitCurrentLimit  = true;
+                        movementComplete = true;
+                        break;
+                    }
                 }
             }
         }
