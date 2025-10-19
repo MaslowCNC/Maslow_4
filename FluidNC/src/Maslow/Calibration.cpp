@@ -2003,6 +2003,12 @@ bool Calibration::belts(const char* value) {
     unsigned long startTime        = millis();
     unsigned long timeout          = 120000;  // 120 second timeout
 
+    // Moving average baseline for current limit detection (like pull_tight does)
+    float currentBaseline[4] = { 700.0, 700.0, 700.0, 700.0 };  // Initial baseline
+    int   incrementalHits[4] = { 0, 0, 0, 0 };                   // Count of incremental threshold hits
+    const float alpha               = 0.01;                      // Smoothing factor for exponential moving average
+    const int   incrementalThreshold = 150;                      // Incremental threshold above baseline
+
     while (!movementComplete && (millis() - startTime) < timeout) {
         protocol_exec_rt_system();
 
@@ -2049,8 +2055,32 @@ bool Calibration::belts(const char* value) {
                             log_info("Belt " << beltNames[i] << " hit current limit at position " << currentPos);
                         }
                     } else {
-                        // For extending (positive distance), use PID control
+                        // For extending (positive distance), use PID control with moving average current limit
                         commands[i].motor->recomputePID();
+
+                        // Check current limit using moving average (same approach as pull_tight)
+                        int currentMeasurement = commands[i].motor->getCurrent();
+                        float currentThreshold = calibrationCurrentThreshold;
+                        if (commands[i].currentLimit > 0) {
+                            currentThreshold = commands[i].currentLimit;
+                        }
+
+                        // Update moving average baseline
+                        currentBaseline[i] = alpha * float(currentMeasurement) + (1 - alpha) * currentBaseline[i];
+
+                        // Check for incremental threshold hits
+                        if (currentMeasurement - currentBaseline[i] > incrementalThreshold) {
+                            incrementalHits[i]++;
+                        } else {
+                            incrementalHits[i] = 0;
+                        }
+
+                        // Check if current limit exceeded (absolute or incremental)
+                        if (currentMeasurement > currentThreshold || incrementalHits[i] > 2) {
+                            log_warn("Belt " << beltNames[i] << " hit current limit (" << currentThreshold << ") at position " << currentPos);
+                            movementComplete = true;
+                            break;
+                        }
                     }
                 }
             }
