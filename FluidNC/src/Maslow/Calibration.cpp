@@ -1877,17 +1877,17 @@ bool Calibration::belts(const char* value) {
         MotorUnit* motor;
         int        index;
         float      distance;
-        float      speed;
+        float      currentLimit;  // Custom current limit (used when retracting with negative distance)
         bool       complyMode;
         bool       used;
     };
 
     BeltCommand commands[4] = { 0 };
     for (int i = 0; i < 4; i++) {
-        commands[i].motor      = nullptr;
-        commands[i].used       = false;
-        commands[i].speed      = -1;  // Default: no speed specified (not currently used)
-        commands[i].complyMode = false;
+        commands[i].motor        = nullptr;
+        commands[i].used         = false;
+        commands[i].currentLimit = -1;  // Default: use calibrationCurrentThreshold
+        commands[i].complyMode   = false;
     }
 
     // Copy value to modifiable buffer
@@ -1938,7 +1938,7 @@ bool Calibration::belts(const char* value) {
             log_debug("  Move mode, distance: " << commands[beltIdx].distance);
         }
 
-        // Check if next token is a speed (number) or another belt name
+        // Check if next token is a current limit (for retracting) or another belt name
         token = strtok(nullptr, " \t");
         if (token) {
             int        testIdx;
@@ -1949,12 +1949,17 @@ bool Calibration::belts(const char* value) {
                 cmdCount++;
                 continue;
             } else {
-                // Try to parse as speed
+                // Try to parse as current limit (only used when distance is negative/retracting)
                 char* endptr;
-                float speedVal = strtof(token, &endptr);
+                float limitVal = strtof(token, &endptr);
                 if (endptr != token) {
-                    commands[beltIdx].speed = speedVal;
-                    token                   = strtok(nullptr, " \t");
+                    commands[beltIdx].currentLimit = limitVal;
+                    if (commands[beltIdx].distance < 0) {
+                        log_debug("  Custom current limit for retraction: " << limitVal);
+                    } else {
+                        log_debug("  Note: current limit (" << limitVal << ") only applies when retracting (distance < 0)");
+                    }
+                    token = strtok(nullptr, " \t");
                 }
             }
         }
@@ -2038,8 +2043,15 @@ bool Calibration::belts(const char* value) {
             }
 
             // Check current limit for all belts
-            if (!beltDone && commands[i].motor->getCurrent() > calibrationCurrentThreshold) {
-                log_warn("Belt " << beltNames[i] << " hit current limit at position " << currentPos);
+            // Use custom current limit if specified and retracting, otherwise use default
+            float currentThreshold = calibrationCurrentThreshold;
+            if (commands[i].currentLimit > 0 && commands[i].distance < 0) {
+                currentThreshold = commands[i].currentLimit;
+            }
+            
+            if (!beltDone && commands[i].motor->getCurrent() > currentThreshold) {
+                log_warn("Belt " << beltNames[i] << " hit current limit (" << currentThreshold 
+                         << ") at position " << currentPos);
                 hitCurrentLimit  = true;
                 movementComplete = true;
                 break;
