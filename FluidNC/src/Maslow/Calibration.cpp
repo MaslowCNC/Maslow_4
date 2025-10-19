@@ -1982,6 +1982,28 @@ bool Calibration::belts(const char* value) {
     float initialPos[4];
     const char* beltNames[] = { "TL", "TR", "BL", "BR" };
 
+    // Check if all belts are in comply mode - this is a special case
+    bool allComply = true;
+    for (int i = 0; i < 4; i++) {
+        if (commands[i].used && !commands[i].complyMode) {
+            allComply = false;
+            break;
+        }
+    }
+
+    // If all belts are in comply mode, treat it as active extension (like $EXT)
+    // Comply mode only makes sense when some belts are actively moving and others comply
+    if (allComply) {
+        log_info("All belts in comply mode - treating as active extension");
+        for (int i = 0; i < 4; i++) {
+            if (commands[i].used) {
+                commands[i].complyMode = false;  // Convert to active movement
+                // For comply mode distance, extend by that amount
+                commands[i].distance = fabs(commands[i].distance);
+            }
+        }
+    }
+
     for (int i = 0; i < 4; i++) {
         if (commands[i].used) {
             initialPos[i] = commands[i].motor->getPosition();
