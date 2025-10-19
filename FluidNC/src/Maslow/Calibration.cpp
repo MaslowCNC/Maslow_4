@@ -1974,35 +1974,14 @@ bool Calibration::belts(const char* value) {
 
     log_info("$belts: moving " << cmdCount << " belts");
 
-    sys.set_state(State::Homing);
+    // Note: No state changes - this command doesn't modify system state
+    // Comply mode allows external forces (user or gravity) to move belts
 
     // Calculate target positions and initialize comply belts
     // IMPORTANT: Put belts into comply mode BEFORE any other belts start moving
     float targetPos[4];
     float initialPos[4];
     const char* beltNames[] = { "TL", "TR", "BL", "BR" };
-
-    // Check if all belts are in comply mode - this is a special case
-    bool allComply = true;
-    for (int i = 0; i < 4; i++) {
-        if (commands[i].used && !commands[i].complyMode) {
-            allComply = false;
-            break;
-        }
-    }
-
-    // If all belts are in comply mode, treat it as active extension (like $EXT)
-    // Comply mode only makes sense when some belts are actively moving and others comply
-    if (allComply) {
-        log_info("All belts in comply mode - treating as active extension");
-        for (int i = 0; i < 4; i++) {
-            if (commands[i].used) {
-                commands[i].complyMode = false;  // Convert to active movement
-                // For comply mode distance, extend by that amount
-                commands[i].distance = fabs(commands[i].distance);
-            }
-        }
-    }
 
     for (int i = 0; i < 4; i++) {
         if (commands[i].used) {
@@ -2098,7 +2077,7 @@ bool Calibration::belts(const char* value) {
     Maslow.axisBL.stop();
     Maslow.axisBR.stop();
 
-    sys.set_state(State::Idle);
+    // Note: No state changes - preserve current system state
 
     if (hitCurrentLimit) {
         log_info("$belts stopped due to current limit");

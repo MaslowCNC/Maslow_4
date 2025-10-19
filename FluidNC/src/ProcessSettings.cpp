@@ -1055,7 +1055,7 @@ static Error maslow_swing(const char* value, WebUI::AuthenticationLevel auth_lev
     }
 
     // Call the Calibration method to do the actual work
-    sys.set_state(State::Homing);
+    // Note: No state changes - belts/swing commands don't modify system state
     bool success = Maslow.calibration.swing(fixedBeltName, movingBeltName, distance, speed);
     return success ? Error::Ok : Error::InvalidStatement;
 }
@@ -1071,7 +1071,7 @@ static Error maslow_belts(const char* value, WebUI::AuthenticationLevel auth_lev
     }
 
     // Call the Calibration method to do the actual work
-    sys.set_state(State::Homing);
+    // Note: No state changes - belts/swing commands don't modify system state
     bool success = Maslow.calibration.belts(value);
     return success ? Error::Ok : Error::InvalidStatement;
 }
