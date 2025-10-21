@@ -1088,7 +1088,7 @@ bool Calibration::move_with_slack(double fromX, double fromY, double toX, double
         withSlack = false;
     }
 
-    //This runs once at the beginning of the move
+    //This runs once at the beginning of the move 
     if (decompress) {
         moveBeginTimer = millis();
         decompress     = false;
