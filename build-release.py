@@ -135,7 +135,7 @@ for platform in ['win64', 'posix']:
             bootloader = 'bootloader.bin'
             zipObj.write(os.path.join(pioPath, envName, bootloader), os.path.join(zipDirName, envName, bootloader))
 
-            # Put littlefs.bin and index.html.gz in the archive
+            # Put littlefs.bin, index.html.gz, and maslow.yaml in the archive
             # bt does not need a littlefs.bin because there is no use for index.html.gz
             if envName == 'wifi_s3':
                 name = 'littlefs.bin'
