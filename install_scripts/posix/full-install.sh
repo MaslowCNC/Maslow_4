@@ -16,6 +16,7 @@ esptool_write $LocalFS
 
 install
 
-read  -n 1 -p $'\n\nInstallation Successful!\nPress any key to exit...' _input
+printf '\n\nInstallation Successful!\nPress Enter to exit...'
+read _input
 
 deactivate
