@@ -142,6 +142,8 @@ for platform in ['win64', 'posix']:
                 zipObj.write(os.path.join(pioPath, envName, name), os.path.join(zipDirName, envName, name))
                 name = 'index.html.gz'
                 zipObj.write(os.path.join('FluidNC', 'data', name), os.path.join(zipDirName, envName, name))
+                name = 'maslow.yaml'
+                zipObj.write(os.path.join('FluidNC', 'data', name), os.path.join(zipDirName, envName, name))
 
             objPath = os.path.join(pioPath, envName)
             for obj in ['firmware.bin','partitions.bin']:
