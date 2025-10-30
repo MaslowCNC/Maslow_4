@@ -146,6 +146,13 @@ void MotorUnit::update() {
 // This is called before forward motor movements to ensure immediate detection of limit violations.
 // The performance overhead is minimal (a few comparisons and a config lookup).
 void MotorUnit::checkSoftLimits() {
+    // Debug: Log that we're checking (once per motor)
+    static bool loggedEntry[4] = { false, false, false, false };
+    if (!loggedEntry[_encoderAddress] && _encoderAddress >= 0 && _encoderAddress < 4) {
+        log_info("checkSoftLimits() called for encoder " << _encoderAddress << " (axis index " << _axisIndex << ")");
+        loggedEntry[_encoderAddress] = true;
+    }
+
     // Skip if axis index is invalid or no config available
     if (_axisIndex < 0 || !config || !config->_axes) {
         return;
