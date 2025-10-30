@@ -142,7 +142,7 @@ void MotorUnit::update() {
 }
 
 // Check if the current belt position exceeds the soft limit
-// This is called on every PID cycle to ensure immediate detection of limit violations.
+// This is called before forward motor movements to ensure immediate detection of limit violations.
 // The performance overhead is minimal (a few comparisons and a config lookup).
 void MotorUnit::checkSoftLimits() {
     // Skip if axis index is invalid or no config available
@@ -169,18 +169,12 @@ void MotorUnit::checkSoftLimits() {
     // - Position maxTravel = belt fully extended
     // - Positions are absolute distances in mm from the zeroed/retracted position
     // - maxTravel comes from the axis max_travel_mm configuration (e.g., 4000mm)
+    // Note: We only check the upper limit here. Negative positions are allowed during
+    // retraction/homing operations and will be corrected by the zero() operation.
     if (currentPosition > maxTravel) {
         String encAddrLabel = Maslow.axis_id_to_label(_encoderAddress);
         String errorMsg     = "Belt on " + encAddrLabel + " has reached maximum extension (" + String(currentPosition, 1) + "mm > " +
                           String(maxTravel, 1) + "mm). Machine shutdown to prevent damage.";
-
-        log_error(errorMsg.c_str());
-        Maslow.eStop(errorMsg);
-    } else if (currentPosition < 0) {
-        // Also check for negative positions (shouldn't happen but good to validate)
-        String encAddrLabel = Maslow.axis_id_to_label(_encoderAddress);
-        String errorMsg     = "Belt on " + encAddrLabel + " has invalid negative position (" + String(currentPosition, 1) +
-                          "mm < 0mm). Machine shutdown to prevent damage.";
 
         log_error(errorMsg.c_str());
         Maslow.eStop(errorMsg);
@@ -196,12 +190,18 @@ void MotorUnit::safeMotorForward(uint16_t speed) {
 }
 
 void MotorUnit::safeMotorBackward(uint16_t speed) {
-    checkSoftLimits();
+    // Backward motion (retraction) moves toward position 0, which is always safe
+    // We only need to check soft limits for forward motion (extension)
+    // Note: Don't call checkSoftLimits() here as backward is always pulling toward safety
     motor.backward(speed);
 }
 
 void MotorUnit::safeMotorRunAtPWM(long signed_speed) {
-    checkSoftLimits();
+    // Only check soft limits for forward motion (positive speed)
+    // Backward motion (negative speed) moves toward position 0, which is always safe
+    if (signed_speed > 0) {
+        checkSoftLimits();
+    }
     motor.runAtPWM(signed_speed);
 }
 
@@ -211,7 +211,8 @@ void MotorUnit::safeMotorFullOut() {
 }
 
 void MotorUnit::safeMotorFullIn() {
-    checkSoftLimits();
+    // Full-in motion (retraction) moves toward position 0, which is always safe
+    // Note: Don't call checkSoftLimits() here as backward is always pulling toward safety
     motor.fullIn();
 }
 
