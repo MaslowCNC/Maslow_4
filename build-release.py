@@ -12,12 +12,12 @@ verbose = '-v' in sys.argv
 
 environ = dict(os.environ)
 
-platformio = r"/Users/barsmith/.platformio/penv/bin/platformio" #"/Users/barsmith/.platformio/penv/bin/platformio"
+platformio = r"pio" # pio must be in the path, such as "/Users/barsmith/.platformio/penv/bin/platformio"
 
 # Extract version from git tag
 try:
     git_tag = (
-        subprocess.check_output(["git", "describe", "--tags", "--abbrev=0"], stderr=subprocess.DEVNULL)
+        subprocess.check_output(["git", "describe", "--tags", "--always", "--dirty"], stderr=subprocess.DEVNULL)
         .strip()
         .decode("utf-8")
     )
@@ -28,8 +28,6 @@ except (subprocess.CalledProcessError, FileNotFoundError):
     version = "unknown"
     print("Warning: Could not determine version from git tags, using 'unknown'")
 
-os.chdir(os.path.dirname(os.path.realpath(r"/Users/barsmith/Documents/GitHub/FluidNC/.pio"))) #"/Users/barsmith/Documents/GitHub/FluidNC/.pio"
-#change path to the project folder (the folder with platformio.ini)
 tag = "maslow4-"+version
 sharedPath = 'install_scripts'
 
@@ -193,7 +191,7 @@ for platform in ['win64', 'posix']:
         # Download and unzip from ESP repo
         ZipFileName = EspDir + '.zip'
         if not os.path.isfile(ZipFileName):
-            with urllib.request.urlopen(EspRepo + ZipFileName, cafile=certifi.where()) as u:
+            with urllib.request.urlopen(EspRepo + ZipFileName) as u:
                 open(ZipFileName, 'wb').write(u.read())
 
         if withEsptoolBinary[platform]:
