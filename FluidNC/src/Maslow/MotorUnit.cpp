@@ -184,6 +184,15 @@ void MotorUnit::checkSoftLimits() {
     // The actual travel limit is the absolute distance from min to max
     float travelRange = abs(maxLimit - minLimit);
 
+    // Diagnostic logging to help understand what values are being checked
+    static unsigned long lastDiagTime = 0;
+    if (millis() - lastDiagTime > 5000 && currentPosition > travelRange * 0.8) {  // Log when approaching limit
+        String encAddrLabel = Maslow.axis_id_to_label(_encoderAddress);
+        log_info("Soft limit check on " << encAddrLabel.c_str() << ": pos=" << currentPosition << "mm, limit=" << travelRange
+                                        << "mm (min=" << minLimit << ", max=" << maxLimit << ")");
+        lastDiagTime = millis();
+    }
+
     // Belt position measurement:
     // - Position 0 = belt fully retracted (wound up on spool)
     // - Position travelRange = belt fully extended
