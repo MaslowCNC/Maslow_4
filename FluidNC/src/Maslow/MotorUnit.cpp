@@ -7,6 +7,7 @@
 #include "Maslow.h"
 #include "../Machine/MachineConfig.h"
 #include "../Config.h"
+#include "../Limits.h"
 
 // PID controller tuning
 #define P 300
@@ -173,19 +174,26 @@ void MotorUnit::checkSoftLimits() {
     }
 
     double currentPosition = getPosition();
-    double maxTravel       = axisConfig->_maxTravel;
+
+    // Get the configured soft limits for this axis using FluidNC's limit functions
+    // These account for homing direction and machine coordinate system
+    float minLimit = limitsMinPosition(_axisIndex);
+    float maxLimit = limitsMaxPosition(_axisIndex);
+
+    // For Maslow belts, position is measured from 0 (retracted) outward
+    // The actual travel limit is the absolute distance from min to max
+    float travelRange = abs(maxLimit - minLimit);
 
     // Belt position measurement:
     // - Position 0 = belt fully retracted (wound up on spool)
-    // - Position maxTravel = belt fully extended
+    // - Position travelRange = belt fully extended
     // - Positions are absolute distances in mm from the zeroed/retracted position
-    // - maxTravel comes from the axis max_travel_mm configuration (e.g., 4000mm)
     // Note: We only check the upper limit here. Negative positions are allowed during
     // retraction/homing operations and will be corrected by the zero() operation.
-    if (currentPosition > maxTravel) {
+    if (currentPosition > travelRange) {
         String encAddrLabel = Maslow.axis_id_to_label(_encoderAddress);
         String errorMsg     = "Belt on " + encAddrLabel + " has reached maximum extension (" + String(currentPosition, 1) + "mm > " +
-                          String(maxTravel, 1) + "mm). Machine shutdown to prevent damage.";
+                          String(travelRange, 1) + "mm). Machine shutdown to prevent damage.";
 
         log_error(errorMsg.c_str());
         Maslow.eStop(errorMsg);
