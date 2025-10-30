@@ -48,7 +48,7 @@ def buildEnv(pioEnv, verbose=False, extraArgs=None):
         app = subprocess.Popen(cmd, env=environ, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         for line in app.stdout:
             line = line.decode('utf8')
-            if "Took" in line or 'Uploading' in line or ("error" in line.lower() and "Compiling" not in line):
+            if "Took" in line or 'Uploading' in line or ("error" in line.lower() and "Compiling" not in line) or "warning" in line.lower():
                 print(line, end='')
     app.wait()
     print()
@@ -65,7 +65,7 @@ def buildFs(pioEnv, verbose=verbose, extraArgs=None):
         app = subprocess.Popen(cmd, env=environ, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         for line in app.stdout:
             line = line.decode('utf8')
-            if "Took" in line or 'Uploading' in line or ("error" in line.lower() and "Compiling" not in line):
+            if "Took" in line or 'Uploading' in line or ("error" in line.lower() and "Compiling" not in line) or "warning" in line.lower():
                 print(line, end='')
     app.wait()
     print()
