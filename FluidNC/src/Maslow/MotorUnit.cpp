@@ -157,7 +157,18 @@ void MotorUnit::checkSoftLimits() {
     }
 
     auto axisConfig = config->_axes->_axis[_axisIndex];
-    if (!axisConfig || !axisConfig->_softLimits) {
+    if (!axisConfig) {
+        return;
+    }
+
+    // Log when soft limits are not enabled to help diagnose configuration issues
+    if (!axisConfig->_softLimits) {
+        static unsigned long lastWarnTime = 0;
+        if (millis() - lastWarnTime > 10000) {  // Warn every 10 seconds
+            String encAddrLabel = Maslow.axis_id_to_label(_encoderAddress);
+            log_debug("Soft limits not enabled for axis " << encAddrLabel.c_str() << " (axis index " << _axisIndex << ")");
+            lastWarnTime = millis();
+        }
         return;  // Soft limits not enabled for this axis
     }
 
