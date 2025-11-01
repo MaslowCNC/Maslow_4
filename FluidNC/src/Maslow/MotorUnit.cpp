@@ -129,7 +129,7 @@ bool MotorUnit::updateEncoderPosition() {
 
     if (encoder.isConnected()) {                                               //this func has 50ms timeout (or worse?, hard to tell)
         mostRecentCumulativeEncoderReading = encoder.getCumulativePosition();  //This updates and returns the encoder value
-        
+
         // Check for I2C communication errors using new AS5600 error handling
         int error = encoder.lastError();
         if (error != 0) {  // AS5600_OK = 0
@@ -249,7 +249,7 @@ bool MotorUnit::pull_tight(int currentThreshold) {
         if (stored_baseline > 2000) {
             stored_baseline = 2000;
         }
-        baseline_recorded = true;
+        baseline_recorded   = true;
         String encAddrLabel = Maslow.axis_id_to_label(_encoderAddress);
         log_info("Recorded baseline for " << encAddrLabel.c_str() << ": " << stored_baseline);
     }
@@ -403,10 +403,10 @@ void MotorUnit::setPosition(double position) {
     // Convert position in mm to encoder counts
     // Formula: encoderCounts = -(position_mm * 4096.0) / _mmPerRevolution
     int32_t encoderCounts = (int32_t)(-(position * 4096.0) / _mmPerRevolution);
-    
+
     Maslow.I2CMux.setPort(_encoderAddress);
     encoder.resetCumulativePosition(encoderCounts);
-    
+
     // Update our cached value
     mostRecentCumulativeEncoderReading = encoderCounts;
 }
@@ -434,5 +434,5 @@ void MotorUnit::setStoredBaseline(float baseline) {
 // Resets the baseline recording state for a new retraction operation
 void MotorUnit::resetBaseline() {
     retract_start_time = 0;
-    baseline_recorded = false;
+    baseline_recorded  = false;
 }

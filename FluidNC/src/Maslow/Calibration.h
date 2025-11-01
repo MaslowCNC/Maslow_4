@@ -121,10 +121,10 @@ private:
     int previousState = UNKNOWN;
 
     //Variables used by extending
-    bool extendedTL   = false;
-    bool extendedTR   = false;
-    bool extendedBL   = false;
-    bool extendedBR   = false;
+    bool extendedTL = false;
+    bool extendedTR = false;
+    bool extendedBL = false;
+    bool extendedBR = false;
 
     //Variables used by take slack
     bool takeSlack = false;

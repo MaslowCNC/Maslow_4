@@ -15,28 +15,28 @@
 
 class MotorUnit {
 public:
-    void   begin(int forwardPin, int backwardPin, int readbackPin, int encoderAddress, int channel1, int channel2);
-    void   zero();
-    void   setTarget(double newTarget);
-    double getTarget();
-    double getPosition();
-    void   setPosition(double position);  // Set encoder position from saved value
-    uint16_t getRawEncoderAngle();  // Get current raw encoder angle (0-4095)
-    double getCurrent();
-    double getPositionError();
-    void   stop();
-    bool   updateEncoderPosition();
-    double recomputePID();
-    void   decompressBelt();
-    bool   comply();
-    bool   retract();
-    bool   extend(double targetLength);
-    bool   pull_tight(int currentThreshold);
-    bool   motor_test();
-    void   fullOut();
-    void   fullIn();
-    bool   test();
-    void   reset();  //resetting variables here, because of non-blocking, maybe there's a better way to do this
+    void     begin(int forwardPin, int backwardPin, int readbackPin, int encoderAddress, int channel1, int channel2);
+    void     zero();
+    void     setTarget(double newTarget);
+    double   getTarget();
+    double   getPosition();
+    void     setPosition(double position);  // Set encoder position from saved value
+    uint16_t getRawEncoderAngle();          // Get current raw encoder angle (0-4095)
+    double   getCurrent();
+    double   getPositionError();
+    void     stop();
+    bool     updateEncoderPosition();
+    double   recomputePID();
+    void     decompressBelt();
+    bool     comply();
+    bool     retract();
+    bool     extend(double targetLength);
+    bool     pull_tight(int currentThreshold);
+    bool     motor_test();
+    void     fullOut();
+    void     fullIn();
+    bool     test();
+    void     reset();  //resetting variables here, because of non-blocking, maybe there's a better way to do this
 
     double getMotorCurrent();  //averaged value of the last 10 measurements
     double getBeltSpeed();
@@ -45,9 +45,9 @@ public:
     bool   onTarget(double precision);
 
     // Baseline current management
-    float  getStoredBaseline() const;
-    void   setStoredBaseline(float baseline);
-    void   resetBaseline();
+    float getStoredBaseline() const;
+    void  setStoredBaseline(float baseline);
+    void  resetBaseline();
 
 private:
     int     _encoderAddress;
@@ -74,15 +74,15 @@ private:
     unsigned long motorCurrentTimer = millis();
 
     //These are used when retracting the belts for storage
-    int      absoluteCurrentThreshold = 1300;
-    int      incrementalThreshold     = 125;
-    int      incrementalThresholdHits = 0;
-    float    alpha                    = .2;
-    uint16_t retract_speed            = 0;
-    float    retract_baseline         = 700;
-    float    stored_baseline          = 0.0;  // Stored baseline current for this motor, loaded from NVS
-    unsigned long retract_start_time  = 0;    // When retraction started, for 3-second threshold
-    bool     baseline_recorded        = false; // Whether baseline has been recorded for this retraction
+    int           absoluteCurrentThreshold = 1300;
+    int           incrementalThreshold     = 125;
+    int           incrementalThresholdHits = 0;
+    float         alpha                    = .2;
+    uint16_t      retract_speed            = 0;
+    float         retract_baseline         = 700;
+    float         stored_baseline          = 0.0;    // Stored baseline current for this motor, loaded from NVS
+    unsigned long retract_start_time       = 0;      // When retraction started, for 3-second threshold
+    bool          baseline_recorded        = false;  // Whether baseline has been recorded for this retraction
 
     //comply variables
     unsigned long lastCallToComply  = millis();
