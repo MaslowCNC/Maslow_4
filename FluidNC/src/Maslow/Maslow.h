@@ -133,6 +133,10 @@ public:
     void loadBeltPositions();
     void markBeltPositionsStale();
 
+    //Save and load motor baselines
+    void saveMotorBaselines();
+    void loadMotorBaselines();
+
     void stopMotors();
 
     void   stop();

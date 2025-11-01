@@ -96,6 +96,7 @@ void Maslow_::begin(void (*sys_rt)()) {
     if (!positionsLoaded) {
         loadZPos();           //Loads the z-axis position from EEPROM
         loadBeltPositions();  //Loads the belt positions from EEPROM
+        loadMotorBaselines(); //Loads the motor baseline currents from EEPROM
         positionsLoaded = true;
     }
 
@@ -876,6 +877,139 @@ void Maslow_::markBeltPositionsStale() {
 
     int currentState = calibration.getCurrentState();
     log_debug("Belt positions marked as stale/invalid in NVS, state=" << currentState);
+}
+
+//This function saves the motor baselines to non-volatile storage
+void Maslow_::saveMotorBaselines() {
+    nvs_handle_t nvsHandle;
+    esp_err_t    ret = nvs_open("maslow", NVS_READWRITE, &nvsHandle);
+    if (ret != ESP_OK) {
+        log_info("Error " + std::string(esp_err_to_name(ret)) + " opening NVS handle for motor baselines!\n");
+        return;
+    }
+
+    // Union for float to int32_t conversion
+    union FloatInt32 {
+        float   f;
+        int32_t i;
+    };
+
+    // Get current baselines
+    float tlBaseline = axisTL.getStoredBaseline();
+    float trBaseline = axisTR.getStoredBaseline();
+    float blBaseline = axisBL.getStoredBaseline();
+    float brBaseline = axisBR.getStoredBaseline();
+
+    // Save TL baseline
+    FloatInt32 tlFi;
+    tlFi.f = tlBaseline;
+    ret = nvs_set_i32(nvsHandle, "tlBaseline", tlFi.i);
+    if (ret != ESP_OK) {
+        log_info("Error " + std::string(esp_err_to_name(ret)) + " writing TL baseline to NVS!\n");
+    }
+
+    // Save TR baseline
+    FloatInt32 trFi;
+    trFi.f = trBaseline;
+    ret = nvs_set_i32(nvsHandle, "trBaseline", trFi.i);
+    if (ret != ESP_OK) {
+        log_info("Error " + std::string(esp_err_to_name(ret)) + " writing TR baseline to NVS!\n");
+    }
+
+    // Save BL baseline
+    FloatInt32 blFi;
+    blFi.f = blBaseline;
+    ret = nvs_set_i32(nvsHandle, "blBaseline", blFi.i);
+    if (ret != ESP_OK) {
+        log_info("Error " + std::string(esp_err_to_name(ret)) + " writing BL baseline to NVS!\n");
+    }
+
+    // Save BR baseline
+    FloatInt32 brFi;
+    brFi.f = brBaseline;
+    ret = nvs_set_i32(nvsHandle, "brBaseline", brFi.i);
+    if (ret != ESP_OK) {
+        log_info("Error " + std::string(esp_err_to_name(ret)) + " writing BR baseline to NVS!\n");
+    }
+
+    // Commit all changes to non-volatile storage
+    ret = nvs_commit(nvsHandle);
+    if (ret != ESP_OK) {
+        log_info("Error " + std::string(esp_err_to_name(ret)) + " committing motor baseline changes to NVS!\n");
+    }
+
+    nvs_close(nvsHandle);
+
+    log_info("Motor baselines saved to NVS: TL=" << tlBaseline << " TR=" << trBaseline
+             << " BL=" << blBaseline << " BR=" << brBaseline);
+}
+
+//This function loads the motor baselines from non-volatile storage
+void Maslow_::loadMotorBaselines() {
+    log_info("loadMotorBaselines() called");
+
+    nvs_handle_t nvsHandle;
+    esp_err_t    ret = nvs_open("maslow", NVS_READONLY, &nvsHandle);
+    if (ret != ESP_OK) {
+        log_info("Error " + std::string(esp_err_to_name(ret)) + " opening NVS handle for motor baselines!\n");
+        return;
+    }
+
+    // Union for int32_t to float conversion
+    union FloatInt32 {
+        float   f;
+        int32_t i;
+    };
+
+    // Load TL baseline
+    int32_t tlValue;
+    ret = nvs_get_i32(nvsHandle, "tlBaseline", &tlValue);
+    if (ret == ESP_OK) {
+        FloatInt32 tlFi;
+        tlFi.i = tlValue;
+        axisTL.setStoredBaseline(tlFi.f);
+        log_info("Loaded TL baseline: " << tlFi.f);
+    } else if (ret != ESP_ERR_NVS_NOT_FOUND) {
+        log_info("Error " + std::string(esp_err_to_name(ret)) + " reading TL baseline from NVS!");
+    }
+
+    // Load TR baseline
+    int32_t trValue;
+    ret = nvs_get_i32(nvsHandle, "trBaseline", &trValue);
+    if (ret == ESP_OK) {
+        FloatInt32 trFi;
+        trFi.i = trValue;
+        axisTR.setStoredBaseline(trFi.f);
+        log_info("Loaded TR baseline: " << trFi.f);
+    } else if (ret != ESP_ERR_NVS_NOT_FOUND) {
+        log_info("Error " + std::string(esp_err_to_name(ret)) + " reading TR baseline from NVS!");
+    }
+
+    // Load BL baseline
+    int32_t blValue;
+    ret = nvs_get_i32(nvsHandle, "blBaseline", &blValue);
+    if (ret == ESP_OK) {
+        FloatInt32 blFi;
+        blFi.i = blValue;
+        axisBL.setStoredBaseline(blFi.f);
+        log_info("Loaded BL baseline: " << blFi.f);
+    } else if (ret != ESP_ERR_NVS_NOT_FOUND) {
+        log_info("Error " + std::string(esp_err_to_name(ret)) + " reading BL baseline from NVS!");
+    }
+
+    // Load BR baseline
+    int32_t brValue;
+    ret = nvs_get_i32(nvsHandle, "brBaseline", &brValue);
+    if (ret == ESP_OK) {
+        FloatInt32 brFi;
+        brFi.i = brValue;
+        axisBR.setStoredBaseline(brFi.f);
+        log_info("Loaded BR baseline: " << brFi.f);
+    } else if (ret != ESP_ERR_NVS_NOT_FOUND) {
+        log_info("Error " + std::string(esp_err_to_name(ret)) + " reading BR baseline from NVS!");
+    }
+
+    nvs_close(nvsHandle);
 }
 
 //------------------------------------------------------

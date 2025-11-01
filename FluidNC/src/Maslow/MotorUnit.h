@@ -44,6 +44,11 @@ public:
     void   update();
     bool   onTarget(double precision);
 
+    // Baseline current management
+    float  getStoredBaseline() const;
+    void   setStoredBaseline(float baseline);
+    void   resetBaseline();
+
 private:
     int     _encoderAddress;
     AS5600  encoder;
@@ -75,6 +80,9 @@ private:
     float    alpha                    = .2;
     uint16_t retract_speed            = 0;
     float    retract_baseline         = 700;
+    float    stored_baseline          = 0.0;  // Stored baseline current for this motor, loaded from NVS
+    unsigned long retract_start_time  = 0;    // When retraction started, for 3-second threshold
+    bool     baseline_recorded        = false; // Whether baseline has been recorded for this retraction
 
     //comply variables
     unsigned long lastCallToComply  = millis();

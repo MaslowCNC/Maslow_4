@@ -84,6 +84,8 @@ bool Calibration::requestStateChange(int newState) {
                 sys.set_state(State::Idle);
                 // Explicitly save belt positions now that belts are retracted and tight
                 Maslow.saveBeltPositions();
+                // Save motor baseline currents that were recorded during retraction
+                Maslow.saveMotorBaselines();
                 success = true;
                 break;
             } else {

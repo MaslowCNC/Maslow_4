@@ -87,7 +87,7 @@ public:
     //They probably shouldn't be.
 
     //Variables used by retraction
-    int  retractCurrentThreshold = 1300;
+    int  retractCurrentThreshold = 200;
     bool axisBLHomed;
     bool axisBRHomed;
     bool axisTRHomed;
@@ -98,7 +98,7 @@ public:
 
     //Variables used by calibration
     bool  orientation;
-    int   calibrationCurrentThreshold    = 1300;
+    int   calibrationCurrentThreshold    = 200;
     float acceptableCalibrationThreshold = 0.5;
     int   calibrationGridSize            = 9;
     float calibration_grid_width_mm_X    = 2000;   // mm offset from the edge of the frame

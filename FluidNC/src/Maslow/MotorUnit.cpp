@@ -76,6 +76,13 @@ bool MotorUnit::test() {
         log_info("All tests passed on " << encAddrLabel.c_str());
     }
 
+    // Report the stored baseline current for this motor
+    if (stored_baseline > 0) {
+        log_info("Baseline current for " << encAddrLabel.c_str() << ": " << stored_baseline);
+    } else {
+        log_info("No baseline recorded for " << encAddrLabel.c_str());
+    }
+
     return !Maslow.error;
 }
 
@@ -217,6 +224,11 @@ bool MotorUnit::pull_tight(int currentThreshold) {
     }
     lastCallToRetract = millis();
 
+    // Initialize retract_start_time on first call
+    if (retract_start_time == 0) {
+        retract_start_time = millis();
+    }
+
     //Gradually increase the pulling speed
     if (random(0, 2) == 1) {
         retract_speed = min(retract_speed + 1, 1023);
@@ -230,14 +242,36 @@ bool MotorUnit::pull_tight(int currentThreshold) {
 
     retract_baseline = alpha * float(currentMeasurement) + (1 - alpha) * retract_baseline;
 
+    // Record baseline after 3 seconds of retraction
+    if (!baseline_recorded && (millis() - retract_start_time > 3000) && retract_speed > 15) {
+        stored_baseline = retract_baseline;
+        // Ensure stored baseline doesn't exceed maximum safe value
+        if (stored_baseline > 2000) {
+            stored_baseline = 2000;
+        }
+        baseline_recorded = true;
+        String encAddrLabel = Maslow.axis_id_to_label(_encoderAddress);
+        log_info("Recorded baseline for " << encAddrLabel.c_str() << ": " << stored_baseline);
+    }
+
     if (currentMeasurement - retract_baseline > incrementalThreshold) {
         incrementalThresholdHits = incrementalThresholdHits + 1;
     } else {
         incrementalThresholdHits = 0;
     }
 
+    // Calculate effective threshold: stored baseline + delta threshold
+    int effectiveThreshold = currentThreshold;
+    if (stored_baseline > 0) {
+        effectiveThreshold = (int)stored_baseline + currentThreshold;
+        // Cap at maximum safe value
+        if (effectiveThreshold > 2000) {
+            effectiveThreshold = 2000;
+        }
+    }
+
     if (retract_speed > 15) {  //20 is not the actual speed, it is the amount of time so we don't trigger immediately
-        if (currentMeasurement > currentThreshold || incrementalThresholdHits > 2) {
+        if (currentMeasurement > effectiveThreshold || incrementalThresholdHits > 2) {
             //stop motor, reset variables
             stop();
             retract_speed    = 0;
@@ -352,6 +386,8 @@ void MotorUnit::reset() {
     amtToMove                = 0;
     lastPosition             = getPosition();
     beltSpeedTimer           = millis();
+    retract_start_time       = 0;
+    baseline_recorded        = false;
 }
 
 //sets the encoder position to 0
@@ -379,4 +415,24 @@ void MotorUnit::setPosition(double position) {
 uint16_t MotorUnit::getRawEncoderAngle() {
     Maslow.I2CMux.setPort(_encoderAddress);
     return encoder.readAngle();
+}
+
+//------------------------------------------------------
+//------------------------------------------------------ Baseline current management
+//------------------------------------------------------
+
+// Gets the stored baseline current for this motor
+float MotorUnit::getStoredBaseline() const {
+    return stored_baseline;
+}
+
+// Sets the stored baseline current for this motor (typically loaded from NVS)
+void MotorUnit::setStoredBaseline(float baseline) {
+    stored_baseline = baseline;
+}
+
+// Resets the baseline recording state for a new retraction operation
+void MotorUnit::resetBaseline() {
+    retract_start_time = 0;
+    baseline_recorded = false;
 }
