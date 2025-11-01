@@ -11,6 +11,11 @@
 #define I 0
 #define D 0
 
+// Retraction baseline recording constants
+#define BASELINE_RECORDING_TIME_MS 3000  // Time in ms before recording baseline during retraction
+#define RETRACT_SPEED_THRESHOLD 15       // Minimum retract speed before considering baseline recording
+#define MAX_SAFE_CURRENT 2000            // Maximum safe current value for baseline and threshold
+
 //------------------------------------------------------
 //------------------------------------------------------ Core utility functions
 //------------------------------------------------------
@@ -242,12 +247,12 @@ bool MotorUnit::pull_tight(int currentThreshold) {
 
     retract_baseline = alpha * float(currentMeasurement) + (1 - alpha) * retract_baseline;
 
-    // Record baseline after 3 seconds of retraction
-    if (!baseline_recorded && (millis() - retract_start_time > 3000) && retract_speed > 15) {
+    // Record baseline after specified time of retraction
+    if (!baseline_recorded && (millis() - retract_start_time > BASELINE_RECORDING_TIME_MS) && retract_speed > RETRACT_SPEED_THRESHOLD) {
         stored_baseline = retract_baseline;
         // Ensure stored baseline doesn't exceed maximum safe value
-        if (stored_baseline > 2000) {
-            stored_baseline = 2000;
+        if (stored_baseline > MAX_SAFE_CURRENT) {
+            stored_baseline = MAX_SAFE_CURRENT;
         }
         baseline_recorded   = true;
         String encAddrLabel = Maslow.axis_id_to_label(_encoderAddress);
@@ -265,12 +270,12 @@ bool MotorUnit::pull_tight(int currentThreshold) {
     if (stored_baseline > 0) {
         effectiveThreshold = (int)stored_baseline + currentThreshold;
         // Cap at maximum safe value
-        if (effectiveThreshold > 2000) {
-            effectiveThreshold = 2000;
+        if (effectiveThreshold > MAX_SAFE_CURRENT) {
+            effectiveThreshold = MAX_SAFE_CURRENT;
         }
     }
 
-    if (retract_speed > 15) {  //20 is not the actual speed, it is the amount of time so we don't trigger immediately
+    if (retract_speed > RETRACT_SPEED_THRESHOLD) {  // Don't trigger immediately before motor speeds up
         if (currentMeasurement > effectiveThreshold || incrementalThresholdHits > 2) {
             //stop motor, reset variables
             stop();
