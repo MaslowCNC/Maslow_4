@@ -297,12 +297,12 @@ namespace Kinematics {
         x = x + _centerX;
         y = y + _centerY;
         
-        float a = _anchorX[arm] - x;  // X dist from anchor to router center
-        float b = _anchorY[arm] - y;  // Y dist from anchor to router center
+        float a = anchor_location[arm][AXIS_X] - x;  // X dist from anchor to router center
+        float b = anchor_location[arm][AXIS_Y] - y;  // Y dist from anchor to router center
         
         // When fixedZ is true, don't use current Z position - only use fixed anchor Z values
         float effectiveZ = _fixedZ ? 0.0f : z;
-        float c = 0.0f - (effectiveZ + _anchorZ[arm] + _spoilboardThickness + _workThickness);
+        float c = 0.0f - (effectiveZ + anchor_location[arm][AXIS_Z] + _spoilboardThickness + _workThickness);
         
         float XYlength = sqrt(a * a + b * b);  // Distance in XY plane from anchor to router center
         float XYBeltLength = XYlength - (_beltEndExtension + _armLength);  // Subtract belt end extension and arm length
@@ -402,14 +402,14 @@ namespace Kinematics {
     void MaslowKinematics::setFrameSize(float frameSize) {
         // Update anchor coordinates for a square frame of size frameSize x frameSize
         // Keep the same Z coordinates but adjust X,Y to form a square
-        _blX = _anchorX[_BL] = 0.0f;
-        _blY = _anchorY[_BL] = 0.0f;
-        _brX = _anchorX[_BR] = frameSize;
-        _brY = _anchorY[_BR] = 0.0f;
-        _tlX = _anchorX[_TL] = 0.0f;
-        _tlY = _anchorY[_TL] = frameSize;
-        _trX = _anchorX[_TR] = frameSize;
-        _trY = _anchorY[_TR] = frameSize;
+        anchor_location[_BL][AXIS_X] = 0.0f;
+        anchor_location[_BL][AXIS_Y] = 0.0f;
+        anchor_location[_BR][AXIS_X] = frameSize;
+        anchor_location[_BR][AXIS_Y] = 0.0f;
+        anchor_location[_TL][AXIS_X] = 0.0f;
+        anchor_location[_TL][AXIS_Y] = frameSize;
+        anchor_location[_TR][AXIS_X] = frameSize;
+        anchor_location[_TR][AXIS_Y] = frameSize;
 
         // Recalculate center coordinates
         calculateCenter();
@@ -417,18 +417,18 @@ namespace Kinematics {
 
     void MaslowKinematics::updateAnchorCoordinates(
         float tlX, float tlY, float tlZ, float trX, float trY, float trZ, float blX, float blY, float blZ, float brX, float brY, float brZ) {
-        _tlX = _anchorX[_TL] = tlX;
-        _tlY = _anchorY[_TL] = tlY;
-        _tlZ = _anchorZ[_TL] = tlZ;
-        _trX = _anchorX[_TR] = trX;
-        _trY = _anchorY[_TR] = trY;
-        _trZ = _anchorZ[_TR] = trZ;
-        _blX = _anchorX[_BL] = blX;
-        _blY = _anchorY[_BL] = blY;
-        _blZ = _anchorZ[_BL] = blZ;
-        _brX = _anchorX[_BR] = brX;
-        _brY = _anchorY[_BR] = brY;
-        _brZ = _anchorZ[_BR] = brZ;
+        anchor_location[_TL][AXIS_X] = tlX;
+        anchor_location[_TL][AXIS_Y] = tlY;
+        anchor_location[_TL][AXIS_Z] = tlZ;
+        anchor_location[_TR][AXIS_X] = trX;
+        anchor_location[_TR][AXIS_Y] = trY;
+        anchor_location[_TR][AXIS_Z] = trZ;
+        anchor_location[_BL][AXIS_X] = blX;
+        anchor_location[_BL][AXIS_Y] = blY;
+        anchor_location[_BL][AXIS_Z] = blZ;
+        anchor_location[_BR][AXIS_X] = brX;
+        anchor_location[_BR][AXIS_Y] = brY;
+        anchor_location[_BR][AXIS_Z] = brZ;
 
         // Recalculate center coordinates
         calculateCenter();
@@ -471,19 +471,19 @@ namespace Kinematics {
         // Check that blX, blY, and brY should be zero (or very close to zero)
         if (std::abs(_blX) > TOLERANCE) {
             log_warn("Bottom left X coordinate (blX) should be 0.0, but is " << _blX << ". Correcting to 0.0.");
-            _blX = _anchorX[_BL] = 0.0f;
+            anchor_location[_BL][AXIS_X] = 0.0f;
             coordinatesCorrected = true;
         }
 
         if (std::abs(_blY) > TOLERANCE) {
             log_warn("Bottom left Y coordinate (blY) should be 0.0, but is " << _blY << ". Correcting to 0.0.");
-            _blY = _anchorY[_BL] = 0.0f;
+            anchor_location[_BL][AXIS_Y] = 0.0f;
             coordinatesCorrected = true;
         }
 
         if (std::abs(_brY) > TOLERANCE) {
             log_warn("Bottom right Y coordinate (brY) should be 0.0, but is " << _brY << ". Correcting to 0.0.");
-            _brY = _anchorY[_BR] = 0.0f;
+            anchor_location[_BR][AXIS_Y] = 0.0f;
             coordinatesCorrected = true;
         }
 
@@ -491,8 +491,8 @@ namespace Kinematics {
         if (_tlX >= _trX) {
             log_warn("Top left X coordinate (tlX=" << _tlX << ") should be less than top right X coordinate (trX=" << _trX
                                                    << "). Correcting to reasonable defaults.");
-            _tlX = _anchorX[_TL] = DEFAULT_TLX;
-            _trX = _anchorX[_TR] = DEFAULT_TRX;
+            anchor_location[_TL][AXIS_X] = DEFAULT_TLX;
+            anchor_location[_TR][AXIS_X] = DEFAULT_TRX;
             coordinatesCorrected = true;
         }
 
@@ -509,8 +509,8 @@ namespace Kinematics {
                      _brY);
             log_warn(buffer);
             releaseLogBuffer();
-            _tlY = _anchorY[_TL] = DEFAULT_TLY;
-            _trY = _anchorY[_TR] = DEFAULT_TRY;
+            anchor_location[_TL][AXIS_Y] = DEFAULT_TLY;
+            anchor_location[_TR][AXIS_Y] = DEFAULT_TRY;
             coordinatesCorrected = true;
         }
 
@@ -552,14 +552,14 @@ namespace Kinematics {
         if (_tlY < 0 || _trY < 0 || _tlY > MAX_REASONABLE_COORD || _trY > MAX_REASONABLE_COORD || _blX < 0 || _brX < 0 ||
             _brX > MAX_REASONABLE_COORD) {
             log_warn("Anchor coordinates contain unrealistic values. Resetting to reasonable defaults.");
-            _tlX = _anchorX[_TL] = DEFAULT_TLX;
-            _tlY = _anchorY[_TL] = DEFAULT_TLY;
-            _trX = _anchorX[_TR] = DEFAULT_TRX;
-            _trY = _anchorY[_TR] = DEFAULT_TRY;
-            _blX = _anchorX[_BL] = DEFAULT_BLX;
-            _blY = _anchorY[_BL] = DEFAULT_BLY;
-            _brX = _anchorX[_BR] = DEFAULT_BRX;
-            _brY = _anchorY[_BR] = DEFAULT_BRY;
+            anchor_location[_TL][AXIS_X] = DEFAULT_TLX;
+            anchor_location[_TL][AXIS_Y] = DEFAULT_TLY;
+            anchor_location[_TR][AXIS_X] = DEFAULT_TRX;
+            anchor_location[_TR][AXIS_Y] = DEFAULT_TRY;
+            anchor_location[_BL][AXIS_X] = DEFAULT_BLX;
+            anchor_location[_BL][AXIS_Y] = DEFAULT_BLY;
+            anchor_location[_BR][AXIS_X] = DEFAULT_BRX;
+            anchor_location[_BR][AXIS_Y] = DEFAULT_BRY;
             coordinatesCorrected = true;
         }
 

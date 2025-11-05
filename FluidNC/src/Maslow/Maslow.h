@@ -39,6 +39,14 @@ enum MaslowArm {
     ARM_COUNT = 4
 };
 
+// Enum for cartesian axis names
+enum CartesianAxis {
+    AXIS_X       = 0,  // X axis
+    AXIS_Y       = 1,  // Y axis
+    AXIS_Z       = 2,  // Z axis
+    AXIS_COUNT = 3
+};
+
 // Common Default strings - especially used by config
 const std::string M = "Maslow";
 // Non-volatile storage name

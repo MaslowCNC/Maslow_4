@@ -18,6 +18,7 @@
 */
 
 #include "Kinematics.h"
+#include "../Maslow/Maslow.h"  // For MaslowArm and CartesianAxis enums
 
 namespace Kinematics {
     class MaslowKinematics : public KinematicSystem {
@@ -59,19 +60,22 @@ namespace Kinematics {
         float computeBL(float x, float y, float z);
         float computeBR(float x, float y, float z);
 
-        // Getters for parameters used by calibration system
-        float getTlX() const { return _tlX; }
-        float getTlY() const { return _tlY; }
-        float getTlZ() const { return _tlZ; }
-        float getTrX() const { return _trX; }
-        float getTrY() const { return _trY; }
-        float getTrZ() const { return _trZ; }
-        float getBlX() const { return _blX; }
-        float getBlY() const { return _blY; }
-        float getBlZ() const { return _blZ; }
-        float getBrX() const { return _brX; }
-        float getBrY() const { return _brY; }
-        float getBrZ() const { return _brZ; }
+        // Generic getter for anchor coordinates
+        float getAnchorCoord(int arm, int axis) const { return anchor_location[arm][axis]; }
+        
+        // Legacy getters for backward compatibility
+        float getTlX() const { return anchor_location[_TL][AXIS_X]; }
+        float getTlY() const { return anchor_location[_TL][AXIS_Y]; }
+        float getTlZ() const { return anchor_location[_TL][AXIS_Z]; }
+        float getTrX() const { return anchor_location[_TR][AXIS_X]; }
+        float getTrY() const { return anchor_location[_TR][AXIS_Y]; }
+        float getTrZ() const { return anchor_location[_TR][AXIS_Z]; }
+        float getBlX() const { return anchor_location[_BL][AXIS_X]; }
+        float getBlY() const { return anchor_location[_BL][AXIS_Y]; }
+        float getBlZ() const { return anchor_location[_BL][AXIS_Z]; }
+        float getBrX() const { return anchor_location[_BR][AXIS_X]; }
+        float getBrY() const { return anchor_location[_BR][AXIS_Y]; }
+        float getBrZ() const { return anchor_location[_BR][AXIS_Z]; }
         float getBeltEndExtension() const { return _beltEndExtension; }
         float getArmLength() const { return _armLength; }
         float getSpoilboardThickness() const { return _spoilboardThickness; }
@@ -94,27 +98,34 @@ namespace Kinematics {
         // Validation and correction helper method
         void validateAndCorrectAnchorCoordinates();
 
-        // Anchor point coordinates (in mm) - indexed by arm: [_TL, _TR, _BL, _BR]
-        float _anchorX[4] = { -27.6f, 2924.3f, 0.0f, 2953.2f };    // X coordinates
-        float _anchorY[4] = { 2064.9f, 2066.5f, 0.0f, 0.0f };      // Y coordinates
-        float _anchorZ[4] = { 100.0f, 56.0f, 34.0f, 78.0f };       // Z coordinates
+        // Anchor point coordinates (in mm) - 2D array indexed by [arm][axis]
+        // First index: arm (_TL, _TR, _BL, _BR)
+        // Second index: axis (_X, _Y, _Z)
+        float anchor_location[ARM_COUNT][AXIS_COUNT] = {
+            { -27.6f, 2064.9f, 100.0f },   // _TL: X, Y, Z
+            { 2924.3f, 2066.5f, 56.0f },   // _TR: X, Y, Z
+            { 0.0f, 0.0f, 34.0f },         // _BL: X, Y, Z
+            { 2953.2f, 0.0f, 78.0f }       // _BR: X, Y, Z
+        };
         
         // Legacy individual accessors (maintained for backward compatibility)
-        float _tlX = -27.6f;   // Top left X
-        float _tlY = 2064.9f;  // Top left Y
-        float _tlZ = 100.0f;   // Top left Z
-
-        float _trX = 2924.3f;  // Top right X
-        float _trY = 2066.5f;  // Top right Y
-        float _trZ = 56.0f;    // Top right Z
-
-        float _blX = 0.0f;   // Bottom left X
-        float _blY = 0.0f;   // Bottom left Y
-        float _blZ = 34.0f;  // Bottom left Z
-
-        float _brX = 2953.2f;  // Bottom right X
-        float _brY = 0.0f;     // Bottom right Y
-        float _brZ = 78.0f;    // Bottom right Z
+        float& _tlX = anchor_location[_TL][AXIS_X];
+        float& _tlY = anchor_location[_TL][AXIS_Y];
+        float& _tlZ = anchor_location[_TL][AXIS_Z];
+        float& _trX = anchor_location[_TR][AXIS_X];
+        float& _trY = anchor_location[_TR][AXIS_Y];
+        float& _trZ = anchor_location[_TR][AXIS_Z];
+        float& _blX = anchor_location[_BL][AXIS_X];
+        float& _blY = anchor_location[_BL][AXIS_Y];
+        float& _blZ = anchor_location[_BL][AXIS_Z];
+        float& _brX = anchor_location[_BR][AXIS_X];
+        float& _brY = anchor_location[_BR][AXIS_Y];
+        float& _brZ = anchor_location[_BR][AXIS_Z];
+        
+        // Deprecated separate arrays (kept in sync via references)
+        float* _anchorX = anchor_location[0];  // Points to X coordinates
+        float* _anchorY = &anchor_location[0][1];  // Points to Y coordinates  
+        float* _anchorZ = &anchor_location[0][2];  // Points to Z coordinates
 
         // Belt and arm parameters (in mm)
         float _beltEndExtension = 30.0f;   // Belt end extension
