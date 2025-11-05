@@ -53,12 +53,6 @@ namespace Kinematics {
 
         // Generic compute function for any arm
         float compute(int arm, float x, float y, float z);
-        
-        // Public access to compute functions for calibration system (for backward compatibility)
-        float computeTL(float x, float y, float z);
-        float computeTR(float x, float y, float z);
-        float computeBL(float x, float y, float z);
-        float computeBR(float x, float y, float z);
 
         // Generic getter for anchor coordinates
         float getAnchorCoord(int arm, int axis) const { return anchor_location[arm][axis]; }

@@ -311,23 +311,6 @@ namespace Kinematics {
         return length;
     }
 
-    // Backward compatibility wrappers
-    float MaslowKinematics::computeTL(float x, float y, float z) {
-        return compute(_TL, x, y, z);
-    }
-
-    float MaslowKinematics::computeTR(float x, float y, float z) {
-        return compute(_TR, x, y, z);
-    }
-
-    float MaslowKinematics::computeBL(float x, float y, float z) {
-        return compute(_BL, x, y, z);
-    }
-
-    float MaslowKinematics::computeBR(float x, float y, float z) {
-        return compute(_BR, x, y, z);
-    }
-
     bool MaslowKinematics::canHome(AxisMask axisMask) {
         // For Maslow CNC, homing is typically done by retracting all belts
         // until they reach full retraction, then calibrating the system
