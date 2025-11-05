@@ -1028,13 +1028,17 @@ void Maslow_::safety_control() {
     static int   positionErrorCounter[ARM_COUNT]  = { 0 };
     static float previousPositionError[ARM_COUNT] = { 0, 0, 0, 0 };
 
+    // Map arm indices to encoder lines for axis_id_to_label
+    static const int armToEncoderLine[ARM_COUNT] = { TLEncoderLine, TREncoderLine, BLEncoderLine, BREncoderLine };
+
     for (int i = 0; i < ARM_COUNT; i++) {
         //If the current exceeds some absolute value, we need to call panic() and stop the machine
         if (axisArm[i].getMotorCurrent() > 4000 && !tick[i]) {
             panicCounter[i]++;
             if (panicCounter[i] > tresholdHitsBeforePanic) {
                 if (sys.state() == State::Jog || sys.state() == State::Cycle) {
-                    log_warn("Motor current on " << axis_id_to_label(i).c_str() << " axis exceeded threshold of " << 4000);
+                    log_warn("Motor current on " << axis_id_to_label(armToEncoderLine[i]).c_str()
+                                                 << " axis exceeded threshold of " << 4000);
                     //Maslow.panic();
                 }
                 tick[i] = true;
@@ -1054,10 +1058,10 @@ void Maslow_::safety_control() {
         if (axisArm[i].getMotorPower() > 450 && abs(axisArm[i].getBeltSpeed()) < 0.1 && !tick[i]) {
             axisSlackCounter[i]++;
             if (axisSlackCounter[i] > 3000) {
-                // log_info("SLACK:" << axis_id_to_label(i).c_str() << " motor power is " << int(axisArm[i].getMotorPower())
+                // log_info("SLACK:" << axis_id_to_label(armToEncoderLine[i]).c_str() << " motor power is " << int(axisArm[i].getMotorPower())
                 //                   << ", but the belt speed is" << axisArm[i].getBeltSpeed());
                 // log_info(axisSlackCounter[i]);
-                // log_info("Pull on " << axis_id_to_label(i).c_str() << " and restart!");
+                // log_info("Pull on " << axis_id_to_label(armToEncoderLine[i]).c_str() << " and restart!");
                 tick[i]             = true;
                 axisSlackCounter[i] = 0;
                 Maslow.panic();
@@ -1067,7 +1071,7 @@ void Maslow_::safety_control() {
 
         //If the motor has a position error greater than 1mm and we are running a file or jogging
         if ((abs(axisArm[i].getPositionError()) > 1) && (sys.state() == State::Jog || sys.state() == State::Cycle) && !tick[i]) {
-            // log_error("Position error on " << axis_id_to_label(i).c_str() << " axis exceeded 1mm, error is " << axisArm[i].getPositionError()
+            // log_error("Position error on " << axis_id_to_label(armToEncoderLine[i]).c_str() << " axis exceeded 1mm, error is " << axisArm[i].getPositionError()
             //                                << "mm");
             tick[i] = true;
         }
@@ -1076,8 +1080,9 @@ void Maslow_::safety_control() {
         previousPositionError[i] = axisArm[i].getPositionError();
         if ((abs(axisArm[i].getPositionError()) > 15) && (sys.state() == State::Cycle)) {
             positionErrorCounter[i]++;
-            log_warn("Position error on " << axis_id_to_label(i).c_str() << " axis exceeded 15mm while running. Error is "
-                                          << axisArm[i].getPositionError() << "mm" << " Counter: " << positionErrorCounter[i]);
+            log_warn("Position error on " << axis_id_to_label(armToEncoderLine[i]).c_str()
+                                          << " axis exceeded 15mm while running. Error is " << axisArm[i].getPositionError() << "mm"
+                                          << " Counter: " << positionErrorCounter[i]);
             log_warn("Previous error was " << previousPositionError[i] << "mm");
 
             if (positionErrorCounter[i] > 5) {
