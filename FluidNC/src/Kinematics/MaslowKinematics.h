@@ -57,19 +57,6 @@ namespace Kinematics {
         // Generic getter for anchor coordinates
         float getAnchorCoord(int arm, int axis) const { return anchor_location[arm][axis]; }
         
-        // Legacy getters for backward compatibility
-        float getTlX() const { return anchor_location[_TL][Coord_X]; }
-        float getTlY() const { return anchor_location[_TL][Coord_Y]; }
-        float getTlZ() const { return anchor_location[_TL][Coord_Z]; }
-        float getTrX() const { return anchor_location[_TR][Coord_X]; }
-        float getTrY() const { return anchor_location[_TR][Coord_Y]; }
-        float getTrZ() const { return anchor_location[_TR][Coord_Z]; }
-        float getBlX() const { return anchor_location[_BL][Coord_X]; }
-        float getBlY() const { return anchor_location[_BL][Coord_Y]; }
-        float getBlZ() const { return anchor_location[_BL][Coord_Z]; }
-        float getBrX() const { return anchor_location[_BR][Coord_X]; }
-        float getBrY() const { return anchor_location[_BR][Coord_Y]; }
-        float getBrZ() const { return anchor_location[_BR][Coord_Z]; }
         float getBeltEndExtension() const { return _beltEndExtension; }
         float getArmLength() const { return _armLength; }
         float getSpoilboardThickness() const { return _spoilboardThickness; }

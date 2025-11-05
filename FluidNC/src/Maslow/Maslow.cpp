@@ -215,8 +215,8 @@ void Maslow_::update() {
                 using namespace Kinematics;
                 MaslowKinematics* kinematics = getMaslowKinematics();
                 if (kinematics) {
-                    targetX = (kinematics->getTrX() + kinematics->getBlX()) / 2.0f - kinematics->getCenterX();  // Approximate center X
-                    targetY = (kinematics->getTrY() + kinematics->getBlY()) / 2.0f - kinematics->getCenterY();  // Approximate center Y
+                    targetX = (kinematics->getAnchorCoord(_TR, Coord_X) + kinematics->getAnchorCoord(_BL, Coord_X)) / 2.0f - kinematics->getCenterX();  // Approximate center X
+                    targetY = (kinematics->getAnchorCoord(_TR, Coord_Y) + kinematics->getAnchorCoord(_BL, Coord_Y)) / 2.0f - kinematics->getCenterY();  // Approximate center Y
                 }
             }
 

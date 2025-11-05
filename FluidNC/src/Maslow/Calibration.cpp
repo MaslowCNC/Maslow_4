@@ -191,8 +191,8 @@ bool Calibration::requestStateChange(int newState) {
                 float x          = 0;
                 float y          = 0;
                 auto  kinematics = getKinematics();
-                if (kinematics && computeXYfromLengths(measurementToXYPlane(Maslow.axis[_TL].getPosition(), kinematics->getTlZ()),
-                                                       measurementToXYPlane(Maslow.axis[_TR].getPosition(), kinematics->getTrZ()),
+                if (kinematics && computeXYfromLengths(measurementToXYPlane(Maslow.axis[_TL].getPosition(), kinematics->getAnchorCoord(_TL, Coord_Z)),
+                                                       measurementToXYPlane(Maslow.axis[_TR].getPosition(), kinematics->getAnchorCoord(_TR, Coord_Z)),
                                                        x,
                                                        y)) {
                     //We reset the last waypoint to where it actually is so that we can move from the updated position to the next waypoint
@@ -488,10 +488,10 @@ bool Calibration::takeSlackFunc() {
             float extension = kinematics->getBeltEndExtension() + kinematics->getArmLength();
 
             //This should use it's own array, this is not calibration data
-            float diffTL = calibration_data[0][0] - measurementToXYPlane(kinematics->compute(_TL, x, y, 0), kinematics->getTlZ());
-            float diffTR = calibration_data[0][1] - measurementToXYPlane(kinematics->compute(_TR, x, y, 0), kinematics->getTrZ());
-            float diffBL = calibration_data[0][2] - measurementToXYPlane(kinematics->compute(_BL, x, y, 0), kinematics->getBlZ());
-            float diffBR = calibration_data[0][3] - measurementToXYPlane(kinematics->compute(_BR, x, y, 0), kinematics->getBrZ());
+            float diffTL = calibration_data[0][0] - measurementToXYPlane(kinematics->compute(_TL, x, y, 0), kinematics->getAnchorCoord(_TL, Coord_Z));
+            float diffTR = calibration_data[0][1] - measurementToXYPlane(kinematics->compute(_TR, x, y, 0), kinematics->getAnchorCoord(_TR, Coord_Z));
+            float diffBL = calibration_data[0][2] - measurementToXYPlane(kinematics->compute(_BL, x, y, 0), kinematics->getAnchorCoord(_BL, Coord_Z));
+            float diffBR = calibration_data[0][3] - measurementToXYPlane(kinematics->compute(_BR, x, y, 0), kinematics->getAnchorCoord(_BR, Coord_Z));
             log_info("Center point deviation: TL: " << diffTL << " TR: " << diffTR << " BL: " << diffBL << " BR: " << diffBR);
             double threshold = 12;
             if (abs(diffTL) > threshold || abs(diffTR) > threshold || abs(diffBL) > threshold || abs(diffBR) > threshold) {
@@ -521,10 +521,10 @@ bool Calibration::takeSlackFunc() {
                 // Convert measured XY plane distances to actual belt lengths for motor positions
                 // calibration_data[0] contains measured XY plane distances: [TL, TR, BL, BR]
                 float beltLength[ARM_COUNT];
-                beltLength[_TL] = measurementFromXYPlane(calibration_data[0][0], kinematics->getTlZ());
-                beltLength[_TR] = measurementFromXYPlane(calibration_data[0][1], kinematics->getTrZ());
-                beltLength[_BL] = measurementFromXYPlane(calibration_data[0][2], kinematics->getBlZ());
-                beltLength[_BR] = measurementFromXYPlane(calibration_data[0][3], kinematics->getBrZ());
+                beltLength[_TL] = measurementFromXYPlane(calibration_data[0][0], kinematics->getAnchorCoord(_TL, Coord_Z));
+                beltLength[_TR] = measurementFromXYPlane(calibration_data[0][1], kinematics->getAnchorCoord(_TR, Coord_Z));
+                beltLength[_BL] = measurementFromXYPlane(calibration_data[0][2], kinematics->getAnchorCoord(_BL, Coord_Z));
+                beltLength[_BR] = measurementFromXYPlane(calibration_data[0][3], kinematics->getAnchorCoord(_BR, Coord_Z));
 
                 log_info("Setting motor positions directly from measurements:");
                 log_info("TL belt: " << beltLength[_TL] << " TR belt: " << beltLength[_TR]);
@@ -573,10 +573,10 @@ bool Calibration::computeXYfromLengths(double TL, double TR, float& x, float& y)
     double trLength = TR;  //measurementToXYPlane(TR, trZ);
 
     //Find the intersection of the two circles centered at tlX, tlY and trX, trY with radii tlLength and trLength
-    double tlX = kinematics->getTlX();
-    double tlY = kinematics->getTlY();
-    double trX = kinematics->getTrX();
-    double trY = kinematics->getTrY();
+    double tlX = kinematics->getAnchorCoord(_TL, Coord_X);
+    double tlY = kinematics->getAnchorCoord(_TL, Coord_Y);
+    double trX = kinematics->getAnchorCoord(_TR, Coord_X);
+    double trY = kinematics->getAnchorCoord(_TR, Coord_Y);
 
     double d = sqrt((tlX - trX) * (tlX - trX) + (tlY - trY) * (tlY - trY));
     if (d > tlLength + trLength || d < abs(tlLength - trLength)) {
@@ -671,10 +671,10 @@ bool Calibration::take_measurement(float result[4], int dir, int run, int curren
             if (!kinematics)
                 return false;
             //take measurement and record it to the calibration data array.
-            result[0] = measurementToXYPlane(Maslow.axis[_TL].getPosition(), kinematics->getTlZ());
-            result[1] = measurementToXYPlane(Maslow.axis[_TR].getPosition(), kinematics->getTrZ());
-            result[2] = measurementToXYPlane(Maslow.axis[_BL].getPosition(), kinematics->getBlZ());
-            result[3] = measurementToXYPlane(Maslow.axis[_BR].getPosition(), kinematics->getBrZ());
+            result[0] = measurementToXYPlane(Maslow.axis[_TL].getPosition(), kinematics->getAnchorCoord(_TL, Coord_Z));
+            result[1] = measurementToXYPlane(Maslow.axis[_TR].getPosition(), kinematics->getAnchorCoord(_TR, Coord_Z));
+            result[2] = measurementToXYPlane(Maslow.axis[_BL].getPosition(), kinematics->getAnchorCoord(_BL, Coord_Z));
+            result[3] = measurementToXYPlane(Maslow.axis[_BR].getPosition(), kinematics->getAnchorCoord(_BR, Coord_Z));
             BR_tight  = false;
             BL_tight  = false;
             return true;
@@ -761,10 +761,10 @@ bool Calibration::take_measurement(float result[4], int dir, int run, int curren
                 if (!kinematics)
                     return false;
                 //take measurement and record it to the calibration data array.
-                result[0] = measurementToXYPlane(Maslow.axis[_TL].getPosition(), kinematics->getTlZ());
-                result[1] = measurementToXYPlane(Maslow.axis[_TR].getPosition(), kinematics->getTrZ());
-                result[2] = measurementToXYPlane(Maslow.axis[_BL].getPosition(), kinematics->getBlZ());
-                result[3] = measurementToXYPlane(Maslow.axis[_BR].getPosition(), kinematics->getBrZ());
+                result[0] = measurementToXYPlane(Maslow.axis[_TL].getPosition(), kinematics->getAnchorCoord(_TL, Coord_Z));
+                result[1] = measurementToXYPlane(Maslow.axis[_TR].getPosition(), kinematics->getAnchorCoord(_TR, Coord_Z));
+                result[2] = measurementToXYPlane(Maslow.axis[_BL].getPosition(), kinematics->getAnchorCoord(_BL, Coord_Z));
+                result[3] = measurementToXYPlane(Maslow.axis[_BR].getPosition(), kinematics->getAnchorCoord(_BR, Coord_Z));
                 // Reset all flags for next measurement
                 tl_tight                 = false;
                 tr_tight                 = false;
@@ -844,10 +844,10 @@ bool Calibration::take_measurement(float result[4], int dir, int run, int curren
                 if (!kinematics)
                     return false;
                 //take measurement and record it to the calibration data array.
-                result[0]   = measurementToXYPlane(Maslow.axis[_TL].getPosition(), kinematics->getTlZ());
-                result[1]   = measurementToXYPlane(Maslow.axis[_TR].getPosition(), kinematics->getTrZ());
-                result[2]   = measurementToXYPlane(Maslow.axis[_BL].getPosition(), kinematics->getBlZ());
-                result[3]   = measurementToXYPlane(Maslow.axis[_BR].getPosition(), kinematics->getBrZ());
+                result[0]   = measurementToXYPlane(Maslow.axis[_TL].getPosition(), kinematics->getAnchorCoord(_TL, Coord_Z));
+                result[1]   = measurementToXYPlane(Maslow.axis[_TR].getPosition(), kinematics->getAnchorCoord(_TR, Coord_Z));
+                result[2]   = measurementToXYPlane(Maslow.axis[_BL].getPosition(), kinematics->getAnchorCoord(_BL, Coord_Z));
+                result[3]   = measurementToXYPlane(Maslow.axis[_BR].getPosition(), kinematics->getAnchorCoord(_BR, Coord_Z));
                 pull1_tight = false;
                 pull2_tight = false;
                 return true;
@@ -988,10 +988,10 @@ bool Calibration::take_measurement_avg_with_check(int waypoint, int dir) {
                     return false;
 
                 double threshold = 100;
-                float  diffTL    = measurements[0][0] - measurementToXYPlane(kinematics->compute(_TL, x, y, 0), kinematics->getTlZ());
-                float  diffTR    = measurements[0][1] - measurementToXYPlane(kinematics->compute(_TR, x, y, 0), kinematics->getTrZ());
-                float  diffBL    = measurements[0][2] - measurementToXYPlane(kinematics->compute(_BL, x, y, 0), kinematics->getBlZ());
-                float  diffBR    = measurements[0][3] - measurementToXYPlane(kinematics->compute(_BR, x, y, 0), kinematics->getBrZ());
+                float  diffTL    = measurements[0][0] - measurementToXYPlane(kinematics->compute(_TL, x, y, 0), kinematics->getAnchorCoord(_TL, Coord_Z));
+                float  diffTR    = measurements[0][1] - measurementToXYPlane(kinematics->compute(_TR, x, y, 0), kinematics->getAnchorCoord(_TR, Coord_Z));
+                float  diffBL    = measurements[0][2] - measurementToXYPlane(kinematics->compute(_BL, x, y, 0), kinematics->getAnchorCoord(_BL, Coord_Z));
+                float  diffBR    = measurements[0][3] - measurementToXYPlane(kinematics->compute(_BR, x, y, 0), kinematics->getAnchorCoord(_BR, Coord_Z));
                 log_info("Center point off by: TL: " << diffTL << " TR: " << diffTR << " BL: " << diffBL << " BR: " << diffBR);
 
                 if (abs(diffTL) > threshold || abs(diffTR) > threshold || abs(diffBL) > threshold || abs(diffBR) > threshold) {
@@ -1291,11 +1291,11 @@ bool Calibration::generate_calibration_grid() {
 
     //If either dimension is set to zero we automatically compute it as half the frame size
     if (calibration_grid_height_mm_Y == 0 || calibration_grid_width_mm_X == 0) {
-        float frameWidth  = getKinematics()->getTrX() - getKinematics()->getTlX();
-        float frameHeight = getKinematics()->getTlY() - getKinematics()->getBlY();
+        float frameWidth  = getKinematics()->getAnchorCoord(_TR, Coord_X) - getKinematics()->getAnchorCoord(_TL, Coord_X);
+        float frameHeight = getKinematics()->getAnchorCoord(_TL, Coord_Y) - getKinematics()->getAnchorCoord(_BL, Coord_Y);
 
-        log_info("Frame dimensions from kinematics: TR_X" << getKinematics()->getTrX() << " TL_X: " << getKinematics()->getTlX() << " TL_Y: "
-                                                          << getKinematics()->getTlY() << " BL_Y: " << getKinematics()->getBlY());
+        log_info("Frame dimensions from kinematics: TR_X" << getKinematics()->getAnchorCoord(_TR, Coord_X) << " TL_X: " << getKinematics()->getAnchorCoord(_TL, Coord_X) << " TL_Y: "
+                                                          << getKinematics()->getAnchorCoord(_TL, Coord_Y) << " BL_Y: " << getKinematics()->getAnchorCoord(_BL, Coord_Y));
 
         log_info("Frame size: " << frameWidth << " x " << frameHeight << " mm");
 
@@ -1476,11 +1476,11 @@ void Calibration::print_calibration_data() {
         return;
 
     //These are used to set the browser side initial guess for the frame size
-    log_data("$/" << M << "_tlX=" << kinematics->getTlX());
-    log_data("$/" << M << "_tlY=" << kinematics->getTlY());
-    log_data("$/" << M << "_trX=" << kinematics->getTrX());
-    log_data("$/" << M << "_trY=" << kinematics->getTrY());
-    log_data("$/" << M << "_brX=" << kinematics->getBrX());
+    log_data("$/" << M << "_tlX=" << kinematics->getAnchorCoord(_TL, Coord_X));
+    log_data("$/" << M << "_tlY=" << kinematics->getAnchorCoord(_TL, Coord_Y));
+    log_data("$/" << M << "_trX=" << kinematics->getAnchorCoord(_TR, Coord_X));
+    log_data("$/" << M << "_trY=" << kinematics->getAnchorCoord(_TR, Coord_Y));
+    log_data("$/" << M << "_brX=" << kinematics->getAnchorCoord(_BR, Coord_X));
 
     String data = "CLBM:[";
     for (int i = 0; i < waypoint; i++) {
