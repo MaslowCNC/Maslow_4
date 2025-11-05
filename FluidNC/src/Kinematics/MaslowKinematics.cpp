@@ -440,9 +440,20 @@ namespace Kinematics {
 
     // Convert angled belt measurement to XY plane distance
     float MaslowKinematics::measurementToXYPlane(float measurement, float zHeight, float softArmExtension) const {
-        // First remove the soft arm extension from the measurement (it was added during forward kinematics)
-        float adjustedMeasurement = measurement - softArmExtension;
-        float lengthInXY          = sqrt(adjustedMeasurement * adjustedMeasurement - zHeight * zHeight);
+        // Remove the soft arm extension from the measurement only if fixedZ is false
+        // (soft arm extensions are only added when fixedZ is false in the compute functions)
+        float adjustedMeasurement = _fixedZ ? measurement : measurement - softArmExtension;
+
+        // Validate that we have a valid value before taking square root
+        float squareValue = adjustedMeasurement * adjustedMeasurement - zHeight * zHeight;
+        if (squareValue < 0.0f) {
+            // If the calculation would result in a negative value, something is wrong
+            // This could happen if soft arm extension is too large or there are measurement errors
+            log_error("MaslowKinematics::measurementToXYPlane: Invalid calculation - measurement too small for Z height");
+            return 0.0f;  // Return 0 to indicate error
+        }
+
+        float lengthInXY = sqrt(squareValue);
         return lengthInXY + _beltEndExtension + _armLength;  // Add belt end extension and arm length
     }
 
