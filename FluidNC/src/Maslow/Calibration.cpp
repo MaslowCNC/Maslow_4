@@ -298,8 +298,10 @@ bool Calibration::requestStateChange(int newState, bool tl, bool tr, bool bl, bo
 
     bool success = false;
 
-    // Set flag to indicate partial operation (not all belts)
-    partialOperation = !(tl && tr && bl && br);
+    // Set flag to indicate partial operation (not all belts selected)
+    // Explicitly count selected belts to make intent clear
+    int selectedCount = (tl ? 1 : 0) + (tr ? 1 : 0) + (bl ? 1 : 0) + (br ? 1 : 0);
+    partialOperation = (selectedCount < 4);
 
     // Track which arms are being operated on
     operatingTL = tl;
@@ -358,18 +360,21 @@ bool Calibration::requestStateChange(int newState, bool tl, bool tr, bool bl, bo
 }
 
 // Helper method to determine appropriate state after partial operation
+// Evaluates all belt positions to determine if the system is in a retracted or extended state
 int Calibration::determineStateAfterPartialOperation() {
-    // Get current belt positions
+    // Get current belt positions (these should be non-negative belt lengths)
     float tlPos = Maslow.axisTL.getPosition();
     float trPos = Maslow.axisTR.getPosition();
     float blPos = Maslow.axisBL.getPosition();
     float brPos = Maslow.axisBR.getPosition();
 
     // Check if any belt is not fully retracted (>= 1mm long)
-    // Per requirements: "state should be retracting if one or more belts is not <1mm long"
+    // After partial operation, determine final state based on ALL belt positions:
+    // - EXTENDEDOUT if any belt is >= 1mm (at least one belt is extended)
+    // - RETRACTED if all belts are < 1mm (all belts are fully retracted)
     const float retractedThreshold = 1.0;
-    bool anyNotRetracted = (fabs(tlPos) >= retractedThreshold || fabs(trPos) >= retractedThreshold ||
-                            fabs(blPos) >= retractedThreshold || fabs(brPos) >= retractedThreshold);
+    bool anyNotRetracted = (tlPos >= retractedThreshold || trPos >= retractedThreshold ||
+                            blPos >= retractedThreshold || brPos >= retractedThreshold);
 
     if (anyNotRetracted) {
         // At least one belt is not retracted - we're in an extended state
@@ -378,6 +383,20 @@ int Calibration::determineStateAfterPartialOperation() {
 
     // All belts are fully retracted (< 1mm)
     return RETRACTED;
+}
+
+// Helper method to complete a partial operation and transition to appropriate state
+void Calibration::completePartialOperation(const char* operationType) {
+    if (partialOperation) {
+        // For partial operations, determine the appropriate state based on all belt positions
+        log_info("Partial " << operationType << " complete");
+        int newState = determineStateAfterPartialOperation();
+        if (newState != currentState) {
+            requestStateChange(newState);
+        } else {
+            sys.set_state(State::Idle);
+        }
+    }
 }
 
 // -Maslow homing loop. This is used whenver any of the homing funcitons are active (belts extending or retracting)
@@ -417,15 +436,7 @@ void Calibration::home() {
             //Once the limits are hit switch to the next state
             if (!retractingTL && !retractingBL && !retractingBR && !retractingTR) {
                 if (partialOperation) {
-                    // For partial operations, determine the appropriate state
-                    int newState = determineStateAfterPartialOperation();
-                    if (newState != currentState) {
-                        requestStateChange(newState);
-                    } else {
-                        // Stay in current stable state (EXTENDEDOUT or similar)
-                        sys.set_state(State::Idle);
-                        log_info("Partial retraction complete");
-                    }
+                    completePartialOperation("retraction");
                 } else {
                     requestStateChange(RETRACTED);
                 }
@@ -465,14 +476,7 @@ void Calibration::home() {
                 
                 if (allOperatingArmsExtended) {
                     if (partialOperation) {
-                        // For partial operations, determine the appropriate state
-                        log_info("Partial extension complete");
-                        int newState = determineStateAfterPartialOperation();
-                        if (newState != currentState) {
-                            requestStateChange(newState);
-                        } else {
-                            sys.set_state(State::Idle);
-                        }
+                        completePartialOperation("extension");
                     } else {
                         log_info("All belts extended to " << extendDist << "mm");
                         requestStateChange(EXTENDEDOUT);

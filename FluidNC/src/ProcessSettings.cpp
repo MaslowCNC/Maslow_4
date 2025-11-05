@@ -833,15 +833,31 @@ static bool parseArmSpecification(const char* value, bool& tl, bool& tr, bool& b
         return true;
     }
 
-    // Convert to lowercase and parse
+    // Convert to lowercase for case-insensitive parsing
     std::string spec = value;
     std::transform(spec.begin(), spec.end(), spec.begin(), ::tolower);
 
-    // Check for each arm identifier
-    if (spec.find("tl") != std::string::npos) tl = true;
-    if (spec.find("tr") != std::string::npos) tr = true;
-    if (spec.find("bl") != std::string::npos) bl = true;
-    if (spec.find("br") != std::string::npos) br = true;
+    // Parse character by character looking for arm identifiers
+    // We look for two-letter sequences: tl, tr, bl, br
+    for (size_t i = 0; i + 1 < spec.length(); i++) {
+        char first = spec[i];
+        char second = spec[i + 1];
+        
+        if (first == 't' && second == 'l') {
+            tl = true;
+            i++; // Skip the second character
+        } else if (first == 't' && second == 'r') {
+            tr = true;
+            i++; // Skip the second character
+        } else if (first == 'b' && second == 'l') {
+            bl = true;
+            i++; // Skip the second character
+        } else if (first == 'b' && second == 'r') {
+            br = true;
+            i++; // Skip the second character
+        }
+        // Ignore other characters (commas, spaces, etc.)
+    }
 
     // Return true if at least one arm was specified
     return (tl || tr || bl || br);

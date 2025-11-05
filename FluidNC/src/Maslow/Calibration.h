@@ -80,6 +80,7 @@ public:
 
     // Helper methods for partial extend/retract operations
     int determineStateAfterPartialOperation();
+    void completePartialOperation(const char* operationType);
 
     //Public Variables
     //hold
