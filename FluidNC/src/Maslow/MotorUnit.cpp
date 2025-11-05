@@ -106,6 +106,7 @@ bool MotorUnit::testArmCurrentStep(int currentPWM) {
     while (millis() - startTime < 1000) {
         motor.backward(currentPWM);
         updateEncoderPosition();  // Update encoder reading
+        delay(10);                // Small delay to prevent excessive CPU usage and allow motor/encoder response
     }
 
     // Stop motor
@@ -113,7 +114,7 @@ bool MotorUnit::testArmCurrentStep(int currentPWM) {
 
     // Check if position changed (movement detected)
     double endPosition = getPosition();
-    double movement    = abs(endPosition - startPosition);
+    double movement    = fabs(endPosition - startPosition);
 
     // Movement threshold: 0.5mm
     return movement > 0.5;

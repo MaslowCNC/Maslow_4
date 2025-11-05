@@ -1059,7 +1059,12 @@ static Error maslow_test_arm_current(const char* value, WebUI::AuthenticationLev
 
     // Parse input string
     if (value && *value) {
-        char* str     = strdup(value);
+        char* str = strdup(value);
+        if (!str) {
+            log_error("Failed to allocate memory for parsing testArmCurrent command");
+            return Error::Overflow;
+        }
+
         char* saveptr = NULL;
         char* token   = strtok_r(str, " \t", &saveptr);
 
@@ -1088,7 +1093,8 @@ static Error maslow_test_arm_current(const char* value, WebUI::AuthenticationLev
                 currentArmIndex        = armIndex;
                 arms[armIndex].enabled = true;
                 paramIndex             = 0;
-            } else if (currentArmIndex >= 0 && (isdigit(token[0]) || (token[0] == '-' && token[1] && isdigit(token[1])))) {
+            } else if (currentArmIndex >= 0 && token[0] != '\0' &&
+                       (isdigit(token[0]) || (token[0] == '-' && token[1] != '\0' && isdigit(token[1])))) {
                 // This is a number and we have a current arm
                 int val = atoi(token);
                 if (paramIndex == 0)
