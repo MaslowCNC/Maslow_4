@@ -365,26 +365,19 @@ int Calibration::determineStateAfterPartialOperation() {
     float blPos = Maslow.axisBL.getPosition();
     float brPos = Maslow.axisBR.getPosition();
 
-    // Check if any belt is not fully retracted (<1mm)
+    // Check if any belt is not fully retracted (>= 1mm long)
+    // Per requirements: "state should be retracting if one or more belts is not <1mm long"
     const float retractedThreshold = 1.0;
-    bool anyNotRetracted = (fabs(tlPos) > retractedThreshold || fabs(trPos) > retractedThreshold ||
-                            fabs(blPos) > retractedThreshold || fabs(brPos) > retractedThreshold);
+    bool anyNotRetracted = (fabs(tlPos) >= retractedThreshold || fabs(trPos) >= retractedThreshold ||
+                            fabs(blPos) >= retractedThreshold || fabs(brPos) >= retractedThreshold);
 
     if (anyNotRetracted) {
-        return RETRACTING;
+        // At least one belt is not retracted - we're in an extended state
+        return EXTENDEDOUT;
     }
 
-    // Check if any belt is more than 4mm shorter than the extended length
-    const float extendedShortfall = 4.0;
-    bool anyNotExtended = ((extendDist - tlPos) > extendedShortfall || (extendDist - trPos) > extendedShortfall ||
-                           (extendDist - blPos) > extendedShortfall || (extendDist - brPos) > extendedShortfall);
-
-    if (anyNotExtended) {
-        return EXTENDING;
-    }
-
-    // If all belts are within acceptable ranges, return current state
-    return currentState;
+    // All belts are fully retracted (< 1mm)
+    return RETRACTED;
 }
 
 // -Maslow homing loop. This is used whenver any of the homing funcitons are active (belts extending or retracting)
