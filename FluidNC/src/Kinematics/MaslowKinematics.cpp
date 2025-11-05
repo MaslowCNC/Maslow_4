@@ -539,8 +539,14 @@ namespace Kinematics {
         // Check that top points are above bottom points
         if (_tlY <= _blY || _trY <= _brY) {
             char* buffer = getLogBuffer();
-            snprintf(buffer, 1400, "Top anchor points should be above bottom anchor points. tlY=%g should be > blY=%g, trY=%g should be > brY=%g. Correcting to reasonable defaults.",
-                    _tlY, _blY, _trY, _brY);
+            snprintf(buffer,
+                     1400,
+                     "Top anchor points should be above bottom anchor points. tlY=%g should be > blY=%g, trY=%g should be > brY=%g. "
+                     "Correcting to reasonable defaults.",
+                     _tlY,
+                     _blY,
+                     _trY,
+                     _brY);
             log_warn(buffer);
             releaseLogBuffer();
             _tlY                 = DEFAULT_TLY;
@@ -565,14 +571,18 @@ namespace Kinematics {
             // Frame dimensions are out of bounds - this is a critical error that cannot be auto-corrected
             // Operating with incorrect anchor points could damage the machine
             char* buffer = getLogBuffer();
-            snprintf(buffer, 1400, "Frame side lengths are outside valid range (500-5000mm). "
-                    "Top=%gmm, Right=%gmm, Bottom=%gmm, Left=%gmm. Calibration cannot proceed with these dimensions.",
-                    topSideLength, rightSideLength, bottomSideLength, leftSideLength);
+            snprintf(buffer,
+                     1400,
+                     "Frame side lengths are outside valid range (500-5000mm). "
+                     "Top=%gmm, Right=%gmm, Bottom=%gmm, Left=%gmm. Calibration cannot proceed with these dimensions.",
+                     topSideLength,
+                     rightSideLength,
+                     bottomSideLength,
+                     leftSideLength);
             log_error(buffer);
             releaseLogBuffer();
-            String errorMsg = "Frame dimensions out of bounds. Top=" + String(topSideLength, 1) + "mm, Right=" + 
-                              String(rightSideLength, 1) + "mm, Bottom=" + String(bottomSideLength, 1) + "mm, Left=" + 
-                              String(leftSideLength, 1) + "mm";
+            String errorMsg = "Frame dimensions out of bounds. Top=" + String(topSideLength, 1) + "mm, Right=" + String(rightSideLength, 1) +
+                              "mm, Bottom=" + String(bottomSideLength, 1) + "mm, Left=" + String(leftSideLength, 1) + "mm";
             Maslow.eStop(errorMsg);
         }
 
@@ -595,8 +605,17 @@ namespace Kinematics {
 
         if (coordinatesCorrected) {
             char* buffer = getLogBuffer();
-            snprintf(buffer, 1400, "Anchor coordinates corrected. New values: tlX=%g tlY=%g trX=%g trY=%g blX=%g blY=%g brX=%g brY=%g",
-                    _tlX, _tlY, _trX, _trY, _blX, _blY, _brX, _brY);
+            snprintf(buffer,
+                     1400,
+                     "Anchor coordinates corrected. New values: tlX=%g tlY=%g trX=%g trY=%g blX=%g blY=%g brX=%g brY=%g",
+                     _tlX,
+                     _tlY,
+                     _trX,
+                     _trY,
+                     _blX,
+                     _blY,
+                     _brX,
+                     _brY);
             log_info(buffer);
             releaseLogBuffer();
             // Recalculate center coordinates after correction

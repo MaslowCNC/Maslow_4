@@ -398,8 +398,8 @@ void Calibration::home() {
     handleMotorOverides();
 
     //if we are done with all the homing moves, switch system state back to Idle?
-    if (currentState != RETRACTING && currentState != EXTENDING && currentState != RELEASE_TENSION && 
-        !calibrationInProgress && !takeSlack && !checkOverides()) {
+    if (currentState != RETRACTING && currentState != EXTENDING && currentState != RELEASE_TENSION && !calibrationInProgress &&
+        !takeSlack && !checkOverides()) {
         sys.set_state(State::Idle);
     }
 }
