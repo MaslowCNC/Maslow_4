@@ -73,9 +73,13 @@ public:
     int  getCurrentState();
     void printCurrentState();
     bool requestStateChange(int newState);
+    bool requestStateChange(int newState, bool tl, bool tr, bool bl, bool br);
 
     // Set extended state variables (used when restoring from NVS)
     void setExtendedState(bool tl, bool tr, bool bl, bool br);
+
+    // Helper methods for partial extend/retract operations
+    int determineStateAfterPartialOperation();
 
     //Public Variables
     //hold
@@ -125,6 +129,15 @@ private:
     bool extendedTR   = false;
     bool extendedBL   = false;
     bool extendedBR   = false;
+
+    // Track if we're doing a partial operation (not all belts)
+    bool partialOperation = false;
+
+    // Track which arms are involved in the current partial operation
+    bool operatingTL = false;
+    bool operatingTR = false;
+    bool operatingBL = false;
+    bool operatingBR = false;
 
     //Variables used by take slack
     bool takeSlack = false;

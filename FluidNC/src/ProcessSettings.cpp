@@ -31,6 +31,7 @@
 #include <cstring>
 #include <map>
 #include <filesystem>
+#include <algorithm>
 
 // WG Readable and writable as guest
 // WU Readable and writable as user and admin
@@ -819,22 +820,83 @@ static Error showHeap(const char* value, WebUI::AuthenticationLevel auth_level, 
               //////////  Maslow-specific user cmd functions  //////////////
 */
 
+// Helper function to parse arm specifications from command value
+// Parses strings like "tl", "tr,bl", "tltr", etc.
+// Returns true if successful, sets the bool references for each arm
+static bool parseArmSpecification(const char* value, bool& tl, bool& tr, bool& bl, bool& br) {
+    // Initialize all to false
+    tl = tr = bl = br = false;
+
+    if (!value || !*value) {
+        // No value means all arms
+        tl = tr = bl = br = true;
+        return true;
+    }
+
+    // Convert to lowercase and parse
+    std::string spec = value;
+    std::transform(spec.begin(), spec.end(), spec.begin(), ::tolower);
+
+    // Check for each arm identifier
+    if (spec.find("tl") != std::string::npos) tl = true;
+    if (spec.find("tr") != std::string::npos) tr = true;
+    if (spec.find("bl") != std::string::npos) bl = true;
+    if (spec.find("br") != std::string::npos) br = true;
+
+    // Return true if at least one arm was specified
+    return (tl || tr || bl || br);
+}
+
 static Error maslow_retract_ALL(const char* value, WebUI::AuthenticationLevel auth_level, Channel& out) {
     if (Maslow.using_default_config) {
         return Error::ConfigurationInvalid;
     }
+
+    // Parse arm specification
+    bool tl, tr, bl, br;
+    if (!parseArmSpecification(value, tl, tr, bl, br)) {
+        log_error("Invalid arm specification: " << (value ? value : ""));
+        return Error::InvalidValue;
+    }
+
     sys.set_state(State::Homing);
-    log_info("Retracting all belts");
-    Maslow.calibration.requestStateChange(RETRACTING);
+
+    if (!value || !*value) {
+        // No specification means all belts (original behavior)
+        log_info("Retracting all belts");
+        Maslow.calibration.requestStateChange(RETRACTING);
+    } else {
+        // Partial retraction
+        log_info("Retracting specified belts: " << value);
+        Maslow.calibration.requestStateChange(RETRACTING, tl, tr, bl, br);
+    }
+
     return Error::Ok;
 }
 static Error maslow_extend_ALL(const char* value, WebUI::AuthenticationLevel auth_level, Channel& out) {
     if (Maslow.using_default_config) {
         return Error::ConfigurationInvalid;
     }
+
+    // Parse arm specification
+    bool tl, tr, bl, br;
+    if (!parseArmSpecification(value, tl, tr, bl, br)) {
+        log_error("Invalid arm specification: " << (value ? value : ""));
+        return Error::InvalidValue;
+    }
+
     sys.set_state(State::Homing);
-    log_info("Extending all belts");
-    Maslow.calibration.requestStateChange(EXTENDING);
+
+    if (!value || !*value) {
+        // No specification means all belts (original behavior)
+        log_info("Extending all belts");
+        Maslow.calibration.requestStateChange(EXTENDING);
+    } else {
+        // Partial extension
+        log_info("Extending specified belts: " << value);
+        Maslow.calibration.requestStateChange(EXTENDING, tl, tr, bl, br);
+    }
+
     return Error::Ok;
 }
 static Error maslow_stop(const char* value, WebUI::AuthenticationLevel auth_level, Channel& out) {

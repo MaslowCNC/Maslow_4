@@ -59,6 +59,9 @@ bool Calibration::requestStateChange(int newState) {
 
     bool success = false;
 
+    // Clear partial operation flag for full operations
+    partialOperation = false;
+
     switch (newState) {
         case UNKNOWN:  //We can enter unknown from any stable state (the machine is not currently performing an action)
             currentState = UNKNOWN;
@@ -288,6 +291,102 @@ bool Calibration::requestStateChange(int newState) {
     return success;
 }
 
+//Request a state change with specific arms specified
+bool Calibration::requestStateChange(int newState, bool tl, bool tr, bool bl, bool br) {
+    log_info("Requesting partial state change from " << stateNames[currentState].name << " to " << stateNames[newState].name
+                                                      << " (TL:" << tl << " TR:" << tr << " BL:" << bl << " BR:" << br << ")");
+
+    bool success = false;
+
+    // Set flag to indicate partial operation (not all belts)
+    partialOperation = !(tl && tr && bl && br);
+
+    // Track which arms are being operated on
+    operatingTL = tl;
+    operatingTR = tr;
+    operatingBL = bl;
+    operatingBR = br;
+
+    switch (newState) {
+        case RETRACTING:  //Partial retraction of specific arms
+            currentState = RETRACTING;
+
+            retractingTL = tl;
+            retractingTR = tr;
+            retractingBL = bl;
+            retractingBR = br;
+
+            if (tl) Maslow.axisTL.reset();
+            if (tr) Maslow.axisTR.reset();
+            if (bl) Maslow.axisBL.reset();
+            if (br) Maslow.axisBR.reset();
+
+            success = true;
+            break;
+
+        case EXTENDING:  //Partial extension of specific arms
+            if (currentState == RETRACTED || currentState == EXTENDEDOUT) {
+                currentState = EXTENDING;
+                Maslow.stop();
+                sys.set_state(State::Homing);
+
+                if (tl) extendedTL = false;
+                if (tr) extendedTR = false;
+                if (bl) extendedBL = false;
+                if (br) extendedBR = false;
+
+                updateCenterXY();
+                success = true;
+                break;
+            } else {
+                log_info("Cannot extend the belts until they have been retracted");
+                break;
+            }
+
+        default:
+            log_error("Partial state change only supported for RETRACTING and EXTENDING states");
+            return false;
+    }
+
+    if (success) {
+        log_info("Succeeded");
+    }
+
+    printCurrentState();
+
+    return success;
+}
+
+// Helper method to determine appropriate state after partial operation
+int Calibration::determineStateAfterPartialOperation() {
+    // Get current belt positions
+    float tlPos = Maslow.axisTL.getPosition();
+    float trPos = Maslow.axisTR.getPosition();
+    float blPos = Maslow.axisBL.getPosition();
+    float brPos = Maslow.axisBR.getPosition();
+
+    // Check if any belt is not fully retracted (<1mm)
+    const float retractedThreshold = 1.0;
+    bool anyNotRetracted = (fabs(tlPos) > retractedThreshold || fabs(trPos) > retractedThreshold ||
+                            fabs(blPos) > retractedThreshold || fabs(brPos) > retractedThreshold);
+
+    if (anyNotRetracted) {
+        return RETRACTING;
+    }
+
+    // Check if any belt is more than 4mm shorter than the extended length
+    const float extendedShortfall = 4.0;
+    bool anyNotExtended = ((extendDist - tlPos) > extendedShortfall || (extendDist - trPos) > extendedShortfall ||
+                           (extendDist - blPos) > extendedShortfall || (extendDist - brPos) > extendedShortfall);
+
+    if (anyNotExtended) {
+        return EXTENDING;
+    }
+
+    // If all belts are within acceptable ranges, return current state
+    return currentState;
+}
+
 // -Maslow homing loop. This is used whenver any of the homing funcitons are active (belts extending or retracting)
 void Calibration::home() {
     switch (currentState) {
@@ -324,7 +423,19 @@ void Calibration::home() {
 
             //Once the limits are hit switch to the next state
             if (!retractingTL && !retractingBL && !retractingBR && !retractingTR) {
-                requestStateChange(RETRACTED);
+                if (partialOperation) {
+                    // For partial operations, determine the appropriate state
+                    int newState = determineStateAfterPartialOperation();
+                    if (newState != currentState) {
+                        requestStateChange(newState);
+                    } else {
+                        // Stay in current stable state (EXTENDEDOUT or similar)
+                        sys.set_state(State::Idle);
+                        log_info("Partial retraction complete");
+                    }
+                } else {
+                    requestStateChange(RETRACTED);
+                }
             }
 
             break;
@@ -350,9 +461,29 @@ void Calibration::home() {
                     extendedBL = Maslow.axisBL.extend(extendDist);
                 if (!extendedBR)
                     extendedBR = Maslow.axisBR.extend(extendDist);
-                if (extendedTL && extendedTR && extendedBL && extendedBR) {
-                    log_info("All belts extended to " << extendDist << "mm");
-                    requestStateChange(EXTENDEDOUT);
+                
+                // Check if the operation is complete
+                // For partial operations, only check the arms that were supposed to extend
+                bool allOperatingArmsExtended = true;
+                if (operatingTL && !extendedTL) allOperatingArmsExtended = false;
+                if (operatingTR && !extendedTR) allOperatingArmsExtended = false;
+                if (operatingBL && !extendedBL) allOperatingArmsExtended = false;
+                if (operatingBR && !extendedBR) allOperatingArmsExtended = false;
+                
+                if (allOperatingArmsExtended) {
+                    if (partialOperation) {
+                        // For partial operations, determine the appropriate state
+                        log_info("Partial extension complete");
+                        int newState = determineStateAfterPartialOperation();
+                        if (newState != currentState) {
+                            requestStateChange(newState);
+                        } else {
+                            sys.set_state(State::Idle);
+                        }
+                    } else {
+                        log_info("All belts extended to " << extendDist << "mm");
+                        requestStateChange(EXTENDEDOUT);
+                    }
                 }
             }
             break;
