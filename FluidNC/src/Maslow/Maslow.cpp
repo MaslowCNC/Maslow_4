@@ -330,16 +330,16 @@ void Maslow_::setTargets(float xTarget, float yTarget, float zTarget, bool tl, b
     }
 
     if (tl) {
-        axis[_TL].setTarget(kinematics->computeTL(xTarget, yTarget, zTarget));
+        axis[_TL].setTarget(kinematics->compute(_TL, xTarget, yTarget, zTarget));
     }
     if (tr) {
-        axis[_TR].setTarget(kinematics->computeTR(xTarget, yTarget, zTarget));
+        axis[_TR].setTarget(kinematics->compute(_TR, xTarget, yTarget, zTarget));
     }
     if (bl) {
-        axis[_BL].setTarget(kinematics->computeBL(xTarget, yTarget, zTarget));
+        axis[_BL].setTarget(kinematics->compute(_BL, xTarget, yTarget, zTarget));
     }
     if (br) {
-        axis[_BR].setTarget(kinematics->computeBR(xTarget, yTarget, zTarget));
+        axis[_BR].setTarget(kinematics->compute(_BR, xTarget, yTarget, zTarget));
     }
 }
 

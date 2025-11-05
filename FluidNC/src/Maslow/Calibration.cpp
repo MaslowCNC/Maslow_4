@@ -488,10 +488,10 @@ bool Calibration::takeSlackFunc() {
             float extension = kinematics->getBeltEndExtension() + kinematics->getArmLength();
 
             //This should use it's own array, this is not calibration data
-            float diffTL = calibration_data[0][0] - measurementToXYPlane(kinematics->computeTL(x, y, 0), kinematics->getTlZ());
-            float diffTR = calibration_data[0][1] - measurementToXYPlane(kinematics->computeTR(x, y, 0), kinematics->getTrZ());
-            float diffBL = calibration_data[0][2] - measurementToXYPlane(kinematics->computeBL(x, y, 0), kinematics->getBlZ());
-            float diffBR = calibration_data[0][3] - measurementToXYPlane(kinematics->computeBR(x, y, 0), kinematics->getBrZ());
+            float diffTL = calibration_data[0][0] - measurementToXYPlane(kinematics->compute(_TL, x, y, 0), kinematics->getTlZ());
+            float diffTR = calibration_data[0][1] - measurementToXYPlane(kinematics->compute(_TR, x, y, 0), kinematics->getTrZ());
+            float diffBL = calibration_data[0][2] - measurementToXYPlane(kinematics->compute(_BL, x, y, 0), kinematics->getBlZ());
+            float diffBR = calibration_data[0][3] - measurementToXYPlane(kinematics->compute(_BR, x, y, 0), kinematics->getBrZ());
             log_info("Center point deviation: TL: " << diffTL << " TR: " << diffTR << " BL: " << diffBL << " BR: " << diffBR);
             double threshold = 12;
             if (abs(diffTL) > threshold || abs(diffTR) > threshold || abs(diffBL) > threshold || abs(diffBR) > threshold) {
@@ -988,10 +988,10 @@ bool Calibration::take_measurement_avg_with_check(int waypoint, int dir) {
                     return false;
 
                 double threshold = 100;
-                float  diffTL    = measurements[0][0] - measurementToXYPlane(kinematics->computeTL(x, y, 0), kinematics->getTlZ());
-                float  diffTR    = measurements[0][1] - measurementToXYPlane(kinematics->computeTR(x, y, 0), kinematics->getTrZ());
-                float  diffBL    = measurements[0][2] - measurementToXYPlane(kinematics->computeBL(x, y, 0), kinematics->getBlZ());
-                float  diffBR    = measurements[0][3] - measurementToXYPlane(kinematics->computeBR(x, y, 0), kinematics->getBrZ());
+                float  diffTL    = measurements[0][0] - measurementToXYPlane(kinematics->compute(_TL, x, y, 0), kinematics->getTlZ());
+                float  diffTR    = measurements[0][1] - measurementToXYPlane(kinematics->compute(_TR, x, y, 0), kinematics->getTrZ());
+                float  diffBL    = measurements[0][2] - measurementToXYPlane(kinematics->compute(_BL, x, y, 0), kinematics->getBlZ());
+                float  diffBR    = measurements[0][3] - measurementToXYPlane(kinematics->compute(_BR, x, y, 0), kinematics->getBrZ());
                 log_info("Center point off by: TL: " << diffTL << " TR: " << diffTR << " BL: " << diffBL << " BR: " << diffBR);
 
                 if (abs(diffTL) > threshold || abs(diffTR) > threshold || abs(diffBL) > threshold || abs(diffBR) > threshold) {
@@ -1098,22 +1098,22 @@ bool Calibration::move_with_slack(double fromX, double fromY, double toX, double
         if (!kinematics)
             return false;
 
-        if (kinematics->computeTL(fromX, fromY, 0) < kinematics->computeTL(toX, toY, 0)) {
+        if (kinematics->compute(_TL, fromX, fromY, 0) < kinematics->compute(_TL, toX, toY, 0)) {
             tlExtending = true;
         } else {
             tlExtending = false;
         }
-        if (kinematics->computeTR(fromX, fromY, 0) < kinematics->computeTR(toX, toY, 0)) {
+        if (kinematics->compute(_TR, fromX, fromY, 0) < kinematics->compute(_TR, toX, toY, 0)) {
             trExtending = true;
         } else {
             trExtending = false;
         }
-        if (kinematics->computeBL(fromX, fromY, 0) < kinematics->computeBL(toX, toY, 0)) {
+        if (kinematics->compute(_BL, fromX, fromY, 0) < kinematics->compute(_BL, toX, toY, 0)) {
             blExtending = true;
         } else {
             blExtending = false;
         }
-        if (kinematics->computeBR(fromX, fromY, 0) < kinematics->computeBR(toX, toY, 0)) {
+        if (kinematics->compute(_BR, fromX, fromY, 0) < kinematics->compute(_BR, toX, toY, 0)) {
             brExtending = true;
         } else {
             brExtending = false;
