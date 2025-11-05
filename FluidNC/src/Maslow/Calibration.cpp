@@ -76,6 +76,42 @@ bool Calibration::requestStateChange(int newState) {
             Maslow.axisBL.reset();
             Maslow.axisBR.reset();
 
+            // Log the effective threshold for each motor unit
+            {
+                int tlThreshold = retractCurrentThreshold;
+                int trThreshold = retractCurrentThreshold;
+                int blThreshold = retractCurrentThreshold;
+                int brThreshold = retractCurrentThreshold;
+
+                if (Maslow.axisTL.getStoredBaseline() > 0) {
+                    tlThreshold = (int)Maslow.axisTL.getStoredBaseline() + retractCurrentThreshold;
+                    if (tlThreshold > 2000) {
+                        tlThreshold = 2000;
+                    }
+                }
+                if (Maslow.axisTR.getStoredBaseline() > 0) {
+                    trThreshold = (int)Maslow.axisTR.getStoredBaseline() + retractCurrentThreshold;
+                    if (trThreshold > 2000) {
+                        trThreshold = 2000;
+                    }
+                }
+                if (Maslow.axisBL.getStoredBaseline() > 0) {
+                    blThreshold = (int)Maslow.axisBL.getStoredBaseline() + retractCurrentThreshold;
+                    if (blThreshold > 2000) {
+                        blThreshold = 2000;
+                    }
+                }
+                if (Maslow.axisBR.getStoredBaseline() > 0) {
+                    brThreshold = (int)Maslow.axisBR.getStoredBaseline() + retractCurrentThreshold;
+                    if (brThreshold > 2000) {
+                        brThreshold = 2000;
+                    }
+                }
+
+                log_info("Retraction thresholds - TL: " << tlThreshold << " TR: " << trThreshold << " BL: " << blThreshold
+                                                        << " BR: " << brThreshold);
+            }
+
             success = true;
             break;
         case RETRACTED:  //We can enter retracted from retracting only
