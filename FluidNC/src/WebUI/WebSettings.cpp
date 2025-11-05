@@ -14,7 +14,7 @@
 #include "../Machine/MachineConfig.h"
 #include "../Configuration/JsonGenerator.h"
 #include "../Uart.h"       // Uart0.baud
-#include "../Report.h"     // git_info
+#include "../Report.h"     // grbl_version
 #include "../InputFile.h"  // InputFile
 
 #include "Driver/localfs.h"  // localfs_format

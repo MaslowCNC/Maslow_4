@@ -69,7 +69,7 @@ namespace WebUI {
                 v = v.substr(1);
             }
             
-            // Check if this is a git-annotated version (has commits after tag)
+            // Check if version has additional commits after a dash (e.g., v1.12-2)
             size_t dashPos = v.find('-');
             if (dashPos != std::string::npos) {
                 // Extract just the version part before the dash
