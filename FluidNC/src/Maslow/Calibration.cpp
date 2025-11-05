@@ -47,10 +47,10 @@ void Calibration::printCurrentState() {
 
 // Set extended state variables (used when restoring from NVS)
 void Calibration::setExtendedState(bool tl, bool tr, bool bl, bool br) {
-    extendedTL = tl;
-    extendedTR = tr;
-    extendedBL = bl;
-    extendedBR = br;
+    extended[_TL] = tl;
+    extended[_TR] = tr;
+    extended[_BL] = bl;
+    extended[_BR] = br;
 }
 
 //Request a state change to a new state. Returns true on success and false on failure (although return value is never used atm)
@@ -67,14 +67,10 @@ bool Calibration::requestStateChange(int newState) {
         case RETRACTING:  //We can enter retracting from any state
             currentState = RETRACTING;
 
-            retractingTL = true;
-            retractingTR = true;
-            retractingBL = true;
-            retractingBR = true;
-            Maslow.axis[_TL].reset();
-            Maslow.axis[_TR].reset();
-            Maslow.axis[_BL].reset();
-            Maslow.axis[_BR].reset();
+            for (int arm = _TL; arm < ARM_COUNT; arm++) {
+                retracting[arm] = true;
+                Maslow.axis[arm].reset();
+            }
 
             success = true;
             break;
@@ -95,10 +91,9 @@ bool Calibration::requestStateChange(int newState) {
                 Maslow.stop();
                 sys.set_state(State::Homing);
 
-                extendedTL = false;
-                extendedTR = false;
-                extendedBL = false;
-                extendedBR = false;
+                for (int arm = _TL; arm < ARM_COUNT; arm++) {
+                    extended[arm] = false;
+                }
 
                 updateCenterXY();  //Why is this needed here?
                 success = true;
@@ -124,15 +119,10 @@ bool Calibration::requestStateChange(int newState) {
                 Maslow.axis[_TL].setTarget(Maslow.axis[_TL].getPosition());
                 Maslow.axis[_TR].setTarget(Maslow.axis[_TR].getPosition());
 
-                retractingTL = false;  //Should be replaced by state now
-                retractingTR = false;
-                retractingBL = false;
-                retractingBR = false;
-
-                Maslow.axis[_TL].reset();
-                Maslow.axis[_TR].reset();
-                Maslow.axis[_BL].reset();
-                Maslow.axis[_BR].reset();
+                for (int arm = _TL; arm < ARM_COUNT; arm++) {
+                    retracting[arm] = false;  //Should be replaced by state now
+                    Maslow.axis[arm].reset();
+                }
 
                 Maslow.x  = 0;
                 Maslow.y  = 0;
@@ -191,10 +181,11 @@ bool Calibration::requestStateChange(int newState) {
                 float x          = 0;
                 float y          = 0;
                 auto  kinematics = getKinematics();
-                if (kinematics && computeXYfromLengths(measurementToXYPlane(Maslow.axis[_TL].getPosition(), kinematics->getAnchorCoord(_TL, Coord_Z)),
-                                                       measurementToXYPlane(Maslow.axis[_TR].getPosition(), kinematics->getAnchorCoord(_TR, Coord_Z)),
-                                                       x,
-                                                       y)) {
+                if (kinematics &&
+                    computeXYfromLengths(measurementToXYPlane(Maslow.axis[_TL].getPosition(), kinematics->getAnchorCoord(_TL, Coord_Z)),
+                                         measurementToXYPlane(Maslow.axis[_TR].getPosition(), kinematics->getAnchorCoord(_TR, Coord_Z)),
+                                         x,
+                                         y)) {
                     //We reset the last waypoint to where it actually is so that we can move from the updated position to the next waypoint
                     if (waypoint > 0) {
                         calibrationGrid[waypoint - 1][0] = x;
@@ -211,7 +202,8 @@ bool Calibration::requestStateChange(int newState) {
                     }
 
                     log_info("Setting motor positions from hardware readings:");
-                    log_info("TL: " << beltLength[_TL] << " TR: " << beltLength[_TR] << " BL: " << beltLength[_BL] << " BR: " << beltLength[_BR]);
+                    log_info("TL: " << beltLength[_TL] << " TR: " << beltLength[_TR] << " BL: " << beltLength[_BL]
+                                    << " BR: " << beltLength[_BR]);
 
                     // Set motor positions directly from hardware readings
                     // Axis mapping: A=TL(0), B=TR(1), C=BL(2), D=BR(3), Z=router(4)
@@ -260,14 +252,11 @@ bool Calibration::requestStateChange(int newState) {
                 previousState   = currentState;  // Store the previous state
                 currentState    = RELEASE_TENSION;
                 complyCallTimer = millis();
-                retractingTL    = false;
-                retractingTR    = false;
-                retractingBL    = false;
-                retractingBR    = false;
-                Maslow.axis[_TL].reset();  //This just resets the thresholds for pull tight
-                Maslow.axis[_TR].reset();
-                Maslow.axis[_BL].reset();
-                Maslow.axis[_BR].reset();
+                for (int arm = _TL; arm < ARM_COUNT; arm++) {
+                    retracting[arm] = false;
+                    extended[arm]   = false;
+                    Maslow.axis[arm].reset();  //This just resets the thresholds for pull tight
+                }
                 success = true;
                 break;
             } else {
@@ -290,44 +279,33 @@ bool Calibration::requestStateChange(int newState) {
 // -Maslow homing loop. This is used whenver any of the homing funcitons are active (belts extending or retracting)
 void Calibration::home() {
     switch (currentState) {
-        case RETRACTING:
+        case RETRACTING: {
             //run all the retract functions untill we hit the current limit
-            if (retractingTL) {
-                if (Maslow.axis[_TL].retract()) {
-                    retractingTL  = false;
-                    axis_homed[0] = true;
-                    extendedTL    = false;
-                }
-            }
-            if (retractingTR) {
-                if (Maslow.axis[_TR].retract()) {
-                    retractingTR  = false;
-                    axis_homed[1] = true;
-                    extendedTR    = false;
-                }
-            }
-            if (retractingBL) {
-                if (Maslow.axis[_BL].retract()) {
-                    retractingBL  = false;
-                    axis_homed[2] = true;
-                    extendedBL    = false;
-                }
-            }
-            if (retractingBR) {
-                if (Maslow.axis[_BR].retract()) {
-                    retractingBR  = false;
-                    axis_homed[3] = true;
-                    extendedBR    = false;
+            for (int arm = _TL; arm < ARM_COUNT; arm++) {
+                if (retracting[arm]) {
+                    if (Maslow.axis[arm].retract()) {
+                        retracting[arm] = false;
+                        axis_homed[arm] = true;
+                        extended[arm]   = false;
+                    }
                 }
             }
 
             //Once the limits are hit switch to the next state
-            if (!retractingTL && !retractingBL && !retractingBR && !retractingTR) {
+            bool all_retracted = true;
+            for (int arm = _TL; arm < ARM_COUNT; arm++) {
+                if (retracting[arm]) {
+                    all_retracted = false;
+                    break;
+                }
+            }
+            if (all_retracted) {
                 requestStateChange(RETRACTED);
             }
 
             break;
-        case EXTENDING:
+        }
+        case EXTENDING: {
             //decompress belts for the first half second
             if (millis() - extendCallTimer < 700) {
                 if (millis() - extendCallTimer > 0)
@@ -341,20 +319,24 @@ void Calibration::home() {
             }
             //then make all the belts comply until they are extended fully, or user terminates it
             else {
-                if (!extendedTL)
-                    extendedTL = Maslow.axis[_TL].extend(extendDist);
-                if (!extendedTR)
-                    extendedTR = Maslow.axis[_TR].extend(extendDist);
-                if (!extendedBL)
-                    extendedBL = Maslow.axis[_BL].extend(extendDist);
-                if (!extendedBR)
-                    extendedBR = Maslow.axis[_BR].extend(extendDist);
-                if (extendedTL && extendedTR && extendedBL && extendedBR) {
+                for (int arm = _TL; arm < ARM_COUNT; arm++) {
+                    if (!extended[arm])
+                        extended[arm] = Maslow.axis[arm].extend(extendDist);
+                }
+                bool all_extended = true;
+                for (int arm = _TL; arm < ARM_COUNT; arm++) {
+                    if (!extended[arm]) {
+                        all_extended = false;
+                        break;
+                    }
+                }
+                if (all_extended) {
                     log_info("All belts extended to " << extendDist << "mm");
                     requestStateChange(EXTENDEDOUT);
                 }
             }
             break;
+        }
         case TAKING_SLACK:
             if (takeSlackFunc()) {  //Returns true. Requests correct state transition within function
                 takeSlack = false;
@@ -490,11 +472,12 @@ bool Calibration::takeSlackFunc() {
             //This should use it's own array, this is not calibration data
             float diff[ARM_COUNT];
             for (int arm = _TL; arm < ARM_COUNT; arm++) {
-                diff[arm] = calibration_data[0][arm] - measurementToXYPlane(kinematics->compute(arm, x, y, 0), kinematics->getAnchorCoord(arm, Coord_Z));
+                diff[arm] = calibration_data[0][arm] -
+                            measurementToXYPlane(kinematics->compute(arm, x, y, 0), kinematics->getAnchorCoord(arm, Coord_Z));
             }
             log_info("Center point deviation: TL: " << diff[_TL] << " TR: " << diff[_TR] << " BL: " << diff[_BL] << " BR: " << diff[_BR]);
-            double threshold = 12;
-            bool threshold_exceeded = false;
+            double threshold          = 12;
+            bool   threshold_exceeded = false;
             for (int arm = _TL; arm < ARM_COUNT; arm++) {
                 if (abs(diff[arm]) > threshold) {
                     threshold_exceeded = true;
@@ -997,7 +980,8 @@ bool Calibration::take_measurement_avg_with_check(int waypoint, int dir) {
                 double threshold = 100;
                 float  diff[ARM_COUNT];
                 for (int arm = _TL; arm < ARM_COUNT; arm++) {
-                    diff[arm] = measurements[0][arm] - measurementToXYPlane(kinematics->compute(arm, x, y, 0), kinematics->getAnchorCoord(arm, Coord_Z));
+                    diff[arm] = measurements[0][arm] -
+                                measurementToXYPlane(kinematics->compute(arm, x, y, 0), kinematics->getAnchorCoord(arm, Coord_Z));
                 }
                 log_info("Center point off by: TL: " << diff[_TL] << " TR: " << diff[_TR] << " BL: " << diff[_BL] << " BR: " << diff[_BR]);
 
@@ -1308,8 +1292,9 @@ bool Calibration::generate_calibration_grid() {
         float frameWidth  = getKinematics()->getAnchorCoord(_TR, Coord_X) - getKinematics()->getAnchorCoord(_TL, Coord_X);
         float frameHeight = getKinematics()->getAnchorCoord(_TL, Coord_Y) - getKinematics()->getAnchorCoord(_BL, Coord_Y);
 
-        log_info("Frame dimensions from kinematics: TR_X" << getKinematics()->getAnchorCoord(_TR, Coord_X) << " TL_X: " << getKinematics()->getAnchorCoord(_TL, Coord_X) << " TL_Y: "
-                                                          << getKinematics()->getAnchorCoord(_TL, Coord_Y) << " BL_Y: " << getKinematics()->getAnchorCoord(_BL, Coord_Y));
+        log_info("Frame dimensions from kinematics: TR_X"
+                 << getKinematics()->getAnchorCoord(_TR, Coord_X) << " TL_X: " << getKinematics()->getAnchorCoord(_TL, Coord_X) << " TL_Y: "
+                 << getKinematics()->getAnchorCoord(_TL, Coord_Y) << " BL_Y: " << getKinematics()->getAnchorCoord(_BL, Coord_Y));
 
         log_info("Frame size: " << frameWidth << " x " << frameHeight << " mm");
 
@@ -1542,14 +1527,10 @@ void Calibration::hold(unsigned long time) {
 //This function is used for release tension...is this function still needed?
 void Calibration::comply() {
     complyCallTimer = millis();
-    retractingTL    = false;
-    retractingTR    = false;
-    retractingBL    = false;
-    retractingBR    = false;
-    Maslow.axis[_TL].reset();  //This just resets the thresholds for pull tight
-    Maslow.axis[_TR].reset();
-    Maslow.axis[_BL].reset();
-    Maslow.axis[_BR].reset();
+    for (int arm = _TL; arm < ARM_COUNT; arm++) {
+        retracting[arm] = false;
+        Maslow.axis[arm].reset();  //This just resets the thresholds for pull tight
+    }
 }
 
 // Direction from maslow current coordinates to the target coordinates
@@ -1655,7 +1636,12 @@ bool Calibration::all_axis_homed() {
 
 // True if all axis were extended
 bool Calibration::allAxisExtended() {
-    return extendedTL && extendedTR && extendedBL && extendedBR;
+    for (int arm = _TL; arm < ARM_COUNT; arm++) {
+        if (!extended[arm]) {
+            return false;
+        }
+    }
+    return true;
 }
 
 bool Calibration::checkOverides() {

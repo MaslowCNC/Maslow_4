@@ -215,8 +215,10 @@ void Maslow_::update() {
                 using namespace Kinematics;
                 MaslowKinematics* kinematics = getMaslowKinematics();
                 if (kinematics) {
-                    targetX = (kinematics->getAnchorCoord(_TR, Coord_X) + kinematics->getAnchorCoord(_BL, Coord_X)) / 2.0f - kinematics->getCenterX();  // Approximate center X
-                    targetY = (kinematics->getAnchorCoord(_TR, Coord_Y) + kinematics->getAnchorCoord(_BL, Coord_Y)) / 2.0f - kinematics->getCenterY();  // Approximate center Y
+                    targetX = (kinematics->getAnchorCoord(_TR, Coord_X) + kinematics->getAnchorCoord(_BL, Coord_X)) / 2.0f -
+                              kinematics->getCenterX();  // Approximate center X
+                    targetY = (kinematics->getAnchorCoord(_TR, Coord_Y) + kinematics->getAnchorCoord(_BL, Coord_Y)) / 2.0f -
+                              kinematics->getCenterY();  // Approximate center Y
                 }
             }
 
@@ -1036,8 +1038,7 @@ void Maslow_::safety_control() {
             panicCounter[i]++;
             if (panicCounter[i] > tresholdHitsBeforePanic) {
                 if (sys.state() == State::Jog || sys.state() == State::Cycle) {
-                    log_warn("Motor current on " << axis_id_to_label(armToEncoderLine[i]).c_str()
-                                                 << " axis exceeded threshold of " << 4000);
+                    log_warn("Motor current on " << axis_id_to_label(armToEncoderLine[i]).c_str() << " axis exceeded threshold of " << 4000);
                     //Maslow.panic();
                 }
                 tick[i] = true;
@@ -1079,9 +1080,8 @@ void Maslow_::safety_control() {
         previousPositionError[i] = axis[i].getPositionError();
         if ((abs(axis[i].getPositionError()) > 15) && (sys.state() == State::Cycle)) {
             positionErrorCounter[i]++;
-            log_warn("Position error on " << axis_id_to_label(armToEncoderLine[i]).c_str()
-                                          << " axis exceeded 15mm while running. Error is " << axis[i].getPositionError() << "mm"
-                                          << " Counter: " << positionErrorCounter[i]);
+            log_warn("Position error on " << axis_id_to_label(armToEncoderLine[i]).c_str() << " axis exceeded 15mm while running. Error is "
+                                          << axis[i].getPositionError() << "mm" << " Counter: " << positionErrorCounter[i]);
             log_warn("Previous error was " << previousPositionError[i] << "mm");
 
             if (positionErrorCounter[i] > 5) {
@@ -1223,19 +1223,16 @@ TelemetryData Maslow_::get_telemetry_data() {
     //if (xSemaphoreTake(telemetry_mutex, portMAX_DELAY)) {
     // Access shared variables here
     data.timestamp = millis();
-    
+
     // Collect data for all arms
     for (int arm = _TL; arm < ARM_COUNT; arm++) {
-        data.Current[arm] = axis[arm].getMotorCurrent();
-        data.Power[arm] = axis[arm].getMotorPower();
-        data.Speed[arm] = axis[arm].getBeltSpeed();
-        data.Pos[arm] = axis[arm].getPosition();
+        data.Current[arm]  = axis[arm].getMotorCurrent();
+        data.Power[arm]    = axis[arm].getMotorPower();
+        data.Speed[arm]    = axis[arm].getBeltSpeed();
+        data.Pos[arm]      = axis[arm].getPosition();
+        data.extended[arm] = calibration.isArmExtended(arm);
     }
 
-    data.extended[_TL] = extendedTL;
-    data.extended[_TR] = extendedTR;
-    data.extended[_BL] = extendedBL;
-    data.extended[_BR] = extendedBR;
     data.extendingALL = (calibration.getCurrentState() == EXTENDING);
     data.complyALL    = (calibration.getCurrentState() == RELEASE_TENSION);
     data.takeSlack    = takeSlack;
