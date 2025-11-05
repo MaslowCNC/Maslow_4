@@ -53,36 +53,18 @@ struct TelemetryFileHeader {
 
 struct TelemetryData {
     unsigned long timestamp;
-    // motors
-    double tlCurrent;
-    double trCurrent;
-    double blCurrent;
-    double brCurrent;
+    // motors - indexed by arm: [_TL, _TR, _BL, _BR]
+    double Current[ARM_COUNT];
     // power
-    double tlPower;
-    double trPower;
-    double blPower;
-    double brPower;
+    double Power[ARM_COUNT];
     // speed
-    double tlSpeed;
-    double trSpeed;
-    double blSpeed;
-    double brSpeed;
+    double Speed[ARM_COUNT];
     // position
-    double tlPos;
-    double trPos;
-    double blPos;
-    double brPos;
+    double Pos[ARM_COUNT];
 
-    int tlState;
-    int trState;
-    int blState;
-    int brState;
+    int State[ARM_COUNT];
 
-    bool extendedTL;
-    bool extendedTR;
-    bool extendedBL;
-    bool extendedBR;
+    bool extended[ARM_COUNT];
 
     bool extendingALL;
     bool complyALL;

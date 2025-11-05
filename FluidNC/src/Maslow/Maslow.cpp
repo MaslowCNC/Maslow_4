@@ -1170,26 +1170,26 @@ void Maslow_::log_telem_pt_csv(TelemetryData data) {
              "%lu,%g,%g,%g,%g,%g,%g,%g,%g,%g,%g,%g,%g,%g,%g,%g,%g,%d,%d,%d,%d,%d,%d,%d,%d,%g,%g,%g,%g,%g,%d,%d,%d,%d,%lu,%d,%lu,%g,%g,%lu,%"
              "lu,%lu,%lu,%lu",
              data.timestamp,
-             data.tlCurrent,
-             data.trCurrent,
-             data.blCurrent,
-             data.brCurrent,
-             data.tlPower,
-             data.trPower,
-             data.blPower,
-             data.brPower,
-             data.tlSpeed,
-             data.trSpeed,
-             data.blSpeed,
-             data.brSpeed,
-             data.tlPos,
-             data.trPos,
-             data.blPos,
-             data.brPos,
-             data.extendedTL,
-             data.extendedTR,
-             data.extendedBL,
-             data.extendedBR,
+             data.Current[_TL],
+             data.Current[_TR],
+             data.Current[_BL],
+             data.Current[_BR],
+             data.Power[_TL],
+             data.Power[_TR],
+             data.Power[_BL],
+             data.Power[_BR],
+             data.Speed[_TL],
+             data.Speed[_TR],
+             data.Speed[_BL],
+             data.Speed[_BR],
+             data.Pos[_TL],
+             data.Pos[_TR],
+             data.Pos[_BL],
+             data.Pos[_BR],
+             data.extended[_TL],
+             data.extended[_TR],
+             data.extended[_BL],
+             data.extended[_BR],
              data.extendingALL,
              data.complyALL,
              data.takeSlack,
@@ -1224,30 +1224,19 @@ TelemetryData Maslow_::get_telemetry_data() {
     //if (xSemaphoreTake(telemetry_mutex, portMAX_DELAY)) {
     // Access shared variables here
     data.timestamp = millis();
-    data.tlCurrent = axis[_TL].getMotorCurrent();
-    data.trCurrent = axis[_TR].getMotorCurrent();
-    data.blCurrent = axis[_BL].getMotorCurrent();
-    data.brCurrent = axis[_BR].getMotorCurrent();
+    
+    // Collect data for all arms
+    for (int arm = _TL; arm < ARM_COUNT; arm++) {
+        data.Current[arm] = axis[arm].getMotorCurrent();
+        data.Power[arm] = axis[arm].getMotorPower();
+        data.Speed[arm] = axis[arm].getBeltSpeed();
+        data.Pos[arm] = axis[arm].getPosition();
+    }
 
-    data.tlPower = axis[_TL].getMotorPower();
-    data.trPower = axis[_TR].getMotorPower();
-    data.blPower = axis[_BL].getMotorPower();
-    data.brPower = axis[_BR].getMotorPower();
-
-    data.tlSpeed = axis[_TL].getBeltSpeed();
-    data.trSpeed = axis[_TR].getBeltSpeed();
-    data.blSpeed = axis[_BL].getBeltSpeed();
-    data.brSpeed = axis[_BR].getBeltSpeed();
-
-    data.tlPos = axis[_TL].getPosition();
-    data.trPos = axis[_TR].getPosition();
-    data.blPos = axis[_BL].getPosition();
-    data.brPos = axis[_BR].getPosition();
-
-    data.extendedTL   = extendedTL;
-    data.extendedTR   = extendedTR;
-    data.extendedBL   = extendedBL;
-    data.extendedBR   = extendedBR;
+    data.extended[_TL] = extendedTL;
+    data.extended[_TR] = extendedTR;
+    data.extended[_BL] = extendedBL;
+    data.extended[_BR] = extendedBR;
     data.extendingALL = (calibration.getCurrentState() == EXTENDING);
     data.complyALL    = (calibration.getCurrentState() == RELEASE_TENSION);
     data.takeSlack    = takeSlack;
