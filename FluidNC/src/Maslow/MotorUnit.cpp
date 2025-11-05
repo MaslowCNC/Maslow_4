@@ -113,7 +113,7 @@ bool MotorUnit::testArmCurrentStep(int currentPWM) {
 
     // Check if position changed (movement detected)
     double endPosition = getPosition();
-    double movement = abs(endPosition - startPosition);
+    double movement    = abs(endPosition - startPosition);
 
     // Movement threshold: 0.5mm
     return movement > 0.5;
@@ -146,7 +146,7 @@ bool MotorUnit::updateEncoderPosition() {
 
     if (encoder.isConnected()) {                                               //this func has 50ms timeout (or worse?, hard to tell)
         mostRecentCumulativeEncoderReading = encoder.getCumulativePosition();  //This updates and returns the encoder value
-        
+
         // Check for I2C communication errors using new AS5600 error handling
         int error = encoder.lastError();
         if (error != 0) {  // AS5600_OK = 0
@@ -391,10 +391,10 @@ void MotorUnit::setPosition(double position) {
     // Convert position in mm to encoder counts
     // Formula: encoderCounts = -(position_mm * 4096.0) / _mmPerRevolution
     int32_t encoderCounts = (int32_t)(-(position * 4096.0) / _mmPerRevolution);
-    
+
     Maslow.I2CMux.setPort(_encoderAddress);
     encoder.resetCumulativePosition(encoderCounts);
-    
+
     // Update our cached value
     mostRecentCumulativeEncoderReading = encoderCounts;
 }

@@ -1039,83 +1039,84 @@ static Error maslow_test_arm_current(const char* value, WebUI::AuthenticationLev
     // Parse command: testArmCurrent=tl 200 2000 100 tr 100 2000 bl 100 2000 br 100 2000
     // Default values
     int defaultStart = 200;
-    int defaultMax = 2000;
-    int defaultStep = 100;
+    int defaultMax   = 2000;
+    int defaultStep  = 100;
 
     // Structure to hold test parameters for each arm
     struct ArmTest {
         bool enabled;
-        int start;
-        int max;
-        int step;
+        int  start;
+        int  max;
+        int  step;
     };
 
     ArmTest arms[4] = {
-        {false, defaultStart, defaultMax, defaultStep},  // TL
-        {false, defaultStart, defaultMax, defaultStep},  // TR
-        {false, defaultStart, defaultMax, defaultStep},  // BL
-        {false, defaultStart, defaultMax, defaultStep}   // BR
+        { false, defaultStart, defaultMax, defaultStep },  // TL
+        { false, defaultStart, defaultMax, defaultStep },  // TR
+        { false, defaultStart, defaultMax, defaultStep },  // BL
+        { false, defaultStart, defaultMax, defaultStep }   // BR
     };
 
     // Parse input string
     if (value && *value) {
-        char* str = strdup(value);
-        char* token = strtok(str, " \t");
+        char* str     = strdup(value);
+        char* saveptr = NULL;
+        char* token   = strtok_r(str, " \t", &saveptr);
+
+        int currentArmIndex = -1;
+        int paramIndex      = 0;
 
         while (token != NULL) {
-            // Convert to lowercase for case-insensitive comparison
+            // Check if this token is an arm name
             char armName[3];
             armName[0] = tolower(token[0]);
             armName[1] = token[1] ? tolower(token[1]) : '\0';
             armName[2] = '\0';
 
             int armIndex = -1;
-            if (strcmp(armName, "tl") == 0) armIndex = 0;
-            else if (strcmp(armName, "tr") == 0) armIndex = 1;
-            else if (strcmp(armName, "bl") == 0) armIndex = 2;
-            else if (strcmp(armName, "br") == 0) armIndex = 3;
+            if (strcmp(armName, "tl") == 0)
+                armIndex = 0;
+            else if (strcmp(armName, "tr") == 0)
+                armIndex = 1;
+            else if (strcmp(armName, "bl") == 0)
+                armIndex = 2;
+            else if (strcmp(armName, "br") == 0)
+                armIndex = 3;
 
             if (armIndex >= 0) {
+                // Found an arm name
+                currentArmIndex        = armIndex;
                 arms[armIndex].enabled = true;
-
-                // Try to read up to 3 numbers after the arm name
-                for (int i = 0; i < 3; i++) {
-                    token = strtok(NULL, " \t");
-                    if (token == NULL) break;
-
-                    // Check if this is a number or another arm name
-                    if (isdigit(token[0])) {
-                        int val = atoi(token);
-                        if (i == 0) arms[armIndex].start = val;
-                        else if (i == 1) arms[armIndex].max = val;
-                        else if (i == 2) arms[armIndex].step = val;
-                    } else {
-                        // It's another arm name, don't consume it
-                        // Put it back for next iteration by adjusting strtok state
-                        token = token - strlen(token) - 1;
-                        strtok(token, "");
-                        break;
-                    }
-                }
+                paramIndex             = 0;
+            } else if (currentArmIndex >= 0 && (isdigit(token[0]) || (token[0] == '-' && token[1] && isdigit(token[1])))) {
+                // This is a number and we have a current arm
+                int val = atoi(token);
+                if (paramIndex == 0)
+                    arms[currentArmIndex].start = val;
+                else if (paramIndex == 1)
+                    arms[currentArmIndex].max = val;
+                else if (paramIndex == 2)
+                    arms[currentArmIndex].step = val;
+                paramIndex++;
             }
 
-            token = strtok(NULL, " \t");
+            token = strtok_r(NULL, " \t", &saveptr);
         }
         free(str);
     }
 
     // Perform tests on enabled arms
-    MotorUnit* motors[4] = {&Maslow.axisTL, &Maslow.axisTR, &Maslow.axisBL, &Maslow.axisBR};
-    const char* armNames[4] = {"TL", "TR", "BL", "BR"};
+    MotorUnit*  motors[4]   = { &Maslow.axisTL, &Maslow.axisTR, &Maslow.axisBL, &Maslow.axisBR };
+    const char* armNames[4] = { "TL", "TR", "BL", "BR" };
 
     for (int i = 0; i < 4; i++) {
-        if (!arms[i].enabled) continue;
+        if (!arms[i].enabled)
+            continue;
 
-        log_info("Testing arm " << armNames[i] << " - start: " << arms[i].start
-                 << " max: " << arms[i].max << " step: " << arms[i].step);
+        log_info("Testing arm " << armNames[i] << " - start: " << arms[i].start << " max: " << arms[i].max << " step: " << arms[i].step);
 
         bool movementDetected = false;
-        int currentPWM = arms[i].start;
+        int  currentPWM       = arms[i].start;
 
         while (currentPWM <= arms[i].max) {
             log_info("Testing " << armNames[i] << " at PWM " << currentPWM);
