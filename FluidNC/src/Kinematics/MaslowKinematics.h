@@ -64,18 +64,18 @@ namespace Kinematics {
         float getAnchorCoord(int arm, int axis) const { return anchor_location[arm][axis]; }
         
         // Legacy getters for backward compatibility
-        float getTlX() const { return anchor_location[_TL][AXIS_X]; }
-        float getTlY() const { return anchor_location[_TL][AXIS_Y]; }
-        float getTlZ() const { return anchor_location[_TL][AXIS_Z]; }
-        float getTrX() const { return anchor_location[_TR][AXIS_X]; }
-        float getTrY() const { return anchor_location[_TR][AXIS_Y]; }
-        float getTrZ() const { return anchor_location[_TR][AXIS_Z]; }
-        float getBlX() const { return anchor_location[_BL][AXIS_X]; }
-        float getBlY() const { return anchor_location[_BL][AXIS_Y]; }
-        float getBlZ() const { return anchor_location[_BL][AXIS_Z]; }
-        float getBrX() const { return anchor_location[_BR][AXIS_X]; }
-        float getBrY() const { return anchor_location[_BR][AXIS_Y]; }
-        float getBrZ() const { return anchor_location[_BR][AXIS_Z]; }
+        float getTlX() const { return anchor_location[_TL][Coord_X]; }
+        float getTlY() const { return anchor_location[_TL][Coord_Y]; }
+        float getTlZ() const { return anchor_location[_TL][Coord_Z]; }
+        float getTrX() const { return anchor_location[_TR][Coord_X]; }
+        float getTrY() const { return anchor_location[_TR][Coord_Y]; }
+        float getTrZ() const { return anchor_location[_TR][Coord_Z]; }
+        float getBlX() const { return anchor_location[_BL][Coord_X]; }
+        float getBlY() const { return anchor_location[_BL][Coord_Y]; }
+        float getBlZ() const { return anchor_location[_BL][Coord_Z]; }
+        float getBrX() const { return anchor_location[_BR][Coord_X]; }
+        float getBrY() const { return anchor_location[_BR][Coord_Y]; }
+        float getBrZ() const { return anchor_location[_BR][Coord_Z]; }
         float getBeltEndExtension() const { return _beltEndExtension; }
         float getArmLength() const { return _armLength; }
         float getSpoilboardThickness() const { return _spoilboardThickness; }
@@ -101,7 +101,7 @@ namespace Kinematics {
         // Anchor point coordinates (in mm) - 2D array indexed by [arm][axis]
         // First index: arm (_TL, _TR, _BL, _BR)
         // Second index: axis (_X, _Y, _Z)
-        float anchor_location[ARM_COUNT][AXIS_COUNT] = {
+        float anchor_location[ARM_COUNT][Coord_COUNT] = {
             { -27.6f, 2064.9f, 100.0f },   // _TL: X, Y, Z
             { 2924.3f, 2066.5f, 56.0f },   // _TR: X, Y, Z
             { 0.0f, 0.0f, 34.0f },         // _BL: X, Y, Z
@@ -109,18 +109,18 @@ namespace Kinematics {
         };
         
         // Legacy individual accessors (maintained for backward compatibility)
-        float& _tlX = anchor_location[_TL][AXIS_X];
-        float& _tlY = anchor_location[_TL][AXIS_Y];
-        float& _tlZ = anchor_location[_TL][AXIS_Z];
-        float& _trX = anchor_location[_TR][AXIS_X];
-        float& _trY = anchor_location[_TR][AXIS_Y];
-        float& _trZ = anchor_location[_TR][AXIS_Z];
-        float& _blX = anchor_location[_BL][AXIS_X];
-        float& _blY = anchor_location[_BL][AXIS_Y];
-        float& _blZ = anchor_location[_BL][AXIS_Z];
-        float& _brX = anchor_location[_BR][AXIS_X];
-        float& _brY = anchor_location[_BR][AXIS_Y];
-        float& _brZ = anchor_location[_BR][AXIS_Z];
+        float& _tlX = anchor_location[_TL][Coord_X];
+        float& _tlY = anchor_location[_TL][Coord_Y];
+        float& _tlZ = anchor_location[_TL][Coord_Z];
+        float& _trX = anchor_location[_TR][Coord_X];
+        float& _trY = anchor_location[_TR][Coord_Y];
+        float& _trZ = anchor_location[_TR][Coord_Z];
+        float& _blX = anchor_location[_BL][Coord_X];
+        float& _blY = anchor_location[_BL][Coord_Y];
+        float& _blZ = anchor_location[_BL][Coord_Z];
+        float& _brX = anchor_location[_BR][Coord_X];
+        float& _brY = anchor_location[_BR][Coord_Y];
+        float& _brZ = anchor_location[_BR][Coord_Z];
         
         // Deprecated separate arrays (kept in sync via references)
         float* _anchorX = anchor_location[0];  // Points to X coordinates

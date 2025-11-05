@@ -41,10 +41,10 @@ enum MaslowArm {
 
 // Enum for cartesian axis names
 enum CartesianAxis {
-    AXIS_X       = 0,  // X axis
-    AXIS_Y       = 1,  // Y axis
-    AXIS_Z       = 2,  // Z axis
-    AXIS_COUNT = 3
+    Coord_X       = 0,  // X axis
+    Coord_Y       = 1,  // Y axis
+    Coord_Z       = 2,  // Z axis
+    Coord_COUNT = 3
 };
 
 // Common Default strings - especially used by config
