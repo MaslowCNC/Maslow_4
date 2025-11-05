@@ -376,7 +376,11 @@ namespace WebUI {
 
         // Check if this is a newer version than current
         // Use grbl_version as the current version (e.g., "3.0")
-        std::string currentVersion = std::string("v") + grbl_version;
+        std::string currentVersion = grbl_version;
+        // Add "v" prefix if not already present
+        if (currentVersion.empty() || currentVersion[0] != 'v') {
+            currentVersion = std::string("v") + currentVersion;
+        }
         
         // Compare versions using semantic versioning logic
         if (tagName.empty() || !isNewerVersion(tagName, currentVersion)) {
