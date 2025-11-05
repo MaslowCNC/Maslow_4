@@ -488,13 +488,20 @@ bool Calibration::takeSlackFunc() {
             float extension = kinematics->getBeltEndExtension() + kinematics->getArmLength();
 
             //This should use it's own array, this is not calibration data
-            float diffTL = calibration_data[0][0] - measurementToXYPlane(kinematics->compute(_TL, x, y, 0), kinematics->getAnchorCoord(_TL, Coord_Z));
-            float diffTR = calibration_data[0][1] - measurementToXYPlane(kinematics->compute(_TR, x, y, 0), kinematics->getAnchorCoord(_TR, Coord_Z));
-            float diffBL = calibration_data[0][2] - measurementToXYPlane(kinematics->compute(_BL, x, y, 0), kinematics->getAnchorCoord(_BL, Coord_Z));
-            float diffBR = calibration_data[0][3] - measurementToXYPlane(kinematics->compute(_BR, x, y, 0), kinematics->getAnchorCoord(_BR, Coord_Z));
-            log_info("Center point deviation: TL: " << diffTL << " TR: " << diffTR << " BL: " << diffBL << " BR: " << diffBR);
+            float diff[ARM_COUNT];
+            for (int arm = _TL; arm < ARM_COUNT; arm++) {
+                diff[arm] = calibration_data[0][arm] - measurementToXYPlane(kinematics->compute(arm, x, y, 0), kinematics->getAnchorCoord(arm, Coord_Z));
+            }
+            log_info("Center point deviation: TL: " << diff[_TL] << " TR: " << diff[_TR] << " BL: " << diff[_BL] << " BR: " << diff[_BR]);
             double threshold = 12;
-            if (abs(diffTL) > threshold || abs(diffTR) > threshold || abs(diffBL) > threshold || abs(diffBR) > threshold) {
+            bool threshold_exceeded = false;
+            for (int arm = _TL; arm < ARM_COUNT; arm++) {
+                if (abs(diff[arm]) > threshold) {
+                    threshold_exceeded = true;
+                    break;
+                }
+            }
+            if (threshold_exceeded) {
                 log_error("Center point deviation over "
                           << threshold << "mm, your coordinate system is not accurate, maybe try running calibration again?");
                 //Should we enter an alarm state here to prevent things from going wrong?
@@ -988,13 +995,20 @@ bool Calibration::take_measurement_avg_with_check(int waypoint, int dir) {
                     return false;
 
                 double threshold = 100;
-                float  diffTL    = measurements[0][0] - measurementToXYPlane(kinematics->compute(_TL, x, y, 0), kinematics->getAnchorCoord(_TL, Coord_Z));
-                float  diffTR    = measurements[0][1] - measurementToXYPlane(kinematics->compute(_TR, x, y, 0), kinematics->getAnchorCoord(_TR, Coord_Z));
-                float  diffBL    = measurements[0][2] - measurementToXYPlane(kinematics->compute(_BL, x, y, 0), kinematics->getAnchorCoord(_BL, Coord_Z));
-                float  diffBR    = measurements[0][3] - measurementToXYPlane(kinematics->compute(_BR, x, y, 0), kinematics->getAnchorCoord(_BR, Coord_Z));
-                log_info("Center point off by: TL: " << diffTL << " TR: " << diffTR << " BL: " << diffBL << " BR: " << diffBR);
+                float  diff[ARM_COUNT];
+                for (int arm = _TL; arm < ARM_COUNT; arm++) {
+                    diff[arm] = measurements[0][arm] - measurementToXYPlane(kinematics->compute(arm, x, y, 0), kinematics->getAnchorCoord(arm, Coord_Z));
+                }
+                log_info("Center point off by: TL: " << diff[_TL] << " TR: " << diff[_TR] << " BL: " << diff[_BL] << " BR: " << diff[_BR]);
 
-                if (abs(diffTL) > threshold || abs(diffTR) > threshold || abs(diffBL) > threshold || abs(diffBR) > threshold) {
+                bool threshold_exceeded = false;
+                for (int arm = _TL; arm < ARM_COUNT; arm++) {
+                    if (abs(diff[arm]) > threshold) {
+                        threshold_exceeded = true;
+                        break;
+                    }
+                }
+                if (threshold_exceeded) {
                     log_error("Center point off by over " << threshold << "mm");
 
                     if (!adjustFrameSizeToMatchFirstMeasurement()) {
