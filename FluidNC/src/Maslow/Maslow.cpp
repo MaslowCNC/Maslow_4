@@ -194,10 +194,10 @@ void Maslow_::update() {
         if (sys.state() == State::Jog || sys.state() == State::Cycle) {
             // With MaslowKinematics, read belt motor positions directly from the axis system
             // Axis mapping: A=TL, B=TR, C=BL, D=BR, Z=Router
-            float tlBeltLength = steps_to_mpos(get_axis_motor_steps(0), 0);  // TL from A axis (axis 0)
-            float trBeltLength = steps_to_mpos(get_axis_motor_steps(1), 1);  // TR from B axis (axis 1)
-            float blBeltLength = steps_to_mpos(get_axis_motor_steps(2), 2);  // BL from C axis (axis 2)
-            float brBeltLength = steps_to_mpos(get_axis_motor_steps(3), 3);  // BR from D axis (axis 3)
+            float tlBeltLength = steps_to_mpos(get_axis_motor_steps(ARM_TL), ARM_TL);  // TL from A axis
+            float trBeltLength = steps_to_mpos(get_axis_motor_steps(ARM_TR), ARM_TR);  // TR from B axis
+            float blBeltLength = steps_to_mpos(get_axis_motor_steps(ARM_BL), ARM_BL);  // BL from C axis
+            float brBeltLength = steps_to_mpos(get_axis_motor_steps(ARM_BR), ARM_BR);  // BR from D axis
             float zPosition    = steps_to_mpos(get_axis_motor_steps(4), 4);  // Z from Z axis (axis 4)
 
             // Set individual belt targets using the computed positions
@@ -667,8 +667,8 @@ void Maslow_::loadBeltPositions() {
             }
         }
 
-        // Set motor steps directly for TL belt (A axis = motor 0)
-        set_motor_steps(0, mpos_to_steps(tlPos, 0));
+        // Set motor steps directly for TL belt (A axis)
+        set_motor_steps(ARM_TL, mpos_to_steps(tlPos, ARM_TL));
         axisTL.setTarget(tlPos);
         // Initialize encoder cumulative position to match adjusted belt length
         axisTL.setPosition(tlPos);
@@ -709,8 +709,8 @@ void Maslow_::loadBeltPositions() {
             }
         }
 
-        // Set motor steps directly for TR belt (B axis = motor 1)
-        set_motor_steps(1, mpos_to_steps(trPos, 1));
+        // Set motor steps directly for TR belt (B axis)
+        set_motor_steps(ARM_TR, mpos_to_steps(trPos, ARM_TR));
         axisTR.setTarget(trPos);
         axisTR.setPosition(trPos);
     } else if (ret != ESP_ERR_NVS_NOT_FOUND) {
@@ -750,8 +750,8 @@ void Maslow_::loadBeltPositions() {
             }
         }
 
-        // Set motor steps directly for BL belt (C axis = motor 2)
-        set_motor_steps(2, mpos_to_steps(blPos, 2));
+        // Set motor steps directly for BL belt (C axis)
+        set_motor_steps(ARM_BL, mpos_to_steps(blPos, ARM_BL));
         axisBL.setTarget(blPos);
         axisBL.setPosition(blPos);
     } else if (ret != ESP_ERR_NVS_NOT_FOUND) {
@@ -791,8 +791,8 @@ void Maslow_::loadBeltPositions() {
             }
         }
 
-        // Set motor steps directly for BR belt (D axis = motor 3)
-        set_motor_steps(3, mpos_to_steps(brPos, 3));
+        // Set motor steps directly for BR belt (D axis)
+        set_motor_steps(ARM_BR, mpos_to_steps(brPos, ARM_BR));
         axisBR.setTarget(brPos);
         axisBR.setPosition(brPos);
     } else if (ret != ESP_ERR_NVS_NOT_FOUND) {

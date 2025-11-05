@@ -26,6 +26,19 @@
 
 #define MASLOW_TELEM_FILE "M4_telemetry.bin"
 
+// Enum for arm/motor ordering - matches motor array indices
+// motors[0] = A axis = Top Left belt length
+// motors[1] = B axis = Top Right belt length
+// motors[2] = C axis = Bottom Left belt length
+// motors[3] = D axis = Bottom Right belt length
+enum MaslowArm {
+    ARM_TL = 0,  // Top Left
+    ARM_TR = 1,  // Top Right
+    ARM_BL = 2,  // Bottom Left
+    ARM_BR = 3,  // Bottom Right
+    ARM_COUNT = 4
+};
+
 // Common Default strings - especially used by config
 const std::string M = "Maslow";
 // Non-volatile storage name
