@@ -58,6 +58,10 @@ kinematics:
     brZ: 78.000000
     beltEndExtension: 30.000000
     armLength: 123.400002
+    tlSoftArmExtension: 0.000000
+    trSoftArmExtension: 0.000000
+    blSoftArmExtension: 0.000000
+    brSoftArmExtension: 0.000000
     maxSegmentLength: 5.000000
     fixedZ: false
 

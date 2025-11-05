@@ -34,9 +34,14 @@ kinematics:
     brZ: 78.0
     beltEndExtension: 30.0
     armLength: 123.4
+    tlSoftArmExtension: 0.0
+    trSoftArmExtension: 0.0
+    blSoftArmExtension: 0.0
+    brSoftArmExtension: 0.0
     spoilboardThickness: 0.0
     workThickness: 0.0
     maxSegmentLength: 5.0
+    fixedZ: false
 
 This implements the cable-driven kinematics for the Maslow CNC system.
 The system has 5 axes:
@@ -46,6 +51,12 @@ The system has 5 axes:
 The spoilboardThickness and workThickness parameters account for material thickness
 placed on the cutting surface. Both values are added to all anchor point Z coordinates
 during belt length calculations, effectively raising the reference height for all belts.
+
+The soft arm extension parameters (tlSoftArmExtension, trSoftArmExtension, blSoftArmExtension,
+brSoftArmExtension) account for flexible extensions that can move with Z changes. Unlike the
+beltEndExtension and armLength which are subtracted in the XY plane projection, soft arm
+extensions are added to the total 3D belt length after computing the angled distance. Each
+arm can have a different soft arm extension length.
 
 The maxSegmentLength parameter controls belt length synchronization during long moves.
 Moves longer than this distance (in mm) will be automatically segmented to ensure
@@ -221,8 +232,9 @@ namespace Kinematics {
         float trTotalZ = 0.0f - (z + _trZ + _spoilboardThickness + _workThickness);
 
         // Convert angled belt measurements to XY plane distances using complete z-components
-        float tlXYDistance = measurementToXYPlane(tlBeltLength, fabs(tlTotalZ));
-        float trXYDistance = measurementToXYPlane(trBeltLength, fabs(trTotalZ));
+        // Pass the soft arm extension for each arm to properly account for flexible extensions
+        float tlXYDistance = measurementToXYPlane(tlBeltLength, fabs(tlTotalZ), _tlSoftArmExtension);
+        float trXYDistance = measurementToXYPlane(trBeltLength, fabs(trTotalZ), _trSoftArmExtension);
 
         // Solve for X,Y position using intersection of circles
         float x, y;
@@ -308,6 +320,12 @@ namespace Kinematics {
             XYlength - (_beltEndExtension + _armLength);           // Subtract the belt end extension and arm length to get the belt length
         float length = sqrt(XYBeltLength * XYBeltLength + c * c);  // Get the angled belt length
 
+        // Add soft arm extension - it flexes with Z so it's added to the total 3D belt length
+        // Only add soft arm extension when not using fixedZ (when the arms can move with Z changes)
+        if (!_fixedZ) {
+            length += _tlSoftArmExtension;
+        }
+
         return length;
     }
 
@@ -326,6 +344,12 @@ namespace Kinematics {
         float XYBeltLength =
             XYlength - (_beltEndExtension + _armLength);           // Subtract the belt end extension and arm length to get the belt length
         float length = sqrt(XYBeltLength * XYBeltLength + c * c);  // Get the angled belt length
+
+        // Add soft arm extension - it flexes with Z so it's added to the total 3D belt length
+        // Only add soft arm extension when not using fixedZ (when the arms can move with Z changes)
+        if (!_fixedZ) {
+            length += _trSoftArmExtension;
+        }
 
         return length;
     }
@@ -346,6 +370,12 @@ namespace Kinematics {
             XYlength - (_beltEndExtension + _armLength);           // Subtract the belt end extension and arm length to get the belt length
         float length = sqrt(XYBeltLength * XYBeltLength + c * c);  // Get the angled belt length
 
+        // Add soft arm extension - it flexes with Z so it's added to the total 3D belt length
+        // Only add soft arm extension when not using fixedZ (when the arms can move with Z changes)
+        if (!_fixedZ) {
+            length += _blSoftArmExtension;
+        }
+
         return length;
     }
 
@@ -364,6 +394,12 @@ namespace Kinematics {
         float XYBeltLength =
             XYlength - (_beltEndExtension + _armLength);           // Subtract the belt end extension and arm length to get the belt length
         float length = sqrt(XYBeltLength * XYBeltLength + c * c);  // Get the angled belt length
+
+        // Add soft arm extension - it flexes with Z so it's added to the total 3D belt length
+        // Only add soft arm extension when not using fixedZ (when the arms can move with Z changes)
+        if (!_fixedZ) {
+            length += _brSoftArmExtension;
+        }
 
         return length;
     }
@@ -403,8 +439,10 @@ namespace Kinematics {
     }
 
     // Convert angled belt measurement to XY plane distance
-    float MaslowKinematics::measurementToXYPlane(float measurement, float zHeight) const {
-        float lengthInXY = sqrt(measurement * measurement - zHeight * zHeight);
+    float MaslowKinematics::measurementToXYPlane(float measurement, float zHeight, float softArmExtension) const {
+        // First remove the soft arm extension from the measurement (it was added during forward kinematics)
+        float adjustedMeasurement = measurement - softArmExtension;
+        float lengthInXY          = sqrt(adjustedMeasurement * adjustedMeasurement - zHeight * zHeight);
         return lengthInXY + _beltEndExtension + _armLength;  // Add belt end extension and arm length
     }
 
@@ -434,6 +472,10 @@ namespace Kinematics {
         handler.item("brZ", _brZ);
         handler.item("beltEndExtension", _beltEndExtension);
         handler.item("armLength", _armLength);
+        handler.item("tlSoftArmExtension", _tlSoftArmExtension);
+        handler.item("trSoftArmExtension", _trSoftArmExtension);
+        handler.item("blSoftArmExtension", _blSoftArmExtension);
+        handler.item("brSoftArmExtension", _brSoftArmExtension);
         handler.item("maxSegmentLength", _maxSegmentLength);
         handler.item("fixedZ", _fixedZ);
     }
@@ -539,8 +581,14 @@ namespace Kinematics {
         // Check that top points are above bottom points
         if (_tlY <= _blY || _trY <= _brY) {
             char* buffer = getLogBuffer();
-            snprintf(buffer, 1400, "Top anchor points should be above bottom anchor points. tlY=%g should be > blY=%g, trY=%g should be > brY=%g. Correcting to reasonable defaults.",
-                    _tlY, _blY, _trY, _brY);
+            snprintf(buffer,
+                     1400,
+                     "Top anchor points should be above bottom anchor points. tlY=%g should be > blY=%g, trY=%g should be > brY=%g. "
+                     "Correcting to reasonable defaults.",
+                     _tlY,
+                     _blY,
+                     _trY,
+                     _brY);
             log_warn(buffer);
             releaseLogBuffer();
             _tlY                 = DEFAULT_TLY;
@@ -565,14 +613,18 @@ namespace Kinematics {
             // Frame dimensions are out of bounds - this is a critical error that cannot be auto-corrected
             // Operating with incorrect anchor points could damage the machine
             char* buffer = getLogBuffer();
-            snprintf(buffer, 1400, "Frame side lengths are outside valid range (500-5000mm). "
-                    "Top=%gmm, Right=%gmm, Bottom=%gmm, Left=%gmm. Calibration cannot proceed with these dimensions.",
-                    topSideLength, rightSideLength, bottomSideLength, leftSideLength);
+            snprintf(buffer,
+                     1400,
+                     "Frame side lengths are outside valid range (500-5000mm). "
+                     "Top=%gmm, Right=%gmm, Bottom=%gmm, Left=%gmm. Calibration cannot proceed with these dimensions.",
+                     topSideLength,
+                     rightSideLength,
+                     bottomSideLength,
+                     leftSideLength);
             log_error(buffer);
             releaseLogBuffer();
-            String errorMsg = "Frame dimensions out of bounds. Top=" + String(topSideLength, 1) + "mm, Right=" + 
-                              String(rightSideLength, 1) + "mm, Bottom=" + String(bottomSideLength, 1) + "mm, Left=" + 
-                              String(leftSideLength, 1) + "mm";
+            String errorMsg = "Frame dimensions out of bounds. Top=" + String(topSideLength, 1) + "mm, Right=" + String(rightSideLength, 1) +
+                              "mm, Bottom=" + String(bottomSideLength, 1) + "mm, Left=" + String(leftSideLength, 1) + "mm";
             Maslow.eStop(errorMsg);
         }
 
@@ -595,8 +647,17 @@ namespace Kinematics {
 
         if (coordinatesCorrected) {
             char* buffer = getLogBuffer();
-            snprintf(buffer, 1400, "Anchor coordinates corrected. New values: tlX=%g tlY=%g trX=%g trY=%g blX=%g blY=%g brX=%g brY=%g",
-                    _tlX, _tlY, _trX, _trY, _blX, _blY, _brX, _brY);
+            snprintf(buffer,
+                     1400,
+                     "Anchor coordinates corrected. New values: tlX=%g tlY=%g trX=%g trY=%g blX=%g blY=%g brX=%g brY=%g",
+                     _tlX,
+                     _tlY,
+                     _trX,
+                     _trY,
+                     _blX,
+                     _blY,
+                     _brX,
+                     _brY);
             log_info(buffer);
             releaseLogBuffer();
             // Recalculate center coordinates after correction

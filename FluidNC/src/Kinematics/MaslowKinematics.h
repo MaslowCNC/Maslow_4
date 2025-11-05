@@ -71,6 +71,10 @@ namespace Kinematics {
         float getBrZ() const { return _brZ; }
         float getBeltEndExtension() const { return _beltEndExtension; }
         float getArmLength() const { return _armLength; }
+        float getTlSoftArmExtension() const { return _tlSoftArmExtension; }
+        float getTrSoftArmExtension() const { return _trSoftArmExtension; }
+        float getBlSoftArmExtension() const { return _blSoftArmExtension; }
+        float getBrSoftArmExtension() const { return _brSoftArmExtension; }
         float getSpoilboardThickness() const { return _spoilboardThickness; }
         float getWorkThickness() const { return _workThickness; }
         float getCenterX() const { return _centerX; }
@@ -78,7 +82,7 @@ namespace Kinematics {
 
         // Forward kinematics methods for position synchronization
         bool  computeXYfromBeltLengths(float tlLength, float trLength, float& x, float& y) const;
-        float measurementToXYPlane(float measurement, float zHeight) const;
+        float measurementToXYPlane(float measurement, float zHeight, float softArmExtension) const;
 
         // Setter methods for calibration system to update frame parameters
         void setFrameSize(float frameSize);
@@ -112,6 +116,13 @@ namespace Kinematics {
         float _beltEndExtension = 30.0f;   // Belt end extension
         float _armLength        = 123.4f;  // Arm length
 
+        // Soft arm extensions (in mm) - flexible extensions that move with Z
+        // These are added to the belt length after calculating the 3D distance
+        float _tlSoftArmExtension = 0.0f;  // Top left soft arm extension
+        float _trSoftArmExtension = 0.0f;  // Top right soft arm extension
+        float _blSoftArmExtension = 0.0f;  // Bottom left soft arm extension
+        float _brSoftArmExtension = 0.0f;  // Bottom right soft arm extension
+
         // Material thickness offsets (in mm) - accounts for spoil board and work piece thickness
         float _spoilboardThickness = 0.0f;  // Spoil board thickness added to all anchor heights
         float _workThickness       = 0.0f;  // Work piece thickness added to all anchor heights
@@ -125,7 +136,7 @@ namespace Kinematics {
 
         // Flag to prevent recursion during segmentation
         bool _isSegmenting = false;
-        
+
         // Flag to determine if arms move with Z changes
         bool _fixedZ = false;  // When true, belt lengths ignore current Z position (use only fixed anchor Z values)
 
