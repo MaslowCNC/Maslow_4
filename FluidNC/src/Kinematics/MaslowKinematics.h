@@ -50,7 +50,10 @@ namespace Kinematics {
 
         ~MaslowKinematics();
 
-        // Public access to compute functions for calibration system
+        // Generic compute function for any arm
+        float compute(int arm, float x, float y, float z);
+        
+        // Public access to compute functions for calibration system (for backward compatibility)
         float computeTL(float x, float y, float z);
         float computeTR(float x, float y, float z);
         float computeBL(float x, float y, float z);
@@ -91,7 +94,12 @@ namespace Kinematics {
         // Validation and correction helper method
         void validateAndCorrectAnchorCoordinates();
 
-        // Anchor point coordinates (in mm)
+        // Anchor point coordinates (in mm) - indexed by arm: [_TL, _TR, _BL, _BR]
+        float _anchorX[4] = { -27.6f, 2924.3f, 0.0f, 2953.2f };    // X coordinates
+        float _anchorY[4] = { 2064.9f, 2066.5f, 0.0f, 0.0f };      // Y coordinates
+        float _anchorZ[4] = { 100.0f, 56.0f, 34.0f, 78.0f };       // Z coordinates
+        
+        // Legacy individual accessors (maintained for backward compatibility)
         float _tlX = -27.6f;   // Top left X
         float _tlY = 2064.9f;  // Top left Y
         float _tlZ = 100.0f;   // Top left Z
