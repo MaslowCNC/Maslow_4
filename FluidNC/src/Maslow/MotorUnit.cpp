@@ -94,6 +94,30 @@ bool MotorUnit::motor_test() {
     motor.stop();
     return false;
 }
+
+// Test if arm moves at given PWM level
+// Returns true if movement detected, false otherwise
+bool MotorUnit::testArmCurrentStep(int currentPWM) {
+    // Record starting position
+    double startPosition = getPosition();
+
+    // Apply PWM to motor in retraction direction for 1 second
+    unsigned long startTime = millis();
+    while (millis() - startTime < 1000) {
+        motor.backward(currentPWM);
+        updateEncoderPosition();  // Update encoder reading
+    }
+
+    // Stop motor
+    motor.stop();
+
+    // Check if position changed (movement detected)
+    double endPosition = getPosition();
+    double movement = abs(endPosition - startPosition);
+
+    // Movement threshold: 0.5mm
+    return movement > 0.5;
+}
 // update the motor current buffer and belts speed every >5 ms
 void MotorUnit::update() {
     //updating belt speed and motor cutrrent

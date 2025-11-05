@@ -37,6 +37,7 @@ public:
     void   fullIn();
     bool   test();
     void   reset();  //resetting variables here, because of non-blocking, maybe there's a better way to do this
+    bool   testArmCurrentStep(int currentPWM);  // Test if arm moves at given PWM level
 
     double getMotorCurrent();  //averaged value of the last 10 measurements
     double getBeltSpeed();

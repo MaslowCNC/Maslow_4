@@ -29,6 +29,7 @@
 #include "FluidPath.h"
 
 #include <cstring>
+#include <cctype>
 #include <map>
 #include <filesystem>
 
@@ -1020,6 +1021,130 @@ static Error maslow_get_info(const char* value, WebUI::AuthenticationLevel auth_
     return Error::Ok;
 }
 
+static Error maslow_test_arm_current(const char* value, WebUI::AuthenticationLevel auth_level, Channel& out) {
+    if (Maslow.using_default_config) {
+        return Error::ConfigurationInvalid;
+    }
+
+    // Check if machine is in extended state
+    if (Maslow.calibration.getCurrentState() != EXTENDEDOUT) {
+        log_error("testArmCurrent requires machine to be in EXTENDEDOUT state");
+        return Error::IdleError;
+    }
+
+    // Set the state to retracting as specified in requirements
+    sys.set_state(State::Homing);
+    Maslow.calibration.requestStateChange(RETRACTING);
+
+    // Parse command: testArmCurrent=tl 200 2000 100 tr 100 2000 bl 100 2000 br 100 2000
+    // Default values
+    int defaultStart = 200;
+    int defaultMax = 2000;
+    int defaultStep = 100;
+
+    // Structure to hold test parameters for each arm
+    struct ArmTest {
+        bool enabled;
+        int start;
+        int max;
+        int step;
+    };
+
+    ArmTest arms[4] = {
+        {false, defaultStart, defaultMax, defaultStep},  // TL
+        {false, defaultStart, defaultMax, defaultStep},  // TR
+        {false, defaultStart, defaultMax, defaultStep},  // BL
+        {false, defaultStart, defaultMax, defaultStep}   // BR
+    };
+
+    // Parse input string
+    if (value && *value) {
+        char* str = strdup(value);
+        char* token = strtok(str, " \t");
+
+        while (token != NULL) {
+            // Convert to lowercase for case-insensitive comparison
+            char armName[3];
+            armName[0] = tolower(token[0]);
+            armName[1] = token[1] ? tolower(token[1]) : '\0';
+            armName[2] = '\0';
+
+            int armIndex = -1;
+            if (strcmp(armName, "tl") == 0) armIndex = 0;
+            else if (strcmp(armName, "tr") == 0) armIndex = 1;
+            else if (strcmp(armName, "bl") == 0) armIndex = 2;
+            else if (strcmp(armName, "br") == 0) armIndex = 3;
+
+            if (armIndex >= 0) {
+                arms[armIndex].enabled = true;
+
+                // Try to read up to 3 numbers after the arm name
+                for (int i = 0; i < 3; i++) {
+                    token = strtok(NULL, " \t");
+                    if (token == NULL) break;
+
+                    // Check if this is a number or another arm name
+                    if (isdigit(token[0])) {
+                        int val = atoi(token);
+                        if (i == 0) arms[armIndex].start = val;
+                        else if (i == 1) arms[armIndex].max = val;
+                        else if (i == 2) arms[armIndex].step = val;
+                    } else {
+                        // It's another arm name, don't consume it
+                        // Put it back for next iteration by adjusting strtok state
+                        token = token - strlen(token) - 1;
+                        strtok(token, "");
+                        break;
+                    }
+                }
+            }
+
+            token = strtok(NULL, " \t");
+        }
+        free(str);
+    }
+
+    // Perform tests on enabled arms
+    MotorUnit* motors[4] = {&Maslow.axisTL, &Maslow.axisTR, &Maslow.axisBL, &Maslow.axisBR};
+    const char* armNames[4] = {"TL", "TR", "BL", "BR"};
+
+    for (int i = 0; i < 4; i++) {
+        if (!arms[i].enabled) continue;
+
+        log_info("Testing arm " << armNames[i] << " - start: " << arms[i].start
+                 << " max: " << arms[i].max << " step: " << arms[i].step);
+
+        bool movementDetected = false;
+        int currentPWM = arms[i].start;
+
+        while (currentPWM <= arms[i].max) {
+            log_info("Testing " << armNames[i] << " at PWM " << currentPWM);
+
+            if (motors[i]->testArmCurrentStep(currentPWM)) {
+                log_info("Arm " << armNames[i] << " started moving at PWM " << currentPWM);
+                movementDetected = true;
+                break;
+            } else {
+                log_info("Arm " << armNames[i] << " did not move at PWM " << currentPWM);
+            }
+
+            currentPWM += arms[i].step;
+        }
+
+        if (!movementDetected) {
+            log_warn("Test for arm " << armNames[i] << " reached max current (" << arms[i].max << ") without detecting movement");
+        }
+
+        // Small delay between arm tests
+        delay(500);
+    }
+
+    // Return to idle state
+    sys.set_state(State::Idle);
+
+    return Error::Ok;
+}
+
 // Commands use the same syntax as Settings, but instead of setting or
 // displaying a persistent value, a command causes some action to occur.
 // That action could be anything, from displaying a run-time parameter
@@ -1113,6 +1238,7 @@ void make_user_commands() {
     new UserCommand("SETZSTOP", M + "/setZStop", maslow_set_zStop, anyState);
     new UserCommand("MINFO", M + "/getInfo", maslow_get_info, anyState);
     new UserCommand("GSTATE", M + "/gstate", maslow_get_state, anyState);
+    new UserCommand("TESTARMCURRENT", M + "/testArmCurrent", maslow_test_arm_current, anyState);
 };
 
 // normalize_key puts a key string into canonical form -
