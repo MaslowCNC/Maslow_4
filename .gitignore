@@ -31,3 +31,4 @@ dist/
 *.cppx
 *.hx
 firmware-package/
+build.log

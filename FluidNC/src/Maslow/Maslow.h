@@ -182,10 +182,7 @@ public:
     double targetY = 0;
     double targetZ = 0;
 
-    MotorUnit axisTL;
-    MotorUnit axisTR;
-    MotorUnit axisBL;
-    MotorUnit axisBR;
+    MotorUnit axisArm[ARM_COUNT];  // Array of motor units: [ARM_TL, ARM_TR, ARM_BL, ARM_BR]
 
     bool readingFromSD = false;  //Used to turn off reading from the encoders when reading from the - i dont think we need this anymore TODO
     bool using_default_config = false;
