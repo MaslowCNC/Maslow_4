@@ -1,92 +1,11 @@
-import subprocess
-import filecmp, tempfile, shutil, os
+import filecmp, os
 
-# Thank you https://docs.platformio.org/en/latest/projectconf/section_env_build.html !
+# Static version information without git references
+# This removes the dependency on git tags and commit IDs
 
-# Define fallback value once
-FALLBACK_VERSION = "unknown-not-built-from-git"
-
-gitFail = False
-try:
-    subprocess.check_call(["git", "status"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-except:
-    gitFail = True
-
-if gitFail:
-    tag = FALLBACK_VERSION
-    rev = " (noGit)"
-else:
-    try:
-        tag = (
-            subprocess.check_output(["git", "describe", "--tags", "--abbrev=0"], stderr=subprocess.DEVNULL)
-            .strip()
-            .decode("utf-8")
-        )
-    except:
-        tag = FALLBACK_VERSION
-
-    # Check to see if the head commit exactly matches a tag.
-    # If so, the revision is "release", otherwise it is BRANCH-COMMIT
-    try:
-        subprocess.check_call(["git", "describe", "--tags", "--exact"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        rev = ''
-    except:
-        branchname = (
-            subprocess.check_output(["git", "rev-parse", "--abbrev-ref", "HEAD"])
-            .strip()
-            .decode("utf-8")
-        )
-        revision = (
-            subprocess.check_output(["git", "rev-parse", "--short", "HEAD"])
-            .strip()
-            .decode("utf-8")
-        )
-        modified = (
-            subprocess.check_output(["git", "status", "-uno", "-s"])
-            .strip()
-            .decode("utf-8")
-        )
-        if modified:
-            dirty = "-dirty"
-        else:
-            dirty = ""
-
-        rev = " (%s-%s%s)" % (branchname, revision, dirty)
-
-# Extract grbl_version (major.minor) from tag
-# For tag-count-hash format like v1.12-58-gabcd, extract just v1.12 first
-if tag == FALLBACK_VERSION:
-    grbl_version = '3.0'  # Use default when no tag available
-else:
-    tag_base = tag.split('-')[0] if '-' in tag else tag
-    tag_no_v = tag_base.replace('v', '')
-    parts = tag_no_v.split('.')
-    if len(parts) >= 2:
-        grbl_version = f'{parts[0]}.{parts[1]}'
-    elif len(parts) == 1:
-        grbl_version = parts[0]
-    else:
-        grbl_version = '3.0'
-
-git_info = '%s%s' % (tag, rev)
-
-# Generate VERSION_NUMBER using git describe --tags --always --dirty for Maslow-specific version
-VERSION_NUMBER = FALLBACK_VERSION
-compile_warning = ""
-
-if not gitFail:
-    try:
-        VERSION_NUMBER = (
-            subprocess.check_output(["git", "describe", "--tags", "--always", "--dirty"], stderr=subprocess.DEVNULL)
-            .strip()
-            .decode("utf-8")
-        )
-    except:
-        pass  # Keep fallback value
-
-    # Check if version contains "-" to trigger warning for non-tagged versions
-    if "-" in VERSION_NUMBER and VERSION_NUMBER != FALLBACK_VERSION:
-        compile_warning = '#warning "' + VERSION_NUMBER + ' is not a tagged version, this should not be a release"'
+grbl_version = '3.0'
+git_info = ''
+VERSION_NUMBER = 'FluidNC 3.0'
 
 provisional = "FluidNC/src/version.cxx"
 final = "FluidNC/src/version.cpp"
@@ -94,8 +13,6 @@ with open(provisional, "w") as fp:
     fp.write('const char* grbl_version = \"' + grbl_version + '\";\n')
     fp.write('const char* git_info     = \"' + git_info + '\";\n')
     fp.write('const char* VERSION_NUMBER = \"' + VERSION_NUMBER + '\";\n')
-    if compile_warning:
-        fp.write(compile_warning + '\n')
 
 if not os.path.exists(final):
     # No version.cpp so rename version.cxx to version.cpp

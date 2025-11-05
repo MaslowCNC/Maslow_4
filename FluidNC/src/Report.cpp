@@ -176,7 +176,8 @@ void report_init_message(Channel& channel) {
                     msg << "'$' for help";
                     break;
                 case 'B':
-                    msg << git_info;
+                    // git_info removed - no longer includes git tag/commit information
+                    msg << "FluidNC";
                     break;
                 case 'V':
                     msg << grbl_version;
@@ -380,7 +381,7 @@ void report_gcode_modes(Channel& channel) {
 
 // Prints build info line
 void report_build_info(const char* line, Channel& channel) {
-    log_to(channel, "[VER:", grbl_version << " FluidNC " << git_info << ":" << line);
+    log_to(channel, "[VER:", grbl_version << " FluidNC:" << line);
 
     // The option message is included for backwards compatibility but
     // is not particularly useful for FluidNC, which has runtime

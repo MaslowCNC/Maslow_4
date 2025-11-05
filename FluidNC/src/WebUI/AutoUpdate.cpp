@@ -98,8 +98,7 @@ namespace WebUI {
             if (minor != other.minor) return minor > other.minor;
             if (patch != other.patch) return patch > other.patch;
             
-            // If base versions are equal, consider git-annotated versions as "newer"
-            // This handles cases like v1.12 (release) vs v1.12-2-abcdef (dev build after release)
+            // If base versions are equal, check if one has additional commits
             return hasCommits && !other.hasCommits;
         }
     };
@@ -376,12 +375,8 @@ namespace WebUI {
         log_info("AutoUpdate: Latest release: " << tagName);
 
         // Check if this is a newer version than current
-        // Extract just the version tag from git_info (e.g., "v1.12 (HEAD-08ab30d2)" -> "v1.12")
-        std::string currentVersion = git_info;
-        size_t spacePos = currentVersion.find(' ');
-        if (spacePos != std::string::npos) {
-            currentVersion = currentVersion.substr(0, spacePos);
-        }
+        // Use grbl_version as the current version (e.g., "3.0")
+        std::string currentVersion = std::string("v") + grbl_version;
         
         // Compare versions using semantic versioning logic
         if (tagName.empty() || !isNewerVersion(tagName, currentVersion)) {
