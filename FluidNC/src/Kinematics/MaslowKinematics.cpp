@@ -198,10 +198,10 @@ namespace Kinematics {
         Forward kinematics for Maslow CNC - convert belt lengths back to X,Y,Z coordinates.
         
         With ABCDZX axis mapping:
-        motors[ARM_TL] = A axis = Top Left belt length
-        motors[ARM_TR] = B axis = Top Right belt length
-        motors[ARM_BL] = C axis = Bottom Left belt length
-        motors[ARM_BR] = D axis = Bottom Right belt length
+        motors[_TL] = A axis = Top Left belt length
+        motors[_TR] = B axis = Top Right belt length
+        motors[_BL] = C axis = Bottom Left belt length
+        motors[_BR] = D axis = Bottom Right belt length
         motors[4] = Z axis = Router position
         motors[5] = X axis = (not used)
         */
@@ -211,8 +211,8 @@ namespace Kinematics {
 
         // For X,Y coordinates, we use the TL and TR belt lengths to solve the forward kinematics
         // We need to convert the raw belt lengths to XY plane distances first
-        float tlBeltLength = motors[ARM_TL];  // Top Left belt length (A axis)
-        float trBeltLength = motors[ARM_TR];  // Top Right belt length (B axis)
+        float tlBeltLength = motors[_TL];  // Top Left belt length (A axis)
+        float trBeltLength = motors[_TR];  // Top Right belt length (B axis)
 
         // Calculate complete z-components including spoilboard and work thickness
         // This must match the z-component calculation used in forward kinematics
@@ -251,10 +251,10 @@ namespace Kinematics {
 
     void MaslowKinematics::transform_cartesian_to_motors(float* motors, float* cartesian) {
         // In this implementation, FluidNC axis order is ABCDZX:
-        // motors[ARM_TL] = A axis = Top Left belt length
-        // motors[ARM_TR] = B axis = Top Right belt length
-        // motors[ARM_BL] = C axis = Bottom Left belt length
-        // motors[ARM_BR] = D axis = Bottom Right belt length
+        // motors[_TL] = A axis = Top Left belt length
+        // motors[_TR] = B axis = Top Right belt length
+        // motors[_BL] = C axis = Bottom Left belt length
+        // motors[_BR] = D axis = Bottom Right belt length
         // motors[4] = Z axis = Router position
         // motors[5] = X axis = (not used, keep as 0)
 
@@ -267,17 +267,17 @@ namespace Kinematics {
         // This allows the Z-axis to move independently when belts are not calibrated
         if (Maslow.calibration.currentState == READY_TO_CUT) {
             // Compute belt lengths for each corner and assign to correct axis
-            motors[ARM_TL] = computeTL(x, y, z);  // Top Left -> A axis
-            motors[ARM_TR] = computeTR(x, y, z);  // Top Right -> B axis
-            motors[ARM_BL] = computeBL(x, y, z);  // Bottom Left -> C axis
-            motors[ARM_BR] = computeBR(x, y, z);  // Bottom Right -> D axis
+            motors[_TL] = computeTL(x, y, z);  // Top Left -> A axis
+            motors[_TR] = computeTR(x, y, z);  // Top Right -> B axis
+            motors[_BL] = computeBL(x, y, z);  // Bottom Left -> C axis
+            motors[_BR] = computeBR(x, y, z);  // Bottom Right -> D axis
         } else {
             // When belts are not ready, keep them at their current positions
             // This prevents the motion planner from synchronizing Z-axis with large belt movements
-            motors[ARM_TL] = steps_to_mpos(get_axis_motor_steps(ARM_TL), ARM_TL);  // Keep TL at current position
-            motors[ARM_TR] = steps_to_mpos(get_axis_motor_steps(ARM_TR), ARM_TR);  // Keep TR at current position
-            motors[ARM_BL] = steps_to_mpos(get_axis_motor_steps(ARM_BL), ARM_BL);  // Keep BL at current position
-            motors[ARM_BR] = steps_to_mpos(get_axis_motor_steps(ARM_BR), ARM_BR);  // Keep BR at current position
+            motors[_TL] = steps_to_mpos(get_axis_motor_steps(_TL), _TL);  // Keep TL at current position
+            motors[_TR] = steps_to_mpos(get_axis_motor_steps(_TR), _TR);  // Keep TR at current position
+            motors[_BL] = steps_to_mpos(get_axis_motor_steps(_BL), _BL);  // Keep BL at current position
+            motors[_BR] = steps_to_mpos(get_axis_motor_steps(_BR), _BR);  // Keep BR at current position
         }
 
         motors[4] = z;     // Z position -> Z axis (pass through)

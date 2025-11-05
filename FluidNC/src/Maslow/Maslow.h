@@ -32,10 +32,10 @@
 // motors[2] = C axis = Bottom Left belt length
 // motors[3] = D axis = Bottom Right belt length
 enum MaslowArm {
-    ARM_TL    = 0,  // Top Left
-    ARM_TR    = 1,  // Top Right
-    ARM_BL    = 2,  // Bottom Left
-    ARM_BR    = 3,  // Bottom Right
+    _TL       = 0,  // Top Left
+    _TR       = 1,  // Top Right
+    _BL       = 2,  // Bottom Left
+    _BR       = 3,  // Bottom Right
     ARM_COUNT = 4
 };
 
@@ -182,7 +182,7 @@ public:
     double targetY = 0;
     double targetZ = 0;
 
-    MotorUnit axisArm[ARM_COUNT];  // Array of motor units: [ARM_TL, ARM_TR, ARM_BL, ARM_BR]
+    MotorUnit axisArm[ARM_COUNT];  // Array of motor units: [_TL, _TR, _BL, _BR]
 
     bool readingFromSD = false;  //Used to turn off reading from the encoders when reading from the - i dont think we need this anymore TODO
     bool using_default_config = false;
