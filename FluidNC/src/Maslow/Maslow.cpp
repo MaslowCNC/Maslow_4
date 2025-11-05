@@ -1276,7 +1276,8 @@ void Maslow_::set_telemetry(bool enabled) {
         // write header
         TelemetryFileHeader header;
         header.structureSize = sizeof(TelemetryData);
-        strcpy(header.version, VERSION_NUMBER);
+        strncpy(header.version, VERSION_NUMBER, sizeof(header.version) - 1);
+        header.version[sizeof(header.version) - 1] = '\0';  // Ensure null termination
         file->write(reinterpret_cast<uint8_t*>(&header), sizeof(TelemetryFileHeader));
         file->flush();
         delete file;

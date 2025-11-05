@@ -1254,6 +1254,7 @@ Error do_command_or_setting(const char* key, char* value, WebUI::AuthenticationL
             return Error::Ok;
         }
     }
+    log_error("Invalid setting or command: " << key << (value ? " with value: " : "") << (value ? value : ""));
     return Error::InvalidStatement;
 }
 
@@ -1265,6 +1266,7 @@ Error settings_execute_line(char* line, Channel& out, WebUI::AuthenticationLevel
         value = strchr(line, ']');
         if (!value) {
             // Missing ] is an error in this form
+            log_error("Missing ']' in command: [" << line);
             return Error::InvalidStatement;
         }
         // ']' was found; replace it with null and set value to the rest of the line.
