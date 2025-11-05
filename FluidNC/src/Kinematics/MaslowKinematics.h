@@ -89,25 +89,6 @@ namespace Kinematics {
             { 2953.2f, 0.0f, 78.0f }       // _BR: X, Y, Z
         };
         
-        // Legacy individual accessors (maintained for backward compatibility)
-        float& _tlX = anchor_location[_TL][Coord_X];
-        float& _tlY = anchor_location[_TL][Coord_Y];
-        float& _tlZ = anchor_location[_TL][Coord_Z];
-        float& _trX = anchor_location[_TR][Coord_X];
-        float& _trY = anchor_location[_TR][Coord_Y];
-        float& _trZ = anchor_location[_TR][Coord_Z];
-        float& _blX = anchor_location[_BL][Coord_X];
-        float& _blY = anchor_location[_BL][Coord_Y];
-        float& _blZ = anchor_location[_BL][Coord_Z];
-        float& _brX = anchor_location[_BR][Coord_X];
-        float& _brY = anchor_location[_BR][Coord_Y];
-        float& _brZ = anchor_location[_BR][Coord_Z];
-        
-        // Deprecated separate arrays (kept in sync via references)
-        float* _anchorX = anchor_location[0];  // Points to X coordinates
-        float* _anchorY = &anchor_location[0][1];  // Points to Y coordinates  
-        float* _anchorZ = &anchor_location[0][2];  // Points to Z coordinates
-
         // Belt and arm parameters (in mm)
         float _beltEndExtension = 30.0f;   // Belt end extension
         float _armLength        = 123.4f;  // Arm length
