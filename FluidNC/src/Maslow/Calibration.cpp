@@ -205,21 +205,20 @@ bool Calibration::requestStateChange(int newState) {
 
                     //Set the internal machine position using actual belt positions to avoid synchronization issues
                     // Get current belt positions from hardware and set motor steps directly
-                    float tlBeltLength = Maslow.axis[_TL].getPosition();  // Actual belt position from hardware
-                    float trBeltLength = Maslow.axis[_TR].getPosition();
-                    float blBeltLength = Maslow.axis[_BL].getPosition();
-                    float brBeltLength = Maslow.axis[_BR].getPosition();
+                    float beltLength[ARM_COUNT];
+                    for (int arm = _TL; arm < ARM_COUNT; arm++) {
+                        beltLength[arm] = Maslow.axis[arm].getPosition();
+                    }
 
                     log_info("Setting motor positions from hardware readings:");
-                    log_info("TL: " << tlBeltLength << " TR: " << trBeltLength << " BL: " << blBeltLength << " BR: " << brBeltLength);
+                    log_info("TL: " << beltLength[_TL] << " TR: " << beltLength[_TR] << " BL: " << beltLength[_BL] << " BR: " << beltLength[_BR]);
 
                     // Set motor positions directly from hardware readings
                     // Axis mapping: A=TL(0), B=TR(1), C=BL(2), D=BR(3), Z=router(4)
-                    set_motor_steps(0, mpos_to_steps(tlBeltLength, 0));  // A axis = TL belt
-                    set_motor_steps(1, mpos_to_steps(trBeltLength, 1));  // B axis = TR belt
-                    set_motor_steps(2, mpos_to_steps(blBeltLength, 2));  // C axis = BL belt
-                    set_motor_steps(3, mpos_to_steps(brBeltLength, 3));  // D axis = BR belt
-                    set_motor_steps(4, mpos_to_steps(0.0, 4));           // Z axis = 0 (surface level) during calibration
+                    for (int arm = _TL; arm < ARM_COUNT; arm++) {
+                        set_motor_steps(arm, mpos_to_steps(beltLength[arm], arm));
+                    }
+                    set_motor_steps(4, mpos_to_steps(0.0, 4));  // Z axis = 0 (surface level) during calibration
 
                     gc_sync_position();  //This updates the Gcode engine with the new position from the stepping engine that we set with set_motor_steps
                     plan_sync_position();
@@ -521,21 +520,21 @@ bool Calibration::takeSlackFunc() {
 
                 // Convert measured XY plane distances to actual belt lengths for motor positions
                 // calibration_data[0] contains measured XY plane distances: [TL, TR, BL, BR]
-                float tlBeltLength = measurementFromXYPlane(calibration_data[0][0], kinematics->getTlZ());
-                float trBeltLength = measurementFromXYPlane(calibration_data[0][1], kinematics->getTrZ());
-                float blBeltLength = measurementFromXYPlane(calibration_data[0][2], kinematics->getBlZ());
-                float brBeltLength = measurementFromXYPlane(calibration_data[0][3], kinematics->getBrZ());
+                float beltLength[ARM_COUNT];
+                beltLength[_TL] = measurementFromXYPlane(calibration_data[0][0], kinematics->getTlZ());
+                beltLength[_TR] = measurementFromXYPlane(calibration_data[0][1], kinematics->getTrZ());
+                beltLength[_BL] = measurementFromXYPlane(calibration_data[0][2], kinematics->getBlZ());
+                beltLength[_BR] = measurementFromXYPlane(calibration_data[0][3], kinematics->getBrZ());
 
                 log_info("Setting motor positions directly from measurements:");
-                log_info("TL belt: " << tlBeltLength << " TR belt: " << trBeltLength);
-                log_info("BL belt: " << blBeltLength << " BR belt: " << brBeltLength);
+                log_info("TL belt: " << beltLength[_TL] << " TR belt: " << beltLength[_TR]);
+                log_info("BL belt: " << beltLength[_BL] << " BR belt: " << beltLength[_BR]);
 
                 // Set motor positions directly from measured belt lengths
                 // Axis mapping: A=TL(0), B=TR(1), C=BL(2), D=BR(3), Z=router(4)
-                set_motor_steps(0, mpos_to_steps(tlBeltLength, 0));  // A axis = TL belt
-                set_motor_steps(1, mpos_to_steps(trBeltLength, 1));  // B axis = TR belt
-                set_motor_steps(2, mpos_to_steps(blBeltLength, 2));  // C axis = BL belt
-                set_motor_steps(3, mpos_to_steps(brBeltLength, 3));  // D axis = BR belt
+                for (int arm = _TL; arm < ARM_COUNT; arm++) {
+                    set_motor_steps(arm, mpos_to_steps(beltLength[arm], arm));
+                }
                 // Z axis is left unchanged during Apply Tension process
 
                 // Verify that the position was set correctly by reading back from motors

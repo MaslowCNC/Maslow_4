@@ -211,8 +211,10 @@ namespace Kinematics {
 
         // For X,Y coordinates, we use the TL and TR belt lengths to solve the forward kinematics
         // We need to convert the raw belt lengths to XY plane distances first
-        float tlBeltLength = motors[_TL];  // Top Left belt length (A axis)
-        float trBeltLength = motors[_TR];  // Top Right belt length (B axis)
+        float beltLength[ARM_COUNT];
+        for (int arm = _TL; arm < ARM_COUNT; arm++) {
+            beltLength[arm] = motors[arm];
+        }
 
         // Calculate complete z-components including spoilboard and work thickness
         // This must match the z-component calculation used in forward kinematics
@@ -221,8 +223,8 @@ namespace Kinematics {
         float trTotalZ = 0.0f - (z + _trZ + _spoilboardThickness + _workThickness);
 
         // Convert angled belt measurements to XY plane distances using complete z-components
-        float tlXYDistance = measurementToXYPlane(tlBeltLength, fabs(tlTotalZ));
-        float trXYDistance = measurementToXYPlane(trBeltLength, fabs(trTotalZ));
+        float tlXYDistance = measurementToXYPlane(beltLength[_TL], fabs(tlTotalZ));
+        float trXYDistance = measurementToXYPlane(beltLength[_TR], fabs(trTotalZ));
 
         // Solve for X,Y position using intersection of circles
         float x, y;
@@ -236,7 +238,7 @@ namespace Kinematics {
             cartesian[X_AXIS] = 0.0f;
             cartesian[Y_AXIS] = 0.0f;
             // Don't spam the console when belts are at zero length - this is expected behavior
-            if (!(tlBeltLength == 0.0f || trBeltLength == 0.0f)) {
+            if (!(beltLength[_TL] == 0.0f || beltLength[_TR] == 0.0f)) {
                 log_error("MaslowKinematics: Failed to compute X,Y from belt lengths, using (0,0)");
             }
         }
