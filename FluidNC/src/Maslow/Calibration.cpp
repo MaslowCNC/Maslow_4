@@ -62,6 +62,12 @@ bool Calibration::requestStateChange(int newState) {
     // Clear partial operation flag for full operations
     partialOperation = false;
 
+    // For full operations, set all operating flags to true
+    operatingTL = true;
+    operatingTR = true;
+    operatingBL = true;
+    operatingBR = true;
+
     switch (newState) {
         case UNKNOWN:  //We can enter unknown from any stable state (the machine is not currently performing an action)
             currentState = UNKNOWN;
@@ -446,24 +452,25 @@ void Calibration::home() {
         case EXTENDING:
             //decompress belts for the first half second
             if (millis() - extendCallTimer < 700) {
-                if (millis() - extendCallTimer > 0)
+                if (millis() - extendCallTimer > 0 && operatingBR)
                     Maslow.axisBR.decompressBelt();
-                if (millis() - extendCallTimer > 150)
+                if (millis() - extendCallTimer > 150 && operatingBL)
                     Maslow.axisBL.decompressBelt();
-                if (millis() - extendCallTimer > 250)
+                if (millis() - extendCallTimer > 250 && operatingTR)
                     Maslow.axisTR.decompressBelt();
-                if (millis() - extendCallTimer > 350)
+                if (millis() - extendCallTimer > 350 && operatingTL)
                     Maslow.axisTL.decompressBelt();
             }
             //then make all the belts comply until they are extended fully, or user terminates it
             else {
-                if (!extendedTL)
+                // Only extend the belts that are part of this operation
+                if (operatingTL && !extendedTL)
                     extendedTL = Maslow.axisTL.extend(extendDist);
-                if (!extendedTR)
+                if (operatingTR && !extendedTR)
                     extendedTR = Maslow.axisTR.extend(extendDist);
-                if (!extendedBL)
+                if (operatingBL && !extendedBL)
                     extendedBL = Maslow.axisBL.extend(extendDist);
-                if (!extendedBR)
+                if (operatingBR && !extendedBR)
                     extendedBR = Maslow.axisBR.extend(extendDist);
                 
                 // Check if the operation is complete
