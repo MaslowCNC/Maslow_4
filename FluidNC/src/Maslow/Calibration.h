@@ -97,14 +97,18 @@ public:
     float extendDist = 1700;
 
     //Variables used by calibration
-    bool  orientation;
-    int   calibrationCurrentThreshold    = 300;
-    float acceptableCalibrationThreshold = 0.5;
-    int   calibrationGridSize            = 9;
-    float calibration_grid_width_mm_X    = 2000;   // mm offset from the edge of the frame
-    float calibration_grid_height_mm_Y   = 1000;   // mm offset from the edge of the frame
-    float calibrationMaxSpacingMm        = 260.0;  // Maximum allowed spacing between calibration points when auto-selecting grid size
-    bool  calibrationInProgress;                   //Used to turn off regular movements during calibration
+    bool orientation;
+    int  calibrationCurrentThreshold = 300;
+
+    // Deprecated variables for backward compatibility - not used, just prevent config errors
+    int retractCurrentThreshold_deprecated       = 0;
+    int calibrationCurrentThreshold_deprecated = 0;
+    float acceptableCalibrationThreshold         = 0.5;
+    int   calibrationGridSize                    = 9;
+    float calibration_grid_width_mm_X            = 2000;  // mm offset from the edge of the frame
+    float calibration_grid_height_mm_Y           = 1000;  // mm offset from the edge of the frame
+    float calibrationMaxSpacingMm = 260.0;  // Maximum allowed spacing between calibration points when auto-selecting grid size
+    bool  calibrationInProgress;            //Used to turn off regular movements during calibration
 
     //State machine variables
     int currentState = UNKNOWN;

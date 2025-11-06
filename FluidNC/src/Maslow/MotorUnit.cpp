@@ -270,13 +270,18 @@ bool MotorUnit::pull_tight(int currentThreshold) {
     }
 
     // Calculate effective threshold: stored baseline + delta threshold
-    int effectiveThreshold = currentThreshold;
+    // Always use at least the delta threshold as a minimum to prevent getting stuck with too-low baselines
+    int effectiveThreshold = currentThreshold;  // Minimum fallback
     if (stored_baseline > 0) {
         effectiveThreshold = (int)stored_baseline + currentThreshold;
         // Cap at maximum safe value
         if (effectiveThreshold > MAX_SAFE_CURRENT) {
             effectiveThreshold = MAX_SAFE_CURRENT;
         }
+    }
+    // Ensure minimum threshold to prevent getting stuck with zero/low baseline
+    if (effectiveThreshold < currentThreshold) {
+        effectiveThreshold = currentThreshold;
     }
 
     if (retract_speed > RETRACT_SPEED_THRESHOLD) {  // Don't trigger immediately before motor speeds up
