@@ -100,7 +100,11 @@ namespace Machine {
         handler.item(M + "_calibration_grid_height_mm_Y", Maslow.calibration.calibration_grid_height_mm_Y, 0, 3000);
         handler.item(M + "_calibration_grid_size", Maslow.calibration.calibrationGridSize, 3, 9);
 
-        // New variable names for delta values (added to baseline) - prevents confusion with old absolute threshold values
+        // Support both old and new variable names for backward compatibility
+        // Old names (deprecated but still supported)
+        handler.item(M + "_Retract_Current_Threshold", Maslow.calibration.retractCurrentThreshold, 0, 3500);
+        handler.item(M + "_Calibration_Current_Threshold", Maslow.calibration.calibrationCurrentThreshold, 0, 3500);
+        // New names (preferred) - these are delta values added to baseline
         handler.item(M + "_Retract_Current_Delta", Maslow.calibration.retractCurrentThreshold, 0, 3500);
         handler.item(M + "_Calibration_Current_Delta", Maslow.calibration.calibrationCurrentThreshold, 0, 3500);
         handler.item(M + "_Acceptable_Calibration_Threshold", Maslow.calibration.acceptableCalibrationThreshold, 0, 1);
