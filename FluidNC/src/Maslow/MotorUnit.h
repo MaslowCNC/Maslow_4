@@ -82,6 +82,7 @@ private:
     float         retract_baseline         = 700;
     float         stored_baseline          = 0.0;    // Stored baseline current for this motor, loaded from NVS
     unsigned long retract_start_time       = 0;      // When retraction started, for 3-second threshold
+    double        retract_start_position   = 0.0;    // Position when retraction started, for distance check
     bool          baseline_recorded        = false;  // Whether baseline has been recorded for this retraction
 
     //comply variables

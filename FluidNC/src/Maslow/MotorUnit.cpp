@@ -13,6 +13,7 @@
 
 // Retraction baseline recording constants
 #define BASELINE_RECORDING_TIME_MS 3000  // Time in ms before recording baseline during retraction
+#define BASELINE_MIN_DISTANCE_MM 35.0    // Minimum distance moved in mm before recording baseline
 #define RETRACT_SPEED_THRESHOLD 15       // Minimum retract speed before considering baseline recording
 #define MAX_SAFE_CURRENT 2000            // Maximum safe current value for baseline and threshold
 
@@ -229,9 +230,10 @@ bool MotorUnit::pull_tight(int currentThreshold) {
     }
     lastCallToRetract = millis();
 
-    // Initialize retract_start_time on first call
+    // Initialize retract_start_time and retract_start_position on first call
     if (retract_start_time == 0) {
-        retract_start_time = millis();
+        retract_start_time     = millis();
+        retract_start_position = getPosition();
     }
 
     //Gradually increase the pulling speed
@@ -247,8 +249,10 @@ bool MotorUnit::pull_tight(int currentThreshold) {
 
     retract_baseline = alpha * float(currentMeasurement) + (1 - alpha) * retract_baseline;
 
-    // Record baseline after specified time of retraction
-    if (!baseline_recorded && (millis() - retract_start_time > BASELINE_RECORDING_TIME_MS) && retract_speed > RETRACT_SPEED_THRESHOLD) {
+    // Record baseline after specified time of retraction AND minimum distance moved
+    double distanceMoved = abs(getPosition() - retract_start_position);
+    if (!baseline_recorded && (millis() - retract_start_time > BASELINE_RECORDING_TIME_MS) && (distanceMoved > BASELINE_MIN_DISTANCE_MM) &&
+        retract_speed > RETRACT_SPEED_THRESHOLD) {
         stored_baseline = retract_baseline;
         // Ensure stored baseline doesn't exceed maximum safe value
         if (stored_baseline > MAX_SAFE_CURRENT) {
@@ -256,7 +260,7 @@ bool MotorUnit::pull_tight(int currentThreshold) {
         }
         baseline_recorded   = true;
         String encAddrLabel = Maslow.axis_id_to_label(_encoderAddress);
-        log_info("Recorded baseline for " << encAddrLabel.c_str() << ": " << stored_baseline);
+        log_info("Recorded baseline for " << encAddrLabel.c_str() << ": " << stored_baseline << " (moved " << distanceMoved << "mm)");
     }
 
     if (currentMeasurement - retract_baseline > incrementalThreshold) {
@@ -392,6 +396,7 @@ void MotorUnit::reset() {
     lastPosition             = getPosition();
     beltSpeedTimer           = millis();
     retract_start_time       = 0;
+    retract_start_position   = 0.0;
     baseline_recorded        = false;
 }
 
@@ -438,6 +443,7 @@ void MotorUnit::setStoredBaseline(float baseline) {
 
 // Resets the baseline recording state for a new retraction operation
 void MotorUnit::resetBaseline() {
-    retract_start_time = 0;
-    baseline_recorded  = false;
+    retract_start_time     = 0;
+    retract_start_position = 0.0;
+    baseline_recorded      = false;
 }
