@@ -264,11 +264,8 @@ namespace Machine {
         // Default sections
         dcSpi + dcSDCard + dcStepping + dcUart1 + dcKinematics +
         "axes:\n"
-        "  x:\n    max_rate_mm_per_min: 2000\n    acceleration_mm_per_sec2: 25\n    max_travel_mm: 2438.4\n    homing:\n      cycle: -1\n"
-        "    motor0:\n      dc_servo:\n"
-        "  y:\n    max_rate_mm_per_min: 2000\n    acceleration_mm_per_sec2: 25\n    max_travel_mm: 1219.2\n    homing:\n      cycle: -1\n"
-        "  z:\n    max_rate_mm_per_min: 400\n    acceleration_mm_per_sec2: 10\n    max_travel_mm: 100\n    steps_per_mm: 100\n    "
-        "homing:\n      cycle: -1\n"
+        "  z:\n    max_rate_mm_per_min: 400\n    acceleration_mm_per_sec2: 10\n    max_travel_mm: 100\n    steps_per_mm: 100\n"
+        "    homing:\n      cycle: -1\n"
         "    motor0:\n      tmc_2209:\n        addr: 0\n        direction_pin: gpio.16\n        step_pin: gpio.15\n" +
         dcZMotor + "    motor1:\n      tmc_2209:\n        addr: 1\n        direction_pin: gpio.38\n        step_pin: gpio.46\n" + dcZMotor;
 
@@ -281,12 +278,13 @@ namespace Machine {
 
         // TEST: Uncomment the following to mock an ESP panic reset
         //reason = ESP_RST_PANIC;
+
+        // Always try to load the user config file, even after a panic.
+        // The default config is now fixed and will be used as fallback if needed.
         if (reason == ESP_RST_PANIC) {
-            log_error("Skipping configuration file due to panic");
-            configOkay = false;
-        } else {
-            configOkay = load_file(config_filename->get());
+            log_warn("Previous boot ended in panic - attempting to load config anyway");
         }
+        configOkay = load_file(config_filename->get());
 
         if (!configOkay) {
             log_info("Using default configuration");
