@@ -1032,9 +1032,9 @@ static Error maslow_test_arm_current(const char* value, WebUI::AuthenticationLev
         return Error::IdleError;
     }
 
-    // Set the state to retracting as specified in requirements
-    sys.set_state(State::Homing);
-    Maslow.calibration.requestStateChange(RETRACTING);
+    // Note: We don't change the calibration state because RETRACTING has its own control loop
+    // that would interfere with our manual motor testing. We stay in EXTENDEDOUT and just
+    // test the motors directly.
 
     // Parse command: testArmCurrent=tl 200 2000 100 tr 100 2000 bl 100 2000 br 100 2000
     // Default values
@@ -1142,11 +1142,17 @@ static Error maslow_test_arm_current(const char* value, WebUI::AuthenticationLev
             log_warn("Test for arm " << armNames[i] << " reached max current (" << arms[i].max << ") without detecting movement");
         }
 
+        // Ensure motor is stopped
+        motors[i]->stop();
+
         // Small delay between arm tests
         delay(500);
     }
 
-    // Return to idle state
+    // Ensure all motors are stopped
+    Maslow.stopMotors();
+
+    // Return to idle state (we stayed in EXTENDEDOUT during the test)
     sys.set_state(State::Idle);
 
     return Error::Ok;
