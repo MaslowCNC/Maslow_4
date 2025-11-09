@@ -33,9 +33,9 @@ const std::string M = "Maslow";
 
 struct TelemetryFileHeader {
     unsigned int structureSize;  // 4 bytes
-    char         version[10];    // 10
+    char         version[30];    // 30
     // if you add to the header take bytes from this
-    char _unused[64];  // 64 bytes
+    char _unused[44];  // 44 bytes
 };
 
 struct TelemetryData {
