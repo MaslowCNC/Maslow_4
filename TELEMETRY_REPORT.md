@@ -149,6 +149,17 @@ struct TelemetryData {
 };
 ```
 
+**Total size**: 296 bytes (on ESP32 platform with 64-bit architecture)
+
+**Size breakdown by data type**:
+- 1 × `unsigned long` (8 bytes) = 8 bytes
+- 22 × `double` (8 bytes each) = 176 bytes
+- 7 × `int` (4 bytes each) = 28 bytes
+- 9 × `bool` (1 byte each) = 9 bytes
+- 2 × `float` (4 bytes each) = 8 bytes
+- 5 × `unsigned long` (8 bytes each) = 40 bytes
+- Padding/alignment = 27 bytes
+
 **Motor labels**:
 - `tl` = Top Left
 - `tr` = Top Right
@@ -161,9 +172,9 @@ The telemetry file follows this structure:
 
 ```
 [TelemetryFileHeader - 78 bytes]
-[TelemetryData Sample 1 - sizeof(TelemetryData) bytes]
-[TelemetryData Sample 2 - sizeof(TelemetryData) bytes]
-[TelemetryData Sample 3 - sizeof(TelemetryData) bytes]
+[TelemetryData Sample 1 - 296 bytes]
+[TelemetryData Sample 2 - 296 bytes]
+[TelemetryData Sample 3 - 296 bytes]
 ...
 ```
 
