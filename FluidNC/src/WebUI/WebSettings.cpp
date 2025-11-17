@@ -111,7 +111,7 @@ namespace WebUI {
     // Used by js/connectdlg.js
     static Error showFwInfo(char* parameter, AuthenticationLevel auth_level, Channel& out) {  // ESP800
         LogStream s(out, "FW version: FluidNC ");
-        s << git_info;
+        s << VERSION_NUMBER;
         // TODO: change grbl-embedded to FluidNC after fixing WebUI
         s << " # FW target:grbl-embedded  # FW HW:";
 
