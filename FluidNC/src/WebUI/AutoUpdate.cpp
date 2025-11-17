@@ -385,8 +385,17 @@ namespace WebUI {
     }
 
     bool AutoUpdate::checkForUpdate() {
+        // Normalize the auto-update setting for backward compatibility
+        // "true" -> "yes", "false" -> "no"
+        std::string autoUpdateSetting = config->_maslowAutoUpdate;
+        if (autoUpdateSetting == "true") {
+            autoUpdateSetting = "yes";
+        } else if (autoUpdateSetting == "false") {
+            autoUpdateSetting = "no";
+        }
+
         // Check if auto-update is set to "never" - if so, skip entirely
-        if (config->_maslowAutoUpdate == "never") {
+        if (autoUpdateSetting == "never") {
             log_info("AutoUpdate: check for new version disabled");
             return false;
         }
@@ -452,10 +461,10 @@ namespace WebUI {
         log_info("AutoUpdate: Current version: " << currentVersion << ", Latest: " << releaseInfo.tagName);
 
         // Check auto-update setting to determine next action
-        // "yes" = auto-download and install
-        // "no" = notify but don't install
+        // "yes" or "true" = auto-download and install
+        // "no" or "false" = notify but don't install
         // "never" = already handled earlier, won't reach here
-        if (config->_maslowAutoUpdate != "yes") {
+        if (autoUpdateSetting != "yes") {
             log_info("AutoUpdate: New version available but auto-update is not set to 'yes' in configuration");
             return false;
         }
