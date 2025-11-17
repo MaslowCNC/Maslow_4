@@ -110,7 +110,7 @@ namespace Machine {
         handler.item(M + "_debugEnabled", Maslow.debugEnabled);
 
         // Auto-update configuration
-        handler.item(M + "AutoUpdate", _maslowAutoUpdate);
+        handler.item((M + "AutoUpdate").c_str(), _maslowAutoUpdate);
         handler.item((M + "UpdateURL").c_str(), _maslowUpdateURL);
 
         // Material thickness parameters - temporary storage for machine-level config

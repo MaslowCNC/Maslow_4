@@ -385,6 +385,12 @@ namespace WebUI {
     }
 
     bool AutoUpdate::checkForUpdate() {
+        // Check if auto-update is set to "never" - if so, skip entirely
+        if (config->_maslowAutoUpdate == "never") {
+            log_debug("AutoUpdate: Skipping update check - auto-update set to 'never'");
+            return false;
+        }
+
         // Only check if not in AP mode
         if (WiFi.getMode() == WIFI_AP) {
             log_debug("AutoUpdate: Skipping update check - in AP mode");
@@ -445,9 +451,12 @@ namespace WebUI {
 
         log_info("AutoUpdate: Current version: " << currentVersion << ", Latest: " << releaseInfo.tagName);
 
-        // Only proceed with download/install if auto-update is enabled
-        if (!config->_maslowAutoUpdate) {
-            log_info("AutoUpdate: New version available but auto-update is disabled in configuration");
+        // Check auto-update setting to determine next action
+        // "yes" = auto-download and install
+        // "no" = notify but don't install
+        // "never" = already handled earlier, won't reach here
+        if (config->_maslowAutoUpdate != "yes") {
+            log_info("AutoUpdate: New version available but auto-update is not set to 'yes' in configuration");
             return false;
         }
 

@@ -12,7 +12,7 @@ Maslow_Extend_Dist: 2600.000000
 Maslow_Scale_X: 1.000000
 Maslow_Scale_Y: 1.000000
 Maslow_debugEnabled: false
-MaslowAutoUpdate: false
+MaslowAutoUpdate: no
 MaslowUpdateURL: https://api.github.com/repos/BarbourSmith/FluidNC/releases/latest
 Maslow_spoilboardThickness: 0.000000
 Maslow_workThickness: 0.000000
