@@ -387,7 +387,7 @@ namespace WebUI {
     bool AutoUpdate::checkForUpdate() {
         // Check if auto-update is set to "never" - if so, skip entirely
         if (config->_maslowAutoUpdate == "never") {
-            log_debug("AutoUpdate: Skipping update check - auto-update set to 'never'");
+            log_info("AutoUpdate: check for new version disabled");
             return false;
         }
 
