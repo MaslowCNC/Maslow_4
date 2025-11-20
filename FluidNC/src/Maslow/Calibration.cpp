@@ -1604,6 +1604,8 @@ void Calibration::resetCalibrationState() {
     measurementInProgress = true;  // Start by taking a measurement
 
     // Reset orientation detection variables so it runs on next calibration
+    // Note: This will trigger reset of static variables in detectOrientation()
+    // when orientationDetectTimer == 0 on the next call
     orientationDetectionDone = false;
     orientationDetectTimer   = 0;
 
@@ -1810,18 +1812,20 @@ bool Calibration::detectOrientation() {
     const unsigned long MOTOR_SETTLING_PAUSE_MS         = 500;   // Pause duration after retraction to allow motors to settle
 
     // Track whether the settling pause has completed
-    static bool settlingCompleted = false;
+    static bool          settlingCompleted = false;
+    static unsigned long settlingStartTime = 0;
+
+    // Initialize timer on first call and reset static state
+    if (orientationDetectTimer == 0) {
+        orientationDetectTimer = millis();
+        settlingCompleted      = false;  // Reset the flag when starting new detection
+        settlingStartTime      = 0;      // Reset settling timer for new detection
+    }
 
     // If settling has already completed, return true immediately on subsequent calls
     // This prevents re-running detection on subsequent calibration_loop iterations
     if (settlingCompleted) {
         return true;
-    }
-
-    // Initialize timer on first call
-    if (orientationDetectTimer == 0) {
-        orientationDetectTimer = millis();
-        settlingCompleted      = false;  // Reset the flag when starting new detection
     }
 
     unsigned long elapsedTime = millis() - orientationDetectTimer;
@@ -1901,7 +1905,6 @@ bool Calibration::detectOrientation() {
         if (fabs(tlCurrentPosition - tlStartPosition) < 5.0 && fabs(trCurrentPosition - trStartPosition) < 5.0) {
             // Phase 5: Power down all motors and pause to allow settling
             // This prevents current spikes when immediately trying to pull belts tight in horizontal orientation
-            static unsigned long settlingStartTime = 0;
 
             // Initialize settling timer on first entry to this phase
             if (settlingStartTime == 0) {
