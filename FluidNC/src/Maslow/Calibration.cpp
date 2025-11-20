@@ -1809,7 +1809,7 @@ bool Calibration::detectOrientation() {
     const int           ORIENTATION_DETECT_SPEED        = 716;   // PWM speed for motors (70% of max 1023)
 
     // Initialize timer on first call
-    if (orientationDetectTimer == 0) {
+    if (orientationDetectTimer == 0) { //Will this work correctly on multiple calls to the calibration process?
         orientationDetectTimer = millis();
     }
 
@@ -1874,6 +1874,7 @@ bool Calibration::detectOrientation() {
         Maslow.axisTR.setTarget(trStartPosition);
 
         orientationDetectionDone = true;
+        orientationDetectTimer = millis();  // Reset timer for the settling phase
         return false;
     }
 
@@ -1890,6 +1891,11 @@ bool Calibration::detectOrientation() {
         if (fabs(tlCurrentPosition - tlStartPosition) < 5.0 && fabs(trCurrentPosition - trStartPosition) < 5.0) {
             Maslow.axisTL.stop();
             Maslow.axisTR.stop();
+
+            //pause to let motors stop before moving on
+            orientationDetectTimer = millis();
+
+            orientationDetectTimer = 0;  // Reset for next time
             return true;
         }
     }
