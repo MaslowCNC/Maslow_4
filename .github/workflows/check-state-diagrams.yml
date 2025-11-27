@@ -6,8 +6,14 @@ on:
       - 'docs/state-diagram.md'
       - 'docs/state-diagram.dot'
       - 'docs/state-diagram.diag'
+      - 'docs/fluidnc-state-diagram.md'
+      - 'docs/fluidnc-state-diagram.dot'
+      - 'docs/fluidnc-state-diagram.diag'
       - 'FluidNC/src/Maslow/Calibration.h'
       - 'FluidNC/src/Maslow/Calibration.cpp'
+      - 'FluidNC/src/Types.h'
+      - 'FluidNC/src/System.h'
+      - 'FluidNC/src/Protocol.cpp'
       - 'build-docs.py'
 
 jobs:

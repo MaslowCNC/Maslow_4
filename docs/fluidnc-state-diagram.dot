@@ -1,0 +1,98 @@
+// FluidNC State Machine Diagram
+// Graphviz DOT format - Use with: dot -Tsvg fluidnc-state-diagram.dot -o fluidnc-state-diagram.svg
+//
+// Install graphviz:
+//   Ubuntu/Debian: apt-get install graphviz
+//   macOS: brew install graphviz
+//   Windows: choco install graphviz
+//
+// Generate outputs:
+//   dot -Tsvg fluidnc-state-diagram.dot -o fluidnc-state-diagram.svg
+//   dot -Tpng fluidnc-state-diagram.dot -o fluidnc-state-diagram.png
+//   dot -Tpdf fluidnc-state-diagram.dot -o fluidnc-state-diagram.pdf
+
+digraph FluidNCStateMachine {
+    // Graph settings
+    rankdir=TB;
+    splines=true;
+    overlap=false;
+    fontname="Helvetica";
+    fontsize=14;
+    label="FluidNC State Machine\n\nNote: Any state can transition to Alarm on error/limit event";
+    labelloc=t;
+
+    // Node defaults
+    node [
+        shape=box,
+        style="rounded,filled",
+        fontname="Helvetica",
+        fontsize=11,
+        margin="0.2,0.1"
+    ];
+
+    // Edge defaults
+    edge [
+        fontname="Helvetica",
+        fontsize=9
+    ];
+
+    // Boot entry point
+    Boot [shape=circle, label="", width=0.3, style=filled, fillcolor=black];
+
+    // State definitions with colors
+    Idle [label="Idle\n(0)", fillcolor="#99ff99"];
+    Alarm [label="Alarm\n(1)", fillcolor="#ff9999"];
+    CheckMode [label="CheckMode\n(2)", fillcolor="#ffff99"];
+    Homing [label="Homing\n(3)", fillcolor="#99ccff"];
+    Cycle [label="Cycle\n(4)", fillcolor="#99ccff"];
+    Hold [label="Hold\n(5)", fillcolor="#ffcc99"];
+    Jog [label="Jog\n(6)", fillcolor="#99ccff"];
+    SafetyDoor [label="SafetyDoor\n(7)", fillcolor="#ffcc99"];
+    Sleep [label="Sleep\n(8)", fillcolor="#cccccc"];
+    ConfigAlarm [label="ConfigAlarm\n(9)", fillcolor="#ff6666"];
+
+    // Boot transitions
+    Boot -> Idle [label="normal boot"];
+    Boot -> Alarm [label="homing required"];
+    Boot -> ConfigAlarm [label="config error"];
+
+    // Idle transitions
+    Idle -> Cycle [label="G-code start"];
+    Idle -> Jog [label="jog command"];
+    Idle -> Homing [label="$H"];
+    Idle -> CheckMode [label="$C"];
+    Idle -> Sleep [label="$SLP"];
+    Idle -> Alarm [label="error"];
+
+    // Cycle transitions
+    Cycle -> Idle [label="complete"];
+    Cycle -> Hold [label="feed hold (!)"];
+    Cycle -> Alarm [label="error"];
+    Cycle -> SafetyDoor [label="door open"];
+
+    // Jog transitions
+    Jog -> Idle [label="complete"];
+    Jog -> Alarm [label="error"];
+
+    // Homing transitions
+    Homing -> Idle [label="complete"];
+    Homing -> Alarm [label="failed"];
+
+    // Hold transitions
+    Hold -> Cycle [label="cycle start (~)"];
+    Hold -> Idle [label="reset"];
+    Hold -> SafetyDoor [label="door open"];
+
+    // SafetyDoor transitions
+    SafetyDoor -> Hold [label="door closed"];
+    SafetyDoor -> Idle [label="reset"];
+
+    // CheckMode transitions
+    CheckMode -> Idle [label="$C toggle"];
+
+    // Sleep transitions
+    Sleep -> Idle [label="wake"];
+
+    // Alarm transitions
+    Alarm -> Idle [label="$X reset"];
+}

@@ -154,29 +154,38 @@ Examples:
 
     success = True
 
-    # Check for source files
-    blockdiag_file = docs_dir / "state-diagram.diag"
-    graphviz_file = docs_dir / "state-diagram.dot"
+    # Define all diagram source files
+    diagram_sources = [
+        ("state-diagram", "Maslow State Machine"),
+        ("fluidnc-state-diagram", "FluidNC State Machine"),
+    ]
 
-    # Generate with blockdiag
-    if not args.graphviz_only and blockdiag_file.exists():
-        if not generate_with_blockdiag(blockdiag_file, output_dir):
-            success = False
-            print("\n  Note: blockdiag may fail with Pillow >= 10.0")
-            print("  Using graphviz as fallback...")
+    for base_name, description in diagram_sources:
+        blockdiag_file = docs_dir / f"{base_name}.diag"
+        graphviz_file = docs_dir / f"{base_name}.dot"
 
-    # Generate with graphviz
-    if not args.blockdiag_only and graphviz_file.exists():
-        graphviz_success = generate_with_graphviz(graphviz_file, output_dir)
-        if graphviz_success:
-            success = True  # Graphviz succeeded, consider it a success overall
+        print(f"\n{'='*60}")
+        print(f"Processing: {description}")
+        print(f"{'='*60}")
+
+        # Generate with blockdiag
+        if not args.graphviz_only and blockdiag_file.exists():
+            if not generate_with_blockdiag(blockdiag_file, output_dir):
+                print("\n  Note: blockdiag may fail with Pillow >= 10.0")
+                print("  Using graphviz as fallback...")
+
+        # Generate with graphviz
+        if not args.blockdiag_only and graphviz_file.exists():
+            graphviz_success = generate_with_graphviz(graphviz_file, output_dir)
+            if graphviz_success:
+                success = True  # At least one method succeeded
 
     # Summary
     print("\n=== Summary ===")
     if success:
         print("Documentation diagrams generated successfully!")
         print(f"Output files are in: {output_dir}")
-        for f in output_dir.iterdir():
+        for f in sorted(output_dir.iterdir()):
             print(f"  - {f.name}")
     else:
         print("Some diagrams could not be generated.")

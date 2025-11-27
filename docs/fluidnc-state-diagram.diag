@@ -1,0 +1,74 @@
+// FluidNC State Machine Diagram
+// This file is used with blockdiag to generate SVG, PDF, and PNG versions
+// Install: pip install blockdiag
+// Generate: blockdiag -Tsvg fluidnc-state-diagram.diag -o fluidnc-state-diagram.svg
+
+blockdiag {
+    // Define node shapes and colors
+    node_width = 140;
+    node_height = 50;
+    default_fontsize = 12;
+
+    // Boot entry point
+    "Boot" [shape = "beginpoint", label = "Boot"];
+
+    // Define all states with their IDs
+    "Idle\n(0)" [color = "#99ff99"];
+    "Alarm\n(1)" [color = "#ff9999"];
+    "CheckMode\n(2)" [color = "#ffff99"];
+    "Homing\n(3)" [color = "#99ccff"];
+    "Cycle\n(4)" [color = "#99ccff"];
+    "Hold\n(5)" [color = "#ffcc99"];
+    "Jog\n(6)" [color = "#99ccff"];
+    "SafetyDoor\n(7)" [color = "#ffcc99"];
+    "Sleep\n(8)" [color = "#cccccc"];
+    "ConfigAlarm\n(9)" [color = "#ff6666"];
+
+    // Boot transitions
+    "Boot" -> "Idle\n(0)" [label = "normal boot"];
+    "Boot" -> "Alarm\n(1)" [label = "homing required"];
+    "Boot" -> "ConfigAlarm\n(9)" [label = "config error"];
+
+    // Idle transitions
+    "Idle\n(0)" -> "Cycle\n(4)" [label = "G-code start"];
+    "Idle\n(0)" -> "Jog\n(6)" [label = "jog command"];
+    "Idle\n(0)" -> "Homing\n(3)" [label = "$H"];
+    "Idle\n(0)" -> "CheckMode\n(2)" [label = "$C"];
+    "Idle\n(0)" -> "Sleep\n(8)" [label = "$SLP"];
+    "Idle\n(0)" -> "Alarm\n(1)" [label = "error"];
+
+    // Cycle transitions
+    "Cycle\n(4)" -> "Idle\n(0)" [label = "complete"];
+    "Cycle\n(4)" -> "Hold\n(5)" [label = "feed hold (!)"];
+    "Cycle\n(4)" -> "Alarm\n(1)" [label = "error"];
+    "Cycle\n(4)" -> "SafetyDoor\n(7)" [label = "door open"];
+
+    // Jog transitions
+    "Jog\n(6)" -> "Idle\n(0)" [label = "complete"];
+    "Jog\n(6)" -> "Alarm\n(1)" [label = "error"];
+
+    // Homing transitions
+    "Homing\n(3)" -> "Idle\n(0)" [label = "complete"];
+    "Homing\n(3)" -> "Alarm\n(1)" [label = "failed"];
+
+    // Hold transitions
+    "Hold\n(5)" -> "Cycle\n(4)" [label = "cycle start (~)"];
+    "Hold\n(5)" -> "Idle\n(0)" [label = "reset"];
+    "Hold\n(5)" -> "SafetyDoor\n(7)" [label = "door open"];
+
+    // SafetyDoor transitions
+    "SafetyDoor\n(7)" -> "Hold\n(5)" [label = "door closed"];
+    "SafetyDoor\n(7)" -> "Idle\n(0)" [label = "reset"];
+
+    // CheckMode transitions
+    "CheckMode\n(2)" -> "Idle\n(0)" [label = "$C toggle"];
+
+    // Sleep transitions
+    "Sleep\n(8)" -> "Idle\n(0)" [label = "wake"];
+
+    // Alarm transitions
+    "Alarm\n(1)" -> "Idle\n(0)" [label = "$X reset"];
+
+    // Note: ConfigAlarm requires fixing config and restart
+    // Note: Any state can transition to Alarm on error/limit event
+}
