@@ -1,0 +1,211 @@
+name: Check State Diagrams
+
+on:
+  pull_request:
+    paths:
+      - 'docs/state-diagram.md'
+      - 'docs/state-diagram.dot'
+      - 'docs/state-diagram.diag'
+      - 'FluidNC/src/Maslow/Calibration.h'
+      - 'FluidNC/src/Maslow/Calibration.cpp'
+      - 'build-docs.py'
+
+jobs:
+  check-diagrams:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+
+    - name: Install graphviz
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y graphviz
+
+    - name: Generate diagrams from DOT source
+      run: |
+        mkdir -p docs/diagrams
+        python3 build-docs.py --graphviz-only --output-dir docs/diagrams
+        echo "Generated diagram files:"
+        ls -la docs/diagrams/
+
+    - name: Check diagram source files consistency
+      run: |
+        echo "=== Checking State Diagram Consistency ==="
+        echo ""
+        echo "Checking if all diagram formats exist..."
+
+        # Check that all source files exist
+        files_missing=0
+
+        if [ ! -f "docs/state-diagram.md" ]; then
+          echo "❌ Missing: docs/state-diagram.md"
+          files_missing=1
+        else
+          echo "✅ Found: docs/state-diagram.md"
+        fi
+
+        if [ ! -f "docs/state-diagram.dot" ]; then
+          echo "❌ Missing: docs/state-diagram.dot"
+          files_missing=1
+        else
+          echo "✅ Found: docs/state-diagram.dot"
+        fi
+
+        if [ ! -f "docs/state-diagram.diag" ]; then
+          echo "❌ Missing: docs/state-diagram.diag"
+          files_missing=1
+        else
+          echo "✅ Found: docs/state-diagram.diag"
+        fi
+
+        if [ $files_missing -eq 1 ]; then
+          echo ""
+          echo "❌ Some diagram source files are missing!"
+          exit 1
+        fi
+
+        echo ""
+        echo "=== Extracting transitions from each format ==="
+
+        # Extract state transitions from Mermaid (markdown)
+        echo "Mermaid transitions:"
+        grep -E "^\s+[A-Z_]+ --> [A-Z_]+" docs/state-diagram.md | \
+          sed 's/:.*//' | sed 's/\s*//g' | sort -u > /tmp/mermaid_transitions.txt
+        cat /tmp/mermaid_transitions.txt
+
+        # Extract state transitions from DOT (graphviz)
+        echo ""
+        echo "DOT transitions:"
+        grep -E "^\s+[A-Z_]+ -> [A-Z_]+" docs/state-diagram.dot | \
+          sed 's/\[.*//' | sed 's/\s*//g' | sed 's/->/ --> /' | sort -u > /tmp/dot_transitions.txt
+        cat /tmp/dot_transitions.txt
+
+        # Extract state transitions from blockdiag
+        echo ""
+        echo "Blockdiag transitions:"
+        grep -E '^\s+"[A-Z_]+' docs/state-diagram.diag | grep -E '\-> "' | \
+          sed 's/"//g' | sed 's/\\n.*//g' | sed 's/\[.*//' | sed 's/\s*//g' | \
+          sed 's/(.*)//' | sed 's/->/ --> /' | sort -u > /tmp/blockdiag_transitions.txt
+        cat /tmp/blockdiag_transitions.txt
+
+        echo ""
+        echo "=== Comparing transition counts ==="
+        mermaid_count=$(wc -l < /tmp/mermaid_transitions.txt)
+        dot_count=$(wc -l < /tmp/dot_transitions.txt)
+        blockdiag_count=$(wc -l < /tmp/blockdiag_transitions.txt)
+
+        echo "Mermaid transitions: $mermaid_count"
+        echo "DOT transitions: $dot_count"
+        echo "Blockdiag transitions: $blockdiag_count"
+
+        # Simple check: all formats should have the same number of transitions
+        if [ "$mermaid_count" -ne "$dot_count" ] || [ "$dot_count" -ne "$blockdiag_count" ]; then
+          echo ""
+          echo "⚠️  Warning: Transition counts differ between formats."
+          echo "Please ensure all diagram formats are synchronized."
+          echo "Run 'python3 build-docs.py' to regenerate diagrams."
+        else
+          echo ""
+          echo "✅ All diagram formats have the same number of transitions."
+        fi
+
+        echo ""
+        echo "=== Generated diagram images ==="
+        if [ -d "docs/diagrams" ]; then
+          ls -la docs/diagrams/
+          echo ""
+          echo "✅ Diagrams generated successfully!"
+        fi
+
+    - name: Upload generated diagrams as artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: state-diagrams
+        path: docs/diagrams/
+        retention-days: 7
+
+    - name: Comment on PR with diagram status
+      if: always()
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+
+          let diagramsGenerated = false;
+          let svgExists = false;
+          let pngExists = false;
+          let pdfExists = false;
+
+          try {
+            svgExists = fs.existsSync('docs/diagrams/state-diagram.svg');
+            pngExists = fs.existsSync('docs/diagrams/state-diagram.png');
+            pdfExists = fs.existsSync('docs/diagrams/state-diagram.pdf');
+            diagramsGenerated = svgExists || pngExists || pdfExists;
+          } catch (e) {
+            console.log('Could not check diagram files:', e.message);
+          }
+
+          const status = diagramsGenerated ? '✅' : '❌';
+          const statusText = diagramsGenerated ? 'successfully generated' : 'generation failed';
+
+          const comment = `### 📊 State Diagram Check
+
+          ${status} Diagrams ${statusText}
+
+          | Format | Status |
+          |--------|--------|
+          | SVG | ${svgExists ? '✅' : '❌'} |
+          | PNG | ${pngExists ? '✅' : '❌'} |
+          | PDF | ${pdfExists ? '✅' : '❌'} |
+
+          ${diagramsGenerated ? `
+          **Download:** The generated diagram images are available as a build artifact named "state-diagrams" from the [Actions tab](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}).
+
+          **Source Files Checked:**
+          - \`docs/state-diagram.md\` (Mermaid)
+          - \`docs/state-diagram.dot\` (Graphviz)
+          - \`docs/state-diagram.diag\` (blockdiag)
+          ` : `
+          ⚠️ Please check the workflow logs for errors.
+          `}
+
+          _This comment was automatically generated by the state diagram check workflow._`;
+
+          // Check if we already commented on this PR to avoid duplicates
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number
+          });
+
+          const existingComment = comments.find(c =>
+            c.user.login === 'github-actions[bot]' &&
+            c.body.includes('State Diagram Check')
+          );
+
+          if (existingComment) {
+            // Update existing comment
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: existingComment.id,
+              body: comment
+            });
+          } else {
+            // Create new comment
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: comment
+            });
+          }
