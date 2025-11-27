@@ -21,7 +21,9 @@ This document describes the state machine that controls the Maslow CNC machine's
 
 ```mermaid
 stateDiagram-v2
-    [*] --> UNKNOWN: Power On
+    [*] --> UNKNOWN: Power On (no saved state)
+    [*] --> RETRACTED: Boot with saved state (belts near zero)
+    [*] --> EXTENDEDOUT: Boot with saved state (belts extended)
 
     %% UNKNOWN transitions
     UNKNOWN --> RETRACTING: User initiates retract
@@ -69,13 +71,6 @@ stateDiagram-v2
         RETRACTING can be entered
         from ANY state (emergency/reset)
     end note
-
-    %% Boot restoration (direct state assignment)
-    note right of UNKNOWN
-        At boot, saved belt positions
-        can restore directly to
-        RETRACTED or EXTENDEDOUT
-    end note
 ```
 
 ## Transition Rules
@@ -86,9 +81,9 @@ stateDiagram-v2
 |--------------|----------------|-----------|
 | **UNKNOWN** | Any state | Always allowed (reset) |
 | **RETRACTING** | Any state | Always allowed (emergency retract) |
-| **RETRACTED** | RETRACTING | When all belts have retracted |
+| **RETRACTED** | RETRACTING, Boot | When all belts have retracted, or boot with saved positions near zero |
 | **EXTENDING** | RETRACTED, EXTENDEDOUT | User command to extend/re-extend |
-| **EXTENDEDOUT** | EXTENDING, TAKING_SLACK, RELEASE_TENSION | When operation completes |
+| **EXTENDEDOUT** | EXTENDING, TAKING_SLACK, RELEASE_TENSION, Boot | When operation completes, or boot with saved positions extended |
 | **TAKING_SLACK** | EXTENDEDOUT, READY_TO_CUT | User command |
 | **CALIBRATION_IN_PROGRESS** | EXTENDEDOUT, READY_TO_CUT, CALIBRATION_COMPUTING | User command or continuing calibration |
 | **READY_TO_CUT** | CALIBRATION_IN_PROGRESS, CALIBRATION_COMPUTING, TAKING_SLACK | When operation completes successfully |
@@ -99,13 +94,24 @@ stateDiagram-v2
 
 ### Special Cases
 
-1. **Boot Restoration**: When the machine boots, saved belt positions from NVS (Non-Volatile Storage) can directly set the state to either `RETRACTED` or `EXTENDEDOUT`, bypassing the normal state machine transitions.
+1. **Boot Restoration from Saved State**: When the machine boots with valid saved belt positions in NVS (Non-Volatile Storage), the state machine can directly enter one of two states:
+   - **RETRACTED**: If all saved belt positions are near zero (within 0.5mm threshold, defined in `loadBeltPositions()`)
+   - **EXTENDEDOUT**: If any saved belt position is beyond the retracted threshold
+
+   This bypasses the normal `UNKNOWN` state and allows the machine to resume operation more quickly. From `EXTENDEDOUT`, the user must initiate "Take Slack" (which enters the `TAKING_SLACK` state) to progress to `READY_TO_CUT`.
 
 2. **Global Retract**: The `RETRACTING` state can be entered from any state, providing an emergency or reset mechanism.
 
 3. **Global Reset**: The `UNKNOWN` state can be entered from any stable state.
 
 ## Typical Workflows
+
+### Boot State Restoration (from saved positions)
+The machine can boot directly into one of two states based on saved belt positions:
+```
+[Boot with saved state, belts near zero] → RETRACTED
+[Boot with saved state, belts extended] → EXTENDEDOUT → TAKING_SLACK → READY_TO_CUT
+```
 
 ### Initial Setup (First Use)
 ```
@@ -129,11 +135,6 @@ READY_TO_CUT → CALIBRATION_IN_PROGRESS → CALIBRATION_COMPUTING → READY_TO_
 ### Storing the Machine
 ```
 READY_TO_CUT → RETRACTING → RETRACTED
-```
-
-### Resuming After Power Off (with saved positions)
-```
-[Boot] → EXTENDEDOUT (restored from NVS)
 ```
 
 ## Source Code Reference
