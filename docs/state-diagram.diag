@@ -57,9 +57,9 @@ blockdiag {
     "CALIBRATION_IN_PROGRESS\n(6)" -> "CALIBRATION_COMPUTING\n(9)" [label = "measure done"];
     "CALIBRATION_IN_PROGRESS\n(6)" -> "EXTENDEDOUT\n(4)" [label = "cancel"];
 
-    // CALIBRATION_COMPUTING transitions
+    // CALIBRATION_COMPUTING transitions (loops back until complete)
+    "CALIBRATION_COMPUTING\n(9)" -> "CALIBRATION_IN_PROGRESS\n(6)" [label = "more data (loop)", style = bold];
     "CALIBRATION_COMPUTING\n(9)" -> "READY_TO_CUT\n(7)" [label = "complete"];
-    "CALIBRATION_COMPUTING\n(9)" -> "CALIBRATION_IN_PROGRESS\n(6)" [label = "more data"];
     "CALIBRATION_COMPUTING\n(9)" -> "RELEASE_TENSION\n(8)" [label = "release"];
 
     // READY_TO_CUT transitions

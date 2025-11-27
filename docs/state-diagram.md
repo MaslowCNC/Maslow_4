@@ -53,10 +53,16 @@ stateDiagram-v2
     CALIBRATION_IN_PROGRESS --> CALIBRATION_COMPUTING: Measurements complete
     CALIBRATION_IN_PROGRESS --> EXTENDEDOUT: Calibration fails/cancelled
 
-    %% CALIBRATION_COMPUTING transitions
+    %% CALIBRATION_COMPUTING transitions (loops back until complete)
+    CALIBRATION_COMPUTING --> CALIBRATION_IN_PROGRESS: More measurements needed (loop)
     CALIBRATION_COMPUTING --> READY_TO_CUT: Calibration complete
-    CALIBRATION_COMPUTING --> CALIBRATION_IN_PROGRESS: More measurements needed
     CALIBRATION_COMPUTING --> RELEASE_TENSION: User releases tension
+
+    note right of CALIBRATION_COMPUTING
+        Loops between CALIBRATION_IN_PROGRESS
+        and CALIBRATION_COMPUTING until
+        calibration is complete
+    end note
 
     %% READY_TO_CUT transitions
     READY_TO_CUT --> TAKING_SLACK: User re-takes slack
@@ -119,13 +125,18 @@ UNKNOWN → RETRACTING → RETRACTED → EXTENDING → EXTENDEDOUT → TAKING_SL
 ```
 
 ### Calibration Flow
+The calibration process loops between `CALIBRATION_IN_PROGRESS` and `CALIBRATION_COMPUTING` until calibration is complete:
 ```
-EXTENDEDOUT → CALIBRATION_IN_PROGRESS → CALIBRATION_COMPUTING → READY_TO_CUT
+EXTENDEDOUT → CALIBRATION_IN_PROGRESS ↔ CALIBRATION_COMPUTING → READY_TO_CUT
+                        ↑________________________↓
+                           (loop until complete)
 ```
-or if recalibration is needed:
-```
-CALIBRATION_IN_PROGRESS → CALIBRATION_COMPUTING → CALIBRATION_IN_PROGRESS → ... → READY_TO_CUT
-```
+The typical flow is:
+1. `EXTENDEDOUT` → `CALIBRATION_IN_PROGRESS` (user starts calibration)
+2. `CALIBRATION_IN_PROGRESS` → `CALIBRATION_COMPUTING` (measurements taken)
+3. `CALIBRATION_COMPUTING` → `CALIBRATION_IN_PROGRESS` (more measurements needed - **loops back**)
+4. Repeat steps 2-3 until calibration is satisfied
+5. `CALIBRATION_COMPUTING` → `READY_TO_CUT` (calibration complete)
 
 ### Re-calibration from Ready State
 ```

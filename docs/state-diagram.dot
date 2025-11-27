@@ -84,9 +84,9 @@ digraph MaslowStateMachine {
     CALIBRATION_IN_PROGRESS -> CALIBRATION_COMPUTING [label="measure done"];
     CALIBRATION_IN_PROGRESS -> EXTENDEDOUT [label="cancel"];
 
-    // CALIBRATION_COMPUTING transitions
+    // CALIBRATION_COMPUTING transitions (loops back until complete)
+    CALIBRATION_COMPUTING -> CALIBRATION_IN_PROGRESS [label="more data\n(loop)", style=bold, color=blue];
     CALIBRATION_COMPUTING -> READY_TO_CUT [label="complete"];
-    CALIBRATION_COMPUTING -> CALIBRATION_IN_PROGRESS [label="more data"];
     CALIBRATION_COMPUTING -> RELEASE_TENSION [label="release"];
 
     // READY_TO_CUT transitions
