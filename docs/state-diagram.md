@@ -143,3 +143,56 @@ The state machine is implemented in:
 - State definitions: `FluidNC/src/Maslow/Calibration.h`
 - State transitions: `FluidNC/src/Maslow/Calibration.cpp` (see `requestStateChange()`)
 - Boot restoration: `FluidNC/src/Maslow/Maslow.cpp` (see `loadBeltPositions()`)
+
+## Generating Diagram Images
+
+The state diagram is available in multiple formats:
+
+### Source Files
+- `docs/state-diagram.md` - Markdown documentation with embedded Mermaid diagram
+- `docs/state-diagram.dot` - Graphviz DOT format
+- `docs/state-diagram.diag` - blockdiag format
+
+### Generate Images
+
+Use the build-docs script to generate SVG, PNG, and PDF versions:
+
+```bash
+# Install graphviz first:
+# Ubuntu/Debian: apt-get install graphviz
+# macOS: brew install graphviz
+# Windows: choco install graphviz
+
+# Generate diagrams (outputs to docs/diagrams/)
+python3 build-docs.py
+
+# Use graphviz only (recommended, more stable)
+python3 build-docs.py --graphviz-only
+
+# Use blockdiag only (requires: pip install blockdiag[pdf])
+python3 build-docs.py --blockdiag-only
+
+# Custom output directory
+python3 build-docs.py --output-dir my-output
+```
+
+### Manual Generation with Graphviz
+
+```bash
+cd docs
+dot -Tsvg state-diagram.dot -o state-diagram.svg
+dot -Tpng state-diagram.dot -o state-diagram.png
+dot -Tpdf state-diagram.dot -o state-diagram.pdf
+```
+
+### Manual Generation with blockdiag
+
+```bash
+pip install blockdiag[pdf]
+cd docs
+blockdiag -Tsvg state-diagram.diag -o state-diagram.svg
+blockdiag -Tpng state-diagram.diag -o state-diagram.png
+blockdiag -Tpdf state-diagram.diag -o state-diagram.pdf
+```
+
+> **Note:** blockdiag may have compatibility issues with Pillow >= 10.0. If you encounter errors, use graphviz instead.

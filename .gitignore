@@ -28,6 +28,7 @@ v*.zip
 /FluidNC/data/config.yaml
 build/
 dist/
+docs/diagrams/
 *.cppx
 *.hx
 firmware-package/

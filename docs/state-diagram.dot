@@ -1,0 +1,99 @@
+// Maslow CNC State Machine Diagram
+// Graphviz DOT format - Use with: dot -Tsvg state-diagram.dot -o state-diagram.svg
+//
+// Install graphviz:
+//   Ubuntu/Debian: apt-get install graphviz
+//   macOS: brew install graphviz
+//   Windows: choco install graphviz
+//
+// Generate outputs:
+//   dot -Tsvg state-diagram.dot -o state-diagram.svg
+//   dot -Tpng state-diagram.dot -o state-diagram.png
+//   dot -Tpdf state-diagram.dot -o state-diagram.pdf
+
+digraph MaslowStateMachine {
+    // Graph settings
+    rankdir=TB;
+    splines=true;
+    overlap=false;
+    fontname="Helvetica";
+    fontsize=14;
+    label="Maslow CNC State Machine\n\nNote: RETRACTING can be entered from ANY state (emergency/reset)";
+    labelloc=t;
+
+    // Node defaults
+    node [
+        shape=box,
+        style="rounded,filled",
+        fontname="Helvetica",
+        fontsize=11,
+        margin="0.2,0.1"
+    ];
+
+    // Edge defaults
+    edge [
+        fontname="Helvetica",
+        fontsize=9
+    ];
+
+    // Boot entry point
+    Boot [shape=circle, label="", width=0.3, style=filled, fillcolor=black];
+
+    // State definitions with colors
+    UNKNOWN [label="UNKNOWN\n(0)", fillcolor="#ffcccc"];
+    RETRACTING [label="RETRACTING\n(1)", fillcolor="#ffeb99"];
+    RETRACTED [label="RETRACTED\n(2)", fillcolor="#ccffcc"];
+    EXTENDING [label="EXTENDING\n(3)", fillcolor="#ffeb99"];
+    EXTENDEDOUT [label="EXTENDEDOUT\n(4)", fillcolor="#ccffcc"];
+    TAKING_SLACK [label="TAKING_SLACK\n(5)", fillcolor="#99ccff"];
+    CALIBRATION_IN_PROGRESS [label="CALIBRATION_IN_PROGRESS\n(6)", fillcolor="#ffcc99"];
+    READY_TO_CUT [label="READY_TO_CUT\n(7)", fillcolor="#99ff99"];
+    RELEASE_TENSION [label="RELEASE_TENSION\n(8)", fillcolor="#cc99ff"];
+    CALIBRATION_COMPUTING [label="CALIBRATION_COMPUTING\n(9)", fillcolor="#ffcc99"];
+
+    // Boot transitions
+    Boot -> UNKNOWN [label="no saved state"];
+    Boot -> RETRACTED [label="saved: belts near zero"];
+    Boot -> EXTENDEDOUT [label="saved: belts extended"];
+
+    // UNKNOWN transitions
+    UNKNOWN -> RETRACTING [label="retract"];
+    UNKNOWN -> RELEASE_TENSION [label="release"];
+
+    // RETRACTING transitions
+    RETRACTING -> RETRACTED [label="complete"];
+
+    // RETRACTED transitions
+    RETRACTED -> EXTENDING [label="extend"];
+
+    // EXTENDING transitions
+    EXTENDING -> EXTENDEDOUT [label="complete"];
+    EXTENDING -> UNKNOWN [label="fail"];
+
+    // EXTENDEDOUT transitions
+    EXTENDEDOUT -> EXTENDING [label="re-extend"];
+    EXTENDEDOUT -> TAKING_SLACK [label="take slack"];
+    EXTENDEDOUT -> CALIBRATION_IN_PROGRESS [label="calibrate"];
+    EXTENDEDOUT -> RELEASE_TENSION [label="release"];
+
+    // TAKING_SLACK transitions
+    TAKING_SLACK -> READY_TO_CUT [label="success"];
+    TAKING_SLACK -> EXTENDEDOUT [label="fail"];
+
+    // CALIBRATION_IN_PROGRESS transitions
+    CALIBRATION_IN_PROGRESS -> CALIBRATION_COMPUTING [label="measure done"];
+    CALIBRATION_IN_PROGRESS -> EXTENDEDOUT [label="cancel"];
+
+    // CALIBRATION_COMPUTING transitions
+    CALIBRATION_COMPUTING -> READY_TO_CUT [label="complete"];
+    CALIBRATION_COMPUTING -> CALIBRATION_IN_PROGRESS [label="more data"];
+    CALIBRATION_COMPUTING -> RELEASE_TENSION [label="release"];
+
+    // READY_TO_CUT transitions
+    READY_TO_CUT -> TAKING_SLACK [label="re-slack"];
+    READY_TO_CUT -> CALIBRATION_IN_PROGRESS [label="recalibrate"];
+    READY_TO_CUT -> RELEASE_TENSION [label="release"];
+
+    // RELEASE_TENSION transitions
+    RELEASE_TENSION -> EXTENDEDOUT [label="released"];
+}

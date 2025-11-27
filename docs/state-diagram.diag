@@ -1,0 +1,75 @@
+// Maslow CNC State Machine Diagram
+// This file is used with blockdiag to generate SVG, PDF, and PNG versions
+// Install: pip install blockdiag
+// Generate: blockdiag -Tsvg state-diagram.diag -o state-diagram.svg
+
+blockdiag {
+    // Define node shapes and colors
+    node_width = 180;
+    node_height = 50;
+    default_fontsize = 12;
+
+    // Boot entry points (initial states)
+    "Boot" [shape = "beginpoint", label = "Boot"];
+
+    // Define all states with their IDs
+    "UNKNOWN\n(0)" [color = "#ffcccc"];
+    "RETRACTING\n(1)" [color = "#ffeb99"];
+    "RETRACTED\n(2)" [color = "#ccffcc"];
+    "EXTENDING\n(3)" [color = "#ffeb99"];
+    "EXTENDEDOUT\n(4)" [color = "#ccffcc"];
+    "TAKING_SLACK\n(5)" [color = "#99ccff"];
+    "CALIBRATION_IN_PROGRESS\n(6)" [color = "#ffcc99"];
+    "READY_TO_CUT\n(7)" [color = "#99ff99"];
+    "RELEASE_TENSION\n(8)" [color = "#cc99ff"];
+    "CALIBRATION_COMPUTING\n(9)" [color = "#ffcc99"];
+
+    // Boot transitions
+    "Boot" -> "UNKNOWN\n(0)" [label = "no saved state"];
+    "Boot" -> "RETRACTED\n(2)" [label = "saved: belts zero"];
+    "Boot" -> "EXTENDEDOUT\n(4)" [label = "saved: belts extended"];
+
+    // UNKNOWN transitions
+    "UNKNOWN\n(0)" -> "RETRACTING\n(1)" [label = "retract"];
+    "UNKNOWN\n(0)" -> "RELEASE_TENSION\n(8)" [label = "release"];
+
+    // RETRACTING transitions
+    "RETRACTING\n(1)" -> "RETRACTED\n(2)" [label = "complete"];
+
+    // RETRACTED transitions
+    "RETRACTED\n(2)" -> "EXTENDING\n(3)" [label = "extend"];
+
+    // EXTENDING transitions
+    "EXTENDING\n(3)" -> "EXTENDEDOUT\n(4)" [label = "complete"];
+    "EXTENDING\n(3)" -> "UNKNOWN\n(0)" [label = "fail"];
+
+    // EXTENDEDOUT transitions
+    "EXTENDEDOUT\n(4)" -> "EXTENDING\n(3)" [label = "re-extend"];
+    "EXTENDEDOUT\n(4)" -> "TAKING_SLACK\n(5)" [label = "take slack"];
+    "EXTENDEDOUT\n(4)" -> "CALIBRATION_IN_PROGRESS\n(6)" [label = "calibrate"];
+    "EXTENDEDOUT\n(4)" -> "RELEASE_TENSION\n(8)" [label = "release"];
+
+    // TAKING_SLACK transitions
+    "TAKING_SLACK\n(5)" -> "READY_TO_CUT\n(7)" [label = "success"];
+    "TAKING_SLACK\n(5)" -> "EXTENDEDOUT\n(4)" [label = "fail"];
+
+    // CALIBRATION_IN_PROGRESS transitions
+    "CALIBRATION_IN_PROGRESS\n(6)" -> "CALIBRATION_COMPUTING\n(9)" [label = "measure done"];
+    "CALIBRATION_IN_PROGRESS\n(6)" -> "EXTENDEDOUT\n(4)" [label = "cancel"];
+
+    // CALIBRATION_COMPUTING transitions
+    "CALIBRATION_COMPUTING\n(9)" -> "READY_TO_CUT\n(7)" [label = "complete"];
+    "CALIBRATION_COMPUTING\n(9)" -> "CALIBRATION_IN_PROGRESS\n(6)" [label = "more data"];
+    "CALIBRATION_COMPUTING\n(9)" -> "RELEASE_TENSION\n(8)" [label = "release"];
+
+    // READY_TO_CUT transitions
+    "READY_TO_CUT\n(7)" -> "TAKING_SLACK\n(5)" [label = "re-slack"];
+    "READY_TO_CUT\n(7)" -> "CALIBRATION_IN_PROGRESS\n(6)" [label = "recalibrate"];
+    "READY_TO_CUT\n(7)" -> "RELEASE_TENSION\n(8)" [label = "release"];
+
+    // RELEASE_TENSION transitions
+    "RELEASE_TENSION\n(8)" -> "EXTENDEDOUT\n(4)" [label = "released"];
+
+    // Note: RETRACTING can be entered from ANY state (emergency/reset)
+    // This is not shown to keep diagram readable
+}
