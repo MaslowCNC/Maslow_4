@@ -26,7 +26,7 @@ blockdiag {
 
     // Boot transitions
     "Boot" -> "UNKNOWN\n(0)" [label = "no saved state"];
-    "Boot" -> "RETRACTED\n(2)" [label = "saved: belts zero"];
+    "Boot" -> "RETRACTED\n(2)" [label = "saved: belts near zero"];
     "Boot" -> "EXTENDEDOUT\n(4)" [label = "saved: belts extended"];
 
     // UNKNOWN transitions

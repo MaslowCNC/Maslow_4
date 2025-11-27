@@ -21,9 +21,9 @@ This document describes the state machine that controls the Maslow CNC machine's
 
 ```mermaid
 stateDiagram-v2
-    [*] --> UNKNOWN: Power On (no saved state)
-    [*] --> RETRACTED: Boot with saved state (belts near zero)
-    [*] --> EXTENDEDOUT: Boot with saved state (belts extended)
+    [*] --> UNKNOWN: no saved state
+    [*] --> RETRACTED: saved: belts near zero
+    [*] --> EXTENDEDOUT: saved: belts extended
 
     %% UNKNOWN transitions
     UNKNOWN --> RETRACTING: User initiates retract
