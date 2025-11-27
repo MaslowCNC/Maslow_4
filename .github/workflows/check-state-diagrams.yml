@@ -2,19 +2,8 @@ name: Check State Diagrams
 
 on:
   pull_request:
-    paths:
-      - 'docs/state-diagram.md'
-      - 'docs/state-diagram.dot'
-      - 'docs/state-diagram.diag'
-      - 'docs/fluidnc-state-diagram.md'
-      - 'docs/fluidnc-state-diagram.dot'
-      - 'docs/fluidnc-state-diagram.diag'
-      - 'FluidNC/src/Maslow/Calibration.h'
-      - 'FluidNC/src/Maslow/Calibration.cpp'
-      - 'FluidNC/src/Types.h'
-      - 'FluidNC/src/System.h'
-      - 'FluidNC/src/Protocol.cpp'
-      - 'build-docs.py'
+    # Run on ALL PRs to check if source code changes affect state machines
+    # The job will detect if state-related files changed and verify diagrams
 
 jobs:
   check-diagrams:
@@ -26,17 +15,73 @@ jobs:
       with:
         fetch-depth: 0
 
+    - name: Check for state-related changes
+      id: check-changes
+      run: |
+        # Get list of changed files
+        CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD 2>/dev/null || echo "")
+        
+        # Check if any state-related files changed
+        STATE_FILES_CHANGED=false
+        DIAGRAM_FILES_CHANGED=false
+        
+        # State definition and transition source files
+        if echo "$CHANGED_FILES" | grep -qE "(Calibration\.(h|cpp)|Types\.h|System\.h|Protocol\.cpp)"; then
+          STATE_FILES_CHANGED=true
+          echo "State-related source files changed!"
+        fi
+        
+        # Diagram files
+        if echo "$CHANGED_FILES" | grep -qE "docs/.*state-diagram\.(md|dot|diag)"; then
+          DIAGRAM_FILES_CHANGED=true
+          echo "Diagram files changed!"
+        fi
+        
+        # Build script
+        if echo "$CHANGED_FILES" | grep -qE "(build-docs\.py|analyze-states\.py)"; then
+          STATE_FILES_CHANGED=true
+          echo "Build/analyze scripts changed!"
+        fi
+        
+        echo "state_files_changed=$STATE_FILES_CHANGED" >> $GITHUB_OUTPUT
+        echo "diagram_files_changed=$DIAGRAM_FILES_CHANGED" >> $GITHUB_OUTPUT
+        echo "should_check=$([[ $STATE_FILES_CHANGED == true || $DIAGRAM_FILES_CHANGED == true ]] && echo true || echo false)" >> $GITHUB_OUTPUT
+        
+        # List what changed for debugging
+        echo ""
+        echo "Changed files:"
+        echo "$CHANGED_FILES" | head -20
+
     - name: Setup Python
+      if: steps.check-changes.outputs.should_check == 'true'
       uses: actions/setup-python@v4
       with:
         python-version: '3.12'
 
     - name: Install graphviz
+      if: steps.check-changes.outputs.should_check == 'true'
       run: |
         sudo apt-get update
         sudo apt-get install -y graphviz
 
+    - name: Analyze state machines in source code
+      if: steps.check-changes.outputs.should_check == 'true'
+      id: analyze
+      run: |
+        echo "=== Analyzing State Machines ==="
+        python3 analyze-states.py --verbose 2>&1 | tee /tmp/analysis.log
+        RESULT=$?
+        echo "analysis_result=$RESULT" >> $GITHUB_OUTPUT
+        
+        if [ $RESULT -ne 0 ]; then
+          echo ""
+          echo "⚠️  State machine analysis found discrepancies!"
+          echo "The diagrams may need to be updated to match the source code."
+        fi
+      continue-on-error: true
+
     - name: Generate diagrams from DOT source
+      if: steps.check-changes.outputs.should_check == 'true'
       run: |
         mkdir -p docs/diagrams
         python3 build-docs.py --graphviz-only --output-dir docs/diagrams
@@ -44,6 +89,7 @@ jobs:
         ls -la docs/diagrams/
 
     - name: Check diagram source files consistency
+      if: steps.check-changes.outputs.should_check == 'true'
       run: |
         echo "=== Checking State Diagram Consistency ==="
         echo ""
@@ -52,26 +98,17 @@ jobs:
         # Check that all source files exist
         files_missing=0
 
-        if [ ! -f "docs/state-diagram.md" ]; then
-          echo "❌ Missing: docs/state-diagram.md"
-          files_missing=1
-        else
-          echo "✅ Found: docs/state-diagram.md"
-        fi
-
-        if [ ! -f "docs/state-diagram.dot" ]; then
-          echo "❌ Missing: docs/state-diagram.dot"
-          files_missing=1
-        else
-          echo "✅ Found: docs/state-diagram.dot"
-        fi
-
-        if [ ! -f "docs/state-diagram.diag" ]; then
-          echo "❌ Missing: docs/state-diagram.diag"
-          files_missing=1
-        else
-          echo "✅ Found: docs/state-diagram.diag"
-        fi
+        for diagram in "state-diagram" "fluidnc-state-diagram"; do
+          for ext in "md" "dot" "diag"; do
+            file="docs/${diagram}.${ext}"
+            if [ ! -f "$file" ]; then
+              echo "❌ Missing: $file"
+              files_missing=1
+            else
+              echo "✅ Found: $file"
+            fi
+          done
+        done
 
         if [ $files_missing -eq 1 ]; then
           echo ""
@@ -80,28 +117,26 @@ jobs:
         fi
 
         echo ""
-        echo "=== Extracting transitions from each format ==="
+        echo "=== Extracting transitions from Maslow diagrams ==="
 
         # Extract state transitions from Mermaid (markdown)
         echo "Mermaid transitions:"
         grep -E "^\s+[A-Z_]+ --> [A-Z_]+" docs/state-diagram.md | \
           sed 's/:.*//' | sed 's/\s*//g' | sort -u > /tmp/mermaid_transitions.txt
-        cat /tmp/mermaid_transitions.txt
+        wc -l < /tmp/mermaid_transitions.txt
 
         # Extract state transitions from DOT (graphviz)
-        echo ""
         echo "DOT transitions:"
         grep -E "^\s+[A-Z_]+ -> [A-Z_]+" docs/state-diagram.dot | \
           sed 's/\[.*//' | sed 's/\s*//g' | sed 's/->/ --> /' | sort -u > /tmp/dot_transitions.txt
-        cat /tmp/dot_transitions.txt
+        wc -l < /tmp/dot_transitions.txt
 
         # Extract state transitions from blockdiag
-        echo ""
         echo "Blockdiag transitions:"
         grep -E '^\s+"[A-Z_]+' docs/state-diagram.diag | grep -E '\-> "' | \
           sed 's/"//g' | sed 's/\\n.*//g' | sed 's/\[.*//' | sed 's/\s*//g' | \
           sed 's/(.*)//' | sed 's/->/ --> /' | sort -u > /tmp/blockdiag_transitions.txt
-        cat /tmp/blockdiag_transitions.txt
+        wc -l < /tmp/blockdiag_transitions.txt
 
         echo ""
         echo "=== Comparing transition counts ==="
@@ -133,6 +168,7 @@ jobs:
         fi
 
     - name: Upload generated diagrams as artifact
+      if: steps.check-changes.outputs.should_check == 'true'
       uses: actions/upload-artifact@v4
       with:
         name: state-diagrams
@@ -140,11 +176,16 @@ jobs:
         retention-days: 7
 
     - name: Comment on PR with diagram status
-      if: always()
+      if: steps.check-changes.outputs.should_check == 'true'
       uses: actions/github-script@v7
       with:
         script: |
           const fs = require('fs');
+
+          // Check what changed
+          const stateFilesChanged = '${{ steps.check-changes.outputs.state_files_changed }}' === 'true';
+          const diagramFilesChanged = '${{ steps.check-changes.outputs.diagram_files_changed }}' === 'true';
+          const analysisResult = '${{ steps.analyze.outputs.analysis_result }}';
 
           let diagramsGenerated = false;
           let svgExists = false;
@@ -160,26 +201,52 @@ jobs:
             console.log('Could not check diagram files:', e.message);
           }
 
+          // Read analysis log if it exists
+          let analysisLog = '';
+          try {
+            if (fs.existsSync('/tmp/analysis.log')) {
+              analysisLog = fs.readFileSync('/tmp/analysis.log', 'utf8');
+            }
+          } catch (e) {
+            console.log('Could not read analysis log:', e.message);
+          }
+
           const status = diagramsGenerated ? '✅' : '❌';
           const statusText = diagramsGenerated ? 'successfully generated' : 'generation failed';
+          const analysisStatus = analysisResult === '0' ? '✅ Diagrams match source code' : '⚠️ Diagrams may need updates';
+
+          let changeInfo = '';
+          if (stateFilesChanged) {
+            changeInfo += '- State-related source files were modified\n';
+          }
+          if (diagramFilesChanged) {
+            changeInfo += '- Diagram files were modified\n';
+          }
 
           const comment = `### 📊 State Diagram Check
 
           ${status} Diagrams ${statusText}
 
-          | Format | Status |
-          |--------|--------|
-          | SVG | ${svgExists ? '✅' : '❌'} |
-          | PNG | ${pngExists ? '✅' : '❌'} |
-          | PDF | ${pdfExists ? '✅' : '❌'} |
+          **Analysis Result:** ${analysisStatus}
+
+          **Changes Detected:**
+          ${changeInfo || '- No state-related changes detected'}
+
+          | Format | Maslow | FluidNC |
+          |--------|--------|---------|
+          | SVG | ${svgExists ? '✅' : '❌'} | ${fs.existsSync('docs/diagrams/fluidnc-state-diagram.svg') ? '✅' : '❌'} |
+          | PNG | ${pngExists ? '✅' : '❌'} | ${fs.existsSync('docs/diagrams/fluidnc-state-diagram.png') ? '✅' : '❌'} |
+          | PDF | ${pdfExists ? '✅' : '❌'} | ${fs.existsSync('docs/diagrams/fluidnc-state-diagram.pdf') ? '✅' : '❌'} |
 
           ${diagramsGenerated ? `
-          **Download:** The generated diagram images are available as a build artifact named "state-diagrams" from the [Actions tab](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}).
+          **Download:** Generated diagrams are available as artifact "state-diagrams" from [Actions](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}).
 
-          **Source Files Checked:**
-          - \`docs/state-diagram.md\` (Mermaid)
-          - \`docs/state-diagram.dot\` (Graphviz)
-          - \`docs/state-diagram.diag\` (blockdiag)
+          ${analysisResult !== '0' ? `
+          ⚠️ **Action Required:** The state machine analyzer detected potential discrepancies between the source code and diagrams. Please review and update the diagram files if needed:
+          - \`docs/state-diagram.md\`
+          - \`docs/state-diagram.dot\`
+          - \`docs/state-diagram.diag\`
+          ` : ''}
           ` : `
           ⚠️ Please check the workflow logs for errors.
           `}
@@ -215,3 +282,9 @@ jobs:
               body: comment
             });
           }
+
+    - name: Skip message for non-state PRs
+      if: steps.check-changes.outputs.should_check != 'true'
+      run: |
+        echo "✅ No state-related files changed in this PR."
+        echo "Skipping state diagram checks."
