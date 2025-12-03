@@ -81,6 +81,13 @@ namespace Kinematics {
         //log_info("Maslow center calculated: X=" << _centerX << " Y=" << _centerY);
     }
 
+    // Helper method to get anchor Z scaling factor based on orientation
+    // Returns 1.0 for vertical mode (use full anchor Z-heights)
+    // Returns 0.0 for horizontal mode (anchors are coplanar with sled)
+    float MaslowKinematics::getAnchorZFactor() const {
+        return Maslow.calibration.orientation ? 1.0f : 0.0f;
+    }
+
     bool MaslowKinematics::cartesian_to_motors(float* target, plan_line_data_t* pl_data, float* position) {
         auto n_axis = config->_axes->_numberAxis;
 
@@ -216,8 +223,8 @@ namespace Kinematics {
 
         // Calculate complete z-components including spoilboard and work thickness
         // This must match the z-component calculation used in forward kinematics
-        // In horizontal mode, anchor Z-heights should be near zero since all anchors are coplanar with the sled
-        float anchorZFactor = Maslow.calibration.orientation ? 1.0f : 0.0f;
+        // In horizontal mode, anchor Z-heights are scaled to zero since all anchors are coplanar with the sled
+        float anchorZFactor = getAnchorZFactor();
         float z        = motors[4];
         float tlTotalZ = 0.0f - (z + _tlZ * anchorZFactor + _spoilboardThickness + _workThickness);
         float trTotalZ = 0.0f - (z + _trZ * anchorZFactor + _spoilboardThickness + _workThickness);
@@ -304,8 +311,7 @@ namespace Kinematics {
         float effectiveZ = _fixedZ ? 0.0f : z;
         // In horizontal mode, anchor Z-heights should be near zero since all anchors are coplanar with the sled
         // In vertical mode, use the full anchor Z-heights as the frame is standing upright
-        // The orientation is stored in Maslow.calibration.orientation (0=HORIZONTAL, 1=VERTICAL)
-        float anchorZFactor = Maslow.calibration.orientation ? 1.0f : 0.0f;
+        float anchorZFactor = getAnchorZFactor();
         float c          = 0.0f - (effectiveZ + _tlZ * anchorZFactor + _spoilboardThickness +
                           _workThickness);  // Z dist from corner to router center (includes material thickness)
 
@@ -327,7 +333,7 @@ namespace Kinematics {
         float effectiveZ = _fixedZ ? 0.0f : z;
         // In horizontal mode, anchor Z-heights should be near zero since all anchors are coplanar with the sled
         // In vertical mode, use the full anchor Z-heights as the frame is standing upright
-        float anchorZFactor = Maslow.calibration.orientation ? 1.0f : 0.0f;
+        float anchorZFactor = getAnchorZFactor();
         float c          = 0.0f - (effectiveZ + _trZ * anchorZFactor + _spoilboardThickness +
                           _workThickness);  // Z dist from corner to router center (includes material thickness)
 
@@ -349,7 +355,7 @@ namespace Kinematics {
         float effectiveZ = _fixedZ ? 0.0f : z;
         // In horizontal mode, anchor Z-heights should be near zero since all anchors are coplanar with the sled
         // In vertical mode, use the full anchor Z-heights as the frame is standing upright
-        float anchorZFactor = Maslow.calibration.orientation ? 1.0f : 0.0f;
+        float anchorZFactor = getAnchorZFactor();
         float c          = 0.0f - (effectiveZ + _blZ * anchorZFactor + _spoilboardThickness +
                           _workThickness);  // Z dist from corner to router center (includes material thickness)
 
@@ -371,7 +377,7 @@ namespace Kinematics {
         float effectiveZ = _fixedZ ? 0.0f : z;
         // In horizontal mode, anchor Z-heights should be near zero since all anchors are coplanar with the sled
         // In vertical mode, use the full anchor Z-heights as the frame is standing upright
-        float anchorZFactor = Maslow.calibration.orientation ? 1.0f : 0.0f;
+        float anchorZFactor = getAnchorZFactor();
         float c          = 0.0f - (effectiveZ + _brZ * anchorZFactor + _spoilboardThickness +
                           _workThickness);  // Z dist from corner to router center (includes material thickness)
 

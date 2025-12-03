@@ -1621,8 +1621,7 @@ float Calibration::measurementToXYPlane(float measurement, float zHeight) {
 
     // In horizontal mode, anchor Z-heights should be near zero since all anchors are coplanar with the sled
     // In vertical mode, use the full anchor Z-heights as the frame is standing upright
-    // The orientation is stored in the calibration object (0=HORIZONTAL, 1=VERTICAL)
-    float anchorZFactor = orientation ? 1.0f : 0.0f;
+    float anchorZFactor = getAnchorZFactor();
     float effectiveZHeight = zHeight * anchorZFactor;
 
     float lengthInXY = sqrt(measurement * measurement - effectiveZHeight * effectiveZHeight);
@@ -1638,7 +1637,7 @@ float Calibration::measurementFromXYPlane(float xyPlaneDistance, float zHeight) 
 
     // In horizontal mode, anchor Z-heights should be near zero since all anchors are coplanar with the sled
     // In vertical mode, use the full anchor Z-heights as the frame is standing upright
-    float anchorZFactor = orientation ? 1.0f : 0.0f;
+    float anchorZFactor = getAnchorZFactor();
     float effectiveZHeight = zHeight * anchorZFactor;
 
     float lengthInXY =

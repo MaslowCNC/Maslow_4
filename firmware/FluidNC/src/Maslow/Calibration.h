@@ -53,6 +53,16 @@ public:
     float measurementFromXYPlane(float xyPlaneDistance, float zHeight);
     bool  takeSlackFunc();
     bool  adjustFrameSizeToMatchFirstMeasurement();
+
+private:
+    // Helper method to get anchor Z scaling factor based on orientation
+    // Returns 1.0 for vertical mode (use full anchor Z-heights)
+    // Returns 0.0 for horizontal mode (anchors are coplanar with sled)
+    inline float getAnchorZFactor() const {
+        return orientation ? 1.0f : 0.0f;
+    }
+
+public:
     bool  computeXYfromLengths(double TL, double TR, float& x, float& y);
     void  calibration_loop();
     void  print_calibration_data();
