@@ -91,11 +91,6 @@ namespace Kinematics {
         // Validation and correction helper method
         void validateAndCorrectAnchorCoordinates();
 
-        // Helper method to get anchor Z scaling factor based on orientation
-        // Returns 1.0 for vertical mode (use full anchor Z-heights)
-        // Returns 0.0 for horizontal mode (anchors are coplanar with sled)
-        float getAnchorZFactor() const;
-
         // Anchor point coordinates (in mm)
         float _tlX = -27.6f;   // Top left X
         float _tlY = 2064.9f;  // Top left Y
