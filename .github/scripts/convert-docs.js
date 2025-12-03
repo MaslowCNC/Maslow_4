@@ -12,8 +12,9 @@ marked.setOptions({
 const SUPPORTED_ASSETS = /\.(jpg|jpeg|png|gif|svg|pdf)$/i;
 
 function htmlTemplate(title, content, relativePath) {
-  const depth = relativePath.split('/').length - 1;
-  const prefix = '../'.repeat(depth);
+  // Calculate depth based on directory separators in the relative path
+  const depth = relativePath ? relativePath.split(path.sep).filter(p => p).length - 1 : 0;
+  const prefix = depth > 0 ? '../'.repeat(depth) : '';
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
