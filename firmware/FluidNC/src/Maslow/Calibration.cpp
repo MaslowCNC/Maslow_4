@@ -1619,7 +1619,13 @@ float Calibration::measurementToXYPlane(float measurement, float zHeight) {
     if (!kinematics)
         return 0.0f;
 
-    float lengthInXY = sqrt(measurement * measurement - zHeight * zHeight);
+    // In horizontal mode, anchor Z-heights should be near zero since all anchors are coplanar with the sled
+    // In vertical mode, use the full anchor Z-heights as the frame is standing upright
+    // The orientation is stored in the calibration object (0=HORIZONTAL, 1=VERTICAL)
+    float anchorZFactor = orientation ? 1.0f : 0.0f;
+    float effectiveZHeight = zHeight * anchorZFactor;
+
+    float lengthInXY = sqrt(measurement * measurement - effectiveZHeight * effectiveZHeight);
     return lengthInXY + kinematics->getBeltEndExtension() +
            kinematics->getArmLength();  //Add the belt end extension and arm length to get the actual distance
 }
@@ -1630,9 +1636,14 @@ float Calibration::measurementFromXYPlane(float xyPlaneDistance, float zHeight) 
     if (!kinematics)
         return 0.0f;
 
+    // In horizontal mode, anchor Z-heights should be near zero since all anchors are coplanar with the sled
+    // In vertical mode, use the full anchor Z-heights as the frame is standing upright
+    float anchorZFactor = orientation ? 1.0f : 0.0f;
+    float effectiveZHeight = zHeight * anchorZFactor;
+
     float lengthInXY =
         xyPlaneDistance - kinematics->getBeltEndExtension() - kinematics->getArmLength();  //Subtract the belt end extension and arm length
-    return sqrt(lengthInXY * lengthInXY + zHeight * zHeight);                              //Calculate the angled belt length
+    return sqrt(lengthInXY * lengthInXY + effectiveZHeight * effectiveZHeight);                              //Calculate the angled belt length
 }
 
 /* Calculates and updates the center (X, Y) position based on the coordinates of the four corners
