@@ -1624,6 +1624,12 @@ float Calibration::measurementToXYPlane(float measurement, float zHeight) {
     float anchorZFactor = getAnchorZFactor();
     float effectiveZHeight = zHeight * anchorZFactor;
 
+    // Validate sqrt domain: measurement must be >= effectiveZHeight to avoid NaN
+    if (measurement < effectiveZHeight) {
+        log_error("Calibration::measurementToXYPlane: Invalid measurement " << measurement << " < effective Z-height " << effectiveZHeight);
+        return 0.0f;
+    }
+
     float lengthInXY = sqrt(measurement * measurement - effectiveZHeight * effectiveZHeight);
     return lengthInXY + kinematics->getBeltEndExtension() +
            kinematics->getArmLength();  //Add the belt end extension and arm length to get the actual distance
@@ -1642,7 +1648,14 @@ float Calibration::measurementFromXYPlane(float xyPlaneDistance, float zHeight) 
 
     float lengthInXY =
         xyPlaneDistance - kinematics->getBeltEndExtension() - kinematics->getArmLength();  //Subtract the belt end extension and arm length
-    return sqrt(lengthInXY * lengthInXY + effectiveZHeight * effectiveZHeight);                              //Calculate the angled belt length
+
+    // Validate that lengthInXY is non-negative to avoid NaN from sqrt
+    if (lengthInXY < 0.0f) {
+        log_error("Calibration::measurementFromXYPlane: Invalid lengthInXY " << lengthInXY << " (xyPlaneDistance=" << xyPlaneDistance << ")");
+        return 0.0f;
+    }
+
+    return sqrt(lengthInXY * lengthInXY + effectiveZHeight * effectiveZHeight);  //Calculate the angled belt length
 }
 
 /* Calculates and updates the center (X, Y) position based on the coordinates of the four corners
