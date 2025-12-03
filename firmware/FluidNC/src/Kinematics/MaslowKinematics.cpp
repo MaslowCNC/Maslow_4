@@ -216,9 +216,11 @@ namespace Kinematics {
 
         // Calculate complete z-components including spoilboard and work thickness
         // This must match the z-component calculation used in forward kinematics
+        // In horizontal mode, anchor Z-heights should be near zero since all anchors are coplanar with the sled
+        float anchorZFactor = Maslow.calibration.orientation ? 1.0f : 0.0f;
         float z        = motors[4];
-        float tlTotalZ = 0.0f - (z + _tlZ + _spoilboardThickness + _workThickness);
-        float trTotalZ = 0.0f - (z + _trZ + _spoilboardThickness + _workThickness);
+        float tlTotalZ = 0.0f - (z + _tlZ * anchorZFactor + _spoilboardThickness + _workThickness);
+        float trTotalZ = 0.0f - (z + _trZ * anchorZFactor + _spoilboardThickness + _workThickness);
 
         // Convert angled belt measurements to XY plane distances using complete z-components
         float tlXYDistance = measurementToXYPlane(tlBeltLength, fabs(tlTotalZ));
@@ -300,7 +302,11 @@ namespace Kinematics {
         float b = _tlY - y;  // Y dist from corner to router center
         // When fixedZ is true, don't use current Z position - only use fixed anchor Z values
         float effectiveZ = _fixedZ ? 0.0f : z;
-        float c          = 0.0f - (effectiveZ + _tlZ + _spoilboardThickness +
+        // In horizontal mode, anchor Z-heights should be near zero since all anchors are coplanar with the sled
+        // In vertical mode, use the full anchor Z-heights as the frame is standing upright
+        // The orientation is stored in Maslow.calibration.orientation (0=HORIZONTAL, 1=VERTICAL)
+        float anchorZFactor = Maslow.calibration.orientation ? 1.0f : 0.0f;
+        float c          = 0.0f - (effectiveZ + _tlZ * anchorZFactor + _spoilboardThickness +
                           _workThickness);  // Z dist from corner to router center (includes material thickness)
 
         float XYlength = sqrt(a * a + b * b);  // Get the distance in the XY plane from the corner to the router center
@@ -319,7 +325,10 @@ namespace Kinematics {
         float b = _trY - y;
         // When fixedZ is true, don't use current Z position - only use fixed anchor Z values
         float effectiveZ = _fixedZ ? 0.0f : z;
-        float c          = 0.0f - (effectiveZ + _trZ + _spoilboardThickness +
+        // In horizontal mode, anchor Z-heights should be near zero since all anchors are coplanar with the sled
+        // In vertical mode, use the full anchor Z-heights as the frame is standing upright
+        float anchorZFactor = Maslow.calibration.orientation ? 1.0f : 0.0f;
+        float c          = 0.0f - (effectiveZ + _trZ * anchorZFactor + _spoilboardThickness +
                           _workThickness);  // Z dist from corner to router center (includes material thickness)
 
         float XYlength = sqrt(a * a + b * b);  // Get the distance in the XY plane from the corner to the router center
@@ -338,7 +347,10 @@ namespace Kinematics {
         float b = _blY - y;  // Y dist from corner to router center
         // When fixedZ is true, don't use current Z position - only use fixed anchor Z values
         float effectiveZ = _fixedZ ? 0.0f : z;
-        float c          = 0.0f - (effectiveZ + _blZ + _spoilboardThickness +
+        // In horizontal mode, anchor Z-heights should be near zero since all anchors are coplanar with the sled
+        // In vertical mode, use the full anchor Z-heights as the frame is standing upright
+        float anchorZFactor = Maslow.calibration.orientation ? 1.0f : 0.0f;
+        float c          = 0.0f - (effectiveZ + _blZ * anchorZFactor + _spoilboardThickness +
                           _workThickness);  // Z dist from corner to router center (includes material thickness)
 
         float XYlength = sqrt(a * a + b * b);  // Get the distance in the XY plane from the corner to the router center
@@ -357,7 +369,10 @@ namespace Kinematics {
         float b = _brY - y;
         // When fixedZ is true, don't use current Z position - only use fixed anchor Z values
         float effectiveZ = _fixedZ ? 0.0f : z;
-        float c          = 0.0f - (effectiveZ + _brZ + _spoilboardThickness +
+        // In horizontal mode, anchor Z-heights should be near zero since all anchors are coplanar with the sled
+        // In vertical mode, use the full anchor Z-heights as the frame is standing upright
+        float anchorZFactor = Maslow.calibration.orientation ? 1.0f : 0.0f;
+        float c          = 0.0f - (effectiveZ + _brZ * anchorZFactor + _spoilboardThickness +
                           _workThickness);  // Z dist from corner to router center (includes material thickness)
 
         float XYlength = sqrt(a * a + b * b);  // Get the distance in the XY plane from the corner to the router center
