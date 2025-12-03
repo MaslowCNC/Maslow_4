@@ -1,0 +1,365 @@
+name: Publish Documentation to GitHub Pages
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:  # Allow manual trigger for testing
+
+# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
+# However, do NOT cancel in-progress runs as we want to allow these production deployments to complete.
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  # Build job
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install markdown converter
+        run: |
+          npm install -g marked
+
+      - name: Convert markdown to HTML
+        run: |
+          # Create a deployment directory
+          mkdir -p _site
+
+          # Create a script to convert markdown files to HTML
+          cat > convert.js << 'EOFJS'
+          const fs = require('fs');
+          const path = require('path');
+          const { marked } = require('marked');
+
+          // Configure marked for GitHub Flavored Markdown
+          marked.setOptions({
+            gfm: true,
+            breaks: true,
+          });
+
+          function htmlTemplate(title, content, relativePath) {
+            const depth = relativePath.split('/').length - 1;
+            const prefix = '../'.repeat(depth);
+            return `<!DOCTYPE html>
+          <html lang="en">
+          <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>${title} - Maslow CNC Documentation</title>
+              <style>
+                  body {
+                      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+                      max-width: 1000px;
+                      margin: 0 auto;
+                      padding: 20px;
+                      line-height: 1.6;
+                      color: #333;
+                  }
+                  img {
+                      max-width: 100%;
+                      height: auto;
+                      border-radius: 4px;
+                      margin: 10px 0;
+                  }
+                  h1, h2, h3, h4, h5, h6 {
+                      color: #2c3e50;
+                      margin-top: 24px;
+                      margin-bottom: 16px;
+                  }
+                  h1 {
+                      border-bottom: 2px solid #3498db;
+                      padding-bottom: 10px;
+                  }
+                  a {
+                      color: #3498db;
+                      text-decoration: none;
+                  }
+                  a:hover {
+                      text-decoration: underline;
+                  }
+                  code {
+                      background: #f4f4f4;
+                      padding: 2px 6px;
+                      border-radius: 3px;
+                      font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+                  }
+                  pre {
+                      background: #f4f4f4;
+                      padding: 16px;
+                      border-radius: 4px;
+                      overflow-x: auto;
+                  }
+                  pre code {
+                      padding: 0;
+                  }
+                  blockquote {
+                      border-left: 4px solid #3498db;
+                      margin: 0;
+                      padding-left: 16px;
+                      color: #666;
+                  }
+                  table {
+                      border-collapse: collapse;
+                      width: 100%;
+                      margin: 16px 0;
+                  }
+                  table th, table td {
+                      border: 1px solid #ddd;
+                      padding: 8px 12px;
+                      text-align: left;
+                  }
+                  table th {
+                      background: #f8f9fa;
+                      font-weight: 600;
+                  }
+                  .nav-header {
+                      background: #f8f9fa;
+                      padding: 15px;
+                      border-radius: 5px;
+                      margin-bottom: 30px;
+                  }
+                  .nav-header a {
+                      margin-right: 15px;
+                  }
+              </style>
+          </head>
+          <body>
+              <div class="nav-header">
+                  <a href="${prefix}index.html">← Documentation Home</a>
+                  <a href="https://github.com/MaslowCNC/Maslow_4" target="_blank">GitHub</a>
+                  <a href="https://forums.maslowcnc.com/" target="_blank">Forums</a>
+              </div>
+              ${content}
+          </body>
+          </html>`;
+          }
+
+          function convertMarkdownFile(inputPath, outputPath, relativePath) {
+            const markdown = fs.readFileSync(inputPath, 'utf8');
+            const html = marked(markdown);
+            
+            // Extract title from first heading or use filename
+            const titleMatch = markdown.match(/^#\s+(.+)$/m);
+            const title = titleMatch ? titleMatch[1] : path.basename(inputPath, '.md');
+            
+            const fullHtml = htmlTemplate(title, html, relativePath);
+            
+            fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+            fs.writeFileSync(outputPath, fullHtml);
+            console.log(`Converted: ${inputPath} -> ${outputPath}`);
+          }
+
+          function processDirectory(srcDir, destDir, baseDir = '') {
+            const entries = fs.readdirSync(srcDir, { withFileTypes: true });
+            
+            for (const entry of entries) {
+              const srcPath = path.join(srcDir, entry.name);
+              const relativePath = path.join(baseDir, entry.name);
+              
+              if (entry.isDirectory()) {
+                const destPath = path.join(destDir, entry.name);
+                fs.mkdirSync(destPath, { recursive: true });
+                processDirectory(srcPath, destPath, relativePath);
+              } else if (entry.name.endsWith('.md')) {
+                const outputName = entry.name === 'README.md' ? 'index.html' : entry.name.replace(/\.md$/, '.html');
+                const destPath = path.join(destDir, outputName);
+                convertMarkdownFile(srcPath, destPath, relativePath);
+              } else if (entry.name.match(/\.(jpg|jpeg|png|gif|svg|pdf)$/i)) {
+                // Copy images and other assets
+                const destPath = path.join(destDir, entry.name);
+                fs.copyFileSync(srcPath, destPath);
+                console.log(`Copied: ${srcPath} -> ${destPath}`);
+              }
+            }
+          }
+
+          // Convert all markdown files in docs directory
+          processDirectory('docs', '_site');
+          console.log('Conversion complete!');
+          EOFJS
+
+          node convert.js
+
+          # Create an index.html homepage
+          cat > _site/index.html << 'EOF'
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>Maslow CNC Documentation</title>
+              <style>
+                  body {
+                      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+                      max-width: 1200px;
+                      margin: 0 auto;
+                      padding: 20px;
+                      line-height: 1.6;
+                      color: #333;
+                  }
+                  h1 {
+                      color: #2c3e50;
+                      border-bottom: 2px solid #3498db;
+                      padding-bottom: 10px;
+                  }
+                  .doc-grid {
+                      display: grid;
+                      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+                      gap: 20px;
+                      margin-top: 30px;
+                  }
+                  .doc-card {
+                      border: 1px solid #ddd;
+                      border-radius: 8px;
+                      padding: 20px;
+                      transition: box-shadow 0.3s;
+                  }
+                  .doc-card:hover {
+                      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+                  }
+                  .doc-card h2 {
+                      margin-top: 0;
+                      color: #3498db;
+                      font-size: 1.3em;
+                  }
+                  .doc-card a {
+                      text-decoration: none;
+                      color: inherit;
+                  }
+                  .doc-card p {
+                      color: #666;
+                      margin-bottom: 10px;
+                  }
+                  .doc-link {
+                      color: #3498db;
+                      font-weight: 500;
+                  }
+                  .header-links {
+                      margin: 20px 0;
+                      padding: 15px;
+                      background: #f8f9fa;
+                      border-radius: 5px;
+                  }
+                  .header-links a {
+                      color: #3498db;
+                      margin-right: 15px;
+                      text-decoration: none;
+                  }
+                  .header-links a:hover {
+                      text-decoration: underline;
+                  }
+              </style>
+          </head>
+          <body>
+              <h1>Maslow CNC Documentation</h1>
+
+              <div class="header-links">
+                  <a href="https://github.com/MaslowCNC/Maslow_4" target="_blank">GitHub Repository</a>
+                  <a href="https://forums.maslowcnc.com/" target="_blank">Forums</a>
+                  <a href="https://www.maslowcnc.com/" target="_blank">Official Website</a>
+              </div>
+
+              <div class="doc-grid">
+                  <div class="doc-card">
+                      <h2><a href="user-guide/index.html" class="doc-link">User Guide</a></h2>
+                      <p>Complete guide for using your Maslow CNC machine, from setup to cutting your first project.</p>
+                  </div>
+
+                  <div class="doc-card">
+                      <h2><a href="assembly-background-4-1/index.html" class="doc-link">Assembly Background</a></h2>
+                      <p>Essential background information before starting assembly of your Maslow 4.1.</p>
+                  </div>
+
+                  <div class="doc-card">
+                      <h2><a href="assembling-the-arms-4-1/index.html" class="doc-link">Assembling the Arms</a></h2>
+                      <p>Step-by-step instructions for assembling the arm components with detailed images.</p>
+                  </div>
+
+                  <div class="doc-card">
+                      <h2><a href="assembling-the-router-4-1/index.html" class="doc-link">Assembling the Router</a></h2>
+                      <p>Guide for assembling the router mounting system.</p>
+                  </div>
+
+                  <div class="doc-card">
+                      <h2><a href="assembling-the-sled-4-1/index.html" class="doc-link">Assembling the Sled</a></h2>
+                      <p>Instructions for assembling the sled that carries the router.</p>
+                  </div>
+
+                  <div class="doc-card">
+                      <h2><a href="putting-it-all-together-4-1/index.html" class="doc-link">Putting It All Together</a></h2>
+                      <p>Final assembly steps to complete your Maslow CNC setup.</p>
+                  </div>
+
+                  <div class="doc-card">
+                      <h2><a href="FrameLibrary.html" class="doc-link">Frame Library</a></h2>
+                      <p>Community-contributed frame designs and configurations.</p>
+                  </div>
+
+                  <div class="doc-card">
+                      <h2><a href="BitLibrary.html" class="doc-link">Bit Library</a></h2>
+                      <p>Information about router bits and cutting tools for use with Maslow.</p>
+                  </div>
+
+                  <div class="doc-card">
+                      <h2><a href="MaterialsLibrary.html" class="doc-link">Materials Library</a></h2>
+                      <p>Guide to materials that can be cut with Maslow CNC.</p>
+                  </div>
+
+                  <div class="doc-card">
+                      <h2><a href="RouterAndSpindleLibrary.html" class="doc-link">Router & Spindle Library</a></h2>
+                      <p>Information about compatible routers and spindles.</p>
+                  </div>
+
+                  <div class="doc-card">
+                      <h2><a href="SoftwareLibrary.html" class="doc-link">Software Library</a></h2>
+                      <p>Software tools and resources for CAD/CAM work with Maslow.</p>
+                  </div>
+
+                  <div class="doc-card">
+                      <h2><a href="MaslowCNC_Wisdom_Manual.html" class="doc-link">Wisdom Manual</a></h2>
+                      <p>Collected wisdom and tips from the Maslow community.</p>
+                  </div>
+
+                  <div class="doc-card">
+                      <h2><a href="HowToEditThisWiki.html" class="doc-link">How To Edit This Wiki</a></h2>
+                      <p>Guide for contributing to the Maslow documentation.</p>
+                  </div>
+              </div>
+          </body>
+          </html>
+          EOF
+
+          echo "Documentation prepared for deployment"
+          ls -la _site/
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+
+  # Deployment job
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
