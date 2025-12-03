@@ -31,3 +31,6 @@ dist/
 *.cppx
 *.hx
 firmware-package/
+_site/
+node_modules/
+package-lock.json
