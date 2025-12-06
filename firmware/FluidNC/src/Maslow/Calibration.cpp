@@ -1310,8 +1310,10 @@ bool Calibration::generate_calibration_grid() {
 
         log_info("Frame size: " << frameWidth << " x " << frameHeight << " mm");
 
+        // Use equal percentages (50%) to maintain the frame's aspect ratio
+        // This prevents Y-axis squishing in auto-calibration
         float gridWidth  = frameWidth * 0.5;
-        float gridHeight = frameHeight * 0.2;
+        float gridHeight = frameHeight * 0.5;
 
         log_info("Computed grid size: " << gridWidth << " x " << gridHeight << " mm");
 
