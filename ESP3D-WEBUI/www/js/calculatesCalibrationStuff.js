@@ -798,31 +798,37 @@ async function findMaxFitness(measurements) {
       messagesBox.scrollTop = messagesBox.scrollHeight;
 
       if (1 / bestGuess.fitness > acceptableCalibrationThreshold) {
+        // Send calibration commands with delays to prevent overwhelming the ESP32 command buffer
         sendCommand(`$/kinematics/MaslowKinematics/tlX=${tlxStr}`);
-        sendCommand(`$/kinematics/MaslowKinematics/tlY=${tlyStr}`);
-        sendCommand(`$/kinematics/MaslowKinematics/trX=${trxStr}`);
-        sendCommand(`$/kinematics/MaslowKinematics/trY=${tryStr}`);
-        sendCommand(`$/kinematics/MaslowKinematics/blX=${blxStr}`);
-        sendCommand(`$/kinematics/MaslowKinematics/blY=${blyStr}`);
-        sendCommand(`$/kinematics/MaslowKinematics/brX=${brxStr}`);
-        sendCommand(`$/kinematics/MaslowKinematics/brY=${bryStr}`);
+        setTimeout(() => sendCommand(`$/kinematics/MaslowKinematics/tlY=${tlyStr}`), 50);
+        setTimeout(() => sendCommand(`$/kinematics/MaslowKinematics/trX=${trxStr}`), 100);
+        setTimeout(() => sendCommand(`$/kinematics/MaslowKinematics/trY=${tryStr}`), 150);
+        setTimeout(() => sendCommand(`$/kinematics/MaslowKinematics/blX=${blxStr}`), 200);
+        setTimeout(() => sendCommand(`$/kinematics/MaslowKinematics/blY=${blyStr}`), 250);
+        setTimeout(() => sendCommand(`$/kinematics/MaslowKinematics/brX=${brxStr}`), 300);
+        setTimeout(() => sendCommand(`$/kinematics/MaslowKinematics/brY=${bryStr}`), 350);
 
         sendCalibrationEvent({
           good: true,
           final: true,
           bestGuess: bestGuess
         }, true);
-        refreshSettings(current_setting_filter);
-        saveMaslowYaml();
 
-        messagesBox.textContent += '\nA command to save these values has been successfully sent for you. Please check for any error messages.';
-        messagesBox.scrollTop = messagesBox.scrollHeight;
+        // Wait for calibration commands to be processed before refreshing and saving
+        setTimeout(() => {
+          refreshSettings(current_setting_filter);
+          saveMaslowYaml();
 
-        initialGuess = bestGuess;
-        initialGuess.fitness = 100000000;
+          messagesBox.textContent += '\nA command to save these values has been successfully sent for you. Please check for any error messages.';
+          messagesBox.scrollTop = messagesBox.scrollHeight;
 
-        // This restarts calibration process for the next stage
-        setTimeout(() => { onCalibrationButtonsClick('$CAL', 'Calibrate'); }, 2000);
+          initialGuess = bestGuess;
+          initialGuess.fitness = 100000000;
+
+          // This restarts calibration process for the next stage
+          // Increased delay to allow time for saving configuration
+          setTimeout(() => { onCalibrationButtonsClick('$CAL', 'Calibrate'); }, 3000);
+        }, 500);
       } else {
 
         sendCalibrationEvent({
