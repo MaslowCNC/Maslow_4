@@ -798,15 +798,20 @@ async function findMaxFitness(measurements) {
       messagesBox.scrollTop = messagesBox.scrollHeight;
 
       if (1 / bestGuess.fitness > acceptableCalibrationThreshold) {
-        // Send calibration commands with delays to prevent overwhelming the ESP32 command buffer
-        sendCommand(`$/kinematics/MaslowKinematics/tlX=${tlxStr}`);
-        setTimeout(() => sendCommand(`$/kinematics/MaslowKinematics/tlY=${tlyStr}`), 50);
-        setTimeout(() => sendCommand(`$/kinematics/MaslowKinematics/trX=${trxStr}`), 100);
-        setTimeout(() => sendCommand(`$/kinematics/MaslowKinematics/trY=${tryStr}`), 150);
-        setTimeout(() => sendCommand(`$/kinematics/MaslowKinematics/blX=${blxStr}`), 200);
-        setTimeout(() => sendCommand(`$/kinematics/MaslowKinematics/blY=${blyStr}`), 250);
-        setTimeout(() => sendCommand(`$/kinematics/MaslowKinematics/brX=${brxStr}`), 300);
-        setTimeout(() => sendCommand(`$/kinematics/MaslowKinematics/brY=${bryStr}`), 350);
+        // Send all calibration commands as a batch with newline separators
+        // This reduces the number of HTTP requests from 8 to 1, preventing command buffer overflow
+        const calibrationCommands = [
+          `$/kinematics/MaslowKinematics/tlX=${tlxStr}`,
+          `$/kinematics/MaslowKinematics/tlY=${tlyStr}`,
+          `$/kinematics/MaslowKinematics/trX=${trxStr}`,
+          `$/kinematics/MaslowKinematics/trY=${tryStr}`,
+          `$/kinematics/MaslowKinematics/blX=${blxStr}`,
+          `$/kinematics/MaslowKinematics/blY=${blyStr}`,
+          `$/kinematics/MaslowKinematics/brX=${brxStr}`,
+          `$/kinematics/MaslowKinematics/brY=${bryStr}`
+        ].join('\n');
+        
+        sendCommand(calibrationCommands);
 
         sendCalibrationEvent({
           good: true,
