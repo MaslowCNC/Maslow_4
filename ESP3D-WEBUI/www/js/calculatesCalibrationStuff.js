@@ -799,7 +799,7 @@ async function findMaxFitness(measurements) {
       }
 
       messagesBox.textContent += '\nCalibration values:';
-      messagesBox.textContent += `\nFitness: ${1 / bestGuess.fitness.toFixed(7)}`;
+      messagesBox.textContent += `\nFitness: ${(1 / bestGuess.fitness).toFixed(7)}`;
 
       const tlxStr = bestGuess.tl.x.toFixed(1), tlyStr = bestGuess.tl.y.toFixed(1);
       const trxStr = bestGuess.tr.x.toFixed(1), tryStr = bestGuess.tr.y.toFixed(1);
