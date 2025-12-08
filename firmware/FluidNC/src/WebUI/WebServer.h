@@ -114,6 +114,9 @@ namespace WebUI {
         static void sendCaptivePortal();
         static void send404Page();
 
+        static void sendCORSHeaders();
+        static void handleCORSPreFlight();
+
         static int getPageid();
     };
 

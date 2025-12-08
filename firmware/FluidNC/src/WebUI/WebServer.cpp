@@ -725,6 +725,7 @@ namespace WebUI {
     }
 
     void Web_Server::sendJSON(int code, const char* s) {
+        sendCORSHeaders();
         _webserver->sendHeader("Cache-Control", "no-cache");
         _webserver->send(200, "application/json", s);
     }
@@ -755,6 +756,20 @@ namespace WebUI {
 
     void Web_Server::sendAuthFailed() {
         sendStatus(401, "Authentication failed");
+    }
+
+    void Web_Server::sendCORSHeaders() {
+        // Allow requests from abundance.maslowcnc.com
+        _webserver->sendHeader("Access-Control-Allow-Origin", "https://abundance.maslowcnc.com");
+        _webserver->sendHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+        _webserver->sendHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, Cookie");
+        _webserver->sendHeader("Access-Control-Allow-Credentials", "true");
+        _webserver->sendHeader("Access-Control-Max-Age", "86400");
+    }
+
+    void Web_Server::handleCORSPreFlight() {
+        sendCORSHeaders();
+        _webserver->send(204);
     }
 
     void Web_Server::LocalFSFileupload() {
@@ -880,6 +895,15 @@ namespace WebUI {
     }
 
     void Web_Server::handleFileOps(const char* fs) {
+        // Send CORS headers for cross-origin requests
+        sendCORSHeaders();
+
+        // Handle OPTIONS preflight request
+        if (_webserver->method() == HTTP_OPTIONS) {
+            handleCORSPreFlight();
+            return;
+        }
+
         //this is only for admin and user
         if (is_authenticated() == AuthenticationLevel::LEVEL_GUEST) {
             _upload_status = UploadStatus::NONE;
