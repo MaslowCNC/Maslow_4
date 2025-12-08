@@ -329,6 +329,21 @@ function computeFurthestFromCenterOfMass(lines, lastGuess) {
 }
 
 /**
+ * Resets theta values in measurements to ensure consistent initial conditions
+ * for the line-fitting algorithm. This prevents theta state from persisting
+ * across different calibration attempts.
+ * @param {Array} measurements - An array of measurement objects
+ */
+function resetMeasurementThetas(measurements) {
+  measurements.forEach((measurement) => {
+    delete measurement.tlTheta;
+    delete measurement.trTheta;
+    delete measurement.blTheta;
+    delete measurement.brTheta;
+  });
+}
+
+/**
  * Computes the fitness of a guess for a set of measurements by comparing the guess to magnetically attracted lines.
  * @param {Array} measurements - An array of measurements to compare the guess to.
  * @param {Object} lastGuess - The last guess made by the algorithm.
@@ -688,6 +703,10 @@ async function findBestRectangularStart(measurements) {
 }
 
 async function findMaxFitness(measurements) {
+  // Reset theta values to ensure consistent initial conditions
+  // This prevents theta state from persisting across calibration attempts
+  resetMeasurementThetas(measurements);
+
   sendCalibrationEvent({
     initialGuess
   }, true);
@@ -742,6 +761,7 @@ async function findMaxFitness(measurements) {
   let stagnantCounter = 0;
   let totalCounter = 0;
   let bestGuess = JSON.parse(JSON.stringify(startingGuess));
+  let retryAttempt = 0;  // Track retry attempts to prevent infinite loops
 
   function iterate() {
     if (stagnantCounter < 1000 && totalCounter < 200000) {
@@ -831,14 +851,76 @@ async function findMaxFitness(measurements) {
           guess: bestGuess
         }, true);
 
-        messagesBox.textContent += '\n Restarting';
+        // Limit retry attempts to prevent infinite loops
+        const MAX_RETRY_ATTEMPTS = 5;
+        if (retryAttempt >= MAX_RETRY_ATTEMPTS) {
+          messagesBox.textContent += '\n\nMaximum retry attempts reached. Using best result found.';
+          messagesBox.textContent += `\nFitness: ${(1 / bestGuess.fitness).toFixed(7)}`;
+          messagesBox.textContent += '\n\nCalibration values:';
+          
+          const tlxStr = bestGuess.tl.x.toFixed(1), tlyStr = bestGuess.tl.y.toFixed(1);
+          const trxStr = bestGuess.tr.x.toFixed(1), tryStr = bestGuess.tr.y.toFixed(1);
+          const blxStr = bestGuess.bl.x.toFixed(1), blyStr = bestGuess.bl.y.toFixed(1);
+          const brxStr = bestGuess.br.x.toFixed(1), bryStr = bestGuess.br.y.toFixed(1);
 
-        //Add +-50 to each of the corner anchor points and try again
-        initialGuess.tl.x = bestGuess.tl.x + Math.random() * 100 - 50;
-        initialGuess.tl.y = bestGuess.tl.y + Math.random() * 100 - 50;
-        initialGuess.tr.x = bestGuess.tr.x + Math.random() * 100 - 50;
-        initialGuess.tr.y = bestGuess.tr.y + Math.random() * 100 - 50;
-        initialGuess.br.x = bestGuess.br.x + Math.random() * 100 - 50;
+          messagesBox.textContent += `\n${M}_tlX: ${tlxStr}`;
+          messagesBox.textContent += `\n${M}_tlY: ${tlyStr}`;
+          messagesBox.textContent += `\n${M}_trX: ${trxStr}`;
+          messagesBox.textContent += `\n${M}_trY: ${tryStr}`;
+          messagesBox.textContent += `\n${M}_blX: ${blxStr}`;
+          messagesBox.textContent += `\n${M}_blY: ${blyStr}`;
+          messagesBox.textContent += `\n${M}_brX: ${brxStr}`;
+          messagesBox.textContent += `\n${M}_brY: ${bryStr}`;
+          messagesBox.scrollTop = messagesBox.scrollHeight;
+          
+          // Save the best result even if fitness is below threshold
+          sendCommand(`$/kinematics/MaslowKinematics/tlX=${tlxStr}`);
+          sendCommand(`$/kinematics/MaslowKinematics/tlY=${tlyStr}`);
+          sendCommand(`$/kinematics/MaslowKinematics/trX=${trxStr}`);
+          sendCommand(`$/kinematics/MaslowKinematics/trY=${tryStr}`);
+          sendCommand(`$/kinematics/MaslowKinematics/blX=${blxStr}`);
+          sendCommand(`$/kinematics/MaslowKinematics/blY=${blyStr}`);
+          sendCommand(`$/kinematics/MaslowKinematics/brX=${brxStr}`);
+          sendCommand(`$/kinematics/MaslowKinematics/brY=${bryStr}`);
+          
+          refreshSettings(current_setting_filter);
+          saveMaslowYaml();
+          
+          initialGuess = bestGuess;
+          initialGuess.fitness = 100000000;
+          
+          // Continue to next calibration stage
+          setTimeout(() => { onCalibrationButtonsClick('$CAL', 'Calibrate'); }, 2000);
+          return;
+        }
+
+        retryAttempt++;
+        messagesBox.textContent += `\n Restarting (attempt ${retryAttempt} of ${MAX_RETRY_ATTEMPTS})`;
+
+        // Reset theta values before retry to ensure consistent initial conditions
+        resetMeasurementThetas(measurements);
+
+        // Use deterministic perturbations based on retry attempt
+        // This creates a systematic search pattern instead of random exploration
+        const perturbationPatterns = [
+          // Pattern 1: Expand frame uniformly
+          { tlX: 30, tlY: 30, trX: -30, trY: 30, brX: -30 },
+          // Pattern 2: Contract frame uniformly
+          { tlX: -30, tlY: -30, trX: 30, trY: -30, brX: 30 },
+          // Pattern 3: Shift frame up
+          { tlX: 0, tlY: 40, trX: 0, trY: 40, brX: 0 },
+          // Pattern 4: Shift frame down
+          { tlX: 0, tlY: -40, trX: 0, trY: -40, brX: 0 },
+          // Pattern 5: Adjust aspect ratio (widen)
+          { tlX: -20, tlY: 0, trX: -20, trY: 0, brX: -20 }
+        ];
+        
+        const pattern = perturbationPatterns[retryAttempt - 1];
+        initialGuess.tl.x = bestGuess.tl.x + pattern.tlX;
+        initialGuess.tl.y = bestGuess.tl.y + pattern.tlY;
+        initialGuess.tr.x = bestGuess.tr.x + pattern.trX;
+        initialGuess.tr.y = bestGuess.tr.y + pattern.trY;
+        initialGuess.br.x = bestGuess.br.x + pattern.brX;
 
         //Reset the counters
         stagnantCounter = 0;
