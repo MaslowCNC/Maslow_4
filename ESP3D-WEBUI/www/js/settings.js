@@ -726,3 +726,10 @@ const define_esp_role = (index) => {
 };
 
 const define_esp_role_from_pos = (pos) => define_esp_role(get_index_from_eeprom_pos(pos));
+
+/** Open Abundance website with machine's IP address */
+function linkAbundance() {
+  const machineIP = document.location.hostname;
+  const abundanceURL = `https://abundance.maslowcnc.com/?IP=${machineIP}`;
+  window.open(abundanceURL, '_blank');
+}
