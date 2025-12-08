@@ -902,10 +902,11 @@ async function findMaxFitness(measurements) {
 
         // Use deterministic perturbations based on retry attempt
         // This creates a systematic search pattern instead of random exploration
+        // Note: bl (bottom-left) is fixed at origin (0,0) and br.y stays at 0 to keep bottom edge horizontal
         const perturbationPatterns = [
           // Pattern 1: Expand frame uniformly
           { tlX: 30, tlY: 30, trX: -30, trY: 30, brX: -30 },
-          // Pattern 2: Contract frame uniformly
+          // Pattern 2: Contract frame uniformly  
           { tlX: -30, tlY: -30, trX: 30, trY: -30, brX: 30 },
           // Pattern 3: Shift frame up
           { tlX: 0, tlY: 40, trX: 0, trY: 40, brX: 0 },
@@ -921,6 +922,7 @@ async function findMaxFitness(measurements) {
         initialGuess.tr.x = bestGuess.tr.x + pattern.trX;
         initialGuess.tr.y = bestGuess.tr.y + pattern.trY;
         initialGuess.br.x = bestGuess.br.x + pattern.brX;
+        // Note: bl.x, bl.y remain at origin (0,0) and br.y stays at 0
 
         //Reset the counters
         stagnantCounter = 0;
