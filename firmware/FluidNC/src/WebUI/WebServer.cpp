@@ -727,7 +727,7 @@ namespace WebUI {
     void Web_Server::sendJSON(int code, const char* s) {
         sendCORSHeaders();
         _webserver->sendHeader("Cache-Control", "no-cache");
-        _webserver->send(200, "application/json", s);
+        _webserver->send(code, "application/json", s);
     }
 
     void Web_Server::sendAuth(const char* status, const char* level, const char* user) {
