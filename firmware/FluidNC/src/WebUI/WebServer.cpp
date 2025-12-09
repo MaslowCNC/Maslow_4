@@ -228,6 +228,9 @@ namespace WebUI {
 
     // Send a file, either the specified path or path.gz
     bool Web_Server::myStreamFile(const char* path, bool download) {
+        // Send CORS headers for cross-origin requests
+        sendCORSHeaders();
+
         std::string spath(path);
         std::string hash;
         // Check for brower cache match
@@ -330,6 +333,15 @@ namespace WebUI {
     }
 
     void Web_Server::handle_root() {
+        // Send CORS headers for cross-origin requests
+        sendCORSHeaders();
+
+        // Handle OPTIONS preflight request
+        if (_webserver->method() == HTTP_OPTIONS) {
+            handleCORSPreFlight();
+            return;
+        }
+
         if (!(_webserver->hasArg("forcefallback") && _webserver->arg("forcefallback") == "yes")) {
             if (myStreamFile("/index.html")) {
                 return;
@@ -343,6 +355,15 @@ namespace WebUI {
 
     // Handle filenames and other things that are not explicitly registered
     void Web_Server::handle_not_found() {
+        // Send CORS headers for cross-origin requests
+        sendCORSHeaders();
+
+        // Handle OPTIONS preflight request
+        if (_webserver->method() == HTTP_OPTIONS) {
+            handleCORSPreFlight();
+            return;
+        }
+
         if (is_authenticated() == AuthenticationLevel::LEVEL_GUEST) {
             _webserver->sendHeader(LOCATION_HEADER, "/");
             _webserver->send(302);
