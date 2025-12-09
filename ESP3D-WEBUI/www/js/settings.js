@@ -729,7 +729,8 @@ const define_esp_role_from_pos = (pos) => define_esp_role(get_index_from_eeprom_
 
 /** Open Abundance website with machine's IP address */
 function linkAbundance() {
-  const machineIP = document.location.hostname;
+  // Use websocket_ip if available (actual IP), fallback to hostname
+  const machineIP = websocket_ip || document.location.hostname;
   const abundanceURL = `https://abundance.maslowcnc.com/?IP=${machineIP}`;
   window.open(abundanceURL, '_blank');
 }
