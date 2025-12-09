@@ -57,6 +57,8 @@ namespace WebUI {
     void WebClient::flush() {
         if (_webserver && _buflen) {
             // ESPWebServer::sendContent expects a String, so convert buffer
+            // Note: This creates a String copy which is less efficient than direct write,
+            // but necessary for ESPWebServerSecure API compatibility
             _webserver->sendContent(String(_buffer, _buflen));
             _buflen = 0;
         }

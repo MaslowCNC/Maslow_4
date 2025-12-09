@@ -283,8 +283,9 @@ namespace WebUI {
         if (isGzip) {
             _webserver->sendHeader("Content-Encoding", "gzip");
         }
-        
+
         // Use ESPWebServer's streamFile method for HTTPS compatibility
+        // This respects headers set above (ETag, Content-Disposition, Content-Encoding)
         _webserver->streamFile(*file, getContentType(path));
 
         delete file;
@@ -669,6 +670,8 @@ namespace WebUI {
             WSChannels::sendError(getPageid(), st);
 
             if (web_error != 0 && _webserver) {
+                // Note: ESPWebServerSecure handles connection state internally
+                // Removed client().available() check for API compatibility
                 _webserver->send(web_error, "text/xml", st);
             }
 
@@ -687,6 +690,7 @@ namespace WebUI {
             upload.status      = UPLOAD_FILE_ABORTED;
             errno              = ECONNABORTED;
             // Note: ESPWebServerSecure handles connection management internally
+            // Removed client().stop() - server manages connection lifecycle
             delay(100);
         }
     }
