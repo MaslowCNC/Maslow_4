@@ -13,12 +13,12 @@
 #    include "Commands.h"
 
 class WebSocketsServer;
-class WebServer;
+class ESPWebServerSecure;
 
 namespace WebUI {
     static const int DEFAULT_HTTP_STATE                 = 1;
     static const int DEFAULT_HTTP_BLOCKED_DURING_MOTION = 1;
-    static const int DEFAULT_HTTP_PORT                  = 80;
+    static const int DEFAULT_HTTP_PORT                  = 443;  // HTTPS port
 
     static const int MIN_HTTP_PORT = 1;
     static const int MAX_HTTP_PORT = 65001;
@@ -54,12 +54,12 @@ namespace WebUI {
         ~Web_Server();
 
     private:
-        static bool              _setupdone;
-        static WebServer*        _webserver;
-        static WebSocketsServer* _socket_server;
-        static uint16_t          _port;
-        static UploadStatus      _upload_status;
-        static FileStream*       _uploadFile;
+        static bool                  _setupdone;
+        static ESPWebServerSecure*   _webserver;
+        static WebSocketsServer*     _socket_server;
+        static uint16_t              _port;
+        static UploadStatus          _upload_status;
+        static FileStream*           _uploadFile;
 
         static const char* getContentType(const char* filename);
 

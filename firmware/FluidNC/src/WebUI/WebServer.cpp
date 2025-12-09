@@ -12,10 +12,11 @@
 #    include "WifiConfig.h"  // wifi_config
 
 #    include "WebServer.h"
+#    include "SSLCert.h"     // SSL certificates
 
 #    include <WebSocketsServer.h>
 #    include <WiFi.h>
-#    include <WebServer.h>
+#    include <ESPWebServerSecure.hpp>  // HTTPS server
 #    include <ESP32SSDP.h>
 #    include <StreamString.h>
 #    include <Update.h>
@@ -60,12 +61,12 @@ namespace WebUI {
     static const char LOCATION_HEADER[] = "Location";
 
     Web_Server webServer;
-    bool       Web_Server::_setupdone = false;
-    uint16_t   Web_Server::_port      = 0;
+    bool                  Web_Server::_setupdone = false;
+    uint16_t              Web_Server::_port      = 0;
 
-    UploadStatus      Web_Server::_upload_status = UploadStatus::NONE;
-    WebServer*        Web_Server::_webserver     = NULL;
-    WebSocketsServer* Web_Server::_socket_server = NULL;
+    UploadStatus          Web_Server::_upload_status = UploadStatus::NONE;
+    ESPWebServerSecure*   Web_Server::_webserver     = NULL;
+    WebSocketsServer*     Web_Server::_socket_server = NULL;
 #    ifdef ENABLE_AUTHENTICATION
     AuthenticationIP* Web_Server::_head  = NULL;
     uint8_t           Web_Server::_nb_ip = 0;
@@ -101,8 +102,8 @@ namespace WebUI {
         }
         _port = WebUI::http_port->get();
 
-        //create instance
-        _webserver = new WebServer(_port);
+        //create HTTPS server instance with SSL certificates
+        _webserver = new ESPWebServerSecure(_port, certificate_der, certificate_der_len, private_key_der, private_key_der_len);
 #    ifdef ENABLE_AUTHENTICATION
         //here the list of headers to be recorded
         const char* headerkeys[]   = { "Cookie" };
@@ -183,13 +184,13 @@ namespace WebUI {
             SSDP.begin();
         }
 
-        log_info("HTTP started on port " << WebUI::http_port->get());
+        log_info("HTTPS started on port " << WebUI::http_port->get());
         //start webserver
         _webserver->begin();
 
         //add mDNS
         if (WiFi.getMode() == WIFI_STA) {
-            MDNS.addService("http", "tcp", _port);
+            MDNS.addService("https", "tcp", _port);
         }
 
         HashFS::rehash();
@@ -204,7 +205,7 @@ namespace WebUI {
         SSDP.end();
 
         //remove mDNS
-        mdns_service_remove("_http", "_tcp");
+        mdns_service_remove("_https", "_tcp");
 
         if (_socket_server) {
             delete _socket_server;
@@ -294,7 +295,7 @@ namespace WebUI {
     void Web_Server::sendWithOurAddress(const char* content, int code) {
         auto        ip    = WiFi.getMode() == WIFI_STA ? WiFi.localIP() : WiFi.softAPIP();
         std::string ipstr = IP_string(ip);
-        if (_port != 80) {
+        if (_port != 443) {
             ipstr += ":";
             ipstr += std::to_string(_port);
         }
@@ -308,7 +309,7 @@ namespace WebUI {
     // Captive Portal Page for use in AP mode
     const char PAGE_CAPTIVE[] =
         "<HTML>\n<HEAD>\n<title>Captive Portal</title> \n</HEAD>\n<BODY>\n<CENTER>Captive Portal page : $QUERY$- you will be "
-        "redirected...\n<BR><BR>\nif not redirected, <a href='http://$WEB_ADDRESS$'>click here</a>\n<BR><BR>\n<PROGRESS name='prg' "
+        "redirected...\n<BR><BR>\nif not redirected, <a href='https://$WEB_ADDRESS$'>click here</a>\n<BR><BR>\n<PROGRESS name='prg' "
         "id='prg'></PROGRESS>\n\n<script>\nvar i = 0; \nvar x = document.getElementById(\"prg\"); \nx.max=5; \nvar "
         "interval=setInterval(function(){\ni=i+1; \nvar x = document.getElementById(\"prg\"); \nx.value=i; \nif (i>5) "
         "\n{\nclearInterval(interval);\nwindow.location.href='/';\n}\n},1000);\n</script>\n</CENTER>\n</BODY>\n</HTML>\n\n";
@@ -320,7 +321,7 @@ namespace WebUI {
     //Default 404 page that is sent when a request cannot be satisfied
     const char PAGE_404[] =
         "<HTML>\n<HEAD>\n<title>Redirecting...</title> \n</HEAD>\n<BODY>\n<CENTER>Unknown page : $QUERY$- you will be "
-        "redirected...\n<BR><BR>\nif not redirected, <a href='http://$WEB_ADDRESS$'>click here</a>\n<BR><BR>\n<PROGRESS name='prg' "
+        "redirected...\n<BR><BR>\nif not redirected, <a href='https://$WEB_ADDRESS$'>click here</a>\n<BR><BR>\n<PROGRESS name='prg' "
         "id='prg'></PROGRESS>\n\n<script>\nvar i = 0; \nvar x = document.getElementById(\"prg\"); \nx.max=5; \nvar "
         "interval=setInterval(function(){\ni=i+1; \nvar x = document.getElementById(\"prg\"); \nx.value=i; \nif (i>5) "
         "\n{\nclearInterval(interval);\nwindow.location.href='/';\n}\n},1000);\n</script>\n</CENTER>\n</BODY>\n</HTML>\n\n";
@@ -390,7 +391,7 @@ namespace WebUI {
                             "<major>1</major>"
                             "<minor>0</minor>"
                             "</specVersion>"
-                            "<URLBase>http://%s:%u/</URLBase>"
+                            "<URLBase>https://%s:%u/</URLBase>"
                             "<device>"
                             "<deviceType>upnp:rootdevice</deviceType>"
                             "<friendlyName>%s</friendlyName>"

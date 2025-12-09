@@ -98,7 +98,7 @@ namespace WebUI {
                 log_info("Cannot start mDNS");
                 no_error = false;
             } else {
-                log_info("Start mDNS with hostname:http://" << h << ".local/");
+                log_info("Start mDNS with hostname:https://" << h << ".local/");
             }
         }
         webServer.begin();
