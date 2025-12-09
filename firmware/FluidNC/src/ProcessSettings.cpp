@@ -882,6 +882,8 @@ static Error maslow_set_comply(const char* value, WebUI::AuthenticationLevel aut
 
 // Archive the current YAML config file with a version number before starting calibration
 static bool archive_yaml_config(const char* config_name) {
+    const size_t FILE_COPY_BUFFER_SIZE = 1024;
+
     try {
         // Extract base name and extension from config filename (e.g., "maslow.yaml")
         std::string config_str(config_name);
@@ -904,26 +906,34 @@ static bool archive_yaml_config(const char* config_name) {
         stdfs::path parent_path = source_path.parent_path();
 
         // Search for existing backup files to find the highest version number
-        for (const auto& entry : stdfs::directory_iterator(parent_path, ec)) {
-            if (ec) {
-                continue;  // Skip entries that cause errors
-            }
+        // Check if directory iterator can be created
+        stdfs::directory_iterator dir_iter(parent_path, ec);
+        if (ec) {
+            log_error("Failed to iterate directory: " << ec.message());
+            return false;
+        }
+
+        for (const auto& entry : dir_iter) {
             std::string filename = entry.path().filename().string();
             // Look for files matching pattern: base_name-backup-N.extension
             std::string prefix = base_name + "-backup-";
-            if (filename.find(prefix) == 0 && filename.find(extension) != std::string::npos) {
-                // Extract version number from filename
-                size_t start_pos = prefix.length();
-                size_t end_pos   = filename.find(extension, start_pos);
-                if (end_pos != std::string::npos) {
-                    std::string version_str = filename.substr(start_pos, end_pos - start_pos);
-                    try {
-                        int version = std::stoi(version_str);
-                        if (version >= next_version) {
-                            next_version = version + 1;
+            // Check that filename starts with prefix and ends with extension
+            if (filename.find(prefix) == 0) {
+                size_t ext_pos = filename.length() - extension.length();
+                if (ext_pos > prefix.length() && filename.substr(ext_pos) == extension) {
+                    // Extract version number from filename
+                    size_t start_pos = prefix.length();
+                    size_t end_pos   = ext_pos;
+                    if (end_pos > start_pos) {
+                        std::string version_str = filename.substr(start_pos, end_pos - start_pos);
+                        try {
+                            int version = std::stoi(version_str);
+                            if (version >= next_version) {
+                                next_version = version + 1;
+                            }
+                        } catch (...) {
+                            // Not a valid number, skip this file
                         }
-                    } catch (...) {
-                        // Not a valid number, skip this file
                     }
                 }
             }
@@ -938,15 +948,14 @@ static bool archive_yaml_config(const char* config_name) {
 
         // Copy the file manually using FileStream (read source, write to destination)
         // FileStream throws exceptions if files cannot be opened
-        FileStream infile(std::string { config_name }, "r", "");
+        FileStream infile(config_name, "r", "");
         FileStream outfile(backup_path_str, "w", "");
 
         // Copy data in chunks
-        const size_t buffer_size = 1024;
-        uint8_t      buffer[buffer_size];
-        size_t       bytes_read;
+        uint8_t buffer[FILE_COPY_BUFFER_SIZE];
+        size_t  bytes_read;
 
-        while ((bytes_read = infile.read(buffer, buffer_size)) > 0) {
+        while ((bytes_read = infile.read(buffer, FILE_COPY_BUFFER_SIZE)) > 0) {
             if (outfile.write(buffer, bytes_read) != bytes_read) {
                 log_error("Failed to write to backup file");
                 return false;
