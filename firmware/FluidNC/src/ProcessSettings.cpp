@@ -879,10 +879,100 @@ static Error maslow_set_comply(const char* value, WebUI::AuthenticationLevel aut
     Maslow.calibration.requestStateChange(RELEASE_TENSION);
     return Error::Ok;
 }
+
+// Archive the current YAML config file with a version number before starting calibration
+static bool archive_yaml_config(const char* config_name) {
+    try {
+        // Extract base name and extension from config filename (e.g., "maslow.yaml")
+        std::string config_str(config_name);
+        size_t      dot_pos   = config_str.rfind('.');
+        std::string base_name = (dot_pos != std::string::npos) ? config_str.substr(0, dot_pos) : config_str;
+        std::string extension = (dot_pos != std::string::npos) ? config_str.substr(dot_pos) : ".yaml";
+
+        // Find the next available version number by checking existing backup files
+        int             next_version = 1;
+        std::error_code ec;
+
+        // Create FluidPath for the source file
+        FluidPath source_path(config_name, "", ec);
+        if (ec) {
+            log_error("Failed to access source config file: " << ec.message());
+            return false;
+        }
+
+        // Get the parent directory from the std::filesystem::path base class
+        stdfs::path parent_path = source_path.parent_path();
+
+        // Search for existing backup files to find the highest version number
+        for (const auto& entry : stdfs::directory_iterator(parent_path, ec)) {
+            if (ec) {
+                continue;  // Skip entries that cause errors
+            }
+            std::string filename = entry.path().filename().string();
+            // Look for files matching pattern: base_name-backup-N.extension
+            std::string prefix = base_name + "-backup-";
+            if (filename.find(prefix) == 0 && filename.find(extension) != std::string::npos) {
+                // Extract version number from filename
+                size_t start_pos = prefix.length();
+                size_t end_pos   = filename.find(extension, start_pos);
+                if (end_pos != std::string::npos) {
+                    std::string version_str = filename.substr(start_pos, end_pos - start_pos);
+                    try {
+                        int version = std::stoi(version_str);
+                        if (version >= next_version) {
+                            next_version = version + 1;
+                        }
+                    } catch (...) {
+                        // Not a valid number, skip this file
+                    }
+                }
+            }
+        }
+
+        // Create the backup filename
+        std::string backup_name = base_name + "-backup-" + std::to_string(next_version) + extension;
+
+        // Create the backup path by combining parent directory with backup filename
+        stdfs::path backup_std_path = parent_path / backup_name;
+        std::string backup_path_str = backup_std_path.string();
+
+        // Copy the file manually using FileStream (read source, write to destination)
+        // FileStream throws exceptions if files cannot be opened
+        FileStream infile(std::string { config_name }, "r", "");
+        FileStream outfile(backup_path_str, "w", "");
+
+        // Copy data in chunks
+        const size_t buffer_size = 1024;
+        uint8_t      buffer[buffer_size];
+        size_t       bytes_read;
+
+        while ((bytes_read = infile.read(buffer, buffer_size)) > 0) {
+            if (outfile.write(buffer, bytes_read) != bytes_read) {
+                log_error("Failed to write to backup file");
+                return false;
+            }
+        }
+
+        log_info("Config archived as: " << backup_name);
+        return true;
+
+    } catch (const std::exception& ex) {
+        log_error("Exception during config archiving: " << ex.what());
+        return false;
+    }
+}
+
 static Error maslow_start_calibration(const char* value, WebUI::AuthenticationLevel auth_level, Channel& out) {
     if (Maslow.using_default_config) {
         return Error::ConfigurationInvalid;
     }
+
+    // Archive the current config before starting calibration
+    const char* config_name = config_filename->get();
+    if (!archive_yaml_config(config_name)) {
+        log_warn("Failed to archive config file, continuing with calibration anyway");
+    }
+
     sys.set_state(State::Homing);
     Maslow.calibration.requestStateChange(CALIBRATION_IN_PROGRESS);
     return Error::Ok;
