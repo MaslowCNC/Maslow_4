@@ -283,13 +283,9 @@ namespace WebUI {
         if (isGzip) {
             _webserver->sendHeader("Content-Encoding", "gzip");
         }
-        _webserver->send(200, getContentType(path), "");
-
-        // This depends on the fact that FileStream inherits from Stream
-        // The Arduino implementation of WiFiClient::write(Stream*) just
-        // reads repetitively from the stream in 1360-byte chunks and
-        // sends the data over the TCP socket. so nothing special.
-        _webserver->client().write(*file);
+        
+        // Use ESPWebServer's streamFile method for HTTPS compatibility
+        _webserver->streamFile(*file, getContentType(path));
 
         delete file;
         return true;
@@ -672,7 +668,7 @@ namespace WebUI {
 
             WSChannels::sendError(getPageid(), st);
 
-            if (web_error != 0 && _webserver && _webserver->client().available() > 0) {
+            if (web_error != 0 && _webserver) {
                 _webserver->send(web_error, "text/xml", st);
             }
 
@@ -686,11 +682,11 @@ namespace WebUI {
 
     //abort reception of packages
     void Web_Server::cancelUpload() {
-        if (_webserver && _webserver->client().available() > 0) {
+        if (_webserver) {
             HTTPUpload& upload = _webserver->upload();
             upload.status      = UPLOAD_FILE_ABORTED;
             errno              = ECONNABORTED;
-            _webserver->client().stop();
+            // Note: ESPWebServerSecure handles connection management internally
             delay(100);
         }
     }

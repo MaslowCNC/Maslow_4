@@ -4,14 +4,14 @@
 #ifdef ENABLE_WIFI
 #    include "../Report.h"
 #    include "WebClient.h"
-#    include <WebServer.h>
+#    include <ESPWebServer.hpp>
 
 namespace WebUI {
     WebClient webClient;
 
     WebClient::WebClient() : Channel("webclient") {}
 
-    void WebClient::attachWS(WebServer* webserver, bool silent) {
+    void WebClient::attachWS(ESPWebServer* webserver, bool silent) {
         _header_sent = false;
         _silent      = silent;
         _webserver   = webserver;
@@ -56,7 +56,8 @@ namespace WebUI {
 
     void WebClient::flush() {
         if (_webserver && _buflen) {
-            _webserver->sendContent(_buffer, _buflen);
+            // ESPWebServer::sendContent expects a String, so convert buffer
+            _webserver->sendContent(String(_buffer, _buflen));
             _buflen = 0;
         }
     }

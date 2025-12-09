@@ -7,7 +7,7 @@
 #include "../Channel.h"
 
 #ifdef ENABLE_WIFI
-class WebServer;
+class ESPWebServer;
 
 namespace WebUI {
     class WebClient : public Channel {
@@ -15,7 +15,7 @@ namespace WebUI {
         WebClient();
         ~WebClient();
 
-        void attachWS(WebServer* webserver, bool silent);
+        void attachWS(ESPWebServer* webserver, bool silent);
         void detachWS();
 
         size_t write(uint8_t data) override;
@@ -27,7 +27,7 @@ namespace WebUI {
     private:
         bool                _header_sent = false;
         bool                _silent      = false;
-        WebServer*          _webserver   = nullptr;
+        ESPWebServer*       _webserver   = nullptr;
         static const size_t BUFLEN       = 1200;
         char                _buffer[BUFLEN];
         size_t              _buflen = 0;
