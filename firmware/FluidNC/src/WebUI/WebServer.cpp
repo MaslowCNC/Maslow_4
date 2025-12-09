@@ -102,8 +102,10 @@ namespace WebUI {
         }
         _port = WebUI::http_port->get();
 
-        //create HTTPS server instance with SSL certificates
-        _webserver = new ESPWebServerSecure(_port, certificate_der, certificate_der_len, private_key_der, private_key_der_len);
+        //create HTTPS server instance
+        _webserver = new ESPWebServerSecure(_port);
+        //set SSL certificates
+        _webserver->setServerKeyAndCert(private_key_der, private_key_der_len, certificate_der, certificate_der_len);
 #    ifdef ENABLE_AUTHENTICATION
         //here the list of headers to be recorded
         const char* headerkeys[]   = { "Cookie" };
