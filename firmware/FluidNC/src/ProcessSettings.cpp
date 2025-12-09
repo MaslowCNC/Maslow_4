@@ -918,7 +918,8 @@ static bool archive_yaml_config(const char* config_name) {
             // Look for files matching pattern: base_name-backup-N.extension
             std::string prefix = base_name + "-backup-";
             // Check that filename starts with prefix and ends with extension
-            if (filename.find(prefix) == 0) {
+            // First ensure filename is long enough to avoid underflow
+            if (filename.length() >= extension.length() && filename.find(prefix) == 0) {
                 size_t ext_pos = filename.length() - extension.length();
                 if (ext_pos > prefix.length() && filename.substr(ext_pos) == extension) {
                     // Extract version number from filename
@@ -952,15 +953,19 @@ static bool archive_yaml_config(const char* config_name) {
         FileStream outfile(backup_path_str, "w", "");
 
         // Copy data in chunks
+        // FileStream::read() returns 0 on end-of-file or error, so loop until no more data
         uint8_t buffer[FILE_COPY_BUFFER_SIZE];
-        size_t  bytes_read;
+        size_t  bytes_read = 0;
 
-        while ((bytes_read = infile.read(buffer, FILE_COPY_BUFFER_SIZE)) > 0) {
-            if (outfile.write(buffer, bytes_read) != bytes_read) {
-                log_error("Failed to write to backup file");
-                return false;
+        do {
+            bytes_read = infile.read(buffer, FILE_COPY_BUFFER_SIZE);
+            if (bytes_read > 0) {
+                if (outfile.write(buffer, bytes_read) != bytes_read) {
+                    log_error("Failed to write to backup file");
+                    return false;
+                }
             }
-        }
+        } while (bytes_read == FILE_COPY_BUFFER_SIZE);  // Continue while buffer was filled
 
         log_info("Config archived as: " << backup_name);
         return true;
