@@ -993,12 +993,17 @@ var bboxHandlers = {
 	// It avoids any use of transcendental functions.  Every path
 	// through this decision tree is either 4 or 5 simple comparisons.
 	
+	// Check for full circle or multi-rotation arcs
+	// A true wraparound occurs when extraRotations >= 1 or when start equals end
+	var isFullCircle = (extraRotations >= 1) || 
+	                   (Math.abs(sx - ex) < 0.001 && Math.abs(sy - ey) < 0.001);
+	
 	// Calculate axis crossings for PROJECTED coordinates (for display)
 	if (ey >= 0) {              // End in upper half plane
 	    if (ex > 0) {             // End in quadrant 0 - X+ Y+
 		if (sy >= 0) {          // Start in upper half plane
 		    if (sx > 0) {         // Start in quadrant 0 - X+ Y+
-			if (sx <= ex) {     // wraparound
+			if (isFullCircle && sx <= ex) {     // wraparound
 			    px = py = mx = my = true;
 			}
 		    } else {              // Start in quadrant 1 - X- Y+
@@ -1016,7 +1021,7 @@ var bboxHandlers = {
 		    if (sx > 0) {         // Start in quadrant 0 - X+ Y+
 			py = true;
 		    } else {              // Start in quadrant 1 - X- Y+
-			if (sx <= ex) {     // wraparound
+			if (isFullCircle && sx <= ex) {     // wraparound
 			    px = py = mx = my = true;
 			}
 		    }
@@ -1038,7 +1043,7 @@ var bboxHandlers = {
 		    }
 		} else {                // Start in lower half plane
 		    if (sx > 0) {         // Start in quadrant 3 - X+ Y-
-			if (sx >= ex) {      // wraparound
+			if (isFullCircle && sx >= ex) {      // wraparound
 			    px = py = mx = my = true;
 			}
 		    } else {              // Start in quadrant 2 - X- Y-
@@ -1056,7 +1061,7 @@ var bboxHandlers = {
 		    if (sx > 0) {         // Start in quadrant 3 - X+ Y-
 			px = py = mx = true;
 		    } else {              // Start in quadrant 2 - X- Y-
-			if (sx >= ex) {      // wraparound
+			if (isFullCircle && sx >= ex) {      // wraparound
 			    px = py = mx = my = true;
 			}
 		    }
@@ -1068,12 +1073,16 @@ var bboxHandlers = {
 	var minX = mx ? pc.x - radius : Math.min(ps.x, pe.x);
 	var minY = my ? pc.y - radius : Math.min(ps.y, pe.y);
 	
+	// Check for full circle or multi-rotation arcs in world coordinates
+	var world_isFullCircle = (extraRotations >= 1) || 
+	                         (Math.abs(world_sx - world_ex) < 0.001 && Math.abs(world_sy - world_ey) < 0.001);
+	
 	// Calculate axis crossings for WORLD coordinates (for job bounding box)
 	if (world_ey >= 0) {              // End in upper half plane
 	    if (world_ex > 0) {             // End in quadrant 0 - X+ Y+
 		if (world_sy >= 0) {          // Start in upper half plane
 		    if (world_sx > 0) {         // Start in quadrant 0 - X+ Y+
-			if (world_sx <= world_ex) {     // wraparound
+			if (world_isFullCircle && world_sx <= world_ex) {     // wraparound
 			    world_px = world_py = world_mx = world_my = true;
 			}
 		    } else {              // Start in quadrant 1 - X- Y+
@@ -1091,7 +1100,7 @@ var bboxHandlers = {
 		    if (world_sx > 0) {         // Start in quadrant 0 - X+ Y+
 			world_py = true;
 		    } else {              // Start in quadrant 1 - X- Y+
-			if (world_sx <= world_ex) {     // wraparound
+			if (world_isFullCircle && world_sx <= world_ex) {     // wraparound
 			    world_px = world_py = world_mx = world_my = true;
 			}
 		    }
@@ -1113,7 +1122,7 @@ var bboxHandlers = {
 		    }
 		} else {                // Start in lower half plane
 		    if (world_sx > 0) {         // Start in quadrant 3 - X+ Y-
-			if (world_sx >= world_ex) {      // wraparound
+			if (world_isFullCircle && world_sx >= world_ex) {      // wraparound
 			    world_px = world_py = world_mx = world_my = true;
 			}
 		    } else {              // Start in quadrant 2 - X- Y-
@@ -1131,7 +1140,7 @@ var bboxHandlers = {
 		    if (world_sx > 0) {         // Start in quadrant 3 - X+ Y-
 			world_px = world_py = world_mx = true;
 		    } else {              // Start in quadrant 2 - X- Y-
-			if (world_sx >= world_ex) {      // wraparound
+			if (world_isFullCircle && world_sx >= world_ex) {      // wraparound
 			    world_px = world_py = world_mx = world_my = true;
 			}
 		    }
