@@ -1,19 +1,18 @@
 # G-code UI vs Firmware Comparison Report - G2/G3 Arc Analysis
 
-> **Note**: This report has been superseded by a comprehensive analysis of ALL G-code commands. See [gcode-ui-firmware-comparison-comprehensive.md](gcode-ui-firmware-comparison-comprehensive.md) for complete coverage.
+> **Note**: This report documents critical G2/G3 arc rendering issues in the UI. These issues are **STILL PRESENT** in the current code.
 >
-> **Status**: PR #592 has been merged with fixes for the G2/G3 issues documented below. This report is retained for historical reference.
+> **See also**: [gcode-ui-firmware-comparison-comprehensive.md](gcode-ui-firmware-comparison-comprehensive.md) for analysis of ALL G-code commands.
 
 ## Executive Summary
 
-This report compares how G-code arc commands (G2/G3) were interpreted and executed by the ESP3D-WEBUI (user interface) versus the FluidNC firmware in the Maslow CNC system **prior to PR #592**.
+This report compares how G-code arc commands (G2/G3) are interpreted and executed by the ESP3D-WEBUI (user interface) versus the FluidNC firmware in the Maslow CNC system.
 
-**Key Findings (Historical - Now Fixed in PR #592)**:
-The UI and firmware handled G-code arcs differently in several critical areas:
-1. **Arc center calculation** - Different formulas and sign conventions ✅ FIXED
-2. **Direction handling** - The UI swapped start/end points for G2, firmware used rotation direction ✅ FIXED
-3. **Multi-turn arcs (P parameter)** - Different handling of extra rotations ✅ FIXED
-4. **Arc mode** - Different interpretations of I/J/K as offsets vs absolute positions ✅ FIXED
+**Critical Finding**: The UI and firmware handle G-code arcs differently in several critical areas that cause **incorrect toolpath visualization**:
+1. **Arc center calculation** - Different formulas and sign conventions ❌ **UNFIXED**
+2. **Direction handling** - The UI swaps start/end points for G2, firmware uses rotation direction ❌ **UNFIXED**
+3. **Multi-turn arcs (P parameter)** - Different handling of extra rotations ⚠️ **Needs Verification**
+4. **Arc mode** - Different interpretations of I/J/K as offsets vs absolute positions ✅ Compatible
 
 ## Overview
 
@@ -511,12 +510,14 @@ G2 X0 Y0 I10 J0 P3
 
 ## Conclusion
 
-**Historical Context**: The UI and firmware had significant differences in how they handled G2/G3 arc commands, particularly:
-1. G2 direction handling (start/end swap in UI)
-2. R-mode center calculation (opposite sign conventions)
+**Current Status**: The UI and firmware have **significant differences** in how they handle G2/G3 arc commands, particularly:
+1. G2 direction handling (start/end swap in UI) - ❌ **STILL PRESENT**
+2. R-mode center calculation (opposite sign conventions) - ❌ **STILL PRESENT**
 
-These differences explained the discrepancies noted in PR #592.
+These differences explain the discrepancies noted in issue discussions. **These issues are NOT fixed** - they remain in the current codebase and cause incorrect arc visualization in the UI.
 
-**Current Status**: PR #592 has been merged - all arc-related issues documented in this report have been resolved. The UI code has been updated to match the firmware's arc handling logic, which correctly implements the LinuxCNC/NIST G-code standard.
+**Action Required**: To resolve these issues, the UI code needs to be updated to match the firmware's arc handling logic, which correctly implements the LinuxCNC/NIST G-code standard. Specifically:
+1. Remove the start/end swap in `toolpath-displayer.js:959-963`
+2. Fix the R-mode sign convention in `simple-toolpath.js:255` to match firmware
 
-**Next Steps**: For analysis of all other G-code commands beyond G2/G3, see the comprehensive report: [gcode-ui-firmware-comparison-comprehensive.md](gcode-ui-firmware-comparison-comprehensive.md)
+**See**: The comprehensive report ([gcode-ui-firmware-comparison-comprehensive.md](gcode-ui-firmware-comparison-comprehensive.md)) documents these and other G-code command differences.

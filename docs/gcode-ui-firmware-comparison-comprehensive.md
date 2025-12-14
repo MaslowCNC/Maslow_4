@@ -4,13 +4,14 @@
 
 This report provides a comprehensive comparison of ALL G-code and M-code commands supported by the FluidNC firmware versus the ESP3D-WEBUI (user interface) in the Maslow CNC system.
 
-**Note**: This analysis assumes that PR #592 (which addressed G2/G3 arc rendering discrepancies) has been merged and its fixes are in place.
+**Critical Note**: Analysis of current code reveals that G2/G3 arc handling issues identified in the original report are **STILL PRESENT**. PR #592 mentioned in issue discussions has **NOT been merged** into the current codebase.
 
 **Overview of Findings**:
 - **Total Firmware G-codes analyzed**: 30+ commands
 - **Total Firmware M-codes analyzed**: 15+ commands  
 - **UI implements**: Most display-relevant commands
 - **UI does NOT implement**: Many firmware-specific commands (G10, G28, G30, G53, G61, M56, M62-M68)
+- **CRITICAL**: G2/G3 arc rendering has multiple incompatibilities with firmware (see Critical Issues)
 
 ## Command Support Matrix
 
@@ -77,7 +78,7 @@ case 1:  // G1 - linear feedrate move
 ---
 
 #### G2 - Clockwise Arc
-**Status**: ✅ Fully Compatible (after PR #592)
+**Status**: ❌ **INCOMPATIBLE - Critical Issues Present**
 
 **UI Implementation** (`simple-toolpath.js:187-275`):
 ```javascript
@@ -95,17 +96,32 @@ case 2:  // G2 - clockwise arc
     gc_block.modal.motion = Motion::CwArc;
 ```
 
-**Behavior**: After PR #592 fixes, both calculate arc center identically using I/J/K offsets or R radius mode. Firmware uses adaptive segmentation, UI uses fixed segmentation (10 segments per π).
+**Behavior**: **CRITICAL INCOMPATIBILITIES EXIST**:
 
-**Note**: PR #592 resolved:
-- Start/end point swap issue
-- R-mode sign convention mismatch
-- Direction handling differences
+1. **Start/End Point Swap** (Issue #1): UI swaps start and end points for G2 arcs in `toolpath-displayer.js:959-963`:
+   ```javascript
+   if (modal.motion == 'G2') {  // clockwise
+       var tmp = start;
+       start = end;
+       end = tmp;
+   }
+   ```
+   Firmware does NOT swap points. **Result**: G2 arcs drawn backwards in UI vs firmware execution.
+
+2. **R-mode Sign Convention** (Issue #2): UI uses positive sqrt at `simple-toolpath.js:255`:
+   ```javascript
+   let height = Math.sqrt(4 * radius * radius - x * x - y * y) / 2;
+   ```
+   Firmware uses negative sqrt. **Result**: Arcs on opposite side of chord line in UI vs firmware.
+
+3. **Direction Handling**: UI treats G2 as CCW by swapping endpoints; firmware adjusts angular_travel calculation.
+
+These issues cause **incorrect arc visualization** in the UI compared to actual firmware cutting paths.
 
 ---
 
 #### G3 - Counter-Clockwise Arc
-**Status**: ✅ Fully Compatible (after PR #592)
+**Status**: ⚠️ **Partial Compatibility - Minor Issues**
 
 **UI Implementation** (`simple-toolpath.js:276-365`):
 ```javascript
@@ -121,7 +137,13 @@ case 3:  // G3 - counterclockwise arc
     gc_block.modal.motion = Motion::CcwArc;
 ```
 
-**Behavior**: Identical to G2 but rotates in opposite direction. PR #592 resolved all arc-related discrepancies.
+**Behavior**: G3 (CCW) has better compatibility than G2, but still affected by:
+
+1. **R-mode Sign Convention**: Same issue as G2 - UI uses positive sqrt, firmware uses negative sqrt. May cause arcs on wrong side of chord.
+
+2. **Segmentation Strategy**: UI uses fixed 10 segments per π; firmware uses adaptive segmentation based on arc tolerance.
+
+G3 does NOT have the start/end swap issue that affects G2, so simple CCW arcs display more accurately.
 
 ---
 
@@ -913,8 +935,8 @@ case 62:
 |---------|-------------|-----------|-----------------|-------|
 | G0 | Rapid Move | ✅ Full | ✅ Full | Compatible |
 | G1 | Linear Feed | ✅ Full | ✅ Full | Compatible |
-| G2 | CW Arc | ✅ Full | ✅ Full | Fixed in PR #592 |
-| G3 | CCW Arc | ✅ Full | ✅ Full | Fixed in PR #592 |
+| G2 | CW Arc | ❌ Incompatible | ✅ Full | **CRITICAL: Start/end swap + R-mode sign error** |
+| G3 | CCW Arc | ⚠️ Partial | ✅ Full | R-mode sign issue |
 | G4 | Dwell | ⚠️ Ignored | ✅ Full | UI doesn't show dwells |
 | G10 | Set Coordinate Data | ❌ None | ✅ Full | Not in UI |
 | G17 | XY Plane | ✅ Full | ✅ Full | Compatible |
@@ -972,7 +994,79 @@ case 62:
 
 ## Critical Issues
 
-### Issue #1: G53 Machine Coordinates Not Implemented
+### Issue #1: G2 Clockwise Arc - Start/End Point Swap
+**Severity**: HIGH  
+**Location**: `ESP3D-WEBUI/www/js/toolpath-displayer.js:959-963`
+
+**Problem**: The UI swaps start and end points for G2 (clockwise) arcs before rendering:
+
+```javascript
+if (modal.motion == 'G2') {  // clockwise
+    var tmp = start;
+    start = end;
+    end = tmp;
+}
+```
+
+The firmware does **NOT** swap points. It maintains start and end as specified in the G-code and adjusts the angular travel direction instead.
+
+**Impact**: G2 arcs are drawn **backwards** in the UI compared to how they're cut by the firmware. The arc starts where it should end and ends where it should start.
+
+**Example**:
+```gcode
+G0 X0 Y0
+G2 X10 Y0 I5 J0  ; Quarter circle CW from (0,0) to (10,0), center at (5,0)
+```
+
+**UI Display**: Shows arc from (10,0) to (0,0) (reversed!)  
+**Firmware Execution**: Cuts arc from (0,0) to (10,0) (correct)  
+**Result**: Toolpath preview is backwards!
+
+**Recommendation**: Remove the start/end swap in UI and handle direction through angular travel calculation like the firmware does.
+
+---
+
+### Issue #2: R-mode Sign Convention Mismatch (G2 and G3)
+**Severity**: HIGH  
+**Location**: 
+- UI: `ESP3D-WEBUI/www/js/simple-toolpath.js:255`
+- Firmware: `firmware/FluidNC/src/GCode.cpp:1212`
+
+**Problem**: The UI and firmware use **opposite sign conventions** when calculating arc center from radius (R parameter).
+
+**UI Implementation** (`simple-toolpath.js:255`):
+```javascript
+let height = Math.sqrt(4 * radius * radius - x * x - y * y) / 2;  // POSITIVE
+if (isClockwise) {
+    height = -height;  // Negate for clockwise
+}
+```
+
+**Firmware Implementation** (`GCode.cpp:1212`):
+```cpp
+h_x2_div_d = -sqrt(h_x2_div_d) / hypot_f(x, y);  // NEGATIVE from start
+if (gc_block.modal.motion == Motion::CcwArc) {
+    h_x2_div_d = -h_x2_div_d;  // Negate for counter-clockwise
+}
+```
+
+**Impact**: Arcs specified with R parameter are drawn on the **opposite side** of the chord line in UI versus firmware. An arc that should bulge left will bulge right, and vice versa.
+
+**Example**:
+```gcode
+G0 X0 Y0
+G2 X10 Y0 R5  ; Small semicircle (R positive = arc < 180°)
+```
+
+**Expected**: Semicircle below the line (Y negative)  
+**UI Shows**: Semicircle above the line (Y positive) - WRONG SIDE!  
+**Result**: Arc appears mirrored across the chord line!
+
+**Recommendation**: Change UI to use negative sqrt initially (match firmware) or adjust the logic to produce the same result.
+
+---
+
+### Issue #3: G53 Machine Coordinates Not Implemented
 **Severity**: HIGH  
 **Location**: UI has no G53 handler
 
@@ -993,7 +1087,7 @@ G53 G0 X0 Y0  ; Move to machine origin -> Machine (0, 0)
 
 ---
 
-### Issue #2: G10 Coordinate System Changes Invisible
+### Issue #4: G10 Coordinate System Changes Invisible
 **Severity**: MEDIUM  
 **Location**: UI has no G10 handler
 
@@ -1013,7 +1107,7 @@ G0 X0 Y0          ; Move to new G54 origin
 
 ---
 
-### Issue #3: Probe Commands Not Visualized
+### Issue #5: Probe Commands Not Visualized
 **Severity**: LOW  
 **Location**: G38.x handlers only track modal state
 
@@ -1025,7 +1119,7 @@ G0 X0 Y0          ; Move to new G54 origin
 
 ---
 
-### Issue #4: Tool Length Offset Not Applied
+### Issue #6: Tool Length Offset Not Applied
 **Severity**: LOW  
 **Location**: G43.1 handler doesn't adjust Z display
 
@@ -1037,7 +1131,7 @@ G0 X0 Y0          ; Move to new G54 origin
 
 ---
 
-### Issue #5: I/O Control Commands Invisible
+### Issue #7: I/O Control Commands Invisible
 **Severity**: LOW  
 **Location**: M62-M68 not implemented
 
@@ -1051,27 +1145,71 @@ G0 X0 Y0          ; Move to new G54 origin
 
 ## Recommendations
 
-### High Priority
-1. **Implement G53 handler** - Critical for accurate machine coordinate moves
-2. **Implement G10 handler** - Important for coordinate system management
-3. **Update documentation** - Note that PR #592 has fixed G2/G3 issues
+### High Priority - CRITICAL ARC ISSUES
+1. **Fix G2 start/end point swap** - Remove the swap in `toolpath-displayer.js:959-963` and handle direction via angular travel calculation
+2. **Fix R-mode sign convention** - Align UI calculation with firmware (negative sqrt or equivalent logic)
+3. **Validate arc rendering** - Create comprehensive test suite for G2/G3 arcs with I/J/K and R modes
+4. **Implement G53 handler** - Critical for accurate machine coordinate moves
+5. **Implement G10 handler** - Important for coordinate system management
 
 ### Medium Priority
-4. **Add probe visualization** - Different display for G38.x moves
-5. **Implement G28/G30 handlers** - Show homing moves
-6. **Add tool length offset display** - Apply G43.1 offsets to preview
+6. **Add probe visualization** - Different display for G38.x moves
+7. **Implement G28/G30 handlers** - Show homing moves
+8. **Add tool length offset display** - Apply G43.1 offsets to preview
 
 ### Low Priority
-7. **Add I/O command markers** - Visual indicators for M62-M68
-8. **Improve dwell visualization** - Show G4 pauses with timing
-9. **Add spindle speed indicators** - Show S parameter changes with M3/M4
+9. **Add I/O command markers** - Visual indicators for M62-M68
+10. **Improve dwell visualization** - Show G4 pauses with timing
+11. **Add spindle speed indicators** - Show S parameter changes with M3/M4
 
 ### Testing
-10. **Create comprehensive test suite** - Test files for all command combinations
-11. **Document expected behaviors** - Clear spec for UI vs firmware differences
-12. **Add validation warnings** - Warn users about commands UI cannot visualize
+12. **Create comprehensive test suite** - Test files for all command combinations, especially arcs
+13. **Document expected behaviors** - Clear spec for UI vs firmware differences
+14. **Add validation warnings** - Warn users about commands UI cannot visualize
 
 ## Test Cases
+
+### Test G2 Start/End Swap Issue
+```gcode
+; Test that G2 arc is drawn in correct direction
+G21  ; Millimeters
+G0 X0 Y0
+G2 X10 Y0 I5 J0  ; Quarter circle CW, should go from (0,0) to (10,0)
+
+; Expected firmware behavior: Arc from (0,0) to (10,0), curving through Y-positive
+; Current UI behavior: Arc from (10,0) to (0,0) - BACKWARDS!
+; Correct UI behavior: Should match firmware
+```
+
+### Test R-mode Sign Convention Issue
+```gcode
+; Test R-mode arc with positive radius
+G21
+G0 X0 Y0
+G2 X10 Y0 R5  ; Small semicircle (< 180°)
+
+; Expected: Semicircle curving in Y-negative direction (below the line)
+; Current UI: Shows semicircle in Y-positive direction - WRONG SIDE!
+; Firmware: Correctly cuts in Y-negative direction
+
+; Test with negative R (large arc)
+G0 X0 Y0
+G2 X10 Y0 R-5  ; Large arc (> 180°)
+
+; Expected: Large arc curving in Y-positive direction (above the line)
+; Current UI: Shows in Y-negative - WRONG SIDE!
+```
+
+### Test G3 CCW Arc (Better Compatibility)
+```gcode
+; G3 should work better since no start/end swap
+G21
+G0 X0 Y0
+G3 X10 Y0 I5 J0  ; CCW quarter circle
+
+; Expected: Arc from (0,0) to (10,0), curving through Y-negative
+; UI behavior: Should be mostly correct (no swap), but may have R-mode issues
+```
 
 ### Test G53 Machine Coordinate Issue
 ```gcode
@@ -1107,12 +1245,19 @@ G38.2 Z-10 F100  ; Probe downward
 
 1. **LinuxCNC G-code Documentation**: https://linuxcnc.org/docs/html/gcode.html
 2. **NIST RS274NGC Standard**
-3. **PR #592**: G2/G3 arc rendering fixes (assumed merged)
+3. **Grbl Arc Implementation**: https://github.com/grbl/grbl/issues/236
 4. **FluidNC Documentation**: https://github.com/bdring/FluidNC/wiki
+5. **Original G2/G3 Analysis**: See `gcode-ui-firmware-comparison.md` for detailed arc issue analysis
 
 ## Conclusion
 
-This comprehensive analysis reveals that while the UI handles most common display-oriented G-code commands correctly (especially after PR #592's arc fixes), there are significant gaps in firmware-specific commands:
+This comprehensive analysis reveals significant gaps and incompatibilities between the UI and firmware G-code handling:
+
+**CRITICAL - Arc Rendering Issues (G2/G3)**:
+- **G2 start/end swap** - UI draws clockwise arcs backwards (Issue #1)
+- **R-mode sign convention** - UI draws arcs on wrong side of chord line (Issue #2)
+- **Impact**: Toolpath preview does NOT match actual cutting for G2/G3 arcs
+- **Status**: **UNFIXED** - These issues are present in current code despite PR #592 references
 
 **Critical Gaps**:
 - G53 machine coordinates (HIGH impact - wrong display)
@@ -1124,6 +1269,6 @@ This comprehensive analysis reveals that while the UI handles most common displa
 - M56 parking override (firmware safety feature)
 - Probe details (hardware interaction)
 
-The UI successfully provides toolpath preview for typical machining operations, but users must understand that certain firmware-specific commands (coordinate system changes, machine coordinate moves, homing) will not be accurately represented in the preview.
+**Important Note**: While the UI successfully provides toolpath preview for basic machining operations (G0/G1 moves, plane selection, units, coordinate systems), **arc commands (G2/G3) have critical rendering errors** that cause the preview to differ significantly from actual firmware execution. Users relying on the UI preview for arc-heavy toolpaths will see incorrect visualizations.
 
-**Post-PR #592 Status**: With the G2/G3 fixes merged, arc handling is now fully compatible between UI and firmware, resolving the original issue that prompted this analysis.
+**Immediate Action Required**: Fix Issues #1 and #2 (G2 start/end swap and R-mode sign convention) to make arc preview accurate. Until these are fixed, the UI preview cannot be trusted for programs containing G2 or G3 commands.
