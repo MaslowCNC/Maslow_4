@@ -587,7 +587,7 @@ var Toolpath = function () {
                         _this.position.y = ymm;
                     }
                     if (params.Z != undefined) {
-			var zmm = _this.translateX(params.Z, false);
+			var zmm = _this.translateZ(params.Z, false);
                         _this.g92offset.z += _this.position.z - zmm;
                         _this.position.z = zmm;
                     }
