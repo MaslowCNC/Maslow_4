@@ -433,7 +433,7 @@ var Toolpath = function () {
                 if (_this.modal.tlo !== 'G43.1') {
                     _this.setModal({ tlo: 'G43.1' });
                 }
-                // G43.1 uses axis word (typically Z) as the offset
+                // G43.1 uses axis word as the offset. This implementation handles Z-axis only.
                 if (params.Z !== undefined) {
                     _this.toolLengthOffset = _this.translateZ(params.Z, false);
                 }
