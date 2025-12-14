@@ -38,11 +38,22 @@ var Toolpath = function () {
             y: 0,
             z: 0
         };
+        // Work Coordinate System offsets for G54-G59
+        this.wcsOffsets = {
+            'G54': { x: 0, y: 0, z: 0 },
+            'G55': { x: 0, y: 0, z: 0 },
+            'G56': { x: 0, y: 0, z: 0 },
+            'G57': { x: 0, y: 0, z: 0 },
+            'G58': { x: 0, y: 0, z: 0 },
+            'G59': { x: 0, y: 0, z: 0 }
+        };
         function offsetG92(pos) {
+            // Apply both WCS and G92 offsets
+            var wcs = _this.wcsOffsets[_this.modal.wcs] || { x: 0, y: 0, z: 0 };
             return {
-                x: pos.x + _this.g92offset.x,
-                y: pos.y + _this.g92offset.y,
-                z: pos.z + _this.g92offset.z,
+                x: pos.x + _this.g92offset.x + wcs.x,
+                y: pos.y + _this.g92offset.y + wcs.y,
+                z: pos.z + _this.g92offset.z + wcs.z,
             }
         }
         function offsetAddLine(start, end) {
@@ -370,7 +381,55 @@ var Toolpath = function () {
             //   G4 P200
             'G4': function G4(params) {},
             // G10: Coordinate System Data Tool and Work Offset Tables
-            'G10': function G10(params) {},
+            'G10': function G10(params) {
+                // G10 L2 Pn - Set WCS origin to absolute machine coordinates
+                // G10 L20 Pn - Set WCS so current position becomes the specified coordinates
+                if (params.L === 2) {
+                    // G10 L2: Set WCS origin to absolute machine coordinates
+                    var wcs_index = params.P || 1;  // P1-P6 for G54-G59
+                    var wcs_name = 'G' + (53 + wcs_index);  // P1=G54, P2=G55, etc.
+
+                    if (wcs_index >= 1 && wcs_index <= 6 && _this.wcsOffsets[wcs_name]) {
+                        // For L2, the WCS offset is set to the specified machine coordinates
+                        // WCS offset is the position of the origin in machine coordinates
+                        if (params.X !== undefined) {
+                            var xmm = _this.translateX(params.X, false);
+                            _this.wcsOffsets[wcs_name].x = xmm;
+                        }
+                        if (params.Y !== undefined) {
+                            var ymm = _this.translateY(params.Y, false);
+                            _this.wcsOffsets[wcs_name].y = ymm;
+                        }
+                        if (params.Z !== undefined) {
+                            var zmm = _this.translateZ(params.Z, false);
+                            _this.wcsOffsets[wcs_name].z = zmm;
+                        }
+                    }
+                } else if (params.L === 20) {
+                    // G10 L20: Set WCS so current position becomes the specified coordinates
+                    var wcs_index = params.P || 1;  // P1-P6 for G54-G59
+                    var wcs_name = 'G' + (53 + wcs_index);  // P1=G54, P2=G55, etc.
+
+                    if (wcs_index >= 1 && wcs_index <= 6 && _this.wcsOffsets[wcs_name]) {
+                        // For L20, calculate WCS offset based on current position
+                        // WCS = MPos - G92 - WPos
+                        // Since position is already in work coordinates (after G92), we need:
+                        // WCS_new = (position + g92offset) - specified_value
+                        if (params.X !== undefined) {
+                            var xmm = _this.translateX(params.X, false);
+                            _this.wcsOffsets[wcs_name].x = (_this.position.x + _this.g92offset.x) - xmm;
+                        }
+                        if (params.Y !== undefined) {
+                            var ymm = _this.translateY(params.Y, false);
+                            _this.wcsOffsets[wcs_name].y = (_this.position.y + _this.g92offset.y) - ymm;
+                        }
+                        if (params.Z !== undefined) {
+                            var zmm = _this.translateZ(params.Z, false);
+                            _this.wcsOffsets[wcs_name].z = (_this.position.z + _this.g92offset.z) - zmm;
+                        }
+                    }
+                }
+            },
             // G17..19: Plane Selection
             // G17: XY (default)
             'G17': function G17(params) {
