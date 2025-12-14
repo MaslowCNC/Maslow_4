@@ -987,11 +987,9 @@ var bboxHandlers = {
 	var world_mx = false;
 	var world_my = false;
 
-	// There are ways to express this decision tree in fewer lines
-	// of code by converting to alternate representations like angles,
-	// but this way is probably the most computationally efficient.
-	// It avoids any use of transcendental functions.  Every path
-	// through this decision tree is either 4 or 5 simple comparisons.
+	// Note: We use one atan2() call to detect full circles (matching firmware behavior),
+	// but the rest of the decision tree avoids transcendental functions for efficiency.
+	// Every path through the axis crossing logic is 4 or 5 simple comparisons.
 	
 	// Check for full circle or multi-rotation arcs using same logic as FluidNC firmware
 	// See firmware/FluidNC/src/MotionControl.cpp lines 142-160 and Config.h line 179
