@@ -1330,7 +1330,7 @@ var displayHandlers = {
             next.x = center.x + radius * Math.cos(theta);
             next.y = center.y + radius * Math.sin(theta);
             next.z += dz;
-            pe = projection(next)
+            pe = projection(next);
             tp.lineTo(pe.x, pe.y);
         }
         tp.stroke();
