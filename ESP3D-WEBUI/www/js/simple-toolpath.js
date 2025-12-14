@@ -252,9 +252,9 @@ var Toolpath = function () {
                     let x = v2.x - v1.x;
                     let y = v2.y - v1.y;
                     let distance = Math.hypot(x, y);
-                    let height = Math.sqrt(4 * radius * radius - x * x - y * y) / 2;
+                    let height = -Math.sqrt(4 * radius * radius - x * x - y * y) / 2;
 
-                    if (isClockwise) {
+                    if (!isClockwise) {
                         height = -height;
                     }
                     if (radius < 0) {
@@ -342,9 +342,9 @@ var Toolpath = function () {
                     let x = v2.x - v1.x;
                     let y = v2.y - v1.y;
                     let distance = Math.hypot(x, y);
-                    let height = Math.sqrt(4 * radius * radius - x * x - y * y) / 2;
+                    let height = -Math.sqrt(4 * radius * radius - x * x - y * y) / 2;
 
-                    if (isClockwise) {
+                    if (!isClockwise) {
                         height = -height;
                     }
                     if (radius < 0) {

@@ -956,12 +956,6 @@ var bboxHandlers = {
 	// Update units in case it changed in a previous line
         tpUnits = modal.units;
 
-        if (modal.motion == 'G2') {  // clockwise
-            var tmp = start;
-            start = end;
-            end = tmp;
-        }
-
         ps = projection(start);
         pc = projection(center);
         pe = projection(end);
