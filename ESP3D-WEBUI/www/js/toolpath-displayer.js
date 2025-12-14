@@ -1268,38 +1268,56 @@ var displayHandlers = {
     addArcCurve: function(modal, start, end, center, extraRotations) {
         var motion = modal.motion;
 
+        // Note: JavaScript uses double precision (64-bit) floats by default, which provides
+        // better precision than firmware's single precision (32-bit) floats. This ensures
+        // we won't have false positives for large radius arcs due to precision limits.
         var deltaX1 = start.x - center.x;
         var deltaY1 = start.y - center.y;
         var radius = Math.hypot(deltaX1, deltaY1);
         var deltaX2 = end.x - center.x;
         var deltaY2 = end.y - center.y;
-        var theta1 = Math.atan2(deltaY1, deltaX1);
-        var theta2 = Math.atan2(deltaY2, deltaX2);
+        
+        // Calculate angular travel using same formula as firmware (MotionControl.cpp:142)
+        // and bounding box calculation above
+        var angular_travel = Math.atan2(deltaX1 * deltaY2 - deltaY1 * deltaX2, 
+                                        deltaX1 * deltaX2 + deltaY1 * deltaY2);
+        
         var cw = modal.motion == "G2";
-        if (!cw && theta2 < theta1) {
-            theta2 += Math.PI * 2;
-        } else if (cw && theta2 > theta1) {
-            theta2 -= Math.PI * 2;
-        }
-	if (theta1 == theta2) {
-	    theta2 += Math.PI * ((cw) ? -2 : 2);
-	}
-        if (extraRotations > 1) {
-            theta2 += (extraRotations-1) * Math.PI * ((cw) ? -2 : 2);;
+        
+        // Use same epsilon as firmware to detect full circles
+        // See firmware/FluidNC/src/Config.h:179 and MotionControl.cpp:144,154
+        var ARC_ANGULAR_TRAVEL_EPSILON = 5e-7;
+        
+        if (cw) {  // Clockwise - correct atan2 output per direction
+            if (angular_travel >= -ARC_ANGULAR_TRAVEL_EPSILON) {
+                angular_travel -= 2 * Math.PI;
+            }
+            if (extraRotations > 1) {
+                angular_travel -= (extraRotations - 1) * 2 * Math.PI;
+            }
+        } else {  // Counter-clockwise
+            if (angular_travel <= ARC_ANGULAR_TRAVEL_EPSILON) {
+                angular_travel += 2 * Math.PI;
+            }
+            if (extraRotations > 1) {
+                angular_travel += (extraRotations - 1) * 2 * Math.PI;
+            }
         }
 
         initialMoves = false;
 
         tp.beginPath();
         tp.strokeStyle = 'black';
-        deltaTheta = theta2 - theta1;
-        n = 10 * Math.ceil(Math.abs(deltaTheta) / Math.PI);
-        dt = (deltaTheta) / n;
+        n = 10 * Math.ceil(Math.abs(angular_travel) / Math.PI);
+        dt = angular_travel / n;
         dz = (end.z - start.z) / n;
+        
+        // Start angle
+        var theta = Math.atan2(deltaY1, deltaX1);
+        
         ps = projection(start);
         tp.moveTo(ps.x, ps.y);
         next = {};
-        theta = theta1;
         next.z = start.z;
         for (i = 0; i < n; i++) {
             theta += dt;
