@@ -38,12 +38,21 @@ var Toolpath = function () {
             y: 0,
             z: 0
         };
+        this.machineCoordinateMode = false;
         function offsetG92(pos) {
+            // Skip G92 offset when in machine coordinate mode (G53)
+            if (_this.machineCoordinateMode) {
+                return {
+                    x: pos.x,
+                    y: pos.y,
+                    z: pos.z,
+                };
+            }
             return {
                 x: pos.x + _this.g92offset.x,
                 y: pos.y + _this.g92offset.y,
                 z: pos.z + _this.g92offset.z,
-            }
+            };
         }
         function offsetAddLine(start, end) {
             _this.fn.addLine(_this.modal, offsetG92(start), offsetG92(end));
@@ -129,6 +138,9 @@ var Toolpath = function () {
 
                 // Update position
                 _this.setPosition(targetPosition.x, targetPosition.y, targetPosition.z);
+
+                // Reset machine coordinate mode after move (G53 is non-modal)
+                _this.machineCoordinateMode = false;
             },
             // G1: Linear Move
             // Usage
@@ -165,6 +177,9 @@ var Toolpath = function () {
 
                 // Update position
                 _this.setPosition(targetPosition.x, targetPosition.y, targetPosition.z);
+
+                // Reset machine coordinate mode after move (G53 is non-modal)
+                _this.machineCoordinateMode = false;
             },
             // G2 & G3: Controlled Arc Move
             // Usage
@@ -272,6 +287,9 @@ var Toolpath = function () {
 
                 // Update position
                 _this.setPosition(targetPosition.x, targetPosition.y, targetPosition.z);
+
+                // Reset machine coordinate mode after move (G53 is non-modal)
+                _this.machineCoordinateMode = false;
             },
             'G3': function G3(params) {
                 if (_this.modal.motion !== 'G3') {
@@ -362,6 +380,9 @@ var Toolpath = function () {
 
                 // Update position
                 _this.setPosition(targetPosition.x, targetPosition.y, targetPosition.z);
+
+                // Reset machine coordinate mode after move (G53 is non-modal)
+                _this.machineCoordinateMode = false;
             },
             // G4: Dwell
             // Parameters
@@ -438,6 +459,13 @@ var Toolpath = function () {
                 if (_this.modal.tlo !== 'G49') {
                     _this.setModal({ tlo: 'G49' });
                 }
+            },
+            // G53: Move in Machine Coordinates (non-modal)
+            // This is a one-shot command that causes the next move to be
+            // interpreted in machine coordinates, ignoring work coordinate
+            // system offsets (G54-G59) and G92 offsets
+            'G53': function G53(params) {
+                _this.machineCoordinateMode = true;
             },
             // G54..59: Coordinate System Select
             'G54': function G54() {
