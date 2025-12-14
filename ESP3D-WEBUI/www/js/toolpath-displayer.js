@@ -1140,11 +1140,11 @@ var bboxHandlers = {
 	}
 	
 	// Now calculate world coordinate bounding box for job bounds
-	// Only use end position in fallback to exclude start from rapid moves
-	var world_maxX = world_px ? center.x + world_radius : end.x;
-	var world_maxY = world_py ? center.y + world_radius : end.y;
-	var world_minX = world_mx ? center.x - world_radius : end.x;
-	var world_minY = world_my ? center.y - world_radius : end.y;
+	// Use both start and end positions when axis is not crossed
+	var world_maxX = world_px ? center.x + world_radius : Math.max(start.x, end.x);
+	var world_maxY = world_py ? center.y + world_radius : Math.max(start.y, end.y);
+	var world_minX = world_mx ? center.x - world_radius : Math.min(start.x, end.x);
+	var world_minY = world_my ? center.y - world_radius : Math.min(start.y, end.y);
 
 	var minZ = Math.min(start.z, end.z);
 	var maxZ = Math.max(start.z, end.z);
