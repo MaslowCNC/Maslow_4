@@ -38,11 +38,12 @@ var Toolpath = function () {
             y: 0,
             z: 0
         };
+        this.toolLengthOffset = 0;
         function offsetG92(pos) {
             return {
                 x: pos.x + _this.g92offset.x,
                 y: pos.y + _this.g92offset.y,
-                z: pos.z + _this.g92offset.z,
+                z: pos.z + _this.g92offset.z + _this.toolLengthOffset,
             }
         }
         function offsetAddLine(start, end) {
@@ -432,12 +433,17 @@ var Toolpath = function () {
                 if (_this.modal.tlo !== 'G43.1') {
                     _this.setModal({ tlo: 'G43.1' });
                 }
+                // G43.1 uses axis word (typically Z) as the offset
+                if (params.Z !== undefined) {
+                    _this.toolLengthOffset = _this.translateZ(params.Z, false);
+                }
             },
             // G49: No Tool Length Offset
             'G49': function G49() {
                 if (_this.modal.tlo !== 'G49') {
                     _this.setModal({ tlo: 'G49' });
                 }
+                _this.toolLengthOffset = 0;
             },
             // G54..59: Coordinate System Select
             'G54': function G54() {
