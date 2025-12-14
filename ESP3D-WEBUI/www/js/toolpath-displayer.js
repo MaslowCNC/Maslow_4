@@ -999,10 +999,18 @@ var bboxHandlers = {
 	// It avoids any use of transcendental functions.  Every path
 	// through this decision tree is either 4 or 5 simple comparisons.
 	
-	// Check for full circle or multi-rotation arcs
-	// A true wraparound occurs when extraRotations >= 1 or when start equals end
+	// Check for full circle or multi-rotation arcs using same logic as FluidNC firmware
+	// See firmware/FluidNC/src/MotionControl.cpp lines 142-160 and Config.h line 179
+	// ARC_ANGULAR_TRAVEL_EPSILON = 5E-7 radians
+	var ARC_ANGULAR_TRAVEL_EPSILON = 5e-7;
+	
+	// Calculate angular travel (CCW angle between start and end from center)
+	// Same calculation as firmware: atan2(r_axis0 * rt_axis1 - r_axis1 * rt_axis0, r_axis0 * rt_axis0 + r_axis1 * rt_axis1)
+	var angular_travel = Math.atan2(sx * ey - sy * ex, sx * ex + sy * ey);
+	
+	// Check if angular travel is near zero (full circle) using firmware's epsilon
 	var isFullCircle = (extraRotations >= 1) || 
-	                   (Math.abs(sx - ex) < 0.001 && Math.abs(sy - ey) < 0.001);
+	                   (Math.abs(angular_travel) <= ARC_ANGULAR_TRAVEL_EPSILON);
 	
 	// Calculate axis crossings for PROJECTED coordinates (for display)
 	if (ey >= 0) {              // End in upper half plane
@@ -1080,8 +1088,10 @@ var bboxHandlers = {
 	var minY = my ? pc.y - radius : Math.min(ps.y, pe.y);
 	
 	// Check for full circle or multi-rotation arcs in world coordinates
+	// Use same logic as firmware (see above for projected coordinates)
+	var world_angular_travel = Math.atan2(world_sx * world_ey - world_sy * world_ex, world_sx * world_ex + world_sy * world_ey);
 	var world_isFullCircle = (extraRotations >= 1) || 
-	                         (Math.abs(world_sx - world_ex) < 0.001 && Math.abs(world_sy - world_ey) < 0.001);
+	                         (Math.abs(world_angular_travel) <= ARC_ANGULAR_TRAVEL_EPSILON);
 	
 	// Calculate axis crossings for WORLD coordinates (for job bounding box)
 	if (world_ey >= 0) {              // End in upper half plane
