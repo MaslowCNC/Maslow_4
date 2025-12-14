@@ -471,15 +471,15 @@ The UI and firmware take fundamentally different approaches to arc direction:
 Here are some test G-code snippets to validate the differences:
 
 ```gcode
-; Test 1: Simple quarter circle, CW
+; Test 1: Quarter circle CW
 G0 X0 Y0
-G2 X10 Y10 I10 J0
-; Expected: Quarter circle from (0,0) to (10,10) with center at (10,0)
+G2 X10 Y0 I5 J0
+; Expected: Quarter circle from (0,0) to (10,0) with center at (5,0), radius 5
 
-; Test 2: Simple quarter circle, CCW
+; Test 2: Three-quarter circle CCW
 G0 X0 Y0
-G3 X10 Y10 I10 J0
-; Expected: Three-quarter circle from (0,0) to (10,10) with center at (10,0)
+G3 X10 Y0 I5 J0
+; Expected: Three-quarter circle from (0,0) to (10,0) with center at (5,0), radius 5
 
 ; Test 3: R-mode small arc, CW
 G0 X0 Y0
@@ -494,7 +494,7 @@ G2 X10 Y0 R-5
 ; Test 5: Multi-turn arc
 G0 X0 Y0
 G2 X0 Y0 I10 J0 P3
-; Expected: Full circle repeated 2.5 times (P3 = 1 + 2 extra turns)
+; Expected: Full circle repeated 3 times (P3 = 1 base + 2 extra rotations)
 ```
 
 ## References
