@@ -138,9 +138,6 @@ var Toolpath = function () {
 
                 // Update position
                 _this.setPosition(targetPosition.x, targetPosition.y, targetPosition.z);
-
-                // Reset machine coordinate mode after move (G53 is non-modal)
-                _this.machineCoordinateMode = false;
             },
             // G1: Linear Move
             // Usage
@@ -177,9 +174,6 @@ var Toolpath = function () {
 
                 // Update position
                 _this.setPosition(targetPosition.x, targetPosition.y, targetPosition.z);
-
-                // Reset machine coordinate mode after move (G53 is non-modal)
-                _this.machineCoordinateMode = false;
             },
             // G2 & G3: Controlled Arc Move
             // Usage
@@ -287,9 +281,6 @@ var Toolpath = function () {
 
                 // Update position
                 _this.setPosition(targetPosition.x, targetPosition.y, targetPosition.z);
-
-                // Reset machine coordinate mode after move (G53 is non-modal)
-                _this.machineCoordinateMode = false;
             },
             'G3': function G3(params) {
                 if (_this.modal.motion !== 'G3') {
@@ -380,9 +371,6 @@ var Toolpath = function () {
 
                 // Update position
                 _this.setPosition(targetPosition.x, targetPosition.y, targetPosition.z);
-
-                // Reset machine coordinate mode after move (G53 is non-modal)
-                _this.machineCoordinateMode = false;
             },
             // G4: Dwell
             // Parameters
@@ -429,32 +417,24 @@ var Toolpath = function () {
                 if (_this.modal.motion !== 'G38.2') {
                     _this.setModal({ motion: 'G38.2' });
                 }
-                // Reset machine coordinate mode after motion command (G53 is non-modal)
-                _this.machineCoordinateMode = false;
             },
             // G38.3: Probe toward workpiece, stop on contact
             'G38.3': function G383(params) {
                 if (_this.modal.motion !== 'G38.3') {
                     _this.setModal({ motion: 'G38.3' });
                 }
-                // Reset machine coordinate mode after motion command (G53 is non-modal)
-                _this.machineCoordinateMode = false;
             },
             // G38.4: Probe away from workpiece, stop on loss of contact, signal error if failure
             'G38.4': function G384(params) {
                 if (_this.modal.motion !== 'G38.4') {
                     _this.setModal({ motion: 'G38.4' });
                 }
-                // Reset machine coordinate mode after motion command (G53 is non-modal)
-                _this.machineCoordinateMode = false;
             },
             // G38.5: Probe away from workpiece, stop on loss of contact
             'G38.5': function G385(params) {
                 if (_this.modal.motion !== 'G38.5') {
                     _this.setModal({ motion: 'G38.5' });
                 }
-                // Reset machine coordinate mode after motion command (G53 is non-modal)
-                _this.machineCoordinateMode = false;
             },
             // G43.1: Tool Length Offset
             'G43.1': function G431(params) {
@@ -511,8 +491,6 @@ var Toolpath = function () {
                 if (_this.modal.motion !== 'G80') {
                     _this.setModal({ motion: 'G80' });
                 }
-                // Reset machine coordinate mode after motion command (G53 is non-modal)
-                _this.machineCoordinateMode = false;
             },
             // G90: Set to Absolute Positioning
             // Example
@@ -742,6 +720,21 @@ var Toolpath = function () {
         };
         toolpath.setModal = function (modal) {
             return _this.setModal(modal);
+        };
+
+        // Override loadFromLinesSync to reset machineCoordinateMode at the start of each line
+        // This ensures G53 only affects axis words on the same line, matching firmware behavior
+        toolpath.loadFromLinesSync = function(lines) {
+            for (var i = 0; i < lines.length; ++i) {
+                var line = lines[i].trim();
+                if (line.length !== 0) {
+                    // Reset machine coordinate mode at the start of each line
+                    // G53 is non-modal and only affects the line it appears on
+                    _this.machineCoordinateMode = false;
+                    // Parse and interpret this line (note: parseLine and interpret must be globally available)
+                    interpret(this, parseLine(line, {}));
+                }
+            }
         };
 
         return toolpath;
