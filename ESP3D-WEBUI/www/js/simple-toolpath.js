@@ -626,7 +626,7 @@ var Toolpath = function () {
                         _this.position.y = ymm;
                     }
                     if (params.Z != undefined) {
-			var zmm = _this.translateX(params.Z, false);
+			var zmm = _this.translateZ(params.Z, false);
                         _this.g92offset.z += _this.position.z - zmm;
                         _this.position.z = zmm;
                     }
@@ -662,7 +662,7 @@ var Toolpath = function () {
                     _this.setModal({ feedmode: 'G94' });
                 }
             },
-            // G94: Units per Revolution Mode
+            // G95: Units per Revolution Mode
             // In units per rev feed rate mode, an F word on the line is interpreted to mean the
             // controlled point should move at a certain number of inches per spindle revolution,
             // millimeters per spindle revolution or degrees per spindle revolution, depending upon
