@@ -56,6 +56,8 @@ var Toolpath = function () {
             y: 0,
             z: 0
         };
+        this.homePosition0 = null;
+        this.homePosition1 = null;
         this.modal = {
             // Motion Mode
             // G0, G1, G2, G3, G38.2, G38.3, G38.4, G38.5, G80
@@ -401,6 +403,102 @@ var Toolpath = function () {
                 if (_this.modal.units !== 'G21') {
                     _this.setModal({ units: 'G21' });
                 }
+            },
+            // G28: Move to predefined position 0 (home position)
+            // If axis words are specified, move to intermediate position first, then to home
+            'G28': function G28(params) {
+                // Check if any axis words are present for intermediate move
+                var hasAxisWords = params.X !== undefined || params.Y !== undefined || params.Z !== undefined;
+
+                if (hasAxisWords) {
+                    // First move to intermediate position specified by axis words
+                    var v1 = {
+                        x: _this.position.x,
+                        y: _this.position.y,
+                        z: _this.position.z
+                    };
+                    var v2 = {
+                        x: _this.translateX(params.X, _this.isRelativeDistance()),
+                        y: _this.translateY(params.Y, _this.isRelativeDistance()),
+                        z: _this.translateZ(params.Z, _this.isRelativeDistance())
+                    };
+
+                    offsetAddLine(v1, v2);
+                    _this.setPosition(v2.x, v2.y, v2.z);
+                }
+
+                // Then move to stored home position if it exists
+                if (_this.homePosition0) {
+                    var v1Home = {
+                        x: _this.position.x,
+                        y: _this.position.y,
+                        z: _this.position.z
+                    };
+                    var v2Home = {
+                        x: _this.homePosition0.x,
+                        y: _this.homePosition0.y,
+                        z: _this.homePosition0.z
+                    };
+
+                    offsetAddLine(v1Home, v2Home);
+                    _this.setPosition(v2Home.x, v2Home.y, v2Home.z);
+                }
+            },
+            // G28.1: Store current position as position 0 (home position)
+            'G28.1': function G281(params) {
+                _this.homePosition0 = {
+                    x: _this.position.x,
+                    y: _this.position.y,
+                    z: _this.position.z
+                };
+            },
+            // G30: Move to predefined position 1 (alternate home position)
+            // If axis words are specified, move to intermediate position first, then to home
+            'G30': function G30(params) {
+                // Check if any axis words are present for intermediate move
+                var hasAxisWords = params.X !== undefined || params.Y !== undefined || params.Z !== undefined;
+
+                if (hasAxisWords) {
+                    // First move to intermediate position specified by axis words
+                    var v1 = {
+                        x: _this.position.x,
+                        y: _this.position.y,
+                        z: _this.position.z
+                    };
+                    var v2 = {
+                        x: _this.translateX(params.X, _this.isRelativeDistance()),
+                        y: _this.translateY(params.Y, _this.isRelativeDistance()),
+                        z: _this.translateZ(params.Z, _this.isRelativeDistance())
+                    };
+
+                    offsetAddLine(v1, v2);
+                    _this.setPosition(v2.x, v2.y, v2.z);
+                }
+
+                // Then move to stored home position if it exists
+                if (_this.homePosition1) {
+                    var v1Home = {
+                        x: _this.position.x,
+                        y: _this.position.y,
+                        z: _this.position.z
+                    };
+                    var v2Home = {
+                        x: _this.homePosition1.x,
+                        y: _this.homePosition1.y,
+                        z: _this.homePosition1.z
+                    };
+
+                    offsetAddLine(v1Home, v2Home);
+                    _this.setPosition(v2Home.x, v2Home.y, v2Home.z);
+                }
+            },
+            // G30.1: Store current position as position 1 (alternate home position)
+            'G30.1': function G301(params) {
+                _this.homePosition1 = {
+                    x: _this.position.x,
+                    y: _this.position.y,
+                    z: _this.position.z
+                };
             },
             // G38.x: Straight Probe
             // G38.2: Probe toward workpiece, stop on contact, signal error if failure
