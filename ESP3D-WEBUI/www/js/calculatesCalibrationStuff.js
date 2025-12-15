@@ -17,6 +17,20 @@ var initialGuess = {
   fitness: 100000000,
 }
 
+/**
+ * Returns a fresh copy of the default initialGuess values
+ * Used to reset calibration to consistent starting point
+ */
+function getDefaultInitialGuess() {
+  return {
+    tl: { x: 0, y: 2000 },
+    tr: { x: 3000, y: 2000 },
+    bl: { x: 0, y: 0 },
+    br: { x: 3000, y: 0 },
+    fitness: 100000000,
+  };
+}
+
 let result
 
 /**------------------------------------Intro------------------------------------
@@ -712,15 +726,10 @@ async function findMaxFitness(measurements) {
   // Reset initialGuess to default at the start of a new calibration run
   // The first stage sends exactly 6 measurements (initial grid estimate)
   // Subsequent stages send more measurements (full grid)
-  if (measurements.length === 6) {
+  const INITIAL_CALIBRATION_MEASUREMENT_COUNT = 6;
+  if (measurements.length === INITIAL_CALIBRATION_MEASUREMENT_COUNT) {
     messagesBox.textContent += 'New calibration run detected (6-point initial stage). Resetting initial guess to default.\n';
-    initialGuess = {
-      tl: { x: 0, y: 2000 },
-      tr: { x: 3000, y: 2000 },
-      bl: { x: 0, y: 0 },
-      br: { x: 3000, y: 0 },
-      fitness: 100000000,
-    };
+    initialGuess = getDefaultInitialGuess();
   } else {
     messagesBox.textContent += `Continuing calibration with ${measurements.length} measurements. Using previous stage result as starting point.\n`;
   }
