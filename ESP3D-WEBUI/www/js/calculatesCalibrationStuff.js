@@ -703,9 +703,27 @@ async function findBestRectangularStart(measurements) {
 }
 
 async function findMaxFitness(measurements) {
+  const messagesBox = document.getElementById('messages');
+  
   // Reset theta values to ensure consistent initial conditions
   // This prevents theta state from persisting across calibration attempts
   resetMeasurementThetas(measurements);
+
+  // Reset initialGuess to default at the start of a new calibration run
+  // The first stage sends exactly 6 measurements (initial grid estimate)
+  // Subsequent stages send more measurements (full grid)
+  if (measurements.length === 6) {
+    messagesBox.textContent += 'New calibration run detected (6-point initial stage). Resetting initial guess to default.\n';
+    initialGuess = {
+      tl: { x: 0, y: 2000 },
+      tr: { x: 3000, y: 2000 },
+      bl: { x: 0, y: 0 },
+      br: { x: 3000, y: 0 },
+      fitness: 100000000,
+    };
+  } else {
+    messagesBox.textContent += `Continuing calibration with ${measurements.length} measurements. Using previous stage result as starting point.\n`;
+  }
 
   sendCalibrationEvent({
     initialGuess
@@ -713,8 +731,6 @@ async function findMaxFitness(measurements) {
 
   //Project the measurements into the XY plane...this is now done on the firmware side
   //measurements = projectMeasurements(measurements);
-
-  const messagesBox = document.getElementById('messages');
 
   // Evaluate the fitness of the initial guess
   const initialGuessCopy = JSON.parse(JSON.stringify(initialGuess));
