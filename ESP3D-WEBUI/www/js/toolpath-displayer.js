@@ -635,16 +635,17 @@ var drawJobBoundingBox = function() {
 }
 
 var drawMachineBounds = function() {
-    
-    //Work codinates offset the maxTravel part centers it in the view so 0,0 is the middle of the sheet
+
+    // Work area is fixed with bottom-left corner at origin (0,0)
+    // Home position can be anywhere within the work area
     var woodWidth = 2438;
     var woodHeight = 2438/2;
 
     //Project onto the camera view
-    const p0 = projection({x: -woodWidth/2, y: -woodHeight/2, z: 0});
-    const p1 = projection({x: woodWidth/2, y: -woodHeight/2, z: 0});
-    const p2 = projection({x: woodWidth/2, y: woodHeight/2, z: 0});
-    const p3 = projection({x: -woodWidth/2, y: woodHeight/2, z: 0});
+    const p0 = projection({x: 0, y: 0, z: 0});
+    const p1 = projection({x: woodWidth, y: 0, z: 0});
+    const p2 = projection({x: woodWidth, y: woodHeight, z: 0});
+    const p3 = projection({x: 0, y: woodHeight, z: 0});
 
     //This is used to fit everything in the camera view later
     tpBbox.min.x = Math.min(tpBbox.min.x, p0.x);
@@ -672,10 +673,11 @@ var drawMachineBelts = function() {
     // Update anchor points from current configuration
     updateAnchorPointsFromConfig();
 
-    const tl = projection({x: tlX - trX/2, y: tlY/2, z: 0});
-    const tr = projection({x: trX/2, y: trY/2, z: 0});
-    const bl = projection({x: blX - brX/2, y: blY - tlY/2, z: 0});
-    const br = projection({x: brX/2, y: brY - trY/2, z: 0});
+    // Belt anchors are now in absolute coordinates matching the fixed work area
+    const tl = projection({x: tlX, y: tlY, z: 0});
+    const tr = projection({x: trX, y: trY, z: 0});
+    const bl = projection({x: blX, y: blY, z: 0});
+    const br = projection({x: brX, y: brY, z: 0});
 
     tpBbox.min.x = Math.min(tpBbox.min.x, bl.x);
     tpBbox.min.y = Math.min(tpBbox.min.y, bl.y);
