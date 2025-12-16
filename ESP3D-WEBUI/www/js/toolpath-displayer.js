@@ -658,25 +658,30 @@ var drawMachineBounds = function() {
         centerOffsetY = isFinite(configOffsetY) ? configOffsetY : 0;
     }
 
-    // Calculate work area bounds in machine coordinates
-    // Calculate machine frame center by averaging opposing edges
-    const frameCenterXMachine = (blX + brX) / 2;  // Center X: average of bottom edge X coords
-    const frameCenterYMachine = (blY + tlY) / 2;  // Center Y: average of left edge Y coords
+    // Calculate work area corners in the same coordinate system as anchor points
+    // The work area is positioned at the machine frame center (calculated from anchor points)
+    // with user-specified offsets applied
+    //
+    // Using the same centering transform as anchor points to ensure they move together:
+    // Anchor points use transforms like: tlX - trX/2, tlY/2
+    // We apply the same pattern to position the work area relative to the frame
 
-    // Work area center in machine coordinates
+    // Machine frame center in original machine coordinates
+    const frameCenterXMachine = (blX + brX) / 2;
+    const frameCenterYMachine = (blY + tlY) / 2;
+
+    // Work area center with user offsets
     const workAreaCenterXMachine = frameCenterXMachine + centerOffsetX;
     const workAreaCenterYMachine = frameCenterYMachine + centerOffsetY;
 
-    // Work area bounds in machine coordinates
+    // Work area corners in machine coordinates
     const machineMinX = workAreaCenterXMachine - woodWidth/2;
     const machineMaxX = workAreaCenterXMachine + woodWidth/2;
     const machineMinY = workAreaCenterYMachine - woodHeight/2;
     const machineMaxY = workAreaCenterYMachine + woodHeight/2;
 
-    // Apply centering transform to convert from machine coords to display coords
-    // This transform centers the machine frame in the display coordinate system
-    // Note: For best results, the frame should be approximately rectangular.
-    // The transform uses trX and tlY as reference dimensions for centering.
+    // Apply the same centering transform as anchor points
+    // This positions everything relative to a centered coordinate system
     const minX = machineMinX - trX/2;
     const maxX = machineMaxX - trX/2;
     const minY = machineMinY - tlY/2;
@@ -688,12 +693,13 @@ var drawMachineBounds = function() {
     const p2 = projection({x: maxX, y: maxY, z: 0});
     const p3 = projection({x: minX, y: maxY, z: 0});
 
-    //This is used to fit everything in the camera view later
-    tpBbox.min.x = Math.min(tpBbox.min.x, p0.x);
-    tpBbox.min.y = Math.min(tpBbox.min.y, p0.y);
-    tpBbox.max.x = Math.max(tpBbox.max.x, p2.x);
-    tpBbox.max.y = Math.max(tpBbox.max.y, p2.y);
-    bboxIsSet = true;
+    // Do NOT add work area to bounding box - it's in machine coordinates
+    // and should not affect the view centering which is based on work coordinates
+    // tpBbox.min.x = Math.min(tpBbox.min.x, p0.x);
+    // tpBbox.min.y = Math.min(tpBbox.min.y, p0.y);
+    // tpBbox.max.x = Math.max(tpBbox.max.x, p2.x);
+    // tpBbox.max.y = Math.max(tpBbox.max.y, p2.y);
+    // bboxIsSet = true;
 
     //Draw to the actual display
     tp.beginPath();
