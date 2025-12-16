@@ -107,11 +107,33 @@ const clearXYHomeTimer = () => {
 
 const setXYHome = () => {
   clearXYHomeTimer();
+  // Capture the WCO before zeroing axes
+  const oldWCO = WCO ? [WCO[0], WCO[1]] : null;
   zeroAxis("X");
   zeroAxis("Y");
   // This changed label will only show for 1 second before being reset
   setXYHomeBtnText(xyHomeLabelRedefined);
-  setTimeout(refreshGcode, 100);
+  
+  // Wait for WCO to update before refreshing display
+  const waitForWCOUpdate = (attempt = 0) => {
+    const maxAttempts = 20; // Try for up to 2 seconds (20 * 100ms)
+    if (attempt >= maxAttempts) {
+      // Timeout - refresh anyway
+      refreshGcode();
+      return;
+    }
+    
+    // Check if WCO has changed
+    if (WCO && oldWCO && (WCO[0] !== oldWCO[0] || WCO[1] !== oldWCO[1])) {
+      // WCO has been updated, refresh the display
+      refreshGcode();
+    } else {
+      // WCO hasn't changed yet, wait a bit longer
+      setTimeout(() => waitForWCOUpdate(attempt + 1), 100);
+    }
+  };
+  
+  waitForWCOUpdate();
 }
 
 const xyHomeTimer = () => {
