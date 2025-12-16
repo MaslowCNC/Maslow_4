@@ -635,6 +635,9 @@ var drawJobBoundingBox = function() {
 }
 
 var drawMachineBounds = function() {
+    // Update anchor points from current configuration
+    updateAnchorPointsFromConfig();
+
     // Get work area dimensions from configuration, with default fallback values
     // Default values: 2438mm x 1219mm (8ft x 4ft, typical for a 4x8 plywood sheet)
     var woodWidth = 2438;
@@ -655,13 +658,27 @@ var drawMachineBounds = function() {
         centerOffsetY = isFinite(configOffsetY) ? configOffsetY : 0;
     }
 
-    // Calculate work area bounds
-    // The work area is centered at (0,0) plus any center offsets
-    // These bounds are independent of the home position
-    const minX = -woodWidth/2 + centerOffsetX;
-    const maxX = woodWidth/2 + centerOffsetX;
-    const minY = -woodHeight/2 + centerOffsetY;
-    const maxY = woodHeight/2 + centerOffsetY;
+    // Calculate work area bounds in machine coordinates
+    // The machine frame center (in machine coords) is used as the base, with offsets applied
+    const frameCenterXMachine = (blX + brX) / 2;  // Average of left and right X positions
+    const frameCenterYMachine = (blY + tlY) / 2;  // Average of bottom and top Y positions
+
+    // Work area center in machine coordinates
+    const workAreaCenterXMachine = frameCenterXMachine + centerOffsetX;
+    const workAreaCenterYMachine = frameCenterYMachine + centerOffsetY;
+
+    // Work area bounds in machine coordinates
+    const machineMinX = workAreaCenterXMachine - woodWidth/2;
+    const machineMaxX = workAreaCenterXMachine + woodWidth/2;
+    const machineMinY = workAreaCenterYMachine - woodHeight/2;
+    const machineMaxY = workAreaCenterYMachine + woodHeight/2;
+
+    // Apply the same centering transform used for anchor points
+    // This centers the machine frame in the display coordinate system
+    const minX = machineMinX - trX/2;
+    const maxX = machineMaxX - trX/2;
+    const minY = machineMinY - tlY/2;
+    const maxY = machineMaxY - tlY/2;
 
     //Project onto the camera view
     const p0 = projection({x: minX, y: minY, z: 0});
