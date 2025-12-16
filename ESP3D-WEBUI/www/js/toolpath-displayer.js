@@ -720,10 +720,11 @@ var drawMachineBelts = function() {
     const wco = window.WCO || [0, 0, 0];
 
     // Convert anchor points from machine to work coordinates
-    const tlWork = {x: tlX - wco[0], y: tlY - wco[1], z: tlZ - wco[2]};
-    const trWork = {x: trX - wco[0], y: trY - wco[1], z: trZ - wco[2]};
-    const blWork = {x: blX - wco[0], y: blY - wco[1], z: blZ - wco[2]};
-    const brWork = {x: brX - wco[0], y: brY - wco[1], z: brZ - wco[2]};
+    // Note: Z coordinates are not critical for 2D display, defaulting to 0
+    const tlWork = {x: tlX - wco[0], y: tlY - wco[1], z: 0};
+    const trWork = {x: trX - wco[0], y: trY - wco[1], z: 0};
+    const blWork = {x: blX - wco[0], y: blY - wco[1], z: 0};
+    const brWork = {x: brX - wco[0], y: brY - wco[1], z: 0};
 
     // Project to screen coordinates
     const tl = projection(tlWork);
