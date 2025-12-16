@@ -693,13 +693,10 @@ var drawMachineBounds = function() {
     const p2 = projection({x: maxX, y: maxY, z: 0});
     const p3 = projection({x: minX, y: maxY, z: 0});
 
-    // Do NOT add work area to bounding box - it's in machine coordinates
-    // and should not affect the view centering which is based on work coordinates
-    // tpBbox.min.x = Math.min(tpBbox.min.x, p0.x);
-    // tpBbox.min.y = Math.min(tpBbox.min.y, p0.y);
-    // tpBbox.max.x = Math.max(tpBbox.max.x, p2.x);
-    // tpBbox.max.y = Math.max(tpBbox.max.y, p2.y);
-    // bboxIsSet = true;
+    // NOTE: Work area is NOT added to bounding box
+    // The bounding box controls view centering and should only include work-coordinate elements.
+    // Work area is in machine coordinates and should not affect view centering.
+    // If this causes issues with view fitting, we may need to reconsider this approach.
 
     //Draw to the actual display
     tp.beginPath();
