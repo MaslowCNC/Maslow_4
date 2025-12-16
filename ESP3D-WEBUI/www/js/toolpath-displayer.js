@@ -1005,11 +1005,14 @@ var bboxHandlers = {
         pe = endProj;
 
         // Update overall bounding box for display (includes all moves for proper canvas scaling)
-        tpBbox.min.x = Math.min(tpBbox.min.x, ps.x, pe.x);
-        tpBbox.min.y = Math.min(tpBbox.min.y, ps.y, pe.y);
+        // Use work coordinates (not machine coordinates) for bounding box so it frames the G-code properly
+        const startWorkProj = projection(start);
+        const endWorkProj = projection(end);
+        tpBbox.min.x = Math.min(tpBbox.min.x, startWorkProj.x, endWorkProj.x);
+        tpBbox.min.y = Math.min(tpBbox.min.y, startWorkProj.y, endWorkProj.y);
         tpBbox.min.z = Math.min(tpBbox.min.z, start.z, end.z);
-        tpBbox.max.x = Math.max(tpBbox.max.x, ps.x, pe.x);
-        tpBbox.max.y = Math.max(tpBbox.max.y, ps.y, pe.y);
+        tpBbox.max.x = Math.max(tpBbox.max.x, startWorkProj.x, endWorkProj.x);
+        tpBbox.max.y = Math.max(tpBbox.max.y, startWorkProj.y, endWorkProj.y);
         tpBbox.max.z = Math.max(tpBbox.max.z, start.z, end.z);
         bboxIsSet = true;
 
@@ -1267,14 +1270,15 @@ var bboxHandlers = {
 	var minZ = Math.min(start.z, end.z);
 	var maxZ = Math.max(start.z, end.z);
 
-        const p0 = projection({x: minX, y: minY, z: minZ});
-        const p1 = projection({x: minX, y: maxY, z: minZ});
-        const p2 = projection({x: maxX, y: maxY, z: minZ});
-        const p3 = projection({x: maxX, y: minY, z: minZ});
-        const p4 = projection({x: minX, y: minY, z: maxZ});
-        const p5 = projection({x: minX, y: maxY, z: maxZ});
-        const p6 = projection({x: maxX, y: maxY, z: maxZ});
-        const p7 = projection({x: maxX, y: minY, z: maxZ});
+        // Project the world coordinate bounding box for display bbox calculation
+        const p0 = projection({x: world_minX, y: world_minY, z: minZ});
+        const p1 = projection({x: world_minX, y: world_maxY, z: minZ});
+        const p2 = projection({x: world_maxX, y: world_maxY, z: minZ});
+        const p3 = projection({x: world_maxX, y: world_minY, z: minZ});
+        const p4 = projection({x: world_minX, y: world_minY, z: maxZ});
+        const p5 = projection({x: world_minX, y: world_maxY, z: maxZ});
+        const p6 = projection({x: world_maxX, y: world_maxY, z: maxZ});
+        const p7 = projection({x: world_maxX, y: world_minY, z: maxZ});
 
 	tpBbox.min.x = Math.min(tpBbox.min.x, p0.x, p1.x, p2.x, p3.x, p4.x, p5.x, p6.x, p7.x);
 	tpBbox.min.y = Math.min(tpBbox.min.y, p0.y, p1.y, p2.y, p3.y, p4.y, p5.y, p6.y, p7.y);

@@ -107,26 +107,36 @@ const clearXYHomeTimer = () => {
 
 const setXYHome = () => {
   clearXYHomeTimer();
+  
+  // Capture initial WCO values before zeroing
+  const oldWCO = WCO ? [WCO[0], WCO[1]] : null;
+  
   zeroAxis("X");
   zeroAxis("Y");
   // This changed label will only show for 1 second before being reset
   setXYHomeBtnText(xyHomeLabelRedefined);
   
-  // Set up one-time callback to refresh display when WCO updates
+  // Set up one-time callback to refresh display when BOTH X and Y WCO values update
   // This is more efficient than polling
   const originalCallback = onWCOUpdateCallback;
   let timeoutId = null;
   
-  onWCOUpdateCallback = (newWCO, oldWCO) => {
-    // Clear the timeout since we got the update
-    if (timeoutId) {
-      clearTimeout(timeoutId);
-      timeoutId = null;
+  onWCOUpdateCallback = (newWCO, prevWCO) => {
+    // Check if BOTH X and Y have changed from initial values
+    // We need both axes to update before refreshing
+    if (oldWCO && newWCO && 
+        (newWCO[0] !== oldWCO[0] && newWCO[1] !== oldWCO[1])) {
+      // Both X and Y have updated - clear timeout and refresh
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+      // Restore the original callback
+      onWCOUpdateCallback = originalCallback;
+      // Refresh the display with new WCO
+      refreshGcode();
     }
-    // Restore the original callback
-    onWCOUpdateCallback = originalCallback;
-    // Refresh the display with new WCO
-    refreshGcode();
+    // If only one axis updated, keep waiting for the other
   };
   
   // Fallback timeout in case WCO update doesn't arrive (e.g., communication error)
