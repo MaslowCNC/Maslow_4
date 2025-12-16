@@ -550,7 +550,7 @@ var toolRectWH = toolRadius*2 + 4;  // Slop to encompass the entire image area
 var drawTool = function(dpos) {
     // Convert work coordinates to machine coordinates if WCO is available
     // This ensures the tool position stays consistent when home position changes
-    const wco = window.WCO;
+    const wco = WCO;
     let toolPos;
 
     if (wco && Array.isArray(wco) && wco.length >= 2) {
@@ -588,7 +588,7 @@ var drawTool = function(dpos) {
 var drawOrigin = function(radius) {
     // Work origin is at WPOS (0,0,0)
     // Convert to MPOS if WCO is available: MPOS = WPOS + WCO
-    const wco = window.WCO;
+    const wco = WCO;
     let originPos;
 
     if (wco && Array.isArray(wco) && wco.length >= 2) {
@@ -748,8 +748,8 @@ var drawMachineBelts = function() {
 
     // Get tool position for belt drawing
     // Convert to machine coordinates if WCO is available
-    const wco = window.WCO;
-    const wpos = window.WPOS;
+    const wco = WCO;
+    const wpos = WPOS;
     let toolPos;
 
     if (wco && Array.isArray(wco) && wco.length >= 2 &&
@@ -987,7 +987,7 @@ var bboxHandlers = {
         tpUnits = modal.units;
 
         // Convert work coordinates to machine coordinates if WCO is available
-        const wco = window.WCO;
+        const wco = WCO;
         let startProj, endProj;
 
         if (wco && Array.isArray(wco) && wco.length >= 2) {
@@ -1057,7 +1057,7 @@ var bboxHandlers = {
         }
 
         // Convert work coordinates to machine coordinates if WCO is available
-        const wco = window.WCO;
+        const wco = WCO;
         let startProj, centerProj, endProj;
 
         if (wco && Array.isArray(wco) && wco.length >= 2) {
@@ -1359,7 +1359,7 @@ var displayHandlers = {
         }
 
         // Convert work coordinates to machine coordinates if WCO is available
-        const wco = window.WCO;
+        const wco = WCO;
         let startProj, endProj;
 
         if (wco && Array.isArray(wco) && wco.length >= 2) {
@@ -1387,7 +1387,7 @@ var displayHandlers = {
         var motion = modal.motion;
 
         // Convert work coordinates to machine coordinates if WCO is available
-        const wco = window.WCO;
+        const wco = WCO;
         let startMPOS, centerMPOS, endMPOS;
 
         if (wco && Array.isArray(wco) && wco.length >= 2) {
