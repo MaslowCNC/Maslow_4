@@ -974,7 +974,8 @@ var transformCanvas = function() {
 
     tp.lineWidth = 0.5 / scaler;
 
-    drawOrigin(imageWidth * 0.04);
+    // Note: drawOrigin is called separately in showToolPosition after transform
+    // to ensure it uses the latest WCO value
 }
 var wrappedDegrees = function(radians) {
     var degrees = radians * 180 / Math.PI;
