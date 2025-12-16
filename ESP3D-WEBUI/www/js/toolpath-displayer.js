@@ -636,7 +636,7 @@ var drawJobBoundingBox = function() {
 
 var drawMachineBounds = function() {
     // Get work area dimensions from configuration, with default fallback values
-    // Default values match a standard 4x8 sheet (2438mm x 1219mm)
+    // Default values match a standard 4x8 sheet width by 4x4 sheet height (2438mm x 1219mm)
     var woodWidth = 2438;
     var woodHeight = 1219;
     var centerOffsetX = 0;
@@ -644,10 +644,15 @@ var drawMachineBounds = function() {
 
     // Load work area settings from global configuration if available
     if (globalThis.loadedValues) {
-        woodWidth = parseFloat(globalThis.loadedValues.workAreaX) || woodWidth;
-        woodHeight = parseFloat(globalThis.loadedValues.workAreaY) || woodHeight;
-        centerOffsetX = parseFloat(globalThis.loadedValues.workAreaCenterOffsetX) || 0;
-        centerOffsetY = parseFloat(globalThis.loadedValues.workAreaCenterOffsetY) || 0;
+        var configWidth = parseFloat(globalThis.loadedValues.workAreaX);
+        var configHeight = parseFloat(globalThis.loadedValues.workAreaY);
+        var configOffsetX = parseFloat(globalThis.loadedValues.workAreaCenterOffsetX);
+        var configOffsetY = parseFloat(globalThis.loadedValues.workAreaCenterOffsetY);
+
+        woodWidth = (isFinite(configWidth) && configWidth > 0) ? configWidth : woodWidth;
+        woodHeight = (isFinite(configHeight) && configHeight > 0) ? configHeight : woodHeight;
+        centerOffsetX = isFinite(configOffsetX) ? configOffsetX : 0;
+        centerOffsetY = isFinite(configOffsetY) ? configOffsetY : 0;
     }
 
     // Calculate work area bounds
