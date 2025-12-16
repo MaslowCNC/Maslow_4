@@ -4,7 +4,7 @@ var root = window;
 
 const canvas = document.getElementById("small-toolpath");
 const scale = window.devicePixelRatio;
-const width = window.innerWidth; 
+const width = window.innerWidth;
 canvas.width = width * scale;
 canvas.height = (width / 2) * scale;
 var tp = canvas.getContext("2d", { willReadFrequently: true });
@@ -19,7 +19,7 @@ var cameraAngle = 2; // Default to top-down view
 // Default fallback values (will be replaced by actual configuration values)
 var tlX = -8.339;
 var tlY = 2209;
-var trX = 3505; 
+var trX = 3505;
 var trY = 2209;
 var blX = 0;
 var blY = 0;
@@ -118,7 +118,7 @@ upC.fillStyle = 'white';
 upC.lineWidth = 1;
 upC.rect(60+49.213840, 99.622299, 93.976021, 74.721062);
 upC.fill();
-    
+
 // #path608
 upC.beginPath();
 upC.strokeStyle = 'white';
@@ -146,7 +146,7 @@ dnC.lineWidth = 1;
 dnC.rect(60 + 49.213840, -75.901474, 93.976021, 74.721062);
 dnC.fill();
 dnC.restore();
-    
+
 // #path608
 dnC.beginPath();
 dnC.strokeStyle = 'white';
@@ -168,13 +168,13 @@ rC.fillRect(0, 0, 500, 500);
 // #g1100
 rC.save();
 rC.transform(0.000000, 1.000000, -1.000000, 0.000000, 187.481000, 0.273690);
-    
+
 // #rect441
 rC.fillStyle = 'white';
 rC.lineWidth = 1;
 rC.rect(-20 + 49.213840, 99.622299 - 80, 93.976021, 74.721062);
 rC.fill();
-    
+
 // #path608
 rC.beginPath();
 rC.strokeStyle = 'white';
@@ -196,13 +196,13 @@ lC.fillRect(0, 0, 500, 500);
 // #g1100
 lC.save();
 lC.transform(0.000000, 1.000000, 1.000000, 0.000000, 11.957500, 0.273690);
-    
+
 // #rect441
 lC.fillStyle = 'white';
 lC.lineWidth = 1;
 lC.rect(-20 + 49.213840, 99.622299, 93.976021, 74.721062);
 lC.fill();
-    
+
 // #path608
 lC.beginPath();
 lC.strokeStyle = 'white';
@@ -238,14 +238,14 @@ hC.lineTo(xO + 103.475730, 84.035976 + yO);
 hC.lineTo(xO + 54.341657, 131.433070 + yO);
 hC.fill();
 hC.stroke();
-    
+
 // #rect1898
 hC.beginPath();
 hC.fillStyle = 'rgb(218, 208, 230)';
 hC.lineWidth = 0.472615;
 hC.rect(xO + 74.087212, 146.169600 + yO, 29.847790, 50.981743);
 hC.fill();
-    
+
 // #path13430
 hC.beginPath();
 hC.fillStyle = 'rgb(151, 132, 181)';
@@ -340,7 +340,7 @@ var resetBbox = function() {
     tpBbox.max.y = -Infinity;
     tpBbox.max.z = -Infinity;
     bboxIsSet = false;
-    
+
     // Also reset job bounding box
     jobBbox.min.x = Infinity;
     jobBbox.min.y = Infinity;
@@ -350,7 +350,7 @@ var resetBbox = function() {
     jobBbox.max.z = -Infinity;
     jobBboxIsSet = false;
     initialMovesForBbox = true;
-    
+
     // Reset toolpath points
     jobToolpathPoints = [];
     jobEnvelopePoints = [];
@@ -358,7 +358,7 @@ var resetBbox = function() {
 
 // Helper functions for job bounding box
 var jobBboxExists = function() {
-    return jobBboxIsSet && 
+    return jobBboxIsSet &&
            isFinite(jobBbox.min.x) && isFinite(jobBbox.min.y) && isFinite(jobBbox.min.z) &&
            isFinite(jobBbox.max.x) && isFinite(jobBbox.max.y) && isFinite(jobBbox.max.z);
 }
@@ -378,36 +378,36 @@ var computeConvexHull = function(points) {
     if (points.length < 3) {
         return points;
     }
-    
+
     // Sort points lexicographically (first by x, then by y)
     var sorted = points.slice().sort(function(a, b) {
         return a.x !== b.x ? a.x - b.x : a.y - b.y;
     });
-    
+
     // Build lower hull
     var lower = [];
     for (var i = 0; i < sorted.length; i++) {
-        while (lower.length >= 2 && 
+        while (lower.length >= 2 &&
                crossProduct(lower[lower.length - 2], lower[lower.length - 1], sorted[i]) <= 0) {
             lower.pop();
         }
         lower.push(sorted[i]);
     }
-    
+
     // Build upper hull
     var upper = [];
     for (var i = sorted.length - 1; i >= 0; i--) {
-        while (upper.length >= 2 && 
+        while (upper.length >= 2 &&
                crossProduct(upper[upper.length - 2], upper[upper.length - 1], sorted[i]) <= 0) {
             upper.pop();
         }
         upper.push(sorted[i]);
     }
-    
+
     // Remove last point of each half because it's repeated
     lower.pop();
     upper.pop();
-    
+
     return lower.concat(upper);
 }
 
@@ -421,17 +421,17 @@ var simplifyPolyline = function(points, maxPoints) {
     if (points.length <= maxPoints) {
         return points;
     }
-    
+
     // Use iterative approach to reduce points to maxPoints
     var epsilon = 0.1; // Start with small tolerance
     var simplified = points;
-    
+
     // Increase epsilon until we have <= maxPoints
     while (simplified.length > maxPoints && epsilon < 1000) {
         simplified = douglasPeucker(points, epsilon);
         epsilon *= 1.5;
     }
-    
+
     return simplified;
 }
 
@@ -440,12 +440,12 @@ var douglasPeucker = function(points, epsilon) {
     if (points.length < 3) {
         return points;
     }
-    
+
     // Find the point with maximum distance
     var dmax = 0;
     var index = 0;
     var end = points.length - 1;
-    
+
     for (var i = 1; i < end; i++) {
         var d = perpendicularDistance(points[i], points[0], points[end]);
         if (d > dmax) {
@@ -453,19 +453,19 @@ var douglasPeucker = function(points, epsilon) {
             dmax = d;
         }
     }
-    
+
     // If max distance is greater than epsilon, recursively simplify
     var result = [];
     if (dmax > epsilon) {
         var recResults1 = douglasPeucker(points.slice(0, index + 1), epsilon);
         var recResults2 = douglasPeucker(points.slice(index), epsilon);
-        
+
         // Concatenate results
         result = recResults1.slice(0, -1).concat(recResults2);
     } else {
         result = [points[0], points[end]];
     }
-    
+
     return result;
 }
 
@@ -473,18 +473,18 @@ var douglasPeucker = function(points, epsilon) {
 var perpendicularDistance = function(point, lineStart, lineEnd) {
     var dx = lineEnd.x - lineStart.x;
     var dy = lineEnd.y - lineStart.y;
-    
+
     var mag = Math.sqrt(dx * dx + dy * dy);
     if (mag === 0) {
-        return Math.sqrt((point.x - lineStart.x) * (point.x - lineStart.x) + 
+        return Math.sqrt((point.x - lineStart.x) * (point.x - lineStart.x) +
                         (point.y - lineStart.y) * (point.y - lineStart.y));
     }
-    
+
     var u = ((point.x - lineStart.x) * dx + (point.y - lineStart.y) * dy) / (mag * mag);
-    
+
     var ix = lineStart.x + u * dx;
     var iy = lineStart.y + u * dy;
-    
+
     return Math.sqrt((point.x - ix) * (point.x - ix) + (point.y - iy) * (point.y - iy));
 }
 
@@ -494,10 +494,10 @@ var computeJobEnvelope = function() {
         jobEnvelopePoints = [];
         return;
     }
-    
+
     // Compute convex hull
     var hull = computeConvexHull(jobToolpathPoints);
-    
+
     // Simplify to at most 100 points
     jobEnvelopePoints = simplifyPolyline(hull, 100);
 }
@@ -548,14 +548,25 @@ var toolRadius = 6;
 var toolRectWH = toolRadius*2 + 4;  // Slop to encompass the entire image area
 
 var drawTool = function(dpos) {
-    // dpos is in work coordinates, convert to machine coordinates: MPOS = WPOS + WCO
-    const wco = window.WCO || [0, 0, 0];
-    const mpos = {
-        x: dpos.x + wco[0],
-        y: dpos.y + wco[1],
-        z: dpos.z + wco[2]
-    };
-    pp = projection(mpos);
+    // Convert work coordinates to machine coordinates if WCO is available
+    // This ensures the tool position stays consistent when home position changes
+    const wco = window.WCO;
+    let toolPos;
+
+    if (wco && Array.isArray(wco) && wco.length >= 2) {
+        // WCO is available, convert WPOS to MPOS: MPOS = WPOS + WCO
+        const mpos = {
+            x: dpos.x + wco[0],
+            y: dpos.y + wco[1],
+            z: dpos.z + (wco[2] || 0)
+        };
+        toolPos = projection(mpos);
+    } else {
+        // WCO not available, project work coordinates directly (original behavior)
+        toolPos = projection(dpos);
+    }
+
+    pp = toolPos;
     toolX = xToPixel(pp.x)-toolRadius-2;
     toolY = yToPixel(pp.y)-toolRadius-2;
 
@@ -575,10 +586,21 @@ var drawTool = function(dpos) {
 }
 
 var drawOrigin = function(radius) {
-    // Work origin is at WPOS (0,0,0), convert to MPOS for display: MPOS = WPOS + WCO
-    const wco = window.WCO || [0, 0, 0];
-    const originMPOS = {x: wco[0], y: wco[1], z: wco[2]};
-    po = projection(originMPOS);
+    // Work origin is at WPOS (0,0,0)
+    // Convert to MPOS if WCO is available: MPOS = WPOS + WCO
+    const wco = window.WCO;
+    let originPos;
+
+    if (wco && Array.isArray(wco) && wco.length >= 2) {
+        // WCO available, work origin is at MPOS = WCO
+        const originMPOS = {x: wco[0], y: wco[1], z: wco[2] || 0};
+        originPos = projection(originMPOS);
+    } else {
+        // WCO not available, project work origin directly (original behavior)
+        originPos = projection({x: 0, y: 0, z: 0});
+    }
+
+    po = originPos;
     tp.beginPath();
     tp.strokeStyle = 'red';
     tp.arc(po.x, po.y, radius, 0, Math.PI*2, false);
@@ -593,30 +615,30 @@ var drawJobBoundingBox = function() {
     if (!bboxIsSet || !jobBboxExists()) {
         return;
     }
-    
+
     // Get the job bounding box
     var bbox = getJobBoundingBox();
     if (!bbox) {
         return;
     }
-    
+
     // Use envelope points if available (shaped boundary), otherwise fall back to rectangle
     if (jobEnvelopePoints.length > 0) {
         // Draw the shaped envelope
         tp.beginPath();
         tp.strokeStyle = 'blue';
         tp.lineWidth = 2.0 / scaler;
-        
+
         // Project and draw the first point
         var firstPoint = projection({x: jobEnvelopePoints[0].x, y: jobEnvelopePoints[0].y, z: bbox.min.z});
         tp.moveTo(firstPoint.x, firstPoint.y);
-        
+
         // Draw lines to all other envelope points
         for (var i = 1; i < jobEnvelopePoints.length; i++) {
             var p = projection({x: jobEnvelopePoints[i].x, y: jobEnvelopePoints[i].y, z: bbox.min.z});
             tp.lineTo(p.x, p.y);
         }
-        
+
         // Close the path
         tp.lineTo(firstPoint.x, firstPoint.y);
         tp.stroke();
@@ -627,7 +649,7 @@ var drawJobBoundingBox = function() {
         const p1 = projection({x: bbox.max.x, y: bbox.min.y, z: bbox.min.z});
         const p2 = projection({x: bbox.max.x, y: bbox.max.y, z: bbox.min.z});
         const p3 = projection({x: bbox.min.x, y: bbox.max.y, z: bbox.min.z});
-        
+
         // Draw the bounding box rectangle
         tp.beginPath();
         tp.strokeStyle = 'blue';
@@ -639,7 +661,7 @@ var drawJobBoundingBox = function() {
         tp.lineTo(p0.x, p0.y);
         tp.stroke();
     }
-    
+
     // Restore line width
     tp.lineWidth = 0.5 / scaler;
 }
@@ -727,16 +749,25 @@ var drawMachineBelts = function() {
     tpBbox.max.x = Math.max(tpBbox.max.x, tr.x, br.x);
     tpBbox.max.y = Math.max(tpBbox.max.y, tr.y, tl.y);
 
-    // Get tool position in machine coordinates
-    // Tool is reported in WPOS, convert to MPOS: MPOS = WPOS + WCO
-    const wco = window.WCO || [0, 0, 0];
-    const wpos = window.WPOS || [0, 0, 0];
-    const toolMPOS = {
-        x: wpos[0] + wco[0],
-        y: wpos[1] + wco[1],
-        z: wpos[2] + wco[2]
-    };
-    const toolPos = projection(toolMPOS);
+    // Get tool position for belt drawing
+    // Convert to machine coordinates if WCO is available
+    const wco = window.WCO;
+    const wpos = window.WPOS;
+    let toolPos;
+
+    if (wco && Array.isArray(wco) && wco.length >= 2 &&
+        wpos && Array.isArray(wpos) && wpos.length >= 2) {
+        // WCO and WPOS available, convert to MPOS: MPOS = WPOS + WCO
+        const toolMPOS = {
+            x: wpos[0] + wco[0],
+            y: wpos[1] + wco[1],
+            z: (wpos[2] || 0) + (wco[2] || 0)
+        };
+        toolPos = projection(toolMPOS);
+    } else {
+        // Fallback: project work origin (0,0,0) directly
+        toolPos = projection({x: 0, y: 0, z: 0});
+    }
 
     // Draw belts from tool position to anchor points
     tp.beginPath();
@@ -790,7 +821,7 @@ var checkMinBeltLength = function(x1, y1, x2, y2){
 
 var computPositonGradient = function(x,y, tl, tr, bl, br){
     var opacity = 0;
-    
+
     //Check distance from the mounting points
     opacity = opacity + checkMinBeltLength(x,y,tl.x, tl.y);
     opacity = opacity + checkMinBeltLength(x,y,tr.x, tr.y);
@@ -958,13 +989,24 @@ var bboxHandlers = {
 	// Update tpUnits in case it changed in a previous line
         tpUnits = modal.units;
 
-        // Convert work coordinates to machine coordinates: MPOS = WPOS + WCO
-        const wco = window.WCO || [0, 0, 0];
-        const startMPOS = {x: start.x + wco[0], y: start.y + wco[1], z: start.z + wco[2]};
-        const endMPOS = {x: end.x + wco[0], y: end.y + wco[1], z: end.z + wco[2]};
+        // Convert work coordinates to machine coordinates if WCO is available
+        const wco = window.WCO;
+        let startProj, endProj;
 
-        ps = projection(startMPOS);
-        pe = projection(endMPOS);
+        if (wco && Array.isArray(wco) && wco.length >= 2) {
+            // WCO available, convert WPOS to MPOS: MPOS = WPOS + WCO
+            const startMPOS = {x: start.x + wco[0], y: start.y + wco[1], z: start.z + (wco[2] || 0)};
+            const endMPOS = {x: end.x + wco[0], y: end.y + wco[1], z: end.z + (wco[2] || 0)};
+            startProj = projection(startMPOS);
+            endProj = projection(endMPOS);
+        } else {
+            // WCO not available, project work coordinates directly (original behavior)
+            startProj = projection(start);
+            endProj = projection(end);
+        }
+
+        ps = startProj;
+        pe = endProj;
 
         // Update overall bounding box for display (includes all moves for proper canvas scaling)
         tpBbox.min.x = Math.min(tpBbox.min.x, ps.x, pe.x);
@@ -974,19 +1016,19 @@ var bboxHandlers = {
         tpBbox.max.y = Math.max(tpBbox.max.y, ps.y, pe.y);
         tpBbox.max.z = Math.max(tpBbox.max.z, start.z, end.z);
         bboxIsSet = true;
-        
+
         // Update job bounding box in world coordinates
         // Exclude G0 rapid moves and skip initial positioning moves
         // Only start tracking once actual cutting (non-G0 XY movement) begins
         if (modal.motion !== 'G0') {
             // Check if this is actual XY cutting movement (not just Z or feed rate change)
             var hasXYMovement = (start.x !== end.x || start.y !== end.y);
-            
+
             if (hasXYMovement) {
                 // Once we have actual XY cutting movement, we're no longer in initial moves
                 initialMovesForBbox = false;
             }
-            
+
             // Only add to job bounds once we've started actual cutting
             if (!initialMovesForBbox) {
                 jobBbox.min.x = Math.min(jobBbox.min.x, end.x);
@@ -996,7 +1038,7 @@ var bboxHandlers = {
                 jobBbox.max.y = Math.max(jobBbox.max.y, end.y);
                 jobBbox.max.z = Math.max(jobBbox.max.z, end.z);
                 jobBboxIsSet = true;
-                
+
                 // Collect end point for envelope calculation
                 jobToolpathPoints.push({x: end.x, y: end.y});
             }
@@ -1017,15 +1059,28 @@ var bboxHandlers = {
             end = tmp;
         }
 
-        // Convert work coordinates to machine coordinates: MPOS = WPOS + WCO
-        const wco = window.WCO || [0, 0, 0];
-        const startMPOS = {x: start.x + wco[0], y: start.y + wco[1], z: start.z + wco[2]};
-        const centerMPOS = {x: center.x + wco[0], y: center.y + wco[1], z: center.z + wco[2]};
-        const endMPOS = {x: end.x + wco[0], y: end.y + wco[1], z: end.z + wco[2]};
+        // Convert work coordinates to machine coordinates if WCO is available
+        const wco = window.WCO;
+        let startProj, centerProj, endProj;
 
-        ps = projection(startMPOS);
-        pc = projection(centerMPOS);
-        pe = projection(endMPOS);
+        if (wco && Array.isArray(wco) && wco.length >= 2) {
+            // WCO available, convert WPOS to MPOS: MPOS = WPOS + WCO
+            const startMPOS = {x: start.x + wco[0], y: start.y + wco[1], z: start.z + (wco[2] || 0)};
+            const centerMPOS = {x: center.x + wco[0], y: center.y + wco[1], z: center.z + (wco[2] || 0)};
+            const endMPOS = {x: end.x + wco[0], y: end.y + wco[1], z: end.z + (wco[2] || 0)};
+            startProj = projection(startMPOS);
+            centerProj = projection(centerMPOS);
+            endProj = projection(endMPOS);
+        } else {
+            // WCO not available, project work coordinates directly (original behavior)
+            startProj = projection(start);
+            centerProj = projection(center);
+            endProj = projection(end);
+        }
+
+        ps = startProj;
+        pc = centerProj;
+        pe = endProj;
 
 	// Coordinates relative to the center of the arc (PROJECTED coordinates for display)
 	var sx = ps.x - pc.x;
@@ -1034,7 +1089,7 @@ var bboxHandlers = {
 	var ey = pe.y - pc.y;
 
         var radius = Math.hypot(sx, sy);
-        
+
         // Also calculate in WORLD coordinates for job bounding box
         var world_sx = start.x - center.x;
         var world_sy = start.y - center.y;
@@ -1047,7 +1102,7 @@ var bboxHandlers = {
 	var py = false;
 	var mx = false;
 	var my = false;
-	
+
 	// World coordinate axis crossings for job bounding box
 	var world_px = false;
 	var world_py = false;
@@ -1059,7 +1114,7 @@ var bboxHandlers = {
 	// but this way is probably the most computationally efficient.
 	// It avoids any use of transcendental functions.  Every path
 	// through this decision tree is either 4 or 5 simple comparisons.
-	
+
 	// Calculate axis crossings for PROJECTED coordinates (for display)
 	if (ey >= 0) {              // End in upper half plane
 	    if (ex > 0) {             // End in quadrant 0 - X+ Y+
@@ -1134,7 +1189,7 @@ var bboxHandlers = {
 	var maxY = py ? pc.y + radius : Math.max(ps.y, pe.y);
 	var minX = mx ? pc.x - radius : Math.min(ps.x, pe.x);
 	var minY = my ? pc.y - radius : Math.min(ps.y, pe.y);
-	
+
 	// Calculate axis crossings for WORLD coordinates (for job bounding box)
 	if (world_ey >= 0) {              // End in upper half plane
 	    if (world_ex > 0) {             // End in quadrant 0 - X+ Y+
@@ -1205,7 +1260,7 @@ var bboxHandlers = {
 		}
 	    }
 	}
-	
+
 	// Now calculate world coordinate bounding box for job bounds
 	// Only use end position in fallback to exclude start from rapid moves
 	var world_maxX = world_px ? center.x + world_radius : end.x;
@@ -1232,12 +1287,12 @@ var bboxHandlers = {
 	tpBbox.max.y = Math.max(tpBbox.max.y, p0.y, p1.y, p2.y, p3.y, p4.y, p5.y, p6.y, p7.y);
 	tpBbox.max.z = Math.max(tpBbox.max.z, maxZ);
         bboxIsSet = true;
-        
+
         // Arc moves (G2/G3) are always cutting moves
         // Check if this is the first cutting move - if so, we need to be careful about the start position
         var wasInitialMoves = initialMovesForBbox;
         initialMovesForBbox = false;
-        
+
         // Update job bounding box in world coordinates for arc
         // Only add bounds if we were already past initial moves (to exclude arc starting from rapid position)
         if (!wasInitialMoves) {
@@ -1258,7 +1313,7 @@ var bboxHandlers = {
             jobBbox.max.z = Math.max(jobBbox.max.z, end.z);
             jobBboxIsSet = true;
         }
-        
+
         // Collect arc points for envelope calculation (skip start point - it may be from rapid move)
         if (modal.motion !== 'G0') {
             // Sample points along the arc (excluding start point)
@@ -1270,18 +1325,18 @@ var bboxHandlers = {
             var theta1 = Math.atan2(deltaY1, deltaX1);
             var theta2 = Math.atan2(deltaY2, deltaX2);
             var cw = modal.motion === "G2";
-        
+
         if (!cw && theta2 < theta1) {
             theta2 += Math.PI * 2;
         } else if (cw && theta2 > theta1) {
             theta2 -= Math.PI * 2;
         }
-            
+
             // Sample arc with enough points to capture its shape (start at i=1 to skip start point)
             var deltaTheta = theta2 - theta1;
             var numSamples = Math.max(5, Math.ceil(Math.abs(deltaTheta) / (Math.PI / 8))); // At least 5 samples
             var dt = deltaTheta / numSamples;
-            
+
             for (var i = 1; i <= numSamples; i++) {
                 var theta = theta1 + i * dt;
                 var px = center.x + radius * Math.cos(theta);
@@ -1306,13 +1361,24 @@ var displayHandlers = {
             }
         }
 
-        // Convert work coordinates to machine coordinates: MPOS = WPOS + WCO
-        const wco = window.WCO || [0, 0, 0];
-        const startMPOS = {x: start.x + wco[0], y: start.y + wco[1], z: start.z + wco[2]};
-        const endMPOS = {x: end.x + wco[0], y: end.y + wco[1], z: end.z + wco[2]};
+        // Convert work coordinates to machine coordinates if WCO is available
+        const wco = window.WCO;
+        let startProj, endProj;
 
-        ps = projection(startMPOS);
-        pe = projection(endMPOS);
+        if (wco && Array.isArray(wco) && wco.length >= 2) {
+            // WCO available, convert WPOS to MPOS: MPOS = WPOS + WCO
+            const startMPOS = {x: start.x + wco[0], y: start.y + wco[1], z: start.z + (wco[2] || 0)};
+            const endMPOS = {x: end.x + wco[0], y: end.y + wco[1], z: end.z + (wco[2] || 0)};
+            startProj = projection(startMPOS);
+            endProj = projection(endMPOS);
+        } else {
+            // WCO not available, project work coordinates directly (original behavior)
+            startProj = projection(start);
+            endProj = projection(end);
+        }
+
+        ps = startProj;
+        pe = endProj;
         tp.beginPath();
         // tp.moveTo(start.x, start.y);
         // tp.lineTo(end.x, end.y);
@@ -1323,11 +1389,21 @@ var displayHandlers = {
     addArcCurve: function(modal, start, end, center, extraRotations) {
         var motion = modal.motion;
 
-        // Convert work coordinates to machine coordinates: MPOS = WPOS + WCO
-        const wco = window.WCO || [0, 0, 0];
-        const startMPOS = {x: start.x + wco[0], y: start.y + wco[1], z: start.z + wco[2]};
-        const centerMPOS = {x: center.x + wco[0], y: center.y + wco[1], z: center.z + wco[2]};
-        const endMPOS = {x: end.x + wco[0], y: end.y + wco[1], z: end.z + wco[2]};
+        // Convert work coordinates to machine coordinates if WCO is available
+        const wco = window.WCO;
+        let startMPOS, centerMPOS, endMPOS;
+
+        if (wco && Array.isArray(wco) && wco.length >= 2) {
+            // WCO available, convert WPOS to MPOS: MPOS = WPOS + WCO
+            startMPOS = {x: start.x + wco[0], y: start.y + wco[1], z: start.z + (wco[2] || 0)};
+            centerMPOS = {x: center.x + wco[0], y: center.y + wco[1], z: center.z + (wco[2] || 0)};
+            endMPOS = {x: end.x + wco[0], y: end.y + wco[1], z: end.z + (wco[2] || 0)};
+        } else {
+            // WCO not available, use work coordinates directly (original behavior)
+            startMPOS = start;
+            centerMPOS = center;
+            endMPOS = end;
+        }
 
         var deltaX1 = startMPOS.x - centerMPOS.x;
         var deltaY1 = startMPOS.y - centerMPOS.y;
@@ -1386,7 +1462,7 @@ ToolpathDisplayer.prototype.clear = function() {
 ToolpathDisplayer.prototype.showToolpath = function(gcode, modal, initialPosition) {
     // Update anchor points from current configuration before displaying
     updateAnchorPointsFromConfig();
-    
+
     cameraAngle = cameraAngle;
 
     var drawBounds = false;
@@ -1429,10 +1505,10 @@ ToolpathDisplayer.prototype.showToolpath = function(gcode, modal, initialPositio
 
     var gcodeLines = gcode.split('\n');
     new Toolpath(bboxHandlers).loadFromLinesSync(gcodeLines);
-    
+
     // Compute the envelope from collected toolpath points
     computeJobEnvelope();
-    
+
     transformCanvas();
     if (!bboxIsSet) {
         return;
@@ -1468,7 +1544,7 @@ ToolpathDisplayer.prototype.reDrawTool = function(modal, dpos) {
 ToolpathDisplayer.prototype.showToolPosition = function(modal, position) {
     // Update anchor points from current configuration
     updateAnchorPointsFromConfig();
-    
+
     // Set up camera view based on current angle
     var drawBounds = false;
     var drawBelts  = false;
@@ -1499,16 +1575,16 @@ ToolpathDisplayer.prototype.showToolPosition = function(modal, position) {
 
     // Initialize bounding box with machine bounds
     resetBbox();
-    
+
     // Always draw machine bounds to establish a coordinate system
     drawMachineBounds();
     if(drawBelts){
         drawMachineBelts();
     }
-    
+
     // Transform canvas to fit the bounds
     transformCanvas();
-    
+
     // Only draw if we have a valid bounding box
     if (bboxIsSet) {
         // Draw visible elements based on camera angle
@@ -1518,7 +1594,7 @@ ToolpathDisplayer.prototype.showToolPosition = function(modal, position) {
         if(drawBelts){
             drawMachineBelts();
         }
-        
+
         // Draw the tool at current position
         drawTool(position);
     }
@@ -1546,10 +1622,10 @@ const tpDisplayer = () => {
 const arrayToXYZ = (arr) => {
 	// Provide safe defaults if array is invalid or contains non-finite values
 	const safeArr = arr && Array.isArray(arr) ? arr : [0, 0, 0];
-	return { 
-		x: isFinite(safeArr[0]) ? safeArr[0] : 0, 
-		y: isFinite(safeArr[1]) ? safeArr[1] : 0, 
-		z: isFinite(safeArr[2]) ? safeArr[2] : 0 
+	return {
+		x: isFinite(safeArr[0]) ? safeArr[0] : 0,
+		y: isFinite(safeArr[1]) ? safeArr[1] : 0,
+		z: isFinite(safeArr[2]) ? safeArr[2] : 0
 	};
 };
 
@@ -1583,22 +1659,22 @@ canvas.addEventListener("contextmenu", function(event) {
     if (cameraAngle < 2) {
         return; // Allow default context menu for non-top-down views
     }
-    
+
     // Check if we have a bounding box set
     if (!bboxIsSet) {
         return; // No GCode loaded
     }
-    
+
     event.preventDefault(); // Prevent default browser context menu
-    
+
     // Get canvas bounding rectangle to calculate relative position
     const rect = canvas.getBoundingClientRect();
-    
+
     // Calculate click position in canvas coordinates
     // Canvas may be scaled/stretched to fit the display, so we need to convert properly
     const canvasX = (event.clientX - rect.left) * (canvas.width / rect.width);
     const canvasY = (event.clientY - rect.top) * (canvas.height / rect.height);
-    
+
     // Use job bounding box if available, otherwise use display bounding box
     // For top view, try to get jobBbox first (world coordinates), fall back to tpBbox
     let worldBox;
@@ -1613,42 +1689,42 @@ canvas.addEventListener("contextmenu", function(event) {
             max: { x: tpBbox.max.x, y: tpBbox.max.y, z: tpBbox.max.z }
         };
     }
-    
+
     if (!worldBox) {
         return;
     }
-    
+
     // For top view, we need to map canvas pixels to world coordinates
     // Get the projected job bounding box (what's actually displayed)
     const boxP0 = projection({x: worldBox.min.x, y: worldBox.min.y, z: 0});
     const boxP1 = projection({x: worldBox.max.x, y: worldBox.max.y, z: 0});
-    
+
     // Calculate the pixel coordinates of the bounding box corners
     const boxPixelMinX = xToPixel(boxP0.x);
     const boxPixelMinY = yToPixel(boxP1.y); // Note: Y is inverted
     const boxPixelMaxX = xToPixel(boxP1.x);
     const boxPixelMaxY = yToPixel(boxP0.y);
-    
+
     // Calculate the relative position within the bounding box (0 to 1)
     const relX = (canvasX - boxPixelMinX) / (boxPixelMaxX - boxPixelMinX);
     const relY = (canvasY - boxPixelMinY) / (boxPixelMaxY - boxPixelMinY);
-    
+
     // Map to world coordinates
     // Note: Y is inverted in canvas (top = max, bottom = min), so invert relY
     const worldX = worldBox.min.x + relX * (worldBox.max.x - worldBox.min.x);
     const worldY = worldBox.max.y - relY * (worldBox.max.y - worldBox.min.y);
-    
+
     // Validate that coordinates are finite and within reasonable bounds
     if (!isFinite(worldX) || !isFinite(worldY)) {
         return;
     }
-    
+
     // Show custom context menu
     contextMenu.textContent = `Move to: X${worldX.toFixed(2)}, Y${worldY.toFixed(2)}`;
     contextMenu.style.left = event.clientX + 'px';
     contextMenu.style.top = event.clientY + 'px';
     contextMenu.style.display = 'block';
-    
+
     // Handle click on context menu
     contextMenu.onclick = function(e) {
         e.stopPropagation();
@@ -1657,7 +1733,7 @@ canvas.addEventListener("contextmenu", function(event) {
             move({ X: worldX, Y: worldY });
         }
     };
-}); 
+});
 var refreshGcode = function() {
     const gcode = getValue("tablettab_gcode");
     tpDisplayer().showToolpath(gcode, gCodeModal, arrayToXYZ(WPOS));
@@ -1669,17 +1745,17 @@ var updateJobBoundsDisplay = function() {
     const boundsInfo = document.getElementById("job-bounds-info");
     const boundsText = document.getElementById("job-bounds-text");
     const traceButton = document.getElementById("tablettab_trace_boundary");
-    
+
     if (!boundsInfo || !boundsText || !traceButton) {
         return;
     }
-    
+
     if (jobBboxExists()) {
         const bbox = getJobBoundingBox();
         const width = (bbox.max.x - bbox.min.x).toFixed(1);
         const height = (bbox.max.y - bbox.min.y).toFixed(1);
         const zRange = (bbox.max.z - bbox.min.z).toFixed(1);
-        
+
         boundsText.innerHTML = `Size: ${width} × ${height} mm<br>Z: ${bbox.min.z.toFixed(1)} to ${bbox.max.z.toFixed(1)} mm (${zRange}mm range)`;
         boundsInfo.style.display = "block";
         traceButton.style.display = "block";
@@ -1696,13 +1772,13 @@ var traceBoundary = function() {
         alert("No job loaded or no movement commands found in GCode");
         return;
     }
-    
+
     const bbox = getJobBoundingBox();
     const currentPos = arrayToXYZ(WPOS);
-    
+
     // Create the boundary tracing commands
     var commands = [`G90`]; // Absolute positioning
-    
+
     // Use envelope points if available (shaped boundary), otherwise fall back to rectangle
     if (jobEnvelopePoints.length > 0) {
         // Trace the shaped envelope
@@ -1719,10 +1795,10 @@ var traceBoundary = function() {
         commands.push(`G0 X${bbox.min.x.toFixed(3)} Y${bbox.max.y.toFixed(3)}`); // Move to top-left corner
         commands.push(`G0 X${bbox.min.x.toFixed(3)} Y${bbox.min.y.toFixed(3)}`); // Back to bottom-left corner
     }
-    
+
     // Return to original position
     commands.push(`G0 X${currentPos.x.toFixed(3)} Y${currentPos.y.toFixed(3)}`);
-    
+
     // Confirm before starting
     var pointCount = jobEnvelopePoints.length > 0 ? jobEnvelopePoints.length : 4;
     if (confirm(`Trace boundary? This will move the machine around the job perimeter using ${pointCount} points.\n\nBounds: ${bbox.min.x.toFixed(1)},${bbox.min.y.toFixed(1)} to ${bbox.max.x.toFixed(1)},${bbox.max.y.toFixed(1)}\n\nZ-axis will not move.`)) {
@@ -1732,4 +1808,4 @@ var traceBoundary = function() {
     }
 }
 
-// document.getElementById("small-toolpath").addEventListener("mouseup", updateGcodeViewerAngle); 
+// document.getElementById("small-toolpath").addEventListener("mouseup", updateGcodeViewerAngle);
