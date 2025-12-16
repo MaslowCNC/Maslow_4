@@ -594,11 +594,20 @@ function stopGCode() {
   grbl_reset() // 0x18, ctrl-x
 }
 
+// Callback for WCO updates - can be set by other modules
+var onWCOUpdateCallback = null;
+
 function grblProcessStatus(response) {
   var grbl = parseGrblStatus(response)
   // Record persistent values of data
+  const oldWCO = WCO ? [WCO[0], WCO[1], WCO[2]] : null;
   if (grbl.wco) {
     WCO = grbl.wco;
+    // Check if WCO has changed and trigger callback if set
+    if (onWCOUpdateCallback && oldWCO && 
+        (WCO[0] !== oldWCO[0] || WCO[1] !== oldWCO[1] || WCO[2] !== oldWCO[2])) {
+      onWCOUpdateCallback(WCO, oldWCO);
+    }
   }
   if (grbl.ovr) {
     OVR = grbl.ovr;

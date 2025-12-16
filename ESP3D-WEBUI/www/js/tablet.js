@@ -107,33 +107,33 @@ const clearXYHomeTimer = () => {
 
 const setXYHome = () => {
   clearXYHomeTimer();
-  // Capture the WCO before zeroing axes
-  const oldWCO = WCO ? [WCO[0], WCO[1]] : null;
   zeroAxis("X");
   zeroAxis("Y");
   // This changed label will only show for 1 second before being reset
   setXYHomeBtnText(xyHomeLabelRedefined);
   
-  // Wait for WCO to update before refreshing display
-  const waitForWCOUpdate = (attempt = 0) => {
-    const maxAttempts = 20; // Try for up to 2 seconds (20 * 100ms)
-    if (attempt >= maxAttempts) {
-      // Timeout - refresh anyway
-      refreshGcode();
-      return;
+  // Set up one-time callback to refresh display when WCO updates
+  // This is more efficient than polling
+  const originalCallback = onWCOUpdateCallback;
+  let timeoutId = null;
+  
+  onWCOUpdateCallback = (newWCO, oldWCO) => {
+    // Clear the timeout since we got the update
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+      timeoutId = null;
     }
-    
-    // Check if WCO has changed
-    if (WCO && oldWCO && (WCO[0] !== oldWCO[0] || WCO[1] !== oldWCO[1])) {
-      // WCO has been updated, refresh the display
-      refreshGcode();
-    } else {
-      // WCO hasn't changed yet, wait a bit longer
-      setTimeout(() => waitForWCOUpdate(attempt + 1), 100);
-    }
+    // Restore the original callback
+    onWCOUpdateCallback = originalCallback;
+    // Refresh the display with new WCO
+    refreshGcode();
   };
   
-  waitForWCOUpdate();
+  // Fallback timeout in case WCO update doesn't arrive (e.g., communication error)
+  timeoutId = setTimeout(() => {
+    onWCOUpdateCallback = originalCallback;
+    refreshGcode();
+  }, 2000); // 2-second timeout
 }
 
 const xyHomeTimer = () => {
