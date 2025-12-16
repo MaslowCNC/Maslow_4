@@ -586,23 +586,25 @@ var drawTool = function(dpos) {
 }
 
 var drawOrigin = function(radius) {
-    // Work origin is at WPOS (0,0,0)
+    // Work origin is at WPOS (0,0,0) on the work surface
     // Convert to MPOS if WCO is available: MPOS = WPOS + WCO
+    // Always use Z=0 for work surface plane regardless of WCO[2]
     const wco = WCO;
     let originPos;
 
     if (wco && Array.isArray(wco) && wco.length >= 2) {
-        // WCO available, work origin is at MPOS = WCO
-        const originMPOS = {x: wco[0], y: wco[1], z: wco[2] || 0};
+        // WCO available, work origin is at MPOS = WCO, but Z=0 for work surface
+        const originMPOS = {x: wco[0], y: wco[1], z: 0};
         originPos = projection(originMPOS);
     } else {
-        // WCO not available, project work origin directly (original behavior)
+        // WCO not available, project work origin directly at work surface (original behavior)
         originPos = projection({x: 0, y: 0, z: 0});
     }
 
     po = originPos;
     tp.beginPath();
     tp.strokeStyle = 'red';
+    tp.lineWidth = 2.0 / scaler;
     tp.arc(po.x, po.y, radius, 0, Math.PI*2, false);
     tp.moveTo(po.x - radius*1.5, po.y);
     tp.lineTo(po.x + radius*1.5, po.y);
