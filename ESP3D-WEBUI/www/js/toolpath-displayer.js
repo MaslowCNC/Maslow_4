@@ -658,56 +658,55 @@ var drawMachineBounds = function() {
         centerOffsetY = isFinite(configOffsetY) ? configOffsetY : 0;
     }
 
-    // Calculate work area corners in the same coordinate system as anchor points
-    // The work area is positioned at the machine frame center (calculated from anchor points)
-    // with user-specified offsets applied
-    //
-    // Using the same centering transform as anchor points to ensure they move together:
-    // Anchor points use transforms like: tlX - trX/2, tlY/2
-    // We apply the same pattern to position the work area relative to the frame
-
-    // Machine frame center in original machine coordinates
+    // Calculate machine frame center from anchor points
     const frameCenterXMachine = (blX + brX) / 2;
     const frameCenterYMachine = (blY + tlY) / 2;
 
-    // Work area center with user offsets
+    // Work area center in machine coordinates (frame center + user offsets)
     const workAreaCenterXMachine = frameCenterXMachine + centerOffsetX;
     const workAreaCenterYMachine = frameCenterYMachine + centerOffsetY;
 
     // Work area corners in machine coordinates
-    const machineMinX = workAreaCenterXMachine - woodWidth/2;
-    const machineMaxX = workAreaCenterXMachine + woodWidth/2;
-    const machineMinY = workAreaCenterYMachine - woodHeight/2;
-    const machineMaxY = workAreaCenterYMachine + woodHeight/2;
+    const machineCorners = [
+        {x: workAreaCenterXMachine - woodWidth/2, y: workAreaCenterYMachine - woodHeight/2},  // bottom-left
+        {x: workAreaCenterXMachine + woodWidth/2, y: workAreaCenterYMachine - woodHeight/2},  // bottom-right
+        {x: workAreaCenterXMachine + woodWidth/2, y: workAreaCenterYMachine + woodHeight/2},  // top-right
+        {x: workAreaCenterXMachine - woodWidth/2, y: workAreaCenterYMachine + woodHeight/2}   // top-left
+    ];
 
-    // Apply the same centering transform as anchor points
-    // This positions everything relative to a centered coordinate system
-    const minX = machineMinX - trX/2;
-    const maxX = machineMaxX - trX/2;
-    const minY = machineMinY - tlY/2;
-    const maxY = machineMaxY - tlY/2;
+    // Convert from machine coordinates to work coordinates for display
+    // If WCO is available, subtract it to get work coordinates
+    // If WCO is not available, use machine coordinates directly (assumes WCO = 0)
+    const wco = window.WCO || [0, 0, 0];
 
-    //Project onto the camera view
-    const p0 = projection({x: minX, y: minY, z: 0});
-    const p1 = projection({x: maxX, y: minY, z: 0});
-    const p2 = projection({x: maxX, y: maxY, z: 0});
-    const p3 = projection({x: minX, y: maxY, z: 0});
+    // Convert each corner from machine coords to work coords, then project
+    const projectedCorners = machineCorners.map(corner => {
+        // Machine to work conversion: WPOS = MPOS - WCO
+        const workX = corner.x - wco[0];
+        const workY = corner.y - wco[1];
+        return projection({x: workX, y: workY, z: 0});
+    });
 
-    // NOTE: Work area is NOT added to bounding box
-    // The bounding box controls view centering and should only include work-coordinate elements.
-    // Work area is in machine coordinates and should not affect view centering.
-    // If this causes issues with view fitting, we may need to reconsider this approach.
+    // Add work area to bounding box so it's always visible
+    projectedCorners.forEach(p => {
+        tpBbox.min.x = Math.min(tpBbox.min.x, p.x);
+        tpBbox.min.y = Math.min(tpBbox.min.y, p.y);
+        tpBbox.max.x = Math.max(tpBbox.max.x, p.x);
+        tpBbox.max.y = Math.max(tpBbox.max.y, p.y);
+    });
+    bboxIsSet = true;
 
-    //Draw to the actual display
+    // Draw the work area rectangle
     tp.beginPath();
-    tp.moveTo(p0.x, p0.y);
-    tp.lineTo(p1.x, p1.y);
-    tp.lineTo(p2.x, p2.y);
-    tp.lineTo(p3.x, p3.y);
-    tp.lineTo(p0.x, p0.y);
+    tp.moveTo(projectedCorners[0].x, projectedCorners[0].y);
+    tp.lineTo(projectedCorners[1].x, projectedCorners[1].y);
+    tp.lineTo(projectedCorners[2].x, projectedCorners[2].y);
+    tp.lineTo(projectedCorners[3].x, projectedCorners[3].y);
+    tp.lineTo(projectedCorners[0].x, projectedCorners[0].y);
     tp.strokeStyle = "green";
+    tp.lineWidth = 2.0 / scaler;
     tp.stroke();
-
+    tp.lineWidth = 0.5 / scaler; // Reset line width
 }
 
 var drawMachineBelts = function() {
@@ -716,60 +715,69 @@ var drawMachineBelts = function() {
     // Update anchor points from current configuration
     updateAnchorPointsFromConfig();
 
-    const tl = projection({x: tlX - trX/2, y: tlY/2, z: 0});
-    const tr = projection({x: trX/2, y: trY/2, z: 0});
-    const bl = projection({x: blX - brX/2, y: blY - tlY/2, z: 0});
-    const br = projection({x: brX/2, y: brY - trY/2, z: 0});
+    // Anchor points are in machine coordinates
+    // Convert to work coordinates using WCO before projection
+    const wco = window.WCO || [0, 0, 0];
 
-    tpBbox.min.x = Math.min(tpBbox.min.x, bl.x);
-    tpBbox.min.y = Math.min(tpBbox.min.y, bl.y);
-    tpBbox.max.x = Math.max(tpBbox.max.x, tr.x);
-    tpBbox.max.y = Math.max(tpBbox.max.y, tr.y);
+    // Convert anchor points from machine to work coordinates
+    const tlWork = {x: tlX - wco[0], y: tlY - wco[1], z: tlZ - wco[2]};
+    const trWork = {x: trX - wco[0], y: trY - wco[1], z: trZ - wco[2]};
+    const blWork = {x: blX - wco[0], y: blY - wco[1], z: blZ - wco[2]};
+    const brWork = {x: brX - wco[0], y: brY - wco[1], z: brZ - wco[2]};
 
+    // Project to screen coordinates
+    const tl = projection(tlWork);
+    const tr = projection(trWork);
+    const bl = projection(blWork);
+    const br = projection(brWork);
+
+    // Add to bounding box
+    tpBbox.min.x = Math.min(tpBbox.min.x, bl.x, tl.x);
+    tpBbox.min.y = Math.min(tpBbox.min.y, bl.y, br.y);
+    tpBbox.max.x = Math.max(tpBbox.max.x, tr.x, br.x);
+    tpBbox.max.y = Math.max(tpBbox.max.y, tr.y, tl.y);
+
+    // Get current tool position in work coordinates (this is at 0,0 in work coords)
+    const toolPos = projection({x: 0, y: 0, z: 0});
+
+    // Draw belts from tool position to anchor points
     tp.beginPath();
     tp.strokeStyle = "grey";
-    tp.moveTo(0, 0);
+    tp.lineWidth = 1.0 / scaler;
+    tp.moveTo(toolPos.x, toolPos.y);
     tp.lineTo(tl.x, tl.y);
-    tp.moveTo(0, 0);
+    tp.moveTo(toolPos.x, toolPos.y);
     tp.lineTo(tr.x, tr.y);
-    tp.moveTo(0, 0);
+    tp.moveTo(toolPos.x, toolPos.y);
     tp.lineTo(bl.x, bl.y);
-    tp.moveTo(0, 0);
+    tp.moveTo(toolPos.x, toolPos.y);
     tp.lineTo(br.x, br.y);
     tp.stroke();
 
+    // Draw anchor point circles
     tp.fillStyle = "black";
-    tp.beginPath();
-    tp.arc(tl.x, tl.y, 10, 0, 2 * Math.PI);
-    tp.closePath();
-    tp.fill();
-    tp.beginPath();
-    tp.arc(tr.x, tr.y, 10, 0, 2 * Math.PI);
-    tp.closePath();
-    tp.fill();
-    tp.beginPath();
-    tp.arc(br.x, br.y, 10, 0, 2 * Math.PI);
-    tp.closePath();
-    tp.fill();
-    tp.beginPath();
-    tp.arc(bl.x, bl.y, 10, 0, 2 * Math.PI);
-    tp.closePath();
-    tp.fill();
-    
+    const anchorRadius = 10;
+    [tl, tr, br, bl].forEach(anchor => {
+        tp.beginPath();
+        tp.arc(anchor.x, anchor.y, anchorRadius, 0, 2 * Math.PI);
+        tp.closePath();
+        tp.fill();
+    });
 
+    // Draw gradient visualization (belt length indicator)
     const squareSize = projection({x: 50, y: 0, z: 0});
-
-
     var i = bl.x;
     var j = bl.y;
     while(i < tr.x){
         while(j < tr.y){
-            drawARect(i,j,squareSize.x, computPositonGradient(i, j, tl, tr, bl, br));
+            drawARect(i, j, squareSize.x, computPositonGradient(i, j, tl, tr, bl, br));
             j = j + squareSize.x;
         }
         j = bl.y;
         i = i + squareSize.x;
     }
+
+    tp.lineWidth = 0.5 / scaler; // Reset line width
 }
 
 var checkMinBeltLength = function(x1, y1, x2, y2){
