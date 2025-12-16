@@ -635,17 +635,27 @@ var drawJobBoundingBox = function() {
 }
 
 var drawMachineBounds = function() {
+    
+    // Update anchor points from current configuration
+    updateAnchorPointsFromConfig();
+    
+    // Calculate machine bounds dynamically based on anchor points
+    // The work area is centered between the anchor points, with (0,0) at the center
+    var minX = Math.min(tlX, trX, blX, brX);
+    var maxX = Math.max(tlX, trX, blX, brX);
+    var minY = Math.min(tlY, trY, blY, brY);
+    var maxY = Math.max(tlY, trY, blY, brY);
+    
+    var centerX = (minX + maxX) / 2;
+    var centerY = (minY + maxY) / 2;
+    var woodWidth = maxX - minX;
+    var woodHeight = maxY - minY;
 
-    // Work area is fixed with bottom-left corner at origin (0,0)
-    // Home position can be anywhere within the work area
-    var woodWidth = 2438;
-    var woodHeight = 2438/2;
-
-    //Project onto the camera view
-    const p0 = projection({x: 0, y: 0, z: 0});
-    const p1 = projection({x: woodWidth, y: 0, z: 0});
-    const p2 = projection({x: woodWidth, y: woodHeight, z: 0});
-    const p3 = projection({x: 0, y: woodHeight, z: 0});
+    // Machine bounds centered at origin (0,0)
+    const p0 = projection({x: minX - centerX, y: minY - centerY, z: 0});
+    const p1 = projection({x: maxX - centerX, y: minY - centerY, z: 0});
+    const p2 = projection({x: maxX - centerX, y: maxY - centerY, z: 0});
+    const p3 = projection({x: minX - centerX, y: maxY - centerY, z: 0});
 
     //This is used to fit everything in the camera view later
     tpBbox.min.x = Math.min(tpBbox.min.x, p0.x);
@@ -672,11 +682,10 @@ var drawMachineBelts = function() {
     // Update anchor points from current configuration
     updateAnchorPointsFromConfig();
 
-    // Belt anchors are now in absolute coordinates matching the fixed work area
-    const tl = projection({x: tlX, y: tlY, z: 0});
-    const tr = projection({x: trX, y: trY, z: 0});
-    const bl = projection({x: blX, y: blY, z: 0});
-    const br = projection({x: brX, y: brY, z: 0});
+    const tl = projection({x: tlX - trX/2, y: tlY/2, z: 0});
+    const tr = projection({x: trX/2, y: trY/2, z: 0});
+    const bl = projection({x: blX - brX/2, y: blY - tlY/2, z: 0});
+    const br = projection({x: brX/2, y: brY - trY/2, z: 0});
 
     tpBbox.min.x = Math.min(tpBbox.min.x, bl.x);
     tpBbox.min.y = Math.min(tpBbox.min.y, bl.y);
