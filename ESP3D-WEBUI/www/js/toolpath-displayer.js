@@ -690,13 +690,10 @@ var drawMachineBounds = function() {
         centerOffsetY = isFinite(configOffsetY) ? configOffsetY : 0;
     }
 
-    // Calculate machine frame center from anchor points (in machine coordinates)
-    const frameCenterXMachine = (blX + brX) / 2;
-    const frameCenterYMachine = (blY + tlY) / 2;
-
-    // Work area center in machine coordinates (frame center + user offsets)
-    const workAreaCenterXMachine = frameCenterXMachine + centerOffsetX;
-    const workAreaCenterYMachine = frameCenterYMachine + centerOffsetY;
+    // Work area is defined in machine coordinates where (0,0) is at the center
+    // Work area center in machine coordinates (user offsets from machine origin)
+    const workAreaCenterXMachine = centerOffsetX;
+    const workAreaCenterYMachine = centerOffsetY;
 
     // Work area corners in machine coordinates
     const machineMinX = workAreaCenterXMachine - woodWidth/2;
@@ -704,8 +701,7 @@ var drawMachineBounds = function() {
     const machineMinY = workAreaCenterYMachine - woodHeight/2;
     const machineMaxY = workAreaCenterYMachine + woodHeight/2;
 
-    // Project the corners directly from machine coordinates
-    // No centering transform - use absolute machine positions
+    // Project the corners from machine coordinates
     const p0 = projection({x: machineMinX, y: machineMinY, z: 0});
     const p1 = projection({x: machineMaxX, y: machineMinY, z: 0});
     const p2 = projection({x: machineMaxX, y: machineMaxY, z: 0});
@@ -737,11 +733,12 @@ var drawMachineBelts = function() {
     // Update anchor points from current configuration
     updateAnchorPointsFromConfig();
 
-    // Project anchor points directly from machine coordinates (no centering transform)
-    const tl = projection({x: tlX, y: tlY, z: 0});
-    const tr = projection({x: trX, y: trY, z: 0});
-    const bl = projection({x: blX, y: blY, z: 0});
-    const br = projection({x: brX, y: brY, z: 0});
+    // Apply centering transform to anchor points
+    // This centers machine (0,0) at the approximate center of the anchor points
+    const tl = projection({x: tlX - trX/2, y: tlY/2, z: 0});
+    const tr = projection({x: trX/2, y: trY/2, z: 0});
+    const bl = projection({x: blX - brX/2, y: blY - tlY/2, z: 0});
+    const br = projection({x: brX/2, y: brY - trY/2, z: 0});
 
     // Add to bounding box
     tpBbox.min.x = Math.min(tpBbox.min.x, bl.x, tl.x);
