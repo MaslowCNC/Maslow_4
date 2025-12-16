@@ -369,6 +369,10 @@ const cfgDef = {
 	blX: { name: "bl.x", type: "Null", cmd: "kinematics/MaslowKinematics/blX" },
 	blY: { name: "bl.y", type: "Null", cmd: "kinematics/MaslowKinematics/blY" },
 	blZ: { name: "bl.z", type: "D", cmd: "kinematics/MaslowKinematics/blZ" },
+	Work_Area_X: { name: "workAreaX", type: "A", cmd: "Maslow_Work_Area_X" },
+	Work_Area_Y: { name: "workAreaY", type: "A", cmd: "Maslow_Work_Area_Y" },
+	Work_Area_Center_Offset_X: { name: "workAreaCenterOffsetX", type: "A", cmd: "Maslow_Work_Area_Center_Offset_X" },
+	Work_Area_Center_Offset_Y: { name: "workAreaCenterOffsetY", type: "A", cmd: "Maslow_Work_Area_Center_Offset_Y" },
 };
 
 /** Handle Maslow specific configuration messages

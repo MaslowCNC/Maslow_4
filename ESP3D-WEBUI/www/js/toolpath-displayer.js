@@ -635,16 +635,34 @@ var drawJobBoundingBox = function() {
 }
 
 var drawMachineBounds = function() {
-    
-    //Work codinates offset the maxTravel part centers it in the view so 0,0 is the middle of the sheet
+    // Get work area dimensions from configuration, with default fallback values
+    // Default values match a standard 4x8 sheet (2438mm x 1219mm)
     var woodWidth = 2438;
-    var woodHeight = 2438/2;
+    var woodHeight = 1219;
+    var centerOffsetX = 0;
+    var centerOffsetY = 0;
+
+    // Load work area settings from global configuration if available
+    if (globalThis.loadedValues) {
+        woodWidth = parseFloat(globalThis.loadedValues.workAreaX) || woodWidth;
+        woodHeight = parseFloat(globalThis.loadedValues.workAreaY) || woodHeight;
+        centerOffsetX = parseFloat(globalThis.loadedValues.workAreaCenterOffsetX) || 0;
+        centerOffsetY = parseFloat(globalThis.loadedValues.workAreaCenterOffsetY) || 0;
+    }
+
+    // Calculate work area bounds
+    // The work area is centered at (0,0) plus any center offsets
+    // These bounds are independent of the home position
+    const minX = -woodWidth/2 + centerOffsetX;
+    const maxX = woodWidth/2 + centerOffsetX;
+    const minY = -woodHeight/2 + centerOffsetY;
+    const maxY = woodHeight/2 + centerOffsetY;
 
     //Project onto the camera view
-    const p0 = projection({x: -woodWidth/2, y: -woodHeight/2, z: 0});
-    const p1 = projection({x: woodWidth/2, y: -woodHeight/2, z: 0});
-    const p2 = projection({x: woodWidth/2, y: woodHeight/2, z: 0});
-    const p3 = projection({x: -woodWidth/2, y: woodHeight/2, z: 0});
+    const p0 = projection({x: minX, y: minY, z: 0});
+    const p1 = projection({x: maxX, y: minY, z: 0});
+    const p2 = projection({x: maxX, y: maxY, z: 0});
+    const p3 = projection({x: minX, y: maxY, z: 0});
 
     //This is used to fit everything in the camera view later
     tpBbox.min.x = Math.min(tpBbox.min.x, p0.x);
