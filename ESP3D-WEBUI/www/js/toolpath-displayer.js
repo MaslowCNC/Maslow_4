@@ -636,7 +636,7 @@ var drawJobBoundingBox = function() {
 
 var drawMachineBounds = function() {
     // Get work area dimensions from configuration, with default fallback values
-    // Default values match a standard 4x8 sheet width by 4x4 sheet height (2438mm x 1219mm)
+    // Default values: 2438mm x 1219mm (8ft x 4ft, typical for a 4x8 plywood sheet)
     var woodWidth = 2438;
     var woodHeight = 1219;
     var centerOffsetX = 0;
