@@ -548,15 +548,22 @@ var toolRadius = 6;
 var toolRectWH = toolRadius*2 + 4;  // Slop to encompass the entire image area
 
 var drawTool = function(dpos) {
-    pp = projection(dpos)
+    // dpos is in work coordinates, convert to machine coordinates: MPOS = WPOS + WCO
+    const wco = window.WCO || [0, 0, 0];
+    const mpos = {
+        x: dpos.x + wco[0],
+        y: dpos.y + wco[1],
+        z: dpos.z + wco[2]
+    };
+    pp = projection(mpos);
     toolX = xToPixel(pp.x)-toolRadius-2;
     toolY = yToPixel(pp.y)-toolRadius-2;
-    
+
     // Validate coordinates before calling getImageData to prevent canvas errors
     if (!isFinite(toolX) || !isFinite(toolY)) {
         return; // Skip drawing if coordinates are invalid
     }
-    
+
     toolSave = tp.getImageData(toolX, toolY, toolRectWH, toolRectWH);
 
     tp.beginPath();
@@ -568,14 +575,17 @@ var drawTool = function(dpos) {
 }
 
 var drawOrigin = function(radius) {
-    po = projection({x: 0.0, y:0.0, z:0.0})
+    // Work origin is at WPOS (0,0,0), convert to MPOS for display: MPOS = WPOS + WCO
+    const wco = window.WCO || [0, 0, 0];
+    const originMPOS = {x: wco[0], y: wco[1], z: 0};
+    po = projection(originMPOS);
     tp.beginPath();
     tp.strokeStyle = 'red';
     tp.arc(po.x, po.y, radius, 0, Math.PI*2, false);
-    tp.moveTo(-radius*1.5, 0);
-    tp.lineTo(radius*1.5, 0);
-    tp.moveTo(0,-radius*1.5);
-    tp.lineTo(0, radius*1.5);
+    tp.moveTo(po.x - radius*1.5, po.y);
+    tp.lineTo(po.x + radius*1.5, po.y);
+    tp.moveTo(po.x, po.y - radius*1.5);
+    tp.lineTo(po.x, po.y + radius*1.5);
     tp.stroke();
 }
 
@@ -658,7 +668,7 @@ var drawMachineBounds = function() {
         centerOffsetY = isFinite(configOffsetY) ? configOffsetY : 0;
     }
 
-    // Calculate machine frame center from anchor points
+    // Calculate machine frame center from anchor points (in machine coordinates)
     const frameCenterXMachine = (blX + brX) / 2;
     const frameCenterYMachine = (blY + tlY) / 2;
 
@@ -672,18 +682,12 @@ var drawMachineBounds = function() {
     const machineMinY = workAreaCenterYMachine - woodHeight/2;
     const machineMaxY = workAreaCenterYMachine + woodHeight/2;
 
-    // Apply the same centering transform as anchor points
-    // This ensures work area stays fixed relative to the machine frame
-    const minX = machineMinX - trX/2;
-    const maxX = machineMaxX - trX/2;
-    const minY = machineMinY - tlY/2;
-    const maxY = machineMaxY - tlY/2;
-
-    // Project the corners
-    const p0 = projection({x: minX, y: minY, z: 0});
-    const p1 = projection({x: maxX, y: minY, z: 0});
-    const p2 = projection({x: maxX, y: maxY, z: 0});
-    const p3 = projection({x: minX, y: maxY, z: 0});
+    // Project the corners directly from machine coordinates
+    // No centering transform - use absolute machine positions
+    const p0 = projection({x: machineMinX, y: machineMinY, z: 0});
+    const p1 = projection({x: machineMaxX, y: machineMinY, z: 0});
+    const p2 = projection({x: machineMaxX, y: machineMaxY, z: 0});
+    const p3 = projection({x: machineMinX, y: machineMaxY, z: 0});
 
     // Add work area to bounding box so it's always visible
     tpBbox.min.x = Math.min(tpBbox.min.x, p0.x);
@@ -711,12 +715,11 @@ var drawMachineBelts = function() {
     // Update anchor points from current configuration
     updateAnchorPointsFromConfig();
 
-    // Use the original centering transform for anchor points
-    // This centers the machine frame in the display coordinate system
-    const tl = projection({x: tlX - trX/2, y: tlY/2, z: 0});
-    const tr = projection({x: trX/2, y: trY/2, z: 0});
-    const bl = projection({x: blX - brX/2, y: blY - tlY/2, z: 0});
-    const br = projection({x: brX/2, y: brY - trY/2, z: 0});
+    // Project anchor points directly from machine coordinates (no centering transform)
+    const tl = projection({x: tlX, y: tlY, z: 0});
+    const tr = projection({x: trX, y: trY, z: 0});
+    const bl = projection({x: blX, y: blY, z: 0});
+    const br = projection({x: brX, y: brY, z: 0});
 
     // Add to bounding box
     tpBbox.min.x = Math.min(tpBbox.min.x, bl.x, tl.x);
@@ -724,18 +727,28 @@ var drawMachineBelts = function() {
     tpBbox.max.x = Math.max(tpBbox.max.x, tr.x, br.x);
     tpBbox.max.y = Math.max(tpBbox.max.y, tr.y, tl.y);
 
-    // Draw belts from origin (0,0) to anchor points
-    // The origin here is in display coordinates (canvas 0,0 after transform)
+    // Get tool position in machine coordinates
+    // Tool is reported in WPOS, convert to MPOS: MPOS = WPOS + WCO
+    const wco = window.WCO || [0, 0, 0];
+    const wpos = window.WPOS || [0, 0, 0];
+    const toolMPOS = {
+        x: wpos[0] + wco[0],
+        y: wpos[1] + wco[1],
+        z: 0
+    };
+    const toolPos = projection(toolMPOS);
+
+    // Draw belts from tool position to anchor points
     tp.beginPath();
     tp.strokeStyle = "grey";
     tp.lineWidth = 1.0 / scaler;
-    tp.moveTo(0, 0);
+    tp.moveTo(toolPos.x, toolPos.y);
     tp.lineTo(tl.x, tl.y);
-    tp.moveTo(0, 0);
+    tp.moveTo(toolPos.x, toolPos.y);
     tp.lineTo(tr.x, tr.y);
-    tp.moveTo(0, 0);
+    tp.moveTo(toolPos.x, toolPos.y);
     tp.lineTo(bl.x, bl.y);
-    tp.moveTo(0, 0);
+    tp.moveTo(toolPos.x, toolPos.y);
     tp.lineTo(br.x, br.y);
     tp.stroke();
 
@@ -945,8 +958,13 @@ var bboxHandlers = {
 	// Update tpUnits in case it changed in a previous line
         tpUnits = modal.units;
 
-        ps = projection(start);
-        pe = projection(end);
+        // Convert work coordinates to machine coordinates: MPOS = WPOS + WCO
+        const wco = window.WCO || [0, 0, 0];
+        const startMPOS = {x: start.x + wco[0], y: start.y + wco[1], z: start.z + wco[2]};
+        const endMPOS = {x: end.x + wco[0], y: end.y + wco[1], z: end.z + wco[2]};
+
+        ps = projection(startMPOS);
+        pe = projection(endMPOS);
 
         // Update overall bounding box for display (includes all moves for proper canvas scaling)
         tpBbox.min.x = Math.min(tpBbox.min.x, ps.x, pe.x);
@@ -999,9 +1017,15 @@ var bboxHandlers = {
             end = tmp;
         }
 
-        ps = projection(start);
-        pc = projection(center);
-        pe = projection(end);
+        // Convert work coordinates to machine coordinates: MPOS = WPOS + WCO
+        const wco = window.WCO || [0, 0, 0];
+        const startMPOS = {x: start.x + wco[0], y: start.y + wco[1], z: start.z + wco[2]};
+        const centerMPOS = {x: center.x + wco[0], y: center.y + wco[1], z: center.z + wco[2]};
+        const endMPOS = {x: end.x + wco[0], y: end.y + wco[1], z: end.z + wco[2]};
+
+        ps = projection(startMPOS);
+        pc = projection(centerMPOS);
+        pe = projection(endMPOS);
 
 	// Coordinates relative to the center of the arc (PROJECTED coordinates for display)
 	var sx = ps.x - pc.x;
@@ -1282,8 +1306,13 @@ var displayHandlers = {
             }
         }
 
-        ps = projection(start);
-        pe = projection(end);
+        // Convert work coordinates to machine coordinates: MPOS = WPOS + WCO
+        const wco = window.WCO || [0, 0, 0];
+        const startMPOS = {x: start.x + wco[0], y: start.y + wco[1], z: start.z + wco[2]};
+        const endMPOS = {x: end.x + wco[0], y: end.y + wco[1], z: end.z + wco[2]};
+
+        ps = projection(startMPOS);
+        pe = projection(endMPOS);
         tp.beginPath();
         // tp.moveTo(start.x, start.y);
         // tp.lineTo(end.x, end.y);
@@ -1294,11 +1323,16 @@ var displayHandlers = {
     addArcCurve: function(modal, start, end, center, extraRotations) {
         var motion = modal.motion;
 
-        var deltaX1 = start.x - center.x;
-        var deltaY1 = start.y - center.y;
+        // Convert work coordinates to machine coordinates: MPOS = WPOS + WCO
+        const wco = window.WCO || [0, 0, 0];
+        const startMPOS = {x: start.x + wco[0], y: start.y + wco[1], z: start.z + wco[2]};
+        const centerMPOS = {x: center.x + wco[0], y: center.y + wco[1], z: center.z + wco[2]};
+
+        var deltaX1 = startMPOS.x - centerMPOS.x;
+        var deltaY1 = startMPOS.y - centerMPOS.y;
         var radius = Math.hypot(deltaX1, deltaY1);
-        var deltaX2 = end.x - center.x;
-        var deltaY2 = end.y - center.y;
+        var deltaX2 = (end.x + wco[0]) - centerMPOS.x;
+        var deltaY2 = (end.y + wco[1]) - centerMPOS.y;
         var theta1 = Math.atan2(deltaY1, deltaX1);
         var theta2 = Math.atan2(deltaY2, deltaX2);
         var cw = modal.motion == "G2";
@@ -1322,15 +1356,15 @@ var displayHandlers = {
         n = 10 * Math.ceil(Math.abs(deltaTheta) / Math.PI);
         dt = (deltaTheta) / n;
         dz = (end.z - start.z) / n;
-        ps = projection(start);
+        ps = projection(startMPOS);
         tp.moveTo(ps.x, ps.y);
         next = {};
         theta = theta1;
-        next.z = start.z;
+        next.z = startMPOS.z;
         for (i = 0; i < n; i++) {
             theta += dt;
-            next.x = center.x + radius * Math.cos(theta);
-            next.y = center.y + radius * Math.sin(theta);
+            next.x = centerMPOS.x + radius * Math.cos(theta);
+            next.y = centerMPOS.y + radius * Math.sin(theta);
             next.z += dz;
             pe = projection(next)
             tp.lineTo(pe.x, pe.y);
