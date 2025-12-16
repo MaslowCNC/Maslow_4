@@ -728,8 +728,6 @@ var drawMachineBounds = function() {
 }
 
 var drawMachineBelts = function() {
-    console.log("Draw belts");
-
     // Update anchor points from current configuration
     updateAnchorPointsFromConfig();
 
@@ -854,7 +852,6 @@ var computeTension = function(x,y, tl, tr, bl, br){
 // Author: Michele Locati <michele@locati.it>
 // Source: https://gist.github.com/mlocati/7210513
 function perc2color(perc) {
-    console.log(perc);
     var r, g, b = 0;
     if(perc < 50) {
         r = 255;
@@ -866,7 +863,6 @@ function perc2color(perc) {
     }
     var h = r * 0x10000 + g * 0x100 + b * 0x1;
 
-    console.log(r + " " + g + " " + b)
     return "rgba("+r+", "+g+", "+b+", .3)";//'#' + ('000000' + h.toString(16)).slice(-6);
 }
 
@@ -1511,6 +1507,11 @@ ToolpathDisplayer.prototype.showToolpath = function(gcode, modal, initialPositio
     if (!bboxIsSet) {
         return;
     }
+
+    // Draw the work origin (cross and circle) after transform is set up
+    var imageWidth = tpBbox.max.x - tpBbox.min.x;
+    drawOrigin(imageWidth * 0.04);
+
     initialMoves = true;
     displayHandlers.position = initialPosition;
     displayHandlers.modal = modal;
