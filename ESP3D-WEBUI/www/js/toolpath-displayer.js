@@ -1584,6 +1584,12 @@ ToolpathDisplayer.prototype.showToolPosition = function(modal, position) {
 
     // Only draw if we have a valid bounding box
     if (bboxIsSet) {
+        // Calculate image dimensions for proper origin size
+        var imageWidth = tpBbox.max.x - tpBbox.min.x;
+        if (imageWidth == 0) {
+            imageWidth = 1;
+        }
+
         // Draw visible elements based on camera angle
         if(drawBounds){
             drawMachineBounds();
@@ -1591,6 +1597,9 @@ ToolpathDisplayer.prototype.showToolPosition = function(modal, position) {
         if(drawBelts){
             drawMachineBelts();
         }
+
+        // Draw the work origin (cross and circle)
+        drawOrigin(imageWidth * 0.04);
 
         // Draw the tool at current position
         drawTool(position);
