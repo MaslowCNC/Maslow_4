@@ -577,7 +577,7 @@ var drawTool = function(dpos) {
 var drawOrigin = function(radius) {
     // Work origin is at WPOS (0,0,0), convert to MPOS for display: MPOS = WPOS + WCO
     const wco = window.WCO || [0, 0, 0];
-    const originMPOS = {x: wco[0], y: wco[1], z: 0};
+    const originMPOS = {x: wco[0], y: wco[1], z: wco[2]};
     po = projection(originMPOS);
     tp.beginPath();
     tp.strokeStyle = 'red';
@@ -734,7 +734,7 @@ var drawMachineBelts = function() {
     const toolMPOS = {
         x: wpos[0] + wco[0],
         y: wpos[1] + wco[1],
-        z: 0
+        z: wpos[2] + wco[2]
     };
     const toolPos = projection(toolMPOS);
 
@@ -1327,12 +1327,13 @@ var displayHandlers = {
         const wco = window.WCO || [0, 0, 0];
         const startMPOS = {x: start.x + wco[0], y: start.y + wco[1], z: start.z + wco[2]};
         const centerMPOS = {x: center.x + wco[0], y: center.y + wco[1], z: center.z + wco[2]};
+        const endMPOS = {x: end.x + wco[0], y: end.y + wco[1], z: end.z + wco[2]};
 
         var deltaX1 = startMPOS.x - centerMPOS.x;
         var deltaY1 = startMPOS.y - centerMPOS.y;
         var radius = Math.hypot(deltaX1, deltaY1);
-        var deltaX2 = (end.x + wco[0]) - centerMPOS.x;
-        var deltaY2 = (end.y + wco[1]) - centerMPOS.y;
+        var deltaX2 = endMPOS.x - centerMPOS.x;
+        var deltaY2 = endMPOS.y - centerMPOS.y;
         var theta1 = Math.atan2(deltaY1, deltaX1);
         var theta2 = Math.atan2(deltaY2, deltaX2);
         var cw = modal.motion == "G2";
