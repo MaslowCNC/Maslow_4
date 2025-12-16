@@ -657,7 +657,6 @@ var drawMachineBounds = function() {
     //Draw to the actual display
     tp.beginPath();
     tp.moveTo(p0.x, p0.y);
-    tp.lineTo(p0.x, p0.y);
     tp.lineTo(p1.x, p1.y);
     tp.lineTo(p2.x, p2.y);
     tp.lineTo(p3.x, p3.y);
