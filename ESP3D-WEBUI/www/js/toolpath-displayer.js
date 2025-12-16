@@ -636,11 +636,9 @@ var drawJobBoundingBox = function() {
 
 var drawMachineBounds = function() {
     
-    // Update anchor points from current configuration
-    updateAnchorPointsFromConfig();
-    
     // Calculate machine bounds dynamically based on anchor points
     // The work area is centered between the anchor points, with (0,0) at the center
+    // Note: updateAnchorPointsFromConfig() is called by showToolpath() before this function
     var minX = Math.min(tlX, trX, blX, brX);
     var maxX = Math.max(tlX, trX, blX, brX);
     var minY = Math.min(tlY, trY, blY, brY);
