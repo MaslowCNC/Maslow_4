@@ -659,9 +659,9 @@ var drawMachineBounds = function() {
     }
 
     // Calculate work area bounds in machine coordinates
-    // The machine frame center (in machine coords) is used as the base, with offsets applied
-    const frameCenterXMachine = (blX + brX) / 2;  // Average of left and right X positions
-    const frameCenterYMachine = (blY + tlY) / 2;  // Average of bottom and top Y positions
+    // Calculate machine frame center by averaging anchor point positions
+    const frameCenterXMachine = (blX + brX) / 2;  // Average X of bottom corners
+    const frameCenterYMachine = (blY + tlY) / 2;  // Average Y of left corners
 
     // Work area center in machine coordinates
     const workAreaCenterXMachine = frameCenterXMachine + centerOffsetX;
@@ -675,6 +675,8 @@ var drawMachineBounds = function() {
 
     // Apply the same centering transform used for anchor points
     // This centers the machine frame in the display coordinate system
+    // Note: This uses a simplified transform assuming a rectangular frame.
+    // For non-rectangular frames, this may not perfectly match anchor point positioning.
     const minX = machineMinX - trX/2;
     const maxX = machineMaxX - trX/2;
     const minY = machineMinY - tlY/2;
