@@ -1648,6 +1648,9 @@ ToolpathDisplayer.prototype.showToolPosition = function(modal, position) {
         // Draw the work origin (cross and circle)
         drawOrigin(imageWidth * 0.04);
 
+        // Draw job bounding box if available (updates with WCO changes)
+        drawJobBoundingBox();
+
         // Draw the tool at current position
         drawTool(position);
     }
