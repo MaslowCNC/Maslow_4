@@ -7,9 +7,26 @@ and this project uses semantic versioning.
 
 ## [Unreleased]
 
+No unreleased changes at this time.
+
+## [v1.16] - 2025-12-17
+
 ### Changed
-- Reorganized project structure: moved firmware and related files into `firmware/` directory (#624)
-- Unified machine coordinate system for work area display in web interface (#618, #624)
+- **Project Structure Reorganization** (#624): Major refactoring to improve organization
+  - Moved all firmware files into `firmware/` directory
+  - Reorganized build scripts and installation tools
+  - Integrated ESP3D-WEBUI as a subproject within the repository
+  - Moved example configurations to `firmware/example_configs/`
+  
+- **Web Interface Improvements** (#618, #624):
+  - Unified machine coordinate system for work area display
+  - Improved consistency in coordinate reporting across the interface
+  - Better visual representation of work area boundaries
+
+### Added
+- Integrated ESP3D-WEBUI project into main repository for easier maintenance
+- Enhanced project documentation and build instructions
+- Additional GitHub workflows for automated testing and deployment
 
 ## [v1.15] - 2024-12-17
 
@@ -56,7 +73,28 @@ Versions prior to v1.15 (v1.14, v1.13, v1.12, v1.11, v1.10, v1.09, v1.08, v1.07,
 - Git tags: https://github.com/MaslowCNC/Maslow_4/tags
 - Commit history: https://github.com/MaslowCNC/Maslow_4/commits/
 
-## Summary of v1.15 Release
+## Release Summaries
+
+### v1.16 Summary
+
+Version 1.16 is primarily a structural release that reorganizes the codebase for better maintainability and integration.
+
+**Key Highlights:**
+1. **Improved Project Structure** - Cleaner organization with firmware in dedicated directory
+2. **ESP3D-WEBUI Integration** - Web interface now part of main repository
+3. **Unified Coordinate System** - Better consistency in work area display
+
+**For Users:**
+- Web interface coordinate display is more consistent
+- No functional changes to operation
+- Easier to build and install from source
+
+**For Developers:**
+- Clearer project structure with firmware in `firmware/` directory
+- ESP3D-WEBUI is now easier to modify and maintain
+- Better organization of example configurations and build tools
+
+### v1.15 Summary
 
 Version 1.15 is a significant release focused on improving the calibration experience and system stability. The headline feature is **automatic orientation detection**, which eliminates a common source of user confusion by having the machine automatically determine whether it's mounted horizontally or vertically.
 
@@ -66,23 +104,11 @@ Version 1.15 is a significant release focused on improving the calibration exper
 3. **Enhanced Stability** - Fixed multiple crash scenarios
 4. **Better User Experience** - Reduced log spam and moved update checks out of startup
 
-**For Users:**
-- Calibration is now easier - the machine detects its orientation automatically
-- Less console spam during operation
-- More stable TEST command operation
-- Firmware update checks don't slow down startup
-
-**For Developers:**
-- Code improvements include better state management
-- Cleaner logging with appropriate log levels
-- More robust WiFi client handling
-- Improved calibration coordinate calculations
-
 ---
 
 ## About This Changelog
 
-This changelog was created to document changes since version 1.15. Future releases will maintain this changelog with detailed information about new features, bug fixes, and breaking changes.
+This changelog documents changes starting from version 1.15. Future releases will maintain this changelog with detailed information about new features, bug fixes, and breaking changes.
 
 For the latest firmware and installation instructions, visit:
 - Website: https://www.maslowcnc.com/
