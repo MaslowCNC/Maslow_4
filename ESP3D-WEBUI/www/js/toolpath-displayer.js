@@ -624,6 +624,10 @@ var drawJobBoundingBox = function() {
         return;
     }
 
+    // Convert work coordinates to machine coordinates if WCO is available
+    const wco = WCO;
+    const hasWCO = wco && Array.isArray(wco) && wco.length >= 2;
+
     // Use envelope points if available (shaped boundary), otherwise fall back to rectangle
     if (jobEnvelopePoints.length > 0) {
         // Draw the shaped envelope
@@ -632,12 +636,24 @@ var drawJobBoundingBox = function() {
         tp.lineWidth = 2.0 / scaler;
 
         // Project and draw the first point
-        var firstPoint = projection({x: jobEnvelopePoints[0].x, y: jobEnvelopePoints[0].y, z: bbox.min.z});
+        let firstPoint;
+        if (hasWCO) {
+            const firstMPOS = {x: jobEnvelopePoints[0].x + wco[0], y: jobEnvelopePoints[0].y + wco[1], z: bbox.min.z + (wco[2] || 0)};
+            firstPoint = projection(firstMPOS);
+        } else {
+            firstPoint = projection({x: jobEnvelopePoints[0].x, y: jobEnvelopePoints[0].y, z: bbox.min.z});
+        }
         tp.moveTo(firstPoint.x, firstPoint.y);
 
         // Draw lines to all other envelope points
         for (var i = 1; i < jobEnvelopePoints.length; i++) {
-            var p = projection({x: jobEnvelopePoints[i].x, y: jobEnvelopePoints[i].y, z: bbox.min.z});
+            let p;
+            if (hasWCO) {
+                const pMPOS = {x: jobEnvelopePoints[i].x + wco[0], y: jobEnvelopePoints[i].y + wco[1], z: bbox.min.z + (wco[2] || 0)};
+                p = projection(pMPOS);
+            } else {
+                p = projection({x: jobEnvelopePoints[i].x, y: jobEnvelopePoints[i].y, z: bbox.min.z});
+            }
             tp.lineTo(p.x, p.y);
         }
 
@@ -647,10 +663,19 @@ var drawJobBoundingBox = function() {
     } else {
         // Fallback to simple rectangle
         // Project the corners of the job bounding box
-        const p0 = projection({x: bbox.min.x, y: bbox.min.y, z: bbox.min.z});
-        const p1 = projection({x: bbox.max.x, y: bbox.min.y, z: bbox.min.z});
-        const p2 = projection({x: bbox.max.x, y: bbox.max.y, z: bbox.min.z});
-        const p3 = projection({x: bbox.min.x, y: bbox.max.y, z: bbox.min.z});
+        let p0, p1, p2, p3;
+        if (hasWCO) {
+            // Convert WPOS to MPOS: MPOS = WPOS + WCO
+            p0 = projection({x: bbox.min.x + wco[0], y: bbox.min.y + wco[1], z: bbox.min.z + (wco[2] || 0)});
+            p1 = projection({x: bbox.max.x + wco[0], y: bbox.min.y + wco[1], z: bbox.min.z + (wco[2] || 0)});
+            p2 = projection({x: bbox.max.x + wco[0], y: bbox.max.y + wco[1], z: bbox.min.z + (wco[2] || 0)});
+            p3 = projection({x: bbox.min.x + wco[0], y: bbox.max.y + wco[1], z: bbox.min.z + (wco[2] || 0)});
+        } else {
+            p0 = projection({x: bbox.min.x, y: bbox.min.y, z: bbox.min.z});
+            p1 = projection({x: bbox.max.x, y: bbox.min.y, z: bbox.min.z});
+            p2 = projection({x: bbox.max.x, y: bbox.max.y, z: bbox.min.z});
+            p3 = projection({x: bbox.min.x, y: bbox.max.y, z: bbox.min.z});
+        }
 
         // Draw the bounding box rectangle
         tp.beginPath();
