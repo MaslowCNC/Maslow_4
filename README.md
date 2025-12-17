@@ -1,10 +1,13 @@
 # Maslow Readme for machines version 4 and 4.1 Current through 2025
 ## Quicklinks:
-Website where you can buy a kit and current assembly instrucitons: 
+Website where you can buy a kit and current assembly instrucitons:
 <https://www.maslowcnc.com/>
 
 📚 **Documentation Site (GitHub Pages):**
 <https://maslowcnc.github.io/Maslow_4/>
+
+📋 **Changelog (What's New):**
+[CHANGELOG.md](./CHANGELOG.md) | [Release Notes v1.15](./docs/ReleaseNotes_v1.15.md)
 
 Assembly instructions in wiki:
 <https://github.com/MaslowCNC/Maslow_4/tree/assembling-the-arms-4-1>
