@@ -1005,14 +1005,12 @@ var bboxHandlers = {
         pe = endProj;
 
         // Update overall bounding box for display (includes all moves for proper canvas scaling)
-        // Use work coordinates (not machine coordinates) for bounding box so it frames the G-code properly
-        const startWorkProj = projection(start);
-        const endWorkProj = projection(end);
-        tpBbox.min.x = Math.min(tpBbox.min.x, startWorkProj.x, endWorkProj.x);
-        tpBbox.min.y = Math.min(tpBbox.min.y, startWorkProj.y, endWorkProj.y);
+        // Use the same coordinate system as the drawn paths (machine coordinates when WCO available)
+        tpBbox.min.x = Math.min(tpBbox.min.x, startProj.x, endProj.x);
+        tpBbox.min.y = Math.min(tpBbox.min.y, startProj.y, endProj.y);
         tpBbox.min.z = Math.min(tpBbox.min.z, start.z, end.z);
-        tpBbox.max.x = Math.max(tpBbox.max.x, startWorkProj.x, endWorkProj.x);
-        tpBbox.max.y = Math.max(tpBbox.max.y, startWorkProj.y, endWorkProj.y);
+        tpBbox.max.x = Math.max(tpBbox.max.x, startProj.x, endProj.x);
+        tpBbox.max.y = Math.max(tpBbox.max.y, startProj.y, endProj.y);
         tpBbox.max.z = Math.max(tpBbox.max.z, start.z, end.z);
         bboxIsSet = true;
 
@@ -1270,15 +1268,31 @@ var bboxHandlers = {
 	var minZ = Math.min(start.z, end.z);
 	var maxZ = Math.max(start.z, end.z);
 
-        // Project the world coordinate bounding box for display bbox calculation
-        const p0 = projection({x: world_minX, y: world_minY, z: minZ});
-        const p1 = projection({x: world_minX, y: world_maxY, z: minZ});
-        const p2 = projection({x: world_maxX, y: world_maxY, z: minZ});
-        const p3 = projection({x: world_maxX, y: world_minY, z: minZ});
-        const p4 = projection({x: world_minX, y: world_minY, z: maxZ});
-        const p5 = projection({x: world_minX, y: world_maxY, z: maxZ});
-        const p6 = projection({x: world_maxX, y: world_maxY, z: maxZ});
-        const p7 = projection({x: world_maxX, y: world_minY, z: maxZ});
+        // Project the arc bounding box for display bbox calculation
+        // Use machine coordinates when WCO is available (same as the drawn arc)
+        let p0, p1, p2, p3, p4, p5, p6, p7;
+        
+        if (wco && Array.isArray(wco) && wco.length >= 2) {
+            // WCO available, convert bounding box corners from WPOS to MPOS
+            p0 = projection({x: world_minX + wco[0], y: world_minY + wco[1], z: minZ + (wco[2] || 0)});
+            p1 = projection({x: world_minX + wco[0], y: world_maxY + wco[1], z: minZ + (wco[2] || 0)});
+            p2 = projection({x: world_maxX + wco[0], y: world_maxY + wco[1], z: minZ + (wco[2] || 0)});
+            p3 = projection({x: world_maxX + wco[0], y: world_minY + wco[1], z: minZ + (wco[2] || 0)});
+            p4 = projection({x: world_minX + wco[0], y: world_minY + wco[1], z: maxZ + (wco[2] || 0)});
+            p5 = projection({x: world_minX + wco[0], y: world_maxY + wco[1], z: maxZ + (wco[2] || 0)});
+            p6 = projection({x: world_maxX + wco[0], y: world_maxY + wco[1], z: maxZ + (wco[2] || 0)});
+            p7 = projection({x: world_maxX + wco[0], y: world_minY + wco[1], z: maxZ + (wco[2] || 0)});
+        } else {
+            // WCO not available, project work coordinates directly
+            p0 = projection({x: world_minX, y: world_minY, z: minZ});
+            p1 = projection({x: world_minX, y: world_maxY, z: minZ});
+            p2 = projection({x: world_maxX, y: world_maxY, z: minZ});
+            p3 = projection({x: world_maxX, y: world_minY, z: minZ});
+            p4 = projection({x: world_minX, y: world_minY, z: maxZ});
+            p5 = projection({x: world_minX, y: world_maxY, z: maxZ});
+            p6 = projection({x: world_maxX, y: world_maxY, z: maxZ});
+            p7 = projection({x: world_maxX, y: world_minY, z: maxZ});
+        }
 
 	tpBbox.min.x = Math.min(tpBbox.min.x, p0.x, p1.x, p2.x, p3.x, p4.x, p5.x, p6.x, p7.x);
 	tpBbox.min.y = Math.min(tpBbox.min.y, p0.y, p1.y, p2.y, p3.y, p4.y, p5.y, p6.y, p7.y);
