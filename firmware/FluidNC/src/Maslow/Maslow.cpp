@@ -487,8 +487,8 @@ void Maslow_::setZStop() {
 void Maslow_::saveBeltPositions() {
     // Only save if in a valid state (belts are tight)
     int currentState = calibration.getCurrentState();
-    if (currentState != READY_TO_CUT && currentState != RETRACTED) {
-        log_debug("Belt positions NOT saved - invalid state (not READY_TO_CUT or RETRACTED), currentState=" << currentState);
+    if (currentState != READY_TO_CUT && currentState != RETRACTED && currentState != CALIBRATION_IN_PROGRESS) {
+        log_debug("Belt positions NOT saved - invalid state (not READY_TO_CUT, RETRACTED, or CALIBRATION_IN_PROGRESS), currentState=" << currentState);
         return;
     }
 
@@ -989,6 +989,14 @@ void Maslow_::reset_all_axis() {
 
 // Stop all motors and reset all state variables
 void Maslow_::stop() {
+    // Save belt positions before stopping if calibration was in progress
+    // During calibration, belts are periodically pulled tight for measurements,
+    // so current position should be preserved when user interrupts
+    if (calibration.calibrationInProgress && calibration.getCurrentState() == CALIBRATION_IN_PROGRESS) {
+        saveBeltPositions();
+        log_info("Belt positions saved after calibration interruption");
+    }
+
     stopMotors();
     calibration.calibrationInProgress = false;
     test                              = false;
