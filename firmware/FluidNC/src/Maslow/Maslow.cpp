@@ -992,7 +992,7 @@ void Maslow_::stop() {
     // Save belt positions before stopping if calibration was in progress
     // During calibration, belts are periodically pulled tight for measurements,
     // so current position should be preserved when user interrupts
-    if (calibration.calibrationInProgress && calibration.getCurrentState() == CALIBRATION_IN_PROGRESS) {
+    if (calibration.getCurrentState() == CALIBRATION_IN_PROGRESS) {
         saveBeltPositions();
         log_info("Belt positions saved after calibration interruption");
     }
