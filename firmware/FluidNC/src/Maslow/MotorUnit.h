@@ -15,6 +15,9 @@
 
 class MotorUnit {
 public:
+    // Tension testing configuration
+    static constexpr unsigned long TENSION_HOLD_DURATION_MS = 10000;  // 10 seconds
+
     void     begin(int forwardPin, int backwardPin, int readbackPin, int encoderAddress, int channel1, int channel2);
     void     zero();
     void     setTarget(double newTarget);

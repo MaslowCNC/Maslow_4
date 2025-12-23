@@ -217,10 +217,10 @@ bool MotorUnit::pull_tight(int currentThreshold) {
     }
     lastCallToRetract = millis();
 
-    // If tension has been detected, maintain it for 10 seconds
+    // If tension has been detected, maintain it for the configured duration
     if (tensionDetected) {
         unsigned long elapsedTime = millis() - tensionDetectedTime;
-        if (elapsedTime >= 10000) {  // 10 seconds have passed
+        if (elapsedTime >= TENSION_HOLD_DURATION_MS) {
             // Stop motor and reset variables
             stop();
             retract_speed       = 0;
@@ -256,11 +256,11 @@ bool MotorUnit::pull_tight(int currentThreshold) {
 
     if (retract_speed > 15) {  //20 is not the actual speed, it is the amount of time so we don't trigger immediately
         if (currentMeasurement > currentThreshold || incrementalThresholdHits > 2) {
-            // Tension detected - start 10 second hold period
+            // Tension detected - start hold period
             tensionDetected     = true;
             tensionDetectedTime = millis();
             String encAddrLabel = Maslow.axis_id_to_label(_encoderAddress);
-            log_info(encAddrLabel.c_str() << " tension detected, maintaining for 10 seconds");
+            log_info(encAddrLabel.c_str() << " tension detected, maintaining for " << int(TENSION_HOLD_DURATION_MS / 1000) << " seconds");
             return false;
         } else {
             return false;
