@@ -217,6 +217,24 @@ bool MotorUnit::pull_tight(int currentThreshold) {
     }
     lastCallToRetract = millis();
 
+    // If tension has been detected, maintain it for 10 seconds
+    if (tensionDetected) {
+        unsigned long elapsedTime = millis() - tensionDetectedTime;
+        if (elapsedTime >= 10000) {  // 10 seconds have passed
+            // Stop motor and reset variables
+            stop();
+            retract_speed    = 0;
+            retract_baseline = 700;
+            tensionDetected  = false;
+            tensionDetectedTime = 0;
+            return true;
+        }
+        // Continue maintaining tension at the threshold
+        motor.backward(retract_speed);
+        _commandPWM = -retract_speed;
+        return false;
+    }
+
     //Gradually increase the pulling speed
     if (random(0, 2) == 1) {
         retract_speed = min(retract_speed + 1, 1023);
@@ -238,11 +256,13 @@ bool MotorUnit::pull_tight(int currentThreshold) {
 
     if (retract_speed > 15) {  //20 is not the actual speed, it is the amount of time so we don't trigger immediately
         if (currentMeasurement > currentThreshold || incrementalThresholdHits > 2) {
-            //stop motor, reset variables
-            stop();
-            retract_speed    = 0;
-            retract_baseline = 700;
-            return true;
+            // Tension detected - start 10 second hold period
+            tensionDetected = true;
+            tensionDetectedTime = millis();
+            tensionHoldCurrentThreshold = currentThreshold;
+            String encAddrLabel = Maslow.axis_id_to_label(_encoderAddress);
+            log_info(encAddrLabel.c_str() << " tension detected, maintaining for 10 seconds");
+            return false;
         } else {
             return false;
         }
@@ -358,6 +378,8 @@ void MotorUnit::reset() {
     amtToMove                = 0;
     lastPosition             = getPosition();
     beltSpeedTimer           = millis();
+    tensionDetected          = false;
+    tensionDetectedTime      = 0;
 }
 
 //sets the encoder position to 0
