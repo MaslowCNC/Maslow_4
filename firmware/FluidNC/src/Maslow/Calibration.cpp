@@ -104,7 +104,7 @@ bool Calibration::requestStateChange(int newState) {
                 success = true;
                 break;
             } else {
-                log_info("Transitioning to extending from state: " << stateNames[currentState].name);
+                log_info("Cannot extend the belts from state: " << stateNames[currentState].name);
                 break;
             }
         case EXTENDEDOUT:  //We can enter extended from extending or in the event of a failure from taking slack or release tension

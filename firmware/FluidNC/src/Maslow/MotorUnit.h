@@ -70,15 +70,14 @@ private:
     unsigned long motorCurrentTimer = millis();
 
     //These are used when retracting the belts for storage
-    int           absoluteCurrentThreshold    = 1300;
-    int           incrementalThreshold        = 125;
-    int           incrementalThresholdHits    = 0;
-    float         alpha                       = .2;
-    uint16_t      retract_speed               = 0;
-    float         retract_baseline            = 700;
-    bool          tensionDetected             = false;
-    unsigned long tensionDetectedTime         = 0;
-    int           tensionHoldCurrentThreshold = 0;
+    int           absoluteCurrentThreshold = 1300;
+    int           incrementalThreshold     = 125;
+    int           incrementalThresholdHits = 0;
+    float         alpha                    = .2;
+    uint16_t      retract_speed            = 0;
+    float         retract_baseline         = 700;
+    bool          tensionDetected          = false;
+    unsigned long tensionDetectedTime      = 0;
 
     //comply variables
     unsigned long lastCallToComply  = millis();
