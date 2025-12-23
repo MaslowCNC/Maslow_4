@@ -89,8 +89,8 @@ bool Calibration::requestStateChange(int newState) {
             } else {
                 break;
             }
-        case EXTENDING:  //We can enter extending from retracted, extended out, or retracting
-            if (currentState == RETRACTED || currentState == EXTENDEDOUT || currentState == RETRACTING) {
+        case EXTENDING:  //We can enter extending from retracted, extended out, retracting, or release tension
+            if (currentState == RETRACTED || currentState == EXTENDEDOUT || currentState == RETRACTING || currentState == RELEASE_TENSION) {
                 currentState = EXTENDING;
                 Maslow.stop();
                 sys.set_state(State::Homing);
@@ -263,9 +263,10 @@ bool Calibration::requestStateChange(int newState) {
             } else {
                 break;
             }
-        case RELEASE_TENSION:  //We can enter release tension from any stable state (the machine is not currently performing an action)
+        case RELEASE_TENSION:  //We can enter release tension from any state that is not actively performing an operation
             if (currentState == READY_TO_CUT || currentState == UNKNOWN || currentState == EXTENDEDOUT ||
-                currentState == CALIBRATION_COMPUTING) {
+                currentState == CALIBRATION_COMPUTING || currentState == RETRACTING || currentState == EXTENDING ||
+                currentState == RETRACTED) {
                 previousState   = currentState;  // Store the previous state
                 currentState    = RELEASE_TENSION;
                 complyCallTimer = millis();
