@@ -1,6 +1,16 @@
+name: "Maslow 4 - Plasma Cutter Configuration"
 board: Maslow
-name: Maslow S3 Board
-meta: 
+meta: Example configuration for Maslow 4 with Plasma Cutter Relay on AUX1 (GPIO 48)
+
+# This is an example configuration for using a Maslow 4 to control a plasma cutter
+# via a Solid State Relay (SSR) connected to the AUX1 port (GPIO 48).
+#
+# IMPORTANT: This example shows only the spindle configuration changes needed for
+# plasma cutter control. You must merge this with your existing maslow.yaml settings
+# for axes, motors, kinematics, etc.
+#
+# For complete setup instructions, see: docs/PlasmaCutterRelayConfig.md
+
 Maslow_vertical: false
 Maslow_calibration_grid_width_mm_X: 0.000000
 Maslow_calibration_grid_height_mm_Y: 0.000000
@@ -15,7 +25,8 @@ MaslowAutoUpdate: false
 MaslowUpdateURL: https://api.github.com/repos/BarbourSmith/FluidNC/releases/latest
 Maslow_spoilboardThickness: 0.000000
 Maslow_workThickness: 0.000000
-stepping: 
+
+stepping:
   engine: Timed
   idle_ms: 240
   pulse_us: 4
@@ -23,7 +34,7 @@ stepping:
   disable_delay_us: 0
   segments: 12
 
-uart1: 
+uart1:
   txd_pin: gpio.1
   rxd_pin: gpio.2
   rts_pin: NO_PIN
@@ -31,18 +42,18 @@ uart1:
   baud: 115200
   mode: 8N1
 
-spi: 
+spi:
   miso_pin: gpio.13
   mosi_pin: gpio.11
   sck_pin: gpio.12
 
-sdcard: 
+sdcard:
   cs_pin: gpio.10
   card_detect_pin: NO_PIN
   frequency_hz: 8000000
 
-kinematics: 
-  MaslowKinematics: 
+kinematics:
+  MaslowKinematics:
     tlX: 139.199997
     tlY: 3230.600098
     tlZ: 100.000000
@@ -60,16 +71,17 @@ kinematics:
     maxSegmentLength: 5.000000
     fixedZ: false
 
-axes: 
+axes:
   shared_stepper_disable_pin: NO_PIN
   shared_stepper_reset_pin: NO_PIN
-  a: 
+
+  a:
     steps_per_mm: 80.000000
     max_rate_mm_per_min: 2000.000000
     acceleration_mm_per_sec2: 50.000000
     max_travel_mm: 4000.000000
     soft_limits: false
-    homing: 
+    homing:
       cycle: -1
       allow_single_axis: true
       positive_direction: true
@@ -79,22 +91,21 @@ axes:
       settle_ms: 250
       seek_scaler: 1.100000
       feed_scaler: 1.100000
-
-    motor0: 
+    motor0:
       limit_neg_pin: NO_PIN
       limit_pos_pin: NO_PIN
       limit_all_pin: NO_PIN
       hard_limits: false
       pulloff_mm: 1.000000
-      null_motor: 
+      null_motor:
 
-  b: 
+  b:
     steps_per_mm: 80.000000
     max_rate_mm_per_min: 2000.000000
     acceleration_mm_per_sec2: 50.000000
     max_travel_mm: 4000.000000
     soft_limits: false
-    homing: 
+    homing:
       cycle: -1
       allow_single_axis: true
       positive_direction: true
@@ -104,22 +115,21 @@ axes:
       settle_ms: 250
       seek_scaler: 1.100000
       feed_scaler: 1.100000
-
-    motor0: 
+    motor0:
       limit_neg_pin: NO_PIN
       limit_pos_pin: NO_PIN
       limit_all_pin: NO_PIN
       hard_limits: false
       pulloff_mm: 1.000000
-      null_motor: 
+      null_motor:
 
-  c: 
+  c:
     steps_per_mm: 80.000000
     max_rate_mm_per_min: 2000.000000
     acceleration_mm_per_sec2: 50.000000
     max_travel_mm: 4000.000000
     soft_limits: false
-    homing: 
+    homing:
       cycle: -1
       allow_single_axis: true
       positive_direction: true
@@ -129,22 +139,21 @@ axes:
       settle_ms: 250
       seek_scaler: 1.100000
       feed_scaler: 1.100000
-
-    motor0: 
+    motor0:
       limit_neg_pin: NO_PIN
       limit_pos_pin: NO_PIN
       limit_all_pin: NO_PIN
       hard_limits: false
       pulloff_mm: 1.000000
-      null_motor: 
+      null_motor:
 
-  d: 
+  d:
     steps_per_mm: 80.000000
     max_rate_mm_per_min: 2000.000000
     acceleration_mm_per_sec2: 50.000000
     max_travel_mm: 4000.000000
     soft_limits: false
-    homing: 
+    homing:
       cycle: -1
       allow_single_axis: true
       positive_direction: true
@@ -154,22 +163,21 @@ axes:
       settle_ms: 250
       seek_scaler: 1.100000
       feed_scaler: 1.100000
-
-    motor0: 
+    motor0:
       limit_neg_pin: NO_PIN
       limit_pos_pin: NO_PIN
       limit_all_pin: NO_PIN
       hard_limits: false
       pulloff_mm: 1.000000
-      null_motor: 
+      null_motor:
 
-  z: 
+  z:
     steps_per_mm: 100.000000
     max_rate_mm_per_min: 400.000000
     acceleration_mm_per_sec2: 10.000000
     max_travel_mm: 100.000000
     soft_limits: false
-    homing: 
+    homing:
       cycle: -1
       allow_single_axis: true
       positive_direction: true
@@ -179,14 +187,13 @@ axes:
       settle_ms: 250
       seek_scaler: 1.100000
       feed_scaler: 1.100000
-
-    motor0: 
+    motor0:
       limit_neg_pin: NO_PIN
       limit_pos_pin: NO_PIN
       limit_all_pin: NO_PIN
       hard_limits: false
       pulloff_mm: 1.000000
-      tmc_2209: 
+      tmc_2209:
         uart_num: 1
         step_pin: gpio.15
         direction_pin: gpio.16
@@ -204,14 +211,13 @@ axes:
         stallguard: 0
         stallguard_debug: false
         toff_coolstep: 3
-
-    motor1: 
+    motor1:
       limit_neg_pin: NO_PIN
       limit_pos_pin: NO_PIN
       limit_all_pin: NO_PIN
       hard_limits: false
       pulloff_mm: 1.000000
-      tmc_2209: 
+      tmc_2209:
         uart_num: 1
         step_pin: gpio.46
         direction_pin: gpio.38
@@ -230,7 +236,7 @@ axes:
         stallguard_debug: false
         toff_coolstep: 3
 
-control: 
+control:
   safety_door_pin: NO_PIN
   reset_pin: NO_PIN
   feed_hold_pin: NO_PIN
@@ -240,29 +246,29 @@ control:
   macro2_pin: NO_PIN
   macro3_pin: NO_PIN
 
-coolant: 
+coolant:
   flood_pin: NO_PIN
   mist_pin: NO_PIN
   delay_ms: 0
 
-probe: 
+probe:
   pin: NO_PIN
   check_mode_start: true
 
-macros: 
-  startup_line0: 
-  startup_line1: 
-  macro0: 
-  macro1: 
-  macro2: 
-  macro3: 
+macros:
+  startup_line0:
+  startup_line1:
+  macro0:
+  macro1:
+  macro2:
+  macro3:
 
-start: 
+start:
   must_home: true
   deactivate_parking: false
   check_limits: false
 
-parking: 
+parking:
   enable: false
   axis: Z
   target_mpos_mm: -5.000000
@@ -270,7 +276,7 @@ parking:
   pullout_distance_mm: 5.000000
   pullout_rate_mm_per_min: 250.000000
 
-user_outputs: 
+user_outputs:
   analog0_pin: NO_PIN
   analog1_pin: NO_PIN
   analog2_pin: NO_PIN
@@ -288,24 +294,44 @@ user_outputs:
   digital6_pin: NO_PIN
   digital7_pin: NO_PIN
 
-NoSpindle:
+# =============================================================================
+# PLASMA CUTTER RELAY CONFIGURATION
+# =============================================================================
+# This Relay spindle configuration controls a Solid State Relay (SSR) connected
+# to AUX1 port (GPIO 48) to trigger a plasma cutter on/off.
+#
+# PIN CONFIGURATION:
+# - gpio.48:low  -> Relay OFF when pin is LOW (0V), ON when HIGH (3.3V)
+#                   RECOMMENDED: Safe during boot (pins default to LOW)
+#
+# - gpio.48:high -> Relay OFF when pin is HIGH (3.3V), ON when LOW (0V)
+#                   Use only if your SSR requires inverted logic
+#
+# SAFETY NOTES:
+# - ESP32 GPIO pins default to LOW during boot
+# - Using :low polarity ensures relay stays OFF during boot/reset
+# - Test with multimeter before connecting plasma cutter
+# - Always verify boot behavior before first plasma cutting operation
+#
+# G-CODE COMMANDS:
+# - M3 or M3 S1  -> Turn plasma cutter ON
+# - M5           -> Turn plasma cutter OFF
+# - M4           -> Same as M3 (relay spindle doesn't distinguish direction)
+#
+# For detailed setup instructions, see: docs/PlasmaCutterRelayConfig.md
+# =============================================================================
+
+Relay:
+  output_pin: gpio.48:low      # AUX1 port - Use :low for safe boot behavior
+  off_on_alarm: true            # Automatically turn off plasma on alarm/emergency stop
+
+# Alternative configuration if your SSR requires inverted logic:
+# Relay:
+#   output_pin: gpio.48:high   # Active-low: HIGH=OFF, LOW=ON
+#   off_on_alarm: true
 
 # =============================================================================
-# PLASMA CUTTER / RELAY SPINDLE CONFIGURATION (Uncomment to enable)
-# =============================================================================
-# To control a plasma cutter via Solid State Relay (SSR) on AUX1 (GPIO 48):
-# 1. Comment out the "NoSpindle:" line above
-# 2. Uncomment the Relay section below
-# 3. Adjust pin polarity (:low or :high) based on your SSR requirements
-#
-# For complete setup guide, see: docs/PlasmaCutterRelayConfig.md
-# Example config: firmware/example_configs/maslow_plasma_cutter.yaml
-#
-# Relay:
-#   output_pin: gpio.48:low    # AUX1 port - :low is safest (relay OFF during boot)
-#   off_on_alarm: true          # Turn off plasma on emergency stop
-#
-# G-code commands: M3 = ON, M5 = OFF
+# END PLASMA CUTTER CONFIGURATION
 # =============================================================================
 
 arc_tolerance_mm: 0.002000
