@@ -322,7 +322,7 @@ user_outputs:
 # =============================================================================
 
 Relay:
-  output_pin: gpio.48:low      # AUX1 port - Use :low for safe boot behavior
+  output_pin: gpio.48:low       # AUX1 port - Use :low for safe boot behavior
   off_on_alarm: true            # Automatically turn off plasma on alarm/emergency stop
 
 # Alternative configuration if your SSR requires inverted logic:
