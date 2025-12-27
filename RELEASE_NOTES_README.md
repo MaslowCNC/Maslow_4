@@ -4,7 +4,32 @@ This directory contains the release notes created for Maslow CNC FluidNC firmwar
 
 ## Files Created
 
-### 1. `RELEASE_NOTES_v1.16.md` (Comprehensive Version)
+### 1. `RELEASE_NOTES_v1.16_USER.md` (User-Focused Version) ⭐
+- **Size:** ~10 KB / 250+ lines
+- **Purpose:** End-user focused documentation of v1.16 features
+- **Content:**
+  - What's new for users
+  - Feature descriptions from user perspective
+  - Calibration improvements explained
+  - Interface enhancements detailed
+  - Bug fixes and improvements
+  - Easy-to-follow upgrade instructions
+  - FAQ section
+- **Audience:** End users, machine operators, beginners
+- **Usage:** Primary release notes for users upgrading firmware
+
+### 2. `RELEASE_NOTES_v1.16_SHORT.md` (GitHub Release Version)
+- **Size:** ~3 KB / 80+ lines
+- **Purpose:** Concise summary for GitHub release page
+- **Content:**
+  - Key features highlighted
+  - Quick installation guide
+  - Essential upgrade information
+  - Links to resources
+- **Audience:** End users, GitHub release page
+- **Usage:** Can replace "(coming soon!)" text at https://github.com/MaslowCNC/Maslow_4/releases/tag/v1.16
+
+### 3. `RELEASE_NOTES_v1.16.md` (Technical Version)
 - **Size:** 9.6 KB / 295 lines
 - **Purpose:** Complete technical documentation of v1.16 changes
 - **Content:**
@@ -12,64 +37,69 @@ This directory contains the release notes created for Maslow CNC FluidNC firmwar
   - ESP3D-WEBUI integration explanation
   - Repository structure changes
   - Build process updates
-  - Upgrade instructions for users and developers
+  - Upgrade instructions for developers
   - Credits, statistics, and future outlook
 - **Audience:** Developers, technical users, documentation
 
-### 2. `RELEASE_NOTES_v1.16_SHORT.md` (Short-Form Version)
-- **Size:** 3.6 KB / 130 lines
-- **Purpose:** Concise summary for GitHub release page
-- **Content:**
-  - Quick summary of major changes
-  - Top 3 features highlighted
-  - Essential upgrade information
-  - Links to resources
-- **Audience:** End users, GitHub release page
-- **Usage:** Can replace "(coming soon!)" text at https://github.com/MaslowCNC/Maslow_4/releases/tag/v1.16
+## What's New in v1.16 - User Features
 
-## What Changed in v1.16
+### Calibration Improvements 🎯
+- **Work area constraints** - Grid automatically fits your machine
+- **Endless loop prevention** - Won't get stuck in calibration
+- **Better initial guess** - Faster, smarter calibration
+- **Enhanced validation** - Catches issues before starting
+- **Combined settings** - More intuitive configuration
 
-### Major Infrastructure Updates
+### Interface Enhancements 🖱️
+- **Right-click to move** - Click canvas to position machine
+- **Better status display** - Clearer machine state info
+- **Consistent buttons** - Uniform sizing and layout
+- **Improved bounding box** - More accurate visualization
+- **Smoother toolpaths** - Better arc and trace rendering
+- **Purple dot fix** - Accurate position indicator
 
-**1. ESP3D-WEBUI Integration** ✨
-- Integrated complete ESP3D-WEBUI project into `ESP3D-WEBUI/` directory
-- Web interface source now included in main repository
-- Multi-language support (14 languages)
-- Build system and development tools included
-- Web simulator for testing without hardware
+### New Settings ⚙️
+- **WiFi in UI** - Configure network without USB
+- **Preferences menu** - Easier settings access
+- **Work area config** - Define machine boundaries
 
-**2. Documentation Improvements** 📚
-- GitHub Pages deployment workflow added
-- CAD directory documentation improved
-- README files added to all CAD subdirectories
+### Bug Fixes 🐛
+- Z-axis positioning accuracy
+- Arc G-code rendering
+- File system reliability
+- Startup sequence
+- Many UI improvements
 
-**3. Build System Updates** 🔧
-- Stale PR/issue management automation
-- Updated CI/CD workflows
-- Better compilation handling
+### Documentation 📚
+- Comprehensive quick start guide
+- Picture-based instructions
+- Frame and bit libraries
+- Software guides
 
 ### Analysis Methodology
 
-1. **Examined existing releases:**
-   - Studied v1.13, v1.14, v1.15 release notes format
-   - Identified documentation patterns
-   - Understood community communication style
+1. **Examined Pull Requests:**
+   - Analyzed 285+ merged PRs between v1.15 and v1.16
+   - Identified user-facing features vs. infrastructure changes
+   - Categorized by feature type (Calibration, UI, Settings, etc.)
+   - Extracted PR descriptions and commit messages
 
-2. **Analyzed v1.16 changes:**
-   - Used `git log v1.15..v1.16` to identify commits
-   - Used `git diff v1.15..v1.16` to analyze file changes
+2. **Analyzed Repository Changes:**
+   - Used `git log v1.15..v1.16` to identify all commits
    - Examined ESP3D-WEBUI directory structure
    - Reviewed workflow changes in `.github/workflows/`
+   - Checked file sizes and binary updates
 
-3. **Verified completeness:**
-   - Cross-referenced with GitHub release assets
-   - Checked file sizes and dates
-   - Reviewed CAD documentation additions
-   - Validated configuration file compatibility
+3. **Created User-Focused Documentation:**
+   - Translated technical changes into user benefits
+   - Grouped features by user impact
+   - Added clear upgrade instructions
+   - Included FAQ section for common questions
 
 ## Key Findings
 
-### Repository Changes
+### Repository Changes (Technical Details)
+- **PRs merged:** 285+ between v1.15 and v1.16
 - **Files added:** ~100+ (mostly in ESP3D-WEBUI/)
 - **Lines added:** ~13,000+
 - **Binary files:** 20+ (language packs, images)
@@ -91,21 +121,22 @@ This directory contains the release notes created for Maslow CNC FluidNC firmwar
 ## Recommendations
 
 ### For Repository Maintainers
-1. Use `RELEASE_NOTES_v1.16_SHORT.md` to update the GitHub release page
-2. Keep `RELEASE_NOTES_v1.16.md` as permanent reference documentation
-3. Consider adding these files to the `docs/` directory for permanent storage
+1. **Primary:** Use `RELEASE_NOTES_v1.16_USER.md` for user-facing communications
+2. **GitHub Release:** Use `RELEASE_NOTES_v1.16_SHORT.md` to update the release page
+3. **Technical Reference:** Keep `RELEASE_NOTES_v1.16.md` for developer documentation
+4. Consider linking to these files from the main README
 
 ### For Users
-1. Update is optional but recommended for latest web interface
-2. No breaking changes - safe to upgrade
-3. Follow standard firmware update process
-4. No recalibration needed
+1. Read `RELEASE_NOTES_v1.16_USER.md` for complete feature list
+2. Update is optional but recommended for new features
+3. No breaking changes - safe to upgrade
+4. No recalibration needed - your settings are preserved
 
 ### For Developers
-1. New build process for web UI: `cd ESP3D-WEBUI && gulp package --lang en`
-2. Node.js v20+ now required for web UI development
-3. Review `ESP3D-WEBUI/COMPILATION.md` for build instructions
-4. Use web simulator for testing: `fluidnc-web-sim.py`
+1. Review `RELEASE_NOTES_v1.16.md` for technical details
+2. New build process for web UI: `cd ESP3D-WEBUI && gulp package --lang en`
+3. Node.js v20+ now required for web UI development
+4. See `ESP3D-WEBUI/COMPILATION.md` for build instructions
 
 ## Credits
 

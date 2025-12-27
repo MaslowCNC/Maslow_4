@@ -1,130 +1,98 @@
-# FluidNC for Maslow - Version 1.16
+# Maslow CNC Firmware v1.16 - Release Notes
 
-**Release Date:** December 26, 2025
-
----
-
-## Quick Summary
-
-Version 1.16 represents a **major infrastructure update** focused on integrating the ESP3D-WEBUI project directly into the Maslow_4 repository. This release consolidates web interface development into the main codebase, making it easier for contributors to work on both firmware and UI together.
+**Release Date:** December 26, 2024
 
 ---
 
-## 🎯 Top Changes
+## What's New
 
-### 1. **ESP3D-WEBUI Integration** ✨
-
-The most significant change in v1.16 is the integration of the ESP3D-WEBUI project directly into the Maslow_4 repository. The web interface source code is now included in the `ESP3D-WEBUI/` directory.
-
-**What this means:**
-- Unified development - firmware and UI in one place
-- Easier for contributors to make coordinated changes
-- Version consistency between firmware and web interface
-- Multi-language support (14 languages available)
-
-**For developers:**
-- Build command: `cd ESP3D-WEBUI && gulp package --lang en`
-- See `ESP3D-WEBUI/COMPILATION.md` for full build instructions
-- Includes web simulator for testing: `fluidnc-web-sim.py`
-
-### 2. **Documentation Improvements** 📚
-
-**GitHub Pages Deployment**
-- Documentation now automatically published to GitHub Pages
-- Added README files to all CAD subdirectories
-- Improved accessibility for users
-
-### 3. **Build System Updates** 🔧
-
-**Stale PR/Issue Management**
-- Automatically marks and closes inactive PRs and issues
-- Keeps the project organized and manageable
-
-**Updated CI/CD Workflows**
-- Improved compilation workflows
-- Better handling of review-triggered builds
+Version 1.16 brings **dozens of improvements** to make your Maslow CNC machine easier to use, more accurate, and more reliable. No recalibration required!
 
 ---
 
-## 📦 Updated Files
+## ✨ Key Features
 
-### What You Need to Update
+### Calibration Improvements
+- **Work area constraints** - Calibration grid automatically fits your machine size
+- **Endless loop prevention** - Calibration won't get stuck anymore
+- **Smarter initial guess** - Faster calibration with better starting point
+- **Better validation** - Catches configuration issues before starting
 
-1. **firmware.bin** (1,985,296 bytes) - Main firmware
-2. **index.html.gz** (132,623 bytes) - Web interface 
-3. **maslow.yaml** (6,603 bytes) - Configuration file
+### Interface Enhancements
+- **Right-click to move** - Click anywhere on canvas to move machine there
+- **Improved status display** - Clearer machine state information
+- **Better button layout** - Consistent sizing and cleaner appearance
+- **Enhanced bounding box** - More accurate part boundary visualization
+- **Smoother toolpath preview** - Better arc rendering and trace display
 
-### Installers
+### New Settings
+- **WiFi configuration in UI** - Configure network without USB connection
+- **Preferences menu** - Easier access to machine settings
+- **Work area settings** - Define your machine's working area
+
+### Bug Fixes
+- Fixed Z-axis positioning accuracy
+- Corrected arc G-code rendering
+- Fixed calibration endless loops
+- Improved file system reliability
+- Better startup sequence
+- Many UI fixes and improvements
+
+---
+
+## 📦 Download & Install
+
+### Installation Files
 
 - **Windows:** `fluidnc-maslow4-1.16-win64.zip` (13.3 MB)
 - **Mac/Linux:** `fluidnc-maslow4-1.16-posix.zip` (11.5 MB)
+- **Firmware only:** `firmware.bin` (1.9 MB)
+- **Web interface:** `index.html.gz` (133 KB)
+
+### Quick Install
+
+1. Download installer for your platform
+2. Connect Maslow controller via USB
+3. Run flash script
+4. Optional: Upload new `index.html.gz` via Settings → System
+
+**Your settings and calibration are preserved** - No recalibration needed!
 
 ---
 
-## 🚀 Upgrade Instructions
+## ⚠️ Important Notes
 
-### Standard Users
-
-1. Download the firmware package for your platform
-2. Flash using the included installer
-3. Upload `index.html.gz` via web interface (optional but recommended)
-4. Your existing configuration will be preserved
-
-### Developers
-
-1. Pull latest from `Maslow-Main` branch
-2. Install Node.js v20+ if needed
-3. Build web UI: `cd ESP3D-WEBUI && npm install && gulp package --lang en`
-4. Build firmware: `pio run -e wifi_s3`
-
-**No recalibration required** - your v1.15 calibration will work with v1.16.
+- ✅ Compatible with v1.15 configurations
+- ✅ Existing calibration works without changes  
+- ✅ No breaking changes
+- ❌ No recalibration required
 
 ---
 
-## 📋 Configuration Notes
+## 🙏 Contributors
 
-- **No breaking changes** - v1.15 configurations work with v1.16
-- Configuration file format unchanged
-- All calibration data preserved
+**Core Team:**
+- @BarbourSmith - Project lead and firmware
 
----
+**Community Contributors:**
+- @md8n - Web interface improvements
+- @wouldchuckit - Documentation
+- @asmith26 - Bug fixes
+- Many others who tested and provided feedback
 
-## 🐛 Known Issues
-
-No specific issues reported for v1.16.
-
-**Build Considerations:**
-- Use single language build (`gulp package --lang en`) for most ESP32 boards
-- Multi-language build may exceed storage on 4MB flash chips
+**Third Party:**
+- ESP3D-WEBUI by luc-github
 
 ---
 
-## 🤝 Credits
+## 📚 More Information
 
-**ESP3D-WEBUI Integration:**
-- Original ESP3D-WEBUI by Luc (luc-github) - https://github.com/luc-github/ESP3D-WEBUI
-- Licensed under GPL v3.0
-
-**Maslow CNC Team:**
-- @BarbourSmith - Project lead and v1.16 integration
-- Community contributors - Testing and feedback
-
----
-
-## 📚 Documentation
-
+- **Full Release Notes:** `RELEASE_NOTES_v1.16_USER.md` - Complete feature list
+- **Technical Details:** `RELEASE_NOTES_v1.16.md` - Developer documentation
 - **Repository:** https://github.com/MaslowCNC/Maslow_4
 - **Documentation:** https://maslowcnc.github.io/Maslow_4/
-- **Forums:** https://forums.maslowcnc.com/
-- **Detailed Release Notes:** See `RELEASE_NOTES_v1.16.md`
+- **Community:** https://forums.maslowcnc.com/
 
 ---
 
-## 💬 Support
-
-- **Issues:** https://github.com/MaslowCNC/Maslow_4/issues
-- **Forums:** https://forums.maslowcnc.com/
-
----
-
-**Thank you for using Maslow CNC!**
+**Happy cutting! 🪚✨**
