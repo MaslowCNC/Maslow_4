@@ -769,11 +769,11 @@ async function processIncrementalMeasurement(measurement) {
     initialGuess = JSON.parse(JSON.stringify(currentBestGuess));
     initialGuess.fitness = 100000000;
     
-    // Clear incremental measurements after anchor update
-    // This starts a new "batch" with the updated anchors
-    incrementalMeasurements = [];
-    currentBestGuess = JSON.parse(JSON.stringify(initialGuess));
-    currentBestFitness = 0;
+    // Keep all measurements but note that we've updated anchors
+    // The measurements remain valid as they reflect actual belt lengths
+    // The improved anchors will just make future calculations more accurate
+    messagesBox.textContent += ' Anchors updated, continuing with measurements...';
+    messagesBox.scrollTop = messagesBox.scrollHeight;
   }
   
   // Always acknowledge receipt so firmware can continue to next point
