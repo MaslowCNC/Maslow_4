@@ -213,21 +213,20 @@ bool Calibration::requestStateChange(int newState) {
 
                     //Set the internal machine position using actual belt positions to avoid synchronization issues
                     // Get current belt positions from hardware and set motor steps directly
-                    float tlBeltLength = Maslow.axis[_TL].getPosition();  // Actual belt position from hardware
-                    float trBeltLength = Maslow.axis[_TR].getPosition();
-                    float blBeltLength = Maslow.axis[_BL].getPosition();
-                    float brBeltLength = Maslow.axis[_BR].getPosition();
+                    float beltLength[ARM_COUNT];
+                    for (int arm = _TL; arm < ARM_COUNT; arm++) {
+                        beltLength[arm] = Maslow.axis[arm].getPosition();
+                    }
 
                     log_info("Setting motor positions from hardware readings:");
-                    log_info("TL: " << tlBeltLength << " TR: " << trBeltLength << " BL: " << blBeltLength << " BR: " << brBeltLength);
+                    log_info("TL: " << beltLength[_TL] << " TR: " << beltLength[_TR] << " BL: " << beltLength[_BL] << " BR: " << beltLength[_BR]);
 
                     // Set motor positions directly from hardware readings
                     // Axis mapping: A=TL(0), B=TR(1), C=BL(2), D=BR(3), Z=router(4)
-                    set_motor_steps(0, mpos_to_steps(tlBeltLength, 0));  // A axis = TL belt
-                    set_motor_steps(1, mpos_to_steps(trBeltLength, 1));  // B axis = TR belt
-                    set_motor_steps(2, mpos_to_steps(blBeltLength, 2));  // C axis = BL belt
-                    set_motor_steps(3, mpos_to_steps(brBeltLength, 3));  // D axis = BR belt
-                    set_motor_steps(4, mpos_to_steps(0.0, 4));           // Z axis = 0 (surface level) during calibration
+                    for (int arm = _TL; arm < ARM_COUNT; arm++) {
+                        set_motor_steps(arm, mpos_to_steps(beltLength[arm], arm));
+                    }
+                    set_motor_steps(4, mpos_to_steps(0.0, 4));  // Z axis = 0 (surface level) during calibration
 
                     gc_sync_position();  //This updates the Gcode engine with the new position from the stepping engine that we set with set_motor_steps
                     plan_sync_position();
@@ -508,19 +507,26 @@ bool Calibration::takeSlackFunc() {
             float extension = kinematics->getBeltEndExtension() + kinematics->getArmLength();
 
             // Compute total vertical distances from each anchor to router (including current Z position)
-            float tlTotalZ = (currentZ + kinematics->getAnchorCoord(_TL, Coord_Z) + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
-            float trTotalZ = (currentZ + kinematics->getAnchorCoord(_TR, Coord_Z) + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
-            float blTotalZ = (currentZ + kinematics->getAnchorCoord(_BL, Coord_Z) + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
-            float brTotalZ = (currentZ + kinematics->getAnchorCoord(_BR, Coord_Z) + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
+            float totalZ[ARM_COUNT];
+            for (int arm = _TL; arm < ARM_COUNT; arm++) {
+                totalZ[arm] = (currentZ + kinematics->getAnchorCoord(arm, Coord_Z) + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
+            }
 
             //This should use it's own array, this is not calibration data
-            float diffTL = calibration_data[0][0] - measurementToXYPlane(kinematics->compute(_TL, x, y, currentZ), tlTotalZ);
-            float diffTR = calibration_data[0][1] - measurementToXYPlane(kinematics->compute(_TR, x, y, currentZ), trTotalZ);
-            float diffBL = calibration_data[0][2] - measurementToXYPlane(kinematics->compute(_BL, x, y, currentZ), blTotalZ);
-            float diffBR = calibration_data[0][3] - measurementToXYPlane(kinematics->compute(_BR, x, y, currentZ), brTotalZ);
-            log_info("Center point deviation: TL: " << diffTL << " TR: " << diffTR << " BL: " << diffBL << " BR: " << diffBR);
+            float diff[ARM_COUNT];
+            for (int arm = _TL; arm < ARM_COUNT; arm++) {
+                diff[arm] = calibration_data[0][arm] - measurementToXYPlane(kinematics->compute(arm, x, y, currentZ), totalZ[arm]);
+            }
+            log_info("Center point deviation: TL: " << diff[_TL] << " TR: " << diff[_TR] << " BL: " << diff[_BL] << " BR: " << diff[_BR]);
             double threshold = 12;
-            if (abs(diffTL) > threshold || abs(diffTR) > threshold || abs(diffBL) > threshold || abs(diffBR) > threshold) {
+            bool overThreshold = false;
+            for (int arm = _TL; arm < ARM_COUNT; arm++) {
+                if (abs(diff[arm]) > threshold) {
+                    overThreshold = true;
+                    break;
+                }
+            }
+            if (overThreshold) {
                 log_error("Center point deviation over "
                           << threshold << "mm, your coordinate system is not accurate, maybe try running calibration again?");
                 //Should we enter an alarm state here to prevent things from going wrong?
@@ -543,24 +549,23 @@ bool Calibration::takeSlackFunc() {
                 float  currentZ = mpos[2];
 
                 // Compute total vertical distances from each anchor to router (including current Z position)
-                float tlTotalZ = (currentZ + kinematics->getAnchorCoord(_TL, Coord_Z) + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
-                float trTotalZ = (currentZ + kinematics->getAnchorCoord(_TR, Coord_Z) + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
-                float blTotalZ = (currentZ + kinematics->getAnchorCoord(_BL, Coord_Z) + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
-                float brTotalZ = (currentZ + kinematics->getAnchorCoord(_BR, Coord_Z) + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
+                float totalZ[ARM_COUNT];
+                for (int arm = _TL; arm < ARM_COUNT; arm++) {
+                    totalZ[arm] = (currentZ + kinematics->getAnchorCoord(arm, Coord_Z) + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
+                }
 
                 // Convert measured XY plane distances to actual belt lengths for motor positions
                 // calibration_data[0] contains measured XY plane distances: [TL, TR, BL, BR]
-                float tlBeltLength = measurementFromXYPlane(calibration_data[0][0], tlTotalZ);
-                float trBeltLength = measurementFromXYPlane(calibration_data[0][1], trTotalZ);
-                float blBeltLength = measurementFromXYPlane(calibration_data[0][2], blTotalZ);
-                float brBeltLength = measurementFromXYPlane(calibration_data[0][3], brTotalZ);
+                float beltLength[ARM_COUNT];
+                for (int arm = _TL; arm < ARM_COUNT; arm++) {
+                    beltLength[arm] = measurementFromXYPlane(calibration_data[0][arm], totalZ[arm]);
+                }
 
                 // Set motor positions directly from measured belt lengths
                 // Axis mapping: A=TL(0), B=TR(1), C=BL(2), D=BR(3), Z=router(4)
-                set_motor_steps(0, mpos_to_steps(tlBeltLength, 0));  // A axis = TL belt
-                set_motor_steps(1, mpos_to_steps(trBeltLength, 1));  // B axis = TR belt
-                set_motor_steps(2, mpos_to_steps(blBeltLength, 2));  // C axis = BL belt
-                set_motor_steps(3, mpos_to_steps(brBeltLength, 3));  // D axis = BR belt
+                for (int arm = _TL; arm < ARM_COUNT; arm++) {
+                    set_motor_steps(arm, mpos_to_steps(beltLength[arm], arm));
+                }
                 // Z axis is left unchanged during Apply Tension process
 
                 // Verify that the position was set correctly by reading back from motors
@@ -701,16 +706,15 @@ bool Calibration::take_measurement(float result[4], int dir, int run, int curren
             float  currentZ = mpos[2];
 
             // Compute total vertical distances from each anchor to router (including current Z position)
-            float tlTotalZ = (currentZ + kinematics->getAnchorCoord(_TL, Coord_Z) + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
-            float trTotalZ = (currentZ + kinematics->getAnchorCoord(_TR, Coord_Z) + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
-            float blTotalZ = (currentZ + kinematics->getAnchorCoord(_BL, Coord_Z) + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
-            float brTotalZ = (currentZ + kinematics->getAnchorCoord(_BR, Coord_Z) + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
+            float totalZ[ARM_COUNT];
+            for (int arm = _TL; arm < ARM_COUNT; arm++) {
+                totalZ[arm] = (currentZ + kinematics->getAnchorCoord(arm, Coord_Z) + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
+            }
 
             //take measurement and record it to the calibration data array.
-            result[0] = measurementToXYPlane(Maslow.axis[_TL].getPosition(), tlTotalZ);
-            result[1] = measurementToXYPlane(Maslow.axis[_TR].getPosition(), trTotalZ);
-            result[2] = measurementToXYPlane(Maslow.axis[_BL].getPosition(), blTotalZ);
-            result[3] = measurementToXYPlane(Maslow.axis[_BR].getPosition(), brTotalZ);
+            for (int arm = _TL; arm < ARM_COUNT; arm++) {
+                result[arm] = measurementToXYPlane(Maslow.axis[arm].getPosition(), totalZ[arm]);
+            }
             BR_tight  = false;
             BL_tight  = false;
             return true;
@@ -721,36 +725,33 @@ bool Calibration::take_measurement(float result[4], int dir, int run, int curren
     else if (orientation == HORIZONTAL) {
         // For the first waypoint (waypoint == 0), use a two-phase approach to ensure proper tension
         if (waypoint == 0) {
-            static bool tl_tight                 = false;
-            static bool tr_tight                 = false;
-            static bool bl_tight                 = false;
-            static bool br_tight                 = false;
+            static bool tight[ARM_COUNT]         = { false, false, false, false };
             static bool initial_tension_complete = false;
 
             // Phase 1: Pull all four belts tight simultaneously to eliminate slack
             if (!initial_tension_complete) {
-                if (Maslow.axis[_TL].pull_tight(current)) {
-                    tl_tight = true;
-                }
-                if (Maslow.axis[_TR].pull_tight(current)) {
-                    tr_tight = true;
-                }
-                if (Maslow.axis[_BL].pull_tight(current)) {
-                    bl_tight = true;
-                }
-                if (Maslow.axis[_BR].pull_tight(current)) {
-                    br_tight = true;
+                for (int arm = _TL; arm < ARM_COUNT; arm++) {
+                    if (Maslow.axis[arm].pull_tight(current)) {
+                        tight[arm] = true;
+                    }
                 }
 
                 // Once all belts are tight, move to phase 2
-                if (tl_tight && tr_tight && bl_tight && br_tight) {
+                bool allTight = true;
+                for (int arm = _TL; arm < ARM_COUNT; arm++) {
+                    if (!tight[arm]) {
+                        allTight = false;
+                        break;
+                    }
+                }
+                if (allTight) {
                     initial_tension_complete = true;
                     // Set TL and TR targets to their current positions to prevent unwanted movement
                     Maslow.axis[_TL].setTarget(Maslow.axis[_TL].getPosition());
                     Maslow.axis[_TR].setTarget(Maslow.axis[_TR].getPosition());
                     // Reset belt tight flags for the actual measurement phase
-                    bl_tight = false;
-                    br_tight = false;
+                    tight[_BL] = false;
+                    tight[_BR] = false;
                 }
                 return false;
             }
@@ -763,36 +764,36 @@ bool Calibration::take_measurement(float result[4], int dir, int run, int curren
             // Pull bottom belts based on x-coordinate (same logic as vertical mode)
             if (Maslow.x < 0) {
                 // On the left side, pull BL first, then BR
-                if (!bl_tight) {
+                if (!tight[_BL]) {
                     if (Maslow.axis[_BL].pull_tight(current)) {
-                        bl_tight = true;
+                        tight[_BL] = true;
                     }
                     return false;
                 }
-                if (!br_tight) {
+                if (!tight[_BR]) {
                     if (Maslow.axis[_BR].pull_tight(current)) {
-                        br_tight = true;
+                        tight[_BR] = true;
                     }
                     return false;
                 }
             } else {
                 // On the right side, pull BR first, then BL
-                if (!br_tight) {
+                if (!tight[_BR]) {
                     if (Maslow.axis[_BR].pull_tight(current)) {
-                        br_tight = true;
+                        tight[_BR] = true;
                     }
                     return false;
                 }
-                if (!bl_tight) {
+                if (!tight[_BL]) {
                     if (Maslow.axis[_BL].pull_tight(current)) {
-                        bl_tight = true;
+                        tight[_BL] = true;
                     }
                     return false;
                 }
             }
 
             // Once both bottom belts are tight, take the measurement
-            if (bl_tight && br_tight) {
+            if (tight[_BL] && tight[_BR]) {
                 auto kinematics = getKinematics();
                 if (!kinematics)
                     return false;
@@ -802,21 +803,19 @@ bool Calibration::take_measurement(float result[4], int dir, int run, int curren
                 float  currentZ = mpos[2];
 
                 // Compute total vertical distances from each anchor to router (including current Z position)
-                float tlTotalZ = (currentZ + kinematics->getAnchorCoord(_TL, Coord_Z) + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
-                float trTotalZ = (currentZ + kinematics->getAnchorCoord(_TR, Coord_Z) + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
-                float blTotalZ = (currentZ + kinematics->getAnchorCoord(_BL, Coord_Z) + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
-                float brTotalZ = (currentZ + kinematics->getAnchorCoord(_BR, Coord_Z) + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
+                float totalZ[ARM_COUNT];
+                for (int arm = _TL; arm < ARM_COUNT; arm++) {
+                    totalZ[arm] = (currentZ + kinematics->getAnchorCoord(arm, Coord_Z) + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
+                }
 
                 //take measurement and record it to the calibration data array.
-                result[0] = measurementToXYPlane(Maslow.axis[_TL].getPosition(), tlTotalZ);
-                result[1] = measurementToXYPlane(Maslow.axis[_TR].getPosition(), trTotalZ);
-                result[2] = measurementToXYPlane(Maslow.axis[_BL].getPosition(), blTotalZ);
-                result[3] = measurementToXYPlane(Maslow.axis[_BR].getPosition(), brTotalZ);
+                for (int arm = _TL; arm < ARM_COUNT; arm++) {
+                    result[arm] = measurementToXYPlane(Maslow.axis[arm].getPosition(), totalZ[arm]);
+                }
                 // Reset all flags for next measurement
-                tl_tight                 = false;
-                tr_tight                 = false;
-                bl_tight                 = false;
-                br_tight                 = false;
+                for (int arm = _TL; arm < ARM_COUNT; arm++) {
+                    tight[arm] = false;
+                }
                 initial_tension_complete = false;
                 return true;
             }
@@ -896,16 +895,15 @@ bool Calibration::take_measurement(float result[4], int dir, int run, int curren
                 float  currentZ = mpos[2];
 
                 // Compute total vertical distances from each anchor to router (including current Z position)
-                float tlTotalZ = (currentZ + kinematics->getAnchorCoord(_TL, Coord_Z) + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
-                float trTotalZ = (currentZ + kinematics->getAnchorCoord(_TR, Coord_Z) + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
-                float blTotalZ = (currentZ + kinematics->getAnchorCoord(_BL, Coord_Z) + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
-                float brTotalZ = (currentZ + kinematics->getAnchorCoord(_BR, Coord_Z) + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
+                float totalZ[ARM_COUNT];
+                for (int arm = _TL; arm < ARM_COUNT; arm++) {
+                    totalZ[arm] = (currentZ + kinematics->getAnchorCoord(arm, Coord_Z) + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
+                }
 
                 //take measurement and record it to the calibration data array.
-                result[0]   = measurementToXYPlane(Maslow.axis[_TL].getPosition(), tlTotalZ);
-                result[1]   = measurementToXYPlane(Maslow.axis[_TR].getPosition(), trTotalZ);
-                result[2]   = measurementToXYPlane(Maslow.axis[_BL].getPosition(), blTotalZ);
-                result[3]   = measurementToXYPlane(Maslow.axis[_BR].getPosition(), brTotalZ);
+                for (int arm = _TL; arm < ARM_COUNT; arm++) {
+                    result[arm] = measurementToXYPlane(Maslow.axis[arm].getPosition(), totalZ[arm]);
+                }
                 pull1_tight = false;
                 pull2_tight = false;
                 return true;
@@ -1047,13 +1045,20 @@ bool Calibration::take_measurement_avg_with_check(int waypoint, int dir) {
                     return false;
 
                 double threshold = 100;
-                float  diffTL    = measurements[0][0] - measurementToXYPlane(kinematics->compute(_TL, x, y, 0), kinematics->getAnchorCoord(_TL, Coord_Z));
-                float  diffTR    = measurements[0][1] - measurementToXYPlane(kinematics->compute(_TR, x, y, 0), kinematics->getAnchorCoord(_TR, Coord_Z));
-                float  diffBL    = measurements[0][2] - measurementToXYPlane(kinematics->compute(_BL, x, y, 0), kinematics->getAnchorCoord(_BL, Coord_Z));
-                float  diffBR    = measurements[0][3] - measurementToXYPlane(kinematics->compute(_BR, x, y, 0), kinematics->getAnchorCoord(_BR, Coord_Z));
-                log_info("Center point off by: TL: " << diffTL << " TR: " << diffTR << " BL: " << diffBL << " BR: " << diffBR);
+                float diff[ARM_COUNT];
+                for (int arm = _TL; arm < ARM_COUNT; arm++) {
+                    diff[arm] = measurements[0][arm] - measurementToXYPlane(kinematics->compute(arm, x, y, 0), kinematics->getAnchorCoord(arm, Coord_Z));
+                }
+                log_info("Center point off by: TL: " << diff[_TL] << " TR: " << diff[_TR] << " BL: " << diff[_BL] << " BR: " << diff[_BR]);
 
-                if (abs(diffTL) > threshold || abs(diffTR) > threshold || abs(diffBL) > threshold || abs(diffBR) > threshold) {
+                bool overThreshold = false;
+                for (int arm = _TL; arm < ARM_COUNT; arm++) {
+                    if (abs(diff[arm]) > threshold) {
+                        overThreshold = true;
+                        break;
+                    }
+                }
+                if (overThreshold) {
                     log_error("Center point off by over " << threshold << "mm");
 
                     if (!adjustFrameSizeToMatchFirstMeasurement()) {
