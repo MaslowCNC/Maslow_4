@@ -11,6 +11,12 @@ var acceptableCalibrationThreshold = 0.5
 // Maximum number of low-fitness retry attempts before giving up
 const MAX_LOW_FITNESS_RETRIES = 10;
 
+// State for incremental calibration (points after the first 6)
+var incrementalMeasurements = [];
+var incrementalCalibrationActive = false;
+var currentBestGuess = null;
+var currentBestFitness = 0;
+
 //Establish initial guesses for the corners
 var initialGuess = {
   tl: { x: 0, y: 2000 },
@@ -690,7 +696,97 @@ async function findBestRectangularStart(measurements) {
   return bestGuess;
 }
 
+/**
+ * Process a single incremental measurement and update calibration state.
+ * This function is called when a measurement arrives after the initial 6-point batch.
+ * @param {Array} measurement - Single measurement in array format [{bl, br, tr, tl}]
+ */
+async function processIncrementalMeasurement(measurement) {
+  const messagesBox = document.getElementById('messages');
+  
+  // Add the new measurement to our accumulated list
+  incrementalMeasurements.push(measurement[0]);
+  
+  messagesBox.textContent += `\nReceived measurement ${incrementalMeasurements.length + 6}`;
+  messagesBox.scrollTop = messagesBox.scrollHeight;
+  
+  // Combine all incremental measurements for processing
+  const allMeasurements = incrementalMeasurements.slice();
+  
+  // Make a deep copy of the current best guess to work with
+  let workingGuess = JSON.parse(JSON.stringify(currentBestGuess));
+  
+  // Run optimization with all measurements collected so far
+  // Use a limited iteration count for incremental updates (faster turnaround)
+  let stagnantCounter = 0;
+  let totalCounter = 0;
+  const maxIterations = 1000; // Reduced from 200000 for faster incremental updates
+  const maxStagnant = 100;    // Reduced from 1000 for faster convergence
+  
+  while (stagnantCounter < maxStagnant && totalCounter < maxIterations) {
+    workingGuess = computeLinesFitness(allMeasurements, workingGuess);
+    
+    if (1 / workingGuess.fitness > currentBestFitness) {
+      currentBestGuess = JSON.parse(JSON.stringify(workingGuess));
+      currentBestFitness = 1 / currentBestGuess.fitness;
+      stagnantCounter = 0;
+    } else {
+      stagnantCounter++;
+    }
+    
+    totalCounter++;
+    
+    // Allow UI to breathe every 50 iterations
+    if (totalCounter % 50 === 0) {
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
+  }
+  
+  messagesBox.textContent += ` - Fitness: ${currentBestFitness.toFixed(7)}`;
+  messagesBox.scrollTop = messagesBox.scrollHeight;
+  
+  // Check if fitness exceeds threshold - if so, send new anchor locations
+  if (currentBestFitness > acceptableCalibrationThreshold) {
+    messagesBox.textContent += ` ✓ Threshold met! Updating anchors...`;
+    messagesBox.scrollTop = messagesBox.scrollHeight;
+    
+    // Send updated anchor locations to the firmware
+    const tlxStr = currentBestGuess.tl.x.toFixed(1), tlyStr = currentBestGuess.tl.y.toFixed(1);
+    const trxStr = currentBestGuess.tr.x.toFixed(1), tryStr = currentBestGuess.tr.y.toFixed(1);
+    const blxStr = currentBestGuess.bl.x.toFixed(1), blyStr = currentBestGuess.bl.y.toFixed(1);
+    const brxStr = currentBestGuess.br.x.toFixed(1), bryStr = currentBestGuess.br.y.toFixed(1);
+    
+    sendCommand(`$/kinematics/MaslowKinematics/tlX=${tlxStr}`);
+    sendCommand(`$/kinematics/MaslowKinematics/tlY=${tlyStr}`);
+    sendCommand(`$/kinematics/MaslowKinematics/trX=${trxStr}`);
+    sendCommand(`$/kinematics/MaslowKinematics/trY=${tryStr}`);
+    sendCommand(`$/kinematics/MaslowKinematics/blX=${blxStr}`);
+    sendCommand(`$/kinematics/MaslowKinematics/blY=${blyStr}`);
+    sendCommand(`$/kinematics/MaslowKinematics/brX=${brxStr}`);
+    sendCommand(`$/kinematics/MaslowKinematics/brY=${bryStr}`);
+    
+    // Update the initial guess for continued processing
+    initialGuess = JSON.parse(JSON.stringify(currentBestGuess));
+    initialGuess.fitness = 100000000;
+    
+    // Clear incremental measurements after anchor update
+    // This starts a new "batch" with the updated anchors
+    incrementalMeasurements = [];
+    currentBestGuess = JSON.parse(JSON.stringify(initialGuess));
+    currentBestFitness = 0;
+  }
+  
+  // Always acknowledge receipt so firmware can continue to next point
+  sendCommand("$ACKCAL");
+}
+
 async function findMaxFitness(measurements) {
+  // Reset incremental calibration state when starting fresh
+  incrementalCalibrationActive = false;
+  incrementalMeasurements = [];
+  currentBestGuess = null;
+  currentBestFitness = 0;
+
   sendCalibrationEvent({
     initialGuess
   }, true);
@@ -871,6 +967,15 @@ async function findMaxFitness(measurements) {
 
         initialGuess = bestGuess;
         initialGuess.fitness = 100000000;
+
+        // Set up incremental calibration mode for subsequent measurements
+        incrementalCalibrationActive = true;
+        incrementalMeasurements = [];
+        currentBestGuess = JSON.parse(JSON.stringify(bestGuess));
+        currentBestFitness = 1 / bestGuess.fitness;
+
+        messagesBox.textContent += '\n\nInitial calibration complete. Switching to incremental mode for remaining points...';
+        messagesBox.scrollTop = messagesBox.scrollHeight;
 
         // This restarts calibration process for the next stage
         setTimeout(() => { onCalibrationButtonsClick('$CAL', 'Calibrate'); }, 2000);

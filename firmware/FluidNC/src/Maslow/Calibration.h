@@ -56,6 +56,7 @@ public:
     bool  computeXYfromLengths(double TL, double TR, float& x, float& y);
     void  calibration_loop();
     void  print_calibration_data();
+    void  print_single_measurement(int waypointIndex);
     void  calibrationDataRecieved();
     void  checkCalibrationData();
 

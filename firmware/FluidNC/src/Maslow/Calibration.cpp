@@ -447,6 +447,11 @@ void Calibration::calibration_loop() {
                 sys.set_state(State::Idle);
                 recomputeCountIndex++;
             } else {
+                // For points after the initial 6, send individual measurements immediately
+                if (waypoint > 6) {
+                    print_single_measurement(waypoint - 1);  // waypoint was already incremented
+                    calibrationDataWaiting = millis();
+                }
                 hold(250);
             }
         }
@@ -1553,6 +1558,21 @@ void Calibration::print_calibration_data() {
                 ",   tr:" + String(calibration_data[i][1]) + ",   tl:" + String(calibration_data[i][0]) + "},";
     }
     data += "]";
+    HeartBeatEnabled = false;
+    log_data(data.c_str());
+    HeartBeatEnabled = true;
+}
+
+// Send a single measurement to the browser for incremental processing
+void Calibration::print_single_measurement(int waypointIndex) {
+    if (waypointIndex < 0 || waypointIndex >= CALIBRATION_GRID_SIZE_MAX || calibration_data == nullptr) {
+        log_error("Invalid waypoint index for print_single_measurement: " << waypointIndex);
+        return;
+    }
+
+    // Send as a single-element array for consistency with browser expectations
+    String data = "CLBM:[{bl:" + String(calibration_data[waypointIndex][2]) + ",   br:" + String(calibration_data[waypointIndex][3]) +
+                  ",   tr:" + String(calibration_data[waypointIndex][1]) + ",   tl:" + String(calibration_data[waypointIndex][0]) + "}]";
     HeartBeatEnabled = false;
     log_data(data.c_str());
     HeartBeatEnabled = true;

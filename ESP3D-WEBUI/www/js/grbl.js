@@ -718,13 +718,20 @@ var collectHandler = undefined
 var collectedSettings = null
 
 async function handleCalibrationData(measurements) {
-  document.querySelector('#messages').textContent += '\nComputing... This may take several minutes'
-  sendCommand("$ACKCAL");
-  await sleep(500)
-  try {
-    calibrationResults = await findMaxFitness(measurements)
-  } catch (error) {
-    console.error('An error occurred:', error)
+  // Check if we're in incremental calibration mode (after the first 6 points)
+  if (incrementalCalibrationActive && measurements.length === 1) {
+    // Process single incremental measurement
+    await processIncrementalMeasurement(measurements);
+  } else {
+    // Process initial batch of 6 measurements (or full batch in legacy mode)
+    document.querySelector('#messages').textContent += '\nComputing... This may take several minutes'
+    sendCommand("$ACKCAL");
+    await sleep(500)
+    try {
+      calibrationResults = await findMaxFitness(measurements)
+    } catch (error) {
+      console.error('An error occurred:', error)
+    }
   }
 }
 
