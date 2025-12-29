@@ -312,7 +312,7 @@ bool Maslow_::updateEncoderPositions() {
 
     // if more than 1% of readings fail, warn user, if more than 10% fail, stop the machine and raise alarm
     if (millis() - encoderFailTimer > 1000) {
-        for (int i = 0; i < 4; i++) {
+        for (int i = 0; i < ARM_COUNT; i++) {
             //turn i into proper label
             String label = axis_id_to_label(i);
             if (encoderFailCounter[i] > 0.1 * ENCODER_READ_FREQUENCY_HZ) {
@@ -890,7 +890,7 @@ void Maslow_::safety_control() {
     static int   positionErrorCounter[4]  = { 0 };
     static float previousPositionError[4] = { 0, 0, 0, 0 };
 
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < ARM_COUNT; i++) {
         //If the current exceeds some absolute value, we need to call panic() and stop the machine
         if (axis[i].getMotorCurrent() > 4000 && !tick[i]) {
             panicCounter[i]++;
@@ -951,7 +951,7 @@ void Maslow_::safety_control() {
     }
 
     if (millis() - spamTimer > 5000) {
-        for (int i = 0; i < 4; i++) {
+        for (int i = 0; i < ARM_COUNT; i++) {
             tick[i] = false;
         }
         spamTimer = millis();
