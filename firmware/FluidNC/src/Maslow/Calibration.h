@@ -112,19 +112,13 @@ public:
 private:
     //Variables used for retracting state
     bool axis_homed[4] = { false, false, false, false };
-    bool retractingTL  = false;
-    bool retractingTR  = false;
-    bool retractingBL  = false;
-    bool retractingBR  = false;
+    bool retracting[4] = { false, false, false, false };
 
     // Store the previous state before entering RELEASE_TENSION
     int previousState = UNKNOWN;
 
     //Variables used by extending
-    bool extendedTL = false;
-    bool extendedTR = false;
-    bool extendedBL = false;
-    bool extendedBR = false;
+    bool extended[4] = { false, false, false, false };
 
     //Variables used by take slack
     bool takeSlack = false;

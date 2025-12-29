@@ -7,11 +7,11 @@
     MaslowKinematics.h
 
     This implements Maslow CNC Kinematics for a cable-driven router system.
-    
+
     The Maslow CNC has four anchor points (TL, TR, BL, BR) connected by cables/belts
     to a router sled. The kinematics transforms X,Y,Z coordinates into the four
     belt lengths needed to position the sled.
-    
+
     This replaces the custom coordinate transformation logic previously handled
     in Maslow.cpp, allowing FluidNC to handle acceleration planning and feed rate
     limiting on a per-belt basis.
@@ -51,24 +51,28 @@ namespace Kinematics {
         ~MaslowKinematics();
 
         // Public access to compute functions for calibration system
+        float compute(int arm, float x, float y, float z);
         float computeTL(float x, float y, float z);
         float computeTR(float x, float y, float z);
         float computeBL(float x, float y, float z);
         float computeBR(float x, float y, float z);
 
-        // Getters for parameters used by calibration system
-        float getTlX() const { return _tlX; }
-        float getTlY() const { return _tlY; }
-        float getTlZ() const { return _tlZ; }
-        float getTrX() const { return _trX; }
-        float getTrY() const { return _trY; }
-        float getTrZ() const { return _trZ; }
-        float getBlX() const { return _blX; }
-        float getBlY() const { return _blY; }
-        float getBlZ() const { return _blZ; }
-        float getBrX() const { return _brX; }
-        float getBrY() const { return _brY; }
-        float getBrZ() const { return _brZ; }
+        // Generic getter for anchor coordinates
+        float getAnchorCoord(int arm, int axis) const;
+
+        // Legacy getters for backward compatibility (will call getAnchorCoord internally)
+        float getTlX() const { return getAnchorCoord(0, 0); }
+        float getTlY() const { return getAnchorCoord(0, 1); }
+        float getTlZ() const { return getAnchorCoord(0, 2); }
+        float getTrX() const { return getAnchorCoord(1, 0); }
+        float getTrY() const { return getAnchorCoord(1, 1); }
+        float getTrZ() const { return getAnchorCoord(1, 2); }
+        float getBlX() const { return getAnchorCoord(2, 0); }
+        float getBlY() const { return getAnchorCoord(2, 1); }
+        float getBlZ() const { return getAnchorCoord(2, 2); }
+        float getBrX() const { return getAnchorCoord(3, 0); }
+        float getBrY() const { return getAnchorCoord(3, 1); }
+        float getBrZ() const { return getAnchorCoord(3, 2); }
         float getBeltEndExtension() const { return _beltEndExtension; }
         float getArmLength() const { return _armLength; }
         float getSpoilboardThickness() const { return _spoilboardThickness; }
@@ -91,22 +95,15 @@ namespace Kinematics {
         // Validation and correction helper method
         void validateAndCorrectAnchorCoordinates();
 
-        // Anchor point coordinates (in mm)
-        float _tlX = -27.6f;   // Top left X
-        float _tlY = 2064.9f;  // Top left Y
-        float _tlZ = 100.0f;   // Top left Z
-
-        float _trX = 2924.3f;  // Top right X
-        float _trY = 2066.5f;  // Top right Y
-        float _trZ = 56.0f;    // Top right Z
-
-        float _blX = 0.0f;   // Bottom left X
-        float _blY = 0.0f;   // Bottom left Y
-        float _blZ = 34.0f;  // Bottom left Z
-
-        float _brX = 2953.2f;  // Bottom right X
-        float _brY = 0.0f;     // Bottom right Y
-        float _brZ = 78.0f;    // Bottom right Z
+        // Anchor point coordinates (in mm) - stored as [arm][coordinate]
+        // arm: 0=TL, 1=TR, 2=BL, 3=BR
+        // coordinate: 0=X, 1=Y, 2=Z
+        float anchor_location[4][3] = {
+            { -27.6f, 2064.9f, 100.0f },   // Top left
+            { 2924.3f, 2066.5f, 56.0f },   // Top right
+            { 0.0f, 0.0f, 34.0f },         // Bottom left
+            { 2953.2f, 0.0f, 78.0f }       // Bottom right
+        };
 
         // Belt and arm parameters (in mm)
         float _beltEndExtension = 30.0f;   // Belt end extension

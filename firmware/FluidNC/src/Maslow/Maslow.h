@@ -31,6 +31,24 @@ const std::string M = "Maslow";
 // Non-volatile storage name
 //const char * nvs_t = "maslow";
 
+// Enums for array indexing to reduce code duplication
+// Use underscore prefix to avoid SDK macro conflicts
+enum MaslowArm {
+    _TL = 0,  // Top Left
+    _TR = 1,  // Top Right
+    _BL = 2,  // Bottom Left
+    _BR = 3,  // Bottom Right
+    ARM_COUNT = 4
+};
+
+// Use Coord_ prefix to avoid SDK conflicts
+enum CartesianAxis {
+    Coord_X = 0,
+    Coord_Y = 1,
+    Coord_Z = 2,
+    Coord_COUNT = 3
+};
+
 struct TelemetryFileHeader {
     unsigned int structureSize;  // 4 bytes
     char         version[10];    // 10
@@ -41,35 +59,17 @@ struct TelemetryFileHeader {
 struct TelemetryData {
     unsigned long timestamp;
     // motors
-    double tlCurrent;
-    double trCurrent;
-    double blCurrent;
-    double brCurrent;
+    double Current[ARM_COUNT];
     // power
-    double tlPower;
-    double trPower;
-    double blPower;
-    double brPower;
+    double Power[ARM_COUNT];
     // speed
-    double tlSpeed;
-    double trSpeed;
-    double blSpeed;
-    double brSpeed;
+    double Speed[ARM_COUNT];
     // position
-    double tlPos;
-    double trPos;
-    double blPos;
-    double brPos;
+    double Pos[ARM_COUNT];
 
-    int tlState;
-    int trState;
-    int blState;
-    int brState;
+    int State[ARM_COUNT];
 
-    bool extendedTL;
-    bool extendedTR;
-    bool extendedBL;
-    bool extendedBR;
+    bool extended[ARM_COUNT];
 
     bool extendingALL;
     bool complyALL;
@@ -142,10 +142,7 @@ public:
     void   safety_control();
     bool   axis_homed[4] = { false, false, false, false };
 
-    bool extendedTL = false;
-    bool extendedTR = false;
-    bool extendedBL = false;
-    bool extendedBR = false;
+    bool extended[ARM_COUNT] = { false, false, false, false };
 
     bool takeSlack = false;
 
@@ -169,10 +166,7 @@ public:
     double targetY = 0;
     double targetZ = 0;
 
-    MotorUnit axisTL;
-    MotorUnit axisTR;
-    MotorUnit axisBL;
-    MotorUnit axisBR;
+    MotorUnit axis[ARM_COUNT];
 
     bool readingFromSD = false;  //Used to turn off reading from the encoders when reading from the - i dont think we need this anymore TODO
     bool using_default_config = false;
