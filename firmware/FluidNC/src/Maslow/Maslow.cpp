@@ -346,7 +346,12 @@ void Maslow_::setTargets(float xTarget, float yTarget, float zTarget, bool tl, b
         return;
     }
 
-    bool enableArm[ARM_COUNT] = { tl, tr, bl, br };
+    bool enableArm[ARM_COUNT];
+    enableArm[_TL] = tl;
+    enableArm[_TR] = tr;
+    enableArm[_BL] = bl;
+    enableArm[_BR] = br;
+
     for (int arm = _TL; arm < ARM_COUNT; arm++) {
         if (enableArm[arm]) {
             axis[arm].setTarget(kinematics->compute(arm, xTarget, yTarget, zTarget));
