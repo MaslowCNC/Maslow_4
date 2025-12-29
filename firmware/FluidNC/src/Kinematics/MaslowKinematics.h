@@ -50,29 +50,12 @@ namespace Kinematics {
 
         ~MaslowKinematics();
 
-        // Public access to compute functions for calibration system
+        // Public access to generic compute function for calibration system
         float compute(int arm, float x, float y, float z);
-        float computeTL(float x, float y, float z);
-        float computeTR(float x, float y, float z);
-        float computeBL(float x, float y, float z);
-        float computeBR(float x, float y, float z);
 
         // Generic getter for anchor coordinates
         float getAnchorCoord(int arm, int axis) const;
 
-        // Legacy getters for backward compatibility (will call getAnchorCoord internally)
-        float getTlX() const { return getAnchorCoord(0, 0); }
-        float getTlY() const { return getAnchorCoord(0, 1); }
-        float getTlZ() const { return getAnchorCoord(0, 2); }
-        float getTrX() const { return getAnchorCoord(1, 0); }
-        float getTrY() const { return getAnchorCoord(1, 1); }
-        float getTrZ() const { return getAnchorCoord(1, 2); }
-        float getBlX() const { return getAnchorCoord(2, 0); }
-        float getBlY() const { return getAnchorCoord(2, 1); }
-        float getBlZ() const { return getAnchorCoord(2, 2); }
-        float getBrX() const { return getAnchorCoord(3, 0); }
-        float getBrY() const { return getAnchorCoord(3, 1); }
-        float getBrZ() const { return getAnchorCoord(3, 2); }
         float getBeltEndExtension() const { return _beltEndExtension; }
         float getArmLength() const { return _armLength; }
         float getSpoilboardThickness() const { return _spoilboardThickness; }
@@ -86,8 +69,6 @@ namespace Kinematics {
 
         // Setter methods for calibration system to update frame parameters
         void setFrameSize(float frameSize);
-        void updateAnchorCoordinates(
-            float tlX, float tlY, float tlZ, float trX, float trY, float trZ, float blX, float blY, float blZ, float brX, float brY, float brZ);
         void setSpoilboardThickness(float thickness);
         void setWorkThickness(float thickness);
 

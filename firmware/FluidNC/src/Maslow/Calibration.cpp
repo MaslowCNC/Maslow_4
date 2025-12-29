@@ -196,8 +196,8 @@ bool Calibration::requestStateChange(int newState) {
                 float  currentZ = mpos[2];
 
                 // Compute total vertical distances for TL and TR
-                float tlTotalZ = (currentZ + kinematics->getTlZ() + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
-                float trTotalZ = (currentZ + kinematics->getTrZ() + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
+                float tlTotalZ = (currentZ + kinematics->getAnchorCoord(_TL, Coord_Z) + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
+                float trTotalZ = (currentZ + kinematics->getAnchorCoord(_TR, Coord_Z) + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
 
                 if (kinematics && computeXYfromLengths(measurementToXYPlane(Maslow.axis[_TL].getPosition(), tlTotalZ),
                                                        measurementToXYPlane(Maslow.axis[_TR].getPosition(), trTotalZ),
@@ -508,16 +508,16 @@ bool Calibration::takeSlackFunc() {
             float extension = kinematics->getBeltEndExtension() + kinematics->getArmLength();
 
             // Compute total vertical distances from each anchor to router (including current Z position)
-            float tlTotalZ = (currentZ + kinematics->getTlZ() + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
-            float trTotalZ = (currentZ + kinematics->getTrZ() + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
-            float blTotalZ = (currentZ + kinematics->getBlZ() + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
-            float brTotalZ = (currentZ + kinematics->getBrZ() + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
+            float tlTotalZ = (currentZ + kinematics->getAnchorCoord(_TL, Coord_Z) + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
+            float trTotalZ = (currentZ + kinematics->getAnchorCoord(_TR, Coord_Z) + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
+            float blTotalZ = (currentZ + kinematics->getAnchorCoord(_BL, Coord_Z) + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
+            float brTotalZ = (currentZ + kinematics->getAnchorCoord(_BR, Coord_Z) + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
 
             //This should use it's own array, this is not calibration data
-            float diffTL = calibration_data[0][0] - measurementToXYPlane(kinematics->computeTL(x, y, currentZ), tlTotalZ);
-            float diffTR = calibration_data[0][1] - measurementToXYPlane(kinematics->computeTR(x, y, currentZ), trTotalZ);
-            float diffBL = calibration_data[0][2] - measurementToXYPlane(kinematics->computeBL(x, y, currentZ), blTotalZ);
-            float diffBR = calibration_data[0][3] - measurementToXYPlane(kinematics->computeBR(x, y, currentZ), brTotalZ);
+            float diffTL = calibration_data[0][0] - measurementToXYPlane(kinematics->compute(_TL, x, y, currentZ), tlTotalZ);
+            float diffTR = calibration_data[0][1] - measurementToXYPlane(kinematics->compute(_TR, x, y, currentZ), trTotalZ);
+            float diffBL = calibration_data[0][2] - measurementToXYPlane(kinematics->compute(_BL, x, y, currentZ), blTotalZ);
+            float diffBR = calibration_data[0][3] - measurementToXYPlane(kinematics->compute(_BR, x, y, currentZ), brTotalZ);
             log_info("Center point deviation: TL: " << diffTL << " TR: " << diffTR << " BL: " << diffBL << " BR: " << diffBR);
             double threshold = 12;
             if (abs(diffTL) > threshold || abs(diffTR) > threshold || abs(diffBL) > threshold || abs(diffBR) > threshold) {
@@ -543,10 +543,10 @@ bool Calibration::takeSlackFunc() {
                 float  currentZ = mpos[2];
 
                 // Compute total vertical distances from each anchor to router (including current Z position)
-                float tlTotalZ = (currentZ + kinematics->getTlZ() + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
-                float trTotalZ = (currentZ + kinematics->getTrZ() + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
-                float blTotalZ = (currentZ + kinematics->getBlZ() + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
-                float brTotalZ = (currentZ + kinematics->getBrZ() + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
+                float tlTotalZ = (currentZ + kinematics->getAnchorCoord(_TL, Coord_Z) + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
+                float trTotalZ = (currentZ + kinematics->getAnchorCoord(_TR, Coord_Z) + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
+                float blTotalZ = (currentZ + kinematics->getAnchorCoord(_BL, Coord_Z) + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
+                float brTotalZ = (currentZ + kinematics->getAnchorCoord(_BR, Coord_Z) + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
 
                 // Convert measured XY plane distances to actual belt lengths for motor positions
                 // calibration_data[0] contains measured XY plane distances: [TL, TR, BL, BR]
@@ -598,10 +598,10 @@ bool Calibration::computeXYfromLengths(double TL, double TR, float& x, float& y)
     double trLength = TR;  //measurementToXYPlane(TR, trZ);
 
     //Find the intersection of the two circles centered at tlX, tlY and trX, trY with radii tlLength and trLength
-    double tlX = kinematics->getTlX();
-    double tlY = kinematics->getTlY();
-    double trX = kinematics->getTrX();
-    double trY = kinematics->getTrY();
+    double tlX = kinematics->getAnchorCoord(_TL, Coord_X);
+    double tlY = kinematics->getAnchorCoord(_TL, Coord_Y);
+    double trX = kinematics->getAnchorCoord(_TR, Coord_X);
+    double trY = kinematics->getAnchorCoord(_TR, Coord_Y);
 
     double d = sqrt((tlX - trX) * (tlX - trX) + (tlY - trY) * (tlY - trY));
     if (d > tlLength + trLength || d < abs(tlLength - trLength)) {
@@ -701,10 +701,10 @@ bool Calibration::take_measurement(float result[4], int dir, int run, int curren
             float  currentZ = mpos[2];
 
             // Compute total vertical distances from each anchor to router (including current Z position)
-            float tlTotalZ = (currentZ + kinematics->getTlZ() + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
-            float trTotalZ = (currentZ + kinematics->getTrZ() + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
-            float blTotalZ = (currentZ + kinematics->getBlZ() + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
-            float brTotalZ = (currentZ + kinematics->getBrZ() + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
+            float tlTotalZ = (currentZ + kinematics->getAnchorCoord(_TL, Coord_Z) + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
+            float trTotalZ = (currentZ + kinematics->getAnchorCoord(_TR, Coord_Z) + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
+            float blTotalZ = (currentZ + kinematics->getAnchorCoord(_BL, Coord_Z) + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
+            float brTotalZ = (currentZ + kinematics->getAnchorCoord(_BR, Coord_Z) + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
 
             //take measurement and record it to the calibration data array.
             result[0] = measurementToXYPlane(Maslow.axis[_TL].getPosition(), tlTotalZ);
@@ -802,10 +802,10 @@ bool Calibration::take_measurement(float result[4], int dir, int run, int curren
                 float  currentZ = mpos[2];
 
                 // Compute total vertical distances from each anchor to router (including current Z position)
-                float tlTotalZ = (currentZ + kinematics->getTlZ() + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
-                float trTotalZ = (currentZ + kinematics->getTrZ() + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
-                float blTotalZ = (currentZ + kinematics->getBlZ() + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
-                float brTotalZ = (currentZ + kinematics->getBrZ() + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
+                float tlTotalZ = (currentZ + kinematics->getAnchorCoord(_TL, Coord_Z) + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
+                float trTotalZ = (currentZ + kinematics->getAnchorCoord(_TR, Coord_Z) + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
+                float blTotalZ = (currentZ + kinematics->getAnchorCoord(_BL, Coord_Z) + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
+                float brTotalZ = (currentZ + kinematics->getAnchorCoord(_BR, Coord_Z) + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
 
                 //take measurement and record it to the calibration data array.
                 result[0] = measurementToXYPlane(Maslow.axis[_TL].getPosition(), tlTotalZ);
@@ -896,10 +896,10 @@ bool Calibration::take_measurement(float result[4], int dir, int run, int curren
                 float  currentZ = mpos[2];
 
                 // Compute total vertical distances from each anchor to router (including current Z position)
-                float tlTotalZ = (currentZ + kinematics->getTlZ() + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
-                float trTotalZ = (currentZ + kinematics->getTrZ() + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
-                float blTotalZ = (currentZ + kinematics->getBlZ() + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
-                float brTotalZ = (currentZ + kinematics->getBrZ() + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
+                float tlTotalZ = (currentZ + kinematics->getAnchorCoord(_TL, Coord_Z) + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
+                float trTotalZ = (currentZ + kinematics->getAnchorCoord(_TR, Coord_Z) + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
+                float blTotalZ = (currentZ + kinematics->getAnchorCoord(_BL, Coord_Z) + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
+                float brTotalZ = (currentZ + kinematics->getAnchorCoord(_BR, Coord_Z) + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
 
                 //take measurement and record it to the calibration data array.
                 result[0]   = measurementToXYPlane(Maslow.axis[_TL].getPosition(), tlTotalZ);
@@ -1047,10 +1047,10 @@ bool Calibration::take_measurement_avg_with_check(int waypoint, int dir) {
                     return false;
 
                 double threshold = 100;
-                float  diffTL    = measurements[0][0] - measurementToXYPlane(kinematics->computeTL(x, y, 0), kinematics->getTlZ());
-                float  diffTR    = measurements[0][1] - measurementToXYPlane(kinematics->computeTR(x, y, 0), kinematics->getTrZ());
-                float  diffBL    = measurements[0][2] - measurementToXYPlane(kinematics->computeBL(x, y, 0), kinematics->getBlZ());
-                float  diffBR    = measurements[0][3] - measurementToXYPlane(kinematics->computeBR(x, y, 0), kinematics->getBrZ());
+                float  diffTL    = measurements[0][0] - measurementToXYPlane(kinematics->compute(_TL, x, y, 0), kinematics->getAnchorCoord(_TL, Coord_Z));
+                float  diffTR    = measurements[0][1] - measurementToXYPlane(kinematics->compute(_TR, x, y, 0), kinematics->getAnchorCoord(_TR, Coord_Z));
+                float  diffBL    = measurements[0][2] - measurementToXYPlane(kinematics->compute(_BL, x, y, 0), kinematics->getAnchorCoord(_BL, Coord_Z));
+                float  diffBR    = measurements[0][3] - measurementToXYPlane(kinematics->compute(_BR, x, y, 0), kinematics->getAnchorCoord(_BR, Coord_Z));
                 log_info("Center point off by: TL: " << diffTL << " TR: " << diffTR << " BL: " << diffBL << " BR: " << diffBR);
 
                 if (abs(diffTL) > threshold || abs(diffTR) > threshold || abs(diffBL) > threshold || abs(diffBR) > threshold) {
@@ -1157,22 +1157,22 @@ bool Calibration::move_with_slack(double fromX, double fromY, double toX, double
         if (!kinematics)
             return false;
 
-        if (kinematics->computeTL(fromX, fromY, 0) < kinematics->computeTL(toX, toY, 0)) {
+        if (kinematics->compute(_TL, fromX, fromY, 0) < kinematics->compute(_TL, toX, toY, 0)) {
             tlExtending = true;
         } else {
             tlExtending = false;
         }
-        if (kinematics->computeTR(fromX, fromY, 0) < kinematics->computeTR(toX, toY, 0)) {
+        if (kinematics->compute(_TR, fromX, fromY, 0) < kinematics->compute(_TR, toX, toY, 0)) {
             trExtending = true;
         } else {
             trExtending = false;
         }
-        if (kinematics->computeBL(fromX, fromY, 0) < kinematics->computeBL(toX, toY, 0)) {
+        if (kinematics->compute(_BL, fromX, fromY, 0) < kinematics->compute(_BL, toX, toY, 0)) {
             blExtending = true;
         } else {
             blExtending = false;
         }
-        if (kinematics->computeBR(fromX, fromY, 0) < kinematics->computeBR(toX, toY, 0)) {
+        if (kinematics->compute(_BR, fromX, fromY, 0) < kinematics->compute(_BR, toX, toY, 0)) {
             brExtending = true;
         } else {
             brExtending = false;
@@ -1350,8 +1350,8 @@ bool Calibration::generate_calibration_grid() {
 
     //If either dimension is set to zero we automatically compute it as half the frame size
     if (calibration_grid_height_mm_Y == 0 || calibration_grid_width_mm_X == 0) {
-        float frameWidth  = getKinematics()->getTrX() - getKinematics()->getTlX();
-        float frameHeight = getKinematics()->getTlY() - getKinematics()->getBlY();
+        float frameWidth  = getKinematics()->getAnchorCoord(_TR, Coord_X) - getKinematics()->getAnchorCoord(_TL, Coord_X);
+        float frameHeight = getKinematics()->getAnchorCoord(_TL, Coord_Y) - getKinematics()->getAnchorCoord(_BL, Coord_Y);
 
         // Calculate initial grid size based on frame dimensions
         float gridWidth  = frameWidth * 0.5;
@@ -1541,11 +1541,11 @@ void Calibration::print_calibration_data() {
         return;
 
     //These are used to set the browser side initial guess for the frame size
-    log_data("$/" << M << "_tlX=" << kinematics->getTlX());
-    log_data("$/" << M << "_tlY=" << kinematics->getTlY());
-    log_data("$/" << M << "_trX=" << kinematics->getTrX());
-    log_data("$/" << M << "_trY=" << kinematics->getTrY());
-    log_data("$/" << M << "_brX=" << kinematics->getBrX());
+    log_data("$/" << M << "_tlX=" << kinematics->getAnchorCoord(_TL, Coord_X));
+    log_data("$/" << M << "_tlY=" << kinematics->getAnchorCoord(_TL, Coord_Y));
+    log_data("$/" << M << "_trX=" << kinematics->getAnchorCoord(_TR, Coord_X));
+    log_data("$/" << M << "_trY=" << kinematics->getAnchorCoord(_TR, Coord_Y));
+    log_data("$/" << M << "_brX=" << kinematics->getAnchorCoord(_BR, Coord_X));
 
     String data = "CLBM:[";
     for (int i = 0; i < waypoint; i++) {

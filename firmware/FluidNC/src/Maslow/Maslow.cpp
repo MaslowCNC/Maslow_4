@@ -216,8 +216,8 @@ void Maslow_::update() {
                 using namespace Kinematics;
                 MaslowKinematics* kinematics = getMaslowKinematics();
                 if (kinematics) {
-                    targetX = (kinematics->getTrX() + kinematics->getBlX()) / 2.0f - kinematics->getCenterX();  // Approximate center X
-                    targetY = (kinematics->getTrY() + kinematics->getBlY()) / 2.0f - kinematics->getCenterY();  // Approximate center Y
+                    targetX = (kinematics->getAnchorCoord(_TR, Coord_X) + kinematics->getAnchorCoord(_BL, Coord_X)) / 2.0f - kinematics->getCenterX();  // Approximate center X
+                    targetY = (kinematics->getAnchorCoord(_TR, Coord_Y) + kinematics->getAnchorCoord(_BL, Coord_Y)) / 2.0f - kinematics->getCenterY();  // Approximate center Y
                 }
             }
 
@@ -346,17 +346,11 @@ void Maslow_::setTargets(float xTarget, float yTarget, float zTarget, bool tl, b
         return;
     }
 
-    if (tl) {
-        axis[_TL].setTarget(kinematics->computeTL(xTarget, yTarget, zTarget));
-    }
-    if (tr) {
-        axis[_TR].setTarget(kinematics->computeTR(xTarget, yTarget, zTarget));
-    }
-    if (bl) {
-        axis[_BL].setTarget(kinematics->computeBL(xTarget, yTarget, zTarget));
-    }
-    if (br) {
-        axis[_BR].setTarget(kinematics->computeBR(xTarget, yTarget, zTarget));
+    bool enableArm[ARM_COUNT] = { tl, tr, bl, br };
+    for (int arm = _TL; arm < ARM_COUNT; arm++) {
+        if (enableArm[arm]) {
+            axis[arm].setTarget(kinematics->compute(arm, xTarget, yTarget, zTarget));
+        }
     }
 }
 

@@ -297,17 +297,15 @@ namespace Kinematics {
         // This allows the Z-axis to move independently when belts are not calibrated
         if (Maslow.calibration.currentState == READY_TO_CUT) {
             // Compute belt lengths for each corner and assign to correct axis
-            motors[0] = computeTL(x, y, z);  // Top Left -> A axis
-            motors[1] = computeTR(x, y, z);  // Top Right -> B axis
-            motors[2] = computeBL(x, y, z);  // Bottom Left -> C axis
-            motors[3] = computeBR(x, y, z);  // Bottom Right -> D axis
+            for (int arm = 0; arm < 4; arm++) {
+                motors[arm] = compute(arm, x, y, z);
+            }
         } else {
             // When belts are not ready, keep them at their current positions
             // This prevents the motion planner from synchronizing Z-axis with large belt movements
-            motors[0] = steps_to_mpos(get_axis_motor_steps(0), 0);  // Keep TL at current position
-            motors[1] = steps_to_mpos(get_axis_motor_steps(1), 1);  // Keep TR at current position
-            motors[2] = steps_to_mpos(get_axis_motor_steps(2), 2);  // Keep BL at current position
-            motors[3] = steps_to_mpos(get_axis_motor_steps(3), 3);  // Keep BR at current position
+            for (int arm = 0; arm < 4; arm++) {
+                motors[arm] = steps_to_mpos(get_axis_motor_steps(arm), arm);
+            }
         }
 
         motors[4] = z;     // Z position -> Z axis (pass through)
@@ -338,23 +336,6 @@ namespace Kinematics {
         float length = sqrt(XYBeltLength * XYBeltLength + c * c);  // Get the angled belt length
 
         return length;
-    }
-
-    // Belt length calculation functions - moved from Maslow.cpp
-    float MaslowKinematics::computeTL(float x, float y, float z) {
-        return compute(0, x, y, z);  // TL = arm 0
-    }
-
-    float MaslowKinematics::computeTR(float x, float y, float z) {
-        return compute(1, x, y, z);  // TR = arm 1
-    }
-
-    float MaslowKinematics::computeBL(float x, float y, float z) {
-        return compute(2, x, y, z);  // BL = arm 2
-    }
-
-    float MaslowKinematics::computeBR(float x, float y, float z) {
-        return compute(3, x, y, z);  // BR = arm 3
     }
 
     bool MaslowKinematics::canHome(AxisMask axisMask) {
@@ -450,27 +431,6 @@ namespace Kinematics {
 
         // Recalculate center coordinates
         calculateCenter();
-    }
-
-    void MaslowKinematics::updateAnchorCoordinates(
-        float tlX, float tlY, float tlZ, float trX, float trY, float trZ, float blX, float blY, float blZ, float brX, float brY, float brZ) {
-        anchor_location[0][0] = tlX;  // TL X
-        anchor_location[0][1] = tlY;  // TL Y
-        anchor_location[0][2] = tlZ;  // TL Z
-        anchor_location[1][0] = trX;  // TR X
-        anchor_location[1][1] = trY;  // TR Y
-        anchor_location[1][2] = trZ;  // TR Z
-        anchor_location[2][0] = blX;  // BL X
-        anchor_location[2][1] = blY;  // BL Y
-        anchor_location[2][2] = blZ;  // BL Z
-        anchor_location[3][0] = brX;  // BR X
-        anchor_location[3][1] = brY;  // BR Y
-        anchor_location[3][2] = brZ;  // BR Z
-
-        // Recalculate center coordinates
-        calculateCenter();
-
-        log_info("Anchor coordinates updated manually");
     }
 
     void MaslowKinematics::setSpoilboardThickness(float thickness) {
