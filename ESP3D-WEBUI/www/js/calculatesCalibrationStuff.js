@@ -723,6 +723,9 @@ async function findMaxFitness(measurements) {
   // This prevents theta state from persisting across calibration attempts
   resetMeasurementThetas(measurements);
 
+  // Declare startingGuess that will be set based on calibration stage
+  let startingGuess;
+
   // Reset initialGuess to default at the start of a new calibration run
   // The first stage sends exactly 6 measurements (initial grid estimate)
   // Subsequent stages send more measurements (full grid)
