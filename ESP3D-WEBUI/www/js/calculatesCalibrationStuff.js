@@ -729,9 +729,52 @@ async function findMaxFitness(measurements) {
   const INITIAL_CALIBRATION_MEASUREMENT_COUNT = 6;
   if (measurements.length === INITIAL_CALIBRATION_MEASUREMENT_COUNT) {
     messagesBox.textContent += 'New calibration run detected (6-point initial stage). Resetting initial guess to default.\n';
+    // Always use rectangular optimization for first stage to ensure robust starting point
+    // This searches for best fit rather than using a fixed default
     initialGuess = getDefaultInitialGuess();
+    startingGuess = await findBestRectangularStart(measurements);
+    messagesBox.textContent += 'Using rectangular optimization result as starting point for consistency.\n';
   } else {
     messagesBox.textContent += `Continuing calibration with ${measurements.length} measurements. Using previous stage result as starting point.\n`;
+    
+    // Evaluate the fitness of the initial guess from previous stage
+    const initialGuessCopy = JSON.parse(JSON.stringify(initialGuess));
+    const evaluatedGuess = computeLinesFitness(measurements, initialGuessCopy, true);
+    const initialFitness = 1 / evaluatedGuess.fitness;
+
+    messagesBox.textContent += `Initial guess fitness: ${initialFitness.toFixed(7)}\n`;
+    messagesBox.scrollTop = messagesBox.scrollHeight;
+
+    // Calculate frame dimensions from initial guess
+    const frameWidth = initialGuess.tr.x - initialGuess.tl.x;
+    const frameHeight = initialGuess.tl.y - initialGuess.bl.y;
+    const aspectRatio = frameWidth / frameHeight;
+    
+    // Check if frame is square or near-square (aspect ratio between 0.9 and 1.11)
+    // This covers ratios like 10:9 to 10:11, which are "close to square"
+    const isNearlySquare = aspectRatio >= 0.9 && aspectRatio <= 1.11;
+    
+    messagesBox.textContent += `Frame dimensions: ${frameWidth.toFixed(1)}mm x ${frameHeight.toFixed(1)}mm (aspect ratio: ${aspectRatio.toFixed(2)}:1)\n`;
+    messagesBox.scrollTop = messagesBox.scrollHeight;
+
+    // Use rectangular optimization if:
+    // 1. Initial fitness is poor (< 0.1), OR
+    // 2. Frame is square or nearly square (likely a default guess)
+    if (initialFitness < 0.1 || isNearlySquare) {
+      if (initialFitness < 0.1) {
+        messagesBox.textContent += "Initial fitness < 0.1 (poor guess), running rectangular optimization to find better starting point.\n";
+      }
+      if (isNearlySquare) {
+        messagesBox.textContent += "Frame is nearly square (aspect ratio " + aspectRatio.toFixed(2) + ":1), running rectangular optimization to find better dimensions.\n";
+      }
+      messagesBox.scrollTop = messagesBox.scrollHeight;
+      // Find the best rectangular starting configuration
+      startingGuess = await findBestRectangularStart(measurements);
+    } else {
+      messagesBox.textContent += "Initial fitness >= 0.1 and frame is not square, skipping rectangular optimization and using initial guess directly.\n";
+      messagesBox.scrollTop = messagesBox.scrollHeight;
+      startingGuess = initialGuess;
+    }
   }
 
   sendCalibrationEvent({
@@ -740,47 +783,6 @@ async function findMaxFitness(measurements) {
 
   //Project the measurements into the XY plane...this is now done on the firmware side
   //measurements = projectMeasurements(measurements);
-
-  // Evaluate the fitness of the initial guess
-  const initialGuessCopy = JSON.parse(JSON.stringify(initialGuess));
-  const evaluatedGuess = computeLinesFitness(measurements, initialGuessCopy, true);
-  const initialFitness = 1 / evaluatedGuess.fitness;
-
-  messagesBox.textContent += `Initial guess fitness: ${initialFitness.toFixed(7)}\n`;
-  messagesBox.scrollTop = messagesBox.scrollHeight;
-
-  // Calculate frame dimensions from initial guess
-  const frameWidth = initialGuess.tr.x - initialGuess.tl.x;
-  const frameHeight = initialGuess.tl.y - initialGuess.bl.y;
-  const aspectRatio = frameWidth / frameHeight;
-  
-  // Check if frame is square or near-square (aspect ratio between 0.9 and 1.11)
-  // This covers ratios like 10:9 to 10:11, which are "close to square"
-  const isNearlySquare = aspectRatio >= 0.9 && aspectRatio <= 1.11;
-  
-  messagesBox.textContent += `Frame dimensions: ${frameWidth.toFixed(1)}mm x ${frameHeight.toFixed(1)}mm (aspect ratio: ${aspectRatio.toFixed(2)}:1)\n`;
-  messagesBox.scrollTop = messagesBox.scrollHeight;
-
-  var startingGuess;
-
-  // Use rectangular optimization if:
-  // 1. Initial fitness is poor (< 0.1), OR
-  // 2. Frame is square or nearly square (likely a default guess)
-  if (initialFitness < 0.1 || isNearlySquare) {
-    if (initialFitness < 0.1) {
-      messagesBox.textContent += "Initial fitness < 0.1 (poor guess), running rectangular optimization to find better starting point.\n";
-    }
-    if (isNearlySquare) {
-      messagesBox.textContent += "Frame is nearly square (aspect ratio " + aspectRatio.toFixed(2) + ":1), running rectangular optimization to find better dimensions.\n";
-    }
-    messagesBox.scrollTop = messagesBox.scrollHeight;
-    // Find the best rectangular starting configuration
-    startingGuess = await findBestRectangularStart(measurements);
-  } else {
-    messagesBox.textContent += "Initial fitness >= 0.1 and frame is not square, skipping rectangular optimization and using initial guess directly.\n";
-    messagesBox.scrollTop = messagesBox.scrollHeight;
-    startingGuess = initialGuess;
-  }
 
   let currentGuess = JSON.parse(JSON.stringify(startingGuess));
   let stagnantCounter = 0;
