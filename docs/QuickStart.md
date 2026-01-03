@@ -147,8 +147,43 @@ Keep an eye on the machine during this entire process, it may be tempting to wal
 
 ## Uploading to Maslow
 
+Once you have  gcode that you want to use to cut something, you will use the "upload" button on the right side of the maslow web interface. That will trigger a dialog box for selecting a file on whatever computer/tablet you're using. Navigate to the gcode file you want to send to the Maslow, and select it. (There are other ways of doing this, but this is the easiest.) Depending on how your home network is set up, the computer you use to design or download a project and generate g-code may not be the one you use in your shop to control the Maslow, but that's OK. The Maslow's built-in web server can deliver multiple windows. (The contents of those windows won't be synchronized, but file you upload will be visible from whatever computer you're using, as long as it's got a browser window open to the Maslow.
+
 ## Move the machine around
+
+This is the Maslow's motion panel:
+<img width="445" height="245" alt="Screenshot 2026-01-02 at 17 53 26" src="https://github.com/user-attachments/assets/b971acf9-b550-45e9-a871-738b960de4db" />
+
+If the belts are already tensioned, you can make the Maslow move by clicking on the arrows in the motion panel. The number in the center is the distance that the Maslow will move with each click, and can be edited by clicking on it. Make sure there's nothing on the work surface that could get in the way before you move the machine. (The first time you move the machine around, you will probably want to label the work surface with arrows corresponding to the directions on the motion panel so you can orient material to be cut.)
 
 ## Define home position
 
+# X/Y
+Each time you use the Maslow, you can redefine the X-Y home position. This will come in handy if you want to cut the same G-code several times in different places on a sheet, or if the g-code file you are cutting has its X-Y zero position somewhere inconvenient.  The position display (upper left) has a little pink dot representing the current location where the Maslow will cut, so you just move the machine to where you want the home position and then set it with a long press of the button in the motion panel.
+
+(The position display can toggle between 4 different modes, so if you don't see the pink dot on the closeup display, click to one of the others that can show the entire work surface. One mode shows color-coded cut accuracy, so you may want to adjust where you plan to cut to get the best results.)
+
+# Z
+Any time you install a different router bit, you will need to redefine the Z home. Use the Z-up and Z-down buttons to bring the bit to the right height, typically just barely above the surface of the material you are cutting. The number between the Z-up and Z-down buttons is the distance the bit will move each time you press a button, and you will likely want to edit it to a smaller number when making adjustments. You will probably also want a stiff piece of thin plastic about 30 cm long to push under the machine so that you can tell when the bit is near the surface. Once you have the bit where you want it, press the "Define Z Home" button.
+
+Because there's tension on the belts, and the belt angle changes when you move the router up or down, the Maslow will appear to jump when you press the Z-up and Z-down buttons. Don't worry too much. 
+
 ## Running a file
+
+Before running a file, you need your workpiece in place. Release tension on the belts, slide the piece to be cut under the Maslow and secure it to the worksorface, then apply tension again.
+
+Select the file to run from the dropdown menu just to the left of the "Upload GCode" button. A preview of the cutting paths will appear in the position display. If you need to, set the XY home position.
+
+# Preflight
+Take a close look at the cutting preview to make sure the Maslow is planning to cut the shapes(s) you want in the position(s) you want. 
+Make sure the workspace is clear of anything that might foul the machine or the belts.
+Make sure that the router spindle is free to turn.
+If you have dust collection (and you should) turn it on.
+
+Turn on the router.
+Press the green button on the Maslow web interface. (Be ready to hit the Stop or Alarm button if anything goes wrong.)
+
+Keep watching until the cuts have completed. 
+
+When you're done, turn off the router, then the dust collection, then (if you're done with that workpiece) release tension on the belts.
+
