@@ -311,27 +311,51 @@ function computeFurthestFromCenterOfMass(lines, lastGuess) {
   const trXAbs = Math.abs(trX);
   const tryAbs = Math.abs(trY);
   const brXAbs = Math.abs(brX);
-  const maxError = Math.max(tlXAbs, tlyAbs, trXAbs, tryAbs, brXAbs);
-
+  
   var scalor = -1;
-  switch (maxError) {
-    case tlXAbs:
+  
+  // Find which coordinate has maximum error using explicit comparisons
+  // This ensures deterministic behavior even with floating point values
+  // We check in a fixed order to break ties consistently
+  let maxError = tlXAbs;
+  let maxIndex = 0; // 0=tlX, 1=tlY, 2=trX, 3=trY, 4=brX
+  
+  if (tlyAbs > maxError) {
+    maxError = tlyAbs;
+    maxIndex = 1;
+  }
+  if (trXAbs > maxError) {
+    maxError = trXAbs;
+    maxIndex = 2;
+  }
+  if (tryAbs > maxError) {
+    maxError = tryAbs;
+    maxIndex = 3;
+  }
+  if (brXAbs > maxError) {
+    maxError = brXAbs;
+    maxIndex = 4;
+  }
+  
+  // Apply adjustment based on which coordinate has maximum error
+  switch (maxIndex) {
+    case 0:
       //console.log("Move tlX by: " + tlX/divisor);
       lastGuess.tl.x = lastGuess.tl.x + tlX * scalor;
       break;
-    case tlyAbs:
+    case 1:
       //console.log("Move tlY by: " + tlY/divisor);
       lastGuess.tl.y = lastGuess.tl.y + tlY * scalor;
       break;
-    case trXAbs:
+    case 2:
       //console.log("Move trX by: " + trX/divisor);
       lastGuess.tr.x = lastGuess.tr.x + trX * scalor;
       break;
-    case tryAbs:
+    case 3:
       //console.log("Move trY by: " + trY/divisor);
       lastGuess.tr.y = lastGuess.tr.y + trY * scalor;
       break;
-    case brXAbs:
+    case 4:
       //console.log("Move brX by: " + brX/divisor);
       lastGuess.br.x = lastGuess.br.x + brX * scalor;
       break;
