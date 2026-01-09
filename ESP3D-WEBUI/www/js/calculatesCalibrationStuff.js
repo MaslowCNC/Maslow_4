@@ -14,8 +14,7 @@ const MAX_LOW_FITNESS_RETRIES = 10;
 // State for incremental calibration (points after the first 6)
 var incrementalMeasurements = [];
 var incrementalCalibrationActive = false;
-var currentBestGuess = null;
-var currentBestFitness = 0;
+var currentBestGuess = null;  // Stores the best guess object with raw fitness value
 
 //Establish initial guesses for the corners
 var initialGuess = {
@@ -726,9 +725,9 @@ async function processIncrementalMeasurement(measurement) {
   while (stagnantCounter < maxStagnant && totalCounter < maxIterations) {
     workingGuess = computeLinesFitness(allMeasurements, workingGuess);
     
-    if (1 / workingGuess.fitness > currentBestFitness) {
+    // Compare raw fitness values (lower is better, so invert for comparison)
+    if (1 / workingGuess.fitness > 1 / currentBestGuess.fitness) {
       currentBestGuess = JSON.parse(JSON.stringify(workingGuess));
-      currentBestFitness = 1 / currentBestGuess.fitness;
       stagnantCounter = 0;
     } else {
       stagnantCounter++;
@@ -742,11 +741,13 @@ async function processIncrementalMeasurement(measurement) {
     }
   }
   
-  messagesBox.textContent += ` - Fitness: ${currentBestFitness.toFixed(7)}`;
+  // Calculate display fitness (inverted raw fitness)
+  const displayFitness = 1 / currentBestGuess.fitness;
+  messagesBox.textContent += ` - Fitness: ${displayFitness.toFixed(7)}`;
   messagesBox.scrollTop = messagesBox.scrollHeight;
   
   // Check if fitness exceeds threshold - if so, send new anchor locations
-  if (currentBestFitness > acceptableCalibrationThreshold) {
+  if (displayFitness > acceptableCalibrationThreshold) {
     messagesBox.textContent += ` ✓ Threshold met! Updating anchors...`;
     messagesBox.scrollTop = messagesBox.scrollHeight;
     
@@ -785,7 +786,6 @@ async function findMaxFitness(measurements) {
   incrementalCalibrationActive = false;
   incrementalMeasurements = [];
   currentBestGuess = null;
-  currentBestFitness = 0;
 
   sendCalibrationEvent({
     initialGuess
@@ -972,7 +972,6 @@ async function findMaxFitness(measurements) {
         incrementalCalibrationActive = true;
         incrementalMeasurements = [];
         currentBestGuess = JSON.parse(JSON.stringify(bestGuess));
-        currentBestFitness = 1 / bestGuess.fitness;
 
         messagesBox.textContent += '\n\nInitial calibration complete. Switching to incremental mode for remaining points...';
         messagesBox.scrollTop = messagesBox.scrollHeight;
