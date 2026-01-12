@@ -791,16 +791,23 @@ const tabletConfigPopupHide = () => hideModal("configuration-popup");
 const tabletGotoXYOpen = () => openModal("goto-xy-popup");
 const tabletGotoXYPopupHide = () => hideModal("goto-xy-popup");
 const tabletGotoXYGo = () => {
-  const x = parseFloat(getText("gotoX"));
-  const y = parseFloat(getText("gotoY"));
+  const xText = getText("gotoX");
+  const yText = getText("gotoY");
+  const x = parseFloat(xText);
+  const y = parseFloat(yText);
 
-  if (isNaN(x) || isNaN(y)) {
-    addMessage("Invalid coordinates entered");
+  if (isNaN(x)) {
+    addMessage(`Invalid X coordinate: "${xText}". Please enter a valid number.`);
+    return;
+  }
+
+  if (isNaN(y)) {
+    addMessage(`Invalid Y coordinate: "${yText}". Please enter a valid number.`);
     return;
   }
 
   if (!checkHomed()) {
-    addMessage("Cannot move. Belt lengths are unknown.");
+    addMessage("Cannot move. Belt lengths are unknown. Please home the machine first.");
     return;
   }
 
