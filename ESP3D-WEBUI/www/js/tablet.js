@@ -808,11 +808,6 @@ const tabletConfigPopupHide = () => hideModal("configuration-popup");
 // Control event handlers - Common
 const tabletPopupStopProp = (event) => event.stopPropagation();
 
-// Absolute coordinate input variables
-let targetAbsoluteX = null;
-let targetAbsoluteY = null;
-let targetAbsoluteZ = null;
-
 /** Handle clicking on coordinate displays to edit them */
 const handleCoordinateClick = function() {
   const axis = this.dataset.axis;
@@ -859,30 +854,6 @@ const gotoAbsoluteXY = () => {
   // Execute absolute move using G90 G0
   const cmd = `G90 G0 X${x.toFixed(3)} Y${y.toFixed(3)}`;
   addMessage(`Moving to absolute position: X${x.toFixed(3)} Y${y.toFixed(3)}`);
-  sendCommand(cmd);
-};
-
-/** Move to absolute Z coordinate entered by user */
-const gotoAbsoluteZ = () => {
-  tabletClick();
-
-  const zElement = id("mpos-z");
-  if (!zElement) {
-    addMessage("Error: Cannot read Z coordinate value");
-    return;
-  }
-
-  const targetZ = zElement.dataset.targetValue || zElement.textContent;
-  const z = Number.parseFloat(targetZ);
-
-  if (Number.isNaN(z)) {
-    addMessage("Error: Invalid Z coordinate value");
-    return;
-  }
-
-  // Execute absolute Z move
-  const cmd = `G90 G0 Z${z.toFixed(3)}`;
-  addMessage(`Moving to absolute Z position: ${z.toFixed(3)}`);
   sendCommand(cmd);
 };
 
