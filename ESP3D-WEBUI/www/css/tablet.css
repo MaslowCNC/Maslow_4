@@ -882,3 +882,17 @@ float: left;
 .calibration-modal-input {
 width: 100%;
 }
+
+.goto-coord-input {
+padding: 10px;
+border: 1px solid #ccc;
+border-radius: 4px;
+text-align: center;
+font-size: 16px;
+cursor: pointer;
+background-color: #f8f9fa;
+}
+
+.goto-coord-input:hover {
+background-color: #e9ecef;
+}

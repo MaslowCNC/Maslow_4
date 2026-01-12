@@ -91,6 +91,11 @@
           <div id="tablettab_set_xy_home" class="maslow-grid-item maslow-grid-item-btn"
             style="background-color: #f2f0e4;" title="Press and hold, or tap twice">Define XY Home</div>
           <div id="dynamic_button_3" class="maslow-grid-item maslow-grid-item-btn" style="background-color: #f2f0e4;">
+            <div id="tablettab_goto_xy" class="maslow-grid-item maslow-grid-item-btn"
+                 style="background-color: #f2f0e4; cursor: pointer;"
+                 title="Move to specific XY coordinates">
+              Go To XY
+            </div>
           </div>
         </div>
         <!-- Controls row 5 -->
@@ -247,6 +252,38 @@
         <hr style="border-top: 1px dashed;">
         <div class="input-row">
           <button id="tablettab_config_save" type="button" class="calibration-modal-button">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="goto-xy-popup" class="calibration-modal-container">
+    <div id="goto_xy_popup_content" class="calibration-modal-content">
+      <div class="calibration-modal-button-container">
+        <div class="input-row">
+          <div style="display: flex; justify-content: center;">
+            <label style="text-align: center;">Go To XY Coordinates</label>
+          </div>
+        </div>
+        <hr style="border-top: 1px dashed;">
+        <div class="grid-container">
+          <div class="input-row">
+            <label for="gotoX" class="input-label">X Coordinate</label>
+          </div>
+          <div class="input-row">
+            <div id="gotoX" class="calibration-modal-input goto-coord-input" data-axis="X">0.0</div>
+          </div>
+          <div class="input-row">
+            <label for="gotoY" class="input-label">Y Coordinate</label>
+          </div>
+          <div class="input-row">
+            <div id="gotoY" class="calibration-modal-input goto-coord-input" data-axis="Y">0.0</div>
+          </div>
+        </div>
+        <hr style="border-top: 1px dashed;">
+        <div class="buttons-row">
+          <button id="tablettab_goto_xy_go" type="button" class="calibration-modal-button">Go</button>
+          <button id="tablettab_goto_xy_cancel" type="button" class="calibration-modal-button">Cancel</button>
         </div>
       </div>
     </div>

@@ -787,6 +787,27 @@ const tabletCalTest = () => onCalibrationButtonsClick("$TEST", "Test");
 const tabletCalRelax = () => onCalibrationButtonsClick("$CMP", "Release Tension");
 // Control event handlers - Configuration Popup
 const tabletConfigPopupHide = () => hideModal("configuration-popup");
+// Control event handlers - Go To XY Popup
+const tabletGotoXYOpen = () => openModal("goto-xy-popup");
+const tabletGotoXYPopupHide = () => hideModal("goto-xy-popup");
+const tabletGotoXYGo = () => {
+  const x = parseFloat(getText("gotoX"));
+  const y = parseFloat(getText("gotoY"));
+
+  if (isNaN(x) || isNaN(y)) {
+    addMessage("Invalid coordinates entered");
+    return;
+  }
+
+  if (!checkHomed()) {
+    addMessage("Cannot move. Belt lengths are unknown.");
+    return;
+  }
+
+  addMessage(`Moving to X:${x} Y:${y}`);
+  move({ X: x, Y: y });
+  hideModal("goto-xy-popup");
+};
 // Control event handlers - Common
 const tabletPopupStopProp = (event) => event.stopPropagation();
 
@@ -810,6 +831,8 @@ function tabletInit() {
 
     numpad.attach({ target: "disM", axis: "D" });
     numpad.attach({ target: "disZ", axis: "Z" });
+    numpad.attach({ target: "gotoX", axis: "X" });
+    numpad.attach({ target: "gotoY", axis: "Y" });
     //numpad.attach({target: "wpos-y", axis: "Y"});
     //numpad.attach({target: "wpos-z", axis: "Z"});
     //numpad.attach({target: "wpos-a", axis: "A"});
@@ -857,9 +880,12 @@ function tabletInit() {
     id("systemStatus").addEventListener("click", clearAlarm);
 
     id("tablettab_save_serial_msg").addEventListener("click", saveSerialMessages);
-    
+
     // Trace boundary button
     id("tablettab_trace_boundary").addEventListener("click", traceBoundary);
+
+    // Go To XY button
+    id("tablettab_goto_xy").addEventListener("click", tabletGotoXYOpen);
 
     // Buttons - Calibration Pop-up
     id("calibration-popup").addEventListener("click", tabletCalPopupHide);
@@ -879,6 +905,12 @@ function tabletInit() {
     id("configuration-popup").addEventListener("click", tabletConfigPopupHide);
     id("configuration_popup_content").addEventListener("click", tabletPopupStopProp);
     id("tablettab_config_save").addEventListener("click", saveConfigValues);
+
+    // Buttons - Go To XY Pop-up
+    id("goto-xy-popup").addEventListener("click", tabletGotoXYPopupHide);
+    id("goto_xy_popup_content").addEventListener("click", tabletPopupStopProp);
+    id("tablettab_goto_xy_go").addEventListener("click", tabletGotoXYGo);
+    id("tablettab_goto_xy_cancel").addEventListener("click", tabletGotoXYPopupHide);
 
   }, 1000);
 }
