@@ -901,3 +901,8 @@ background-color: #e8f4f8;
 background-color: #d0e7f0;
 }
 
+/* Highlight for modified coordinate values */
+.coordinate-modified {
+background-color: #ffffcc !important;
+}
+

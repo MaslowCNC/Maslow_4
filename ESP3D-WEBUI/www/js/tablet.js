@@ -720,6 +720,7 @@ function tabletGrblState(grbl, response) {
   tpDisplayer().reDrawTool(gCodeModal, arrayToXYZ(WPOS));
 
   const digits = gCodeModal.units === 'G20' ? 4 : 2;
+  const POSITION_TOLERANCE = 0.1; // mm - tolerance for determining if machine has reached target
 
   if (WPOS) {
     WPOS.forEach((pos, index) => {
@@ -734,11 +735,11 @@ function tabletGrblState(grbl, response) {
         if (targetValue) {
           const target = Number.parseFloat(targetValue);
           const current = Number.parseFloat(newValue);
-          // If we're close to the target (within 0.1mm), clear the target
-          if (Math.abs(target - current) < 0.1) {
+          // If we're close to the target, clear the target
+          if (Math.abs(target - current) < POSITION_TOLERANCE) {
             delete element.dataset.targetValue;
-            element.style.backgroundColor = "";
-            element.title = "Click to enter absolute " + axisNames[index] + " coordinate";
+            element.classList.remove("coordinate-modified");
+            element.title = "Click to enter absolute " + axisNames[index].toUpperCase() + " coordinate";
           }
         }
       }
@@ -879,39 +880,25 @@ function tabletInit() {
     numpad.attach({ target: "disZ", axis: "Z" });
 
     // Setup coordinate displays for absolute positioning
-    const mposX = id("mpos-x");
-    const mposY = id("mpos-y");
-    const mposZ = id("mpos-z");
+    // Max characters for coordinate input (e.g., "-1234.567" = 9 chars)
+    const COORDINATE_INPUT_MAX_CHARS = 10;
 
-    if (mposX) {
-      mposX.dataset.axis = "X";
-      mposX.dataset.max = 10;
-      mposX.dataset.decimal = "true";
-      mposX.style.cursor = "pointer";
-      mposX.style.textDecoration = "underline";
-      mposX.title = "Click to enter absolute X coordinate";
-      mposX.addEventListener("click", handleCoordinateClick);
-    }
+    const setupCoordinateDisplay = (elementId, axis) => {
+      const element = id(elementId);
+      if (element) {
+        element.dataset.axis = axis;
+        element.dataset.max = COORDINATE_INPUT_MAX_CHARS;
+        element.dataset.decimal = "true";
+        element.style.cursor = "pointer";
+        element.style.textDecoration = "underline";
+        element.title = `Click to enter absolute ${axis} coordinate`;
+        element.addEventListener("click", handleCoordinateClick);
+      }
+    };
 
-    if (mposY) {
-      mposY.dataset.axis = "Y";
-      mposY.dataset.max = 10;
-      mposY.dataset.decimal = "true";
-      mposY.style.cursor = "pointer";
-      mposY.style.textDecoration = "underline";
-      mposY.title = "Click to enter absolute Y coordinate";
-      mposY.addEventListener("click", handleCoordinateClick);
-    }
-
-    if (mposZ) {
-      mposZ.dataset.axis = "Z";
-      mposZ.dataset.max = 10;
-      mposZ.dataset.decimal = "true";
-      mposZ.style.cursor = "pointer";
-      mposZ.style.textDecoration = "underline";
-      mposZ.title = "Click to enter absolute Z coordinate";
-      mposZ.addEventListener("click", handleCoordinateClick);
-    }
+    setupCoordinateDisplay("mpos-x", "X");
+    setupCoordinateDisplay("mpos-y", "Y");
+    setupCoordinateDisplay("mpos-z", "Z");
 
     // Add event listener for "Go To XY" button
     const gotoButton = id("tablettab_goto_absolute");

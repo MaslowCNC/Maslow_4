@@ -196,9 +196,8 @@ var numpad = {
       // Store the target value for absolute positioning
       numpad.nowTarget.dataset.targetValue = numpad.hdisplay.value;
       // Update the display to show user's input with a visual indicator
-      const originalValue = numpad.nowTarget.textContent;
       numpad.nowTarget.textContent = numpad.hdisplay.value;
-      numpad.nowTarget.style.backgroundColor = "#ffffcc"; // Highlight to show it's modified
+      numpad.nowTarget.classList.add("coordinate-modified");
       numpad.nowTarget.title = `Target: ${numpad.hdisplay.value} (Click 'Go To XY' button to move)`;
     } else {
       // For distance fields (disM, disZ), keep original behavior
