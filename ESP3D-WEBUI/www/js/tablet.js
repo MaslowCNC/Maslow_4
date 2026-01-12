@@ -812,7 +812,6 @@ const tabletPopupStopProp = (event) => event.stopPropagation();
 /** Handle clicking on coordinate displays to edit them */
 const handleCoordinateClick = function() {
   const axis = this.dataset.axis;
-  const currentValue = this.textContent;
 
   // Store current axis
   numpad.nowAxis = axis;
@@ -880,7 +879,7 @@ function tabletInit() {
     numpad.attach({ target: "disZ", axis: "Z" });
 
     // Setup coordinate displays for absolute positioning
-    // Max characters for coordinate input (e.g., "-1234.567" = 9 chars)
+    // Max 10 characters for coordinate input (e.g., "-1234.567" = 9 chars, allows one extra)
     const COORDINATE_INPUT_MAX_CHARS = 10;
 
     const setupCoordinateDisplay = (elementId, axis) => {
