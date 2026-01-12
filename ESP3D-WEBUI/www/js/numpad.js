@@ -82,6 +82,7 @@ var numpad = {
     // (B1) CURRENTLY SELECTED FIELD + MAX LIMIT
     nowTarget: null, // Current selected input field
     nowMax: 0, // Current max allowed digits
+    nowAxis: null, // Current selected axis (for coordinate input)
     
     keypr: function(event) {
         event.preventDefault();
