@@ -882,3 +882,22 @@ float: left;
 .calibration-modal-input {
 width: 100%;
 }
+
+/* Coordinate display styling for absolute positioning */
+.coordinate-display {
+cursor: pointer;
+text-decoration: underline;
+text-decoration-style: dotted;
+padding: 2px 5px;
+border-radius: 3px;
+transition: background-color 0.3s ease;
+}
+
+.coordinate-display:hover {
+background-color: #e8f4f8;
+}
+
+.coordinate-display:active {
+background-color: #d0e7f0;
+}
+

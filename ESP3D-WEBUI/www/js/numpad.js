@@ -178,13 +178,33 @@ var numpad = {
 
   // (B6) Recall
   recall: function(){
-    numpad.hdisplay.value = numpad.nowTarget.textContent;
+    // Get the target value if it exists, otherwise use the displayed text
+    const targetValue = numpad.nowTarget.dataset.targetValue;
+    if (targetValue) {
+      numpad.hdisplay.value = targetValue;
+    } else {
+      numpad.hdisplay.value = numpad.nowTarget.textContent;
+    }
   },
 
   setCoordinate: function(){
-    numpad.nowTarget.textContent = numpad.hdisplay.value;
-    saveJogDists();
-    //setAxisByValue(numpad.nowTarget.dataset.axis, numpad.hdisplay.value);
+    const axis = numpad.nowTarget.dataset.axis;
+
+    // Check if this is a coordinate display (X, Y, Z) or a distance field (D)
+    if (axis === "X" || axis === "Y" || axis === "Z") {
+      // Store the target value for absolute positioning
+      numpad.nowTarget.dataset.targetValue = numpad.hdisplay.value;
+      // Update the display to show user's input with a visual indicator
+      const originalValue = numpad.nowTarget.textContent;
+      numpad.nowTarget.textContent = numpad.hdisplay.value;
+      numpad.nowTarget.style.backgroundColor = "#ffffcc"; // Highlight to show it's modified
+      numpad.nowTarget.title = `Target: ${numpad.hdisplay.value} (Click 'Go To XY' button to move)`;
+    } else {
+      // For distance fields (disM, disZ), keep original behavior
+      numpad.nowTarget.textContent = numpad.hdisplay.value;
+      saveJogDists();
+    }
+
     numpad.hide();
   },
 
