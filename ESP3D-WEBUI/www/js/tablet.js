@@ -851,9 +851,12 @@ const gotoAbsoluteXY = () => {
     return;
   }
 
+  // Use appropriate precision based on current unit mode
+  const precision = gCodeModal.units === 'G20' ? 4 : 3;
+
   // Execute absolute move using G90 G0
-  const cmd = `G90 G0 X${x.toFixed(3)} Y${y.toFixed(3)}`;
-  addMessage(`Moving to absolute position: X${x.toFixed(3)} Y${y.toFixed(3)}`);
+  const cmd = `G90 G0 X${x.toFixed(precision)} Y${y.toFixed(precision)}`;
+  addMessage(`Moving to absolute position: X${x.toFixed(precision)} Y${y.toFixed(precision)}`);
   sendCommand(cmd);
 };
 
