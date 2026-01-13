@@ -787,6 +787,44 @@ const tabletCalTest = () => onCalibrationButtonsClick("$TEST", "Test");
 const tabletCalRelax = () => onCalibrationButtonsClick("$CMP", "Release Tension");
 // Control event handlers - Configuration Popup
 const tabletConfigPopupHide = () => hideModal("configuration-popup");
+// Control event handlers - Go to XY Popup
+const tabletGotoXYOpen = () => {
+  // Clear previous values
+  setValue("gotoX", "");
+  setValue("gotoY", "");
+  openModal("goto-xy-popup");
+};
+const tabletGotoXYPopupHide = () => hideModal("goto-xy-popup");
+const tabletGotoXYMove = () => {
+  const xInput = Number(getValue("gotoX"));
+  const yInput = Number(getValue("gotoY"));
+
+  // Validate inputs
+  if (isNaN(xInput) || isNaN(yInput)) {
+    addMessage("Error: Please enter valid X and Y coordinates");
+    return;
+  }
+
+  // Get work area parameters from globalThis.loadedValues (set by maslow.js)
+  const workAreaX = Number(globalThis.loadedValues?.workAreaX) || 0;
+  const workAreaY = Number(globalThis.loadedValues?.workAreaY) || 0;
+  const workAreaCenterOffsetX = Number(globalThis.loadedValues?.workAreaCenterOffsetX) || 0;
+  const workAreaCenterOffsetY = Number(globalThis.loadedValues?.workAreaCenterOffsetY) || 0;
+
+  // Calculate absolute machine coordinates
+  // The reference point is at Work_Area_X + Work_Area_Center_Offset_X for X
+  // and Work_Area_Y + Work_Area_Center_Offset_Y for Y
+  const machineX = workAreaX + workAreaCenterOffsetX + xInput;
+  const machineY = workAreaY + workAreaCenterOffsetY + yInput;
+
+  addMessage(`Moving to XY: (${xInput.toFixed(2)}, ${yInput.toFixed(2)}) = Machine: (${machineX.toFixed(2)}, ${machineY.toFixed(2)})`);
+
+  // Use the existing moveTo function to move to the calculated position
+  moveTo(`X${machineX.toFixed(3)} Y${machineY.toFixed(3)}`);
+
+  // Hide the modal
+  hideModal("goto-xy-popup");
+};
 // Control event handlers - Common
 const tabletPopupStopProp = (event) => event.stopPropagation();
 
@@ -879,6 +917,12 @@ function tabletInit() {
     id("configuration-popup").addEventListener("click", tabletConfigPopupHide);
     id("configuration_popup_content").addEventListener("click", tabletPopupStopProp);
     id("tablettab_config_save").addEventListener("click", saveConfigValues);
+
+    // Buttons - Go to XY Pop-up
+    id("tablettab_goto_xy").addEventListener("click", tabletGotoXYOpen);
+    id("goto-xy-popup").addEventListener("click", tabletGotoXYPopupHide);
+    id("goto_xy_popup_content").addEventListener("click", tabletPopupStopProp);
+    id("tablettab_goto_xy_move").addEventListener("click", tabletGotoXYMove);
 
   }, 1000);
 }

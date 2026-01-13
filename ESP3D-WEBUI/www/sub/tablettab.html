@@ -91,6 +91,11 @@
           <div id="tablettab_set_xy_home" class="maslow-grid-item maslow-grid-item-btn"
             style="background-color: #f2f0e4;" title="Press and hold, or tap twice">Define XY Home</div>
           <div id="dynamic_button_3" class="maslow-grid-item maslow-grid-item-btn" style="background-color: #f2f0e4;">
+            <div id="tablettab_goto_xy" class="maslow-grid-item maslow-grid-item-btn"
+                 style="background-color: #f2f0e4; cursor: pointer;"
+                 title="Go to specific XY coordinates">
+              Go to XY
+            </div>
           </div>
         </div>
         <!-- Controls row 5 -->
@@ -247,6 +252,44 @@
         <hr style="border-top: 1px dashed;">
         <div class="input-row">
           <button id="tablettab_config_save" type="button" class="calibration-modal-button">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="goto-xy-popup" class="calibration-modal-container">
+    <div id="goto_xy_popup_content" class="calibration-modal-content">
+      <div class="calibration-modal-button-container">
+        <div class="input-row">
+          <div style="display: flex; justify-content: center;">
+            <label style="text-align: center;">Go to XY Coordinates</label>
+          </div>
+        </div>
+        <hr style="border-top: 1px dashed;">
+        <div class="grid-container">
+          <div class="input-row">
+            <label for="gotoX" class="input-label">X Coordinate (mm)</label>
+          </div>
+          <div class="input-row">
+            <input id="gotoX" type="number" step="0.1" class="calibration-modal-input" placeholder="Enter X coordinate">
+          </div>
+          <div class="input-row">
+            <label for="gotoY" class="input-label">Y Coordinate (mm)</label>
+          </div>
+          <div class="input-row">
+            <input id="gotoY" type="number" step="0.1" class="calibration-modal-input" placeholder="Enter Y coordinate">
+          </div>
+        </div>
+        <hr style="border-top: 1px dashed;">
+        <div class="input-row">
+          <div style="font-size: 12px; color: #666; text-align: center; padding: 5px;">
+            Coordinates are relative to Work Area center<br>
+            (0,0) is at the center of the work area
+          </div>
+        </div>
+        <hr style="border-top: 1px dashed;">
+        <div class="input-row">
+          <button id="tablettab_goto_xy_move" type="button" class="calibration-modal-button">Move to Position</button>
         </div>
       </div>
     </div>
