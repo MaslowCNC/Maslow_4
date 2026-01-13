@@ -792,6 +792,14 @@ const tabletGotoXYOpen = () => {
   // Clear previous values
   setValue("gotoX", "");
   setValue("gotoY", "");
+
+  // Update the label to show current units
+  const units = gCodeModal.units === "G21" ? "mm" : "inch";
+  const xLabel = document.querySelector('label[for="gotoX"]');
+  const yLabel = document.querySelector('label[for="gotoY"]');
+  if (xLabel) xLabel.textContent = `X Coordinate (${units})`;
+  if (yLabel) yLabel.textContent = `Y Coordinate (${units})`;
+
   openModal("goto-xy-popup");
 };
 const tabletGotoXYPopupHide = () => hideModal("goto-xy-popup");
@@ -805,19 +813,31 @@ const tabletGotoXYMove = () => {
     return;
   }
 
+  // Check if machine is homed
+  if (!checkHomed()) {
+    addMessage("Error: Machine must be calibrated before moving to coordinates");
+    return;
+  }
+
   // Get work area parameters from globalThis.loadedValues (set by maslow.js)
   const workAreaX = Number(globalThis.loadedValues?.workAreaX) || 0;
   const workAreaY = Number(globalThis.loadedValues?.workAreaY) || 0;
   const workAreaCenterOffsetX = Number(globalThis.loadedValues?.workAreaCenterOffsetX) || 0;
   const workAreaCenterOffsetY = Number(globalThis.loadedValues?.workAreaCenterOffsetY) || 0;
 
-  // Calculate absolute machine coordinates
+  // Convert input to mm if in inch mode
+  const mmPerInch = 25.4;
+  const xInputMm = gCodeModal.units === "G20" ? xInput * mmPerInch : xInput;
+  const yInputMm = gCodeModal.units === "G20" ? yInput * mmPerInch : yInput;
+
+  // Calculate absolute machine coordinates (always in mm internally)
   // The reference point is at Work_Area_X + Work_Area_Center_Offset_X for X
   // and Work_Area_Y + Work_Area_Center_Offset_Y for Y
-  const machineX = workAreaX + workAreaCenterOffsetX + xInput;
-  const machineY = workAreaY + workAreaCenterOffsetY + yInput;
+  const machineX = workAreaX + workAreaCenterOffsetX + xInputMm;
+  const machineY = workAreaY + workAreaCenterOffsetY + yInputMm;
 
-  addMessage(`Moving to XY: (${xInput.toFixed(2)}, ${yInput.toFixed(2)}) = Machine: (${machineX.toFixed(2)}, ${machineY.toFixed(2)})`);
+  const units = gCodeModal.units === "G21" ? "mm" : "inch";
+  addMessage(`Moving to XY: (${xInput.toFixed(2)}, ${yInput.toFixed(2)}) ${units} = Machine: (${machineX.toFixed(2)}, ${machineY.toFixed(2)}) mm`);
 
   // Use the existing moveTo function to move to the calculated position
   moveTo(`X${machineX.toFixed(3)} Y${machineY.toFixed(3)}`);
