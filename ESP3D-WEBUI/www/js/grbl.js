@@ -719,9 +719,16 @@ var collectedSettings = null
 
 async function handleCalibrationData(measurements) {
   // Check if we're in incremental calibration mode (after the first 6 points)
-  if (incrementalCalibrationActive && measurements.length === 1) {
-    // Process single incremental measurement
-    await processIncrementalMeasurement(measurements);
+  if (incrementalCalibrationActive) {
+    if (measurements.length === 1) {
+      // Process single incremental measurement
+      await processIncrementalMeasurement(measurements);
+    } else {
+      // Received a batch message at a recompute point - just acknowledge
+      // The background optimization already has all measurements and is running
+      console.log(`Received batch of ${measurements.length} measurements at recompute point - acknowledging`);
+      sendCommand("$ACKCAL");
+    }
   } else {
     // Process initial batch of 6 measurements (or full batch in legacy mode)
     document.querySelector('#messages').textContent += '\nComputing... This may take several minutes'
