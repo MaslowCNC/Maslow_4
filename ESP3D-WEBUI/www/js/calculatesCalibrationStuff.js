@@ -760,11 +760,12 @@ async function processIncrementalMeasurement(measurement) {
       let lastMeasurementCount = incrementalMeasurements.length;  // Track when new measurements arrive
 
       while (stagnantCounter < maxStagnant && totalCounter < maxIterations) {
-        // Check if new measurements have arrived - reset stagnant counter to give them a chance
+        // Check if new measurements have arrived - restart optimization from best position
         if (incrementalMeasurements.length > lastMeasurementCount) {
-          messagesBox.textContent += `\n[Background] New measurement arrived (now ${incrementalMeasurements.length} total), resetting stagnant counter...`;
+          messagesBox.textContent += `\n[Background] New measurement arrived (now ${incrementalMeasurements.length} total), restarting from best known position...`;
           messagesBox.scrollTop = messagesBox.scrollHeight;
           stagnantCounter = 0;  // Reset stagnation when new data arrives
+          workingGuess = JSON.parse(JSON.stringify(currentBestGuess));  // Restart search from best position
           lastMeasurementCount = incrementalMeasurements.length;
         }
         // Use all measurements accumulated so far (combine initial + incremental)
@@ -807,9 +808,8 @@ async function processIncrementalMeasurement(measurement) {
             sendCommand(`$/kinematics/MaslowKinematics/brX=${brxStr}`);
             sendCommand(`$/kinematics/MaslowKinematics/brY=${bryStr}`);
 
-            // Update initial guess
+            // Update initial guess (keep fitness value)
             initialGuess = JSON.parse(JSON.stringify(currentBestGuess));
-            initialGuess.fitness = 100000000;
           }
         } else {
           stagnantCounter++;
