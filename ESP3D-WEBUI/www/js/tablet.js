@@ -915,15 +915,25 @@ const showGCode = (gcode, append = false, updateToolpath = true) => {
  * @param {string} sdName - Name of the file being executed
  * @param {string} stateName - Current GRBL state (Run, Hold, Idle, etc.)
  */
+let progressDisplayElements = null;
 function updateProgressDisplay(sdPercent, sdName, stateName) {
-  const fileControls = id('tablettab_file_controls');
-  const progressContainer = id('tablettab_progress_container');
-  const progressBar = id('tablettab_progress_bar');
-  const progressPercent = id('tablettab_progress_percent');
-  const progressFilename = id('tablettab_progress_filename');
+  // Cache DOM elements on first call
+  if (!progressDisplayElements) {
+    progressDisplayElements = {
+      fileControls: id('tablettab_file_controls'),
+      progressContainer: id('tablettab_progress_container'),
+      progressBar: id('tablettab_progress_bar'),
+      progressPercent: id('tablettab_progress_percent'),
+      progressFilename: id('tablettab_progress_filename')
+    };
+  }
+
+  const { fileControls, progressContainer, progressBar, progressPercent, progressFilename } = progressDisplayElements;
 
   // Show progress bar when running G-code from file
   if (sdName && (stateName === 'Run' || stateName === 'Hold')) {
+    const percent = typeof sdPercent === 'number' ? sdPercent : 0;
+
     // Hide file controls
     if (fileControls) {
       fileControls.style.display = 'none';
@@ -934,11 +944,9 @@ function updateProgressDisplay(sdPercent, sdName, stateName) {
     }
     // Update progress bar and text
     if (progressBar) {
-      const percent = typeof sdPercent === 'number' ? sdPercent : 0;
       progressBar.value = percent;
     }
     if (progressPercent) {
-      const percent = typeof sdPercent === 'number' ? sdPercent : 0;
       progressPercent.textContent = `${percent.toFixed(1)}%`;
     }
     if (progressFilename) {
