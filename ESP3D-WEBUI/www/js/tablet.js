@@ -1256,6 +1256,12 @@ function handleKeyDown(event) {
     return;
   }
 
+  // Don't intercept keys when typing in input fields (fix for #699)
+  const activeElement = document.activeElement;
+  if (activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA')) {
+    return;  // Don't intercept keys when typing in input fields
+  }
+
   const dirKeyToBtnId = {
     'ArrowRight': 'jog-x-plus',
     'ArrowLeft': 'jog-x-minus',

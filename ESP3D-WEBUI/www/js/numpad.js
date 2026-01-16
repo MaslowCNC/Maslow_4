@@ -63,7 +63,7 @@ var numpad = {
 
     // 1 2 3 +- Set
     for (var i=1; i<=3; i++) { buttonator(i, "num", numpad.digit); }
-    buttonator("", "num", (numpad.doNothing));
+    buttonator("±", "num", numpad.toggleSign);
     //buttonator("+-", "num", numpad.toggleSign);
     buttonator("Set", "set", numpad.setCoordinate);
 
