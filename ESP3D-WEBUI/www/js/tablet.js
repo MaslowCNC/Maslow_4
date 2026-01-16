@@ -837,10 +837,12 @@ const tabletGotoXYMove = () => {
   const yInputMm = gCodeModal.units === "G20" ? yInput * mmPerInch : yInput;
 
   // Calculate absolute machine coordinates (always in mm internally)
-  // The reference point is at Work_Area_X + Work_Area_Center_Offset_X for X
-  // and Work_Area_Y + Work_Area_Center_Offset_Y for Y
-  const machineX = workAreaX + workAreaCenterOffsetX + xInputMm;
-  const machineY = workAreaY + workAreaCenterOffsetY + yInputMm;
+  // User coordinates have (0,0) at bottom-left corner of work area
+  // Machine coordinates have (0,0) at center of work area
+  // Convert from bottom-left origin to centered origin:
+  // Machine_Coord = User_Coord - (WorkArea_Dimension / 2) + Center_Offset
+  const machineX = xInputMm - (workAreaX / 2.0) + workAreaCenterOffsetX;
+  const machineY = yInputMm - (workAreaY / 2.0) + workAreaCenterOffsetY;
 
   const units = gCodeModal.units === "G21" ? "mm" : "inch";
   addMessage(`Moving to: (${xInput.toFixed(2)}, ${yInput.toFixed(2)}) ${units}`);
