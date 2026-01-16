@@ -9,8 +9,8 @@ let cmdInterval = 0;
 const processNextCmd = () => {
     if (!cmd_list.length) {
         console.warn("Command list empty, no messages to process at this time");
-        clearInterval(cmdInterval);
         cmdInterval = 0;
+        return;
     }
 
     switch (process_cmd_list(cmd_list[0], "process")) {
@@ -29,6 +29,13 @@ const processNextCmd = () => {
             break;
         default:
             break;
+    }
+    
+    // Schedule next processing if there are more commands
+    if (cmd_list.length > 0 && cmdInterval) {
+        scheduleTask(processNextCmd);
+    } else {
+        cmdInterval = 0;
     }
 }
 
@@ -136,7 +143,6 @@ const process_cmd_list = (cmd, step = "") => {
             if (cmd_list.length) {
                 doNext = true;
             } else {
-                clearInterval(cmdInterval);
                 cmdInterval = 0;
             }
 
@@ -145,7 +151,6 @@ const process_cmd_list = (cmd, step = "") => {
         case "purge":
             // Wipe the command list 
             cmd_list.length = 0;
-            clearInterval(cmdInterval);
             cmdInterval = 0;
             doNext = false;
             processing_cmd = false;
@@ -154,11 +159,12 @@ const process_cmd_list = (cmd, step = "") => {
     cmd_lock = false;
 
     if (doNext) {
-        // setInterval is used here to ensure that this call goes onto the event loop
-        // i.e. so that it is effectively treated asynchronously
-        const throttleInterval = 10;
+        // Use scheduleTask (MessageChannel) to ensure command processing works in background tabs
+        // This provides immediate scheduling without the 10ms throttling, which is acceptable
+        // since HTTP requests themselves provide natural throttling
         if (!cmdInterval) {
-            cmdInterval = setInterval(() => processNextCmd(), throttleInterval);
+            cmdInterval = 1; // Mark as active
+            scheduleTask(processNextCmd);
         }
     }
 

@@ -40,7 +40,6 @@ let result
  *------------------------------------------------------------------------------
  */
 
-
 /**
  * Computes the distance between two points.
  * @param {number} a - The x-coordinate of the first point.
@@ -356,14 +355,43 @@ function computeLinesFitness(measurements, lastGuess, skipThetaUpdates = false) 
     allLines.push(lines)
   })
 
-  //Computes the average fitness of all of the measurements
-  const fitness = calculateAverage(fitnesses)
+  // Filter out worst performing measurements before computing average
+  // Remove at most 4 measurements or 10% of total measurements, whichever is smaller
+  const maxMeasurementsToRemove = Math.min(4, Math.floor(fitnesses.length * 0.1))
+  let filteredFitnesses = fitnesses
+  let filteredLines = allLines
+
+  if (maxMeasurementsToRemove > 0 && fitnesses.length > maxMeasurementsToRemove) {
+    // Create array of indices paired with their fitness values
+    const indexedFitnesses = fitnesses.map((fitness, index) => ({ fitness, index }))
+
+    // Sort by fitness (worst = highest value)
+    indexedFitnesses.sort((a, b) => Math.abs(b.fitness) - Math.abs(a.fitness))
+
+    // Identify indices to remove (worst performers)
+    const indicesToRemove = new Set(
+      indexedFitnesses.slice(0, maxMeasurementsToRemove).map(item => item.index)
+    )
+
+    // Log filtering information during first iteration for debugging
+    if (!skipThetaUpdates && typeof lastGuess.filteringLogged === 'undefined') {
+      console.log(`Filtering calibration measurements: Removing ${maxMeasurementsToRemove} worst out of ${fitnesses.length} measurements`)
+      lastGuess.filteringLogged = true
+    }
+
+    // Filter out the worst measurements
+    filteredFitnesses = fitnesses.filter((_, index) => !indicesToRemove.has(index))
+    filteredLines = allLines.filter((_, index) => !indicesToRemove.has(index))
+  }
+
+  //Computes the average fitness of the filtered measurements
+  const fitness = calculateAverage(filteredFitnesses)
 
   // console.log(fitnesses)
 
   //Here is where we need to do the calculation of which corner is the worst and which direction to move it
   if (!skipThetaUpdates) {
-    lastGuess = computeFurthestFromCenterOfMass(allLines, lastGuess)
+    lastGuess = computeFurthestFromCenterOfMass(filteredLines, lastGuess)
   }
   lastGuess.fitness = fitness
 
@@ -583,8 +611,8 @@ async function findBestRectangularStart(measurements) {
       diagonalBestSize = rightResult.size;
     }
 
-    // Allow UI to update
-    await new Promise(resolve => setTimeout(resolve, 0));
+    // Allow UI to update (works even when tab is inactive)
+    await yieldToEventLoop();
 
     if (leftResult.fitness < rightResult.fitness) {
       rightSize = rightThird;
@@ -670,8 +698,8 @@ async function findBestRectangularStart(measurements) {
       bestGuess = JSON.parse(JSON.stringify(rightResult.result));
     }
 
-    // Allow UI to update
-    await new Promise(resolve => setTimeout(resolve, 0));
+    // Allow UI to update (works even when tab is inactive)
+    await yieldToEventLoop();
 
     // Narrow the search range based on which point has better fitness
     if (leftResult.fitness < rightResult.fitness) {
@@ -914,8 +942,8 @@ async function findMaxFitness(measurements) {
         messagesBox.scrollTop = messagesBox.scrollHeight;
       }
 
-      // Schedule the next iteration
-      setTimeout(iterate, 0);
+      // Schedule the next iteration (works even when tab is inactive)
+      scheduleTask(iterate);
 
     } else { //We have completed the calibration (success or timeout)
       // Track best guess across all retry attempts
@@ -1019,7 +1047,7 @@ async function findMaxFitness(measurements) {
         messagesBox.scrollTop = messagesBox.scrollHeight;
 
         // This restarts calibration process for the next stage
-        setTimeout(() => { onCalibrationButtonsClick('$CAL', 'Calibrate'); }, 2000);
+        scheduleCallback(() => { onCalibrationButtonsClick('$CAL', 'Calibrate'); }, 2000);
       } else {
 
         sendCalibrationEvent({
@@ -1045,8 +1073,8 @@ async function findMaxFitness(measurements) {
         bestGuess = JSON.parse(JSON.stringify(initialGuess));
         currentGuess = JSON.parse(JSON.stringify(initialGuess));
 
-        //Restart the iteration
-        setTimeout(iterate, 0);
+        //Restart the iteration (works even when tab is inactive)
+        scheduleTask(iterate);
       }
     }
   }

@@ -67,15 +67,15 @@ void Maslow_::begin(void (*sys_rt)()) {
     Wire.begin(5, 4, 200000);
     I2CMux.begin(TCAADDR, Wire);
 
-    axisTL.begin(tlIn1Pin, tlIn2Pin, tlADCPin, TLEncoderLine, tlIn1Channel, tlIn2Channel);
-    axisTR.begin(trIn1Pin, trIn2Pin, trADCPin, TREncoderLine, trIn1Channel, trIn2Channel);
-    axisBL.begin(blIn1Pin, blIn2Pin, blADCPin, BLEncoderLine, blIn1Channel, blIn2Channel);
-    axisBR.begin(brIn1Pin, brIn2Pin, brADCPin, BREncoderLine, brIn1Channel, brIn2Channel);
+    axis[_TL].begin(tlIn1Pin, tlIn2Pin, tlADCPin, TLEncoderLine, tlIn1Channel, tlIn2Channel);
+    axis[_TR].begin(trIn1Pin, trIn2Pin, trADCPin, TREncoderLine, trIn1Channel, trIn2Channel);
+    axis[_BL].begin(blIn1Pin, blIn2Pin, blADCPin, BLEncoderLine, blIn1Channel, blIn2Channel);
+    axis[_BR].begin(brIn1Pin, brIn2Pin, brADCPin, BREncoderLine, brIn1Channel, brIn2Channel);
 
-    calibration.axisBLHomed = false;
-    calibration.axisBRHomed = false;
-    calibration.axisTRHomed = false;
-    calibration.axisTLHomed = false;
+    calibration.axisHomed[_BL] = false;
+    calibration.axisHomed[_BR] = false;
+    calibration.axisHomed[_TR] = false;
+    calibration.axisHomed[_TL] = false;
 
     //Recompute the center XY
     calibration.updateCenterXY();
@@ -143,20 +143,20 @@ void Maslow_::update() {
     //Save the z-axis position if the prevous state was jog or cycle and the current state is idle
     if ((prevState == State::Jog || prevState == State::Cycle) && sys.state() == State::Idle) {
         saveZPos();
-        // Only save belt positions when in READY_TO_CUT or RETRACTED state (belts are tight and valid)
+        // Only save belt positions when in READY_TO_CUT, RETRACTED, or EXTENDEDOUT state (belts are tight and valid)
         int currentMaslowState = calibration.getCurrentState();
-        if (currentMaslowState == READY_TO_CUT || currentMaslowState == RETRACTED) {
+        if (currentMaslowState == READY_TO_CUT || currentMaslowState == RETRACTED || currentMaslowState == EXTENDEDOUT) {
             saveBeltPositions();
         }
     }
 
-    // Track state changes and mark belt positions as stale when leaving READY_TO_CUT or RETRACTED
+    // Track state changes and mark belt positions as stale when leaving valid states
     static int prevMaslowState    = calibration.getCurrentState();
     int        currentMaslowState = calibration.getCurrentState();
     if (prevMaslowState != currentMaslowState) {
-        // If we're leaving READY_TO_CUT or RETRACTED, mark positions as stale
-        if ((prevMaslowState == READY_TO_CUT || prevMaslowState == RETRACTED) &&
-            (currentMaslowState != READY_TO_CUT && currentMaslowState != RETRACTED)) {
+        // If we're leaving READY_TO_CUT, RETRACTED, or EXTENDEDOUT, mark positions as stale
+        if ((prevMaslowState == READY_TO_CUT || prevMaslowState == RETRACTED || prevMaslowState == EXTENDEDOUT) &&
+            (currentMaslowState != READY_TO_CUT && currentMaslowState != RETRACTED && currentMaslowState != EXTENDEDOUT)) {
             markBeltPositionsStale();
         }
         prevMaslowState = currentMaslowState;
@@ -170,10 +170,9 @@ void Maslow_::update() {
 
         Maslow.updateEncoderPositions();  //We always update encoder positions in any state,
 
-        axisTL.update();  //update motor currents and belt speeds like this for now
-        axisTR.update();
-        axisBL.update();
-        axisBR.update();
+        for (int arm = _TL; arm < ARM_COUNT; arm++) {
+            axis[arm].update();  //update motor currents and belt speeds like this for now
+        }
 
         if (safetyOn)
             safety_control();
@@ -195,17 +194,17 @@ void Maslow_::update() {
         if (sys.state() == State::Jog || sys.state() == State::Cycle) {
             // With MaslowKinematics, read belt motor positions directly from the axis system
             // Axis mapping: A=TL, B=TR, C=BL, D=BR, Z=Router
-            float tlBeltLength = steps_to_mpos(get_axis_motor_steps(0), 0);  // TL from A axis (axis 0)
-            float trBeltLength = steps_to_mpos(get_axis_motor_steps(1), 1);  // TR from B axis (axis 1)
-            float blBeltLength = steps_to_mpos(get_axis_motor_steps(2), 2);  // BL from C axis (axis 2)
-            float brBeltLength = steps_to_mpos(get_axis_motor_steps(3), 3);  // BR from D axis (axis 3)
-            float zPosition    = steps_to_mpos(get_axis_motor_steps(4), 4);  // Z from Z axis (axis 4)
+            float beltLength[ARM_COUNT];
+            beltLength[_TL] = steps_to_mpos(get_axis_motor_steps(0), 0);  // TL from A axis (axis 0)
+            beltLength[_TR] = steps_to_mpos(get_axis_motor_steps(1), 1);  // TR from B axis (axis 1)
+            beltLength[_BL] = steps_to_mpos(get_axis_motor_steps(2), 2);  // BL from C axis (axis 2)
+            beltLength[_BR] = steps_to_mpos(get_axis_motor_steps(3), 3);  // BR from D axis (axis 3)
+            float zPosition = steps_to_mpos(get_axis_motor_steps(4), 4);  // Z from Z axis (axis 4)
 
             // Set individual belt targets using the computed positions
-            axisTL.setTarget(tlBeltLength);
-            axisTR.setTarget(trBeltLength);
-            axisBL.setTarget(blBeltLength);
-            axisBR.setTarget(brBeltLength);
+            for (int arm = _TL; arm < ARM_COUNT; arm++) {
+                axis[arm].setTarget(beltLength[arm]);
+            }
 
             // Update internal target tracking for getTargetX/Y/Z functions
             // For now, we'll use the Z position directly and estimate X,Y from frame center
@@ -284,22 +283,22 @@ bool Maslow_::updateEncoderPositions() {
         static int encoderToRead = 0;
         switch (encoderToRead) {
             case 0:
-                if (!axisTL.updateEncoderPosition()) {
+                if (!axis[_TL].updateEncoderPosition()) {
                     encoderFailCounter[TLEncoderLine]++;
                 }
                 break;
             case 1:
-                if (!axisTR.updateEncoderPosition()) {
+                if (!axis[_TR].updateEncoderPosition()) {
                     encoderFailCounter[TREncoderLine]++;
                 }
                 break;
             case 2:
-                if (!axisBL.updateEncoderPosition()) {
+                if (!axis[_BL].updateEncoderPosition()) {
                     encoderFailCounter[BLEncoderLine]++;
                 }
                 break;
             case 3:
-                if (!axisBR.updateEncoderPosition()) {
+                if (!axis[_BR].updateEncoderPosition()) {
                     encoderFailCounter[BREncoderLine]++;
                 }
                 break;
@@ -348,16 +347,16 @@ void Maslow_::setTargets(float xTarget, float yTarget, float zTarget, bool tl, b
     }
 
     if (tl) {
-        axisTL.setTarget(kinematics->computeTL(xTarget, yTarget, zTarget));
+        axis[_TL].setTarget(kinematics->computeTL(xTarget, yTarget, zTarget));
     }
     if (tr) {
-        axisTR.setTarget(kinematics->computeTR(xTarget, yTarget, zTarget));
+        axis[_TR].setTarget(kinematics->computeTR(xTarget, yTarget, zTarget));
     }
     if (bl) {
-        axisBL.setTarget(kinematics->computeBL(xTarget, yTarget, zTarget));
+        axis[_BL].setTarget(kinematics->computeBL(xTarget, yTarget, zTarget));
     }
     if (br) {
-        axisBR.setTarget(kinematics->computeBR(xTarget, yTarget, zTarget));
+        axis[_BR].setTarget(kinematics->computeBR(xTarget, yTarget, zTarget));
     }
 }
 
@@ -378,10 +377,10 @@ double Maslow_::getTargetZ() {
 
 //updates motor powers for all axis, based on targets set by setTargets()
 void Maslow_::recomputePID() {
-    axisBL.recomputePID();
-    axisBR.recomputePID();
-    axisTR.recomputePID();
-    axisTL.recomputePID();
+    axis[_BL].recomputePID();
+    axis[_BR].recomputePID();
+    axis[_TR].recomputePID();
+    axis[_TL].recomputePID();
 
     digitalWrite(coolingFanPin, HIGH);  //keep the cooling fan on
 
@@ -485,10 +484,10 @@ void Maslow_::setZStop() {
 
 //This function saves the current belt positions to non-volatile storage
 void Maslow_::saveBeltPositions() {
-    // Only save if in a valid state (belts are tight)
+    // Only save if in a valid state (belts are tight and at known positions)
     int currentState = calibration.getCurrentState();
-    if (currentState != READY_TO_CUT && currentState != RETRACTED) {
-        log_debug("Belt positions NOT saved - invalid state (not READY_TO_CUT or RETRACTED), currentState=" << currentState);
+    if (currentState != READY_TO_CUT && currentState != RETRACTED && currentState != EXTENDEDOUT) {
+        log_debug("Belt positions NOT saved - invalid state (not READY_TO_CUT, RETRACTED, or EXTENDEDOUT), currentState=" << currentState);
         return;
     }
 
@@ -506,16 +505,16 @@ void Maslow_::saveBeltPositions() {
     };
 
     // Get current belt positions
-    float tlPos = axisTL.getPosition();
-    float trPos = axisTR.getPosition();
-    float blPos = axisBL.getPosition();
-    float brPos = axisBR.getPosition();
+    float tlPos = axis[_TL].getPosition();
+    float trPos = axis[_TR].getPosition();
+    float blPos = axis[_BL].getPosition();
+    float brPos = axis[_BR].getPosition();
 
     // Get current raw encoder angles for validation on restore
-    uint16_t tlAngle = axisTL.getRawEncoderAngle();
-    uint16_t trAngle = axisTR.getRawEncoderAngle();
-    uint16_t blAngle = axisBL.getRawEncoderAngle();
-    uint16_t brAngle = axisBR.getRawEncoderAngle();
+    uint16_t tlAngle = axis[_TL].getRawEncoderAngle();
+    uint16_t trAngle = axis[_TR].getRawEncoderAngle();
+    uint16_t blAngle = axis[_BL].getRawEncoderAngle();
+    uint16_t brAngle = axis[_BR].getRawEncoderAngle();
 
     // Save TL belt position
     int32_t currentTLPos;
@@ -637,7 +636,7 @@ void Maslow_::loadBeltPositions() {
         int32_t savedTLAngle;
         ret = nvs_get_i32(nvsHandle, "tlAngle", &savedTLAngle);
         if (ret == ESP_OK) {
-            uint16_t currentTLAngle = axisTL.getRawEncoderAngle();
+            uint16_t currentTLAngle = axis[_TL].getRawEncoderAngle();
             int32_t  angleDiff      = currentTLAngle - savedTLAngle;
 
             // Handle wrap-around: if difference is > 2048, it wrapped the other direction
@@ -661,9 +660,9 @@ void Maslow_::loadBeltPositions() {
 
         // Set motor steps directly for TL belt (A axis = motor 0)
         set_motor_steps(0, mpos_to_steps(tlPos, 0));
-        axisTL.setTarget(tlPos);
+        axis[_TL].setTarget(tlPos);
         // Initialize encoder cumulative position to match adjusted belt length
-        axisTL.setPosition(tlPos);
+        axis[_TL].setPosition(tlPos);
     } else if (ret != ESP_ERR_NVS_NOT_FOUND) {
         log_info("Error " + std::string(esp_err_to_name(ret)) + " reading TL belt position from NVS!");
     }
@@ -681,7 +680,7 @@ void Maslow_::loadBeltPositions() {
         int32_t savedTRAngle;
         ret = nvs_get_i32(nvsHandle, "trAngle", &savedTRAngle);
         if (ret == ESP_OK) {
-            uint16_t currentTRAngle = axisTR.getRawEncoderAngle();
+            uint16_t currentTRAngle = axis[_TR].getRawEncoderAngle();
             int32_t  angleDiff      = currentTRAngle - savedTRAngle;
 
             // Handle wrap-around
@@ -702,8 +701,8 @@ void Maslow_::loadBeltPositions() {
 
         // Set motor steps directly for TR belt (B axis = motor 1)
         set_motor_steps(1, mpos_to_steps(trPos, 1));
-        axisTR.setTarget(trPos);
-        axisTR.setPosition(trPos);
+        axis[_TR].setTarget(trPos);
+        axis[_TR].setPosition(trPos);
     } else if (ret != ESP_ERR_NVS_NOT_FOUND) {
         log_info("Error " + std::string(esp_err_to_name(ret)) + " reading TR belt position from NVS!");
     }
@@ -721,7 +720,7 @@ void Maslow_::loadBeltPositions() {
         int32_t savedBLAngle;
         ret = nvs_get_i32(nvsHandle, "blAngle", &savedBLAngle);
         if (ret == ESP_OK) {
-            uint16_t currentBLAngle = axisBL.getRawEncoderAngle();
+            uint16_t currentBLAngle = axis[_BL].getRawEncoderAngle();
             int32_t  angleDiff      = currentBLAngle - savedBLAngle;
 
             // Handle wrap-around
@@ -742,8 +741,8 @@ void Maslow_::loadBeltPositions() {
 
         // Set motor steps directly for BL belt (C axis = motor 2)
         set_motor_steps(2, mpos_to_steps(blPos, 2));
-        axisBL.setTarget(blPos);
-        axisBL.setPosition(blPos);
+        axis[_BL].setTarget(blPos);
+        axis[_BL].setPosition(blPos);
     } else if (ret != ESP_ERR_NVS_NOT_FOUND) {
         log_info("Error " + std::string(esp_err_to_name(ret)) + " reading BL belt position from NVS!");
     }
@@ -761,7 +760,7 @@ void Maslow_::loadBeltPositions() {
         int32_t savedBRAngle;
         ret = nvs_get_i32(nvsHandle, "brAngle", &savedBRAngle);
         if (ret == ESP_OK) {
-            uint16_t currentBRAngle = axisBR.getRawEncoderAngle();
+            uint16_t currentBRAngle = axis[_BR].getRawEncoderAngle();
             int32_t  angleDiff      = currentBRAngle - savedBRAngle;
 
             // Handle wrap-around
@@ -782,8 +781,8 @@ void Maslow_::loadBeltPositions() {
 
         // Set motor steps directly for BR belt (D axis = motor 3)
         set_motor_steps(3, mpos_to_steps(brPos, 3));
-        axisBR.setTarget(brPos);
-        axisBR.setPosition(brPos);
+        axis[_BR].setTarget(brPos);
+        axis[_BR].setPosition(brPos);
     } else if (ret != ESP_ERR_NVS_NOT_FOUND) {
         log_info("Error " + std::string(esp_err_to_name(ret)) + " reading BR belt position from NVS!");
     }
@@ -897,10 +896,9 @@ void Maslow_::test_() {
     log_info("I2C Timeout: ");
     log_info(Wire.getTimeOut());
 
-    axisTL.test();
-    axisTR.test();
-    axisBL.test();
-    axisBR.test();
+    for (int arm = _TL; arm < ARM_COUNT; arm++) {
+        axis[arm].test();
+    }
 
 #ifdef ENABLE_WIFI
     // Check for firmware updates after all tests complete
@@ -969,8 +967,8 @@ void Maslow_::print_motor_currents() {
     unsigned long        currentTime       = millis();
 
     if (currentTime - lastExecutionTime >= 1000) {
-        log_info("TLC: " << axisTL.getMotorCurrent() << " TRC: " << axisTR.getMotorCurrent() << " BLC: " << axisBL.getMotorCurrent()
-                         << " BRC: " << axisBR.getMotorCurrent());
+        log_info("TLC: " << axis[_TL].getMotorCurrent() << " TRC: " << axis[_TR].getMotorCurrent()
+                         << " BLC: " << axis[_BL].getMotorCurrent() << " BRC: " << axis[_BR].getMotorCurrent());
         lastExecutionTime = currentTime;
     }
 }
@@ -981,10 +979,9 @@ void Maslow_::print_motor_currents() {
 
 // Resets variables on all 4 axis
 void Maslow_::reset_all_axis() {
-    axisTL.reset();
-    axisTR.reset();
-    axisBL.reset();
-    axisBR.reset();
+    for (int arm = _TL; arm < ARM_COUNT; arm++) {
+        axis[arm].reset();
+    }
 }
 
 // Stop all motors and reset all state variables
@@ -994,10 +991,9 @@ void Maslow_::stop() {
     test                              = false;
     takeSlack                         = false;
 
-    axisTL.reset();
-    axisTR.reset();
-    axisBL.reset();
-    axisBR.reset();
+    for (int arm = _TL; arm < ARM_COUNT; arm++) {
+        axis[arm].reset();
+    }
 
     // if we are stopping, stop any running job too
     allChannels.stopJob();
@@ -1005,10 +1001,10 @@ void Maslow_::stop() {
 
 // Stop all the motors
 void Maslow_::stopMotors() {
-    axisBL.stop();
-    axisBR.stop();
-    axisTR.stop();
-    axisTL.stop();
+    axis[_BL].stop();
+    axis[_BR].stop();
+    axis[_TR].stop();
+    axis[_TL].stop();
 }
 
 static void stopEverything() {
@@ -1043,10 +1039,9 @@ void Maslow_::safety_control() {
     static int   positionErrorCounter[4]  = { 0 };
     static float previousPositionError[4] = { 0, 0, 0, 0 };
 
-    MotorUnit* axis[4] = { &axisTL, &axisTR, &axisBL, &axisBR };
     for (int i = 0; i < 4; i++) {
         //If the current exceeds some absolute value, we need to call panic() and stop the machine
-        if (axis[i]->getMotorCurrent() > 4000 && !tick[i]) {
+        if (axis[i].getMotorCurrent() > 4000 && !tick[i]) {
             panicCounter[i]++;
             if (panicCounter[i] > tresholdHitsBeforePanic) {
                 if (sys.state() == State::Jog || sys.state() == State::Cycle) {
@@ -1067,11 +1062,11 @@ void Maslow_::safety_control() {
         static int axisSlackCounter[4] = { 0, 0, 0, 0 };
 
         axisSlackCounter[i] = 0;  //TEMP
-        if (axis[i]->getMotorPower() > 450 && abs(axis[i]->getBeltSpeed()) < 0.1 && !tick[i]) {
+        if (axis[i].getMotorPower() > 450 && abs(axis[i].getBeltSpeed()) < 0.1 && !tick[i]) {
             axisSlackCounter[i]++;
             if (axisSlackCounter[i] > 3000) {
-                // log_info("SLACK:" << axis_id_to_label(i).c_str() << " motor power is " << int(axis[i]->getMotorPower())
-                //                   << ", but the belt speed is" << axis[i]->getBeltSpeed());
+                // log_info("SLACK:" << axis_id_to_label(i).c_str() << " motor power is " << int(axis[i].getMotorPower())
+                //                   << ", but the belt speed is" << axis[i].getBeltSpeed());
                 // log_info(axisSlackCounter[i]);
                 // log_info("Pull on " << axis_id_to_label(i).c_str() << " and restart!");
                 tick[i]             = true;
@@ -1082,18 +1077,18 @@ void Maslow_::safety_control() {
             axisSlackCounter[i] = 0;
 
         //If the motor has a position error greater than 1mm and we are running a file or jogging
-        if ((abs(axis[i]->getPositionError()) > 1) && (sys.state() == State::Jog || sys.state() == State::Cycle) && !tick[i]) {
-            // log_error("Position error on " << axis_id_to_label(i).c_str() << " axis exceeded 1mm, error is " << axis[i]->getPositionError()
+        if ((abs(axis[i].getPositionError()) > 1) && (sys.state() == State::Jog || sys.state() == State::Cycle) && !tick[i]) {
+            // log_error("Position error on " << axis_id_to_label(i).c_str() << " axis exceeded 1mm, error is " << axis[i].getPositionError()
             //                                << "mm");
             tick[i] = true;
         }
 
         //If the motor has a position error greater than 15mm and we are running a file or jogging
-        previousPositionError[i] = axis[i]->getPositionError();
-        if ((abs(axis[i]->getPositionError()) > 15) && (sys.state() == State::Cycle)) {
+        previousPositionError[i] = axis[i].getPositionError();
+        if ((abs(axis[i].getPositionError()) > 15) && (sys.state() == State::Cycle)) {
             positionErrorCounter[i]++;
             log_warn("Position error on " << axis_id_to_label(i).c_str() << " axis exceeded 15mm while running. Error is "
-                                          << axis[i]->getPositionError() << "mm" << " Counter: " << positionErrorCounter[i]);
+                                          << axis[i].getPositionError() << "mm" << " Counter: " << positionErrorCounter[i]);
             log_warn("Previous error was " << previousPositionError[i] << "mm");
 
             if (positionErrorCounter[i] > 5) {
@@ -1125,14 +1120,14 @@ void Maslow_::getInfo() {
              "\"etl\": %g, \"etr\": %g, \"ebr\": %g, \"ebl\": %g, \"extended\": %s }",
              calibration.all_axis_homed() ? "true" : "false",
              calibration.calibrationInProgress ? "true" : "false",
-             axisTL.getPosition(),
-             axisTR.getPosition(),
-             axisBR.getPosition(),
-             axisBL.getPosition(),
-             axisTL.getPositionError(),
-             axisTR.getPositionError(),
-             axisBR.getPositionError(),
-             axisBL.getPositionError(),
+             axis[_TL].getPosition(),
+             axis[_TR].getPosition(),
+             axis[_BR].getPosition(),
+             axis[_BL].getPosition(),
+             axis[_TL].getPositionError(),
+             axis[_TR].getPositionError(),
+             axis[_BR].getPositionError(),
+             axis[_BL].getPositionError(),
              calibration.allAxisExtended() ? "true" : "false");
     log_data(buffer);
     releaseLogBuffer();
@@ -1166,12 +1161,13 @@ void Maslow_::set_telemetry(bool enabled) {
 }
 
 void Maslow_::log_telem_hdr_csv() {
-    log_data("millis," << "tlCurrent," << "trCurrent," << "blCurrent," << "brCurrent," << "tlPower," << "trPower," << "blPower,"
-                       << "brPower," << "tlSpeed," << "trSpeed," << "blSpeed," << "brSpeed," << "tlPos," << "trPos," << "blPos," << "brPos,"
-                       << "extendedTL," << "extendedTR," << "extendedBL," << "extendedBR," << "extendingALL," << "complyALL,"
-                       << "takeSlack," << "safetyOn," << "targetX," << "targetY," << "targetZ," << "x," << "y," << "test," << "pointCount,"
-                       << "waypoint," << "calibrationGridSize," << "holdTimer," << "holding," << "holdTime," << "centerX," << "centerY,"
-                       << "lastCallToPID," << "lastMiss," << "lastCallToUpdate," << "extendCallTimer," << "complyCallTimer");
+    log_data("millis," << "Current[_TL]," << "Current[_TR]," << "Current[_BL]," << "Current[_BR]," << "Power[_TL]," << "Power[_TR],"
+                       << "Power[_BL]," << "Power[_BR]," << "Speed[_TL]," << "Speed[_TR]," << "Speed[_BL]," << "Speed[_BR]," << "Pos[_TL],"
+                       << "Pos[_TR]," << "Pos[_BL]," << "Pos[_BR]," << "extended[_TL]," << "extended[_TR]," << "extended[_BL],"
+                       << "extended[_BR]," << "extendingALL," << "complyALL," << "takeSlack," << "safetyOn," << "targetX," << "targetY,"
+                       << "targetZ," << "x," << "y," << "test," << "pointCount," << "waypoint," << "calibrationGridSize," << "holdTimer,"
+                       << "holding," << "holdTime," << "centerX," << "centerY," << "lastCallToPID," << "lastMiss," << "lastCallToUpdate,"
+                       << "extendCallTimer," << "complyCallTimer");
 }
 
 void Maslow_::log_telem_pt_csv(TelemetryData data) {
@@ -1182,26 +1178,26 @@ void Maslow_::log_telem_pt_csv(TelemetryData data) {
              "%lu,%g,%g,%g,%g,%g,%g,%g,%g,%g,%g,%g,%g,%g,%g,%g,%g,%d,%d,%d,%d,%d,%d,%d,%d,%g,%g,%g,%g,%g,%d,%d,%d,%d,%lu,%d,%lu,%g,%g,%lu,%"
              "lu,%lu,%lu,%lu",
              data.timestamp,
-             data.tlCurrent,
-             data.trCurrent,
-             data.blCurrent,
-             data.brCurrent,
-             data.tlPower,
-             data.trPower,
-             data.blPower,
-             data.brPower,
-             data.tlSpeed,
-             data.trSpeed,
-             data.blSpeed,
-             data.brSpeed,
-             data.tlPos,
-             data.trPos,
-             data.blPos,
-             data.brPos,
-             data.extendedTL,
-             data.extendedTR,
-             data.extendedBL,
-             data.extendedBR,
+             data.Current[_TL],
+             data.Current[_TR],
+             data.Current[_BL],
+             data.Current[_BR],
+             data.Power[_TL],
+             data.Power[_TR],
+             data.Power[_BL],
+             data.Power[_BR],
+             data.Speed[_TL],
+             data.Speed[_TR],
+             data.Speed[_BL],
+             data.Speed[_BR],
+             data.Pos[_TL],
+             data.Pos[_TR],
+             data.Pos[_BL],
+             data.Pos[_BR],
+             data.extended[_TL],
+             data.extended[_TR],
+             data.extended[_BL],
+             data.extended[_BR],
              data.extendingALL,
              data.complyALL,
              data.takeSlack,
@@ -1235,41 +1231,41 @@ TelemetryData Maslow_::get_telemetry_data() {
     // it may not matter much. the reads are generally of types that don't
     //if (xSemaphoreTake(telemetry_mutex, portMAX_DELAY)) {
     // Access shared variables here
-    data.timestamp = millis();
-    data.tlCurrent = axisTL.getMotorCurrent();
-    data.trCurrent = axisTR.getMotorCurrent();
-    data.blCurrent = axisBL.getMotorCurrent();
-    data.brCurrent = axisBR.getMotorCurrent();
+    data.timestamp    = millis();
+    data.Current[_TL] = axis[_TL].getMotorCurrent();
+    data.Current[_TR] = axis[_TR].getMotorCurrent();
+    data.Current[_BL] = axis[_BL].getMotorCurrent();
+    data.Current[_BR] = axis[_BR].getMotorCurrent();
 
-    data.tlPower = axisTL.getMotorPower();
-    data.trPower = axisTR.getMotorPower();
-    data.blPower = axisBL.getMotorPower();
-    data.brPower = axisBR.getMotorPower();
+    data.Power[_TL] = axis[_TL].getMotorPower();
+    data.Power[_TR] = axis[_TR].getMotorPower();
+    data.Power[_BL] = axis[_BL].getMotorPower();
+    data.Power[_BR] = axis[_BR].getMotorPower();
 
-    data.tlSpeed = axisTL.getBeltSpeed();
-    data.trSpeed = axisTR.getBeltSpeed();
-    data.blSpeed = axisBL.getBeltSpeed();
-    data.brSpeed = axisBR.getBeltSpeed();
+    data.Speed[_TL] = axis[_TL].getBeltSpeed();
+    data.Speed[_TR] = axis[_TR].getBeltSpeed();
+    data.Speed[_BL] = axis[_BL].getBeltSpeed();
+    data.Speed[_BR] = axis[_BR].getBeltSpeed();
 
-    data.tlPos = axisTL.getPosition();
-    data.trPos = axisTR.getPosition();
-    data.blPos = axisBL.getPosition();
-    data.brPos = axisBR.getPosition();
+    data.Pos[_TL] = axis[_TL].getPosition();
+    data.Pos[_TR] = axis[_TR].getPosition();
+    data.Pos[_BL] = axis[_BL].getPosition();
+    data.Pos[_BR] = axis[_BR].getPosition();
 
-    data.extendedTL   = extendedTL;
-    data.extendedTR   = extendedTR;
-    data.extendedBL   = extendedBL;
-    data.extendedBR   = extendedBR;
-    data.extendingALL = (calibration.getCurrentState() == EXTENDING);
-    data.complyALL    = (calibration.getCurrentState() == RELEASE_TENSION);
-    data.takeSlack    = takeSlack;
-    data.safetyOn     = safetyOn;
-    data.targetX      = targetX;
-    data.targetY      = targetY;
-    data.targetZ      = targetZ;
-    data.x            = x;
-    data.y            = y;
-    data.test         = test;
+    data.extended[_TL] = extended[_TL];
+    data.extended[_TR] = extended[_TR];
+    data.extended[_BL] = extended[_BL];
+    data.extended[_BR] = extended[_BR];
+    data.extendingALL  = (calibration.getCurrentState() == EXTENDING);
+    data.complyALL     = (calibration.getCurrentState() == RELEASE_TENSION);
+    data.takeSlack     = takeSlack;
+    data.safetyOn      = safetyOn;
+    data.targetX       = targetX;
+    data.targetY       = targetY;
+    data.targetZ       = targetZ;
+    data.x             = x;
+    data.y             = y;
+    data.test          = test;
     // data.pointCount          = calibration.pointCount;
     // data.waypoint            = calibration.waypoint;
     data.calibrationGridSize = calibration.calibrationGridSize;

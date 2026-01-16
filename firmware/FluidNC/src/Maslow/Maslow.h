@@ -4,6 +4,7 @@
 
 #pragma once
 #include <Arduino.h>
+#include "MaslowEnums.h"
 #include "MotorUnit.h"
 #include "Calibration.h"
 #include "../System.h"  // sys.*
@@ -15,14 +16,6 @@
 #define TCAADDR 0x70
 
 #define CALIBRATION_GRID_SIZE_MAX (10 * 10) + 2
-
-#define UP 1
-#define DOWN 2
-#define LEFT 3
-#define RIGHT 4
-
-#define HORIZONTAL 0
-#define VERTICAL 1
 
 #define MASLOW_TELEM_FILE "M4_telemetry.bin"
 
@@ -40,36 +33,13 @@ struct TelemetryFileHeader {
 
 struct TelemetryData {
     unsigned long timestamp;
-    // motors
-    double tlCurrent;
-    double trCurrent;
-    double blCurrent;
-    double brCurrent;
-    // power
-    double tlPower;
-    double trPower;
-    double blPower;
-    double brPower;
-    // speed
-    double tlSpeed;
-    double trSpeed;
-    double blSpeed;
-    double brSpeed;
-    // position
-    double tlPos;
-    double trPos;
-    double blPos;
-    double brPos;
-
-    int tlState;
-    int trState;
-    int blState;
-    int brState;
-
-    bool extendedTL;
-    bool extendedTR;
-    bool extendedBL;
-    bool extendedBR;
+    // motors - indexed by MaslowArm enum
+    double Current[ARM_COUNT];
+    double Power[ARM_COUNT];
+    double Speed[ARM_COUNT];
+    double Pos[ARM_COUNT];
+    int    State[ARM_COUNT];
+    bool   extended[ARM_COUNT];
 
     bool extendingALL;
     bool complyALL;
@@ -142,10 +112,7 @@ public:
     void   safety_control();
     bool   axis_homed[4] = { false, false, false, false };
 
-    bool extendedTL = false;
-    bool extendedTR = false;
-    bool extendedBL = false;
-    bool extendedBR = false;
+    bool extended[ARM_COUNT] = { false, false, false, false };
 
     bool takeSlack = false;
 
@@ -169,10 +136,7 @@ public:
     double targetY = 0;
     double targetZ = 0;
 
-    MotorUnit axisTL;
-    MotorUnit axisTR;
-    MotorUnit axisBL;
-    MotorUnit axisBR;
+    MotorUnit axis[ARM_COUNT];
 
     bool readingFromSD = false;  //Used to turn off reading from the encoders when reading from the - i dont think we need this anymore TODO
     bool using_default_config = false;
@@ -190,8 +154,8 @@ public:
     float  scaleY = 1.0;
 
     // Work area constraints
-    float workAreaX = 2440.0;
-    float workAreaY = 1220.0;
+    float workAreaX             = 2440.0;
+    float workAreaY             = 1220.0;
     float workAreaCenterOffsetX = 0.0;
     float workAreaCenterOffsetY = 0.0;
 

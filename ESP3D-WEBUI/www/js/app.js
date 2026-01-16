@@ -28,6 +28,28 @@ var last_ping = 0;
 var enable_ping = true;
 var esp_error_message = '';
 var esp_error_code = 0;
+// WiFi SSID validation pattern - allows A-Z, a-z, 0-9, and special chars: . - _ # $ % & [ ] +
+var SSID_PATTERN = '[A-Za-z0-9._#$%&\\[\\]+\\-]*';
+var SSID_PATTERN_TITLE = 'Allowed characters: A-Z, a-z, 0-9, . - _ # $ % & [ ] +';
+// Pre-compiled regex patterns for SSID validation (avoid recreating on each input event)
+var SSID_FULL_PATTERN_REGEX = null;
+var SSID_CHAR_PATTERN_REGEX = null;
+
+// Function to get or create the full SSID pattern regex
+var getSSIDFullPatternRegex = function() {
+  if (!SSID_FULL_PATTERN_REGEX) {
+    SSID_FULL_PATTERN_REGEX = new RegExp("^" + SSID_PATTERN + "$");
+  }
+  return SSID_FULL_PATTERN_REGEX;
+};
+
+// Function to get or create the single character pattern regex
+var getSSIDCharPatternRegex = function() {
+  if (!SSID_CHAR_PATTERN_REGEX) {
+    SSID_CHAR_PATTERN_REGEX = /^[A-Za-z0-9._#$%&\[\]+\-]$/;
+  }
+  return SSID_CHAR_PATTERN_REGEX;
+};
 
 //Check for IE
 //Edge

@@ -1,5 +1,5 @@
 # Software Library
-**Click on the three bars in the top right corner for a table of contents outline>>>^**
+
 
 **QUICK START TIP: use Inkscape to draw something with no fill. Export as a regular .svg (not inkscape svg)  Upload that to Krabscam.com build paths for the tools that you have and then Export as a .nc Gcode file which can up uploaded to your Maslow.**
 
@@ -340,6 +340,41 @@ PICTURE
 
 
 ## Other useful programs
+
+### GCodeClean
+- It’s a CLI tool (runs from a command line) to ‘clean’ 3-axis (XYZ) GCode files.
+It will often reduce the file size, the number of GCode lines, and potentially the ‘G0’ travelling times.
+It has 3 operations,
+
+    - clean - which does most of the work
+    - split - which will split a single GCode file into individual GCode files for each individual cutting path, and
+    - merge - which can merge individual GCode files back into one file, and will try to reduce the travelling distance between the cutting paths.
+
+As per the README.md in GitHub
+A library and command line utility to do some ‘cleaning’ of a gcode (an .nc, .gcode) file. The primary objective is to be a GCode Linter, as part of that per line linting of gcode is already done.
+
+
+We also have:
+
+    - eliminating redundant lines (within tolerances),
+    - converting very short arcs (G2, G3) to simple lines (G1), also within tolerances,
+    - linear to arc deduplication, converting several simple lines to a single arc,
+    - eliminate meaningless movement commands - especially G0 without any arguments,
+    - correcting G1 to G0 when the z-axis is at a positive value,
+    - clipping decimal places on arguments to meaningful values (as per the NIST spec),
+    - per line linting: splitting lines to match the actual execution order as per the NIST gcode spec, and then reorganising the ‘words’ on a line to conform to some common practices (but not all),
+    - annotate the GCode with explanatory comments (optional), note that annotating a cleaned file means that you may not be able to split the file later,
+    - ‘soft’, ‘medium’, ‘hard’ or custom removal of superfluous tokens (minimise).
+    - preamble linting: Adding a ‘standard’ set of gcode declarations, i.e. converting the ‘implicit’ to ‘explicit’.
+    - postamble linting: Similar to the preamble, but at the end of the file (obviously).
+    - file terminator matching: Ensuring that if the file demarcation character % is used at the start of the file then it is also used at the end.
+    - splitting of GCode files into individual files, each with a single cutting path.
+    - mergeing of previously split files, with some effort at ordering them to reduce the amount of travelling (G0) distance in total.
+
+Forum members working on it - @md8n (LeeH), with a little update from @bar
+- Linux, can be run on Windows and Mac
+- <https://github.com/aersida/GCodeClean>
+- Forum link about it: <https://forums.maslowcnc.com/t/and-the-travelling-salesman-arrives-at-gcodeclean-v1-3-0/19688>
 
 ### Pepakura Designer
 PICTURE

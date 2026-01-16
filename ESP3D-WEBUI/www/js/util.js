@@ -1,3 +1,110 @@
+/**
+ * Creates a task scheduler that works even when the browser tab is inactive.
+ * Uses MessageChannel API which is not throttled in background tabs, unlike setTimeout.
+ * Falls back to Promise.resolve() for immediate execution if MessageChannel is unavailable.
+ * @returns {Function} - A function that schedules a callback to run asynchronously.
+ */
+function createBackgroundTaskScheduler() {
+  // Try to use MessageChannel for immediate task scheduling (not throttled in background)
+  if (typeof MessageChannel !== 'undefined') {
+    const channel = new MessageChannel();
+    const taskQueue = [];
+
+    // Set up the message handler once
+    channel.port1.onmessage = () => {
+      if (taskQueue.length > 0) {
+        const callback = taskQueue.shift();
+        try {
+          callback();
+        } catch (error) {
+          console.error('Error executing scheduled task:', error);
+        }
+      }
+    };
+
+    // Return a function that enqueues tasks and triggers execution
+    return function(callback) {
+      taskQueue.push(callback);
+      channel.port2.postMessage(null);
+    };
+  }
+  // Fallback to Promise.resolve() which also executes immediately
+  return function(callback) {
+    Promise.resolve().then(() => {
+      try {
+        callback();
+      } catch (error) {
+        console.error('Error executing scheduled task:', error);
+      }
+    });
+  };
+}
+
+// Create the scheduler once at module load time
+const scheduleTask = createBackgroundTaskScheduler();
+
+/**
+ * Yields control to the browser event loop without being throttled in background tabs.
+ * This replaces setTimeout(..., 0) which is throttled to ~1 second in inactive tabs.
+ * @returns {Promise} - A promise that resolves on the next event loop tick.
+ */
+function yieldToEventLoop() {
+  return new Promise(resolve => scheduleTask(resolve));
+}
+
+/**
+ * Schedules a callback to run after a minimum delay without being throttled in background tabs.
+ * Uses requestAnimationFrame polling for delays to avoid browser throttling.
+ * For delay = 0, uses the background-safe MessageChannel scheduler.
+ * @param {Function} callback - The function to call
+ * @param {number} delay - Minimum delay in milliseconds (0 for immediate)
+ * @returns {Function|undefined} - Cancel function for delays > 0, undefined for immediate execution
+ */
+function scheduleCallback(callback, delay = 0) {
+  if (typeof callback !== 'function') {
+    console.error('scheduleCallback: callback must be a function');
+    return undefined;
+  }
+  if (typeof delay !== 'number' || delay < 0) {
+    console.error('scheduleCallback: delay must be a non-negative number');
+    return undefined;
+  }
+  
+  if (delay === 0) {
+    scheduleTask(callback);
+    return undefined;
+  } else {
+    // Use requestAnimationFrame polling to avoid setTimeout throttling in background tabs
+    const startTime = performance.now();
+    let rafId = null;
+    
+    const poll = () => {
+      const now = performance.now();
+      const elapsed = now - startTime;
+      
+      if (elapsed >= delay) {
+        try {
+          callback();
+        } catch (error) {
+          console.error('Error executing scheduled callback:', error);
+        }
+      } else {
+        rafId = requestAnimationFrame(poll);
+      }
+    };
+    
+    rafId = requestAnimationFrame(poll);
+    
+    // Return a cancel function for cleanup if needed
+    return () => {
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
+    };
+  }
+}
+
 /** Get the element identified with the supplied name */
 const id = (name) => document.getElementById(name);
 

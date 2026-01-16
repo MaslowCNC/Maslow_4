@@ -95,6 +95,9 @@ const Monitor_output_Update = (message) => {
 	if (cmdContElem) {
 		const old_output = cmdContElem.innerHTML;
 		cmdContElem.innerHTML = output;
+		// Force a reflow to ensure DOM update is processed even in background tabs
+		// This won't make it visible but ensures the update isn't batched/deferred
+		void cmdContElem.offsetHeight;
 		// Do not autoscroll if the contents have not changed.
 		// This prevents scrolling on filtered-out status reports.
 		if (output !== old_output) {
