@@ -934,13 +934,15 @@ function updateProgressDisplay(sdPercent, sdName, stateName) {
     }
     // Update progress bar and text
     if (progressBar) {
-      progressBar.value = sdPercent || 0;
+      const percent = typeof sdPercent === 'number' ? sdPercent : 0;
+      progressBar.value = percent;
     }
     if (progressPercent) {
-      progressPercent.textContent = `${(sdPercent || 0).toFixed(1)}%`;
+      const percent = typeof sdPercent === 'number' ? sdPercent : 0;
+      progressPercent.textContent = `${percent.toFixed(1)}%`;
     }
     if (progressFilename) {
-      progressFilename.textContent = sdName;
+      progressFilename.textContent = sdName || 'Running G-code';
     }
   } else {
     // Show file controls
