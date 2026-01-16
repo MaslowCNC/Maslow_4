@@ -733,10 +733,20 @@ async function handleCalibrationData(measurements) {
       // Process single incremental measurement
       await processIncrementalMeasurement(measurements);
     } else {
-      // Received a batch message at a recompute point - just acknowledge
-      // The background optimization already has all measurements and is running
-      console.log(`Received batch of ${measurements.length} measurements at recompute point - acknowledging`);
+      // Received a batch message at a recompute point
+      // The background optimization should continue running with all measurements
+      console.log(`Received batch of ${measurements.length} measurements at recompute point - acknowledging and continuing background optimization`);
+      
+      // Just acknowledge - the background optimization already has all measurements
+      // and will continue to run until completion (200K iterations or 1000 stagnant)
       sendCommand("$ACKCAL");
+      
+      // Log a message to the UI
+      const messagesBox = document.getElementById('messages');
+      if (messagesBox) {
+        messagesBox.textContent += `\nReceived recompute batch (${measurements.length} measurements) - background optimization continues...`;
+        messagesBox.scrollTop = messagesBox.scrollHeight;
+      }
     }
   } else {
     // Process initial batch of 6 measurements (or full batch in legacy mode)

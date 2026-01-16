@@ -753,6 +753,7 @@ async function processIncrementalMeasurement(measurement) {
       let totalCounter = 0;
       const maxIterations = 200000;  // Full optimization like original
       const maxStagnant = 1000;
+      let lastAnchorUpdateFitness = 0;  // Track when we last sent anchor updates
 
       while (stagnantCounter < maxStagnant && totalCounter < maxIterations) {
         // Use all measurements accumulated so far (combine initial + incremental)
@@ -761,13 +762,23 @@ async function processIncrementalMeasurement(measurement) {
 
         // Compare raw fitness values (lower is better, so invert for comparison)
         if (1 / workingGuess.fitness > 1 / currentBestGuess.fitness) {
+          const previousFitness = 1 / currentBestGuess.fitness;
           currentBestGuess = JSON.parse(JSON.stringify(workingGuess));
           stagnantCounter = 0;
 
-          // Check if we've crossed threshold and should send anchors
           const displayFitness = 1 / currentBestGuess.fitness;
-          if (displayFitness > acceptableCalibrationThreshold) {
-            messagesBox.textContent += `\n[Background] Fitness improved: ${displayFitness.toFixed(7)} - Threshold met!`;
+          
+          // Send anchor updates if:
+          // 1. Fitness is above threshold, AND
+          // 2. Fitness has improved by at least 0.5% since last update
+          const fitnessImprovement = displayFitness - lastAnchorUpdateFitness;
+          const shouldUpdateAnchors = displayFitness > acceptableCalibrationThreshold && 
+                                       fitnessImprovement > 0.005 * displayFitness;
+
+          if (shouldUpdateAnchors) {
+            lastAnchorUpdateFitness = displayFitness;
+            
+            messagesBox.textContent += `\n[Background] Fitness improved to ${displayFitness.toFixed(7)} - Updating anchors...`;
             messagesBox.scrollTop = messagesBox.scrollHeight;
 
             // Send updated anchor locations
@@ -804,7 +815,7 @@ async function processIncrementalMeasurement(measurement) {
         }
       }
 
-      messagesBox.textContent += `\n[Background] Optimization complete after ${totalCounter} iterations`;
+      messagesBox.textContent += `\n[Background] Optimization complete after ${totalCounter} iterations. Final fitness: ${(1 / currentBestGuess.fitness).toFixed(7)}`;
       messagesBox.scrollTop = messagesBox.scrollHeight;
       backgroundOptimizationRunning = false;
     })();
@@ -815,35 +826,8 @@ async function processIncrementalMeasurement(measurement) {
   messagesBox.textContent += ` - Fitness: ${displayFitness.toFixed(7)}`;
   messagesBox.scrollTop = messagesBox.scrollHeight;
 
-  // Check if current fitness exceeds threshold - send anchors if so
-  if (displayFitness > acceptableCalibrationThreshold) {
-    messagesBox.textContent += ` ✓ Threshold met! Updating anchors...`;
-    messagesBox.scrollTop = messagesBox.scrollHeight;
-
-    // Send updated anchor locations to the firmware
-    const tlxStr = currentBestGuess.tl.x.toFixed(1), tlyStr = currentBestGuess.tl.y.toFixed(1);
-    const trxStr = currentBestGuess.tr.x.toFixed(1), tryStr = currentBestGuess.tr.y.toFixed(1);
-    const blxStr = currentBestGuess.bl.x.toFixed(1), blyStr = currentBestGuess.bl.y.toFixed(1);
-    const brxStr = currentBestGuess.br.x.toFixed(1), bryStr = currentBestGuess.br.y.toFixed(1);
-
-    sendCommand(`$/kinematics/MaslowKinematics/tlX=${tlxStr}`);
-    sendCommand(`$/kinematics/MaslowKinematics/tlY=${tlyStr}`);
-    sendCommand(`$/kinematics/MaslowKinematics/trX=${trxStr}`);
-    sendCommand(`$/kinematics/MaslowKinematics/trY=${tryStr}`);
-    sendCommand(`$/kinematics/MaslowKinematics/blX=${blxStr}`);
-    sendCommand(`$/kinematics/MaslowKinematics/blY=${blyStr}`);
-    sendCommand(`$/kinematics/MaslowKinematics/brX=${brxStr}`);
-    sendCommand(`$/kinematics/MaslowKinematics/brY=${bryStr}`);
-
-    // Update the initial guess for continued processing
-    initialGuess = JSON.parse(JSON.stringify(currentBestGuess));
-    initialGuess.fitness = 100000000;
-
-    messagesBox.textContent += ' Anchors updated, continuing with measurements...';
-    messagesBox.scrollTop = messagesBox.scrollHeight;
-  }
-
   // Always acknowledge receipt so firmware can continue to next point
+  // The background optimization will continue running and send anchor updates when threshold is met
   sendCommand("$ACKCAL");
 }
 
