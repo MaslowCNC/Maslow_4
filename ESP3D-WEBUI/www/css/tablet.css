@@ -882,3 +882,41 @@ float: left;
 .calibration-modal-input {
 width: 100%;
 }
+
+/* Progress bar styling for G-code execution */
+#tablettab_progress_bar {
+  width: 100%;
+  height: 40px;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  border: none;
+  background-color: #ddd;
+  border-radius: 0;
+}
+
+/* WebKit browsers (Chrome, Safari) */
+#tablettab_progress_bar::-webkit-progress-bar {
+  background-color: #ddd;
+  border-radius: 0;
+  border: none;
+}
+
+#tablettab_progress_bar::-webkit-progress-value {
+  background-color: #4aa85c;
+  border-radius: 0;
+  transition: width 0.3s ease;
+}
+
+/* Firefox */
+#tablettab_progress_bar::-moz-progress-bar {
+  background-color: #4aa85c;
+  border-radius: 0;
+}
+
+/* Edge and IE */
+#tablettab_progress_bar::-ms-fill {
+  background-color: #4aa85c;
+  border-radius: 0;
+  border: none;
+}
