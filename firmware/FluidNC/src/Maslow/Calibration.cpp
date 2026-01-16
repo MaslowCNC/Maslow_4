@@ -438,17 +438,24 @@ void Calibration::calibration_loop() {
 
             waypoint++;  //Increment the waypoint counter
 
-            if (waypoint > recomputePoints[recomputeCountIndex]) {  //If we have reached the end of this stage of the calibration process
+            // Only send batch at the first recompute point (after first 6 measurements)
+            // After that, send individual measurements only
+            if (waypoint > recomputePoints[recomputeCountIndex] && recomputeCountIndex == 0) {
+                // First recompute point - send batch of first 6 measurements
                 requestStateChange(CALIBRATION_COMPUTING);
                 print_calibration_data();
                 calibrationDataWaiting = millis();
                 sys.set_state(State::Idle);
                 recomputeCountIndex++;
             } else {
-                // For points after the initial 6, send individual measurements immediately
+                // For all points after the initial 6, send individual measurements immediately
                 if (waypoint > 6) {
                     print_single_measurement(waypoint - 1);  // waypoint was already incremented
                     calibrationDataWaiting = millis();
+                }
+                // Skip subsequent recompute points - we're not batching anymore
+                if (waypoint > recomputePoints[recomputeCountIndex] && recomputeCountIndex > 0) {
+                    recomputeCountIndex++;
                 }
                 hold(250);
             }
