@@ -716,6 +716,10 @@ function tabletGrblState(grbl, response) {
       scrollToLine(grbl.lineNumber);
     }
   }
+
+  // Handle progress bar display when G-code is running
+  updateProgressDisplay(grbl.sdPercent, grbl.sdName, stateName);
+
   // Always update tool position, even without GCode loaded
   tpDisplayer().reDrawTool(gCodeModal, arrayToXYZ(WPOS));
 
@@ -903,6 +907,51 @@ const showGCode = (gcode, append = false, updateToolpath = true) => {
 
   // TODO: this needs to take into account error states
   setRunControls();
+}
+
+/**
+ * Updates the progress bar display based on G-code execution status
+ * @param {number} sdPercent - Current progress percentage (0-100)
+ * @param {string} sdName - Name of the file being executed
+ * @param {string} stateName - Current GRBL state (Run, Hold, Idle, etc.)
+ */
+function updateProgressDisplay(sdPercent, sdName, stateName) {
+  const fileControls = id('tablettab_file_controls');
+  const progressContainer = id('tablettab_progress_container');
+  const progressBar = id('tablettab_progress_bar');
+  const progressPercent = id('tablettab_progress_percent');
+  const progressFilename = id('tablettab_progress_filename');
+
+  // Show progress bar when running G-code from file
+  if (sdName && (stateName === 'Run' || stateName === 'Hold')) {
+    // Hide file controls
+    if (fileControls) {
+      fileControls.style.display = 'none';
+    }
+    // Show progress container
+    if (progressContainer) {
+      progressContainer.style.display = 'grid';
+    }
+    // Update progress bar and text
+    if (progressBar) {
+      progressBar.value = sdPercent || 0;
+    }
+    if (progressPercent) {
+      progressPercent.textContent = `${(sdPercent || 0).toFixed(1)}%`;
+    }
+    if (progressFilename) {
+      progressFilename.textContent = sdName;
+    }
+  } else {
+    // Show file controls
+    if (fileControls) {
+      fileControls.style.display = 'grid';
+    }
+    // Hide progress container
+    if (progressContainer) {
+      progressContainer.style.display = 'none';
+    }
+  }
 }
 
 function nthLineEnd(str, n) {
