@@ -745,6 +745,9 @@ async function processIncrementalMeasurement(measurement) {
   // Start background optimization if not already running
   if (!backgroundOptimizationRunning) {
     backgroundOptimizationRunning = true;
+    
+    messagesBox.textContent += `\n[Background] Starting optimization with ${incrementalMeasurements.length} incremental measurements...`;
+    messagesBox.scrollTop = messagesBox.scrollHeight;
 
     // Start full optimization in background (runs to completion like original)
     (async function backgroundOptimization() {
@@ -754,8 +757,16 @@ async function processIncrementalMeasurement(measurement) {
       const maxIterations = 200000;  // Full optimization like original
       const maxStagnant = 1000;
       let lastAnchorUpdateFitness = 0;  // Track when we last sent anchor updates
+      let lastMeasurementCount = incrementalMeasurements.length;  // Track when new measurements arrive
 
       while (stagnantCounter < maxStagnant && totalCounter < maxIterations) {
+        // Check if new measurements have arrived - reset stagnant counter to give them a chance
+        if (incrementalMeasurements.length > lastMeasurementCount) {
+          messagesBox.textContent += `\n[Background] New measurement arrived (now ${incrementalMeasurements.length} total), resetting stagnant counter...`;
+          messagesBox.scrollTop = messagesBox.scrollHeight;
+          stagnantCounter = 0;  // Reset stagnation when new data arrives
+          lastMeasurementCount = incrementalMeasurements.length;
+        }
         // Use all measurements accumulated so far (combine initial + incremental)
         const currentMeasurements = [...initialMeasurements, ...incrementalMeasurements];
         workingGuess = computeLinesFitness(currentMeasurements, workingGuess);

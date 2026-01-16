@@ -727,10 +727,16 @@ var collectHandler = undefined
 var collectedSettings = null
 
 async function handleCalibrationData(measurements) {
+  const messagesBox = document.getElementById('messages');
+  
+  // Log what we received
+  console.log(`handleCalibrationData: received ${measurements.length} measurements, incrementalCalibrationActive=${incrementalCalibrationActive}`);
+  
   // Check if we're in incremental calibration mode (after the first 6 points)
   if (incrementalCalibrationActive) {
     if (measurements.length === 1) {
       // Process single incremental measurement
+      console.log('Processing single incremental measurement');
       await processIncrementalMeasurement(measurements);
     } else {
       // Received a batch message at a recompute point
@@ -739,17 +745,21 @@ async function handleCalibrationData(measurements) {
       
       // Just acknowledge - the background optimization already has all measurements
       // and will continue to run until completion (200K iterations or 1000 stagnant)
+      if (messagesBox) {
+        messagesBox.textContent += `\nReceived recompute batch (${measurements.length} measurements) - acknowledging...`;
+        messagesBox.scrollTop = messagesBox.scrollHeight;
+      }
+      
       sendCommand("$ACKCAL");
       
-      // Log a message to the UI
-      const messagesBox = document.getElementById('messages');
       if (messagesBox) {
-        messagesBox.textContent += `\nReceived recompute batch (${measurements.length} measurements) - background optimization continues...`;
+        messagesBox.textContent += ' Background optimization continues...';
         messagesBox.scrollTop = messagesBox.scrollHeight;
       }
     }
   } else {
     // Process initial batch of 6 measurements (or full batch in legacy mode)
+    console.log('Processing initial batch or legacy mode');
     document.querySelector('#messages').textContent += '\nComputing... This may take several minutes'
     sendCommand("$ACKCAL");
     await sleep(500)
