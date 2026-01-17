@@ -820,14 +820,18 @@ const tabletGotoXYMove = () => {
   }
 
   // Get work area parameters from globalThis.loadedValues (set by maslow.js)
-  const workAreaX = Number(globalThis.loadedValues?.workAreaX);
-  const workAreaY = Number(globalThis.loadedValues?.workAreaY);
-  const workAreaCenterOffsetX = Number(globalThis.loadedValues?.workAreaCenterOffsetX);
-  const workAreaCenterOffsetY = Number(globalThis.loadedValues?.workAreaCenterOffsetY);
+  let workAreaX = Number(globalThis.loadedValues?.workAreaX);
+  let workAreaY = Number(globalThis.loadedValues?.workAreaY);
+  let workAreaCenterOffsetX = Number(globalThis.loadedValues?.workAreaCenterOffsetX);
+  let workAreaCenterOffsetY = Number(globalThis.loadedValues?.workAreaCenterOffsetY);
+
+  // Log the loaded values for debugging
+  addMessage(`Debug: Work Area loaded values - X:${workAreaX}, Y:${workAreaY}, OffsetX:${workAreaCenterOffsetX}, OffsetY:${workAreaCenterOffsetY}`);
 
   // Validate that work area parameters are available
   if (isNaN(workAreaX) || isNaN(workAreaY) || isNaN(workAreaCenterOffsetX) || isNaN(workAreaCenterOffsetY)) {
     addMessage("Error: Work area parameters not available. Please ensure machine configuration is loaded.");
+    addMessage("Try sending $MINFO command to refresh configuration.");
     return;
   }
 
