@@ -819,36 +819,17 @@ const tabletGotoXYMove = () => {
     return;
   }
 
-  // Get work area parameters from globalThis.loadedValues (set by maslow.js)
-  const workAreaX = Number(globalThis.loadedValues?.workAreaX);
-  const workAreaY = Number(globalThis.loadedValues?.workAreaY);
-  const workAreaCenterOffsetX = Number(globalThis.loadedValues?.workAreaCenterOffsetX);
-  const workAreaCenterOffsetY = Number(globalThis.loadedValues?.workAreaCenterOffsetY);
-
-  // Validate that work area parameters are available
-  if (isNaN(workAreaX) || isNaN(workAreaY) || isNaN(workAreaCenterOffsetX) || isNaN(workAreaCenterOffsetY)) {
-    addMessage("Error: Work area parameters not available. Please ensure machine configuration is loaded.");
-    addMessage("Try sending $MINFO command to refresh configuration.");
-    return;
-  }
-
   // Convert input to mm if in inch mode
   const mmPerInch = 25.4;
   const xInputMm = gCodeModal.units === "G20" ? xInput * mmPerInch : xInput;
   const yInputMm = gCodeModal.units === "G20" ? yInput * mmPerInch : yInput;
 
-  // Calculate absolute machine coordinates (always in mm internally)
-  // Set origin at bottom-left corner of work area (minimum position)
-  // Bottom-left = Center_Offset - (Work_Area / 2)
-  const machineX = xInputMm + workAreaCenterOffsetX - (workAreaX / 2.0);
-  const machineY = yInputMm + workAreaCenterOffsetY - (workAreaY / 2.0);
-
   const units = gCodeModal.units === "G21" ? "mm" : "inch";
-  addMessage(`Moving to: (${xInput.toFixed(2)}, ${yInput.toFixed(2)}) ${units}`);
-  addMessage(`Machine coords: (${machineX.toFixed(2)}, ${machineY.toFixed(2)}) mm`);
+  addMessage(`Moving to machine coords: (${xInput.toFixed(2)}, ${yInput.toFixed(2)}) ${units}`);
 
-  // Use the existing moveTo function to move to the calculated position
-  moveTo(`X${machineX.toFixed(3)} Y${machineY.toFixed(3)}`);
+  // Send G53 command to use machine coordinate system directly
+  const cmd = `G53 G0 X${xInputMm.toFixed(3)} Y${yInputMm.toFixed(3)}`;
+  sendCommand(cmd);
 
   // Hide the modal
   hideModal("goto-xy-popup");
