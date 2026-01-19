@@ -776,10 +776,22 @@ async function processIncrementalMeasurement(measurement) {
       while (stagnantCounter < maxStagnant && totalCounter < maxIterations) {
         // Check if new measurements have arrived - restart optimization from best position
         if (incrementalMeasurements.length > lastMeasurementCount) {
-          messagesBox.textContent += `\n[Background] New measurement arrived (now ${incrementalMeasurements.length} total), restarting from best known position...`;
+          messagesBox.textContent += `\n[Background] New measurement arrived (now ${incrementalMeasurements.length} total), restarting from best known position with random perturbation...`;
           messagesBox.scrollTop = messagesBox.scrollHeight;
           stagnantCounter = 0;  // Reset stagnation when new data arrives
           workingGuess = JSON.parse(JSON.stringify(currentBestGuess));  // Restart search from best position
+          
+          // Add random perturbation to escape local optima (scale with measurement count)
+          const perturbScale = 5.0 / Math.sqrt(incrementalMeasurements.length);
+          workingGuess.tl.x += (Math.random() - 0.5) * perturbScale;
+          workingGuess.tl.y += (Math.random() - 0.5) * perturbScale;
+          workingGuess.tr.x += (Math.random() - 0.5) * perturbScale;
+          workingGuess.tr.y += (Math.random() - 0.5) * perturbScale;
+          workingGuess.bl.x += (Math.random() - 0.5) * perturbScale;
+          workingGuess.bl.y += (Math.random() - 0.5) * perturbScale;
+          workingGuess.br.x += (Math.random() - 0.5) * perturbScale;
+          workingGuess.br.y += (Math.random() - 0.5) * perturbScale;
+          
           lastMeasurementCount = incrementalMeasurements.length;
         }
         // Use all measurements accumulated so far (combine initial + incremental)
