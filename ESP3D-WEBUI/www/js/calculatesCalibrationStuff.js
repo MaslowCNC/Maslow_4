@@ -782,15 +782,16 @@ async function processIncrementalMeasurement(measurement) {
           workingGuess = JSON.parse(JSON.stringify(currentBestGuess));  // Restart search from best position
           
           // Add random perturbation to escape local optima (scale with measurement count)
-          const perturbScale = 5.0 / Math.sqrt(incrementalMeasurements.length);
-          workingGuess.tl.x += (Math.random() - 0.5) * perturbScale;
-          workingGuess.tl.y += (Math.random() - 0.5) * perturbScale;
-          workingGuess.tr.x += (Math.random() - 0.5) * perturbScale;
-          workingGuess.tr.y += (Math.random() - 0.5) * perturbScale;
-          workingGuess.bl.x += (Math.random() - 0.5) * perturbScale;
-          workingGuess.bl.y += (Math.random() - 0.5) * perturbScale;
-          workingGuess.br.x += (Math.random() - 0.5) * perturbScale;
-          workingGuess.br.y += (Math.random() - 0.5) * perturbScale;
+          // Use larger perturbation (50mm base) that scales down with more measurements
+          const perturbScale = 50.0 / Math.sqrt(incrementalMeasurements.length);
+          workingGuess.tl.x += (Math.random() - 0.5) * 2 * perturbScale;
+          workingGuess.tl.y += (Math.random() - 0.5) * 2 * perturbScale;
+          workingGuess.tr.x += (Math.random() - 0.5) * 2 * perturbScale;
+          workingGuess.tr.y += (Math.random() - 0.5) * 2 * perturbScale;
+          workingGuess.bl.x += (Math.random() - 0.5) * 2 * perturbScale;
+          workingGuess.bl.y += (Math.random() - 0.5) * 2 * perturbScale;
+          workingGuess.br.x += (Math.random() - 0.5) * 2 * perturbScale;
+          workingGuess.br.y += (Math.random() - 0.5) * 2 * perturbScale;
           
           lastMeasurementCount = incrementalMeasurements.length;
         }
