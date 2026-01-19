@@ -746,12 +746,26 @@ async function processIncrementalMeasurement(measurement) {
   if (!backgroundOptimizationRunning) {
     backgroundOptimizationRunning = true;
     
-    messagesBox.textContent += `\n[Background] Starting optimization with ${incrementalMeasurements.length} incremental measurements...`;
+    const startingMeasurementCount = incrementalMeasurements.length;
+    messagesBox.textContent += `\n[Background] Starting optimization with ${startingMeasurementCount} incremental measurements...`;
     messagesBox.scrollTop = messagesBox.scrollHeight;
 
     // Start full optimization in background (runs to completion like original)
     (async function backgroundOptimization() {
       let workingGuess = JSON.parse(JSON.stringify(currentBestGuess));
+      
+      // Add small random perturbation to escape local optima
+      // Perturbation size scales with number of measurements (more data = smaller perturbation)
+      const perturbationScale = 5.0 / Math.sqrt(startingMeasurementCount);
+      workingGuess.tl.x += (Math.random() - 0.5) * perturbationScale;
+      workingGuess.tl.y += (Math.random() - 0.5) * perturbationScale;
+      workingGuess.tr.x += (Math.random() - 0.5) * perturbationScale;
+      workingGuess.tr.y += (Math.random() - 0.5) * perturbationScale;
+      workingGuess.bl.x += (Math.random() - 0.5) * perturbationScale;
+      workingGuess.bl.y += (Math.random() - 0.5) * perturbationScale;
+      workingGuess.br.x += (Math.random() - 0.5) * perturbationScale;
+      workingGuess.br.y += (Math.random() - 0.5) * perturbationScale;
+      
       let stagnantCounter = 0;
       let totalCounter = 0;
       const maxIterations = 200000;  // Full optimization like original
@@ -826,7 +840,9 @@ async function processIncrementalMeasurement(measurement) {
         }
       }
 
-      messagesBox.textContent += `\n[Background] Optimization complete after ${totalCounter} iterations. Final fitness: ${(1 / currentBestGuess.fitness).toFixed(7)}`;
+      const endingMeasurementCount = incrementalMeasurements.length;
+      const measurementsAdded = endingMeasurementCount - startingMeasurementCount;
+      messagesBox.textContent += `\n[Background] Optimization complete after ${totalCounter} iterations (${measurementsAdded} measurements added during optimization). Final fitness: ${(1 / currentBestGuess.fitness).toFixed(7)}`;
       messagesBox.scrollTop = messagesBox.scrollHeight;
       backgroundOptimizationRunning = false;
     })();
