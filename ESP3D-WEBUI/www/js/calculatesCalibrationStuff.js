@@ -15,7 +15,7 @@ const MAX_LOW_FITNESS_RETRIES = 10;
 var initialGuess = {
   tl: { x: 0, y: 2000 },
   tr: { x: 3000, y: 2000 },
-  bl: { x: 0, y: 0 },
+  bl: { x: 0, y: 0 }, 
   br: { x: 3000, y: 0 },
   fitness: 100000000,
 }
