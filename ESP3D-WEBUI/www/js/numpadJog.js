@@ -57,10 +57,10 @@ function setCurrentStepSize(axis, value) {
 	const elem = id(elementId);
 	if (elem) {
 		// Update both textContent and value to support different element types
-		if (elem.textContent !== undefined) {
+		if ('textContent' in elem) {
 			elem.textContent = value.toString();
 		}
-		if (elem.value !== undefined) {
+		if ('value' in elem) {
 			elem.value = value.toString();
 		}
 		// Trigger a change event to notify other components
@@ -355,6 +355,7 @@ function handleNumpadKeyDown(event) {
 	}
 	
 	// Special case: Always allow numpad 5 (ABORT) to work, even when locked
+	// Note: Some keyboards may report 'Clear' instead of '5' when NumLock is off
 	if (event.key === '5' || event.key === 'Clear') {
 		executeAbort();
 		event.preventDefault();
