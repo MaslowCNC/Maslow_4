@@ -279,6 +279,28 @@ function handleEnterKeyUp() {
 }
 
 /**
+ * Check if a key event is from the numpad
+ * @param {KeyboardEvent} event
+ * @returns {boolean}
+ */
+function isNumpadKey(event) {
+	// Check if the key is from the numpad location
+	if (event.location === KeyboardEvent.DOM_KEY_LOCATION_NUMPAD) {
+		return true;
+	}
+	
+	// Check for numpad-specific key codes
+	const numpadCodes = [
+		'Numpad0', 'Numpad1', 'Numpad2', 'Numpad3', 'Numpad4',
+		'Numpad5', 'Numpad6', 'Numpad7', 'Numpad8', 'Numpad9',
+		'NumpadAdd', 'NumpadSubtract', 'NumpadMultiply', 'NumpadDivide',
+		'NumpadDecimal', 'NumpadEnter'
+	];
+	
+	return numpadCodes.includes(event.code);
+}
+
+/**
  * Check if the dashboard/controls panel has focus
  * Keyboard listeners should only be active when the dashboard or jogging widget has focus
  * to prevent accidental triggers while typing in other input fields
@@ -315,6 +337,11 @@ function isNumpadControlActive() {
  * @param {KeyboardEvent} event
  */
 function handleNumpadKeyDown(event) {
+	// Only handle keys from the actual numpad
+	if (!isNumpadKey(event)) {
+		return;
+	}
+	
 	// Special case: Always allow numpad 5 (ABORT) to work, even when locked
 	if (event.key === '5' || event.key === 'Clear') {
 		executeAbort();
@@ -367,12 +394,10 @@ function handleNumpadKeyDown(event) {
 		
 		// Z-Axis Control
 		case '+':
-		case '=': // Also accept = key (same key without shift on many keyboards)
 			executeZJog('');
 			event.preventDefault();
 			break;
 		case '-':
-		case '_': // Also accept _ key (same key with shift)
 			executeZJog('-');
 			event.preventDefault();
 			break;
@@ -401,11 +426,8 @@ function handleNumpadKeyDown(event) {
 		
 		// Cycle Start (with long-press)
 		case 'Enter':
-			// Only handle numpad Enter, not regular Enter
-			if (event.location === KeyboardEvent.DOM_KEY_LOCATION_NUMPAD || event.code === 'NumpadEnter') {
-				handleEnterKeyDown();
-				event.preventDefault();
-			}
+			handleEnterKeyDown();
+			event.preventDefault();
 			break;
 	}
 }
@@ -415,8 +437,13 @@ function handleNumpadKeyDown(event) {
  * @param {KeyboardEvent} event
  */
 function handleNumpadKeyUp(event) {
+	// Only handle keys from the actual numpad
+	if (!isNumpadKey(event)) {
+		return;
+	}
+	
 	// Handle Enter key release for long-press detection
-	if (event.key === 'Enter' && (event.location === KeyboardEvent.DOM_KEY_LOCATION_NUMPAD || event.code === 'NumpadEnter')) {
+	if (event.key === 'Enter') {
 		handleEnterKeyUp();
 		event.preventDefault();
 	}
