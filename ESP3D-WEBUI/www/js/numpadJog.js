@@ -110,36 +110,36 @@ function cycleStepSize(up) {
 
 /**
  * Execute a jog command for XY axes
- * @param {string} xCmd - X-axis command (e.g., 'X10', 'X-10', or '' for no X movement)
- * @param {string} yCmd - Y-axis command (e.g., 'Y10', 'Y-10', or '' for no Y movement)
+ * @param {string} axis - 'X' or 'Y'
+ * @param {string} direction - '' for positive, '-' for negative
  */
-function executeXYJog(xCmd, yCmd) {
+function executeXYJog(axis, direction) {
 	if (getChecked("lock_UI") !== "false") {
 		return;
 	}
 	
 	const stepSize = getCurrentStepSize('M');
-	const commands = [];
-	
-	if (xCmd) {
-		// Extract the axis letter and sign, then append the step size
-		const match = xCmd.match(/^([XY])([+-]?)/);
-		if (match) {
-			commands.push(`${match[1]}${match[2]}${stepSize}`);
-		}
-	}
-	if (yCmd) {
-		// Extract the axis letter and sign, then append the step size
-		const match = yCmd.match(/^([XY])([+-]?)/);
-		if (match) {
-			commands.push(`${match[1]}${match[2]}${stepSize}`);
-		}
+	// Convention: Y10 for positive, Y-10 for negative (no + sign for positive)
+	const cmd = `${axis}${direction}${stepSize}`;
+	SendJogcommand(cmd, 'XYfeedrate');
+}
+
+/**
+ * Execute a combined XY jog command (for diagonal movement)
+ * @param {string} xDirection - '' for X+, '-' for X-
+ * @param {string} yDirection - '' for Y+, '-' for Y-
+ */
+function executeXYDiagonalJog(xDirection, yDirection) {
+	if (getChecked("lock_UI") !== "false") {
+		return;
 	}
 	
-	if (commands.length > 0) {
-		const combinedCmd = commands.join(' ');
-		SendJogcommand(combinedCmd, 'XYfeedrate');
-	}
+	const stepSize = getCurrentStepSize('M');
+	// Build both X and Y commands
+	const xCmd = `X${xDirection}${stepSize}`;
+	const yCmd = `Y${yDirection}${stepSize}`;
+	const combinedCmd = `${xCmd} ${yCmd}`;
+	SendJogcommand(combinedCmd, 'XYfeedrate');
 }
 
 /**
@@ -370,37 +370,37 @@ function handleNumpadKeyDown(event) {
 	switch (event.key) {
 		// XY Jogging
 		case '8':
-			executeXYJog('', 'Y10');
+			executeXYJog('Y', ''); // Y+
 			event.preventDefault();
 			break;
 		case '2':
-			executeXYJog('', 'Y-10');
+			executeXYJog('Y', '-'); // Y-
 			event.preventDefault();
 			break;
 		case '4':
-			executeXYJog('X-10', '');
+			executeXYJog('X', '-'); // X-
 			event.preventDefault();
 			break;
 		case '6':
-			executeXYJog('X10', '');
+			executeXYJog('X', ''); // X+
 			event.preventDefault();
 			break;
 		
 		// Diagonal Jogging
 		case '7':
-			executeXYJog('X-10', 'Y10'); // Top-Left
+			executeXYDiagonalJog('-', ''); // Top-Left (X-, Y+)
 			event.preventDefault();
 			break;
 		case '9':
-			executeXYJog('X10', 'Y10'); // Top-Right
+			executeXYDiagonalJog('', ''); // Top-Right (X+, Y+)
 			event.preventDefault();
 			break;
 		case '1':
-			executeXYJog('X-10', 'Y-10'); // Bottom-Left
+			executeXYDiagonalJog('-', '-'); // Bottom-Left (X-, Y-)
 			event.preventDefault();
 			break;
 		case '3':
-			executeXYJog('X10', 'Y-10'); // Bottom-Right
+			executeXYDiagonalJog('', '-'); // Bottom-Right (X+, Y-)
 			event.preventDefault();
 			break;
 		
