@@ -122,10 +122,18 @@ function executeXYJog(xCmd, yCmd) {
 	const commands = [];
 	
 	if (xCmd) {
-		commands.push(xCmd.replace(/[+-]?\d+\.?\d*/, stepSize.toString()));
+		// Extract the axis letter and sign, then append the step size
+		const match = xCmd.match(/^([XY])([+-]?)/);
+		if (match) {
+			commands.push(`${match[1]}${match[2]}${stepSize}`);
+		}
 	}
 	if (yCmd) {
-		commands.push(yCmd.replace(/[+-]?\d+\.?\d*/, stepSize.toString()));
+		// Extract the axis letter and sign, then append the step size
+		const match = yCmd.match(/^([XY])([+-]?)/);
+		if (match) {
+			commands.push(`${match[1]}${match[2]}${stepSize}`);
+		}
 	}
 	
 	if (commands.length > 0) {
@@ -136,7 +144,7 @@ function executeXYJog(xCmd, yCmd) {
 
 /**
  * Execute a jog command for Z axis
- * @param {string} direction - '+' or '-' for direction
+ * @param {string} direction - '' for positive (up), '-' for negative (down)
  */
 function executeZJog(direction) {
 	if (getChecked("lock_UI") !== "false") {
@@ -144,6 +152,7 @@ function executeZJog(direction) {
 	}
 	
 	const stepSize = getCurrentStepSize('Z');
+	// Convention: Z10 for positive, Z-10 for negative (no + sign for positive)
 	const cmd = `Z${direction}${stepSize}`;
 	SendJogcommand(cmd, 'Zfeedrate');
 }
@@ -168,10 +177,13 @@ function executeHomeXY() {
 	if (getChecked('lock_UI') === "true") {
 		return;
 	}
+	// Delay between homing commands to prevent command queue overflow
+	const HOME_COMMAND_DELAY_MS = 100;
+	
 	SendHomecommand('G28 X0'); // Home X
 	setTimeout(() => {
-		SendHomecommand('G28 Y0'); // Home Y after a brief delay
-	}, 100);
+		SendHomecommand('G28 Y0'); // Home Y after allowing first command to be processed
+	}, HOME_COMMAND_DELAY_MS);
 	console.log('Home XY executed');
 }
 
