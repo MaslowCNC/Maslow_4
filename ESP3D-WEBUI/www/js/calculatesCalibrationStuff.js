@@ -925,7 +925,7 @@ async function findMaxFitness(measurements) {
           const currentWidth = bestGuess.tr.x - bestGuess.tl.x;
           const currentHeight = bestGuess.tl.y - bestGuess.bl.y;
           const diagonalSize = Math.sqrt(currentWidth * currentWidth + currentHeight * currentHeight) / Math.sqrt(2);
-          const optimalRadius = Math.sqrt(diagonalSize * diagonalSize + diagonalSize * diagonalSize);
+          const optimalRadius = diagonalSize * Math.sqrt(2);
 
           // Calculate new dimensions on the arc using the target aspect ratio
           // For a point on an arc at radius R with aspect ratio A:
@@ -955,7 +955,10 @@ async function findMaxFitness(measurements) {
           initialGuess.tl.y = bestGuess.tl.y + Math.random() * 100 - 50;
           initialGuess.tr.x = bestGuess.tr.x + Math.random() * 100 - 50;
           initialGuess.tr.y = bestGuess.tr.y + Math.random() * 100 - 50;
+          initialGuess.bl.x = bestGuess.bl.x + Math.random() * 100 - 50;
+          initialGuess.bl.y = bestGuess.bl.y + Math.random() * 100 - 50;
           initialGuess.br.x = bestGuess.br.x + Math.random() * 100 - 50;
+          initialGuess.br.y = bestGuess.br.y + Math.random() * 100 - 50;
         }
 
         //Reset the counters
