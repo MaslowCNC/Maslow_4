@@ -779,6 +779,10 @@ async function findMaxFitness(measurements) {
   let bestGuessAcrossAllRetries = JSON.parse(JSON.stringify(startingGuess));
   let bestFitnessAcrossAllRetries = 1 / bestGuess.fitness;
 
+  // Define the sequence of aspect ratios to try when initial calculation fails
+  // Aspect ratios are width:height
+  const aspectRatioSequence = [2.0, 1.0, 0.5, 1.5, 1.0/1.5]; // 2:1, 1:1, 1:2, 1.5:1, 1:1.5
+
   function iterate() {
     if (stagnantCounter < 1000 && totalCounter < 200000) {
 
@@ -912,12 +916,47 @@ async function findMaxFitness(measurements) {
 
         messagesBox.textContent += '\n Restarting';
 
-        //Add +-50 to each of the corner anchor points and try again
-        initialGuess.tl.x = bestGuess.tl.x + Math.random() * 100 - 50;
-        initialGuess.tl.y = bestGuess.tl.y + Math.random() * 100 - 50;
-        initialGuess.tr.x = bestGuess.tr.x + Math.random() * 100 - 50;
-        initialGuess.tr.y = bestGuess.tr.y + Math.random() * 100 - 50;
-        initialGuess.br.x = bestGuess.br.x + Math.random() * 100 - 50;
+        // Instead of random guesses, pick another point on the arc with specific aspect ratios
+        // Use the sequence: 2:1, 1:1, 1:2, 1.5:1, 1:1.5
+        if (lowFitnessRetryCount < aspectRatioSequence.length) {
+          const targetAspectRatio = aspectRatioSequence[lowFitnessRetryCount];
+
+          // Calculate the optimal radius from the current best guess
+          const currentWidth = bestGuess.tr.x - bestGuess.tl.x;
+          const currentHeight = bestGuess.tl.y - bestGuess.bl.y;
+          const diagonalSize = Math.sqrt(currentWidth * currentWidth + currentHeight * currentHeight) / Math.sqrt(2);
+          const optimalRadius = Math.sqrt(diagonalSize * diagonalSize + diagonalSize * diagonalSize);
+
+          // Calculate new dimensions on the arc using the target aspect ratio
+          // For a point on an arc at radius R with aspect ratio A:
+          // width = R * cos(angle), height = R * sin(angle)
+          // A = width/height = cos(angle)/sin(angle) = cot(angle)
+          // angle = atan(1/A)
+          const angle = Math.atan(1 / targetAspectRatio);
+          const newWidth = optimalRadius * Math.cos(angle);
+          const newHeight = optimalRadius * Math.sin(angle);
+
+          messagesBox.textContent += ` with aspect ratio ${targetAspectRatio.toFixed(2)}:1`;
+          messagesBox.textContent += ` (width: ${newWidth.toFixed(1)}mm, height: ${newHeight.toFixed(1)}mm)`;
+
+          // Set the new initial guess using the calculated dimensions
+          initialGuess.tl.x = 0;
+          initialGuess.tl.y = newHeight;
+          initialGuess.tr.x = newWidth;
+          initialGuess.tr.y = newHeight;
+          initialGuess.bl.x = 0;
+          initialGuess.bl.y = 0;
+          initialGuess.br.x = newWidth;
+          initialGuess.br.y = 0;
+        } else {
+          // Fallback: If we've exhausted aspect ratio sequence, use a small random offset
+          messagesBox.textContent += ' with small random offset (fallback)';
+          initialGuess.tl.x = bestGuess.tl.x + Math.random() * 100 - 50;
+          initialGuess.tl.y = bestGuess.tl.y + Math.random() * 100 - 50;
+          initialGuess.tr.x = bestGuess.tr.x + Math.random() * 100 - 50;
+          initialGuess.tr.y = bestGuess.tr.y + Math.random() * 100 - 50;
+          initialGuess.br.x = bestGuess.br.x + Math.random() * 100 - 50;
+        }
 
         //Reset the counters
         stagnantCounter = 0;
