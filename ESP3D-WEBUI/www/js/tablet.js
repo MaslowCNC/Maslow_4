@@ -434,8 +434,8 @@ function clearAlarm() {
   if (statusText === 'Alarm') {
     id('systemStatus').classList.remove('system-status-alarm')
     SendPrinterCommand('$X', true, null, null, 114, 1)
-  } else if (statusText === 'Resume Tension' && maslowStatus.state === 4) {
-    // When in Extended state (state 4), clicking "Resume Tension" applies tension
+  } else if (statusText === 'Apply Tension' && maslowStatus.state === 4) {
+    // When in Extended state (state 4), clicking "Apply Tension" applies tension
     tabletCalTense();
   }
 }

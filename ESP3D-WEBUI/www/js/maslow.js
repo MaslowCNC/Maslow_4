@@ -152,12 +152,12 @@ const updateDynamicButtons = () => {
 
 			relaxButton.style.backgroundColor = greenBackground;
 
-			// Update systemStatus button to show "Resume Tension" in Extended state
+			// Update systemStatus button to show "Apply Tension" in Extended state
 			// This works in conjunction with show_grbl_status in grbl.js which also sets
 			// the text when GRBL state updates come in while Maslow is in Extended state
 			const systemStatusElement = document.getElementById("systemStatus");
 			if (systemStatusElement) {
-				setHTML("systemStatus", "Resume Tension");
+				setHTML("systemStatus", "Apply Tension");
 			}
 
 			break;
