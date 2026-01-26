@@ -149,8 +149,14 @@ const updateDynamicButtons = () => {
 			tenseButton.style.backgroundColor = greenBackground;
 			calibrateButton.style.backgroundColor = greenBackground;
 			extendButton.style.backgroundColor = greenBackground;
-			
+
 			relaxButton.style.backgroundColor = greenBackground;
+
+			// Update systemStatus button to show "Resume Tension" in Extended state
+			const systemStatusElement = document.getElementById("systemStatus");
+			if (systemStatusElement) {
+				systemStatusElement.innerHTML = "Resume Tension";
+			}
 
 			break;
 		case 5:

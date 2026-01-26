@@ -535,7 +535,12 @@ const show_grbl_status = (stateName = "", message = "", hasSD = false) => {
 
   setHTML("grbl_status", stateName);
   // Set systemStatus for tablet view (will be updated with progress by show_grbl_SD if file is running)
-  setHTML("systemStatus", stateName);
+  // When Maslow state is Extended (state 4) and GRBL state is Idle, show "Resume Tension" instead
+  if (stateName === "Idle" && typeof maslowStatus !== 'undefined' && maslowStatus.state === 4) {
+    setHTML("systemStatus", "Resume Tension");
+  } else {
+    setHTML("systemStatus", stateName);
+  }
 
   if (stateName === "Alarm") {
     id("systemStatus").classList.add("system-status-alarm");

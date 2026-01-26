@@ -430,9 +430,13 @@ function tabletShowMessage(msg, collecting) {
 function tabletShowResponse(response) { }
 
 function clearAlarm() {
-  if (getText('systemStatus') === 'Alarm') {
+  const statusText = getText('systemStatus');
+  if (statusText === 'Alarm') {
     id('systemStatus').classList.remove('system-status-alarm')
     SendPrinterCommand('$X', true, null, null, 114, 1)
+  } else if (statusText === 'Resume Tension' && maslowStatus.state === 4) {
+    // When in Extended state (state 4), clicking "Resume Tension" applies tension
+    tabletCalTense();
   }
 }
 
