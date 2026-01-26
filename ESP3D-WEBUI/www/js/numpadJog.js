@@ -339,9 +339,14 @@ function isNumpadKey(event) {
  * @returns {boolean} true if numpad controls should be active
  */
 function isNumpadControlActive() {
-	// Check if we're on the main tab (dashboard)
+	// Check if we're on the main tab (dashboard) or tablet tab
 	const maintab = id('maintab');
-	if (!maintab || maintab.style.display === 'none') {
+	const tablettab = id('tablettab');
+	
+	const mainTabVisible = maintab && maintab.style.display !== 'none';
+	const tabletTabVisible = tablettab && tablettab.style.display !== 'none';
+	
+	if (!mainTabVisible && !tabletTabVisible) {
 		return false;
 	}
 	
@@ -391,6 +396,7 @@ function handleNumpadKeyDown(event) {
 	if (!isActive) {
 		console.log('Numpad control not active - checking conditions:');
 		console.log('  - Main tab visible:', id('maintab') && id('maintab').style.display !== 'none');
+		console.log('  - Tablet tab visible:', id('tablettab') && id('tablettab').style.display !== 'none');
 		console.log('  - UI locked:', getChecked('lock_UI'));
 		console.log('  - Active element:', document.activeElement?.tagName);
 		return;

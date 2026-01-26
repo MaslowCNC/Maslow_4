@@ -32,7 +32,7 @@ The layout is designed to follow the physical arrangement of a standard Numpad f
 ### When is the Numpad Active?
 
 **The numpad jogging controls work when:**
-1. **The main dashboard tab is visible** - You must be on the Controls/Dashboard tab
+1. **The dashboard or tablet tab is visible** - You must be on the Controls/Dashboard tab OR the Tablet tab
 2. **The UI is not locked** - The interface must be unlocked (not during a running job)
 3. **No text input fields have focus** - To prevent interference with typing
 
@@ -207,7 +207,7 @@ ABORT command sent successfully
 **If pressing numpad keys does nothing:**
 
 1. **Check NumLock**: Ensure NumLock is ON on your keyboard
-2. **Check tab**: Ensure you're on the main dashboard/Controls tab (not Camera, Config, or Settings)
+2. **Check tab**: Ensure you're on the dashboard/Controls tab OR the Tablet tab (not Camera, Config, or Settings)
 3. **Check UI lock**: Look for the lock button in the top toolbar
    - Button shows "Lock interface" → UI is unlocked, numpad should work ✓
    - Button shows "Unlock interface" → UI is locked, only ABORT (key 5) will work
