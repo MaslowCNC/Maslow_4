@@ -29,6 +29,23 @@ The layout is designed to follow the physical arrangement of a standard Numpad f
 
 ## Functional Requirements
 
+### When is the Numpad Active?
+
+**The numpad jogging controls work when:**
+1. **The main dashboard tab is visible** - You must be on the Controls/Dashboard tab
+2. **The UI is not locked** - The interface must be unlocked (not during a running job)
+3. **No text input fields have focus** - To prevent interference with typing
+
+**Important:** The numpad functionality is tied to the **UI lock state**, not the machine state:
+- **UI Unlocked** (interface shows "Lock interface" button) → Numpad jogging works ✓
+- **UI Locked** (interface shows "Unlock interface" button) → Numpad jogging disabled ✗
+  - **Exception:** The ABORT key (5) always works, even when UI is locked
+
+**Machine states vs UI lock:**
+- **"Idle"** machine state: The machine is not moving. UI can be locked or unlocked.
+- **"Run"** machine state: The machine is running a job. UI is typically locked for safety.
+- The numpad respects the UI lock, not the machine state directly.
+
 ### Dynamic Step Cycling
 
 Pressing `0` (Numpad Insert) or `.` (Numpad Delete) updates the step value in the UI in real-time:
@@ -170,12 +187,41 @@ Tested and working on:
 
 ## Troubleshooting
 
+### Debug Mode
+
+The numpad handler includes extensive console logging to help diagnose issues. Open your browser's Developer Console (F12) to see:
+- Which numpad keys are detected
+- Whether the numpad control is active
+- Why controls might be disabled (UI locked, wrong tab, input field focus)
+- Any errors when sending commands
+
+Example console output:
+```
+Numpad key detected: 5 (code: Numpad5)
+Executing ABORT command
+ABORT command sent successfully
+```
+
 ### Numpad not responding
 
-1. **Check NumLock**: Ensure NumLock is ON
-2. **Check tab**: Ensure you're on the main dashboard tab
-3. **Check focus**: Click on the dashboard background (not in an input field)
-4. **Check lock**: Ensure UI is not locked (except for ABORT key)
+**If pressing numpad keys does nothing:**
+
+1. **Check NumLock**: Ensure NumLock is ON on your keyboard
+2. **Check tab**: Ensure you're on the main dashboard/Controls tab (not Camera, Config, or Settings)
+3. **Check UI lock**: Look for the lock button in the top toolbar
+   - Button shows "Lock interface" → UI is unlocked, numpad should work ✓
+   - Button shows "Unlock interface" → UI is locked, only ABORT (key 5) will work
+4. **Check focus**: Click on the dashboard background (not in any input field)
+5. **Check console**: Open browser Developer Console (F12) and press a numpad key to see debug output
+
+**If you get "Error 2" or other firmware errors:**
+
+This indicates the command reached the firmware but was rejected. Common causes:
+- Machine is not in a valid state for the command
+- Firmware configuration issue
+- Communication error with the controller
+
+Check the browser console for the exact command being sent (e.g., `$J=G91 G21 F1000 X10`).
 
 ### Enter key not starting job
 

@@ -115,13 +115,25 @@ function cycleStepSize(up) {
  */
 function executeXYJog(axis, direction) {
 	if (getChecked("lock_UI") !== "false") {
+		console.log('Cannot jog: UI is locked');
+		return;
+	}
+	
+	if (typeof SendJogcommand !== 'function') {
+		console.error('SendJogcommand function not available');
 		return;
 	}
 	
 	const stepSize = getCurrentStepSize('M');
 	// Convention: Y10 for positive, Y-10 for negative (no + sign for positive)
 	const cmd = `${axis}${direction}${stepSize}`;
-	SendJogcommand(cmd, 'XYfeedrate');
+	console.log(`Executing XY jog: ${cmd}`);
+	
+	try {
+		SendJogcommand(cmd, 'XYfeedrate');
+	} catch (error) {
+		console.error('Error executing XY jog:', error);
+	}
 }
 
 /**
@@ -161,13 +173,21 @@ function executeZJog(direction) {
  * Execute abort/stop command
  */
 function executeAbort() {
-	// Use the files_abort function which sends 'abort' command
-	if (typeof files_abort === 'function') {
-		files_abort();
-	} else {
-		SendPrinterCommand("abort");
+	console.log('Executing ABORT command');
+	
+	// Check if SendPrinterCommand is available
+	if (typeof SendPrinterCommand !== 'function') {
+		console.error('SendPrinterCommand function not available');
+		return;
 	}
-	console.log('ABORT command sent');
+	
+	// Send abort command directly
+	try {
+		SendPrinterCommand("abort", true);
+		console.log('ABORT command sent successfully');
+	} catch (error) {
+		console.error('Error sending ABORT command:', error);
+	}
 }
 
 /**
@@ -354,16 +374,25 @@ function handleNumpadKeyDown(event) {
 		return;
 	}
 	
+	console.log(`Numpad key detected: ${event.key} (code: ${event.code})`);
+	
 	// Special case: Always allow numpad 5 (ABORT) to work, even when locked
 	// Note: Some keyboards may report 'Clear' instead of '5' when NumLock is off
 	if (event.key === '5' || event.key === 'Clear') {
+		console.log('Executing ABORT command');
 		executeAbort();
 		event.preventDefault();
 		return;
 	}
 	
 	// For all other keys, check if numpad control is active
-	if (!isNumpadControlActive()) {
+	const isActive = isNumpadControlActive();
+	console.log(`Numpad control active: ${isActive}`);
+	if (!isActive) {
+		console.log('Numpad control not active - checking conditions:');
+		console.log('  - Main tab visible:', id('maintab') && id('maintab').style.display !== 'none');
+		console.log('  - UI locked:', getChecked('lock_UI'));
+		console.log('  - Active element:', document.activeElement?.tagName);
 		return;
 	}
 	
