@@ -175,19 +175,40 @@ function executeZJog(direction) {
 function executeAbort() {
 	console.log('Executing ABORT command');
 	
-	// Check if SendPrinterCommand is available
-	if (typeof SendPrinterCommand !== 'function') {
-		console.error('SendPrinterCommand function not available');
+	// Check if grbl_reset is available (preferred method - sends 0x18 Ctrl-X soft reset)
+	if (typeof grbl_reset === 'function') {
+		try {
+			grbl_reset();
+			console.log('ABORT command sent successfully (soft reset)');
+		} catch (error) {
+			console.error('Error sending ABORT command:', error);
+		}
 		return;
 	}
 	
-	// Send abort command directly
-	try {
-		SendPrinterCommand("abort", true);
-		console.log('ABORT command sent successfully');
-	} catch (error) {
-		console.error('Error sending ABORT command:', error);
+	// Fallback: Try SendRealtimeCmd with JogCancel (0x85)
+	if (typeof SendRealtimeCmd === 'function') {
+		try {
+			SendRealtimeCmd(0x85); // JogCancel
+			console.log('ABORT command sent successfully (jog cancel)');
+		} catch (error) {
+			console.error('Error sending ABORT command:', error);
+		}
+		return;
 	}
+	
+	// Last resort fallback: Try SendPrinterCommand
+	if (typeof SendPrinterCommand === 'function') {
+		try {
+			SendPrinterCommand("abort", true);
+			console.log('ABORT command sent (text command - may not work)');
+		} catch (error) {
+			console.error('Error sending ABORT command:', error);
+		}
+		return;
+	}
+	
+	console.error('No abort command functions available');
 }
 
 /**

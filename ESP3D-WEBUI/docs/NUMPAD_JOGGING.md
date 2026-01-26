@@ -223,12 +223,32 @@ This indicates the command reached the firmware but was rejected. Common causes:
 
 Check the browser console for the exact command being sent (e.g., `$J=G91 G21 F1000 X10`).
 
+**Note:** The message "Command list empty, no messages to process at this time" is NORMAL and not an error. It just means the command queue has been processed.
+
+### Home commands not working
+
+The home commands (/ for XY, * for Z) send the proper homing commands to the firmware:
+- `/` sends `$HX` then `$HY` (homes X then Y axes)
+- `*` sends `$HZ` (homes Z axis)
+
+If these don't work:
+1. Check that homing is enabled in your firmware configuration
+2. Verify limit switches are properly configured
+3. The console should show "Home XY executed" or "Home Z executed" when pressed
+4. The "Command list empty" message after is normal
+
 ### Enter key not starting job
 
-1. **Hold for 3 seconds**: The Enter key requires a full 3-second press
-2. **Check machine state**: Machine must be in IDLE state
-3. **Check file loaded**: A G-Code file must be loaded
-4. **Check console**: Look for error messages in the browser console
+The Enter key requires a **3-second long press** to start:
+1. **Press and HOLD** the numpad Enter key
+2. **Wait 3 full seconds** (you'll see "Enter key armed" in console after 3 seconds)
+3. **Release** the key - job will start
+4. **If released before 3 seconds**: "Enter key released too early" message appears
+
+Additional requirements:
+- Machine must be in IDLE state
+- A G-Code file must be loaded
+- Check console for error messages
 
 ### Numbers not working
 
