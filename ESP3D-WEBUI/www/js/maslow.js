@@ -215,63 +215,62 @@ function showCalibrationCompleteMessage() {
  * Fetch state transitions from firmware
  * This function sends the STATETRANS command to get allowed state transitions
  */
-function fetchStateTransitions() {
-	// Send command to get state transitions
-	SendGetHttp(
-		"STATETRANS",
-		(responseText) => {
-			try {
-				// Parse the JSON response
-				// Expected format: {"stateTransitions":{"0":[1],"1":[2],...}}
-				const data = JSON.parse(responseText);
-				if (data.stateTransitions) {
-					stateTransitionsMap = data.stateTransitions;
-					console.log("State transitions loaded:", stateTransitionsMap);
-					// Update buttons now that we have the transition map
-					updateDynamicButtons();
-				}
-			} catch (error) {
-				console.error("Failed to parse state transitions:", error);
-			}
-		},
-		(error) => {
-			console.error("Failed to fetch state transitions:", error);
-			// If we can't fetch transitions, fall back to the UI working without dynamic button control
-		}
-	);
-}
-
 /**
- * Fetch state definitions from firmware
- * This function sends the STATEDEFS command to get state names and button labels
+ * Fetch unified state data from firmware
+ * This function sends the STATEDEFS command to get all state information including
+ * names, button labels, colors, and allowed transitions
  */
-function fetchStateDefinitions() {
-	// Send command to get state definitions
+function fetchStateData() {
+	// Send command to get complete state data
 	SendGetHttp(
 		"STATEDEFS",
 		(responseText) => {
 			try {
 				// Parse the JSON response
-				// Expected format: {"states":[{"id":0,"name":"Unknown","buttonLabel":""},...]}
+				// Expected format: {"states":[{"id":0,"name":"Unknown","buttonLabel":"","backgroundColor":"#f8d7da","allowedTransitions":[1]},...]}
 				const data = JSON.parse(responseText);
 				if (data.states) {
 					stateDefinitions = {};
-					// Convert array to object keyed by state id
+					stateTransitionsMap = {};
+					
+					// Convert array to objects keyed by state id
 					data.states.forEach(state => {
 						stateDefinitions[state.id] = state;
+						// Build transitions map
+						stateTransitionsMap[state.id] = state.allowedTransitions;
 					});
-					console.log("State definitions loaded:", stateDefinitions);
-					// Update UI with state definitions
+					
+					console.log("State data loaded:", stateDefinitions);
+					console.log("State transitions loaded:", stateTransitionsMap);
+					
+					// Update UI with complete state data
 					updateDynamicButtons();
 				}
 			} catch (error) {
-				console.error("Failed to parse state definitions:", error);
+				console.error("Failed to parse state data:", error);
 			}
 		},
 		(error) => {
-			console.error("Failed to fetch state definitions:", error);
+			console.error("Failed to fetch state data:", error);
+			// If we can't fetch data, fall back to the UI working without dynamic control
 		}
 	);
+}
+
+/**
+ * Legacy function for backwards compatibility - now calls fetchStateData()
+ * @deprecated Use fetchStateData() instead
+ */
+function fetchStateTransitions() {
+	fetchStateData();
+}
+
+/**
+ * Legacy function for backwards compatibility - now calls fetchStateData()
+ * @deprecated Use fetchStateData() instead
+ */
+function fetchStateDefinitions() {
+	fetchStateData();
 }
 
 /**

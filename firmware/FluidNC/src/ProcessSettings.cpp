@@ -902,9 +902,9 @@ static Error maslow_get_state_transitions(const char* value, WebUI::Authenticati
     return Error::Ok;
 }
 
-//Get state definitions including names and button labels
+//Get state definitions including names, button labels, colors, and transitions
 static Error maslow_get_state_definitions(const char* value, WebUI::AuthenticationLevel auth_level, Channel& out) {
-    // Output JSON object with state definitions
+    // Output JSON object with complete state definitions including transitions
     out << "{\"states\":[";
     
     bool first = true;
@@ -919,8 +919,21 @@ static Error maslow_get_state_definitions(const char* value, WebUI::Authenticati
         const char* buttonLabel = Maslow.calibration.getStateButtonLabel(state);
         const char* backgroundColor = Maslow.calibration.getStateBackgroundColor(state);
         
+        // Get allowed transitions for this state
+        int count;
+        const int* allowedTransitions = Maslow.calibration.getAllowedTransitions(state, count);
+        
         out << "{\"id\":" << state << ",\"name\":\"" << name << "\",\"buttonLabel\":\"" << buttonLabel 
-            << "\",\"backgroundColor\":\"" << backgroundColor << "\"}";
+            << "\",\"backgroundColor\":\"" << backgroundColor << "\",\"allowedTransitions\":[";
+        
+        for (int i = 0; i < count; i++) {
+            if (i > 0) {
+                out << ",";
+            }
+            out << allowedTransitions[i];
+        }
+        
+        out << "]}";
     }
     
     out << "]}\n";
