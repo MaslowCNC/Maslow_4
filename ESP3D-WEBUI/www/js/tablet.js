@@ -558,6 +558,7 @@ function stopAndRecover() {
 }
 
 var oldCannotClick = null
+var oldStateName = null
 
 function scaleUnits(target) {
   //Scale the units to move when jogging down or up by 25.4 to keep them reasonable
@@ -614,18 +615,56 @@ function tabletGrblState(grbl, response) {
   }
 
   const cannotClick = stateName === 'Run' || stateName === 'Hold'
+  const cannotClickZ = stateName === 'Run'  // Allow Z controls during Hold
   // Recompute the layout only when the state changes
-  if (oldCannotClick !== cannotClick) {
+  if (oldCannotClick !== cannotClick || oldStateName !== stateName) {
     setDisabled('.dropdown-toggle', cannotClick)
     setDisabled('.axis-position .position', cannotClick)
     setDisabled('.axis-position .form-control', cannotClick)
     setDisabled('.axis-position .btn', cannotClick)
     setDisabled('.axis-position .position', cannotClick)
+
+    // Get all jog button IDs
+    const zJogButtons = ['HomeZ', 'Z+10', 'Z+1', 'Z+0.1', 'Z-10', 'Z-1', 'Z-0_1'];
+    const xyJogButtons = ['HomeX', 'HomeY', 'HomeAll',
+      'X+100', 'X+10', 'X+1', 'X+0.1', 'X-100', 'X-10', 'X-1', 'X-0_1',
+      'Y+100', 'Y+10', 'Y+1', 'Y+0.1', 'Y-100', 'Y-10', 'Y-1', 'Y-0_1'];
+    const allJogButtons = [...zJogButtons, ...xyJogButtons];
+
+    // Handle control states based on machine state
+    if (stateName === 'Hold') {
+      // During Hold (pause): Enable Z controls, disable XY controls
+      const zeroZBtn = id('zero_z_btn');
+      if (zeroZBtn) zeroZBtn.disabled = false;
+
+      zJogButtons.forEach(btnId => {
+        const btn = id(btnId);
+        if (btn) btn.style.pointerEvents = 'auto';
+      });
+
+      xyJogButtons.forEach(btnId => {
+        const btn = id(btnId);
+        if (btn) btn.style.pointerEvents = 'none';
+      });
+    } else if (stateName === 'Run') {
+      // During Run: Disable all controls
+      allJogButtons.forEach(btnId => {
+        const btn = id(btnId);
+        if (btn) btn.style.pointerEvents = 'none';
+      });
+    } else {
+      // Other states (Idle, etc.): Enable all controls
+      allJogButtons.forEach(btnId => {
+        const btn = id(btnId);
+        if (btn) btn.style.pointerEvents = 'auto';
+      });
+    }
     // if (!cannotClick) {
     //     contractVisualizer();
     // }
   }
   oldCannotClick = cannotClick
+  oldStateName = stateName
 
   tabletUpdateModal()
 
