@@ -61,6 +61,8 @@ public:
     void printCurrentState();
     bool requestStateChange(int newState);
     const int* getAllowedTransitions(int fromState, int& count);
+    const char* getStateName(int state);
+    const char* getStateButtonLabel(int state);
 
     // Set extended state variables (used when restoring from NVS)
     void setExtendedState(bool tl, bool tr, bool bl, bool br);
@@ -148,21 +150,23 @@ private:
     bool safetyOn         = true;
     bool HeartBeatEnabled = true;
 
-    //A structure to hold the state names
-    struct StateName {
+    //A structure to hold the state information
+    struct StateInfo {
         int         state;
         const char* name;
+        const char* buttonLabel;  // Label for UI button, empty string if no button
     };
-    StateName stateNames[11] = { { UNKNOWN, "Unknown" },
-                                 { RETRACTING, "Retracting Belts" },
-                                 { RETRACTED, "Belts Retracted" },
-                                 { EXTENDING, "Extending Belts" },
-                                 { EXTENDEDOUT, "Belts Extended" },
-                                 { TAKING_SLACK, "Taking Slack" },
-                                 { CALIBRATION_IN_PROGRESS, "Calibrating" },
-                                 { READY_TO_CUT, "Ready To Cut" },
-                                 { RELEASE_TENSION, "Releasing Tension" },
-                                 { CALIBRATION_COMPUTING, "Calibration Computing" } };
+    StateInfo stateNames[11] = { 
+        { UNKNOWN, "Unknown", "" },
+        { RETRACTING, "Retracting Belts", "Retract All" },
+        { RETRACTED, "Belts Retracted", "" },
+        { EXTENDING, "Extending Belts", "Extend All" },
+        { EXTENDEDOUT, "Belts Extended", "" },
+        { TAKING_SLACK, "Taking Slack", "Apply Tension" },
+        { CALIBRATION_IN_PROGRESS, "Calibrating", "Find Anchor Locations" },
+        { READY_TO_CUT, "Ready To Cut", "" },
+        { RELEASE_TENSION, "Releasing Tension", "Release Tension" },
+        { CALIBRATION_COMPUTING, "Calibration Computing", "" } };
 
     // State transition map - defines which states can transition to which other states
     // Each entry is a list of allowed destination states for a given source state

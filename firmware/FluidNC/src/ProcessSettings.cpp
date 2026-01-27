@@ -902,6 +902,29 @@ static Error maslow_get_state_transitions(const char* value, WebUI::Authenticati
     return Error::Ok;
 }
 
+//Get state definitions including names and button labels
+static Error maslow_get_state_definitions(const char* value, WebUI::AuthenticationLevel auth_level, Channel& out) {
+    // Output JSON object with state definitions
+    out << "{\"states\":[";
+    
+    bool first = true;
+    // Iterate through all states
+    for (int state = UNKNOWN; state < STATE_COUNT; state++) {
+        if (!first) {
+            out << ",";
+        }
+        first = false;
+        
+        const char* name = Maslow.calibration.getStateName(state);
+        const char* buttonLabel = Maslow.calibration.getStateButtonLabel(state);
+        
+        out << "{\"id\":" << state << ",\"name\":\"" << name << "\",\"buttonLabel\":\"" << buttonLabel << "\"}";
+    }
+    
+    out << "]}\n";
+    return Error::Ok;
+}
+
 //This is used for release tension
 static Error maslow_set_comply(const char* value, WebUI::AuthenticationLevel auth_level, Channel& out) {
     if (Maslow.using_default_config) {
@@ -1156,6 +1179,7 @@ void make_user_commands() {
     new UserCommand("MINFO", M + "/getInfo", maslow_get_info, anyState);
     new UserCommand("GSTATE", M + "/gstate", maslow_get_state, anyState);
     new UserCommand("STATETRANS", M + "/stateTransitions", maslow_get_state_transitions, anyState);
+    new UserCommand("STATEDEFS", M + "/stateDefinitions", maslow_get_state_definitions, anyState);
 };
 
 // normalize_key puts a key string into canonical form -

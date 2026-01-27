@@ -68,6 +68,26 @@ const int* Calibration::getAllowedTransitions(int fromState, int& count) {
     return emptyArray;
 }
 
+// Get the name of a state
+const char* Calibration::getStateName(int state) {
+    for (int i = 0; i < 11; i++) {
+        if (stateNames[i].state == state) {
+            return stateNames[i].name;
+        }
+    }
+    return "Unknown";
+}
+
+// Get the button label for a state
+const char* Calibration::getStateButtonLabel(int state) {
+    for (int i = 0; i < 11; i++) {
+        if (stateNames[i].state == state) {
+            return stateNames[i].buttonLabel;
+        }
+    }
+    return "";
+}
+
 // Set extended state variables (used when restoring from NVS)
 void Calibration::setExtendedState(bool tl, bool tr, bool bl, bool br) {
     extended[_TL] = tl;
