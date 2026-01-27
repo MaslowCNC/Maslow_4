@@ -189,16 +189,19 @@ function SendHomecommand(cmd) {
 		default: hCmd = '$H'; break;
 	}
 
-	// During Hold state, resume to allow homing
-	// The machine will remain in Idle state after homing
+	// During Hold state, resume to allow homing and auto-pause after
 	if (isHoldState && isZHomeCommand) {
 		// Send cycle start (resume) to exit Hold state
-		// Use resumeGCode() function which is the standard way to resume
 		resumeGCode();
 		
-		// Wait longer for state transition before sending home command
+		// Wait for state transition before sending home command
 		setTimeout(() => {
 			SendPrinterCommand(hCmd, true, get_Position);
+			
+			// Return to Hold state after homing completes
+			setTimeout(() => {
+				pauseGCode();
+			}, 3000);
 		}, 500);
 	} else {
 		SendPrinterCommand(hCmd, true, get_Position);
@@ -258,18 +261,23 @@ function SendJogcommand(cmd, feedrate) {
 
 	const feedrateValue = GetAxisFeedRate(feedrate[0].toUpperCase() === "Z" ? getValue("control_select_axis") : "XY");
 
-	// During Hold state, resume to allow Z movement
-	// The machine will remain in Idle/Cycle state after movement
+	// During Hold state, use regular G-code movement instead of jog commands
+	// Jog commands ($J) don't execute reliably after resume during Hold
 	if (isHoldState && isZCommand) {
 		// Send cycle start (resume) to exit Hold state
-		// Use resumeGCode() function which is the standard way to resume
 		resumeGCode();
 		
-		// Wait longer for state transition before sending jog command
+		// Wait for state transition, then send regular G-code movement
+		// Use G91 (incremental) G0 (rapid) for Z adjustments
 		setTimeout(() => {
-			const command = `$J=G91 G21 F${feedrateValue} ${jCmd}`;
+			const command = `G91 G0 ${jCmd} F${feedrateValue}`;
 			console.debug(command);
 			SendPrinterCommand(command, true, get_Position);
+			
+			// Return to Hold state after a delay
+			setTimeout(() => {
+				pauseGCode();
+			}, 1500);
 		}, 500);
 	} else {
 		// Use jog command for normal operation
