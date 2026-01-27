@@ -285,6 +285,7 @@ const maslowInfoMsgHandling = (msg) => {
 
 	//Catch the calibration complete message and alert the user...this locks up the UI which is bad...should be handled better
 	if (msg.startsWith("[MSG:INFO: Calibration complete")) {
+		calibrationComplete = true; // Set flag to prevent auto-restart
 		showCalibrationCompleteMessage();
 		return true;
 	}

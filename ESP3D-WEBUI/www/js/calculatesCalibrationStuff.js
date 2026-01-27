@@ -11,6 +11,10 @@ var acceptableCalibrationThreshold = 0.5
 // Maximum number of low-fitness retry attempts before giving up
 const MAX_LOW_FITNESS_RETRIES = 10;
 
+// Flag to track if calibration is complete (set by firmware message)
+// This prevents auto-restart after the final calibration stage
+var calibrationComplete = false;
+
 //Establish initial guesses for the corners
 var initialGuess = {
   tl: { x: 0, y: 2000 },
@@ -904,8 +908,14 @@ async function findMaxFitness(measurements) {
         initialGuess = bestGuess;
         initialGuess.fitness = 100000000;
 
-        // Note: Calibration auto-restart has been removed to prevent infinite loops.
-        // If calibration has multiple stages, the user needs to manually click "Calibrate" again.
+        // Auto-restart calibration for next stage, unless calibration is fully complete
+        // The calibrationComplete flag is set by the firmware when all stages are done
+        if (!calibrationComplete) {
+          messagesBox.textContent += '\nContinuing to next calibration stage...';
+          scheduleCallback(() => { onCalibrationButtonsClick('$CAL', 'Calibrate'); }, 2000);
+        } else {
+          messagesBox.textContent += '\nCalibration complete! All stages finished.';
+        }
       } else {
 
         sendCalibrationEvent({

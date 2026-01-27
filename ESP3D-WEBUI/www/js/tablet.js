@@ -1409,6 +1409,12 @@ const onCalibrationButtonsClick = async (command, msg = "") => {
   if (msg) {
     addMessage(msg);
   }
+  
+  // Reset calibration complete flag when user manually starts calibration
+  if (command === '$CAL') {
+    calibrationComplete = false;
+  }
+  
   sendCommand(command);
 
   //Prints out the index.html version number when test is pressed
