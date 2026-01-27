@@ -63,6 +63,7 @@ public:
     const int* getAllowedTransitions(int fromState, int& count);
     const char* getStateName(int state);
     const char* getStateButtonLabel(int state);
+    const char* getStateBackgroundColor(int state);
 
     // Set extended state variables (used when restoring from NVS)
     void setExtendedState(bool tl, bool tr, bool bl, bool br);

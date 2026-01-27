@@ -917,8 +917,10 @@ static Error maslow_get_state_definitions(const char* value, WebUI::Authenticati
         
         const char* name = Maslow.calibration.getStateName(state);
         const char* buttonLabel = Maslow.calibration.getStateButtonLabel(state);
+        const char* backgroundColor = Maslow.calibration.getStateBackgroundColor(state);
         
-        out << "{\"id\":" << state << ",\"name\":\"" << name << "\",\"buttonLabel\":\"" << buttonLabel << "\"}";
+        out << "{\"id\":" << state << ",\"name\":\"" << name << "\",\"buttonLabel\":\"" << buttonLabel 
+            << "\",\"backgroundColor\":\"" << backgroundColor << "\"}";
     }
     
     out << "]}\n";

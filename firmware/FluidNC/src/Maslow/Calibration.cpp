@@ -88,6 +88,16 @@ const char* Calibration::getStateButtonLabel(int state) {
     return "";
 }
 
+// Get the background color for a state
+const char* Calibration::getStateBackgroundColor(int state) {
+    for (size_t i = 0; i < sizeof(stateDefinitions) / sizeof(StateDefinition); i++) {
+        if (stateDefinitions[i].id == state) {
+            return stateDefinitions[i].backgroundColor;
+        }
+    }
+    return "#f8d7da";  // Default to red (error/unknown state)
+}
+
 // Set extended state variables (used when restoring from NVS)
 void Calibration::setExtendedState(bool tl, bool tr, bool bl, bool br) {
     extended[_TL] = tl;

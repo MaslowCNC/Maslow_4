@@ -67,45 +67,41 @@ const updateDynamicButtons = () => {
 	const greenBackground = "#4aa85c"
 	const greyBackground = "#a0a0a0"
 	
-	// State label background colors
-	const redBackground = "#f8d7da"
-	const blueBackground = "#cfe2ff"
-	const greenStateBackground = "#d1e7dd"
-	const yellowBackground = "#fff3cd"
-
-	// State background colors (hardcoded for now as they're not in state definitions)
-	const stateBackgrounds = {
-		0: redBackground,      // UNKNOWN
-		1: blueBackground,     // RETRACTING
-		2: greenStateBackground, // RETRACTED
-		3: blueBackground,     // EXTENDING
-		4: yellowBackground,   // EXTENDEDOUT
-		5: blueBackground,     // TAKING_SLACK
-		6: blueBackground,     // CALIBRATION_IN_PROGRESS
-		7: greenStateBackground, // READY_TO_CUT
-		8: blueBackground,     // RELEASE_TENSION
-		9: blueBackground      // CALIBRATION_COMPUTING
-	};
-
-	// Update state label using state definitions from firmware
+	// Get current state info from fetched definitions
 	const currentStateInfo = stateDefinitions[maslowStatus.state];
 	const stateName = currentStateInfo ? currentStateInfo.name : "Unknown";
+	const stateBackgroundColor = currentStateInfo ? currentStateInfo.backgroundColor : "#f8d7da";
+	
+	// Update state label
 	stateLabel.innerHTML = "State: " + stateName;
 	if (mainStateLabel) {
 		mainStateLabel.innerHTML = "State: " + stateName;
 		if (mainStateLabelContainer) {
-			mainStateLabelContainer.style.backgroundColor = stateBackgrounds[maslowStatus.state] || redBackground;
+			mainStateLabelContainer.style.backgroundColor = stateBackgroundColor;
 		}
 	}
 
-	// Map button IDs to the state they trigger
-	const buttonToStateMap = {
-		"tablettab_cal_retract": 1,    // RETRACTING
-		"tablettab_cal_extend": 3,     // EXTENDING
-		"tablettab_cal_tense": 5,      // TAKING_SLACK
-		"tablettab_cal_calibrate": 6,  // CALIBRATION_IN_PROGRESS
-		"tablettab_cal_relax": 8       // RELEASE_TENSION
-	};
+	// Build button to state map dynamically from state definitions
+	// Only include states that have button labels
+	const buttonToStateMap = {};
+	for (const stateId in stateDefinitions) {
+		const stateDef = stateDefinitions[stateId];
+		if (stateDef && stateDef.buttonLabel) {
+			// Map button IDs based on button labels
+			// This matches the original button IDs in the HTML
+			const buttonIdMap = {
+				"Retract All": "tablettab_cal_retract",
+				"Extend All": "tablettab_cal_extend",
+				"Apply Tension": "tablettab_cal_tense",
+				"Find Anchor Locations": "tablettab_cal_calibrate",
+				"Release Tension": "tablettab_cal_relax"
+			};
+			const buttonId = buttonIdMap[stateDef.buttonLabel];
+			if (buttonId) {
+				buttonToStateMap[buttonId] = stateDef.id;
+			}
+		}
+	}
 
 	// Update each button based on whether its transition is allowed
 	for (const [buttonId, targetState] of Object.entries(buttonToStateMap)) {
