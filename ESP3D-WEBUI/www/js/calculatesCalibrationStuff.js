@@ -918,7 +918,8 @@ async function findMaxFitness(measurements) {
 
         // Instead of random guesses, pick another point on the arc with specific aspect ratios
         // Use the sequence: 2:1, 1:1, 1:2, 1.5:1, 1:1.5
-        if (lowFitnessRetryCount <= aspectRatioSequence.length) {
+        // lowFitnessRetryCount is 1-based (incremented before use), so use index lowFitnessRetryCount - 1
+        if (lowFitnessRetryCount >= 1 && lowFitnessRetryCount <= aspectRatioSequence.length) {
           const targetAspectRatio = aspectRatioSequence[lowFitnessRetryCount - 1];
 
           // Calculate the optimal radius from the current best guess
