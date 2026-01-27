@@ -877,7 +877,7 @@ static Error maslow_get_state_transitions(const char* value, WebUI::Authenticati
     
     bool firstState = true;
     // Iterate through all states
-    for (int state = UNKNOWN; state <= CALIBRATION_COMPUTING; state++) {
+    for (int state = UNKNOWN; state < STATE_COUNT; state++) {
         if (!firstState) {
             out << ",";
         }

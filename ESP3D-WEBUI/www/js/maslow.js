@@ -266,8 +266,9 @@ function fetchStateTransitions() {
  */
 function isTransitionAllowed(fromState, toState) {
 	if (!stateTransitionsMap) {
-		// If we don't have the map yet, allow all transitions (fallback behavior)
-		return true;
+		// If we don't have the map yet, disable all transitions for safety
+		// until the firmware provides the valid transition data
+		return false;
 	}
 	
 	const allowedStates = stateTransitionsMap[fromState.toString()];
