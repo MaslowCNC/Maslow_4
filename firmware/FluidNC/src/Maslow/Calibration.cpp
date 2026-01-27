@@ -45,6 +45,29 @@ void Calibration::printCurrentState() {
     log_info("Current state: " << currentState);
 }
 
+// Get allowed state transitions for a given state
+// Returns a pointer to an array of allowed states and sets count to the number of allowed states
+const int* Calibration::getAllowedTransitions(int fromState, int& count) {
+    // Find the transition map entry for this state
+    for (size_t i = 0; i < sizeof(stateTransitionMap) / sizeof(StateTransitions); i++) {
+        if (stateTransitionMap[i].fromState == fromState) {
+            // Count the number of valid transitions (excluding -1 terminators)
+            count = 0;
+            for (int j = 0; j < MAX_TRANSITIONS; j++) {
+                if (stateTransitionMap[i].allowedStates[j] == -1) {
+                    break;
+                }
+                count++;
+            }
+            return stateTransitionMap[i].allowedStates;
+        }
+    }
+    // If state not found in map, return empty array
+    count = 0;
+    static const int emptyArray[] = { -1 };
+    return emptyArray;
+}
+
 // Set extended state variables (used when restoring from NVS)
 void Calibration::setExtendedState(bool tl, bool tr, bool bl, bool br) {
     extended[_TL] = tl;
@@ -57,14 +80,30 @@ void Calibration::setExtendedState(bool tl, bool tr, bool bl, bool br) {
 bool Calibration::requestStateChange(int newState) {
     log_info("Requesting state change from " << stateNames[currentState].name << " to " << stateNames[newState].name);
 
+    // Check if the transition is allowed using the state transition map
+    int count;
+    const int* allowedTransitions = getAllowedTransitions(currentState, count);
+    bool transitionAllowed = false;
+    for (int i = 0; i < count; i++) {
+        if (allowedTransitions[i] == newState) {
+            transitionAllowed = true;
+            break;
+        }
+    }
+
+    if (!transitionAllowed) {
+        log_info("Transition not allowed from " << stateNames[currentState].name << " to " << stateNames[newState].name);
+        return false;
+    }
+
     bool success = false;
 
     switch (newState) {
-        case UNKNOWN:  //We can enter unknown from any stable state (the machine is not currently performing an action)
+        case UNKNOWN:
             currentState = UNKNOWN;
             success      = true;
             break;
-        case RETRACTING:  //We can enter retracting from any state
+        case RETRACTING:
             currentState = RETRACTING;
 
             retracting[_TL] = true;
@@ -77,116 +116,98 @@ bool Calibration::requestStateChange(int newState) {
 
             success = true;
             break;
-        case RETRACTED:  //We can enter retracted from retracting only
-            if (currentState == RETRACTING) {
-                currentState = RETRACTED;
-                sys.set_state(State::Idle);
-                // Explicitly save belt positions now that belts are retracted and tight
-                Maslow.saveBeltPositions();
-                success = true;
-                break;
-            } else {
-                break;
+        case RETRACTED:
+            currentState = RETRACTED;
+            sys.set_state(State::Idle);
+            // Explicitly save belt positions now that belts are retracted and tight
+            Maslow.saveBeltPositions();
+            success = true;
+            break;
+        case EXTENDING:
+            currentState = EXTENDING;
+            Maslow.stop();
+            sys.set_state(State::Homing);
+
+            extended[_TL] = false;
+            extended[_TR] = false;
+            extended[_BL] = false;
+            extended[_BR] = false;
+
+            updateCenterXY();
+            success = true;
+            break;
+        case EXTENDEDOUT:
+            currentState = EXTENDEDOUT;
+            sys.set_state(State::Idle);
+            // Save belt positions now that belts are extended and at a known position
+            Maslow.saveBeltPositions();
+            success = true;
+            break;
+        case TAKING_SLACK:
+            currentState = TAKING_SLACK;
+
+            //Reset the axis targets at the beginning of taking slack
+            Maslow.axis[_TL].setTarget(Maslow.axis[_TL].getPosition());
+            Maslow.axis[_TR].setTarget(Maslow.axis[_TR].getPosition());
+
+            retracting[_TL] = false;  //Should be replaced by state now
+            retracting[_TR] = false;
+            retracting[_BL] = false;
+            retracting[_BR] = false;
+
+            for (int arm = _TL; arm < ARM_COUNT; arm++) {
+                Maslow.axis[arm].reset();
             }
-        case EXTENDING:  //We can enter extending from retracted or extended out
-            if (currentState == RETRACTED || currentState == EXTENDEDOUT) {
-                currentState = EXTENDING;
-                Maslow.stop();
-                sys.set_state(State::Homing);
 
-                extended[_TL] = false;
-                extended[_TR] = false;
-                extended[_BL] = false;
-                extended[_BR] = false;
+            Maslow.x  = 0;
+            Maslow.y  = 0;
+            takeSlack = true;
 
-                updateCenterXY();  //Why is this needed here?
-                success = true;
-                break;
-            } else {
-                log_info("Cannot extend the belts until they have been retracted");
-                break;
-            }
-        case EXTENDEDOUT:  //We can enter extended from extending or in the event of a failure from taking slack or release tension
-            if (currentState == EXTENDING || currentState == TAKING_SLACK || currentState == RELEASE_TENSION) {
-                currentState = EXTENDEDOUT;
-                sys.set_state(State::Idle);
-                // Save belt positions now that belts are extended and at a known position
-                Maslow.saveBeltPositions();
-                success = true;
-                break;
-            } else {
-                break;
-            }
-        case TAKING_SLACK:  //We can enter taking slack from extended or ready to cut
-            if (currentState == EXTENDEDOUT || currentState == READY_TO_CUT) {
-                currentState = TAKING_SLACK;
+            //Alocate the memory to store the measurements in. This is used here because take slack will use the same memory as the calibration
+            allocateCalibrationMemory();
+            success = true;
+            break;
+        case CALIBRATION_IN_PROGRESS:
+            currentState = CALIBRATION_IN_PROGRESS;
 
-                //Reset the axis targets at the beginning of taking slack
-                Maslow.axis[_TL].setTarget(Maslow.axis[_TL].getPosition());
-                Maslow.axis[_TR].setTarget(Maslow.axis[_TR].getPosition());
+            //Reset the axis targets at the beginning of calibration
+            Maslow.axis[_TL].setTarget(Maslow.axis[_TL].getPosition());
+            Maslow.axis[_TR].setTarget(Maslow.axis[_TR].getPosition());
 
-                retracting[_TL] = false;  //Should be replaced by state now
-                retracting[_TR] = false;
-                retracting[_BL] = false;
-                retracting[_BR] = false;
+            sys.set_state(State::Homing);
 
-                for (int arm = _TL; arm < ARM_COUNT; arm++) {
-                    Maslow.axis[arm].reset();
+            //If we are at the first point we need to generate the grid before we can start
+            if (waypoint == 0) {
+                // Initialize calibration loop state for fresh start
+                calibrationDirection     = UP;
+                measurementInProgress    = true;
+                orientationDetectionDone = false;  // Reset orientation detection flag for new calibration
+                orientationDetectTimer   = 0;      // Reset timer so detection starts fresh
+
+                if (!generate_calibration_grid()) {  //Fail out if the grid cannot be generated
+                    return false;
                 }
-
-                Maslow.x  = 0;
-                Maslow.y  = 0;
-                takeSlack = true;
-
-                //Alocate the memory to store the measurements in. This is used here because take slack will use the same memory as the calibration
-                allocateCalibrationMemory();
-                success = true;
-                break;
-            } else {
-                log_info("Cannot take slack until the belts have been extended");
-                break;
             }
-        case CALIBRATION_IN_PROGRESS:  //We can enter calibration in progress from EXTENDEDOUT, READY_TO_CUT, or CALIBRATION_COMPUTING
-            if (currentState == EXTENDEDOUT || currentState == READY_TO_CUT || currentState == CALIBRATION_COMPUTING) {
-                currentState = CALIBRATION_IN_PROGRESS;
-
-                //Reset the axis targets at the beginning of calibration
-                Maslow.axis[_TL].setTarget(Maslow.axis[_TL].getPosition());
-                Maslow.axis[_TR].setTarget(Maslow.axis[_TR].getPosition());
-
-                sys.set_state(State::Homing);
-
-                //If we are at the first point we need to generate the grid before we can start
-                if (waypoint == 0) {
-                    // Initialize calibration loop state for fresh start
-                    calibrationDirection     = UP;
-                    measurementInProgress    = true;
-                    orientationDetectionDone = false;  // Reset orientation detection flag for new calibration
-                    orientationDetectTimer   = 0;      // Reset timer so detection starts fresh
-
-                    if (!generate_calibration_grid()) {  //Fail out if the grid cannot be generated
-                        return false;
-                    }
+            //We have just finished the first six points and have updated anchor locations so it's time to generate the grid again
+            //if the user has selected for it to be generated automatically
+            if (waypoint == 6 && calibration_grid_width_mm_X == 0 && calibration_grid_height_mm_Y == 0) {
+                if (!generate_calibration_grid()) {  //Fail out if the grid cannot be generated
+                    return false;
                 }
-                //We have just finished the first six points and have updated anchor locations so it's time to generate the grid again
-                //if the user has selected for it to be generated automatically
-                if (waypoint == 6 && calibration_grid_width_mm_X == 0 && calibration_grid_height_mm_Y == 0) {
-                    if (!generate_calibration_grid()) {  //Fail out if the grid cannot be generated
-                        return false;
-                    }
-                }
-                Maslow.stop();
+            }
+            Maslow.stop();
 
-                //Save the z-axis 'stop' position
-                Maslow.targetZ = 0;
-                Maslow.setZStop();
+            //Save the z-axis 'stop' position
+            Maslow.targetZ = 0;
+            Maslow.setZStop();
 
-                //Recalculate the center position because the machine dimensions may have been updated
-                updateCenterXY();
+            //Recalculate the center position because the machine dimensions may have been updated
+            updateCenterXY();
 
-                //At this point it's likely that we have just sent the machine new cordinates for the anchor points so we need to figure out our new XY
-                //cordinates by looking at the current lengths of the top two belts.
-                //If we can't load the position, that's OK, we can still go ahead with the calibration and the first point will make a guess for it
+            //At this point it's likely that we have just sent the machine new cordinates for the anchor points so we need to figure out our new XY
+            //cordinates by looking at the current lengths of the top two belts.
+            //If we can't load the position, that's OK, we can still go ahead with the calibration and the first point will make a guess for it
+            {
                 float x          = 0;
                 float y          = 0;
                 auto  kinematics = getKinematics();
@@ -233,56 +254,38 @@ bool Calibration::requestStateChange(int newState) {
                     gc_sync_position();  //This updates the Gcode engine with the new position from the stepping engine that we set with set_motor_steps
                     plan_sync_position();
                 }
+            }
 
-                sys.set_state(State::Homing);
+            sys.set_state(State::Homing);
 
-                calibrationInProgress = true;  //Should be replaced by state machine
-                success               = true;
-                break;
-            } else {
-                log_info("Cannot start calibration until the belts have been extended");
-                break;
+            calibrationInProgress = true;  //Should be replaced by state machine
+            success               = true;
+            break;
+        case CALIBRATION_COMPUTING:
+            currentState          = CALIBRATION_COMPUTING;
+            calibrationInProgress = false;
+            success               = true;
+            break;
+        case READY_TO_CUT:
+            currentState = READY_TO_CUT;
+            sys.set_state(State::Idle);
+            // Explicitly save belt positions now that calibration/take-slack is complete and belts are tight
+            Maslow.saveBeltPositions();
+            success = true;
+            break;
+        case RELEASE_TENSION:
+            previousState   = currentState;  // Store the previous state
+            currentState    = RELEASE_TENSION;
+            complyCallTimer = millis();
+            retracting[_TL] = false;
+            retracting[_TR] = false;
+            retracting[_BL] = false;
+            retracting[_BR] = false;
+            for (int arm = _TL; arm < ARM_COUNT; arm++) {
+                Maslow.axis[arm].reset();  //This just resets the thresholds for pull tight
             }
-        case CALIBRATION_COMPUTING:  //We can enter calibration computing from calibration in progress
-            if (currentState == CALIBRATION_IN_PROGRESS) {
-                currentState          = CALIBRATION_COMPUTING;
-                calibrationInProgress = false;
-                success               = true;
-                break;
-            } else {
-                log_info("Cannot enter calibration computing from state " << stateNames[currentState].name);
-                break;
-            }
-        case READY_TO_CUT:  //We can enter ready to cut from calibration in progress, calibration computing or taking slack
-            if (currentState == CALIBRATION_IN_PROGRESS || currentState == CALIBRATION_COMPUTING || currentState == TAKING_SLACK) {
-                currentState = READY_TO_CUT;
-                sys.set_state(State::Idle);
-                // Explicitly save belt positions now that calibration/take-slack is complete and belts are tight
-                Maslow.saveBeltPositions();
-                success = true;
-                break;
-            } else {
-                break;
-            }
-        case RELEASE_TENSION:  //We can enter release tension from any stable state (the machine is not currently performing an action)
-            if (currentState == READY_TO_CUT || currentState == UNKNOWN || currentState == EXTENDEDOUT ||
-                currentState == CALIBRATION_COMPUTING) {
-                previousState   = currentState;  // Store the previous state
-                currentState    = RELEASE_TENSION;
-                complyCallTimer = millis();
-                retracting[_TL] = false;
-                retracting[_TR] = false;
-                retracting[_BL] = false;
-                retracting[_BR] = false;
-                for (int arm = _TL; arm < ARM_COUNT; arm++) {
-                    Maslow.axis[arm].reset();  //This just resets the thresholds for pull tight
-                }
-                success = true;
-                break;
-            } else {
-                log_info("Cannot release tension from state " << stateNames[currentState].name);
-                break;
-            }
+            success = true;
+            break;
         default:
             return false;
     }

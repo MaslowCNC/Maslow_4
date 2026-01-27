@@ -60,6 +60,7 @@ public:
     int  getCurrentState();
     void printCurrentState();
     bool requestStateChange(int newState);
+    const int* getAllowedTransitions(int fromState, int& count);
 
     // Set extended state variables (used when restoring from NVS)
     void setExtendedState(bool tl, bool tr, bool bl, bool br);
@@ -162,4 +163,28 @@ private:
                                  { READY_TO_CUT, "Ready To Cut" },
                                  { RELEASE_TENSION, "Releasing Tension" },
                                  { CALIBRATION_COMPUTING, "Calibration Computing" } };
+
+    // State transition map - defines which states can transition to which other states
+    // Each entry is a list of allowed destination states for a given source state
+    // terminated by -1
+    static constexpr int MAX_TRANSITIONS = 5;
+    struct StateTransitions {
+        int fromState;
+        int allowedStates[MAX_TRANSITIONS];
+    };
+
+    // Define allowed state transitions for each state
+    // Based on the comments and logic in requestStateChange()
+    static constexpr StateTransitions stateTransitionMap[] = {
+        { UNKNOWN, { RETRACTING, -1, -1, -1, -1 } },
+        { RETRACTING, { RETRACTED, -1, -1, -1, -1 } },
+        { RETRACTED, { EXTENDING, RETRACTING, -1, -1, -1 } },
+        { EXTENDING, { EXTENDEDOUT, -1, -1, -1, -1 } },
+        { EXTENDEDOUT, { TAKING_SLACK, CALIBRATION_IN_PROGRESS, RELEASE_TENSION, RETRACTING, EXTENDING } },
+        { TAKING_SLACK, { EXTENDEDOUT, READY_TO_CUT, -1, -1, -1 } },
+        { CALIBRATION_IN_PROGRESS, { CALIBRATION_COMPUTING, -1, -1, -1, -1 } },
+        { READY_TO_CUT, { TAKING_SLACK, CALIBRATION_IN_PROGRESS, RELEASE_TENSION, RETRACTING, -1 } },
+        { RELEASE_TENSION, { EXTENDEDOUT, -1, -1, -1, -1 } },
+        { CALIBRATION_COMPUTING, { CALIBRATION_IN_PROGRESS, READY_TO_CUT, RELEASE_TENSION, -1, -1 } },
+    };
 };
