@@ -7,6 +7,9 @@ let maslowStatus = { homed: false, extended: false, state: 0 };
 /** State Transitions Map - fetched from firmware at startup */
 let stateTransitionsMap = null;
 
+/** State Definitions - fetched from firmware at startup */
+let stateDefinitions = null;
+
 /** This keeps track of when we saw the last heartbeat from the machine */
 //I think this is not used anymore and can be removed now
 let lastHeartBeatTime = new Date().getTime();
@@ -52,16 +55,14 @@ READY_TO_CUT 7
     -Release Tension
 */
 const updateDynamicButtons = () => {
+	// If we don't have state definitions yet, skip the update
+	if (!stateDefinitions) {
+		return;
+	}
 
 	const stateLabel = document.getElementById("state-label");
 	const mainStateLabel = document.getElementById("main-state-label");
 	const mainStateLabelContainer = document.getElementById("main-state-label-container");
-
-	const retractButton = document.getElementById("tablettab_cal_retract");
-	const extendButton = document.getElementById("tablettab_cal_extend");
-	const tenseButton = document.getElementById("tablettab_cal_tense");
-	const relaxButton = document.getElementById("tablettab_cal_relax");
-	const calibrateButton = document.getElementById("tablettab_cal_calibrate");
 
 	const greenBackground = "#4aa85c"
 	const greyBackground = "#a0a0a0"
@@ -72,48 +73,23 @@ const updateDynamicButtons = () => {
 	const greenStateBackground = "#d1e7dd"
 	const yellowBackground = "#fff3cd"
 
-	// State constants (matching firmware)
-	const UNKNOWN = 0;
-	const RETRACTING = 1;
-	const RETRACTED = 2;
-	const EXTENDING = 3;
-	const EXTENDEDOUT = 4;
-	const TAKING_SLACK = 5;
-	const CALIBRATION_IN_PROGRESS = 6;
-	const READY_TO_CUT = 7;
-	const RELEASE_TENSION = 8;
-	const CALIBRATION_COMPUTING = 9;
-
-	// State names for display
-	const stateNames = {
-		[UNKNOWN]: "Unknown",
-		[RETRACTING]: "Retracting",
-		[RETRACTED]: "Retracted",
-		[EXTENDING]: "Extending",
-		[EXTENDEDOUT]: "Extended",
-		[TAKING_SLACK]: "Taking Slack",
-		[CALIBRATION_IN_PROGRESS]: "Calibrating",
-		[READY_TO_CUT]: "Ready to Cut",
-		[RELEASE_TENSION]: "Releasing Tension",
-		[CALIBRATION_COMPUTING]: "Calibration Computing"
-	};
-
-	// State background colors
+	// State background colors (hardcoded for now as they're not in state definitions)
 	const stateBackgrounds = {
-		[UNKNOWN]: redBackground,
-		[RETRACTING]: blueBackground,
-		[RETRACTED]: greenStateBackground,
-		[EXTENDING]: blueBackground,
-		[EXTENDEDOUT]: yellowBackground,
-		[TAKING_SLACK]: blueBackground,
-		[CALIBRATION_IN_PROGRESS]: blueBackground,
-		[READY_TO_CUT]: greenStateBackground,
-		[RELEASE_TENSION]: blueBackground,
-		[CALIBRATION_COMPUTING]: blueBackground
+		0: redBackground,      // UNKNOWN
+		1: blueBackground,     // RETRACTING
+		2: greenStateBackground, // RETRACTED
+		3: blueBackground,     // EXTENDING
+		4: yellowBackground,   // EXTENDEDOUT
+		5: blueBackground,     // TAKING_SLACK
+		6: blueBackground,     // CALIBRATION_IN_PROGRESS
+		7: greenStateBackground, // READY_TO_CUT
+		8: blueBackground,     // RELEASE_TENSION
+		9: blueBackground      // CALIBRATION_COMPUTING
 	};
 
-	// Update state label
-	const stateName = stateNames[maslowStatus.state] || "Unknown";
+	// Update state label using state definitions from firmware
+	const currentStateInfo = stateDefinitions[maslowStatus.state];
+	const stateName = currentStateInfo ? currentStateInfo.name : "Unknown";
 	stateLabel.innerHTML = "State: " + stateName;
 	if (mainStateLabel) {
 		mainStateLabel.innerHTML = "State: " + stateName;
@@ -122,18 +98,29 @@ const updateDynamicButtons = () => {
 		}
 	}
 
-	// Update button states based on allowed transitions
-	// Relaxation button is always available (special case)
-	relaxButton.style.backgroundColor = greenBackground;
+	// Map button IDs to the state they trigger
+	const buttonToStateMap = {
+		"tablettab_cal_retract": 1,    // RETRACTING
+		"tablettab_cal_extend": 3,     // EXTENDING
+		"tablettab_cal_tense": 5,      // TAKING_SLACK
+		"tablettab_cal_calibrate": 6,  // CALIBRATION_IN_PROGRESS
+		"tablettab_cal_relax": 8       // RELEASE_TENSION
+	};
 
-	// Set button colors based on whether transitions are allowed
-	const currentState = maslowStatus.state;
-	
-	retractButton.style.backgroundColor = isTransitionAllowed(currentState, RETRACTING) ? greenBackground : greyBackground;
-	extendButton.style.backgroundColor = isTransitionAllowed(currentState, EXTENDING) ? greenBackground : greyBackground;
-	tenseButton.style.backgroundColor = isTransitionAllowed(currentState, TAKING_SLACK) ? greenBackground : greyBackground;
-	calibrateButton.style.backgroundColor = isTransitionAllowed(currentState, CALIBRATION_IN_PROGRESS) ? greenBackground : greyBackground;
-	// Note: RELEASE_TENSION is not directly triggered by a button in most states
+	// Update each button based on whether its transition is allowed
+	for (const [buttonId, targetState] of Object.entries(buttonToStateMap)) {
+		const button = document.getElementById(buttonId);
+		if (button) {
+			const allowed = isTransitionAllowed(maslowStatus.state, targetState);
+			button.style.backgroundColor = allowed ? greenBackground : greyBackground;
+			
+			// Update button text from state definitions if available
+			const targetStateInfo = stateDefinitions[targetState];
+			if (targetStateInfo && targetStateInfo.buttonLabel) {
+				button.textContent = targetStateInfo.buttonLabel;
+			}
+		}
+	}
 }
 
 
@@ -254,6 +241,39 @@ function fetchStateTransitions() {
 		(error) => {
 			console.error("Failed to fetch state transitions:", error);
 			// If we can't fetch transitions, fall back to the UI working without dynamic button control
+		}
+	);
+}
+
+/**
+ * Fetch state definitions from firmware
+ * This function sends the STATEDEFS command to get state names and button labels
+ */
+function fetchStateDefinitions() {
+	// Send command to get state definitions
+	SendGetHttp(
+		"STATEDEFS",
+		(responseText) => {
+			try {
+				// Parse the JSON response
+				// Expected format: {"states":[{"id":0,"name":"Unknown","buttonLabel":""},...]}
+				const data = JSON.parse(responseText);
+				if (data.states) {
+					stateDefinitions = {};
+					// Convert array to object keyed by state id
+					data.states.forEach(state => {
+						stateDefinitions[state.id] = state;
+					});
+					console.log("State definitions loaded:", stateDefinitions);
+					// Update UI with state definitions
+					updateDynamicButtons();
+				}
+			} catch (error) {
+				console.error("Failed to parse state definitions:", error);
+			}
+		},
+		(error) => {
+			console.error("Failed to fetch state definitions:", error);
 		}
 	);
 }
