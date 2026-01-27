@@ -4,6 +4,9 @@
 /** Maslow Status */
 let maslowStatus = { homed: false, extended: false, state: 0 };
 
+/** State Transitions Map - fetched from firmware at startup */
+let stateTransitionsMap = null;
+
 /** This keeps track of when we saw the last heartbeat from the machine */
 //I think this is not used anymore and can be removed now
 let lastHeartBeatTime = new Date().getTime();
@@ -69,173 +72,68 @@ const updateDynamicButtons = () => {
 	const greenStateBackground = "#d1e7dd"
 	const yellowBackground = "#fff3cd"
 
-	// #define UNKNOWN 0
-	// #define RETRACTING 1
-	// #define RETRACTED 2
-	// #define EXTENDING 3
-	// #define EXTENDEDOUT 4 //Extended is a reserved word
-	// #define TAKING_SLACK 5
-	// #define CALIBRATION_IN_PROGRESS 6
-	// #define READY_TO_CUT 7
-	// #define RELEASE_TENSION 8
-	// #define CALIBRATION_COMPUTING 9
+	// State constants (matching firmware)
+	const UNKNOWN = 0;
+	const RETRACTING = 1;
+	const RETRACTED = 2;
+	const EXTENDING = 3;
+	const EXTENDEDOUT = 4;
+	const TAKING_SLACK = 5;
+	const CALIBRATION_IN_PROGRESS = 6;
+	const READY_TO_CUT = 7;
+	const RELEASE_TENSION = 8;
+	const CALIBRATION_COMPUTING = 9;
 
-	switch (maslowStatus.state) {
-		case 0: 
-			stateLabel.innerHTML = "State: Unknown";
-			if (mainStateLabel) {
-				mainStateLabel.innerHTML = "State: Unknown";
-				if (mainStateLabelContainer) mainStateLabelContainer.style.backgroundColor = redBackground;
-			}
+	// State names for display
+	const stateNames = {
+		[UNKNOWN]: "Unknown",
+		[RETRACTING]: "Retracting",
+		[RETRACTED]: "Retracted",
+		[EXTENDING]: "Extending",
+		[EXTENDEDOUT]: "Extended",
+		[TAKING_SLACK]: "Taking Slack",
+		[CALIBRATION_IN_PROGRESS]: "Calibrating",
+		[READY_TO_CUT]: "Ready to Cut",
+		[RELEASE_TENSION]: "Releasing Tension",
+		[CALIBRATION_COMPUTING]: "Calibration Computing"
+	};
 
-			//Set the retract and extend buttons to have a green background 
-			retractButton.style.backgroundColor = greenBackground;
-			extendButton.style.backgroundColor = greenBackground;
+	// State background colors
+	const stateBackgrounds = {
+		[UNKNOWN]: redBackground,
+		[RETRACTING]: blueBackground,
+		[RETRACTED]: greenStateBackground,
+		[EXTENDING]: blueBackground,
+		[EXTENDEDOUT]: yellowBackground,
+		[TAKING_SLACK]: blueBackground,
+		[CALIBRATION_IN_PROGRESS]: blueBackground,
+		[READY_TO_CUT]: greenStateBackground,
+		[RELEASE_TENSION]: blueBackground,
+		[CALIBRATION_COMPUTING]: blueBackground
+	};
 
-			tenseButton.style.backgroundColor = greyBackground;
-			relaxButton.style.backgroundColor = greenBackground;
-			calibrateButton.style.backgroundColor = greyBackground;
-			break;
-		case 1:
-			stateLabel.innerHTML = "State: Retracting";
-			if (mainStateLabel) {
-				mainStateLabel.innerHTML = "State: Retracting";
-				if (mainStateLabelContainer) mainStateLabelContainer.style.backgroundColor = blueBackground;
-			}
-
-			retractButton.style.backgroundColor = greyBackground;
-			extendButton.style.backgroundColor = greyBackground;
-			tenseButton.style.backgroundColor = greyBackground;
-			relaxButton.style.backgroundColor = greenBackground;
-			calibrateButton.style.backgroundColor = greyBackground;
-
-			break;
-		case 2:
-			stateLabel.innerHTML = "State: Retracted";
-			if (mainStateLabel) {
-				mainStateLabel.innerHTML = "State: Retracted";
-				if (mainStateLabelContainer) mainStateLabelContainer.style.backgroundColor = greenStateBackground;
-			}
-
-			retractButton.style.backgroundColor = greenBackground;
-			extendButton.style.backgroundColor = greenBackground;
-
-			tenseButton.style.backgroundColor = greyBackground;
-			relaxButton.style.backgroundColor = greenBackground;
-			calibrateButton.style.backgroundColor = greyBackground;
-
-			break;
-		case 3:
-			stateLabel.innerHTML = "State: Extending";
-			if (mainStateLabel) {
-				mainStateLabel.innerHTML = "State: Extending";
-				if (mainStateLabelContainer) mainStateLabelContainer.style.backgroundColor = blueBackground;
-			}
-			
-			retractButton.style.backgroundColor = greyBackground;
-			extendButton.style.backgroundColor = greyBackground;
-			tenseButton.style.backgroundColor = greyBackground;
-			relaxButton.style.backgroundColor = greenBackground;
-			calibrateButton.style.backgroundColor = greyBackground;
-			break;
-		case 4:
-			stateLabel.innerHTML = "State: Extended";
-			if (mainStateLabel) {
-				mainStateLabel.innerHTML = "State: Extended";
-				if (mainStateLabelContainer) mainStateLabelContainer.style.backgroundColor = yellowBackground;
-			}
-
-			retractButton.style.backgroundColor = greenBackground;
-			tenseButton.style.backgroundColor = greenBackground;
-			calibrateButton.style.backgroundColor = greenBackground;
-			extendButton.style.backgroundColor = greenBackground;
-			
-			relaxButton.style.backgroundColor = greenBackground;
-
-			break;
-		case 5:
-			stateLabel.innerHTML = "State: Taking Slack";
-			if (mainStateLabel) {
-				mainStateLabel.innerHTML = "State: Taking Slack";
-				if (mainStateLabelContainer) mainStateLabelContainer.style.backgroundColor = blueBackground;
-			}
-
-			retractButton.style.backgroundColor = greyBackground;
-			extendButton.style.backgroundColor = greyBackground;
-			tenseButton.style.backgroundColor = greyBackground;
-			relaxButton.style.backgroundColor = greenBackground;
-			calibrateButton.style.backgroundColor = greyBackground;
-			break;
-		case 6:
-			stateLabel.innerHTML = "State: Calibrating";
-			if (mainStateLabel) {
-				mainStateLabel.innerHTML = "State: Calibrating";
-				if (mainStateLabelContainer) mainStateLabelContainer.style.backgroundColor = blueBackground;
-			}
-
-			retractButton.style.backgroundColor = greyBackground;
-			extendButton.style.backgroundColor = greyBackground;
-			tenseButton.style.backgroundColor = greyBackground;
-			relaxButton.style.backgroundColor = greenBackground;
-			calibrateButton.style.backgroundColor = greyBackground;
-			break;
-		case 7:
-			stateLabel.innerHTML = "State: Ready to Cut";
-			if (mainStateLabel) {
-				mainStateLabel.innerHTML = "State: Ready to Cut";
-				if (mainStateLabelContainer) mainStateLabelContainer.style.backgroundColor = greenStateBackground;
-			}
-
-			retractButton.style.backgroundColor = greenBackground;
-			relaxButton.style.backgroundColor = greenBackground;
-
-			extendButton.style.backgroundColor = greyBackground;
-			tenseButton.style.backgroundColor = greyBackground;
-			calibrateButton.style.backgroundColor = greyBackground;
-
-			break;
-		case 8:
-			stateLabel.innerHTML = "State: Releasing Tension";
-			if (mainStateLabel) {
-				mainStateLabel.innerHTML = "State: Releasing Tension";
-				if (mainStateLabelContainer) mainStateLabelContainer.style.backgroundColor = blueBackground;
-			}
-
-			retractButton.style.backgroundColor = greyBackground;
-			extendButton.style.backgroundColor = greyBackground;
-			tenseButton.style.backgroundColor = greyBackground;
-			relaxButton.style.backgroundColor = greenBackground;
-			calibrateButton.style.backgroundColor = greyBackground;
-
-			// No buttons are active in this state
-			break;
-		case 9:
-			stateLabel.innerHTML = "State: Calibration Computing";
-			if (mainStateLabel) {
-				mainStateLabel.innerHTML = "State: Calibration Computing";
-				if (mainStateLabelContainer) mainStateLabelContainer.style.backgroundColor = blueBackground;
-			}
-			// No buttons are active in this state
-			retractButton.style.backgroundColor = greyBackground;
-			extendButton.style.backgroundColor = greyBackground;
-			tenseButton.style.backgroundColor = greyBackground;
-			relaxButton.style.backgroundColor = greenBackground;
-			calibrateButton.style.backgroundColor = greyBackground;
-			break;
-		default:
-			stateLabel.innerHTML = "State: Unknown";
-			if (mainStateLabel) {
-				mainStateLabel.innerHTML = "State: Unknown";
-				if (mainStateLabelContainer) mainStateLabelContainer.style.backgroundColor = redBackground;
-			}
-
-			retractButton.style.backgroundColor = greenBackground;
-			extendButton.style.backgroundColor = greyBackground;
-			tenseButton.style.backgroundColor = greyBackground;
-			relaxButton.style.backgroundColor = greenBackground;
-			calibrateButton.style.backgroundColor = greyBackground;
-			break;
+	// Update state label
+	const stateName = stateNames[maslowStatus.state] || "Unknown";
+	stateLabel.innerHTML = "State: " + stateName;
+	if (mainStateLabel) {
+		mainStateLabel.innerHTML = "State: " + stateName;
+		if (mainStateLabelContainer) {
+			mainStateLabelContainer.style.backgroundColor = stateBackgrounds[maslowStatus.state] || redBackground;
+		}
 	}
+
+	// Update button states based on allowed transitions
+	// Relaxation button is always available (special case)
+	relaxButton.style.backgroundColor = greenBackground;
+
+	// Set button colors based on whether transitions are allowed
+	const currentState = maslowStatus.state;
+	
+	retractButton.style.backgroundColor = isTransitionAllowed(currentState, RETRACTING) ? greenBackground : greyBackground;
+	extendButton.style.backgroundColor = isTransitionAllowed(currentState, EXTENDING) ? greenBackground : greyBackground;
+	tenseButton.style.backgroundColor = isTransitionAllowed(currentState, TAKING_SLACK) ? greenBackground : greyBackground;
+	calibrateButton.style.backgroundColor = isTransitionAllowed(currentState, CALIBRATION_IN_PROGRESS) ? greenBackground : greyBackground;
+	// Note: RELEASE_TENSION is not directly triggered by a button in most states
 }
 
 
@@ -328,6 +226,56 @@ function showCalibrationCompleteMessage() {
   modal.appendChild(messageElement);
   modal.appendChild(closeButton);
   document.body.appendChild(modal);
+}
+
+/**
+ * Fetch state transitions from firmware
+ * This function sends the STATETRANS command to get allowed state transitions
+ */
+function fetchStateTransitions() {
+	// Send command to get state transitions
+	SendGetHttp(
+		"STATETRANS",
+		(responseText) => {
+			try {
+				// Parse the JSON response
+				// Expected format: {"stateTransitions":{"0":[1],"1":[2],...}}
+				const data = JSON.parse(responseText);
+				if (data.stateTransitions) {
+					stateTransitionsMap = data.stateTransitions;
+					console.log("State transitions loaded:", stateTransitionsMap);
+					// Update buttons now that we have the transition map
+					updateDynamicButtons();
+				}
+			} catch (error) {
+				console.error("Failed to parse state transitions:", error);
+			}
+		},
+		(error) => {
+			console.error("Failed to fetch state transitions:", error);
+			// If we can't fetch transitions, fall back to the UI working without dynamic button control
+		}
+	);
+}
+
+/**
+ * Check if a state transition is allowed
+ * @param {number} fromState - Current state
+ * @param {number} toState - Target state
+ * @returns {boolean} True if transition is allowed
+ */
+function isTransitionAllowed(fromState, toState) {
+	if (!stateTransitionsMap) {
+		// If we don't have the map yet, allow all transitions (fallback behavior)
+		return true;
+	}
+	
+	const allowedStates = stateTransitionsMap[fromState.toString()];
+	if (!allowedStates) {
+		return false;
+	}
+	
+	return allowedStates.includes(toState);
 }
 
 /** Perform maslow specific-ish error message handling */

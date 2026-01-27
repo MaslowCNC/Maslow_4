@@ -191,6 +191,10 @@ function initUI_4() {
 		build_HTML_setting_list(current_setting_filter);
 		closeModal();
 		show_main_UI();
+		// Fetch state transitions from firmware
+		if (typeof fetchStateTransitions === "function") {
+			fetchStateTransitions();
+		}
 	}
 }
 
