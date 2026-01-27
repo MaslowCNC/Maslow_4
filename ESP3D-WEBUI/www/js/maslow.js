@@ -61,53 +61,68 @@ const isJoggingAllowed = () => {
 	return maslowStatus.state === 7;
 };
 
-/** Update jog UI visual state based on whether jogging is allowed */
-const updateJogUIState = () => {
-	const jogUI = document.getElementById("JogUI");
-	if (!jogUI) {
-		return;
-	}
+/** Update tablet tab jog button visual state based on whether jogging is allowed */
+const updateTabletJogUIState = () => {
+	// All the purple jog arrow button IDs on the tablet tab
+	const jogButtonIds = [
+		'tablettab_topLeft', 'tablettab_top', 'tablettab_topRight',
+		'tablettab_left', 'tablettab_right',
+		'tablettab_bottomLeft', 'tablettab_bottom', 'tablettab_bottomRight',
+		'tablettab_zUp', 'tablettab_zDown'
+	];
 
-	// Remove any existing overlay
-	let overlay = document.getElementById("jog-disabled-overlay");
-	
-	if (!isJoggingAllowed()) {
-		// Create overlay if it doesn't exist
-		if (!overlay) {
-			overlay = document.createElement("div");
-			overlay.id = "jog-disabled-overlay";
-			overlay.style.position = "absolute";
-			overlay.style.top = "0";
-			overlay.style.left = "0";
-			overlay.style.width = "100%";
-			overlay.style.height = "100%";
-			overlay.style.backgroundColor = "rgba(211, 211, 211, 0.7)"; // Light grey with transparency
-			overlay.style.cursor = "not-allowed";
-			overlay.style.zIndex = "1000";
-			overlay.style.pointerEvents = "auto";
+	// Get the state name from firmware definitions
+	const currentStateInfo = stateDefinitions ? stateDefinitions[maslowStatus.state] : null;
+	const stateName = currentStateInfo ? currentStateInfo.name : "current state";
+	const tooltipText = `Jogging is only available when in state Ready To Cut (currently in ${stateName})`;
+
+	jogButtonIds.forEach(buttonId => {
+		const button = document.getElementById(buttonId);
+		if (!button) {
+			return;
+		}
+
+		if (!isJoggingAllowed()) {
+			// Apply light grey overlay effect
+			button.style.opacity = "0.5";
+			button.style.cursor = "not-allowed";
+			button.style.pointerEvents = "none";
+			button.title = tooltipText;
 			
-			// Get the state name from firmware definitions
-			const currentStateInfo = stateDefinitions ? stateDefinitions[maslowStatus.state] : null;
-			const stateName = currentStateInfo ? currentStateInfo.name : "current state";
-			
-			// Add tooltip
-			overlay.title = `Jogging is only available when in state Ready To Cut (currently in ${stateName})`;
-			
-			// Position the overlay relative to JogUI
-			jogUI.style.position = "relative";
-			jogUI.appendChild(overlay);
+			// Add a visual overlay div if it doesn't exist
+			let overlay = button.querySelector('.jog-disabled-overlay');
+			if (!overlay) {
+				overlay = document.createElement("div");
+				overlay.className = "jog-disabled-overlay";
+				overlay.style.position = "absolute";
+				overlay.style.top = "0";
+				overlay.style.left = "0";
+				overlay.style.width = "100%";
+				overlay.style.height = "100%";
+				overlay.style.backgroundColor = "rgba(211, 211, 211, 0.6)";
+				overlay.style.pointerEvents = "none";
+				overlay.style.zIndex = "10";
+				
+				// Ensure button has position relative for overlay
+				if (button.style.position !== "relative" && button.style.position !== "absolute") {
+					button.style.position = "relative";
+				}
+				button.appendChild(overlay);
+			}
 		} else {
-			// Update tooltip with current state
-			const currentStateInfo = stateDefinitions ? stateDefinitions[maslowStatus.state] : null;
-			const stateName = currentStateInfo ? currentStateInfo.name : "current state";
-			overlay.title = `Jogging is only available when in state Ready To Cut (currently in ${stateName})`;
+			// Remove grey overlay effect
+			button.style.opacity = "";
+			button.style.cursor = "";
+			button.style.pointerEvents = "";
+			button.title = "";
+			
+			// Remove overlay div if it exists
+			const overlay = button.querySelector('.jog-disabled-overlay');
+			if (overlay) {
+				overlay.remove();
+			}
 		}
-	} else {
-		// Remove overlay if it exists
-		if (overlay) {
-			overlay.remove();
-		}
-	}
+	});
 };
 
 const updateDynamicButtons = () => {
@@ -174,8 +189,8 @@ const updateDynamicButtons = () => {
 		}
 	}
 	
-	// Update jog UI state
-	updateJogUIState();
+	// Update tablet tab jog UI state
+	updateTabletJogUIState();
 }
 
 

@@ -241,6 +241,14 @@ const checkParams = (params = {}) => {
 
 /** Perform a jog command */
 const jog = (params = {}) => {
+  // Check if jogging is allowed based on current state
+  if (!isJoggingAllowed()) {
+    const currentStateInfo = stateDefinitions ? stateDefinitions[maslowStatus.state] : null;
+    const stateName = currentStateInfo ? currentStateInfo.name : "current state";
+    addMessage(`Jogging is only available when in state Ready To Cut (currently in ${stateName})`);
+    return;
+  }
+
   const axisAndDistance = checkParams(params);
   if (!axisAndDistance) {
     return;

@@ -218,12 +218,6 @@ function SendJogcommand(cmd, feedrate) {
 		return;
 	}
 
-	// Check if jogging is allowed based on current state
-	if (!isJoggingAllowed()) {
-		console.log("Jogging is only available when in state Ready To Cut");
-		return;
-	}
-
 	const jCmd = grblaxis > 3 ? cmd.replace("Z", getValue("control_select_axis")) : cmd;
 
 	const feedrateValue = GetAxisFeedRate(feedrate[0].toUpperCase() === "Z" ? getValue("control_select_axis") : "XY");
