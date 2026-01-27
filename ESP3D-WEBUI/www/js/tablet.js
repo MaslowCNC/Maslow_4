@@ -274,23 +274,55 @@ const jogWithUnitsSafeguard = (feedrate, axisAndDistance) => {
   // Store what units the UI is currently displaying (what user expects)
   const uiExpectedUnits = gCodeModal.units;
   
-  // Force firmware to use UI units, execute jog, then query to restore original state
-  // This ensures the jog distance is always interpreted correctly
-  sendCommand(uiExpectedUnits);
+  // Check if we're in Hold state and this is a Z command
+  const isZCommand = axisAndDistance && axisAndDistance.toUpperCase().includes('Z');
+  const isHoldState = typeof currentMachineState !== 'undefined' && currentMachineState === 'Hold';
   
-  // Small delay to ensure units command is processed
-  setTimeout(() => {
-    const cmd = `$J=G91F${feedrate}${axisAndDistance}`;
-    const unitsLabel = uiExpectedUnits === 'G20' ? 'inch' : 'mm';
-    addMessage(`JogTo: ${cmd} (${unitsLabel})`);
-    sendCommand(cmd + '\n');
+  // If in Hold state with Z command, use resume-move-pause workflow
+  if (isHoldState && isZCommand) {
+    // Send resume to exit Hold state
+    resumeGCode();
     
-    // After jog command, query current state to restore if needed
-    // The $G response will be handled by grblGetModal and update the UI automatically
+    // Wait for state transition, then send G0 movement command
     setTimeout(() => {
-      sendCommand('$G');
-    }, 200);
-  }, 100);
+      // Force firmware to use UI units
+      sendCommand(uiExpectedUnits);
+      
+      setTimeout(() => {
+        // Use G91 G0 instead of $J for better reliability after resume
+        const cmd = `G91 G0 ${axisAndDistance} F${feedrate}`;
+        const unitsLabel = uiExpectedUnits === 'G20' ? 'inch' : 'mm';
+        addMessage(`JogTo: ${cmd} (${unitsLabel})`);
+        sendCommand(cmd + '\n');
+        
+        // Return to Hold state after movement
+        setTimeout(() => {
+          pauseGCode();
+          // Query state to update UI
+          sendCommand('$G');
+        }, 1500);
+      }, 100);
+    }, 500);
+  } else {
+    // Normal jog operation (not in Hold state)
+    // Force firmware to use UI units, execute jog, then query to restore original state
+    // This ensures the jog distance is always interpreted correctly
+    sendCommand(uiExpectedUnits);
+    
+    // Small delay to ensure units command is processed
+    setTimeout(() => {
+      const cmd = `$J=G91F${feedrate}${axisAndDistance}`;
+      const unitsLabel = uiExpectedUnits === 'G20' ? 'inch' : 'mm';
+      addMessage(`JogTo: ${cmd} (${unitsLabel})`);
+      sendCommand(cmd + '\n');
+      
+      // After jog command, query current state to restore if needed
+      // The $G response will be handled by grblGetModal and update the UI automatically
+      setTimeout(() => {
+        sendCommand('$G');
+      }, 200);
+    }, 100);
+  }
 }
 
 /** Peform a move command */
