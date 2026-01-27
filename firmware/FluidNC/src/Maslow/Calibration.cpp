@@ -48,18 +48,18 @@ void Calibration::printCurrentState() {
 // Get allowed state transitions for a given state
 // Returns a pointer to an array of allowed states and sets count to the number of allowed states
 const int* Calibration::getAllowedTransitions(int fromState, int& count) {
-    // Find the transition map entry for this state
-    for (size_t i = 0; i < sizeof(stateTransitionMap) / sizeof(StateTransitions); i++) {
-        if (stateTransitionMap[i].fromState == fromState) {
+    // Find the state definition entry for this state
+    for (size_t i = 0; i < sizeof(stateDefinitions) / sizeof(StateDefinition); i++) {
+        if (stateDefinitions[i].id == fromState) {
             // Count the number of valid transitions (excluding -1 terminators)
             count = 0;
             for (int j = 0; j < MAX_TRANSITIONS; j++) {
-                if (stateTransitionMap[i].allowedStates[j] == -1) {
+                if (stateDefinitions[i].allowedTransitions[j] == -1) {
                     break;
                 }
                 count++;
             }
-            return stateTransitionMap[i].allowedStates;
+            return stateDefinitions[i].allowedTransitions;
         }
     }
     // If state not found in map, return empty array
@@ -70,9 +70,9 @@ const int* Calibration::getAllowedTransitions(int fromState, int& count) {
 
 // Get the name of a state
 const char* Calibration::getStateName(int state) {
-    for (int i = 0; i < 11; i++) {
-        if (stateNames[i].state == state) {
-            return stateNames[i].name;
+    for (size_t i = 0; i < sizeof(stateDefinitions) / sizeof(StateDefinition); i++) {
+        if (stateDefinitions[i].id == state) {
+            return stateDefinitions[i].name;
         }
     }
     return "Unknown";
@@ -80,9 +80,9 @@ const char* Calibration::getStateName(int state) {
 
 // Get the button label for a state
 const char* Calibration::getStateButtonLabel(int state) {
-    for (int i = 0; i < 11; i++) {
-        if (stateNames[i].state == state) {
-            return stateNames[i].buttonLabel;
+    for (size_t i = 0; i < sizeof(stateDefinitions) / sizeof(StateDefinition); i++) {
+        if (stateDefinitions[i].id == state) {
+            return stateDefinitions[i].buttonLabel;
         }
     }
     return "";
@@ -98,7 +98,7 @@ void Calibration::setExtendedState(bool tl, bool tr, bool bl, bool br) {
 
 //Request a state change to a new state. Returns true on success and false on failure (although return value is never used atm)
 bool Calibration::requestStateChange(int newState) {
-    log_info("Requesting state change from " << stateNames[currentState].name << " to " << stateNames[newState].name);
+    log_info("Requesting state change from " << getStateName(currentState) << " to " << getStateName(newState));
 
     // Check if the transition is allowed using the state transition map
     int count;
@@ -112,7 +112,7 @@ bool Calibration::requestStateChange(int newState) {
     }
 
     if (!transitionAllowed) {
-        log_info("Cannot transition from state " << stateNames[currentState].name << " to state " << stateNames[newState].name);
+        log_info("Cannot transition from state " << getStateName(currentState) << " to state " << getStateName(newState));
         return false;
     }
 

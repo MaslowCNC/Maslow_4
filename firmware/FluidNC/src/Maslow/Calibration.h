@@ -150,45 +150,38 @@ private:
     bool safetyOn         = true;
     bool HeartBeatEnabled = true;
 
-    //A structure to hold the state information
-    struct StateInfo {
-        int         state;
-        const char* name;
-        const char* buttonLabel;  // Label for UI button, empty string if no button
-    };
-    StateInfo stateNames[11] = { 
-        { UNKNOWN, "Unknown", "" },
-        { RETRACTING, "Retracting Belts", "Retract All" },
-        { RETRACTED, "Belts Retracted", "" },
-        { EXTENDING, "Extending Belts", "Extend All" },
-        { EXTENDEDOUT, "Belts Extended", "" },
-        { TAKING_SLACK, "Taking Slack", "Apply Tension" },
-        { CALIBRATION_IN_PROGRESS, "Calibrating", "Find Anchor Locations" },
-        { READY_TO_CUT, "Ready To Cut", "" },
-        { RELEASE_TENSION, "Releasing Tension", "Release Tension" },
-        { CALIBRATION_COMPUTING, "Calibration Computing", "" } };
-
-    // State transition map - defines which states can transition to which other states
-    // Each entry is a list of allowed destination states for a given source state
-    // terminated by -1
+    // Unified state definition structure - combines state info and transitions
+    // This keeps all state-related data in one place to prevent desynchronization
     static constexpr int MAX_TRANSITIONS = 5;
-    struct StateTransitions {
-        int fromState;
-        int allowedStates[MAX_TRANSITIONS];
+    struct StateDefinition {
+        int         id;              // State ID (matches defines in MaslowEnums.h)
+        const char* name;            // Human-readable state name
+        const char* buttonLabel;     // UI button label (empty string if no button)
+        int         allowedTransitions[MAX_TRANSITIONS];  // Allowed next states, -1 terminated
     };
 
-    // Define allowed state transitions for each state
-    // Based on the comments and logic in requestStateChange()
-    static constexpr StateTransitions stateTransitionMap[] = {
-        { UNKNOWN, { RETRACTING, -1, -1, -1, -1 } },
-        { RETRACTING, { RETRACTED, -1, -1, -1, -1 } },
-        { RETRACTED, { EXTENDING, RETRACTING, -1, -1, -1 } },
-        { EXTENDING, { EXTENDEDOUT, -1, -1, -1, -1 } },
-        { EXTENDEDOUT, { TAKING_SLACK, CALIBRATION_IN_PROGRESS, RELEASE_TENSION, RETRACTING, EXTENDING } },
-        { TAKING_SLACK, { EXTENDEDOUT, READY_TO_CUT, -1, -1, -1 } },
-        { CALIBRATION_IN_PROGRESS, { CALIBRATION_COMPUTING, -1, -1, -1, -1 } },
-        { READY_TO_CUT, { TAKING_SLACK, CALIBRATION_IN_PROGRESS, RELEASE_TENSION, RETRACTING, -1 } },
-        { RELEASE_TENSION, { EXTENDEDOUT, -1, -1, -1, -1 } },
-        { CALIBRATION_COMPUTING, { CALIBRATION_IN_PROGRESS, READY_TO_CUT, RELEASE_TENSION, -1, -1 } },
+    // Complete state machine definition
+    // Each entry defines: id, name, button label, and allowed transitions
+    static constexpr StateDefinition stateDefinitions[] = {
+        { UNKNOWN, "Unknown", "", 
+            { RETRACTING, -1, -1, -1, -1 } },
+        { RETRACTING, "Retracting Belts", "Retract All", 
+            { RETRACTED, -1, -1, -1, -1 } },
+        { RETRACTED, "Belts Retracted", "", 
+            { EXTENDING, RETRACTING, -1, -1, -1 } },
+        { EXTENDING, "Extending Belts", "Extend All", 
+            { EXTENDEDOUT, -1, -1, -1, -1 } },
+        { EXTENDEDOUT, "Belts Extended", "", 
+            { TAKING_SLACK, CALIBRATION_IN_PROGRESS, RELEASE_TENSION, RETRACTING, EXTENDING } },
+        { TAKING_SLACK, "Taking Slack", "Apply Tension", 
+            { EXTENDEDOUT, READY_TO_CUT, -1, -1, -1 } },
+        { CALIBRATION_IN_PROGRESS, "Calibrating", "Find Anchor Locations", 
+            { CALIBRATION_COMPUTING, -1, -1, -1, -1 } },
+        { READY_TO_CUT, "Ready To Cut", "", 
+            { TAKING_SLACK, CALIBRATION_IN_PROGRESS, RELEASE_TENSION, RETRACTING, -1 } },
+        { RELEASE_TENSION, "Releasing Tension", "Release Tension", 
+            { EXTENDEDOUT, -1, -1, -1, -1 } },
+        { CALIBRATION_COMPUTING, "Calibration Computing", "", 
+            { CALIBRATION_IN_PROGRESS, READY_TO_CUT, RELEASE_TENSION, -1, -1 } },
     };
 };
