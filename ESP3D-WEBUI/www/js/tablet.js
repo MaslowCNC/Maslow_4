@@ -615,7 +615,6 @@ function tabletGrblState(grbl, response) {
   }
 
   const cannotClick = stateName === 'Run' || stateName === 'Hold'
-  const cannotClickZ = stateName === 'Run'  // Allow Z controls during Hold
   // Recompute the layout only when the state changes
   if (oldCannotClick !== cannotClick || oldStateName !== stateName) {
     setDisabled('.dropdown-toggle', cannotClick)
@@ -631,11 +630,19 @@ function tabletGrblState(grbl, response) {
       'Y+100', 'Y+10', 'Y+1', 'Y+0.1', 'Y-100', 'Y-10', 'Y-1', 'Y-0_1'];
     const allJogButtons = [...zJogButtons, ...xyJogButtons];
 
+    // Get zero button references
+    const zeroXBtn = id('zero_x_btn');
+    const zeroYBtn = id('zero_y_btn');
+    const zeroZBtn = id('zero_z_btn');
+    const zeroXYZBtn = id('zero_xyz_btn');
+
     // Handle control states based on machine state
     if (stateName === 'Hold') {
       // During Hold (pause): Enable Z controls, disable XY controls
-      const zeroZBtn = id('zero_z_btn');
       if (zeroZBtn) zeroZBtn.disabled = false;
+      if (zeroXBtn) zeroXBtn.disabled = true;
+      if (zeroYBtn) zeroYBtn.disabled = true;
+      if (zeroXYZBtn) zeroXYZBtn.disabled = true;
 
       zJogButtons.forEach(btnId => {
         const btn = id(btnId);
@@ -648,12 +655,22 @@ function tabletGrblState(grbl, response) {
       });
     } else if (stateName === 'Run') {
       // During Run: Disable all controls
+      if (zeroZBtn) zeroZBtn.disabled = true;
+      if (zeroXBtn) zeroXBtn.disabled = true;
+      if (zeroYBtn) zeroYBtn.disabled = true;
+      if (zeroXYZBtn) zeroXYZBtn.disabled = true;
+
       allJogButtons.forEach(btnId => {
         const btn = id(btnId);
         if (btn) btn.style.pointerEvents = 'none';
       });
     } else {
       // Other states (Idle, etc.): Enable all controls
+      if (zeroZBtn) zeroZBtn.disabled = false;
+      if (zeroXBtn) zeroXBtn.disabled = false;
+      if (zeroYBtn) zeroYBtn.disabled = false;
+      if (zeroXYZBtn) zeroXYZBtn.disabled = false;
+
       allJogButtons.forEach(btnId => {
         const btn = id(btnId);
         if (btn) btn.style.pointerEvents = 'auto';
