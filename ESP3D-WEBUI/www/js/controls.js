@@ -172,7 +172,12 @@ function control_motorsOff() {
 }
 
 function SendHomecommand(cmd) {
-	if (getChecked('lock_UI') === "true") {
+	// Allow Z-axis homing during Hold (pause) state
+	const isZHomeCommand = cmd && (cmd === 'G28 Z0' || (cmd.includes && cmd.includes('Z')));
+	const isHoldState = typeof currentMachineState !== 'undefined' && currentMachineState === 'Hold';
+	const allowDuringHold = isZHomeCommand && isHoldState;
+	
+	if (getChecked('lock_UI') === "true" && !allowDuringHold) {
 		return;
 	}
 	let hCmd = cmd;
@@ -188,6 +193,19 @@ function SendHomecommand(cmd) {
 }
 
 function SendZerocommand(cmd) {
+	// Allow Z-axis zero during Hold (pause) state
+	const isZZeroCommand = cmd && cmd.includes && cmd.includes('Z');
+	const isHoldState = typeof currentMachineState !== 'undefined' && currentMachineState === 'Hold';
+	const allowDuringHold = isZZeroCommand && isHoldState;
+	
+	// Only block XY commands during Hold, allow Z commands
+	if (!allowDuringHold && isHoldState) {
+		// During Hold, block non-Z commands
+		if (!isZZeroCommand) {
+			return;
+		}
+	}
+	
 	const command = `G10 L20 P0 ${cmd}`;
 	SendPrinterCommand(command, true, get_Position);
 }
@@ -214,7 +232,12 @@ function JogFeedrate(axis) {
 
 /** This is extensively used in the jog dial SVGs */
 function SendJogcommand(cmd, feedrate) {
-	if (getChecked("lock_UI") !== "false") {
+	// Allow Z-axis jogging during Hold (pause) state
+	const isZCommand = cmd && cmd.toUpperCase().includes('Z');
+	const isHoldState = typeof currentMachineState !== 'undefined' && currentMachineState === 'Hold';
+	const allowDuringHold = isZCommand && isHoldState;
+	
+	if (getChecked("lock_UI") !== "false" && !allowDuringHold) {
 		return;
 	}
 
