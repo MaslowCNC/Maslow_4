@@ -49,35 +49,35 @@ constexpr int MAX_TRANSITIONS = 5;
 struct StateDefinition {
     int         id;              // State ID (matches defines above)
     const char* name;            // Human-readable state name
+    const char* backgroundColor; // UI background color for state label (grouped with name for display)
     const char* buttonLabel;     // UI button label (empty string if no button)
-    const char* backgroundColor; // UI background color for state label
     int         allowedTransitions[MAX_TRANSITIONS];  // Allowed next states, -1 terminated
 };
 
 // Complete state machine definition
-// Each entry defines: id, name, button label, background color, and allowed transitions FROM this state
+// Each entry defines: id, name, background color, button label, and allowed transitions FROM this state
 // Background colors: red=#f8d7da, blue=#cfe2ff, green=#d1e7dd, yellow=#fff3cd
 // NOTE: RETRACTING can be entered from any state, so it appears in all transition lists
 // NOTE: UNKNOWN has no normal transitions - it's only entered on errors or when position cannot be determined
 constexpr StateDefinition stateDefinitions[] = {
-    { UNKNOWN, "Unknown", "", "#f8d7da",
+    { UNKNOWN, "Unknown", "#f8d7da", "",
         { -1, -1, -1, -1, -1 } },
-    { RETRACTING, "Retracting Belts", "Retract All", "#cfe2ff",
+    { RETRACTING, "Retracting Belts", "#cfe2ff", "Retract All",
         { RETRACTED, RETRACTING, -1, -1, -1 } },
-    { RETRACTED, "Belts Retracted", "", "#d1e7dd",
+    { RETRACTED, "Belts Retracted", "#d1e7dd", "",
         { EXTENDING, RETRACTING, RELEASE_TENSION, -1, -1 } },
-    { EXTENDING, "Extending Belts", "Extend All", "#cfe2ff",
+    { EXTENDING, "Extending Belts", "#cfe2ff", "Extend All",
         { EXTENDEDOUT, RETRACTING, -1, -1, -1 } },
-    { EXTENDEDOUT, "Belts Extended", "", "#fff3cd",
+    { EXTENDEDOUT, "Belts Extended", "#fff3cd", "",
         { TAKING_SLACK, CALIBRATION_IN_PROGRESS, RELEASE_TENSION, RETRACTING, EXTENDING } },
-    { TAKING_SLACK, "Taking Slack", "Apply Tension", "#cfe2ff",
+    { TAKING_SLACK, "Taking Slack", "#cfe2ff", "Apply Tension",
         { EXTENDEDOUT, READY_TO_CUT, RETRACTING, -1, -1 } },
-    { CALIBRATION_IN_PROGRESS, "Calibrating", "Find Anchor Locations", "#cfe2ff",
+    { CALIBRATION_IN_PROGRESS, "Calibrating", "#cfe2ff", "Find Anchor Locations",
         { CALIBRATION_COMPUTING, READY_TO_CUT, RETRACTING, -1, -1 } },
-    { READY_TO_CUT, "Ready To Cut", "", "#d1e7dd",
+    { READY_TO_CUT, "Ready To Cut", "#d1e7dd", "",
         { TAKING_SLACK, CALIBRATION_IN_PROGRESS, RELEASE_TENSION, RETRACTING, -1 } },
-    { RELEASE_TENSION, "Releasing Tension", "Release Tension", "#cfe2ff",
+    { RELEASE_TENSION, "Releasing Tension", "#cfe2ff", "Release Tension",
         { EXTENDEDOUT, RETRACTING, -1, -1, -1 } },
-    { CALIBRATION_COMPUTING, "Calibration Computing", "", "#cfe2ff",
+    { CALIBRATION_COMPUTING, "Calibration Computing", "#cfe2ff", "",
         { CALIBRATION_IN_PROGRESS, READY_TO_CUT, RELEASE_TENSION, RETRACTING, -1 } },
 };
