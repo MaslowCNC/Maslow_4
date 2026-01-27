@@ -110,19 +110,14 @@ void Calibration::setExtendedState(bool tl, bool tr, bool bl, bool br) {
 bool Calibration::requestStateChange(int newState) {
     log_info("Requesting state change from " << getStateName(currentState) << " to " << getStateName(newState));
 
-    // Special cases: UNKNOWN and RETRACTING can be entered from any state
+    // Check if the transition is allowed using the state transition map
     bool transitionAllowed = false;
-    if (newState == UNKNOWN || newState == RETRACTING) {
-        transitionAllowed = true;
-    } else {
-        // Check if the transition is allowed using the state transition map
-        int count;
-        const int* allowedTransitions = getAllowedTransitions(currentState, count);
-        for (int i = 0; i < count; i++) {
-            if (allowedTransitions[i] == newState) {
-                transitionAllowed = true;
-                break;
-            }
+    int count;
+    const int* allowedTransitions = getAllowedTransitions(currentState, count);
+    for (int i = 0; i < count; i++) {
+        if (allowedTransitions[i] == newState) {
+            transitionAllowed = true;
+            break;
         }
     }
 

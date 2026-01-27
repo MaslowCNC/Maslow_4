@@ -57,26 +57,26 @@ struct StateDefinition {
 // Complete state machine definition
 // Each entry defines: id, name, button label, background color, and allowed transitions FROM this state
 // Background colors: red=#f8d7da, blue=#cfe2ff, green=#d1e7dd, yellow=#fff3cd
-// NOTE: UNKNOWN and RETRACTING can be entered from any state (special handling in code)
+// NOTE: RETRACTING can be entered from any state, so it appears in all transition lists
 constexpr StateDefinition stateDefinitions[] = {
     { UNKNOWN, "Unknown", "", "#f8d7da",
         { RETRACTING, RELEASE_TENSION, -1, -1, -1 } },
     { RETRACTING, "Retracting Belts", "Retract All", "#cfe2ff",
-        { RETRACTED, -1, -1, -1, -1 } },
+        { RETRACTED, RETRACTING, -1, -1, -1 } },
     { RETRACTED, "Belts Retracted", "", "#d1e7dd",
         { EXTENDING, RETRACTING, RELEASE_TENSION, -1, -1 } },
     { EXTENDING, "Extending Belts", "Extend All", "#cfe2ff",
-        { EXTENDEDOUT, -1, -1, -1, -1 } },
+        { EXTENDEDOUT, RETRACTING, -1, -1, -1 } },
     { EXTENDEDOUT, "Belts Extended", "", "#fff3cd",
         { TAKING_SLACK, CALIBRATION_IN_PROGRESS, RELEASE_TENSION, RETRACTING, EXTENDING } },
     { TAKING_SLACK, "Taking Slack", "Apply Tension", "#cfe2ff",
-        { EXTENDEDOUT, READY_TO_CUT, -1, -1, -1 } },
+        { EXTENDEDOUT, READY_TO_CUT, RETRACTING, -1, -1 } },
     { CALIBRATION_IN_PROGRESS, "Calibrating", "Find Anchor Locations", "#cfe2ff",
-        { CALIBRATION_COMPUTING, READY_TO_CUT, -1, -1, -1 } },
+        { CALIBRATION_COMPUTING, READY_TO_CUT, RETRACTING, -1, -1 } },
     { READY_TO_CUT, "Ready To Cut", "", "#d1e7dd",
         { TAKING_SLACK, CALIBRATION_IN_PROGRESS, RELEASE_TENSION, RETRACTING, -1 } },
     { RELEASE_TENSION, "Releasing Tension", "Release Tension", "#cfe2ff",
-        { EXTENDEDOUT, -1, -1, -1, -1 } },
+        { EXTENDEDOUT, RETRACTING, -1, -1, -1 } },
     { CALIBRATION_COMPUTING, "Calibration Computing", "", "#cfe2ff",
-        { CALIBRATION_IN_PROGRESS, READY_TO_CUT, RELEASE_TENSION, -1, -1 } },
+        { CALIBRATION_IN_PROGRESS, READY_TO_CUT, RELEASE_TENSION, RETRACTING, -1 } },
 };
