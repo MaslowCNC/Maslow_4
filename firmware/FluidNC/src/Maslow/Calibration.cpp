@@ -92,7 +92,7 @@ bool Calibration::requestStateChange(int newState) {
     }
 
     if (!transitionAllowed) {
-        log_info("Transition not allowed from " << stateNames[currentState].name << " to " << stateNames[newState].name);
+        log_info("Cannot transition from state " << stateNames[currentState].name << " to state " << stateNames[newState].name);
         return false;
     }
 
