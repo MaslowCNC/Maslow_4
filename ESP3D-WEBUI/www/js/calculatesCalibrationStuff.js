@@ -11,9 +11,8 @@ var acceptableCalibrationThreshold = 0.5
 // Maximum number of low-fitness retry attempts before giving up
 const MAX_LOW_FITNESS_RETRIES = 10;
 
-// Flag to track if calibration is complete (set by firmware message)
-// This prevents auto-restart after the final calibration stage
-var calibrationComplete = false;
+// Note: calibrationComplete flag is declared in maslow.js (loads first)
+// and is used to prevent auto-restart after final calibration stage
 
 //Establish initial guesses for the corners
 var initialGuess = {

@@ -8,6 +8,10 @@ let maslowStatus = { homed: false, extended: false, state: 0 };
 //I think this is not used anymore and can be removed now
 let lastHeartBeatTime = new Date().getTime();
 
+/** Flag to track if calibration is complete (set by firmware message) */
+// This prevents auto-restart after the final calibration stage
+var calibrationComplete = false;
+
 const err = "error: ";
 // When we can change to proper ESM - prefix these const strings and functions with 'export' (minus the quotes of course)
 const MaslowErrMsgKeyValueCantUse = `${err}Could not use supplied key-value pair.`;
