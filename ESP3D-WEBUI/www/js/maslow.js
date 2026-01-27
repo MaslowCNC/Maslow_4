@@ -54,6 +54,62 @@ READY_TO_CUT 7
     -Apply Tension
     -Release Tension
 */
+
+/** Check if jogging is allowed based on current state */
+const isJoggingAllowed = () => {
+	// READY_TO_CUT is state 7
+	return maslowStatus.state === 7;
+};
+
+/** Update jog UI visual state based on whether jogging is allowed */
+const updateJogUIState = () => {
+	const jogUI = document.getElementById("JogUI");
+	if (!jogUI) {
+		return;
+	}
+
+	// Remove any existing overlay
+	let overlay = document.getElementById("jog-disabled-overlay");
+	
+	if (!isJoggingAllowed()) {
+		// Create overlay if it doesn't exist
+		if (!overlay) {
+			overlay = document.createElement("div");
+			overlay.id = "jog-disabled-overlay";
+			overlay.style.position = "absolute";
+			overlay.style.top = "0";
+			overlay.style.left = "0";
+			overlay.style.width = "100%";
+			overlay.style.height = "100%";
+			overlay.style.backgroundColor = "rgba(211, 211, 211, 0.7)"; // Light grey with transparency
+			overlay.style.cursor = "not-allowed";
+			overlay.style.zIndex = "1000";
+			overlay.style.pointerEvents = "auto";
+			
+			// Get the state name from firmware definitions
+			const currentStateInfo = stateDefinitions ? stateDefinitions[maslowStatus.state] : null;
+			const stateName = currentStateInfo ? currentStateInfo.name : "current state";
+			
+			// Add tooltip
+			overlay.title = `Jogging is only available when in state Ready To Cut (currently in ${stateName})`;
+			
+			// Position the overlay relative to JogUI
+			jogUI.style.position = "relative";
+			jogUI.appendChild(overlay);
+		} else {
+			// Update tooltip with current state
+			const currentStateInfo = stateDefinitions ? stateDefinitions[maslowStatus.state] : null;
+			const stateName = currentStateInfo ? currentStateInfo.name : "current state";
+			overlay.title = `Jogging is only available when in state Ready To Cut (currently in ${stateName})`;
+		}
+	} else {
+		// Remove overlay if it exists
+		if (overlay) {
+			overlay.remove();
+		}
+	}
+};
+
 const updateDynamicButtons = () => {
 	// If we don't have state definitions yet, skip the update
 	if (!stateDefinitions) {
@@ -117,6 +173,9 @@ const updateDynamicButtons = () => {
 			}
 		}
 	}
+	
+	// Update jog UI state
+	updateJogUIState();
 }
 
 
