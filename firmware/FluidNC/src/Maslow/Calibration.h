@@ -150,38 +150,6 @@ private:
     bool safetyOn         = true;
     bool HeartBeatEnabled = true;
 
-    // Unified state definition structure - combines state info and transitions
-    // This keeps all state-related data in one place to prevent desynchronization
-    static constexpr int MAX_TRANSITIONS = 5;
-    struct StateDefinition {
-        int         id;              // State ID (matches defines in MaslowEnums.h)
-        const char* name;            // Human-readable state name
-        const char* buttonLabel;     // UI button label (empty string if no button)
-        int         allowedTransitions[MAX_TRANSITIONS];  // Allowed next states, -1 terminated
-    };
-
-    // Complete state machine definition
-    // Each entry defines: id, name, button label, and allowed transitions
-    static constexpr StateDefinition stateDefinitions[] = {
-        { UNKNOWN, "Unknown", "", 
-            { RETRACTING, -1, -1, -1, -1 } },
-        { RETRACTING, "Retracting Belts", "Retract All", 
-            { RETRACTED, -1, -1, -1, -1 } },
-        { RETRACTED, "Belts Retracted", "", 
-            { EXTENDING, RETRACTING, -1, -1, -1 } },
-        { EXTENDING, "Extending Belts", "Extend All", 
-            { EXTENDEDOUT, -1, -1, -1, -1 } },
-        { EXTENDEDOUT, "Belts Extended", "", 
-            { TAKING_SLACK, CALIBRATION_IN_PROGRESS, RELEASE_TENSION, RETRACTING, EXTENDING } },
-        { TAKING_SLACK, "Taking Slack", "Apply Tension", 
-            { EXTENDEDOUT, READY_TO_CUT, -1, -1, -1 } },
-        { CALIBRATION_IN_PROGRESS, "Calibrating", "Find Anchor Locations", 
-            { CALIBRATION_COMPUTING, -1, -1, -1, -1 } },
-        { READY_TO_CUT, "Ready To Cut", "", 
-            { TAKING_SLACK, CALIBRATION_IN_PROGRESS, RELEASE_TENSION, RETRACTING, -1 } },
-        { RELEASE_TENSION, "Releasing Tension", "Release Tension", 
-            { EXTENDEDOUT, -1, -1, -1, -1 } },
-        { CALIBRATION_COMPUTING, "Calibration Computing", "", 
-            { CALIBRATION_IN_PROGRESS, READY_TO_CUT, RELEASE_TENSION, -1, -1 } },
-    };
+    // Note: State definitions are now in MaslowEnums.h
+    // This provides a single source of truth for all state-related data
 };
