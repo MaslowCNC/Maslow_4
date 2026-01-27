@@ -870,6 +870,38 @@ static Error maslow_get_state(const char* value, WebUI::AuthenticationLevel auth
     return Error::Ok;
 }
 
+//Get allowed state transitions for all states
+static Error maslow_get_state_transitions(const char* value, WebUI::AuthenticationLevel auth_level, Channel& out) {
+    // Output JSON object with state transitions
+    out << "{\"stateTransitions\":{";
+    
+    bool firstState = true;
+    // Iterate through all states
+    for (int state = UNKNOWN; state <= CALIBRATION_COMPUTING; state++) {
+        if (!firstState) {
+            out << ",";
+        }
+        firstState = false;
+        
+        out << "\"" << state << "\":[";
+        
+        int count;
+        const int* allowedTransitions = Maslow.calibration.getAllowedTransitions(state, count);
+        
+        for (int i = 0; i < count; i++) {
+            if (i > 0) {
+                out << ",";
+            }
+            out << allowedTransitions[i];
+        }
+        
+        out << "]";
+    }
+    
+    out << "}}\n";
+    return Error::Ok;
+}
+
 //This is used for release tension
 static Error maslow_set_comply(const char* value, WebUI::AuthenticationLevel auth_level, Channel& out) {
     if (Maslow.using_default_config) {
@@ -1123,6 +1155,7 @@ void make_user_commands() {
     new UserCommand("SETZSTOP", M + "/setZStop", maslow_set_zStop, anyState);
     new UserCommand("MINFO", M + "/getInfo", maslow_get_info, anyState);
     new UserCommand("GSTATE", M + "/gstate", maslow_get_state, anyState);
+    new UserCommand("STATETRANS", M + "/stateTransitions", maslow_get_state_transitions, anyState);
 };
 
 // normalize_key puts a key string into canonical form -
