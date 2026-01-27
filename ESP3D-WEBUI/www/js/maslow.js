@@ -191,8 +191,148 @@ const updateDynamicButtons = () => {
 	
 	// Update tablet tab jog UI state
 	updateTabletJogUIState();
+	
+	// Update control buttons row based on state
+	updateControlButtonsRow();
 }
 
+/** Update the control buttons row on the Maslow tab based on current state */
+const updateControlButtonsRow = () => {
+	// If we don't have state definitions yet, skip the update
+	if (!stateDefinitions) {
+		return;
+	}
+	
+	const READY_TO_CUT = 7;
+	const CALIBRATION_IN_PROGRESS = 6;
+	
+	// Get the control buttons row container
+	const controlButtonsRow = document.getElementById("tablettab_control_buttons_row");
+	const releaseTensionBtn = document.getElementById("tablettab_release_tension");
+	
+	if (!controlButtonsRow) {
+		return;
+	}
+	
+	// Always show the release tension button (make it visible)
+	if (releaseTensionBtn) {
+		releaseTensionBtn.style.display = "block";
+		
+		// Color it based on whether transition is allowed
+		const releaseTensionState = 8; // RELEASE_TENSION state
+		const allowed = isTransitionAllowed(maslowStatus.state, releaseTensionState);
+		releaseTensionBtn.style.backgroundColor = allowed ? "#4aa85c" : "#a0a0a0";
+		releaseTensionBtn.style.cursor = allowed ? "pointer" : "not-allowed";
+		releaseTensionBtn.style.pointerEvents = allowed ? "auto" : "none";
+	}
+	
+	// Clear the row first
+	controlButtonsRow.innerHTML = "";
+	
+	if (maslowStatus.state === READY_TO_CUT) {
+		// Show play/pause, stop, and alert/idle buttons in ready-to-cut state
+		controlButtonsRow.style.gridTemplateColumns = "33% 33% 33%";
+		
+		controlButtonsRow.innerHTML = `
+			<div id="tablettab_gcode_play" class="maslow-grid-item maslow-grid-item-btn"
+				style="background-color: #4aa85c;"><canvas id="playBtn" style="width: 100%; height: 100%"></canvas></div>
+			<div id="tablettab_gcode_stop" class="maslow-grid-item maslow-grid-item-btn"
+				style="background-color: #ce654c;"><canvas id="stopBtn" style="width: 100%; height: 100%"></canvas></div>
+			<div id="systemStatus" class="maslow-grid-item system-status">Idle</div>
+		`;
+		
+		// Redraw the play and stop button canvases
+		drawPlayButton();
+		drawStopButton();
+	} else {
+		// In other states, show buttons for allowed transitions (except release tension)
+		// Build list of allowed transitions for current state
+		const currentStateInfo = stateDefinitions[maslowStatus.state];
+		const allowedTransitions = currentStateInfo ? currentStateInfo.allowedTransitions : [];
+		
+		// Filter out RELEASE_TENSION (state 8) since it has its own dedicated button
+		const RELEASE_TENSION = 8;
+		const filteredTransitions = allowedTransitions.filter(stateId => stateId !== -1 && stateId !== RELEASE_TENSION);
+		
+		// For calibration state, also add stop button
+		let buttons = [];
+		
+		// Add transition buttons
+		filteredTransitions.forEach(targetStateId => {
+			const targetStateInfo = stateDefinitions[targetStateId];
+			if (targetStateInfo && targetStateInfo.buttonLabel) {
+				buttons.push({
+					type: 'transition',
+					label: targetStateInfo.buttonLabel,
+					stateId: targetStateId,
+					color: "#4aa85c" // Green for allowed transitions
+				});
+			}
+		});
+		
+		// Add stop button for calibration state
+		if (maslowStatus.state === CALIBRATION_IN_PROGRESS) {
+			buttons.push({
+				type: 'stop',
+				label: 'Stop',
+				color: "#ce654c" // Red for stop button
+			});
+		}
+		
+		// Calculate grid columns based on number of buttons
+		const numButtons = buttons.length;
+		if (numButtons === 0) {
+			controlButtonsRow.style.gridTemplateColumns = "100%";
+			controlButtonsRow.innerHTML = `<div class="maslow-grid-item" style="background-color: #f2f0e4;"></div>`;
+		} else {
+			const columnWidth = Math.floor(100 / numButtons);
+			controlButtonsRow.style.gridTemplateColumns = buttons.map(() => `${columnWidth}%`).join(" ");
+			
+			// Create HTML for each button
+			const buttonsHTML = buttons.map(btn => {
+				if (btn.type === 'stop') {
+					return `<div id="tablettab_calibration_stop" class="maslow-grid-item maslow-grid-item-btn"
+						style="background-color: ${btn.color}; cursor: pointer;">${btn.label}</div>`;
+				} else {
+					// Transition button - need unique ID based on state
+					const buttonId = `tablettab_transition_${btn.stateId}`;
+					return `<div id="${buttonId}" class="maslow-grid-item maslow-grid-item-btn" data-target-state="${btn.stateId}"
+						style="background-color: ${btn.color}; cursor: pointer;">${btn.label}</div>`;
+				}
+			}).join("");
+			
+			controlButtonsRow.innerHTML = buttonsHTML;
+			
+			// Attach click handlers to transition buttons
+			buttons.forEach(btn => {
+				if (btn.type === 'transition') {
+					const buttonId = `tablettab_transition_${btn.stateId}`;
+					const buttonElement = document.getElementById(buttonId);
+					if (buttonElement) {
+						buttonElement.addEventListener('click', () => {
+							// Send the state transition command
+							requestStateTransition(btn.stateId);
+						});
+					}
+				} else if (btn.type === 'stop') {
+					const stopBtn = document.getElementById('tablettab_calibration_stop');
+					if (stopBtn) {
+						stopBtn.addEventListener('click', () => {
+							// Send stop command
+							SendPrinterCommand("!");
+						});
+					}
+				}
+			});
+		}
+	}
+}
+
+/** Request a state transition */
+const requestStateTransition = (targetState) => {
+	// Send the state change command to firmware
+	SendPrinterCommand(`$MaslowState=${targetState}`);
+}
 
 
 

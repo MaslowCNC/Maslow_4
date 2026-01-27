@@ -909,6 +909,12 @@ function tabletInit() {
     id("tablettab_cal_zstop").addEventListener("click", tabletCalSetZStop);
     id("tablettab_cal_test").addEventListener("click", tabletCalTest);
     id("tablettab_cal_relax").addEventListener("click", tabletCalRelax);
+    
+    // Release tension button on main tab
+    const releaseTensionMainBtn = id("tablettab_release_tension");
+    if (releaseTensionMainBtn) {
+      releaseTensionMainBtn.addEventListener("click", tabletCalRelax);
+    }
 
     // Buttons - Configuration Pop-up
     id("configuration-popup").addEventListener("click", tabletConfigPopupHide);
