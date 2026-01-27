@@ -110,20 +110,24 @@ void Calibration::setExtendedState(bool tl, bool tr, bool bl, bool br) {
 bool Calibration::requestStateChange(int newState) {
     log_info("Requesting state change from " << getStateName(currentState) << " to " << getStateName(newState));
 
-    // Check if the transition is allowed using the state transition map
-    bool transitionAllowed = false;
-    int count;
-    const int* allowedTransitions = getAllowedTransitions(currentState, count);
-    for (int i = 0; i < count; i++) {
-        if (allowedTransitions[i] == newState) {
-            transitionAllowed = true;
-            break;
+    // Special case: UNKNOWN can be entered from any state (for error conditions or when position cannot be determined)
+    // This is not a normal user-initiated transition, so it bypasses the transition map
+    if (newState != UNKNOWN) {
+        // Check if the transition is allowed using the state transition map
+        bool transitionAllowed = false;
+        int count;
+        const int* allowedTransitions = getAllowedTransitions(currentState, count);
+        for (int i = 0; i < count; i++) {
+            if (allowedTransitions[i] == newState) {
+                transitionAllowed = true;
+                break;
+            }
         }
-    }
 
-    if (!transitionAllowed) {
-        log_info("Cannot transition from state " << getStateName(currentState) << " to state " << getStateName(newState));
-        return false;
+        if (!transitionAllowed) {
+            log_info("Cannot transition from state " << getStateName(currentState) << " to state " << getStateName(newState));
+            return false;
+        }
     }
 
     bool success = false;
