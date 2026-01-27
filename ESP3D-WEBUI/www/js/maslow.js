@@ -257,21 +257,6 @@ function fetchStateData() {
 	);
 }
 
-/**
- * Legacy function for backwards compatibility - now calls fetchStateData()
- * @deprecated Use fetchStateData() instead
- */
-function fetchStateTransitions() {
-	fetchStateData();
-}
-
-/**
- * Legacy function for backwards compatibility - now calls fetchStateData()
- * @deprecated Use fetchStateData() instead
- */
-function fetchStateDefinitions() {
-	fetchStateData();
-}
 
 /**
  * Check if a state transition is allowed
