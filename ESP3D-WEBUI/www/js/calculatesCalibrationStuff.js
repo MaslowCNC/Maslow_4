@@ -904,8 +904,8 @@ async function findMaxFitness(measurements) {
         initialGuess = bestGuess;
         initialGuess.fitness = 100000000;
 
-        // This restarts calibration process for the next stage
-        scheduleCallback(() => { onCalibrationButtonsClick('$CAL', 'Calibrate'); }, 2000);
+        // Note: Calibration auto-restart has been removed to prevent infinite loops.
+        // If calibration has multiple stages, the user needs to manually click "Calibrate" again.
       } else {
 
         sendCalibrationEvent({
@@ -918,8 +918,8 @@ async function findMaxFitness(measurements) {
 
         // Instead of random guesses, pick another point on the arc with specific aspect ratios
         // Use the sequence: 2:1, 1:1, 1:2, 1.5:1, 1:1.5
-        if (lowFitnessRetryCount < aspectRatioSequence.length) {
-          const targetAspectRatio = aspectRatioSequence[lowFitnessRetryCount];
+        if (lowFitnessRetryCount <= aspectRatioSequence.length) {
+          const targetAspectRatio = aspectRatioSequence[lowFitnessRetryCount - 1];
 
           // Calculate the optimal radius from the current best guess
           const currentWidth = bestGuess.tr.x - bestGuess.tl.x;
