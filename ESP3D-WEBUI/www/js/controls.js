@@ -189,7 +189,24 @@ function SendHomecommand(cmd) {
 		default: hCmd = '$H'; break;
 	}
 
-	SendPrinterCommand(hCmd, true, get_Position);
+	// During Hold state, temporarily resume to allow homing
+	if (isHoldState && isZHomeCommand) {
+		// Send cycle start (resume) to allow movement
+		SendRealtimeCmd(0x7e);
+		
+		// Wait briefly for state transition, then send home command
+		setTimeout(() => {
+			SendPrinterCommand(hCmd, true, get_Position);
+			
+			// After homing completes, return to Hold state
+			// Homing takes longer, so use a longer timeout (e.g., 5 seconds)
+			setTimeout(() => {
+				SendRealtimeCmd(0x21); // Pause again
+			}, 5000);
+		}, 100);
+	} else {
+		SendPrinterCommand(hCmd, true, get_Position);
+	}
 }
 
 function SendZerocommand(cmd) {
@@ -245,9 +262,30 @@ function SendJogcommand(cmd, feedrate) {
 
 	const feedrateValue = GetAxisFeedRate(feedrate[0].toUpperCase() === "Z" ? getValue("control_select_axis") : "XY");
 
-	const command = `$J=G91 G21 F${feedrateValue} ${jCmd}`;
-	console.debug(command);
-	SendPrinterCommand(command, true, get_Position);
+	// During Hold state, temporarily resume, send jog command, then pause again
+	// This allows Z-axis adjustments while maintaining the paused state
+	if (isHoldState && isZCommand) {
+		// Send cycle start (resume) to allow movement
+		SendRealtimeCmd(0x7e);
+		
+		// Wait briefly for state transition, then send jog command
+		setTimeout(() => {
+			const command = `$J=G91 G21 F${feedrateValue} ${jCmd}`;
+			console.debug(command);
+			SendPrinterCommand(command, true, get_Position);
+			
+			// After a delay for the movement to complete, return to Hold state
+			// Adjust timeout based on typical Z movement duration (e.g., 2 seconds)
+			setTimeout(() => {
+				SendRealtimeCmd(0x21); // Pause again
+			}, 2000);
+		}, 100);
+	} else {
+		// Use jog command for normal operation
+		const command = `$J=G91 G21 F${feedrateValue} ${jCmd}`;
+		console.debug(command);
+		SendPrinterCommand(command, true, get_Position);
+	}
 }
 
 const getFeedRateValue = (name) => floatOrZero(getValue(name) || 0);
