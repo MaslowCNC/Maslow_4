@@ -193,12 +193,13 @@ function SendHomecommand(cmd) {
 	// The machine will remain in Idle state after homing
 	if (isHoldState && isZHomeCommand) {
 		// Send cycle start (resume) to exit Hold state
-		SendRealtimeCmd(0x7e);
+		// Use resumeGCode() function which is the standard way to resume
+		resumeGCode();
 		
-		// Wait for state transition before sending home command
+		// Wait longer for state transition before sending home command
 		setTimeout(() => {
 			SendPrinterCommand(hCmd, true, get_Position);
-		}, 200);
+		}, 500);
 	} else {
 		SendPrinterCommand(hCmd, true, get_Position);
 	}
@@ -261,14 +262,15 @@ function SendJogcommand(cmd, feedrate) {
 	// The machine will remain in Idle/Cycle state after movement
 	if (isHoldState && isZCommand) {
 		// Send cycle start (resume) to exit Hold state
-		SendRealtimeCmd(0x7e);
+		// Use resumeGCode() function which is the standard way to resume
+		resumeGCode();
 		
-		// Wait for state transition before sending jog command
+		// Wait longer for state transition before sending jog command
 		setTimeout(() => {
 			const command = `$J=G91 G21 F${feedrateValue} ${jCmd}`;
 			console.debug(command);
 			SendPrinterCommand(command, true, get_Position);
-		}, 200);
+		}, 500);
 	} else {
 		// Use jog command for normal operation
 		const command = `$J=G91 G21 F${feedrateValue} ${jCmd}`;
