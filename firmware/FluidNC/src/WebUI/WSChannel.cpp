@@ -249,6 +249,12 @@ namespace WebUI {
                         s = "ACTIVE_ID:";
                         s += std::to_string(wsChannel->id());
                         wsChannel->sendTXT(s);
+                        
+                        // Send current state to newly connected UI
+                        #ifdef MASLOW_CREATE
+                        extern class Maslow_& Maslow;
+                        Maslow.calibration.printCurrentState();
+                        #endif
                     }
                 }
             } break;
