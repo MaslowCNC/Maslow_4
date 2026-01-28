@@ -250,7 +250,12 @@ namespace WebUI {
                         s += std::to_string(wsChannel->id());
                         wsChannel->sendTXT(s);
                         
-                        // Send current state to newly connected UI
+                        // Dump startup log to this channel if it has messages
+                        if (!startupLog.messages().empty()) {
+                            startupLog.dump(*wsChannel);
+                        }
+                        
+                        // Send current state to newly connected UI after startup messages
                         #ifdef MASLOW_CREATE
                         extern class Maslow_& Maslow;
                         // Send state info directly to this channel to ensure it receives it
