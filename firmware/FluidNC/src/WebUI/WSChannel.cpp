@@ -10,6 +10,7 @@
 
 #    include "../Serial.h"      // is_realtime_command
 #    include "../StartupLog.h"  // startupLog
+#    include "../Maslow/Maslow.h"  // Maslow
 
 namespace WebUI {
     class WSChannels;
@@ -256,14 +257,11 @@ namespace WebUI {
                         }
                         
                         // Send current state to newly connected UI after startup messages
-                        #ifdef MASLOW_CREATE
-                        extern class Maslow_& Maslow;
                         // Send state info directly to this channel to ensure it receives it
                         s = "[MSG:INFO: Current state: ";
                         s += std::to_string(Maslow.calibration.currentState);
                         s += "]\n";
                         wsChannel->sendTXT(s);
-                        #endif
                     }
                 }
             } break;
