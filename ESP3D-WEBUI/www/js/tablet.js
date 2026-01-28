@@ -274,55 +274,23 @@ const jogWithUnitsSafeguard = (feedrate, axisAndDistance) => {
   // Store what units the UI is currently displaying (what user expects)
   const uiExpectedUnits = gCodeModal.units;
   
-  // Check if we're in Hold state and this is a Z command
-  const isZCommand = axisAndDistance && axisAndDistance.toUpperCase().includes('Z');
-  const isHoldState = typeof currentMachineState !== 'undefined' && currentMachineState === 'Hold';
+  // Force firmware to use UI units, execute jog, then query to restore original state
+  // This ensures the jog distance is always interpreted correctly
+  sendCommand(uiExpectedUnits);
   
-  // If in Hold state with Z command, use resume-move-pause workflow
-  if (isHoldState && isZCommand) {
-    // Send resume to exit Hold state
-    resumeGCode();
+  // Small delay to ensure units command is processed
+  setTimeout(() => {
+    const cmd = `$J=G91F${feedrate}${axisAndDistance}`;
+    const unitsLabel = uiExpectedUnits === 'G20' ? 'inch' : 'mm';
+    addMessage(`JogTo: ${cmd} (${unitsLabel})`);
+    sendCommand(cmd + '\n');
     
-    // Wait for state transition, then send G0 movement command
+    // After jog command, query current state to restore if needed
+    // The $G response will be handled by grblGetModal and update the UI automatically
     setTimeout(() => {
-      // Force firmware to use UI units
-      sendCommand(uiExpectedUnits);
-      
-      setTimeout(() => {
-        // Use G91 G0 instead of $J for better reliability after resume
-        const cmd = `G91 G0 ${axisAndDistance} F${feedrate}`;
-        const unitsLabel = uiExpectedUnits === 'G20' ? 'inch' : 'mm';
-        addMessage(`JogTo: ${cmd} (${unitsLabel})`);
-        sendCommand(cmd + '\n');
-        
-        // Return to Hold state after movement
-        setTimeout(() => {
-          pauseGCode();
-          // Query state to update UI
-          sendCommand('$G');
-        }, 1500);
-      }, 100);
-    }, 500);
-  } else {
-    // Normal jog operation (not in Hold state)
-    // Force firmware to use UI units, execute jog, then query to restore original state
-    // This ensures the jog distance is always interpreted correctly
-    sendCommand(uiExpectedUnits);
-    
-    // Small delay to ensure units command is processed
-    setTimeout(() => {
-      const cmd = `$J=G91F${feedrate}${axisAndDistance}`;
-      const unitsLabel = uiExpectedUnits === 'G20' ? 'inch' : 'mm';
-      addMessage(`JogTo: ${cmd} (${unitsLabel})`);
-      sendCommand(cmd + '\n');
-      
-      // After jog command, query current state to restore if needed
-      // The $G response will be handled by grblGetModal and update the UI automatically
-      setTimeout(() => {
-        sendCommand('$G');
-      }, 200);
-    }, 100);
-  }
+      sendCommand('$G');
+    }, 200);
+  }, 100);
 }
 
 /** Peform a move command */
@@ -590,7 +558,6 @@ function stopAndRecover() {
 }
 
 var oldCannotClick = null
-var oldStateName = null
 
 function scaleUnits(target) {
   //Scale the units to move when jogging down or up by 25.4 to keep them reasonable
@@ -648,72 +615,17 @@ function tabletGrblState(grbl, response) {
 
   const cannotClick = stateName === 'Run' || stateName === 'Hold'
   // Recompute the layout only when the state changes
-  if (oldCannotClick !== cannotClick || oldStateName !== stateName) {
+  if (oldCannotClick !== cannotClick) {
     setDisabled('.dropdown-toggle', cannotClick)
     setDisabled('.axis-position .position', cannotClick)
     setDisabled('.axis-position .form-control', cannotClick)
     setDisabled('.axis-position .btn', cannotClick)
     setDisabled('.axis-position .position', cannotClick)
-
-    // Get all jog button IDs
-    const zJogButtons = ['HomeZ', 'Z+10', 'Z+1', 'Z+0.1', 'Z-10', 'Z-1', 'Z-0_1'];
-    const xyJogButtons = ['HomeX', 'HomeY', 'HomeAll',
-      'X+100', 'X+10', 'X+1', 'X+0.1', 'X-100', 'X-10', 'X-1', 'X-0_1',
-      'Y+100', 'Y+10', 'Y+1', 'Y+0.1', 'Y-100', 'Y-10', 'Y-1', 'Y-0_1'];
-    const allJogButtons = [...zJogButtons, ...xyJogButtons];
-
-    // Get zero button references
-    const zeroXBtn = id('zero_x_btn');
-    const zeroYBtn = id('zero_y_btn');
-    const zeroZBtn = id('zero_z_btn');
-    const zeroXYZBtn = id('zero_xyz_btn');
-
-    // Handle control states based on machine state
-    if (stateName === 'Hold') {
-      // During Hold (pause): Enable Z controls, disable XY controls
-      if (zeroZBtn) zeroZBtn.disabled = false;
-      if (zeroXBtn) zeroXBtn.disabled = true;
-      if (zeroYBtn) zeroYBtn.disabled = true;
-      if (zeroXYZBtn) zeroXYZBtn.disabled = true;
-
-      zJogButtons.forEach(btnId => {
-        const btn = id(btnId);
-        if (btn) btn.style.pointerEvents = 'auto';
-      });
-
-      xyJogButtons.forEach(btnId => {
-        const btn = id(btnId);
-        if (btn) btn.style.pointerEvents = 'none';
-      });
-    } else if (stateName === 'Run') {
-      // During Run: Disable all controls
-      if (zeroZBtn) zeroZBtn.disabled = true;
-      if (zeroXBtn) zeroXBtn.disabled = true;
-      if (zeroYBtn) zeroYBtn.disabled = true;
-      if (zeroXYZBtn) zeroXYZBtn.disabled = true;
-
-      allJogButtons.forEach(btnId => {
-        const btn = id(btnId);
-        if (btn) btn.style.pointerEvents = 'none';
-      });
-    } else {
-      // Other states (Idle, etc.): Enable all controls
-      if (zeroZBtn) zeroZBtn.disabled = false;
-      if (zeroXBtn) zeroXBtn.disabled = false;
-      if (zeroYBtn) zeroYBtn.disabled = false;
-      if (zeroXYZBtn) zeroXYZBtn.disabled = false;
-
-      allJogButtons.forEach(btnId => {
-        const btn = id(btnId);
-        if (btn) btn.style.pointerEvents = 'auto';
-      });
-    }
     // if (!cannotClick) {
     //     contractVisualizer();
     // }
   }
   oldCannotClick = cannotClick
-  oldStateName = stateName
 
   tabletUpdateModal()
 

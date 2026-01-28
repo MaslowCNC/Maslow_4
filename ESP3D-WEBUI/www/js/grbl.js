@@ -10,7 +10,6 @@ var MPOS = [0, 0, 0]
 var WPOS = [0, 0, 0]
 var grblaxis = 3;
 var grblzerocmd = 'X0 Y0 Z0';
-var currentMachineState = 'Idle'; // Track current machine state for control logic
 
 let axis_feedrate = [0, 0, 0, 0, 0, 0];
 /** gets/sets the GRBL axis feedrates [x, y, z, a, b, c]
@@ -632,10 +631,6 @@ function grblProcessStatus(response) {
     if (WCO) {
       MPOS = grbl.wpos.map((v, index) => v + WCO[index]);
     }
-  }
-  // Update global machine state for use in control functions
-  if (grbl.stateName) {
-    currentMachineState = grbl.stateName;
   }
   show_grbl_position(WPOS, MPOS);
   show_grbl_status(grbl.stateName, grbl.message, grbl.sdName);

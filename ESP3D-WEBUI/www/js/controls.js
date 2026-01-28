@@ -172,12 +172,7 @@ function control_motorsOff() {
 }
 
 function SendHomecommand(cmd) {
-	// Allow Z-axis homing during Hold (pause) state
-	const isZHomeCommand = cmd && (cmd === 'G28 Z0' || (cmd.includes && cmd.includes('Z')));
-	const isHoldState = typeof currentMachineState !== 'undefined' && currentMachineState === 'Hold';
-	const allowDuringHold = isZHomeCommand && isHoldState;
-	
-	if (getChecked('lock_UI') === "true" && !allowDuringHold) {
+	if (getChecked('lock_UI') === "true") {
 		return;
 	}
 	let hCmd = cmd;
@@ -189,39 +184,10 @@ function SendHomecommand(cmd) {
 		default: hCmd = '$H'; break;
 	}
 
-	// During Hold state, resume to allow homing and auto-pause after
-	if (isHoldState && isZHomeCommand) {
-		// Send cycle start (resume) to exit Hold state
-		resumeGCode();
-		
-		// Wait for state transition before sending home command
-		setTimeout(() => {
-			SendPrinterCommand(hCmd, true, get_Position);
-			
-			// Return to Hold state after homing completes
-			setTimeout(() => {
-				pauseGCode();
-			}, 3000);
-		}, 500);
-	} else {
-		SendPrinterCommand(hCmd, true, get_Position);
-	}
+	SendPrinterCommand(hCmd, true, get_Position);
 }
 
 function SendZerocommand(cmd) {
-	// Allow Z-axis zero during Hold (pause) state
-	const isZZeroCommand = cmd && cmd.includes && cmd.includes('Z');
-	const isHoldState = typeof currentMachineState !== 'undefined' && currentMachineState === 'Hold';
-	const allowDuringHold = isZZeroCommand && isHoldState;
-	
-	// Only block XY commands during Hold, allow Z commands
-	if (!allowDuringHold && isHoldState) {
-		// During Hold, block non-Z commands
-		if (!isZZeroCommand) {
-			return;
-		}
-	}
-	
 	const command = `G10 L20 P0 ${cmd}`;
 	SendPrinterCommand(command, true, get_Position);
 }
@@ -248,12 +214,7 @@ function JogFeedrate(axis) {
 
 /** This is extensively used in the jog dial SVGs */
 function SendJogcommand(cmd, feedrate) {
-	// Allow Z-axis jogging during Hold (pause) state
-	const isZCommand = cmd && cmd.toUpperCase().includes('Z');
-	const isHoldState = typeof currentMachineState !== 'undefined' && currentMachineState === 'Hold';
-	const allowDuringHold = isZCommand && isHoldState;
-	
-	if (getChecked("lock_UI") !== "false" && !allowDuringHold) {
+	if (getChecked("lock_UI") !== "false") {
 		return;
 	}
 
@@ -261,30 +222,9 @@ function SendJogcommand(cmd, feedrate) {
 
 	const feedrateValue = GetAxisFeedRate(feedrate[0].toUpperCase() === "Z" ? getValue("control_select_axis") : "XY");
 
-	// During Hold state, use regular G-code movement instead of jog commands
-	// Jog commands ($J) don't execute reliably after resume during Hold
-	if (isHoldState && isZCommand) {
-		// Send cycle start (resume) to exit Hold state
-		resumeGCode();
-		
-		// Wait for state transition, then send regular G-code movement
-		// Use G91 (incremental) G0 (rapid) for Z adjustments
-		setTimeout(() => {
-			const command = `G91 G0 ${jCmd} F${feedrateValue}`;
-			console.debug(command);
-			SendPrinterCommand(command, true, get_Position);
-			
-			// Return to Hold state after a delay
-			setTimeout(() => {
-				pauseGCode();
-			}, 1500);
-		}, 500);
-	} else {
-		// Use jog command for normal operation
-		const command = `$J=G91 G21 F${feedrateValue} ${jCmd}`;
-		console.debug(command);
-		SendPrinterCommand(command, true, get_Position);
-	}
+	const command = `$J=G91 G21 F${feedrateValue} ${jCmd}`;
+	console.debug(command);
+	SendPrinterCommand(command, true, get_Position);
 }
 
 const getFeedRateValue = (name) => floatOrZero(getValue(name) || 0);
