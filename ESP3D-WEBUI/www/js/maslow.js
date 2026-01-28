@@ -1,7 +1,9 @@
 // When we can change to proper ESM - uncomment this
 // import M from "constants";
 
-/** Maslow Status */
+/** Maslow Status 
+ * Initializes with state 0 (UNKNOWN) until firmware sends actual state update
+ */
 let maslowStatus = { homed: false, extended: false, state: 0 };
 
 /** State Transitions Map - fetched from firmware at startup */
