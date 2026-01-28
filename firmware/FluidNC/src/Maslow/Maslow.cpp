@@ -599,6 +599,8 @@ void Maslow_::loadBeltPositions() {
     esp_err_t    ret = nvs_open("maslow", NVS_READWRITE, &nvsHandle);
     if (ret != ESP_OK) {
         log_info("Error " + std::string(esp_err_to_name(ret)) + " opening NVS handle for belt positions!\n");
+        // Report UNKNOWN state to UI since we're staying in the default state
+        calibration.printCurrentState();
         return;
     }
 
@@ -614,6 +616,8 @@ void Maslow_::loadBeltPositions() {
                      << validityMarker << ") - machine will remain in UNKNOWN state until belts are calibrated/extended");
         }
         nvs_close(nvsHandle);
+        // Report UNKNOWN state to UI since we're staying in the default state
+        calibration.printCurrentState();
         return;
     }
 
@@ -654,6 +658,8 @@ void Maslow_::loadBeltPositions() {
             } else {
                 log_info("TL encoder angle difference too large (" << angleDiff << " counts), treating belt positions as stale");
                 nvs_close(nvsHandle);
+                // Report UNKNOWN state to UI since we're staying in the default state
+                calibration.printCurrentState();
                 return;
             }
         }
@@ -695,6 +701,8 @@ void Maslow_::loadBeltPositions() {
             } else {
                 log_info("TR encoder angle difference too large (" << angleDiff << " counts), treating belt positions as stale");
                 nvs_close(nvsHandle);
+                // Report UNKNOWN state to UI since we're staying in the default state
+                calibration.printCurrentState();
                 return;
             }
         }
@@ -735,6 +743,8 @@ void Maslow_::loadBeltPositions() {
             } else {
                 log_info("BL encoder angle difference too large (" << angleDiff << " counts), treating belt positions as stale");
                 nvs_close(nvsHandle);
+                // Report UNKNOWN state to UI since we're staying in the default state
+                calibration.printCurrentState();
                 return;
             }
         }
@@ -775,6 +785,8 @@ void Maslow_::loadBeltPositions() {
             } else {
                 log_info("BR encoder angle difference too large (" << angleDiff << " counts), treating belt positions as stale");
                 nvs_close(nvsHandle);
+                // Report UNKNOWN state to UI since we're staying in the default state
+                calibration.printCurrentState();
                 return;
             }
         }
@@ -807,6 +819,9 @@ void Maslow_::loadBeltPositions() {
     // This is appropriate when restoring a known-good saved state at boot time
     // requestStateChange() would reject EXTENDEDOUT from UNKNOWN state
     calibration.currentState = newState;
+
+    // Report the state to UI
+    calibration.printCurrentState();
 
     // Set the extended* state variables in the Calibration class to match the restored state
     // When belts are extended (EXTENDEDOUT), mark all belts as extended
