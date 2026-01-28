@@ -253,7 +253,11 @@ namespace WebUI {
                         // Send current state to newly connected UI
                         #ifdef MASLOW_CREATE
                         extern class Maslow_& Maslow;
-                        Maslow.calibration.printCurrentState();
+                        // Send state info directly to this channel to ensure it receives it
+                        s = "[MSG:INFO: Current state: ";
+                        s += std::to_string(Maslow.calibration.currentState);
+                        s += "]\n";
+                        wsChannel->sendTXT(s);
                         #endif
                     }
                 }
