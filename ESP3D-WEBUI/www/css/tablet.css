@@ -782,6 +782,7 @@ height: 100%;
 background: rgba(0, 0, 0, 0.5);
 justify-content: center;
 align-items: center;
+z-index: 1050; /* Ensure modal appears above jog button overlays (z-index: 10) */
 }
 
 .calibration-modal-content {
@@ -791,6 +792,7 @@ border-radius: 8px;
 box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
 text-align: center;
 line-height: 1.1;
+z-index: 1051; /* Ensure modal content is on top */
 }
 
 .calibration-modal-button {
