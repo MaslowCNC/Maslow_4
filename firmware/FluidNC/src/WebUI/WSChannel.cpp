@@ -221,6 +221,7 @@ namespace WebUI {
                 WSChannels::removeChannel(num);
                 break;
             case WStype_CONNECTED: {
+                log_info("WStype_CONNECTED event received for client " << num);
                 WSChannel* wsChannel = new WSChannel(server, num);
                 if (!wsChannel) {
                     log_error("Creating WebSocket channel failed");
@@ -228,7 +229,7 @@ namespace WebUI {
                     std::string uri((char*)payload, length);
 
                     IPAddress ip = server->remoteIP(num);
-                    log_debug("WebSocket " << num << " from " << ip << " uri " << uri);
+                    log_info("WebSocket " << num << " from " << ip << " uri: [" << uri << "]");
 
                     _lastWSChannel = wsChannel;
                     allChannels.registration(wsChannel);
@@ -237,11 +238,14 @@ namespace WebUI {
                     // On first websocket connection, stop capturing to startup log
                     // This ensures all logs from startup until first connection are captured
                     if (startupLog.isActive()) {
+                        log_info("Stopping startup log capture");
                         startupLog.stop();
                         allChannels.deregistration(&startupLog);
                     }
 
+                    log_info("Checking URI match: uri=[" << uri << "], expected=[/]");
                     if (uri == "/") {
+                        log_info("URI matches /, proceeding with state message");
                         std::string s("CURRENT_ID:");
                         s += std::to_string(num);
                         // send message to client
@@ -253,6 +257,7 @@ namespace WebUI {
                         
                         // Dump startup log to this channel if it has messages
                         if (!startupLog.messages().empty()) {
+                            log_info("Dumping startup log");
                             startupLog.dump(*wsChannel);
                         }
                         
@@ -265,6 +270,8 @@ namespace WebUI {
                         log_info("Sending state message to WebSocket: " << s);
                         wsChannel->sendTXT(s);
                         log_info("State message sent successfully");
+                    } else {
+                        log_info("URI does not match /, not sending state message");
                     }
                 }
             } break;
