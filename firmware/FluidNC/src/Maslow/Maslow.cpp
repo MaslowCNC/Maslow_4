@@ -190,8 +190,20 @@ void Maslow_::update() {
 
         //------------------------ Maslow State Machine
 
+        // DIAGNOSTIC: Log sys.state when in RELEASE_TENSION to understand control flow
+        if (calibration.getCurrentState() == RELEASE_TENSION) {
+            log_info("DIAGNOSTIC: In RELEASE_TENSION, sys.state=" << static_cast<int>(sys.state()) 
+                     << " (Idle=" << static_cast<int>(State::Idle)
+                     << ", Jog=" << static_cast<int>(State::Jog)
+                     << ", Cycle=" << static_cast<int>(State::Cycle)
+                     << ", Homing=" << static_cast<int>(State::Homing) << ")");
+        }
+
         //-------Jog or G-code execution.
         if (sys.state() == State::Jog || sys.state() == State::Cycle) {
+            if (calibration.getCurrentState() == RELEASE_TENSION) {
+                log_info("DIAGNOSTIC: RELEASE_TENSION entered Jog/Cycle branch - home() will NOT be called!");
+            }
             // With MaslowKinematics, read belt motor positions directly from the axis system
             // Axis mapping: A=TL, B=TR, C=BL, D=BR, Z=Router
             float beltLength[ARM_COUNT];
