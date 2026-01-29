@@ -227,7 +227,7 @@ namespace WebUI {
                     std::string uri((char*)payload, length);
 
                     IPAddress ip = server->remoteIP(num);
-                    log_debug("WebSocket " << num << " from " << ip);
+                    log_debug("WebSocket " << num << " from " << ip << " uri " << uri);
 
                     _lastWSChannel = wsChannel;
                     allChannels.registration(wsChannel);
@@ -249,11 +249,6 @@ namespace WebUI {
                         s = "ACTIVE_ID:";
                         s += std::to_string(wsChannel->id());
                         wsChannel->sendTXT(s);
-                        
-                        // Dump startup log to this channel if it has messages
-                        if (!startupLog.messages().empty()) {
-                            startupLog.dump(*wsChannel);
-                        }
                     }
                 }
             } break;

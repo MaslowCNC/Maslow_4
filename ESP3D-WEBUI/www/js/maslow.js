@@ -128,11 +128,6 @@ const updateTabletJogUIState = () => {
 };
 
 const updateDynamicButtons = () => {
-	// If we don't have state definitions yet, skip the update
-	if (!stateDefinitions) {
-		return;
-	}
-
 	const stateLabel = document.getElementById("state-label");
 	const mainStateLabel = document.getElementById("main-state-label");
 	const mainStateLabelContainer = document.getElementById("main-state-label-container");
@@ -141,17 +136,23 @@ const updateDynamicButtons = () => {
 	const greyBackground = "#a0a0a0"
 	
 	// Get current state info from fetched definitions
-	const currentStateInfo = stateDefinitions[maslowStatus.state];
+	// Show "Unknown" if definitions aren't loaded yet or state not found
+	const currentStateInfo = stateDefinitions ? stateDefinitions[maslowStatus.state] : null;
 	const stateName = currentStateInfo ? currentStateInfo.name : "Unknown";
 	const stateBackgroundColor = currentStateInfo ? currentStateInfo.backgroundColor : "#f8d7da";
 	
-	// Update state label
+	// Update state label - always show current state even if definitions aren't loaded
 	stateLabel.innerHTML = "State: " + stateName;
 	if (mainStateLabel) {
 		mainStateLabel.innerHTML = "State: " + stateName;
 		if (mainStateLabelContainer) {
 			mainStateLabelContainer.style.backgroundColor = stateBackgroundColor;
 		}
+	}
+
+	// If we don't have state definitions yet, skip button updates
+	if (!stateDefinitions) {
+		return;
 	}
 
 	// Build button to state map dynamically from state definitions
