@@ -408,6 +408,7 @@ void Calibration::home() {
             }
             break;
         case RELEASE_TENSION:
+            log_info("RELEASE_TENSION state: home() called, timer=" << static_cast<int>(millis() - complyCallTimer) << "ms");
             //decompress belts for the first half second
             if (millis() - complyCallTimer < 40) {
                 Maslow.axis[_BR].decompressBelt();
@@ -419,6 +420,7 @@ void Calibration::home() {
                     Maslow.axis[arm].comply();
                 }
             } else {
+                log_info("RELEASE_TENSION timer expired, transitioning back to " << (previousState == READY_TO_CUT || previousState == EXTENDEDOUT || previousState == CALIBRATION_COMPUTING ? "EXTENDEDOUT" : "UNKNOWN"));
                 for (int arm = _TL; arm < ARM_COUNT; arm++) {
                     Maslow.axis[arm].stop();
                 }

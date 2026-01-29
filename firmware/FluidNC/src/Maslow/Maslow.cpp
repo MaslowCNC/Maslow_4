@@ -230,8 +230,14 @@ void Maslow_::update() {
         }
         //--------Homing routines
         else if (sys.state() == State::Homing) {
+            if (calibration.getCurrentState() == RELEASE_TENSION) {
+                log_info("Maslow loop: Calling home() in RELEASE_TENSION state, sys.state=Homing");
+            }
             calibration.home();
         } else {  //This is confusing to understand. This is an else if so this is only run if we are not in jog, cycle, or homing
+            if (calibration.getCurrentState() == RELEASE_TENSION) {
+                log_info("Maslow loop: RELEASE_TENSION state but sys.state=" << static_cast<int>(sys.state()) << " (NOT Homing=" << static_cast<int>(State::Homing) << "), home() NOT being called");
+            }
             // Clear any motor override flags to ensure motors stop
             calibration.clearMotorOverrides();
             Maslow.stopMotors();
