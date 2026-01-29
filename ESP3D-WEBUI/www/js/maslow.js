@@ -95,7 +95,6 @@ const updateTabletJogUIState = () => {
 			// Apply light grey overlay effect
 			button.style.opacity = "0.5";
 			button.style.cursor = "not-allowed";
-			button.style.pointerEvents = "none";
 			button.title = tooltipText;
 			
 			// Add a visual overlay div if it doesn't exist
@@ -109,20 +108,23 @@ const updateTabletJogUIState = () => {
 				overlay.style.width = "100%";
 				overlay.style.height = "100%";
 				overlay.style.backgroundColor = "rgba(211, 211, 211, 0.6)";
-				overlay.style.pointerEvents = "none";
+				overlay.style.cursor = "not-allowed";
 				overlay.style.zIndex = "10";
+				overlay.title = tooltipText; // Set tooltip on overlay so it shows
 				
 				// Ensure button has position relative for overlay
 				if (button.style.position !== "relative" && button.style.position !== "absolute") {
 					button.style.position = "relative";
 				}
 				button.appendChild(overlay);
+			} else {
+				// Update tooltip if overlay already exists
+				overlay.title = tooltipText;
 			}
 		} else {
 			// Remove grey overlay effect
 			button.style.opacity = "";
 			button.style.cursor = "";
-			button.style.pointerEvents = "";
 			button.title = "";
 			
 			// Remove overlay div if it exists
