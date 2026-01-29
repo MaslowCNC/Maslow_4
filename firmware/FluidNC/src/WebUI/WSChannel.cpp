@@ -263,8 +263,6 @@ namespace WebUI {
                         
                         // Send current state to newly connected UI after startup messages
                         // Send state info directly to this channel to ensure it receives it
-                        // Check if Maslow is initialized before accessing it
-                        #ifdef MASLOW_CREATE
                         try {
                             log_info("About to send state message");
                             int currentState = Maslow.calibration.currentState;
@@ -275,10 +273,11 @@ namespace WebUI {
                             log_info("Sending state message to WebSocket: " << s);
                             wsChannel->sendTXT(s);
                             log_info("State message sent successfully");
+                        } catch (const std::exception& e) {
+                            log_error("Exception while trying to send state message: " << e.what());
                         } catch (...) {
-                            log_error("Exception while trying to send state message");
+                            log_error("Unknown exception while trying to send state message");
                         }
-                        #endif
                     } else {
                         log_info("URI does not match /, not sending state message");
                     }
