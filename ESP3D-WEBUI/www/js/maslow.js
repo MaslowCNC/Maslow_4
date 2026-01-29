@@ -71,12 +71,11 @@ const updateTabletJogUIState = () => {
 	console.log("  updateTabletJogUIState: checking jogging state...");
 	console.log("  Jogging allowed:", isJoggingAllowed());
 	
-	// All the purple jog arrow button IDs on the tablet tab
+	// Purple jog arrow button IDs on the tablet tab (XY arrows only - Z buttons always enabled)
 	const jogButtonIds = [
 		'tablettab_topLeft', 'tablettab_top', 'tablettab_topRight',
 		'tablettab_left', 'tablettab_right',
-		'tablettab_bottomLeft', 'tablettab_bottom', 'tablettab_bottomRight',
-		'tablettab_zUp', 'tablettab_zDown'
+		'tablettab_bottomLeft', 'tablettab_bottom', 'tablettab_bottomRight'
 	];
 
 	// Get the state name from firmware definitions

@@ -58,10 +58,10 @@ struct StateDefinition {
 // Each entry defines: id, name, background color, button label, and allowed transitions FROM this state
 // Background colors: red=#f8d7da, blue=#cfe2ff, green=#d1e7dd, yellow=#fff3cd
 // NOTE: RETRACTING can be entered from any state, so it appears in all transition lists
-// NOTE: UNKNOWN allows transition to RETRACTING (retract-all) for emergency situations
+// NOTE: UNKNOWN allows transitions to RETRACTING (retract-all) and RELEASE_TENSION for emergency situations
 constexpr StateDefinition stateDefinitions[] = {
     { UNKNOWN, "Unknown", "#f8d7da", "",
-        { RETRACTING, -1, -1, -1, -1 } },
+        { RETRACTING, RELEASE_TENSION, -1, -1, -1 } },
     { RETRACTING, "Retracting Belts", "#cfe2ff", "Retract All",
         { RETRACTED, RETRACTING, -1, -1, -1 } },
     { RETRACTED, "Belts Retracted", "#d1e7dd", "",
