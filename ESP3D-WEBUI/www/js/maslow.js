@@ -260,10 +260,8 @@ const updateControlButtonsRow = () => {
 		return;
 	}
 	
-	// Always show the release tension button (make it visible)
+	// Always update the release tension button (now in jog grid position 5,4)
 	if (releaseTensionBtn) {
-		releaseTensionBtn.style.display = "block";
-		
 		// Color it based on whether transition is allowed
 		const releaseTensionState = 8; // RELEASE_TENSION state
 		const allowed = isTransitionAllowed(maslowStatus.state, releaseTensionState);
