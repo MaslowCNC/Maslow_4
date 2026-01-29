@@ -272,25 +272,36 @@ const updateControlButtonsRow = () => {
 		releaseTensionBtn.style.pointerEvents = allowed ? "auto" : "none";
 	}
 	
-	// Clear the row first
-	controlButtonsRow.innerHTML = "";
+	// Always show play/pause, stop, and idle/alarm buttons
+	controlButtonsRow.style.gridTemplateColumns = "33% 33% 33%";
 	
-	if (maslowStatus.state === READY_TO_CUT) {
-		// Show play/pause, stop, and alert/idle buttons in ready-to-cut state
-		controlButtonsRow.style.gridTemplateColumns = "33% 33% 33%";
-		
-		controlButtonsRow.innerHTML = `
-			<div id="tablettab_gcode_play" class="maslow-grid-item maslow-grid-item-btn"
-				style="background-color: #4aa85c;"><canvas id="playBtn" style="width: 100%; height: 100%"></canvas></div>
-			<div id="tablettab_gcode_stop" class="maslow-grid-item maslow-grid-item-btn"
-				style="background-color: #ce654c;"><canvas id="stopBtn" style="width: 100%; height: 100%"></canvas></div>
-			<div id="systemStatus" class="maslow-grid-item system-status">Idle</div>
-		`;
-		
-		// Redraw the play and stop button canvases
-		drawPlayButton();
-		drawStopButton();
-	} else {
+	// Determine if play/pause button should be enabled (only in Ready To Cut state)
+	const playPauseEnabled = (maslowStatus.state === READY_TO_CUT);
+	const playPauseColor = playPauseEnabled ? "#4aa85c" : "#a0a0a0";
+	const playPauseCursor = playPauseEnabled ? "pointer" : "not-allowed";
+	const playPausePointerEvents = playPauseEnabled ? "auto" : "none";
+	
+	// Get state name for tooltip
+	const currentStateName = stateDefinitions[maslowStatus.state] ? stateDefinitions[maslowStatus.state].name : "Unknown";
+	const playPauseTitle = playPauseEnabled ? "" : `Play/Pause is only available when in state Ready To Cut (currently in ${currentStateName})`;
+	
+	controlButtonsRow.innerHTML = `
+		<div id="tablettab_gcode_play" class="maslow-grid-item maslow-grid-item-btn"
+			style="background-color: ${playPauseColor}; cursor: ${playPauseCursor}; pointer-events: ${playPausePointerEvents};"
+			title="${playPauseTitle}"><canvas id="playBtn" style="width: 100%; height: 100%"></canvas></div>
+		<div id="tablettab_gcode_stop" class="maslow-grid-item maslow-grid-item-btn"
+			style="background-color: #ce654c;"><canvas id="stopBtn" style="width: 100%; height: 100%"></canvas></div>
+		<div id="systemStatus" class="maslow-grid-item system-status">Idle</div>
+	`;
+	
+	// Redraw the play and stop button canvases
+	drawPlayButton();
+	drawStopButton();
+	
+	// The following code block is no longer needed since we always show the same buttons
+	// Keeping it commented for reference in case we need to revert
+	/*
+	if (false) {  // Disabled - now always showing play/pause/stop/idle buttons
 		// In other states, show buttons for allowed transitions (except release tension)
 		// Build list of allowed transitions for current state
 		const currentStateInfo = stateDefinitions[maslowStatus.state];
@@ -372,6 +383,7 @@ const updateControlButtonsRow = () => {
 			});
 		}
 	}
+	*/
 }
 
 /** Request a state transition */
