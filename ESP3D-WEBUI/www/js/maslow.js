@@ -487,38 +487,55 @@ function fetchStateData() {
 		cmd,
 		(responseText) => {
 			console.log("*** fetchStateData: received response");
-			console.log("Response text:", responseText);
+			console.log("*** fetchStateData: responseText type:", typeof responseText);
+			console.log("*** fetchStateData: responseText length:", responseText ? responseText.length : 0);
+			console.log("*** fetchStateData: responseText value:", responseText);
+			
+			// Check if responseText is empty or invalid
+			if (!responseText || responseText.trim() === "") {
+				console.error("*** fetchStateData: ERROR - response text is empty!");
+				return;
+			}
+			
 			try {
 				// Parse the JSON response
 				// Expected format: {"states":[{"id":0,"name":"Unknown","buttonLabel":"","backgroundColor":"#f8d7da","allowedTransitions":[1]},...]}
 				const data = JSON.parse(responseText);
 				console.log("*** fetchStateData: parsed JSON successfully");
+				console.log("*** fetchStateData: data object:", data);
+				
 				if (data.states) {
+					console.log("*** fetchStateData: Found", data.states.length, "state definitions");
 					stateDefinitions = {};
 					stateTransitionsMap = {};
 					
 					// Convert array to objects keyed by state id
 					data.states.forEach(state => {
+						console.log(`  Processing state ${state.id}: ${state.name}`);
 						stateDefinitions[state.id] = state;
 						// Build transitions map
 						stateTransitionsMap[state.id] = state.allowedTransitions;
 					});
 					
-					console.log("*** fetchStateData: State data loaded:", stateDefinitions);
-					console.log("*** fetchStateData: State transitions loaded:", stateTransitionsMap);
+					console.log("*** fetchStateData: State data loaded successfully:");
+					console.log("  stateDefinitions:", stateDefinitions);
+					console.log("  stateTransitionsMap:", stateTransitionsMap);
 					
 					// Update UI with complete state data
 					console.log("*** fetchStateData: calling updateDynamicButtons()...");
 					updateDynamicButtons();
 				} else {
-					console.log("*** fetchStateData: WARNING - no 'states' field in response data");
+					console.error("*** fetchStateData: ERROR - no 'states' field in response data!");
+					console.error("  Response data keys:", Object.keys(data));
 				}
 			} catch (error) {
-				console.error("*** fetchStateData: Failed to parse state data:", error);
+				console.error("*** fetchStateData: ERROR - Failed to parse state data:", error);
+				console.error("  Error message:", error.message);
+				console.error("  Error stack:", error.stack);
 			}
 		},
 		(error) => {
-			console.error("Failed to fetch state data:", error);
+			console.error("*** fetchStateData: ERROR - Failed to fetch:", error);
 			// If we can't fetch data, fall back to the UI working without dynamic control
 		}
 	);
