@@ -189,10 +189,10 @@ function initUI_4() {
 		do_not_build_settings = false;
 		display_boot_progress();
 		build_HTML_setting_list(current_setting_filter);
+		// Fetch unified state data from firmware BEFORE showing UI and processing messages
+		fetchStateData();
 		closeModal();
 		show_main_UI();
-		// Fetch unified state data from firmware
-		fetchStateData();
 	}
 }
 
