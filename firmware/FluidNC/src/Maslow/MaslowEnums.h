@@ -78,7 +78,7 @@ constexpr StateDefinition stateDefinitions[] = {
     { READY_TO_CUT, "Ready To Cut", "#d1e7dd", "",
         { TAKING_SLACK, CALIBRATION_IN_PROGRESS, RELEASE_TENSION, RETRACTING, -1 } },
     { RELEASE_TENSION, "Releasing Tension", "#cfe2ff", "Release Tension",
-        { EXTENDEDOUT, RETRACTING, -1, -1, -1 } },
+        { EXTENDEDOUT, UNKNOWN, RETRACTING, -1, -1 } },
     { CALIBRATION_COMPUTING, "Calibration Computing", "#cfe2ff", "",
         { CALIBRATION_IN_PROGRESS, READY_TO_CUT, RELEASE_TENSION, RETRACTING, -1 } },
 };
