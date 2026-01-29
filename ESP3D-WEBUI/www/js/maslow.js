@@ -152,10 +152,20 @@ const updateDynamicButtons = () => {
 	const greyBackground = "#a0a0a0"
 	
 	// Get current state info from fetched definitions
-	// Show "Unknown" if definitions aren't loaded yet or state not found
+	// Show "Comm Failure" if all retries exhausted, "Unknown" if definitions aren't loaded yet, or actual state name
 	const currentStateInfo = stateDefinitions ? stateDefinitions[maslowStatus.state] : null;
-	const stateName = currentStateInfo ? currentStateInfo.name : "Unknown";
-	const stateBackgroundColor = currentStateInfo ? currentStateInfo.backgroundColor : "#f8d7da";
+	let stateName, stateBackgroundColor;
+	
+	if (stateDataFetchFailed) {
+		stateName = "Comm Failure";
+		stateBackgroundColor = "#dc3545"; // Red background for comm failure
+	} else if (currentStateInfo) {
+		stateName = currentStateInfo.name;
+		stateBackgroundColor = currentStateInfo.backgroundColor;
+	} else {
+		stateName = "Unknown";
+		stateBackgroundColor = "#f8d7da"; // Pink background for unknown
+	}
 	
 	console.log("State name:", stateName);
 	console.log("State background color:", stateBackgroundColor);
@@ -578,14 +588,28 @@ function showCalibrationCompleteMessage() {
  * This function sends the STATEDEFS command to get all state information including
  * names, button labels, colors, and allowed transitions
  */
+// Track retry attempts for state data fetch
+let stateDataFetchAttempts = 0;
+const MAX_STATE_DATA_RETRIES = 5;
+const STATE_DATA_RETRY_DELAY_MS = 2000;
+let stateDataRetryTimeout = null;
+let stateDataFetchFailed = false;
+
 function fetchStateData() {
-	console.log("*** fetchStateData: sending $STATEDEFS command to firmware...");
+	stateDataFetchAttempts++;
+	console.log(`*** fetchStateData: sending $STATEDEFS command to firmware (attempt ${stateDataFetchAttempts}/${MAX_STATE_DATA_RETRIES})...`);
 	
 	// Set up a callback to handle the response when it arrives via WebSocket
 	// The response won't come through SendGetHttp's callback - it comes through the WebSocket
 	pendingStateDataCallback = (jsonText) => {
 		console.log("*** fetchStateData: received JSON response via WebSocket");
 		console.log("*** fetchStateData: JSON text length:", jsonText.length);
+		
+		// Clear any pending retry timeout
+		if (stateDataRetryTimeout) {
+			clearTimeout(stateDataRetryTimeout);
+			stateDataRetryTimeout = null;
+		}
 		
 		try {
 			// Parse the JSON response
@@ -599,6 +623,7 @@ function fetchStateData() {
 				console.log("*** fetchStateData: Found", data.states.length, "state definitions");
 				stateDefinitions = {};
 				stateTransitionsMap = {};
+				stateDataFetchFailed = false;
 				
 				// Convert array to objects keyed by state id
 				data.states.forEach(state => {
@@ -618,11 +643,13 @@ function fetchStateData() {
 			} else {
 				console.error("*** fetchStateData: ERROR - no 'states' field in response data!");
 				console.error("  Response data keys:", Object.keys(data));
+				retryFetchStateData();
 			}
 		} catch (error) {
 			console.error("*** fetchStateData: ERROR - Failed to parse state data:", error);
 			console.error("  Error message:", error.message);
 			console.error("  Error stack:", error.stack);
+			retryFetchStateData();
 		}
 	};
 	
@@ -638,13 +665,38 @@ function fetchStateData() {
 			console.log("*** fetchStateData: HTTP callback called (response comes via WebSocket instead)");
 			console.log("*** fetchStateData: HTTP responseText length:", responseText ? responseText.length : 0);
 			// Don't process anything here - the real response is handled by pendingStateDataCallback
+			
+			// Schedule a timeout to retry if we don't receive a response via WebSocket within a reasonable time
+			if (stateDataRetryTimeout) {
+				clearTimeout(stateDataRetryTimeout);
+			}
+			stateDataRetryTimeout = setTimeout(() => {
+				console.warn("*** fetchStateData: Timeout waiting for WebSocket response");
+				retryFetchStateData();
+			}, STATE_DATA_RETRY_DELAY_MS);
 		},
 		(error) => {
 			console.error("*** fetchStateData: ERROR - HTTP request failed:", error);
 			// Clear the pending callback if the command itself failed to send
 			pendingStateDataCallback = null;
+			retryFetchStateData();
 		}
 	);
+}
+
+function retryFetchStateData() {
+	if (stateDataFetchAttempts < MAX_STATE_DATA_RETRIES) {
+		console.log(`*** retryFetchStateData: Scheduling retry in ${STATE_DATA_RETRY_DELAY_MS}ms...`);
+		setTimeout(() => {
+			fetchStateData();
+		}, STATE_DATA_RETRY_DELAY_MS);
+	} else {
+		console.error("*** retryFetchStateData: All retry attempts exhausted - marking as comm failure");
+		stateDataFetchFailed = true;
+		pendingStateDataCallback = null;
+		// Update UI to show "Comm Failure"
+		updateDynamicButtons();
+	}
 }
 
 
