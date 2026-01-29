@@ -308,6 +308,7 @@ bool Calibration::requestStateChange(int newState) {
             success = true;
             break;
         case RELEASE_TENSION:
+            log_info("DIAGNOSTIC: Entering RELEASE_TENSION state NOW");
             previousState   = currentState;  // Store the previous state
             currentState    = RELEASE_TENSION;
             complyCallTimer = millis();
@@ -318,6 +319,7 @@ bool Calibration::requestStateChange(int newState) {
             for (int arm = _TL; arm < ARM_COUNT; arm++) {
                 Maslow.axis[arm].reset();  //This just resets the thresholds for pull tight
             }
+            log_info("DIAGNOSTIC: RELEASE_TENSION entry complete, complyCallTimer=" << (int)complyCallTimer << ", sys.state=" << (int)sys.state());
             success = true;
             break;
         default:
