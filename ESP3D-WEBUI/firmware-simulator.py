@@ -46,35 +46,8 @@ app = Flask(__name__)
 # WebSocket connections
 CONNECTIONS = set()
 
-# ESP800 response with correct websocket address
-esp800resp = json.dumps({
-    "FWVersion": "3.6.7",
-    "FWTarget": "grbl-embedded",
-    "FWTargetID": "41",
-    "Setup": "Enabled",
-    "SDConnection": "direct",
-    "SerialProtocol": "Socket",
-    "Authentication": "Disabled",
-    "WebCommunication": "Synchronous",
-    "WebSocketIP": "localhost",
-    "WebSocketPort": "8081",
-    "Hostname": "maslow",
-    "WiFiMode": "STA",
-    "WebUpdate": "Enabled",
-    "FlashFileSystem": "LittleFS",
-    "HostPath": "/",
-    "Time": "none",
-    "Sensor": json.dumps([
-        {
-            "P": "/board",
-            "H": "/board",
-            "T": "S",
-            "V": "None",
-            "S": "255",
-            "M": "0"
-        }
-    ])
-})
+# ESP800 response with correct websocket address - plain text format
+esp800resp = 'FW version: FluidNC v3.6.7 (Simulator) # FW target:grbl-embedded  # FW HW:Direct SD  # primary sd:/sd # secondary sd:none  # authentication:no # webcommunication: Sync: 8081:localhost # hostname:maslow # axis:3'
 
 @app.route('/')
 def index():
@@ -86,11 +59,27 @@ def do_command():
     if plainval == '[ESP800]':
         return esp800resp
     if plainval == '[ESP400]':
-        # Return basic settings
+        # Return basic settings in the correct format
         return json.dumps({
-            "Settings": [
-                {"F": "network/sta_ssid", "P": "0", "T": "S", "V": "test", "H": "SSID", "S": "32", "M": "1"},
-                {"F": "network/sta_ip_mode", "P": "0", "T": "B", "V": "1", "H": "IP Mode", "O": [{"DHCP": "1"}, {"Static": "0"}]},
+            "EEPROM": [
+                {
+                    "F": "nvs",
+                    "P": "Firmware/Build",
+                    "H": "Firmware/Build",
+                    "T": "S",
+                    "V": "",
+                    "S": "20",
+                    "M": "0"
+                },
+                {
+                    "F": "tree",
+                    "P": "/board",
+                    "H": "/board",
+                    "T": "S",
+                    "V": "None",
+                    "S": "255",
+                    "M": "0"
+                }
             ]
         })
     return ""
@@ -150,7 +139,7 @@ async def send_state_message():
         
         await asyncio.sleep(2)  # Send updates every 2 seconds
 
-async def message_control(websocket, path):
+async def message_control(websocket):
     """Handle WebSocket connections"""
     await register(websocket)
     try:
