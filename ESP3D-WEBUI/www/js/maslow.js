@@ -65,6 +65,9 @@ const isJoggingAllowed = () => {
 
 /** Update tablet tab jog button visual state based on whether jogging is allowed */
 const updateTabletJogUIState = () => {
+	console.log("  updateTabletJogUIState: checking jogging state...");
+	console.log("  Jogging allowed:", isJoggingAllowed());
+	
 	// All the purple jog arrow button IDs on the tablet tab
 	const jogButtonIds = [
 		'tablettab_topLeft', 'tablettab_top', 'tablettab_topRight',
@@ -81,6 +84,7 @@ const updateTabletJogUIState = () => {
 	jogButtonIds.forEach(buttonId => {
 		const button = document.getElementById(buttonId);
 		if (!button) {
+			console.log(`  WARNING: Jog button "${buttonId}" not found in DOM!`);
 			return;
 		}
 
@@ -128,9 +132,17 @@ const updateTabletJogUIState = () => {
 };
 
 const updateDynamicButtons = () => {
+	console.log("=== updateDynamicButtons called ===");
+	console.log("Current state:", maslowStatus.state);
+	console.log("stateDefinitions loaded:", !!stateDefinitions);
+	console.log("stateTransitionsMap loaded:", !!stateTransitionsMap);
+	
 	const stateLabel = document.getElementById("state-label");
 	const mainStateLabel = document.getElementById("main-state-label");
 	const mainStateLabelContainer = document.getElementById("main-state-label-container");
+
+	console.log("State label element exists:", !!stateLabel);
+	console.log("Main state label element exists:", !!mainStateLabel);
 
 	const greenBackground = "#4aa85c"
 	const greyBackground = "#a0a0a0"
@@ -141,8 +153,15 @@ const updateDynamicButtons = () => {
 	const stateName = currentStateInfo ? currentStateInfo.name : "Unknown";
 	const stateBackgroundColor = currentStateInfo ? currentStateInfo.backgroundColor : "#f8d7da";
 	
+	console.log("State name:", stateName);
+	console.log("State background color:", stateBackgroundColor);
+	
 	// Update state label - always show current state even if definitions aren't loaded
-	stateLabel.innerHTML = "State: " + stateName;
+	if (stateLabel) {
+		stateLabel.innerHTML = "State: " + stateName;
+	} else {
+		console.log("WARNING: state-label element not found!");
+	}
 	if (mainStateLabel) {
 		mainStateLabel.innerHTML = "State: " + stateName;
 		if (mainStateLabelContainer) {
@@ -152,8 +171,11 @@ const updateDynamicButtons = () => {
 
 	// If we don't have state definitions yet, skip button updates
 	if (!stateDefinitions) {
+		console.log("No state definitions loaded yet - skipping button updates");
 		return;
 	}
+	
+	console.log("Proceeding with button updates...");
 
 	// Build button to state map dynamically from state definitions
 	// Only include states that have button labels
@@ -176,12 +198,16 @@ const updateDynamicButtons = () => {
 			}
 		}
 	}
+	
+	console.log("Button to state map:", buttonToStateMap);
 
 	// Update each button based on whether its transition is allowed
 	for (const [buttonId, targetState] of Object.entries(buttonToStateMap)) {
 		const button = document.getElementById(buttonId);
+		console.log(`Checking button ${buttonId} (target state ${targetState}):`, !!button);
 		if (button) {
 			const allowed = isTransitionAllowed(maslowStatus.state, targetState);
+			console.log(`  Transition ${maslowStatus.state} -> ${targetState} allowed:`, allowed);
 			button.style.backgroundColor = allowed ? greenBackground : greyBackground;
 			
 			// Update button text from state definitions if available
@@ -189,20 +215,29 @@ const updateDynamicButtons = () => {
 			if (targetStateInfo && targetStateInfo.buttonLabel) {
 				button.textContent = targetStateInfo.buttonLabel;
 			}
+		} else {
+			console.log(`  WARNING: Button element "${buttonId}" not found in DOM!`);
 		}
 	}
 	
 	// Update tablet tab jog UI state
+	console.log("Updating tablet jog UI state...");
 	updateTabletJogUIState();
 	
 	// Update control buttons row based on state
+	console.log("Updating control buttons row...");
 	updateControlButtonsRow();
+	
+	console.log("=== updateDynamicButtons completed ===");
 }
 
 /** Update the control buttons row on the Maslow tab based on current state */
 const updateControlButtonsRow = () => {
+	console.log("  updateControlButtonsRow: starting...");
+	
 	// If we don't have state definitions yet, skip the update
 	if (!stateDefinitions) {
+		console.log("  No state definitions - skipping control buttons row update");
 		return;
 	}
 	
@@ -213,7 +248,11 @@ const updateControlButtonsRow = () => {
 	const controlButtonsRow = document.getElementById("tablettab_control_buttons_row");
 	const releaseTensionBtn = document.getElementById("tablettab_release_tension");
 	
+	console.log("  Control buttons row element exists:", !!controlButtonsRow);
+	console.log("  Release tension button element exists:", !!releaseTensionBtn);
+	
 	if (!controlButtonsRow) {
+		console.log("  WARNING: tablettab_control_buttons_row element not found!");
 		return;
 	}
 	
@@ -375,7 +414,9 @@ const maslowInfoMsgHandling = (msg) => {
 				console.error("Invalid state received from machine: " + state);
 				return false;
 			}
+			console.log("*** STATE CHANGE: Machine state changed from", maslowStatus.state, "to", state);
 			maslowStatus.state = state;
+			console.log("*** STATE CHANGE: calling updateDynamicButtons()...");
 			updateDynamicButtons();
 		}
 		return true;
@@ -438,16 +479,20 @@ function showCalibrationCompleteMessage() {
  * names, button labels, colors, and allowed transitions
  */
 function fetchStateData() {
+	console.log("*** fetchStateData: sending $STATEDEFS command to firmware...");
 	// Send command to get complete state data  
 	// Use $STATEDEFS to call the Maslow custom command (not [ESP800] which is ESP3D system state)
 	const cmd = buildHttpCommandCmd(httpCmdType.plain, "$STATEDEFS");
 	SendGetHttp(
 		cmd,
 		(responseText) => {
+			console.log("*** fetchStateData: received response");
+			console.log("Response text:", responseText);
 			try {
 				// Parse the JSON response
 				// Expected format: {"states":[{"id":0,"name":"Unknown","buttonLabel":"","backgroundColor":"#f8d7da","allowedTransitions":[1]},...]}
 				const data = JSON.parse(responseText);
+				console.log("*** fetchStateData: parsed JSON successfully");
 				if (data.states) {
 					stateDefinitions = {};
 					stateTransitionsMap = {};
@@ -459,14 +504,17 @@ function fetchStateData() {
 						stateTransitionsMap[state.id] = state.allowedTransitions;
 					});
 					
-					console.log("State data loaded:", stateDefinitions);
-					console.log("State transitions loaded:", stateTransitionsMap);
+					console.log("*** fetchStateData: State data loaded:", stateDefinitions);
+					console.log("*** fetchStateData: State transitions loaded:", stateTransitionsMap);
 					
 					// Update UI with complete state data
+					console.log("*** fetchStateData: calling updateDynamicButtons()...");
 					updateDynamicButtons();
+				} else {
+					console.log("*** fetchStateData: WARNING - no 'states' field in response data");
 				}
 			} catch (error) {
-				console.error("Failed to parse state data:", error);
+				console.error("*** fetchStateData: Failed to parse state data:", error);
 			}
 		},
 		(error) => {

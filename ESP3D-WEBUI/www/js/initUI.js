@@ -115,8 +115,10 @@ const display_boot_progress = () => {
 /** InitUI step1 - try to connect to the ESP32 */
 const initUI = () => {
 	console.log("Init UI - Step 1");
+	console.log("*** TIMING: initUI step 1 started");
 	
 	// Fetch unified state data from firmware FIRST, immediately after connection
+	console.log("*** TIMING: calling fetchStateData()...");
 	fetchStateData();
 
 	// Start up connect dialog, don't try and get the FW data
@@ -198,10 +200,15 @@ function initUI_4() {
 }
 
 function show_main_UI() {
+	console.log("*** TIMING: show_main_UI() called - DOM elements should now exist");
 	displayUndoNone("main_ui");
 	// Update dynamic buttons now that UI elements exist
 	// State data was already fetched in step 1, now apply it to the actual DOM elements
 	if (typeof updateDynamicButtons === "function") {
+		console.log("*** TIMING: calling updateDynamicButtons() from show_main_UI()...");
 		updateDynamicButtons();
+	} else {
+		console.log("*** TIMING: WARNING - updateDynamicButtons function not found!");
 	}
+	console.log("*** TIMING: show_main_UI() completed");
 }
