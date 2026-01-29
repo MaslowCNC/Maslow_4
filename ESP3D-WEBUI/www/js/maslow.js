@@ -439,8 +439,9 @@ function showCalibrationCompleteMessage() {
  */
 function fetchStateData() {
 	// Send command to get complete state data
+	const cmd = buildHttpCommandCmd(httpCmdType.plain, "[ESP800]STATEDEFS");
 	SendGetHttp(
-		"STATEDEFS",
+		cmd,
 		(responseText) => {
 			try {
 				// Parse the JSON response
