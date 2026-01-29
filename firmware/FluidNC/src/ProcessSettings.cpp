@@ -937,6 +937,7 @@ static Error maslow_get_state_definitions(const char* value, WebUI::Authenticati
     }
     
     out << "]}\n";
+    out.flush();  // Force immediate send to prevent buffer truncation
     return Error::Ok;
 }
 
