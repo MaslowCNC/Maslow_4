@@ -199,4 +199,9 @@ function initUI_4() {
 
 function show_main_UI() {
 	displayUndoNone("main_ui");
+	// Update dynamic buttons now that UI elements exist
+	// State data was already fetched in step 1, now apply it to the actual DOM elements
+	if (typeof updateDynamicButtons === "function") {
+		updateDynamicButtons();
+	}
 }
