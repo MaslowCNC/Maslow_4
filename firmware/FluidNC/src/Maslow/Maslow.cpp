@@ -109,6 +109,9 @@ void Maslow_::begin(void (*sys_rt)()) {
     } else {
         log_info("Starting " + M + " Version " << VERSION_NUMBER);
     }
+    
+    // Report current state to UI - this will be captured in startup log and sent when WebSocket connects
+    calibration.printCurrentState();
 }
 
 // Maslow main loop, everything is processed here
