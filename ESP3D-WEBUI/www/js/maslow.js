@@ -12,6 +12,9 @@ let stateTransitionsMap = null;
 /** State Definitions - fetched from firmware at startup */
 let stateDefinitions = null;
 
+/** Callback to handle STATEDEFS response when it arrives via WebSocket */
+let pendingStateDataCallback = null;
+
 /** This keeps track of when we saw the last heartbeat from the machine */
 //I think this is not used anymore and can be removed now
 let lastHeartBeatTime = new Date().getTime();
@@ -380,6 +383,22 @@ const requestStateTransition = (targetState) => {
 
 /** Perform maslow specific-ish info message handling */
 const maslowInfoMsgHandling = (msg) => {
+	// Check for STATEDEFS JSON response (comes through WebSocket, not HTTP callback)
+	// This will be a JSON object starting with { and containing "states" field
+	if (msg.trim().startsWith('{') && msg.includes('"states"')) {
+		console.log("*** maslowInfoMsgHandling: intercepted STATEDEFS JSON response");
+		if (pendingStateDataCallback) {
+			console.log("*** maslowInfoMsgHandling: calling pendingStateDataCallback with JSON");
+			// Call the callback with the JSON message
+			pendingStateDataCallback(msg.trim());
+			// Clear the callback
+			pendingStateDataCallback = null;
+		} else {
+			console.log("*** maslowInfoMsgHandling: WARNING - received state data JSON but no callback registered");
+		}
+		return true; // Mark as handled
+	}
+	
 	if (msg.startsWith('MINFO: ')) {
 		try {
 			const parsedStatus = JSON.parse(msg.substring(7));
@@ -480,74 +499,69 @@ function showCalibrationCompleteMessage() {
  */
 function fetchStateData() {
 	console.log("*** fetchStateData: sending $STATEDEFS command to firmware...");
+	
+	// Set up a callback to handle the response when it arrives via WebSocket
+	// The response won't come through SendGetHttp's callback - it comes through the WebSocket
+	pendingStateDataCallback = (jsonText) => {
+		console.log("*** fetchStateData: received JSON response via WebSocket");
+		console.log("*** fetchStateData: JSON text length:", jsonText.length);
+		
+		try {
+			// Parse the JSON response
+			// Expected format: {"states":[{"id":0,"name":"Unknown","buttonLabel":"","backgroundColor":"#f8d7da","allowedTransitions":[1]},...]}
+			console.log("*** fetchStateData: attempting to parse JSON...");
+			const data = JSON.parse(jsonText);
+			console.log("*** fetchStateData: parsed JSON successfully");
+			console.log("*** fetchStateData: data object:", data);
+			
+			if (data.states) {
+				console.log("*** fetchStateData: Found", data.states.length, "state definitions");
+				stateDefinitions = {};
+				stateTransitionsMap = {};
+				
+				// Convert array to objects keyed by state id
+				data.states.forEach(state => {
+					console.log(`  Processing state ${state.id}: ${state.name}`);
+					stateDefinitions[state.id] = state;
+					// Build transitions map
+					stateTransitionsMap[state.id] = state.allowedTransitions;
+				});
+				
+				console.log("*** fetchStateData: State data loaded successfully:");
+				console.log("  stateDefinitions:", stateDefinitions);
+				console.log("  stateTransitionsMap:", stateTransitionsMap);
+				
+				// Update UI with complete state data
+				console.log("*** fetchStateData: calling updateDynamicButtons()...");
+				updateDynamicButtons();
+			} else {
+				console.error("*** fetchStateData: ERROR - no 'states' field in response data!");
+				console.error("  Response data keys:", Object.keys(data));
+			}
+		} catch (error) {
+			console.error("*** fetchStateData: ERROR - Failed to parse state data:", error);
+			console.error("  Error message:", error.message);
+			console.error("  Error stack:", error.stack);
+		}
+	};
+	
 	// Send command to get complete state data  
 	// Use $STATEDEFS to call the Maslow custom command (not [ESP800] which is ESP3D system state)
+	// Note: The response will come through the WebSocket (handled by pendingStateDataCallback above),
+	// NOT through this HTTP callback which will receive an empty response
 	const cmd = buildHttpCommandCmd(httpCmdType.plain, "$STATEDEFS");
 	SendGetHttp(
 		cmd,
 		(responseText) => {
-			console.log("*** fetchStateData: received response");
-			console.log("*** fetchStateData: responseText type:", typeof responseText);
-			console.log("*** fetchStateData: responseText length:", responseText ? responseText.length : 0);
-			console.log("*** fetchStateData: responseText is null/undefined:", responseText === null || responseText === undefined);
-			console.log("*** fetchStateData: responseText after trim:", responseText ? `"${responseText.trim()}"` : "NULL");
-			
-			// The response might have the format "Response text: \n{JSON}"
-			// SendGetHttp might be logging "Response text: " and returning empty string
-			// Let's check if responseText needs to be extracted from logged output
-			if (!responseText) {
-				console.error("*** fetchStateData: ERROR - responseText is null or undefined!");
-				return;
-			}
-			
-			const trimmed = responseText.trim();
-			if (trimmed === "") {
-				console.error("*** fetchStateData: ERROR - response text is empty after trim!");
-				console.error("*** fetchStateData: Original responseText was:", JSON.stringify(responseText));
-				return;
-			}
-			
-			try {
-				// Parse the JSON response
-				// Expected format: {"states":[{"id":0,"name":"Unknown","buttonLabel":"","backgroundColor":"#f8d7da","allowedTransitions":[1]},...]}
-				console.log("*** fetchStateData: attempting to parse trimmed responseText...");
-				const data = JSON.parse(trimmed);
-				console.log("*** fetchStateData: parsed JSON successfully");
-				console.log("*** fetchStateData: data object:", data);
-				
-				if (data.states) {
-					console.log("*** fetchStateData: Found", data.states.length, "state definitions");
-					stateDefinitions = {};
-					stateTransitionsMap = {};
-					
-					// Convert array to objects keyed by state id
-					data.states.forEach(state => {
-						console.log(`  Processing state ${state.id}: ${state.name}`);
-						stateDefinitions[state.id] = state;
-						// Build transitions map
-						stateTransitionsMap[state.id] = state.allowedTransitions;
-					});
-					
-					console.log("*** fetchStateData: State data loaded successfully:");
-					console.log("  stateDefinitions:", stateDefinitions);
-					console.log("  stateTransitionsMap:", stateTransitionsMap);
-					
-					// Update UI with complete state data
-					console.log("*** fetchStateData: calling updateDynamicButtons()...");
-					updateDynamicButtons();
-				} else {
-					console.error("*** fetchStateData: ERROR - no 'states' field in response data!");
-					console.error("  Response data keys:", Object.keys(data));
-				}
-			} catch (error) {
-				console.error("*** fetchStateData: ERROR - Failed to parse state data:", error);
-				console.error("  Error message:", error.message);
-				console.error("  Error stack:", error.stack);
-			}
+			// This callback receives an empty response because the actual JSON comes via WebSocket
+			console.log("*** fetchStateData: HTTP callback called (response comes via WebSocket instead)");
+			console.log("*** fetchStateData: HTTP responseText length:", responseText ? responseText.length : 0);
+			// Don't process anything here - the real response is handled by pendingStateDataCallback
 		},
 		(error) => {
-			console.error("*** fetchStateData: ERROR - Failed to fetch:", error);
-			// If we can't fetch data, fall back to the UI working without dynamic control
+			console.error("*** fetchStateData: ERROR - HTTP request failed:", error);
+			// Clear the pending callback if the command itself failed to send
+			pendingStateDataCallback = null;
 		}
 	);
 }
