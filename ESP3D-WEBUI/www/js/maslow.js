@@ -290,10 +290,77 @@ const updateControlButtonsRow = () => {
 	
 	// Update play/pause button properties without destroying it
 	if (playBtn) {
-		playBtn.style.backgroundColor = playPauseColor;
-		playBtn.style.cursor = playPauseCursor;
-		playBtn.style.pointerEvents = playPausePointerEvents;
-		playBtn.title = playPauseTitle;
+		// When disabled, change to grey background and redraw canvas with grey triangle
+		if (!playPauseEnabled) {
+			playBtn.style.backgroundColor = "#a0a0a0";  // Grey background
+			playBtn.style.cursor = "not-allowed";
+			playBtn.style.pointerEvents = "none";
+			playBtn.title = playPauseTitle;
+			
+			// Redraw the canvas triangle in grey instead of white
+			const playBtnCanvas = document.getElementById("playBtn");
+			if (playBtnCanvas) {
+				const rect = playBtn.getBoundingClientRect();
+				playBtnCanvas.width = rect.width || 200;
+				playBtnCanvas.height = rect.height || 200;
+				
+				const playC = playBtnCanvas.getContext("2d");
+				playC.clearRect(0, 0, playBtnCanvas.width, playBtnCanvas.height);
+				
+				const centerX = playBtnCanvas.width / 2;
+				const centerY = playBtnCanvas.height / 2;
+				const size = Math.min(playBtnCanvas.width, playBtnCanvas.height) * 0.3;
+				
+				// Draw grey triangle instead of white
+				playC.beginPath();
+				playC.strokeStyle = '#666666';  // Dark grey
+				playC.fillStyle = '#666666';
+				playC.lineWidth = 1;
+				playC.lineCap = 'butt';
+				playC.lineJoin = 'miter';
+				playC.moveTo(centerX - size/2, centerY - size/2);
+				playC.lineTo(centerX - size/2, centerY + size/2);
+				playC.lineTo(centerX + size/2, centerY);
+				playC.closePath();
+				playC.fill();
+				playC.stroke();
+			}
+		} else {
+			// When enabled, restore green background and white triangle
+			playBtn.style.backgroundColor = "#4aa85c";  // Green background
+			playBtn.style.cursor = "pointer";
+			playBtn.style.pointerEvents = "auto";
+			playBtn.title = "";
+			
+			// Redraw the canvas triangle in white
+			const playBtnCanvas = document.getElementById("playBtn");
+			if (playBtnCanvas) {
+				const rect = playBtn.getBoundingClientRect();
+				playBtnCanvas.width = rect.width || 200;
+				playBtnCanvas.height = rect.height || 200;
+				
+				const playC = playBtnCanvas.getContext("2d");
+				playC.clearRect(0, 0, playBtnCanvas.width, playBtnCanvas.height);
+				
+				const centerX = playBtnCanvas.width / 2;
+				const centerY = playBtnCanvas.height / 2;
+				const size = Math.min(playBtnCanvas.width, playBtnCanvas.height) * 0.3;
+				
+				// Draw white triangle
+				playC.beginPath();
+				playC.strokeStyle = 'white';
+				playC.fillStyle = 'white';
+				playC.lineWidth = 1;
+				playC.lineCap = 'butt';
+				playC.lineJoin = 'miter';
+				playC.moveTo(centerX - size/2, centerY - size/2);
+				playC.lineTo(centerX - size/2, centerY + size/2);
+				playC.lineTo(centerX + size/2, centerY);
+				playC.closePath();
+				playC.fill();
+				playC.stroke();
+			}
+		}
 	}
 	
 	// Stop button always stays the same (red, enabled)
