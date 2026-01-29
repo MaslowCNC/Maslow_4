@@ -177,10 +177,10 @@ void Maslow_::update() {
         if (safetyOn)
             safety_control();
 
-        // DIAGNOSTIC: Check if holding flag prevents RELEASE_TENSION from running
-        if (calibration.getCurrentState() == RELEASE_TENSION && calibration.holding) {
-            log_info("DIAGNOSTIC: RELEASE_TENSION blocked by calibration.holding flag! holdTime=" 
-                     << (int)calibration.holdTime << "ms, elapsed=" << (int)(millis() - calibration.holdTimer) << "ms");
+        // DIAGNOSTIC: Log when RELEASE_TENSION state is active (fires every loop iteration)
+        if (calibration.getCurrentState() == RELEASE_TENSION) {
+            log_info("DIAGNOSTIC: In RELEASE_TENSION state, holding=" << (calibration.holding ? "true" : "false")
+                     << ", holdTime=" << (int)calibration.holdTime << "ms, elapsed=" << (int)(millis() - calibration.holdTimer) << "ms");
         }
 
         //quick solution for delay without blocking
