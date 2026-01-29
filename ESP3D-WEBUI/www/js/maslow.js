@@ -438,8 +438,9 @@ function showCalibrationCompleteMessage() {
  * names, button labels, colors, and allowed transitions
  */
 function fetchStateData() {
-	// Send command to get complete state data
-	const cmd = buildHttpCommandCmd(httpCmdType.plain, "[ESP800]STATEDEFS");
+	// Send command to get complete state data  
+	// Use $STATEDEFS to call the Maslow custom command (not [ESP800] which is ESP3D system state)
+	const cmd = buildHttpCommandCmd(httpCmdType.plain, "$STATEDEFS");
 	SendGetHttp(
 		cmd,
 		(responseText) => {
