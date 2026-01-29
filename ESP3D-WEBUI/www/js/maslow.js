@@ -489,18 +489,29 @@ function fetchStateData() {
 			console.log("*** fetchStateData: received response");
 			console.log("*** fetchStateData: responseText type:", typeof responseText);
 			console.log("*** fetchStateData: responseText length:", responseText ? responseText.length : 0);
-			console.log("*** fetchStateData: responseText value:", responseText);
+			console.log("*** fetchStateData: responseText is null/undefined:", responseText === null || responseText === undefined);
+			console.log("*** fetchStateData: responseText after trim:", responseText ? `"${responseText.trim()}"` : "NULL");
 			
-			// Check if responseText is empty or invalid
-			if (!responseText || responseText.trim() === "") {
-				console.error("*** fetchStateData: ERROR - response text is empty!");
+			// The response might have the format "Response text: \n{JSON}"
+			// SendGetHttp might be logging "Response text: " and returning empty string
+			// Let's check if responseText needs to be extracted from logged output
+			if (!responseText) {
+				console.error("*** fetchStateData: ERROR - responseText is null or undefined!");
+				return;
+			}
+			
+			const trimmed = responseText.trim();
+			if (trimmed === "") {
+				console.error("*** fetchStateData: ERROR - response text is empty after trim!");
+				console.error("*** fetchStateData: Original responseText was:", JSON.stringify(responseText));
 				return;
 			}
 			
 			try {
 				// Parse the JSON response
 				// Expected format: {"states":[{"id":0,"name":"Unknown","buttonLabel":"","backgroundColor":"#f8d7da","allowedTransitions":[1]},...]}
-				const data = JSON.parse(responseText);
+				console.log("*** fetchStateData: attempting to parse trimmed responseText...");
+				const data = JSON.parse(trimmed);
 				console.log("*** fetchStateData: parsed JSON successfully");
 				console.log("*** fetchStateData: data object:", data);
 				
