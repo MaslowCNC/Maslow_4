@@ -68,9 +68,6 @@ const isJoggingAllowed = () => {
 
 /** Update tablet tab jog button visual state based on whether jogging is allowed */
 const updateTabletJogUIState = () => {
-	console.log("  updateTabletJogUIState: checking jogging state...");
-	console.log("  Jogging allowed:", isJoggingAllowed());
-	
 	// Purple jog arrow button IDs on the tablet tab (XY arrows only - Z buttons always enabled)
 	const jogButtonIds = [
 		'tablettab_topLeft', 'tablettab_top', 'tablettab_topRight',
@@ -86,7 +83,6 @@ const updateTabletJogUIState = () => {
 	jogButtonIds.forEach(buttonId => {
 		const button = document.getElementById(buttonId);
 		if (!button) {
-			console.log(`  WARNING: Jog button "${buttonId}" not found in DOM!`);
 			return;
 		}
 
@@ -136,17 +132,9 @@ const updateTabletJogUIState = () => {
 };
 
 const updateDynamicButtons = () => {
-	console.log("=== updateDynamicButtons called ===");
-	console.log("Current state:", maslowStatus.state);
-	console.log("stateDefinitions loaded:", !!stateDefinitions);
-	console.log("stateTransitionsMap loaded:", !!stateTransitionsMap);
-	
 	const stateLabel = document.getElementById("state-label");
 	const mainStateLabel = document.getElementById("main-state-label");
 	const mainStateLabelContainer = document.getElementById("main-state-label-container");
-
-	console.log("State label element exists:", !!stateLabel);
-	console.log("Main state label element exists:", !!mainStateLabel);
 
 	const greenBackground = "#4aa85c"
 	const greyBackground = "#a0a0a0"
@@ -167,14 +155,9 @@ const updateDynamicButtons = () => {
 		stateBackgroundColor = "#f8d7da"; // Pink background for unknown
 	}
 	
-	console.log("State name:", stateName);
-	console.log("State background color:", stateBackgroundColor);
-	
 	// Update state label - always show current state even if definitions aren't loaded
 	if (stateLabel) {
 		stateLabel.innerHTML = "State: " + stateName;
-	} else {
-		console.log("WARNING: state-label element not found!");
 	}
 	if (mainStateLabel) {
 		mainStateLabel.innerHTML = "State: " + stateName;
@@ -185,11 +168,8 @@ const updateDynamicButtons = () => {
 
 	// If we don't have state definitions yet, skip button updates
 	if (!stateDefinitions) {
-		console.log("No state definitions loaded yet - skipping button updates");
 		return;
 	}
-	
-	console.log("Proceeding with button updates...");
 
 	// Build button to state map dynamically from state definitions
 	// Only include states that have button labels
@@ -212,16 +192,12 @@ const updateDynamicButtons = () => {
 			}
 		}
 	}
-	
-	console.log("Button to state map:", buttonToStateMap);
 
 	// Update each button based on whether its transition is allowed
 	for (const [buttonId, targetState] of Object.entries(buttonToStateMap)) {
 		const button = document.getElementById(buttonId);
-		console.log(`Checking button ${buttonId} (target state ${targetState}):`, !!button);
 		if (button) {
 			const allowed = isTransitionAllowed(maslowStatus.state, targetState);
-			console.log(`  Transition ${maslowStatus.state} -> ${targetState} allowed:`, allowed);
 			button.style.backgroundColor = allowed ? greenBackground : greyBackground;
 			
 			// Update button text from state definitions if available
@@ -229,29 +205,20 @@ const updateDynamicButtons = () => {
 			if (targetStateInfo && targetStateInfo.buttonLabel) {
 				button.textContent = targetStateInfo.buttonLabel;
 			}
-		} else {
-			console.log(`  WARNING: Button element "${buttonId}" not found in DOM!`);
 		}
 	}
 	
 	// Update tablet tab jog UI state
-	console.log("Updating tablet jog UI state...");
 	updateTabletJogUIState();
 	
 	// Update control buttons row based on state
-	console.log("Updating control buttons row...");
 	updateControlButtonsRow();
-	
-	console.log("=== updateDynamicButtons completed ===");
 }
 
 /** Update the control buttons row on the Maslow tab based on current state */
 const updateControlButtonsRow = () => {
-	console.log("  updateControlButtonsRow: starting...");
-	
 	// If we don't have state definitions yet, skip the update
 	if (!stateDefinitions) {
-		console.log("  No state definitions - skipping control buttons row update");
 		return;
 	}
 	
@@ -262,11 +229,7 @@ const updateControlButtonsRow = () => {
 	const controlButtonsRow = document.getElementById("tablettab_control_buttons_row");
 	const releaseTensionBtn = document.getElementById("tablettab_release_tension");
 	
-	console.log("  Control buttons row element exists:", !!controlButtonsRow);
-	console.log("  Release tension button element exists:", !!releaseTensionBtn);
-	
 	if (!controlButtonsRow) {
-		console.log("  WARNING: tablettab_control_buttons_row element not found!");
 		return;
 	}
 	
@@ -477,15 +440,11 @@ const maslowInfoMsgHandling = (msg) => {
 	// Check for STATEDEFS JSON response (comes through WebSocket, not HTTP callback)
 	// This will be a JSON object starting with { and containing "states" field
 	if (msg.trim().startsWith('{') && msg.includes('"states"')) {
-		console.log("*** maslowInfoMsgHandling: intercepted STATEDEFS JSON response");
 		if (pendingStateDataCallback) {
-			console.log("*** maslowInfoMsgHandling: calling pendingStateDataCallback with JSON");
 			// Call the callback with the JSON message
 			pendingStateDataCallback(msg.trim());
 			// Clear the callback
 			pendingStateDataCallback = null;
-		} else {
-			console.log("*** maslowInfoMsgHandling: WARNING - received state data JSON but no callback registered");
 		}
 		return true; // Mark as handled
 	}
@@ -524,9 +483,7 @@ const maslowInfoMsgHandling = (msg) => {
 				console.error("Invalid state received from machine: " + state);
 				return false;
 			}
-			console.log("*** STATE CHANGE: Machine state changed from", maslowStatus.state, "to", state);
 			maslowStatus.state = state;
-			console.log("*** STATE CHANGE: calling updateDynamicButtons()...");
 			updateDynamicButtons();
 		}
 		return true;
@@ -597,14 +554,10 @@ let stateDataFetchFailed = false;
 
 function fetchStateData() {
 	stateDataFetchAttempts++;
-	console.log(`*** fetchStateData: sending $STATEDEFS command to firmware (attempt ${stateDataFetchAttempts}/${MAX_STATE_DATA_RETRIES})...`);
 	
 	// Set up a callback to handle the response when it arrives via WebSocket
 	// The response won't come through SendGetHttp's callback - it comes through the WebSocket
 	pendingStateDataCallback = (jsonText) => {
-		console.log("*** fetchStateData: received JSON response via WebSocket");
-		console.log("*** fetchStateData: JSON text length:", jsonText.length);
-		
 		// Clear any pending retry timeout
 		if (stateDataRetryTimeout) {
 			clearTimeout(stateDataRetryTimeout);
@@ -614,31 +567,21 @@ function fetchStateData() {
 		try {
 			// Parse the JSON response
 			// Expected format: {"states":[{"id":0,"name":"Unknown","buttonLabel":"","backgroundColor":"#f8d7da","allowedTransitions":[1]},...]}
-			console.log("*** fetchStateData: attempting to parse JSON...");
 			const data = JSON.parse(jsonText);
-			console.log("*** fetchStateData: parsed JSON successfully");
-			console.log("*** fetchStateData: data object:", data);
 			
 			if (data.states) {
-				console.log("*** fetchStateData: Found", data.states.length, "state definitions");
 				stateDefinitions = {};
 				stateTransitionsMap = {};
 				stateDataFetchFailed = false;
 				
 				// Convert array to objects keyed by state id
 				data.states.forEach(state => {
-					console.log(`  Processing state ${state.id}: ${state.name}`);
 					stateDefinitions[state.id] = state;
 					// Build transitions map
 					stateTransitionsMap[state.id] = state.allowedTransitions;
 				});
 				
-				console.log("*** fetchStateData: State data loaded successfully:");
-				console.log("  stateDefinitions:", stateDefinitions);
-				console.log("  stateTransitionsMap:", stateTransitionsMap);
-				
 				// Update UI with complete state data
-				console.log("*** fetchStateData: calling updateDynamicButtons()...");
 				updateDynamicButtons();
 			} else {
 				console.error("*** fetchStateData: ERROR - no 'states' field in response data!");
@@ -662,8 +605,6 @@ function fetchStateData() {
 		cmd,
 		(responseText) => {
 			// This callback receives an empty response because the actual JSON comes via WebSocket
-			console.log("*** fetchStateData: HTTP callback called (response comes via WebSocket instead)");
-			console.log("*** fetchStateData: HTTP responseText length:", responseText ? responseText.length : 0);
 			// Don't process anything here - the real response is handled by pendingStateDataCallback
 			
 			// Schedule a timeout to retry if we don't receive a response via WebSocket within a reasonable time
@@ -686,7 +627,6 @@ function fetchStateData() {
 
 function retryFetchStateData() {
 	if (stateDataFetchAttempts < MAX_STATE_DATA_RETRIES) {
-		console.log(`*** retryFetchStateData: Scheduling retry in ${STATE_DATA_RETRY_DELAY_MS}ms...`);
 		setTimeout(() => {
 			fetchStateData();
 		}, STATE_DATA_RETRY_DELAY_MS);
@@ -856,7 +796,6 @@ globalThis.loadedValues = globalThis.loadedValues || {};
 
 const checkHomed = () => {
 	if (maslowStatus.state != 7) { // If the state is not 'ready to cut'
-		console.log("Maslow is not ready to move, current state: " + maslowStatus.state);
 		const err_msg = `${M} is not ready to move.`;
 		alert(err_msg);
 
