@@ -10,7 +10,6 @@
 
 #    include "../Serial.h"      // is_realtime_command
 #    include "../StartupLog.h"  // startupLog
-#    include "../Maslow/Maslow.h"  // Maslow
 
 namespace WebUI {
     class WSChannels;
@@ -221,7 +220,6 @@ namespace WebUI {
                 WSChannels::removeChannel(num);
                 break;
             case WStype_CONNECTED: {
-                log_info("WStype_CONNECTED event received for client " << num);
                 WSChannel* wsChannel = new WSChannel(server, num);
                 if (!wsChannel) {
                     log_error("Creating WebSocket channel failed");
@@ -229,7 +227,7 @@ namespace WebUI {
                     std::string uri((char*)payload, length);
 
                     IPAddress ip = server->remoteIP(num);
-                    log_info("WebSocket " << num << " from " << ip << " uri: [" << uri << "]");
+                    log_debug("WebSocket " << num << " from " << ip);
 
                     _lastWSChannel = wsChannel;
                     allChannels.registration(wsChannel);
@@ -238,14 +236,11 @@ namespace WebUI {
                     // On first websocket connection, stop capturing to startup log
                     // This ensures all logs from startup until first connection are captured
                     if (startupLog.isActive()) {
-                        log_info("Stopping startup log capture");
                         startupLog.stop();
                         allChannels.deregistration(&startupLog);
                     }
 
-                    log_info("Checking URI match: uri=[" << uri << "], expected=[/]");
                     if (uri == "/") {
-                        log_info("URI matches /, proceeding with state message");
                         std::string s("CURRENT_ID:");
                         s += std::to_string(num);
                         // send message to client
@@ -257,23 +252,8 @@ namespace WebUI {
                         
                         // Dump startup log to this channel if it has messages
                         if (!startupLog.messages().empty()) {
-                            log_info("Dumping startup log");
                             startupLog.dump(*wsChannel);
                         }
-                        
-                        // Send current state to newly connected UI after startup messages
-                        // Send state info directly to this channel to ensure it receives it
-                        try {
-                            int currentState = Maslow.calibration.currentState;
-                            s = "[MSG:INFO: Current state: ";
-                            s += std::to_string(currentState);
-                            s += "]\n";
-                            wsChannel->sendTXT(s);
-                        } catch (...) {
-                            // Silently ignore errors - Maslow may not be initialized yet
-                        }
-                    } else {
-                        log_info("URI does not match /, not sending state message");
                     }
                 }
             } break;
