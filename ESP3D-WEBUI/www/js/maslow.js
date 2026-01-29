@@ -283,18 +283,21 @@ const updateControlButtonsRow = () => {
 	const currentStateName = stateDefinitions[maslowStatus.state] ? stateDefinitions[maslowStatus.state].name : "Unknown";
 	const playPauseTitle = playPauseEnabled ? "" : `Play/Pause is only available when in state Ready To Cut (currently in ${currentStateName})`;
 	
-	controlButtonsRow.innerHTML = `
-		<div id="tablettab_gcode_play" class="maslow-grid-item maslow-grid-item-btn"
-			style="background-color: ${playPauseColor}; cursor: ${playPauseCursor}; pointer-events: ${playPausePointerEvents};"
-			title="${playPauseTitle}"><canvas id="playBtn" style="width: 100%; height: 100%"></canvas></div>
-		<div id="tablettab_gcode_stop" class="maslow-grid-item maslow-grid-item-btn"
-			style="background-color: #ce654c;"><canvas id="stopBtn" style="width: 100%; height: 100%"></canvas></div>
-		<div id="systemStatus" class="maslow-grid-item system-status">Idle</div>
-	`;
+	// Get the existing button elements instead of recreating them
+	const playBtn = document.getElementById("tablettab_gcode_play");
+	const stopBtn = document.getElementById("tablettab_gcode_stop");
+	const statusDiv = document.getElementById("systemStatus");
 	
-	// Redraw the play and stop button canvases
-	drawPlayButton();
-	drawStopButton();
+	// Update play/pause button properties without destroying it
+	if (playBtn) {
+		playBtn.style.backgroundColor = playPauseColor;
+		playBtn.style.cursor = playPauseCursor;
+		playBtn.style.pointerEvents = playPausePointerEvents;
+		playBtn.title = playPauseTitle;
+	}
+	
+	// Stop button always stays the same (red, enabled)
+	// Status div content is managed elsewhere
 	
 	// The following code block is no longer needed since we always show the same buttons
 	// Keeping it commented for reference in case we need to revert
