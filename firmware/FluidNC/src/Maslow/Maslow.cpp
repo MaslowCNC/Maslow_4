@@ -480,6 +480,9 @@ void Maslow_::setZStop() {
 
     gc_sync_position();  //This updates the Gcode engine with the new position from the stepping engine that we set with set_motor_steps
     plan_sync_position();
+
+    // Mark Z axis as homed after setting Z stop
+    axis_homed[Z_AXIS] = true;
 }
 
 //This function saves the current belt positions to non-volatile storage
