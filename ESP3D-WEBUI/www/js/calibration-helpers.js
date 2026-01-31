@@ -88,16 +88,18 @@ async function findBestRectangularStart(measurements, initialGuess, logFn = () =
     
     const widthMin = 500;
     const widthMax = 6000;
-    const widthStep = 50;
+    const widthStep = 100;  // Increased from 50mm to 100mm for faster search
+    
+    const heightMin = 500;
+    const heightMax = 6000;
+    const heightStep = 100;  // Increased from 50mm to 100mm for faster search
+    
+    const totalEstimated = Math.ceil((widthMax - widthMin) / widthStep) * Math.ceil((heightMax - heightMin) / heightStep);
+    logFn(`Estimated evaluations: ${totalEstimated}`);
     
     for (let W = widthMin; W <= widthMax; W += widthStep) {
         // Compute required center X from left/right distances
         const xc = x0 + (d_tl * d_tl - d_tr * d_tr) / (2 * W);
-        
-        // For each width, sample different heights
-        const heightMin = 500;
-        const heightMax = 6000;
-        const heightStep = 50;
         
         for (let H = heightMin; H <= heightMax; H += heightStep) {
             testedCount++;
@@ -146,8 +148,9 @@ async function findBestRectangularStart(measurements, initialGuess, logFn = () =
                 bestGuess.fitness = result.fitness;
             }
             
-            // Yield periodically
-            if (testedCount % 100 === 0) {
+            // Yield frequently and log progress to keep UI responsive
+            if (testedCount % 50 === 0) {
+                logFn(`Progress: ${testedCount}/${totalEstimated} tested, best fitness so far: ${bestFitness < Infinity ? (1/bestFitness).toFixed(4) : 'N/A'}`);
                 await new Promise(resolve => setTimeout(resolve, 0));
             }
         }
@@ -176,6 +179,8 @@ async function findBestRectangularStart(measurements, initialGuess, logFn = () =
     const refineHeightStep = 10;
     const refineRange = 100;
     
+    let refinementCount = 0;
+    
     for (let W = bestWidth - refineRange; W <= bestWidth + refineRange; W += refineWidthStep) {
         if (W < widthMin) continue;
         
@@ -185,6 +190,7 @@ async function findBestRectangularStart(measurements, initialGuess, logFn = () =
             if (H < heightMin) continue;
             
             testedCount++;
+            refinementCount++;
             
             const yc = y0 + (d_tl * d_tl - d_bl * d_bl) / (2 * H);
             
@@ -215,6 +221,12 @@ async function findBestRectangularStart(measurements, initialGuess, logFn = () =
                 bestFitness = result.fitness;
                 bestGuess = JSON.parse(JSON.stringify(guess));
                 bestGuess.fitness = result.fitness;
+            }
+            
+            // Yield frequently during refinement
+            if (refinementCount % 20 === 0) {
+                logFn(`Refinement progress: ${refinementCount} tested`);
+                await new Promise(resolve => setTimeout(resolve, 0));
             }
         }
     }
