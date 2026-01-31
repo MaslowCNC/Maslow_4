@@ -444,43 +444,38 @@
                 ctx.stroke();
             }
             
-            // Draw parametric curves (aspect ratio lines)
-            const aspectRatios = [0.5, 0.67, 0.75, 1.0, 1.33, 1.5, 2.0, 2.5, 3.0];
+            // Draw geometric locus curve (points that satisfy distance constraints)
+            // Group points by aspect ratio to show the underlying structure
             ctx.strokeStyle = '#cbd5e0';
             ctx.lineWidth = 1;
             ctx.setLineDash([5, 5]);
             
-            aspectRatios.forEach(ar => {
+            // Sort tested points by aspect ratio to draw curves
+            const pointsByAR = {};
+            testedPoints.forEach(p => {
+                const arKey = p.aspectRatio.toFixed(2);
+                if (!pointsByAR[arKey]) pointsByAR[arKey] = [];
+                pointsByAR[arKey].push(p);
+            });
+            
+            // Draw each aspect ratio curve
+            Object.values(pointsByAR).forEach(points => {
+                if (points.length < 2) return;
+                points.sort((a, b) => a.width - b.width);
+                
                 ctx.beginPath();
                 let first = true;
-                for (let d = 500; d <= 6000; d += 100) {
-                    const h = d / Math.sqrt(ar * ar + 1);
-                    const w = ar * h;
-                    if (w >= minWidth && w <= maxWidth && h >= minHeight && h <= maxHeight) {
-                        const x = scaleX(w);
-                        const y = scaleY(h);
-                        if (first) {
-                            ctx.moveTo(x, y);
-                            first = false;
-                        } else {
-                            ctx.lineTo(x, y);
-                        }
+                points.forEach(p => {
+                    const x = scaleX(p.width);
+                    const y = scaleY(p.height);
+                    if (first) {
+                        ctx.moveTo(x, y);
+                        first = false;
+                    } else {
+                        ctx.lineTo(x, y);
                     }
-                }
+                });
                 ctx.stroke();
-                
-                // Label the curve
-                const d = (maxWidth + maxHeight) / 2;
-                const h = d / Math.sqrt(ar * ar + 1);
-                const w = ar * h;
-                if (w >= minWidth && w <= maxWidth && h >= minHeight && h <= maxHeight) {
-                    const x = scaleX(w);
-                    const y = scaleY(h);
-                    ctx.fillStyle = '#718096';
-                    ctx.font = '9px Arial';
-                    ctx.textAlign = 'center';
-                    ctx.fillText(`${ar.toFixed(2)}`, x, y - 5);
-                }
             });
             
             ctx.setLineDash([]);
@@ -583,7 +578,10 @@
                 }
                 
                 // Remove trailing comma if present (before closing bracket)
-                dataStr = dataStr.replace(/,\s*\]/, ']');
+                dataStr = dataStr.replace(/,\s*\]/g, ']');
+                
+                // Remove trailing commas after objects
+                dataStr = dataStr.replace(/,(\s*[}\]])/g, '$1');
                 
                 // Wrap in array brackets if not already present
                 if (!dataStr.trim().startsWith('[')) {
