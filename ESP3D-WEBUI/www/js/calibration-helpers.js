@@ -123,28 +123,27 @@ async function findBestRectangularStart(measurements, initialGuess, logFn = () =
             const errorSum = Math.abs(calc_d_tl - d_tl) + Math.abs(calc_d_tr - d_tr) + 
                            Math.abs(calc_d_bl - d_bl) + Math.abs(calc_d_br - d_br);
             
-            // Only evaluate if distance constraints are reasonably satisfied
-            if (errorSum < 50) { // 50mm total error tolerance
-                const testMeasurements = JSON.parse(JSON.stringify(measurements));
-                const result = computeLinesFitness(testMeasurements, guess, true);
-                
-                // Store tested point for visualization
-                if (testedPoints !== null) {
-                    testedPoints.push({
-                        width: W,
-                        height: H,
-                        aspectRatio: W / H,
-                        fitness: result.fitness,
-                        guess: JSON.parse(JSON.stringify(guess)),
-                        errorSum: errorSum
-                    });
-                }
-                
-                if (result.fitness < bestFitness) {
-                    bestFitness = result.fitness;
-                    bestGuess = JSON.parse(JSON.stringify(guess));
-                    bestGuess.fitness = result.fitness;
-                }
+            // Evaluate fitness for all points (for better coverage)
+            const testMeasurements = JSON.parse(JSON.stringify(measurements));
+            const result = computeLinesFitness(testMeasurements, guess, true);
+            
+            // Store tested point for visualization
+            if (testedPoints !== null) {
+                testedPoints.push({
+                    width: W,
+                    height: H,
+                    aspectRatio: W / H,
+                    fitness: result.fitness,
+                    guess: JSON.parse(JSON.stringify(guess)),
+                    errorSum: errorSum
+                });
+            }
+            
+            // Only consider for best solution if distance constraints are reasonably satisfied
+            if (errorSum < 200 && result.fitness < bestFitness) { // 200mm tolerance (relaxed)
+                bestFitness = result.fitness;
+                bestGuess = JSON.parse(JSON.stringify(guess));
+                bestGuess.fitness = result.fitness;
             }
             
             // Yield periodically
@@ -160,6 +159,11 @@ async function findBestRectangularStart(measurements, initialGuess, logFn = () =
     }
     
     logFn(`Tested ${testedCount} configurations on geometric locus`);
+    
+    if (testedPoints !== null) {
+        logFn(`Collected ${testedPoints.length} points for visualization`);
+    }
+    
     logFn(`Best: ${(bestGuess.tr.x - bestGuess.tl.x).toFixed(0)}mm x ${(bestGuess.tl.y - bestGuess.bl.y).toFixed(0)}mm, Fitness: ${(1/bestGuess.fitness).toFixed(4)}`);
     
     // Phase 2: Refine around best solution
