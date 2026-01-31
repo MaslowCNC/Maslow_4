@@ -88,11 +88,11 @@ async function findBestRectangularStart(measurements, initialGuess, logFn = () =
     
     const widthMin = 500;
     const widthMax = 6000;
-    const widthStep = 100;  // Increased from 50mm to 100mm for faster search
+    const widthStep = 150;  // Increased to 150mm for faster search
     
     const heightMin = 500;
     const heightMax = 6000;
-    const heightStep = 100;  // Increased from 50mm to 100mm for faster search
+    const heightStep = 150;  // Increased to 150mm for faster search
     
     const totalEstimated = Math.ceil((widthMax - widthMin) / widthStep) * Math.ceil((heightMax - heightMin) / heightStep);
     logFn(`Estimated evaluations: ${totalEstimated}`);
@@ -149,9 +149,10 @@ async function findBestRectangularStart(measurements, initialGuess, logFn = () =
             }
             
             // Yield frequently and log progress to keep UI responsive
-            if (testedCount % 50 === 0) {
+            if (testedCount % 25 === 0) {
                 logFn(`Progress: ${testedCount}/${totalEstimated} tested, best fitness so far: ${bestFitness < Infinity ? (1/bestFitness).toFixed(4) : 'N/A'}`);
-                await new Promise(resolve => setTimeout(resolve, 0));
+                // Use a small timeout to truly yield to browser rendering
+                await new Promise(resolve => setTimeout(resolve, 10));
             }
         }
     }
@@ -175,9 +176,9 @@ async function findBestRectangularStart(measurements, initialGuess, logFn = () =
     const bestWidth = bestGuess.tr.x - bestGuess.tl.x;
     const bestHeight = bestGuess.tl.y - bestGuess.bl.y;
     
-    const refineWidthStep = 10;
-    const refineHeightStep = 10;
-    const refineRange = 100;
+    const refineWidthStep = 15;
+    const refineHeightStep = 15;
+    const refineRange = 150;  // Increased to cover coarser initial grid
     
     let refinementCount = 0;
     
@@ -224,9 +225,9 @@ async function findBestRectangularStart(measurements, initialGuess, logFn = () =
             }
             
             // Yield frequently during refinement
-            if (refinementCount % 20 === 0) {
+            if (refinementCount % 10 === 0) {
                 logFn(`Refinement progress: ${refinementCount} tested`);
-                await new Promise(resolve => setTimeout(resolve, 0));
+                await new Promise(resolve => setTimeout(resolve, 10));
             }
         }
     }
