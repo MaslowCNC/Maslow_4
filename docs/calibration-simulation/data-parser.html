@@ -310,17 +310,15 @@
         </div>
     </div>
 
-    <!-- Load shared calibration computation library -->
+    <!-- Load shared calibration computation libraries -->
     <script src="../../ESP3D-WEBUI/www/js/calibration-computation.js"></script>
+    <script src="../../ESP3D-WEBUI/www/js/calibration-helpers.js"></script>
     
     <script>
         let parsedMeasurements = null;
 
-        // Z-heights for belt anchor points (used in projection calculations)
-        const tlZ = 100;
-        const trZ = 56;
-        const blZ = 34;
-        const brZ = 78;
+        // Use shared Z-heights from calibration-helpers.js
+        // tlZ, trZ, blZ, brZ are now defined in calibration-helpers.js
 
         function log(message, clear = false) {
             const output = document.getElementById('output');
@@ -338,122 +336,8 @@
             statusEl.className = `status-message ${type}`;
         }
 
-        /**
-         * Projects a single measurement to the plane of the machine
-         * @param {Object} measurement - Measurement object with tl, tr, bl, br
-         * @returns {Object} - Projected measurements
-         */
-        function projectMeasurement(measurement) {
-            const tl = Math.sqrt(Math.pow(measurement.tl, 2) - Math.pow(tlZ, 2));
-            const tr = Math.sqrt(Math.pow(measurement.tr, 2) - Math.pow(trZ, 2));
-            const bl = Math.sqrt(Math.pow(measurement.bl, 2) - Math.pow(blZ, 2));
-            const br = Math.sqrt(Math.pow(measurement.br, 2) - Math.pow(brZ, 2));
-            return { tl: tl, tr: tr, bl: bl, br: br };
-        }
-
-        /**
-         * Projects array of measurements
-         * @param {Object[]} measurements - Array of measurements
-         * @returns {Object[]} - Array of projected measurements
-         */
-        function projectMeasurements(measurements) {
-            return measurements.map(m => projectMeasurement(m));
-        }
-
-        /**
-         * Searches for best rectangular starting configuration
-         * NEW: Direct 2D grid search over frame dimensions
-         */
-        async function findBestRectangularStart(measurements) {
-            log('Computing anchor positions using direct grid search...');
-            log(`Evaluating against ${measurements.length} measurements`);
-            
-            let bestGuess = null;
-            let bestFitness = Infinity;
-            let testedCount = 0;
-            
-            // Search range based on typical Maslow dimensions
-            const minDim = 500;
-            const maxDim = 4500;
-            const coarseStep = 100;
-            
-            // Estimate workspace center from initial guess
-            const centerX = (initialGuess.tl.x + initialGuess.tr.x) / 2;
-            const centerY = (initialGuess.tl.y + initialGuess.bl.y) / 2;
-            
-            log('Phase 1: Coarse grid search (100mm steps)...');
-            
-            // Phase 1: Coarse search
-            for (let width = minDim; width <= maxDim; width += coarseStep) {
-                for (let height = minDim; height <= maxDim; height += coarseStep) {
-                    testedCount++;
-                    
-                    const guess = {
-                        tl: { x: centerX - width/2, y: centerY + height/2 },
-                        tr: { x: centerX + width/2, y: centerY + height/2 },
-                        bl: { x: centerX - width/2, y: centerY - height/2 },
-                        br: { x: centerX + width/2, y: centerY - height/2 },
-                        fitness: 0
-                    };
-                    
-                    const testMeasurements = JSON.parse(JSON.stringify(measurements));
-                    const result = computeLinesFitness(testMeasurements, guess, true);
-                    
-                    if (result.fitness < bestFitness) {
-                        bestFitness = result.fitness;
-                        bestGuess = JSON.parse(JSON.stringify(guess));
-                        bestGuess.fitness = result.fitness;
-                    }
-                    
-                    // Yield periodically
-                    if (testedCount % 50 === 0) {
-                        await new Promise(resolve => setTimeout(resolve, 0));
-                    }
-                }
-            }
-            
-            log(`Tested ${testedCount} configurations in coarse search`);
-            log(`Best: ${(bestGuess.tr.x - bestGuess.tl.x).toFixed(0)}mm x ${(bestGuess.tl.y - bestGuess.bl.y).toFixed(0)}mm, Fitness: ${(1/bestGuess.fitness).toFixed(4)}`);
-            
-            // Phase 2: Refine around best solution
-            log('Phase 2: Refining best solution (25mm steps)...');
-            
-            const bestWidth = bestGuess.tr.x - bestGuess.tl.x;
-            const bestHeight = bestGuess.tl.y - bestGuess.bl.y;
-            const refineStep = 25;
-            const refineRange = 150;
-            
-            for (let width = bestWidth - refineRange; width <= bestWidth + refineRange; width += refineStep) {
-                for (let height = bestHeight - refineRange; height <= bestHeight + refineRange; height += refineStep) {
-                    if (width < minDim || height < minDim) continue;
-                    
-                    testedCount++;
-                    
-                    const guess = {
-                        tl: { x: centerX - width/2, y: centerY + height/2 },
-                        tr: { x: centerX + width/2, y: centerY + height/2 },
-                        bl: { x: centerX - width/2, y: centerY - height/2 },
-                        br: { x: centerX + width/2, y: centerY - height/2 },
-                        fitness: 0
-                    };
-                    
-                    const testMeasurements = JSON.parse(JSON.stringify(measurements));
-                    const result = computeLinesFitness(testMeasurements, guess, true);
-                    
-                    if (result.fitness < bestFitness) {
-                        bestFitness = result.fitness;
-                        bestGuess = JSON.parse(JSON.stringify(guess));
-                        bestGuess.fitness = result.fitness;
-                    }
-                }
-            }
-            
-            log(`Total configurations tested: ${testedCount}`);
-            log(`Final solution: ${(bestGuess.tr.x - bestGuess.tl.x).toFixed(1)}mm x ${(bestGuess.tl.y - bestGuess.bl.y).toFixed(1)}mm`);
-            log(`Fitness: ${(1/bestGuess.fitness).toFixed(4)}`);
-            
-            return bestGuess;
-        }
+        // projectMeasurement, projectMeasurements, and findBestRectangularStart
+        // are now loaded from calibration-helpers.js
 
         function parseCalibrationData() {
             const input = document.getElementById('calibration-input').value.trim();
@@ -587,7 +471,7 @@
                         log(`Frame is nearly square (aspect ratio ${aspectRatio.toFixed(2)}:1), running rectangular optimization to find better dimensions.`);
                     }
                     
-                    startingGuess = await findBestRectangularStart(projectedMeasurements);
+                    startingGuess = await findBestRectangularStart(projectedMeasurements, initialGuess, log);
                     
                     // Update the input fields with computed values
                     document.getElementById('tlx-input').value = startingGuess.tl.x.toFixed(1);

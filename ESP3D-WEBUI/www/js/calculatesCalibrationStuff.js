@@ -75,34 +75,7 @@ function calculateAverage(array) {
   return total / count;
 }
 
-/**
- * Projects the measurements to the plane of the machine
- * @param {Object} measurement - Measurement object
- * @returns {Object} - Projected measurements
- */
-function projectMeasurement(measurement) {
-  const tl = Math.sqrt(Math.pow(measurement.tl, 2) - Math.pow(tlZ, 2))
-  const tr = Math.sqrt(Math.pow(measurement.tr, 2) - Math.pow(trZ, 2))
-  const bl = Math.sqrt(Math.pow(measurement.bl, 2) - Math.pow(blZ, 2))
-  const br = Math.sqrt(Math.pow(measurement.br, 2) - Math.pow(brZ, 2))
-
-  return { tl: tl, tr: tr, bl: bl, br: br }
-}
-
-/**
- * Projects array of measurements
- * @param {Object[]} measurements - Array of measurements
- * @returns {Object[]} - Array of projected measurements
- */
-function projectMeasurements(measurements) {
-  var projectedMeasurements = []
-
-  measurements.forEach((measurement) => {
-    projectedMeasurements.push(projectMeasurement(measurement))
-  })
-
-  return projectedMeasurements
-}
+// projectMeasurement and projectMeasurements are now in calibration-helpers.js
 
 /**
  * Adds offset to measurements
@@ -178,108 +151,19 @@ function scaleMeasurementsBasedOnTension(measurements, guess) {
 
 /**
  * Searches for best rectangular starting configuration
- * NEW: Direct grid search over frame dimensions without assuming
- * solutions lie on diagonal or circular arc
+ * Wrapper around shared findBestRectangularStart that adds UI logging
  */
-async function findBestRectangularStart(measurements) {
+async function findBestRectangularStartWithUI(measurements) {
   const messagesBox = document.getElementById('messages');
-  messagesBox.textContent += "Computing anchor positions using direct grid search...\n";
-  messagesBox.scrollTop = messagesBox.scrollHeight;
-
-  messagesBox.textContent += `Evaluating against ${measurements.length} measurements\n`;
-  messagesBox.scrollTop = messagesBox.scrollHeight;
   
-  let bestGuess = null;
-  let bestFitness = Infinity;
-  let testedCount = 0;
+  // Create logging function that writes to messages box
+  const logFn = (message) => {
+    messagesBox.textContent += message + "\n";
+    messagesBox.scrollTop = messagesBox.scrollHeight;
+  };
   
-  // Search range based on typical Maslow dimensions
-  const minDim = 500;
-  const maxDim = 4500;
-  const coarseStep = 100;  // Faster than old ternary search
-  
-  // Estimate workspace center from initial guess
-  const centerX = (initialGuess.tl.x + initialGuess.tr.x) / 2;
-  const centerY = (initialGuess.tl.y + initialGuess.bl.y) / 2;
-  
-  messagesBox.textContent += "Phase 1: Coarse grid search (100mm steps)...\n";
-  messagesBox.scrollTop = messagesBox.scrollHeight;
-  
-  // Phase 1: Coarse search
-  for (let width = minDim; width <= maxDim; width += coarseStep) {
-    for (let height = minDim; height <= maxDim; height += coarseStep) {
-      testedCount++;
-      
-      const guess = {
-        tl: { x: centerX - width/2, y: centerY + height/2 },
-        tr: { x: centerX + width/2, y: centerY + height/2 },
-        bl: { x: centerX - width/2, y: centerY - height/2 },
-        br: { x: centerX + width/2, y: centerY - height/2 },
-        fitness: 0
-      };
-      
-      // Evaluate fitness using magnetic lines approach
-      const testMeasurements = JSON.parse(JSON.stringify(measurements));
-      const result = computeLinesFitness(testMeasurements, guess, true);
-      
-      if (result.fitness < bestFitness) {
-        bestFitness = result.fitness;
-        bestGuess = JSON.parse(JSON.stringify(guess));
-        bestGuess.fitness = result.fitness;
-      }
-      
-      // Yield periodically
-      if (testedCount % 50 === 0) {
-        await new Promise(resolve => setTimeout(resolve, 0));
-      }
-    }
-  }
-  
-  messagesBox.textContent += `Tested ${testedCount} configurations in coarse search\n`;
-  messagesBox.textContent += `Best: ${(bestGuess.tr.x - bestGuess.tl.x).toFixed(0)}mm x ${(bestGuess.tl.y - bestGuess.bl.y).toFixed(0)}mm, Fitness: ${(1/bestGuess.fitness).toFixed(4)}\n`;
-  messagesBox.scrollTop = messagesBox.scrollHeight;
-  
-  // Phase 2: Refine around best solution
-  messagesBox.textContent += "Phase 2: Refining best solution (25mm steps)...\n";
-  messagesBox.scrollTop = messagesBox.scrollHeight;
-  
-  const bestWidth = bestGuess.tr.x - bestGuess.tl.x;
-  const bestHeight = bestGuess.tl.y - bestGuess.bl.y;
-  const refineStep = 25;
-  const refineRange = 150;
-  
-  for (let width = bestWidth - refineRange; width <= bestWidth + refineRange; width += refineStep) {
-    for (let height = bestHeight - refineRange; height <= bestHeight + refineRange; height += refineStep) {
-      if (width < minDim || height < minDim) continue;
-      
-      testedCount++;
-      
-      const guess = {
-        tl: { x: centerX - width/2, y: centerY + height/2 },
-        tr: { x: centerX + width/2, y: centerY + height/2 },
-        bl: { x: centerX - width/2, y: centerY - height/2 },
-        br: { x: centerX + width/2, y: centerY - height/2 },
-        fitness: 0
-      };
-      
-      const testMeasurements = JSON.parse(JSON.stringify(measurements));
-      const result = computeLinesFitness(testMeasurements, guess, true);
-      
-      if (result.fitness < bestFitness) {
-        bestFitness = result.fitness;
-        bestGuess = JSON.parse(JSON.stringify(guess));
-        bestGuess.fitness = result.fitness;
-      }
-    }
-  }
-  
-  messagesBox.textContent += `Total configurations tested: ${testedCount}\n`;
-  messagesBox.textContent += `Final solution: ${(bestGuess.tr.x - bestGuess.tl.x).toFixed(1)}mm x ${(bestGuess.tl.y - bestGuess.bl.y).toFixed(1)}mm\n`;
-  messagesBox.textContent += `Fitness: ${(1/bestGuess.fitness).toFixed(4)}\n`;
-  messagesBox.textContent += "Starting optimization...\n";
-  messagesBox.scrollTop = messagesBox.scrollHeight;
-  
-  return bestGuess;
+  // Call shared function with UI logging
+  return await findBestRectangularStart(measurements, initialGuess, logFn);
 }
 
 /**
@@ -316,7 +200,7 @@ async function findMaxFitness(measurements) {
     }
     messagesBox.scrollTop = messagesBox.scrollHeight;
 
-    startingGuess = await findBestRectangularStart(projectedMeasurements);
+    startingGuess = await findBestRectangularStartWithUI(projectedMeasurements);
   } else {
     messagesBox.textContent += "Initial fitness >= 0.1 and frame is not square, skipping rectangular optimization and using initial guess directly.\n";
     messagesBox.scrollTop = messagesBox.scrollHeight;
