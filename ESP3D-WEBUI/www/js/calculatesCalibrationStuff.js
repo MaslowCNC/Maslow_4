@@ -178,163 +178,75 @@ function scaleMeasurementsBasedOnTension(measurements, guess) {
 
 /**
  * Searches for best rectangular starting configuration
- * This is a UI-specific helper function for the optimization
+ * NEW: Uses direct anchor point computation from first measurement
+ * instead of diagonal+arc ternary search
  */
 async function findBestRectangularStart(measurements) {
   const messagesBox = document.getElementById('messages');
-  messagesBox.textContent += "Searching for best rectangular starting configuration...\n";
-  messagesBox.textContent += "Phase 1: Finding optimal radius along diagonal using ternary search...\n";
+  messagesBox.textContent += "Computing anchor positions using direct geometric method...\n";
   messagesBox.scrollTop = messagesBox.scrollHeight;
 
-  // Deep copy measurements
-  const measurementsCopy = JSON.parse(JSON.stringify(measurements));
-
-  // PHASE 1: Ternary search for optimal diagonal size
-  let diagonalBestFitness = Infinity;
-  let diagonalBestSize = 0;
-  let diagonalResults = [];
-  let phase1TestCount = 0;
-
-  async function evaluateDiagonalSize(size) {
-    const testMeasurements = JSON.parse(JSON.stringify(measurementsCopy));
-    const guess = {
-      tl: { x: 0, y: size },
-      tr: { x: size, y: size },
-      bl: { x: 0, y: 0 },
-      br: { x: size, y: 0 },
-      fitness: 0
-    };
-
-    const result = computeLinesFitness(testMeasurements, guess, true);
-    const fitnessValue = 1 / result.fitness;
-    diagonalResults.push({ size, fitness: fitnessValue, rawFitness: result.fitness });
-    phase1TestCount++;
-
-    console.log(`[Diagonal Test #${phase1TestCount}] Size: ${size}mm, Raw Fitness: ${result.fitness.toFixed(6)}, Display Fitness (1/raw): ${fitnessValue.toFixed(4)}`);
-
-    return { fitness: result.fitness, size: size };
-  }
-
-  // Ternary search for optimal diagonal size (100 to 5000mm range)
-  let leftSize = 100;
-  let rightSize = 5000;
-  const epsilon = 50; // Stop when range is less than 50mm
-
-  while ((rightSize - leftSize) > epsilon) {
-    const mid1 = leftSize + (rightSize - leftSize) / 3;
-    const mid2 = rightSize - (rightSize - leftSize) / 3;
-
-    const result1 = await evaluateDiagonalSize(mid1);
-    const result2 = await evaluateDiagonalSize(mid2);
-
-    if (result1.fitness < result2.fitness) {
-      rightSize = mid2;
-      if (result1.fitness < diagonalBestFitness) {
-        diagonalBestFitness = result1.fitness;
-        diagonalBestSize = mid1;
-      }
-    } else {
-      leftSize = mid1;
-      if (result2.fitness < diagonalBestFitness) {
-        diagonalBestFitness = result2.fitness;
-        diagonalBestSize = mid2;
-      }
-    }
-
-    await new Promise(resolve => setTimeout(resolve, 0));
-  }
-
-  const optimalRadius = diagonalBestSize;
-  messagesBox.textContent += `Phase 1 complete: Optimal radius found at ${diagonalBestSize}mm using ${phase1TestCount} evaluations\n`;
+  // Use the first measurement to directly compute anchor positions
+  const firstMeasurement = measurements[0];
+  
+  // Assume the reference point is roughly at the center of the workspace
+  // We need to estimate this from the initial guess
+  const estimatedCenterX = (initialGuess.tl.x + initialGuess.tr.x) / 2;
+  const estimatedCenterY = (initialGuess.tl.y + initialGuess.bl.y) / 2;
+  const referencePoint = { x: estimatedCenterX, y: estimatedCenterY };
+  
+  messagesBox.textContent += `Reference point estimate: (${estimatedCenterX.toFixed(1)}, ${estimatedCenterY.toFixed(1)})\n`;
+  messagesBox.textContent += `First measurement distances: TL=${firstMeasurement.tl.toFixed(1)}, TR=${firstMeasurement.tr.toFixed(1)}, BL=${firstMeasurement.bl.toFixed(1)}, BR=${firstMeasurement.br.toFixed(1)}\n`;
   messagesBox.scrollTop = messagesBox.scrollHeight;
-
-  // PHASE 2: Search for best aspect ratio on arc at optimal radius
-  messagesBox.textContent += `Phase 2: Finding best aspect ratio on arc at ${optimalRadius.toFixed(0)}mm radius...\n`;
+  
+  messagesBox.textContent += "Phase 1: Coarse search (50mm steps)...\n";
   messagesBox.scrollTop = messagesBox.scrollHeight;
-
-  let bestGuess = null;
-  let bestFitnessOverall = Infinity;
-  let phase2TestCount = 0;
-  let testedPoints = [];
-
-  async function evaluateFitnessAtAngle(angleRad) {
-    const testMeasurements = JSON.parse(JSON.stringify(measurementsCopy));
-    const width = optimalRadius * Math.cos(angleRad);
-    const height = optimalRadius * Math.sin(angleRad);
-
-    const guess = {
-      tl: { x: 0, y: height },
-      tr: { x: width, y: height },
-      bl: { x: 0, y: 0 },
-      br: { x: width, y: 0 },
-      fitness: 0
-    };
-
-    const result = computeLinesFitness(testMeasurements, guess, true);
-    const fitnessValue = 1 / result.fitness;
-    phase2TestCount++;
-
-    testedPoints.push({
-      width: width,
-      height: height,
-      angle: angleRad,
-      fitness: result.fitness,
-      displayFitness: fitnessValue
-    });
-
-    console.log(`[Phase 2 Test #${phase2TestCount}] Angle: ${(angleRad * 180 / Math.PI).toFixed(1)}°, Width: ${width.toFixed(1)}mm, Height: ${height.toFixed(1)}mm, Fitness: ${fitnessValue.toFixed(4)}`);
-
-    return { fitness: result.fitness, width: width, height: height, angle: angleRad };
+  
+  // Phase 1: Coarse search
+  const coarseSolutions = findRectangularSolutionsFromDistances(referencePoint, firstMeasurement);
+  
+  if (coarseSolutions.length === 0) {
+    messagesBox.textContent += "❌ No valid solutions found! Falling back to initial guess.\n";
+    messagesBox.scrollTop = messagesBox.scrollHeight;
+    return initialGuess;
   }
-
-  // Ternary search on angle (from 0 to π/2)
-  let leftAngle = 0.1; // Avoid exactly 0 or π/2
-  let rightAngle = Math.PI / 2 - 0.1;
-  const angleEpsilon = 0.01; // ~0.57 degrees
-
-  while ((rightAngle - leftAngle) > angleEpsilon) {
-    const mid1 = leftAngle + (rightAngle - leftAngle) / 3;
-    const mid2 = rightAngle - (rightAngle - leftAngle) / 3;
-
-    const result1 = await evaluateFitnessAtAngle(mid1);
-    const result2 = await evaluateFitnessAtAngle(mid2);
-
-    if (result1.fitness < result2.fitness) {
-      rightAngle = mid2;
-      if (result1.fitness < bestFitnessOverall) {
-        bestFitnessOverall = result1.fitness;
-        bestGuess = {
-          tl: { x: 0, y: result1.height },
-          tr: { x: result1.width, y: result1.height },
-          bl: { x: 0, y: 0 },
-          br: { x: result1.width, y: 0 },
-          fitness: result1.fitness
-        };
-      }
-    } else {
-      leftAngle = mid1;
-      if (result2.fitness < bestFitnessOverall) {
-        bestFitnessOverall = result2.fitness;
-        bestGuess = {
-          tl: { x: 0, y: result2.height },
-          tr: { x: result2.width, y: result2.height },
-          bl: { x: 0, y: 0 },
-          br: { x: result2.width, y: 0 },
-          fitness: result2.fitness
-        };
-      }
-    }
-
-    await new Promise(resolve => setTimeout(resolve, 0));
-  }
-
-  const testedCount = phase1TestCount + phase2TestCount;
-  messagesBox.textContent += `Search complete! Tested ${testedCount} points using ternary search.\n`;
-  messagesBox.textContent += `Best rectangular start: Width: ${bestGuess.tr.x.toFixed(1)}mm, Height: ${bestGuess.tr.y.toFixed(1)}mm, Fitness: ${(1 / bestGuess.fitness).toFixed(4)}\n`;
+  
+  messagesBox.textContent += `Found ${coarseSolutions.length} potential configurations\n`;
+  messagesBox.textContent += `Best coarse solution: Width=${coarseSolutions[0].width.toFixed(1)}mm, Height=${coarseSolutions[0].height.toFixed(1)}mm, Error=${coarseSolutions[0].error.toFixed(3)}mm\n`;
+  messagesBox.scrollTop = messagesBox.scrollHeight;
+  
+  // Yield to UI
+  await new Promise(resolve => setTimeout(resolve, 0));
+  
+  messagesBox.textContent += "Phase 2: Refining solution (1mm steps)...\n";
+  messagesBox.scrollTop = messagesBox.scrollHeight;
+  
+  // Phase 2: Refine the best solution
+  const refinedSolution = refineSolution(
+    referencePoint, 
+    firstMeasurement, 
+    coarseSolutions[0],
+    100,  // Search within ±100mm
+    1     // 1mm step size
+  );
+  
+  messagesBox.textContent += `Refined solution: Width=${refinedSolution.width.toFixed(1)}mm, Height=${refinedSolution.height.toFixed(1)}mm\n`;
+  messagesBox.textContent += `Final error: ${refinedSolution.error.toFixed(3)}mm\n`;
+  messagesBox.textContent += `TL: (${refinedSolution.tl.x.toFixed(1)}, ${refinedSolution.tl.y.toFixed(1)})\n`;
+  messagesBox.textContent += `TR: (${refinedSolution.tr.x.toFixed(1)}, ${refinedSolution.tr.y.toFixed(1)})\n`;
+  messagesBox.textContent += `BL: (${refinedSolution.bl.x.toFixed(1)}, ${refinedSolution.bl.y.toFixed(1)})\n`;
+  messagesBox.textContent += `BR: (${refinedSolution.br.x.toFixed(1)}, ${refinedSolution.br.y.toFixed(1)})\n`;
   messagesBox.textContent += "Starting optimization...\n";
   messagesBox.scrollTop = messagesBox.scrollHeight;
-
-  return bestGuess;
+  
+  // Convert to expected format
+  return {
+    tl: refinedSolution.tl,
+    tr: refinedSolution.tr,
+    bl: refinedSolution.bl,
+    br: refinedSolution.br,
+    fitness: refinedSolution.error < 1 ? 100000000 : 1 / refinedSolution.error
+  };
 }
 
 /**

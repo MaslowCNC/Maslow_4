@@ -22,6 +22,203 @@ function distanceBetweenPoints(a, b, c, d) {
 }
 
 /**
+ * NEW: Direct anchor point computation using geometric constraints.
+ * This replaces the diagonal+arc ternary search with a more accurate method.
+ * 
+ * Given a reference point and distances to four anchors, directly compute
+ * the anchor positions that form a valid rectangle.
+ */
+
+/**
+ * Finds rectangular anchor configurations from distance measurements.
+ * 
+ * For a rectangle with corners TL(x1,y2), TR(x2,y2), BL(x1,y1), BR(x2,y1)
+ * and reference point P0(x0,y0) with distances d_TL, d_TR, d_BL, d_BR:
+ * 
+ * We derive:
+ *   d_TL² - d_TR² = 2*W*(xc - x0)  where W = x2-x1, xc = (x1+x2)/2
+ *   d_TL² - d_BL² = 2*H*(yc - y0)  where H = y2-y1, yc = (y1+y2)/2
+ * 
+ * This allows direct computation of center position for any (W,H).
+ */
+function findRectangularSolutionsFromDistances(p0, distances) {
+    const solutions = [];
+    const { x: x0, y: y0 } = p0;
+    const { tl: d_tl, tr: d_tr, bl: d_bl, br: d_br } = distances;
+    
+    const d_tl_sq = d_tl * d_tl;
+    const d_tr_sq = d_tr * d_tr;
+    const d_bl_sq = d_bl * d_bl;
+    const d_br_sq = d_br * d_br;
+    
+    // Derived constraints from distance equations
+    const delta_x_top = d_tl_sq - d_tr_sq;    // = 2*W*(xc - x0)
+    const delta_x_bot = d_bl_sq - d_br_sq;    // = 2*W*(xc - x0) (should be equal)
+    const delta_y_left = d_tl_sq - d_bl_sq;   // = 2*H*(yc - y0)
+    const delta_y_right = d_tr_sq - d_br_sq;  // = 2*H*(yc - y0) (should be equal)
+    
+    // Sanity check: consistency of measurements
+    const x_consistency = Math.abs(delta_x_top - delta_x_bot);
+    const y_consistency = Math.abs(delta_y_left - delta_y_right);
+    
+    if (x_consistency > 10 || y_consistency > 10) {
+        console.warn('Distance measurements may be inconsistent', {x_consistency, y_consistency});
+    }
+    
+    // Search for solutions by testing different width and height combinations
+    const minDim = 100;
+    const maxDim = 5000;
+    const step = 50;
+    
+    for (let W = minDim; W <= maxDim; W += step) {
+        for (let H = minDim; H <= maxDim; H += step) {
+            // Solve for center position from geometric constraints
+            const xc = (delta_x_top / (2 * W)) + x0;
+            const yc = (delta_y_left / (2 * H)) + y0;
+            
+            // Compute anchor positions
+            const x1 = xc - W / 2;
+            const x2 = xc + W / 2;
+            const y1 = yc - H / 2;
+            const y2 = yc + H / 2;
+            
+            const tl = { x: x1, y: y2 };
+            const tr = { x: x2, y: y2 };
+            const bl = { x: x1, y: y1 };
+            const br = { x: x2, y: y1 };
+            
+            // Verify: compute distances and check error
+            const calc_d_tl = Math.sqrt((x0 - x1) ** 2 + (y0 - y2) ** 2);
+            const calc_d_tr = Math.sqrt((x0 - x2) ** 2 + (y0 - y2) ** 2);
+            const calc_d_bl = Math.sqrt((x0 - x1) ** 2 + (y0 - y1) ** 2);
+            const calc_d_br = Math.sqrt((x0 - x2) ** 2 + (y0 - y1) ** 2);
+            
+            const error_tl = Math.abs(calc_d_tl - d_tl);
+            const error_tr = Math.abs(calc_d_tr - d_tr);
+            const error_bl = Math.abs(calc_d_bl - d_bl);
+            const error_br = Math.abs(calc_d_br - d_br);
+            const totalError = error_tl + error_tr + error_bl + error_br;
+            
+            // Only keep solutions with low error
+            if (totalError < 10) {
+                const fitness = 1 / (totalError + 0.01);
+                
+                solutions.push({
+                    tl, tr, bl, br,
+                    width: W,
+                    height: H,
+                    center: { x: xc, y: yc },
+                    error: totalError,
+                    fitness: fitness
+                });
+            }
+        }
+    }
+    
+    // Sort by fitness (best first)
+    solutions.sort((a, b) => b.fitness - a.fitness);
+    
+    return solutions;
+}
+
+/**
+ * Refines a coarse solution with finer step size.
+ */
+function refineSolution(p0, distances, coarseSolution, searchRange = 100, step = 1) {
+    const { x: x0, y: y0 } = p0;
+    const { tl: d_tl, tr: d_tr, bl: d_bl, br: d_br } = distances;
+    const { width: W0, height: H0 } = coarseSolution;
+    
+    let bestSolution = coarseSolution;
+    let bestError = coarseSolution.error;
+    
+    const d_tl_sq = d_tl * d_tl;
+    const d_tr_sq = d_tr * d_tr;
+    const d_bl_sq = d_bl * d_bl;
+    const delta_x_top = d_tl_sq - d_tr_sq;
+    const delta_y_left = d_tl_sq - d_bl_sq;
+    
+    for (let W = W0 - searchRange; W <= W0 + searchRange; W += step) {
+        for (let H = H0 - searchRange; H <= H0 + searchRange; H += step) {
+            if (W <= 0 || H <= 0) continue;
+            
+            const xc = (delta_x_top / (2 * W)) + x0;
+            const yc = (delta_y_left / (2 * H)) + y0;
+            
+            const x1 = xc - W / 2;
+            const x2 = xc + W / 2;
+            const y1 = yc - H / 2;
+            const y2 = yc + H / 2;
+            
+            const calc_d_tl = Math.sqrt((x0 - x1) ** 2 + (y0 - y2) ** 2);
+            const calc_d_tr = Math.sqrt((x0 - x2) ** 2 + (y0 - y2) ** 2);
+            const calc_d_bl = Math.sqrt((x0 - x1) ** 2 + (y0 - y1) ** 2);
+            const calc_d_br = Math.sqrt((x0 - x2) ** 2 + (y0 - y1) ** 2);
+            
+            const totalError = Math.abs(calc_d_tl - d_tl) + 
+                             Math.abs(calc_d_tr - d_tr) +
+                             Math.abs(calc_d_bl - d_bl) + 
+                             Math.abs(calc_d_br - d_br);
+            
+            if (totalError < bestError) {
+                bestError = totalError;
+                bestSolution = {
+                    tl: { x: x1, y: y2 },
+                    tr: { x: x2, y: y2 },
+                    bl: { x: x1, y: y1 },
+                    br: { x: x2, y: y1 },
+                    width: W,
+                    height: H,
+                    center: { x: xc, y: yc },
+                    error: totalError,
+                    fitness: 1 / (totalError + 0.01)
+                };
+            }
+        }
+    }
+    
+    return bestSolution;
+}
+
+/**
+ * Main function to compute anchor positions from first measurement.
+ * Replaces the diagonal+arc ternary search with direct geometric computation.
+ */
+function computeAnchorsFromFirstMeasurement(firstMeasurement, referencePoint) {
+    console.log('Computing anchor positions using direct geometric method...');
+    
+    // Phase 1: Coarse search (50mm steps)
+    const coarseSolutions = findRectangularSolutionsFromDistances(referencePoint, firstMeasurement);
+    
+    if (coarseSolutions.length === 0) {
+        console.error('No valid solutions found in coarse search');
+        return null;
+    }
+    
+    console.log(`Found ${coarseSolutions.length} coarse solutions, refining best one...`);
+    
+    // Phase 2: Refine the best solution (1mm steps)
+    const refinedSolution = refineSolution(
+        referencePoint, 
+        firstMeasurement, 
+        coarseSolutions[0],
+        100,  // Search within ±100mm
+        1     // 1mm step size
+    );
+    
+    console.log('Refined solution error:', refinedSolution.error.toFixed(3), 'mm');
+    
+    // Convert to expected format
+    return {
+        tl: refinedSolution.tl,
+        tr: refinedSolution.tr,
+        bl: refinedSolution.bl,
+        br: refinedSolution.br,
+        fitness: refinedSolution.error < 1 ? 100000000 : 1 / refinedSolution.error
+    };
+}
+
+/**
  * Computes the end point of a line based on its starting point, angle, and length.
  */
 function getEndPoint(startX, startY, angle, length) {
@@ -362,6 +559,10 @@ if (typeof module !== 'undefined' && module.exports) {
         computeLineEndPoint,
         walkLines,
         computeDistanceFromCenterOfMass,
-        generateTweaks
+        generateTweaks,
+        // New anchor point solver functions
+        findRectangularSolutionsFromDistances,
+        refineSolution,
+        computeAnchorsFromFirstMeasurement
     };
 }
