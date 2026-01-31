@@ -44,36 +44,51 @@ function projectMeasurements(measurements) {
 
 /**
  * Searches for best rectangular starting configuration
- * Direct 2D grid search over frame dimensions
+ * Uses parametric curve sampling in (W, H) space along aspect ratios
  * 
  * @param {Object[]} measurements - Array of projected measurements
  * @param {Object} initialGuess - Initial guess for anchor positions
  * @param {Function} logFn - Optional logging function
+ * @param {Array} testedPoints - Optional array to collect tested points for visualization
  * @returns {Promise<Object>} - Best guess configuration
  */
-async function findBestRectangularStart(measurements, initialGuess, logFn = () => {}) {
-    logFn('Computing anchor positions using direct grid search...');
+async function findBestRectangularStart(measurements, initialGuess, logFn = () => {}, testedPoints = null) {
+    logFn('Computing anchor positions using parametric curve search...');
     logFn(`Evaluating against ${measurements.length} measurements`);
     
     let bestGuess = null;
     let bestFitness = Infinity;
     let testedCount = 0;
     
-    // Search range based on typical Maslow dimensions
-    const minDim = 500;
-    const maxDim = 4500;
-    const coarseStep = 100;
-    
     // Estimate workspace center from initial guess
     const centerX = (initialGuess.tl.x + initialGuess.tr.x) / 2;
     const centerY = (initialGuess.tl.y + initialGuess.bl.y) / 2;
     
-    logFn('Phase 1: Coarse grid search (100mm steps)...');
+    logFn('Phase 1: Sampling along parametric curves (aspect ratios and diagonals)...');
     
-    // Phase 1: Coarse search
-    for (let width = minDim; width <= maxDim; width += coarseStep) {
-        for (let height = minDim; height <= maxDim; height += coarseStep) {
+    // Sample along different aspect ratios (width/height)
+    const aspectRatios = [0.5, 0.67, 0.75, 1.0, 1.33, 1.5, 2.0, 2.5, 3.0];
+    const diagonals = []; // Will sample from 500 to 6000mm
+    
+    for (let d = 500; d <= 6000; d += 100) {
+        diagonals.push(d);
+    }
+    
+    // Phase 1: Sample along each aspect ratio curve
+    for (const aspectRatio of aspectRatios) {
+        for (const diagonal of diagonals) {
             testedCount++;
+            
+            // For a rectangle with aspect ratio AR = W/H and diagonal D:
+            // W² + H² = D²
+            // W = AR * H
+            // (AR * H)² + H² = D²
+            // H² * (AR² + 1) = D²
+            // H = D / sqrt(AR² + 1)
+            // W = AR * H
+            
+            const height = diagonal / Math.sqrt(aspectRatio * aspectRatio + 1);
+            const width = aspectRatio * height;
             
             const guess = {
                 tl: { x: centerX - width/2, y: centerY + height/2 },
@@ -85,6 +100,18 @@ async function findBestRectangularStart(measurements, initialGuess, logFn = () =
             
             const testMeasurements = JSON.parse(JSON.stringify(measurements));
             const result = computeLinesFitness(testMeasurements, guess, true);
+            
+            // Store tested point for visualization
+            if (testedPoints !== null) {
+                testedPoints.push({
+                    width: width,
+                    height: height,
+                    aspectRatio: aspectRatio,
+                    diagonal: diagonal,
+                    fitness: result.fitness,
+                    guess: JSON.parse(JSON.stringify(guess))
+                });
+            }
             
             if (result.fitness < bestFitness) {
                 bestFitness = result.fitness;
@@ -99,22 +126,34 @@ async function findBestRectangularStart(measurements, initialGuess, logFn = () =
         }
     }
     
-    logFn(`Tested ${testedCount} configurations in coarse search`);
+    logFn(`Tested ${testedCount} configurations along parametric curves`);
     logFn(`Best: ${(bestGuess.tr.x - bestGuess.tl.x).toFixed(0)}mm x ${(bestGuess.tl.y - bestGuess.bl.y).toFixed(0)}mm, Fitness: ${(1/bestGuess.fitness).toFixed(4)}`);
     
-    // Phase 2: Refine around best solution
-    logFn('Phase 2: Refining best solution (25mm steps)...');
+    // Phase 2: Refine around best solution with local sampling
+    logFn('Phase 2: Refining best solution (local sampling)...');
     
     const bestWidth = bestGuess.tr.x - bestGuess.tl.x;
     const bestHeight = bestGuess.tl.y - bestGuess.bl.y;
-    const refineStep = 25;
-    const refineRange = 150;
+    const bestAspectRatio = bestWidth / bestHeight;
     
-    for (let width = bestWidth - refineRange; width <= bestWidth + refineRange; width += refineStep) {
-        for (let height = bestHeight - refineRange; height <= bestHeight + refineRange; height += refineStep) {
-            if (width < minDim || height < minDim) continue;
-            
+    // Sample around the best aspect ratio
+    const refineAspectRatios = [];
+    for (let ar = bestAspectRatio - 0.3; ar <= bestAspectRatio + 0.3; ar += 0.05) {
+        if (ar > 0.1) refineAspectRatios.push(ar);
+    }
+    
+    const bestDiagonal = Math.sqrt(bestWidth * bestWidth + bestHeight * bestHeight);
+    const refineDiagonals = [];
+    for (let d = bestDiagonal - 300; d <= bestDiagonal + 300; d += 25) {
+        if (d > 0) refineDiagonals.push(d);
+    }
+    
+    for (const aspectRatio of refineAspectRatios) {
+        for (const diagonal of refineDiagonals) {
             testedCount++;
+            
+            const height = diagonal / Math.sqrt(aspectRatio * aspectRatio + 1);
+            const width = aspectRatio * height;
             
             const guess = {
                 tl: { x: centerX - width/2, y: centerY + height/2 },
@@ -126,6 +165,19 @@ async function findBestRectangularStart(measurements, initialGuess, logFn = () =
             
             const testMeasurements = JSON.parse(JSON.stringify(measurements));
             const result = computeLinesFitness(testMeasurements, guess, true);
+            
+            // Store tested point for visualization
+            if (testedPoints !== null) {
+                testedPoints.push({
+                    width: width,
+                    height: height,
+                    aspectRatio: aspectRatio,
+                    diagonal: diagonal,
+                    fitness: result.fitness,
+                    guess: JSON.parse(JSON.stringify(guess)),
+                    isRefinement: true
+                });
+            }
             
             if (result.fitness < bestFitness) {
                 bestFitness = result.fitness;
