@@ -178,75 +178,108 @@ function scaleMeasurementsBasedOnTension(measurements, guess) {
 
 /**
  * Searches for best rectangular starting configuration
- * NEW: Uses direct anchor point computation from first measurement
- * instead of diagonal+arc ternary search
+ * NEW: Direct grid search over frame dimensions without assuming
+ * solutions lie on diagonal or circular arc
  */
 async function findBestRectangularStart(measurements) {
   const messagesBox = document.getElementById('messages');
-  messagesBox.textContent += "Computing anchor positions using direct geometric method...\n";
+  messagesBox.textContent += "Computing anchor positions using direct grid search...\n";
   messagesBox.scrollTop = messagesBox.scrollHeight;
 
-  // Use the first measurement to directly compute anchor positions
-  const firstMeasurement = measurements[0];
-  
-  // Assume the reference point is roughly at the center of the workspace
-  // We need to estimate this from the initial guess
-  const estimatedCenterX = (initialGuess.tl.x + initialGuess.tr.x) / 2;
-  const estimatedCenterY = (initialGuess.tl.y + initialGuess.bl.y) / 2;
-  const referencePoint = { x: estimatedCenterX, y: estimatedCenterY };
-  
-  messagesBox.textContent += `Reference point estimate: (${estimatedCenterX.toFixed(1)}, ${estimatedCenterY.toFixed(1)})\n`;
-  messagesBox.textContent += `First measurement distances: TL=${firstMeasurement.tl.toFixed(1)}, TR=${firstMeasurement.tr.toFixed(1)}, BL=${firstMeasurement.bl.toFixed(1)}, BR=${firstMeasurement.br.toFixed(1)}\n`;
+  messagesBox.textContent += `Evaluating against ${measurements.length} measurements\n`;
   messagesBox.scrollTop = messagesBox.scrollHeight;
   
-  messagesBox.textContent += "Phase 1: Coarse search (50mm steps)...\n";
+  let bestGuess = null;
+  let bestFitness = Infinity;
+  let testedCount = 0;
+  
+  // Search range based on typical Maslow dimensions
+  const minDim = 500;
+  const maxDim = 4500;
+  const coarseStep = 100;  // Faster than old ternary search
+  
+  // Estimate workspace center from initial guess
+  const centerX = (initialGuess.tl.x + initialGuess.tr.x) / 2;
+  const centerY = (initialGuess.tl.y + initialGuess.bl.y) / 2;
+  
+  messagesBox.textContent += "Phase 1: Coarse grid search (100mm steps)...\n";
   messagesBox.scrollTop = messagesBox.scrollHeight;
   
   // Phase 1: Coarse search
-  const coarseSolutions = findRectangularSolutionsFromDistances(referencePoint, firstMeasurement);
-  
-  if (coarseSolutions.length === 0) {
-    messagesBox.textContent += "❌ No valid solutions found! Falling back to initial guess.\n";
-    messagesBox.scrollTop = messagesBox.scrollHeight;
-    return initialGuess;
+  for (let width = minDim; width <= maxDim; width += coarseStep) {
+    for (let height = minDim; height <= maxDim; height += coarseStep) {
+      testedCount++;
+      
+      const guess = {
+        tl: { x: centerX - width/2, y: centerY + height/2 },
+        tr: { x: centerX + width/2, y: centerY + height/2 },
+        bl: { x: centerX - width/2, y: centerY - height/2 },
+        br: { x: centerX + width/2, y: centerY - height/2 },
+        fitness: 0
+      };
+      
+      // Evaluate fitness using magnetic lines approach
+      const testMeasurements = JSON.parse(JSON.stringify(measurements));
+      const result = computeLinesFitness(testMeasurements, guess, true);
+      
+      if (result.fitness < bestFitness) {
+        bestFitness = result.fitness;
+        bestGuess = JSON.parse(JSON.stringify(guess));
+        bestGuess.fitness = result.fitness;
+      }
+      
+      // Yield periodically
+      if (testedCount % 50 === 0) {
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
+    }
   }
   
-  messagesBox.textContent += `Found ${coarseSolutions.length} potential configurations\n`;
-  messagesBox.textContent += `Best coarse solution: Width=${coarseSolutions[0].width.toFixed(1)}mm, Height=${coarseSolutions[0].height.toFixed(1)}mm, Error=${coarseSolutions[0].error.toFixed(3)}mm\n`;
+  messagesBox.textContent += `Tested ${testedCount} configurations in coarse search\n`;
+  messagesBox.textContent += `Best: ${(bestGuess.tr.x - bestGuess.tl.x).toFixed(0)}mm x ${(bestGuess.tl.y - bestGuess.bl.y).toFixed(0)}mm, Fitness: ${(1/bestGuess.fitness).toFixed(4)}\n`;
   messagesBox.scrollTop = messagesBox.scrollHeight;
   
-  // Yield to UI
-  await new Promise(resolve => setTimeout(resolve, 0));
-  
-  messagesBox.textContent += "Phase 2: Refining solution (1mm steps)...\n";
+  // Phase 2: Refine around best solution
+  messagesBox.textContent += "Phase 2: Refining best solution (25mm steps)...\n";
   messagesBox.scrollTop = messagesBox.scrollHeight;
   
-  // Phase 2: Refine the best solution
-  const refinedSolution = refineSolution(
-    referencePoint, 
-    firstMeasurement, 
-    coarseSolutions[0],
-    100,  // Search within ±100mm
-    1     // 1mm step size
-  );
+  const bestWidth = bestGuess.tr.x - bestGuess.tl.x;
+  const bestHeight = bestGuess.tl.y - bestGuess.bl.y;
+  const refineStep = 25;
+  const refineRange = 150;
   
-  messagesBox.textContent += `Refined solution: Width=${refinedSolution.width.toFixed(1)}mm, Height=${refinedSolution.height.toFixed(1)}mm\n`;
-  messagesBox.textContent += `Final error: ${refinedSolution.error.toFixed(3)}mm\n`;
-  messagesBox.textContent += `TL: (${refinedSolution.tl.x.toFixed(1)}, ${refinedSolution.tl.y.toFixed(1)})\n`;
-  messagesBox.textContent += `TR: (${refinedSolution.tr.x.toFixed(1)}, ${refinedSolution.tr.y.toFixed(1)})\n`;
-  messagesBox.textContent += `BL: (${refinedSolution.bl.x.toFixed(1)}, ${refinedSolution.bl.y.toFixed(1)})\n`;
-  messagesBox.textContent += `BR: (${refinedSolution.br.x.toFixed(1)}, ${refinedSolution.br.y.toFixed(1)})\n`;
+  for (let width = bestWidth - refineRange; width <= bestWidth + refineRange; width += refineStep) {
+    for (let height = bestHeight - refineRange; height <= bestHeight + refineRange; height += refineStep) {
+      if (width < minDim || height < minDim) continue;
+      
+      testedCount++;
+      
+      const guess = {
+        tl: { x: centerX - width/2, y: centerY + height/2 },
+        tr: { x: centerX + width/2, y: centerY + height/2 },
+        bl: { x: centerX - width/2, y: centerY - height/2 },
+        br: { x: centerX + width/2, y: centerY - height/2 },
+        fitness: 0
+      };
+      
+      const testMeasurements = JSON.parse(JSON.stringify(measurements));
+      const result = computeLinesFitness(testMeasurements, guess, true);
+      
+      if (result.fitness < bestFitness) {
+        bestFitness = result.fitness;
+        bestGuess = JSON.parse(JSON.stringify(guess));
+        bestGuess.fitness = result.fitness;
+      }
+    }
+  }
+  
+  messagesBox.textContent += `Total configurations tested: ${testedCount}\n`;
+  messagesBox.textContent += `Final solution: ${(bestGuess.tr.x - bestGuess.tl.x).toFixed(1)}mm x ${(bestGuess.tl.y - bestGuess.bl.y).toFixed(1)}mm\n`;
+  messagesBox.textContent += `Fitness: ${(1/bestGuess.fitness).toFixed(4)}\n`;
   messagesBox.textContent += "Starting optimization...\n";
   messagesBox.scrollTop = messagesBox.scrollHeight;
   
-  // Convert to expected format
-  return {
-    tl: refinedSolution.tl,
-    tr: refinedSolution.tr,
-    bl: refinedSolution.bl,
-    br: refinedSolution.br,
-    fitness: refinedSolution.error < 1 ? 100000000 : 1 / refinedSolution.error
-  };
+  return bestGuess;
 }
 
 /**
