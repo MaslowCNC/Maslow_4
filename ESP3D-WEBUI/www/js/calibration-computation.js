@@ -33,6 +33,7 @@ function distanceBetweenPoints(a, b, c, d) {
  * Finds rectangular anchor configurations from distance measurements.
  * 
  * For a rectangle with corners TL(x1,y2), TR(x2,y2), BL(x1,y1), BR(x2,y1)
+ * where x1 < x2 (left to right) and y1 < y2 (bottom to top, with y increasing upward)
  * and reference point P0(x0,y0) with distances d_TL, d_TR, d_BL, d_BR:
  * 
  * We derive:

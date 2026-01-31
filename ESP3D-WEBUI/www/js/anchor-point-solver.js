@@ -17,7 +17,8 @@
  * Solves for rectangular anchor positions given a reference point and distances.
  * 
  * Mathematical approach:
- * For a rectangle with corners TL(x1,y2), TR(x2,y2), BL(x1,y1), BR(x2,y1) where x1 < x2, y1 < y2
+ * For a rectangle with corners TL(x1,y2), TR(x2,y2), BL(x1,y1), BR(x2,y1) 
+ * where x1 < x2 (left to right) and y1 < y2 (bottom to top, y increases upward)
  * And a reference point P0(x0,y0) with measured distances d_TL, d_TR, d_BL, d_BR:
  * 
  * We have:
