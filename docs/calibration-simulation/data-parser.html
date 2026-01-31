@@ -362,136 +362,96 @@
 
         /**
          * Searches for best rectangular starting configuration
-         * Uses ternary search to find optimal dimensions
+         * NEW: Direct 2D grid search over frame dimensions
          */
         async function findBestRectangularStart(measurements) {
-            log('Searching for best rectangular starting configuration...');
-            log('Phase 1: Finding optimal radius along diagonal...');
-
-            const measurementsCopy = JSON.parse(JSON.stringify(measurements));
-
-            // Phase 1: Ternary search for optimal diagonal size
-            let diagonalBestFitness = Infinity;
-            let diagonalBestSize = 0;
-            let phase1TestCount = 0;
-
-            async function evaluateDiagonalSize(size) {
-                const testMeasurements = JSON.parse(JSON.stringify(measurementsCopy));
-                const guess = {
-                    tl: { x: 0, y: size },
-                    tr: { x: size, y: size },
-                    bl: { x: 0, y: 0 },
-                    br: { x: size, y: 0 },
-                    fitness: 0
-                };
-
-                const result = computeLinesFitness(testMeasurements, guess, true);
-                phase1TestCount++;
-                return { fitness: result.fitness, size: size };
-            }
-
-            // Ternary search for optimal diagonal size (100 to 5000mm range)
-            let leftSize = 100;
-            let rightSize = 5000;
-            const epsilon = 50;
-
-            while ((rightSize - leftSize) > epsilon) {
-                const mid1 = leftSize + (rightSize - leftSize) / 3;
-                const mid2 = rightSize - (rightSize - leftSize) / 3;
-
-                const result1 = await evaluateDiagonalSize(mid1);
-                const result2 = await evaluateDiagonalSize(mid2);
-
-                if (result1.fitness < result2.fitness) {
-                    rightSize = mid2;
-                    if (result1.fitness < diagonalBestFitness) {
-                        diagonalBestFitness = result1.fitness;
-                        diagonalBestSize = mid1;
-                    }
-                } else {
-                    leftSize = mid1;
-                    if (result2.fitness < diagonalBestFitness) {
-                        diagonalBestFitness = result2.fitness;
-                        diagonalBestSize = mid2;
-                    }
-                }
-
-                await new Promise(resolve => setTimeout(resolve, 0));
-            }
-
-            const optimalRadius = diagonalBestSize;
-            log(`Phase 1 complete: Optimal radius ${diagonalBestSize.toFixed(0)}mm using ${phase1TestCount} evaluations`);
-
-            // Phase 2: Search for best aspect ratio on arc at optimal radius
-            log(`Phase 2: Finding best aspect ratio on arc at ${optimalRadius.toFixed(0)}mm radius...`);
-
+            log('Computing anchor positions using direct grid search...');
+            log(`Evaluating against ${measurements.length} measurements`);
+            
             let bestGuess = null;
-            let bestFitnessOverall = Infinity;
-            let phase2TestCount = 0;
-
-            async function evaluateFitnessAtAngle(angleRad) {
-                const testMeasurements = JSON.parse(JSON.stringify(measurementsCopy));
-                const width = optimalRadius * Math.cos(angleRad);
-                const height = optimalRadius * Math.sin(angleRad);
-
-                const guess = {
-                    tl: { x: 0, y: height },
-                    tr: { x: width, y: height },
-                    bl: { x: 0, y: 0 },
-                    br: { x: width, y: 0 },
-                    fitness: 0
-                };
-
-                const result = computeLinesFitness(testMeasurements, guess, true);
-                phase2TestCount++;
-                return { fitness: result.fitness, width: width, height: height, angle: angleRad };
-            }
-
-            // Ternary search on angle (from 0 to π/2)
-            let leftAngle = 0.1;
-            let rightAngle = Math.PI / 2 - 0.1;
-            const angleEpsilon = 0.01;
-
-            while ((rightAngle - leftAngle) > angleEpsilon) {
-                const mid1 = leftAngle + (rightAngle - leftAngle) / 3;
-                const mid2 = rightAngle - (rightAngle - leftAngle) / 3;
-
-                const result1 = await evaluateFitnessAtAngle(mid1);
-                const result2 = await evaluateFitnessAtAngle(mid2);
-
-                if (result1.fitness < result2.fitness) {
-                    rightAngle = mid2;
-                    if (result1.fitness < bestFitnessOverall) {
-                        bestFitnessOverall = result1.fitness;
-                        bestGuess = {
-                            tl: { x: 0, y: result1.height },
-                            tr: { x: result1.width, y: result1.height },
-                            bl: { x: 0, y: 0 },
-                            br: { x: result1.width, y: 0 },
-                            fitness: result1.fitness
-                        };
+            let bestFitness = Infinity;
+            let testedCount = 0;
+            
+            // Search range based on typical Maslow dimensions
+            const minDim = 500;
+            const maxDim = 4500;
+            const coarseStep = 100;
+            
+            // Estimate workspace center from initial guess
+            const centerX = (initialGuess.tl.x + initialGuess.tr.x) / 2;
+            const centerY = (initialGuess.tl.y + initialGuess.bl.y) / 2;
+            
+            log('Phase 1: Coarse grid search (100mm steps)...');
+            
+            // Phase 1: Coarse search
+            for (let width = minDim; width <= maxDim; width += coarseStep) {
+                for (let height = minDim; height <= maxDim; height += coarseStep) {
+                    testedCount++;
+                    
+                    const guess = {
+                        tl: { x: centerX - width/2, y: centerY + height/2 },
+                        tr: { x: centerX + width/2, y: centerY + height/2 },
+                        bl: { x: centerX - width/2, y: centerY - height/2 },
+                        br: { x: centerX + width/2, y: centerY - height/2 },
+                        fitness: 0
+                    };
+                    
+                    const testMeasurements = JSON.parse(JSON.stringify(measurements));
+                    const result = computeLinesFitness(testMeasurements, guess, true);
+                    
+                    if (result.fitness < bestFitness) {
+                        bestFitness = result.fitness;
+                        bestGuess = JSON.parse(JSON.stringify(guess));
+                        bestGuess.fitness = result.fitness;
                     }
-                } else {
-                    leftAngle = mid1;
-                    if (result2.fitness < bestFitnessOverall) {
-                        bestFitnessOverall = result2.fitness;
-                        bestGuess = {
-                            tl: { x: 0, y: result2.height },
-                            tr: { x: result2.width, y: result2.height },
-                            bl: { x: 0, y: 0 },
-                            br: { x: result2.width, y: 0 },
-                            fitness: result2.fitness
-                        };
+                    
+                    // Yield periodically
+                    if (testedCount % 50 === 0) {
+                        await new Promise(resolve => setTimeout(resolve, 0));
                     }
                 }
-
-                await new Promise(resolve => setTimeout(resolve, 0));
             }
-
-            const testedCount = phase1TestCount + phase2TestCount;
-            log(`Search complete! Tested ${testedCount} points.`);
-            log(`Best rectangular start: Width=${bestGuess.tr.x.toFixed(1)}mm, Height=${bestGuess.tr.y.toFixed(1)}mm, Fitness=${(1/bestGuess.fitness).toFixed(4)}`);
-
+            
+            log(`Tested ${testedCount} configurations in coarse search`);
+            log(`Best: ${(bestGuess.tr.x - bestGuess.tl.x).toFixed(0)}mm x ${(bestGuess.tl.y - bestGuess.bl.y).toFixed(0)}mm, Fitness: ${(1/bestGuess.fitness).toFixed(4)}`);
+            
+            // Phase 2: Refine around best solution
+            log('Phase 2: Refining best solution (25mm steps)...');
+            
+            const bestWidth = bestGuess.tr.x - bestGuess.tl.x;
+            const bestHeight = bestGuess.tl.y - bestGuess.bl.y;
+            const refineStep = 25;
+            const refineRange = 150;
+            
+            for (let width = bestWidth - refineRange; width <= bestWidth + refineRange; width += refineStep) {
+                for (let height = bestHeight - refineRange; height <= bestHeight + refineRange; height += refineStep) {
+                    if (width < minDim || height < minDim) continue;
+                    
+                    testedCount++;
+                    
+                    const guess = {
+                        tl: { x: centerX - width/2, y: centerY + height/2 },
+                        tr: { x: centerX + width/2, y: centerY + height/2 },
+                        bl: { x: centerX - width/2, y: centerY - height/2 },
+                        br: { x: centerX + width/2, y: centerY - height/2 },
+                        fitness: 0
+                    };
+                    
+                    const testMeasurements = JSON.parse(JSON.stringify(measurements));
+                    const result = computeLinesFitness(testMeasurements, guess, true);
+                    
+                    if (result.fitness < bestFitness) {
+                        bestFitness = result.fitness;
+                        bestGuess = JSON.parse(JSON.stringify(guess));
+                        bestGuess.fitness = result.fitness;
+                    }
+                }
+            }
+            
+            log(`Total configurations tested: ${testedCount}`);
+            log(`Final solution: ${(bestGuess.tr.x - bestGuess.tl.x).toFixed(1)}mm x ${(bestGuess.tl.y - bestGuess.bl.y).toFixed(1)}mm`);
+            log(`Fitness: ${(1/bestGuess.fitness).toFixed(4)}`);
+            
             return bestGuess;
         }
 
