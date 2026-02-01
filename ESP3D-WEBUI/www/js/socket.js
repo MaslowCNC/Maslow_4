@@ -161,13 +161,16 @@ const startSocket = () => {
 	ws_source.onopen = (e) => {
 		console.log("Connected");
 		// Request status update on reconnection to restore job progress display
-		// Use setTimeout to ensure the connection is fully established
+		// Small delay ensures WebSocket connection is fully established before sending commands
+		const RECONNECT_STATUS_DELAY_MS = 100;
 		setTimeout(() => {
 			if (typeof get_status === 'function') {
 				console.log("Requesting status update after reconnection");
 				get_status();
+			} else {
+				console.warn("get_status function not available - status recovery disabled");
 			}
-		}, 100);
+		}, RECONNECT_STATUS_DELAY_MS);
 	};
 	ws_source.onclose = (e) => {
 		console.log("Disconnected");
