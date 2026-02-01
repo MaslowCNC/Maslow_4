@@ -30,7 +30,7 @@ const handlePing = () => {
 			clearInterval(interval_ping);
 		}
 		last_ping = Date.now();
-		interval_ping = setInterval(() => check_ping(), 10 * 1000);
+		interval_ping = setInterval(() => check_ping(), 5 * 1000);
 		console.log("enable ping");
 	} else {
 		clearInterval(interval_ping);
@@ -160,6 +160,14 @@ const startSocket = () => {
 	ws_source.binaryType = "arraybuffer";
 	ws_source.onopen = (e) => {
 		console.log("Connected");
+		// Request status update on reconnection to restore job progress display
+		// Use setTimeout to ensure the connection is fully established
+		setTimeout(() => {
+			if (typeof get_status === 'function') {
+				console.log("Requesting status update after reconnection");
+				get_status();
+			}
+		}, 100);
 	};
 	ws_source.onclose = (e) => {
 		console.log("Disconnected");
@@ -216,7 +224,7 @@ const startSocket = () => {
 						if (interval_ping === -1)
 							interval_ping = setInterval(() => {
 								check_ping();
-							}, 10 * 1000);
+							}, 5 * 1000);
 					}
 				}
 				if (tval[0] === "ACTIVE_ID") {

@@ -1125,7 +1125,7 @@ namespace WebUI {
         if (_socket_server && _setupdone) {
             _socket_server->loop();
         }
-        if ((millis() - start_time) > 10000 && _socket_server) {
+        if ((millis() - start_time) > 5000 && _socket_server) {
             WSChannels::sendPing();
             start_time = millis();
         }
