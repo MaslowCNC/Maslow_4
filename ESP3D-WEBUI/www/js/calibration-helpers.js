@@ -102,24 +102,24 @@ async function findBestRectangularStart(measurements, initialGuess, logFn = () =
     for (let w = widthMin; w <= widthMax; w += widthStep) {
         // From first measurement at (x0, y0), compute where rectangle's TL corner must be
         // if rectangle has width w
-        const x = (w*w + Kx) / (2*w);  // X position of TL corner relative to first measurement
-        const rem = TL2 - x*x;
+        const x = (w*w + Kx) / (2*w);  // X offset of TL corner from first measurement point
+        const rem = TL2 - x*x;  // Remaining Y distance squared (dTL² - x²)
         
         if (rem >= 0) {
-            const v = Math.sqrt(rem);  // Y distance from measurement to TL corner
+            const v = Math.sqrt(rem);  // Y distance from measurement to TL corner (can be ± v)
             
-            // Try both +v and -v (top and bottom of workspace)
-            [v, -v].forEach(V => {
+            // Try both +v and -v (measurement point could be above or below TL corner)
+            [v, -v].forEach(yDistance => {
                 // Now solve for height h using the BR constraint
-                const disc = 4*V*V - 4*Ky;
+                const disc = 4*yDistance*yDistance - 4*Ky;  // Discriminant of quadratic equation
                 if (disc >= 0) {
-                    const sd = Math.sqrt(disc);
+                    const sqrtDisc = Math.sqrt(disc);  // Square root of discriminant
                     // Quadratic formula gives two solutions for h
-                    [(-2*V + sd)/2, (-2*V - sd)/2].forEach(h => {
+                    [(-2*yDistance + sqrtDisc)/2, (-2*yDistance - sqrtDisc)/2].forEach(h => {
                         if (h > 100) {  // Only positive, reasonable heights
-                            const y = (h*h - Ky) / (2*h);  // Y position of TL corner
+                            const y = (h*h - Ky) / (2*h);  // Y offset of TL corner from measurement
                             
-                            // Ensure (x,y) is within or near rectangle bounds (sanity check)
+                            // Ensure (x,y) offsets place TL corner within or near rectangle bounds (sanity check)
                             if (x >= -0.05 && x <= w+0.05 && y >= -0.05 && y <= h+0.05) {
                                 validPoints.push({w, h, x, y});
                             }
@@ -209,19 +209,19 @@ async function findBestRectangularStart(measurements, initialGuess, logFn = () =
     
     for (let w = refineWidthMin; w <= refineWidthMax; w += refineWidthStep) {
         // Compute points on arc for this width
-        const x = (w*w + Kx) / (2*w);
-        const rem = TL2 - x*x;
+        const x = (w*w + Kx) / (2*w);  // X offset of TL corner from first measurement point
+        const rem = TL2 - x*x;  // Remaining Y distance squared
         
         if (rem >= 0) {
-            const v = Math.sqrt(rem);
+            const v = Math.sqrt(rem);  // Y distance from measurement to TL corner
             
-            [v, -v].forEach(V => {
-                const disc = 4*V*V - 4*Ky;
+            [v, -v].forEach(yDistance => {
+                const disc = 4*yDistance*yDistance - 4*Ky;  // Discriminant of quadratic equation
                 if (disc >= 0) {
-                    const sd = Math.sqrt(disc);
-                    [(-2*V + sd)/2, (-2*V - sd)/2].forEach(h => {
+                    const sqrtDisc = Math.sqrt(disc);  // Square root of discriminant
+                    [(-2*yDistance + sqrtDisc)/2, (-2*yDistance - sqrtDisc)/2].forEach(h => {
                         if (h > 100) {
-                            const y = (h*h - Ky) / (2*h);
+                            const y = (h*h - Ky) / (2*h);  // Y offset of TL corner from measurement
                             
                             if (x >= -0.05 && x <= w+0.05 && y >= -0.05 && y <= h+0.05) {
                                 testedCount++;
