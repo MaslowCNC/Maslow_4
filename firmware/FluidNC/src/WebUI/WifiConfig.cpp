@@ -559,7 +559,7 @@ namespace WebUI {
             case SYSTEM_EVENT_STA_GOT_IP:
                 break;
             case SYSTEM_EVENT_STA_DISCONNECTED:
-                log_info("WiFi Disconnected");
+                log_info("WiFi Disconnected - Last RSSI: " << WiFi.RSSI() << " dBm");
                 break;
             default:
                 //log_info("WiFi event:" << event);

@@ -216,7 +216,11 @@ namespace WebUI {
     void WSChannels::handleEvent(WebSocketsServer* server, uint8_t num, uint8_t type, uint8_t* payload, size_t length) {
         switch (type) {
             case WStype_DISCONNECTED:
-                log_debug("WebSocket disconnect " << num);
+                if (WiFi.getMode() == WIFI_STA) {
+                    log_debug("WebSocket disconnect " << num << " - WiFi RSSI: " << WiFi.RSSI() << " dBm");
+                } else {
+                    log_debug("WebSocket disconnect " << num);
+                }
                 WSChannels::removeChannel(num);
                 break;
             case WStype_CONNECTED: {
