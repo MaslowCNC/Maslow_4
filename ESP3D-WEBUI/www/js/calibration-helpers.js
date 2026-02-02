@@ -44,7 +44,8 @@ function projectMeasurements(measurements) {
 
 /**
  * Searches for best rectangular starting configuration
- * Uses geometric locus computed from first measurement constraints
+ * Uses geometric locus arc computed from first measurement constraints
+ * Based on the Shape2.html algorithm
  * 
  * @param {Object[]} measurements - Array of projected measurements
  * @param {Object} initialGuess - Initial guess for anchor positions
@@ -53,7 +54,7 @@ function projectMeasurements(measurements) {
  * @returns {Promise<Object>} - Best guess configuration
  */
 async function findBestRectangularStart(measurements, initialGuess, logFn = () => {}, testedPoints = null) {
-    logFn('Computing anchor positions using geometric locus from first measurement...');
+    logFn('Computing anchor positions using geometric locus arc from first measurement...');
     logFn(`Evaluating against ${measurements.length} measurements`);
     
     if (!measurements || measurements.length === 0) {
@@ -63,106 +64,132 @@ async function findBestRectangularStart(measurements, initialGuess, logFn = () =
     
     // Use first measurement to constrain the search
     const firstMeas = measurements[0];
-    const d_tl = firstMeas.tl;
-    const d_tr = firstMeas.tr;
-    const d_bl = firstMeas.bl;
-    const d_br = firstMeas.br;
+    const dTL = firstMeas.tl;
+    const dTR = firstMeas.tr;
+    const dBL = firstMeas.bl;
+    const dBR = firstMeas.br;
     
     // Assume first measurement is at center of workspace
     const x0 = (initialGuess.tl.x + initialGuess.tr.x) / 2;
     const y0 = (initialGuess.tl.y + initialGuess.bl.y) / 2;
     
     logFn(`First measurement point: (${x0.toFixed(1)}, ${y0.toFixed(1)})`);
-    logFn(`Distances: TL=${d_tl.toFixed(1)}, TR=${d_tr.toFixed(1)}, BL=${d_bl.toFixed(1)}, BR=${d_br.toFixed(1)}`);
+    logFn(`Distances: TL=${dTL.toFixed(1)}, TR=${dTR.toFixed(1)}, BL=${dBL.toFixed(1)}, BR=${dBR.toFixed(1)}`);
     
     let bestGuess = null;
     let bestFitness = Infinity;
     let testedCount = 0;
     
-    logFn('Phase 1: Sampling along geometric locus...');
+    logFn('Phase 1: Computing valid solutions arc...');
     
-    // Sample different frame sizes and compute where center must be
-    // For each (W, H), we can compute center from distance constraints:
-    // d_TL² - d_TR² = -2W(x0 - xc) => xc = x0 + (d_TL² - d_TR²)/(2W)
-    // d_TL² - d_BL² = -2H(y0 - yc) => yc = y0 + (d_TL² - d_BL²)/(2H)
+    // Compute the locus of valid rectangular configurations using Shape2.html algorithm
+    // This creates a parametric curve in (W, H) space, not a grid!
     
-    const widthMin = 500;
-    const widthMax = 6000;
-    const widthStep = 150;  // Increased to 150mm for faster search
+    const TL2 = dTL * dTL;
+    const TR2 = dTR * dTR;
+    const BR2 = dBR * dBR;
+    const BL2 = dBL * dBL;
+    const Kx = TL2 - TR2;
+    const Ky = TR2 - BR2;
     
-    const heightMin = 500;
-    const heightMax = 6000;
-    const heightStep = 150;  // Increased to 150mm for faster search
+    const widthMin = 100;
+    const widthMax = (dTL + dTR + dBR + dBL) * 0.75;  // Based on Shape2.html scan range
+    const widthStep = 20;  // Finer sampling along the curve
     
-    const totalEstimated = Math.ceil((widthMax - widthMin) / widthStep) * Math.ceil((heightMax - heightMin) / heightStep);
-    logFn(`Estimated evaluations: ${totalEstimated}`);
+    const validPoints = [];  // Store points on the arc
     
-    for (let W = widthMin; W <= widthMax; W += widthStep) {
-        // Compute required center X from left/right distances
-        const xc = x0 + (d_tl * d_tl - d_tr * d_tr) / (2 * W);
+    // For each width w, solve for valid heights h that satisfy all distance constraints
+    for (let w = widthMin; w <= widthMax; w += widthStep) {
+        // From first measurement at (x0, y0), compute where rectangle's TL corner must be
+        // if rectangle has width w
+        const x = (w*w + Kx) / (2*w);  // X position of TL corner relative to first measurement
+        const rem = TL2 - x*x;
         
-        for (let H = heightMin; H <= heightMax; H += heightStep) {
-            testedCount++;
+        if (rem >= 0) {
+            const v = Math.sqrt(rem);  // Y distance from measurement to TL corner
             
-            // Compute required center Y from top/bottom distances
-            const yc = y0 + (d_tl * d_tl - d_bl * d_bl) / (2 * H);
-            
-            // Construct rectangle with this center and dimensions
-            const guess = {
-                tl: { x: xc - W/2, y: yc + H/2 },
-                tr: { x: xc + W/2, y: yc + H/2 },
-                bl: { x: xc - W/2, y: yc - H/2 },
-                br: { x: xc + W/2, y: yc - H/2 },
-                fitness: 0
-            };
-            
-            // Verify this satisfies distance constraints (sanity check)
-            const calc_d_tl = Math.sqrt((x0 - guess.tl.x) ** 2 + (y0 - guess.tl.y) ** 2);
-            const calc_d_tr = Math.sqrt((x0 - guess.tr.x) ** 2 + (y0 - guess.tr.y) ** 2);
-            const calc_d_bl = Math.sqrt((x0 - guess.bl.x) ** 2 + (y0 - guess.bl.y) ** 2);
-            const calc_d_br = Math.sqrt((x0 - guess.br.x) ** 2 + (y0 - guess.br.y) ** 2);
-            
-            const errorSum = Math.abs(calc_d_tl - d_tl) + Math.abs(calc_d_tr - d_tr) + 
-                           Math.abs(calc_d_bl - d_bl) + Math.abs(calc_d_br - d_br);
-            
-            // Evaluate fitness for all points (for better coverage)
-            const testMeasurements = JSON.parse(JSON.stringify(measurements));
-            const result = computeLinesFitness(testMeasurements, guess, true);
-            
-            // Store tested point for visualization
-            if (testedPoints !== null) {
-                testedPoints.push({
-                    width: W,
-                    height: H,
-                    aspectRatio: W / H,
-                    fitness: result.fitness,
-                    guess: JSON.parse(JSON.stringify(guess)),
-                    errorSum: errorSum
-                });
-            }
-            
-            // Only consider for best solution if distance constraints are reasonably satisfied
-            if (errorSum < 200 && result.fitness < bestFitness) { // 200mm tolerance (relaxed)
-                bestFitness = result.fitness;
-                bestGuess = JSON.parse(JSON.stringify(guess));
-                bestGuess.fitness = result.fitness;
-            }
-            
-            // Yield frequently and log progress to keep UI responsive
-            if (testedCount % 25 === 0) {
-                logFn(`Progress: ${testedCount}/${totalEstimated} tested, best fitness so far: ${bestFitness < Infinity ? (1/bestFitness).toFixed(4) : 'N/A'}`);
-                // Use a small timeout to truly yield to browser rendering
-                await new Promise(resolve => setTimeout(resolve, 10));
-            }
+            // Try both +v and -v (top and bottom of workspace)
+            [v, -v].forEach(V => {
+                // Now solve for height h using the BR constraint
+                const disc = 4*V*V - 4*Ky;
+                if (disc >= 0) {
+                    const sd = Math.sqrt(disc);
+                    // Quadratic formula gives two solutions for h
+                    [(-2*V + sd)/2, (-2*V - sd)/2].forEach(h => {
+                        if (h > 100) {  // Only positive, reasonable heights
+                            const y = (h*h - Ky) / (2*h);  // Y position of TL corner
+                            
+                            // Ensure (x,y) is within or near rectangle bounds (sanity check)
+                            if (x >= -0.05 && x <= w+0.05 && y >= -0.05 && y <= h+0.05) {
+                                validPoints.push({w, h, x, y});
+                            }
+                        }
+                    });
+                }
+            });
+        }
+    }
+    
+    logFn(`Found ${validPoints.length} points on geometric locus arc`);
+    logFn('Phase 2: Evaluating fitness along arc...');
+    
+    // Now evaluate fitness for each point on the arc
+    for (let i = 0; i < validPoints.length; i++) {
+        const point = validPoints[i];
+        const W = point.w;
+        const H = point.h;
+        
+        testedCount++;
+        
+        // The point (x, y) is where the TL corner must be relative to the first measurement
+        // Transform to absolute coordinates
+        const tl_x = x0 + point.x;
+        const tl_y = y0 + point.y;
+        
+        // Construct rectangle
+        const guess = {
+            tl: { x: tl_x, y: tl_y },
+            tr: { x: tl_x + W, y: tl_y },
+            bl: { x: tl_x, y: tl_y - H },
+            br: { x: tl_x + W, y: tl_y - H },
+            fitness: 0
+        };
+        
+        // Evaluate fitness
+        const testMeasurements = JSON.parse(JSON.stringify(measurements));
+        const result = computeLinesFitness(testMeasurements, guess, true);
+        
+        // Store tested point for visualization
+        if (testedPoints !== null) {
+            testedPoints.push({
+                width: W,
+                height: H,
+                aspectRatio: W / H,
+                fitness: result.fitness,
+                guess: JSON.parse(JSON.stringify(guess)),
+                onArc: true
+            });
+        }
+        
+        if (result.fitness < bestFitness) {
+            bestFitness = result.fitness;
+            bestGuess = JSON.parse(JSON.stringify(guess));
+            bestGuess.fitness = result.fitness;
+        }
+        
+        // Yield frequently and log progress to keep UI responsive
+        if (testedCount % 50 === 0) {
+            logFn(`Progress: ${testedCount}/${validPoints.length} tested, best fitness so far: ${bestFitness < Infinity ? (1/bestFitness).toFixed(4) : 'N/A'}`);
+            await new Promise(resolve => setTimeout(resolve, 10));
         }
     }
     
     if (!bestGuess) {
-        logFn('Warning: No valid solution found on geometric locus, using initial guess');
+        logFn('Warning: No valid solution found on geometric locus arc, using initial guess');
         return initialGuess;
     }
     
-    logFn(`Tested ${testedCount} configurations on geometric locus`);
+    logFn(`Tested ${testedCount} configurations on geometric locus arc`);
     
     if (testedPoints !== null) {
         logFn(`Collected ${testedPoints.length} points for visualization`);
@@ -170,65 +197,78 @@ async function findBestRectangularStart(measurements, initialGuess, logFn = () =
     
     logFn(`Best: ${(bestGuess.tr.x - bestGuess.tl.x).toFixed(0)}mm x ${(bestGuess.tl.y - bestGuess.bl.y).toFixed(0)}mm, Fitness: ${(1/bestGuess.fitness).toFixed(4)}`);
     
-    // Phase 2: Refine around best solution
-    logFn('Phase 2: Refining best solution (local sampling)...');
+    // Phase 3: Refine by sampling finer along the arc near best solution
+    logFn('Phase 3: Refining best solution on arc...');
     
     const bestWidth = bestGuess.tr.x - bestGuess.tl.x;
-    const bestHeight = bestGuess.tl.y - bestGuess.bl.y;
-    
-    const refineWidthStep = 15;
-    const refineHeightStep = 15;
-    const refineRange = 150;  // Increased to cover coarser initial grid
+    const refineWidthMin = Math.max(widthMin, bestWidth - 300);
+    const refineWidthMax = bestWidth + 300;
+    const refineWidthStep = 5;  // Much finer sampling for refinement
     
     let refinementCount = 0;
     
-    for (let W = bestWidth - refineRange; W <= bestWidth + refineRange; W += refineWidthStep) {
-        if (W < widthMin) continue;
+    for (let w = refineWidthMin; w <= refineWidthMax; w += refineWidthStep) {
+        // Compute points on arc for this width
+        const x = (w*w + Kx) / (2*w);
+        const rem = TL2 - x*x;
         
-        const xc = x0 + (d_tl * d_tl - d_tr * d_tr) / (2 * W);
+        if (rem >= 0) {
+            const v = Math.sqrt(rem);
+            
+            [v, -v].forEach(V => {
+                const disc = 4*V*V - 4*Ky;
+                if (disc >= 0) {
+                    const sd = Math.sqrt(disc);
+                    [(-2*V + sd)/2, (-2*V - sd)/2].forEach(h => {
+                        if (h > 100) {
+                            const y = (h*h - Ky) / (2*h);
+                            
+                            if (x >= -0.05 && x <= w+0.05 && y >= -0.05 && y <= h+0.05) {
+                                testedCount++;
+                                refinementCount++;
+                                
+                                const tl_x = x0 + x;
+                                const tl_y = y0 + y;
+                                
+                                const guess = {
+                                    tl: { x: tl_x, y: tl_y },
+                                    tr: { x: tl_x + w, y: tl_y },
+                                    bl: { x: tl_x, y: tl_y - h },
+                                    br: { x: tl_x + w, y: tl_y - h },
+                                    fitness: 0
+                                };
+                                
+                                const testMeasurements = JSON.parse(JSON.stringify(measurements));
+                                const result = computeLinesFitness(testMeasurements, guess, true);
+                                
+                                if (testedPoints !== null) {
+                                    testedPoints.push({
+                                        width: w,
+                                        height: h,
+                                        aspectRatio: w / h,
+                                        fitness: result.fitness,
+                                        guess: JSON.parse(JSON.stringify(guess)),
+                                        onArc: true,
+                                        isRefinement: true
+                                    });
+                                }
+                                
+                                if (result.fitness < bestFitness) {
+                                    bestFitness = result.fitness;
+                                    bestGuess = JSON.parse(JSON.stringify(guess));
+                                    bestGuess.fitness = result.fitness;
+                                }
+                            }
+                        }
+                    });
+                }
+            });
+        }
         
-        for (let H = bestHeight - refineRange; H <= bestHeight + refineRange; H += refineHeightStep) {
-            if (H < heightMin) continue;
-            
-            testedCount++;
-            refinementCount++;
-            
-            const yc = y0 + (d_tl * d_tl - d_bl * d_bl) / (2 * H);
-            
-            const guess = {
-                tl: { x: xc - W/2, y: yc + H/2 },
-                tr: { x: xc + W/2, y: yc + H/2 },
-                bl: { x: xc - W/2, y: yc - H/2 },
-                br: { x: xc + W/2, y: yc - H/2 },
-                fitness: 0
-            };
-            
-            const testMeasurements = JSON.parse(JSON.stringify(measurements));
-            const result = computeLinesFitness(testMeasurements, guess, true);
-            
-            // Store tested point for visualization
-            if (testedPoints !== null) {
-                testedPoints.push({
-                    width: W,
-                    height: H,
-                    aspectRatio: W / H,
-                    fitness: result.fitness,
-                    guess: JSON.parse(JSON.stringify(guess)),
-                    isRefinement: true
-                });
-            }
-            
-            if (result.fitness < bestFitness) {
-                bestFitness = result.fitness;
-                bestGuess = JSON.parse(JSON.stringify(guess));
-                bestGuess.fitness = result.fitness;
-            }
-            
-            // Yield frequently during refinement
-            if (refinementCount % 10 === 0) {
-                logFn(`Refinement progress: ${refinementCount} tested`);
-                await new Promise(resolve => setTimeout(resolve, 10));
-            }
+        // Yield occasionally during refinement
+        if (refinementCount % 20 === 0) {
+            logFn(`Refinement progress: ${refinementCount} tested`);
+            await new Promise(resolve => setTimeout(resolve, 10));
         }
     }
     

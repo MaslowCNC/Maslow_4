@@ -444,41 +444,36 @@
                 ctx.stroke();
             }
             
-            // Draw geometric locus curve (points that satisfy distance constraints)
-            // Group points by aspect ratio to show the underlying structure
-            ctx.strokeStyle = '#cbd5e0';
-            ctx.lineWidth = 1;
-            ctx.setLineDash([5, 5]);
+            // Draw geometric locus arc as a continuous curve
+            // Sort points by width to connect them in order
+            const arcPoints = testedPoints.filter(p => p.onArc).sort((a, b) => a.width - b.width);
             
-            // Sort tested points by aspect ratio to draw curves
-            const pointsByAR = {};
-            testedPoints.forEach(p => {
-                const arKey = p.aspectRatio.toFixed(2);
-                if (!pointsByAR[arKey]) pointsByAR[arKey] = [];
-                pointsByAR[arKey].push(p);
-            });
-            
-            // Draw each aspect ratio curve
-            Object.values(pointsByAR).forEach(points => {
-                if (points.length < 2) return;
-                points.sort((a, b) => a.width - b.width);
-                
+            if (arcPoints.length > 1) {
+                // Draw the main arc curve
+                ctx.strokeStyle = '#3182ce';
+                ctx.lineWidth = 2;
                 ctx.beginPath();
-                let first = true;
-                points.forEach(p => {
+                
+                arcPoints.forEach((p, i) => {
                     const x = scaleX(p.width);
                     const y = scaleY(p.height);
-                    if (first) {
+                    if (i === 0) {
                         ctx.moveTo(x, y);
-                        first = false;
                     } else {
                         ctx.lineTo(x, y);
                     }
                 });
                 ctx.stroke();
-            });
-            
-            ctx.setLineDash([]);
+                
+                // Add label
+                ctx.fillStyle = '#2d3748';
+                ctx.font = '12px Arial';
+                ctx.textAlign = 'left';
+                const midPoint = arcPoints[Math.floor(arcPoints.length / 2)];
+                const midX = scaleX(midPoint.width);
+                const midY = scaleY(midPoint.height);
+                ctx.fillText('Geometric Locus Arc', midX + 10, midY);
+            }
             
             // Draw tested points
             testedPoints.forEach(p => {
