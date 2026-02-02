@@ -66,7 +66,11 @@ const Disable_interface = (lostconnection) => {
 	if (typeof lostconnection !== "undefined") lostcon = lostconnection;
 	//block all communication
 	http_communication_locked = true;
-	log_off = true;
+	// Only set log_off to true if this is NOT a lost connection (i.e., intentional disconnect)
+	// This allows automatic reconnection on connection loss
+	if (!lostcon) {
+		log_off = true;
+	}
 	if (interval_ping !== -1) {
 		clearInterval(interval_ping);
 	}
@@ -160,6 +164,9 @@ const startSocket = () => {
 	ws_source.binaryType = "arraybuffer";
 	ws_source.onopen = (e) => {
 		console.log("Connected");
+		// Unlock HTTP communication on reconnection
+		http_communication_locked = false;
+		log_off = false;
 		// Request status update on reconnection to restore job progress display
 		// Small delay ensures WebSocket connection is fully established before sending commands
 		const RECONNECT_STATUS_DELAY_MS = 100;
