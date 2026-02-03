@@ -370,7 +370,12 @@ async function findMaxFitness(measurements) {
         bestGuess = JSON.parse(JSON.stringify(initialGuess));
         currentGuess = JSON.parse(JSON.stringify(initialGuess));
 
-        scheduleTask(iterate);
+        // Restart calibration cycle with perturbed initial guess
+        messagesBox.textContent += '\n[DEBUG] Sending $CAL to restart calibration with perturbed guess...';
+        console.log('[DEBUG] Sending $CAL command to restart calibration cycle');
+        scheduleCallback(() => { 
+          onCalibrationButtonsClick('$CAL', 'Calibrate'); 
+        }, 2000);
       }
     }
   }
