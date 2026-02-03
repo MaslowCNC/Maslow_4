@@ -183,12 +183,13 @@ async function findBestRectangularStart(measurements, initialGuess, logFn = () =
     
     // Ternary search to find the minimum fitness along the arc
     // This reduces evaluations from O(n) to O(log n)
+    const TERNARY_SEARCH_THRESHOLD = 5;  // Stop when range is this small
     let left = 0;
     let right = validPoints.length - 1;
     
-    while (right - left > 5) {  // Continue until range is small
+    while (right - left > TERNARY_SEARCH_THRESHOLD) {
         const mid1 = Math.floor(left + (right - left) / 3);
-        const mid2 = Math.floor(right - (right - left) / 3);
+        const mid2 = Math.floor(left + 2 * (right - left) / 3);
         
         const fitness1 = await evaluatePointAtIndex(mid1);
         const fitness2 = await evaluatePointAtIndex(mid2);
@@ -314,12 +315,14 @@ async function findBestRectangularStart(measurements, initialGuess, logFn = () =
     }
     
     // Ternary search on refinement points
+    // Use smaller threshold for refinement since points are already near optimum
+    const REFINEMENT_SEARCH_THRESHOLD = 3;
     let refLeft = 0;
     let refRight = refinementPoints.length - 1;
     
-    while (refRight - refLeft > 3) {
+    while (refRight - refLeft > REFINEMENT_SEARCH_THRESHOLD) {
         const refMid1 = Math.floor(refLeft + (refRight - refLeft) / 3);
-        const refMid2 = Math.floor(refRight - (refRight - refLeft) / 3);
+        const refMid2 = Math.floor(refLeft + 2 * (refRight - refLeft) / 3);
         
         const refFitness1 = await evaluateRefinementPoint(refMid1);
         const refFitness2 = await evaluateRefinementPoint(refMid2);
