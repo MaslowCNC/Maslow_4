@@ -814,11 +814,6 @@
                 const status = computer.getStatus();
                 const fitness = status.bestFitness;
                 
-                // Fix BL and BR positions (BL should always be at origin, BR.y should always be 0)
-                result.bl.x = 0;
-                result.bl.y = 0;
-                result.br.y = 0;
-                
                 // Track best fitness across all retries
                 if (fitness > bestFitnessAcrossAllRetries) {
                     bestFitnessAcrossAllRetries = fitness;
@@ -845,11 +840,6 @@
                         
                         // Use best result from all attempts
                         result = bestGuessAcrossAllRetries;
-                        
-                        // Fix BL and BR positions
-                        result.bl.x = 0;
-                        result.bl.y = 0;
-                        result.br.y = 0;
                         
                         // Display best results
                         document.getElementById('result-tlx').textContent = result.tl.x.toFixed(2) + ' mm';

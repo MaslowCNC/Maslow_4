@@ -147,12 +147,16 @@ async function findBestRectangularStart(measurements, initialGuess, logFn = () =
         const tl_x = x0 + point.x;
         const tl_y = y0 + point.y;
         
-        // Construct rectangle
+        // Construct rectangle with BL at origin (0,0) constraint
+        // Translate the entire rectangle so BL is at (0,0)
+        const bl_x_unconstrained = tl_x;
+        const bl_y_unconstrained = tl_y - H;
+        
         const guess = {
-            tl: { x: tl_x, y: tl_y },
-            tr: { x: tl_x + W, y: tl_y },
-            bl: { x: tl_x, y: tl_y - H },
-            br: { x: tl_x + W, y: tl_y - H },
+            tl: { x: tl_x - bl_x_unconstrained, y: tl_y - bl_y_unconstrained },
+            tr: { x: (tl_x + W) - bl_x_unconstrained, y: tl_y - bl_y_unconstrained },
+            bl: { x: 0, y: 0 },
+            br: { x: (tl_x + W) - bl_x_unconstrained, y: 0 },
             fitness: 0
         };
         
@@ -299,11 +303,16 @@ async function findBestRectangularStart(measurements, initialGuess, logFn = () =
         const tl_x = x0 + point.x;
         const tl_y = y0 + point.y;
         
+        // Construct rectangle with BL at origin (0,0) constraint
+        // Translate the entire rectangle so BL is at (0,0)
+        const bl_x_unconstrained = tl_x;
+        const bl_y_unconstrained = tl_y - h;
+        
         const guess = {
-            tl: { x: tl_x, y: tl_y },
-            tr: { x: tl_x + w, y: tl_y },
-            bl: { x: tl_x, y: tl_y - h },
-            br: { x: tl_x + w, y: tl_y - h },
+            tl: { x: tl_x - bl_x_unconstrained, y: tl_y - bl_y_unconstrained },
+            tr: { x: (tl_x + w) - bl_x_unconstrained, y: tl_y - bl_y_unconstrained },
+            bl: { x: 0, y: 0 },
+            br: { x: (tl_x + w) - bl_x_unconstrained, y: 0 },
             fitness: 0
         };
         
