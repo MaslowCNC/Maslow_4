@@ -269,6 +269,22 @@ async function findBestRectangularStart(measurements, initialGuess, logFn = () =
     
     logFn(`Generated ${refinementPoints.length} refinement points, using ternary search...`);
     
+    // Add all refinement points to visualization (showing the search space)
+    if (testedPoints !== null) {
+        refinementPoints.forEach(point => {
+            testedPoints.push({
+                width: point.w,
+                height: point.h,
+                aspectRatio: point.w / point.h,
+                fitness: null,  // Not evaluated yet
+                guess: null,
+                onArc: true,
+                isRefinement: true,
+                unevaluated: true  // Mark as not yet evaluated
+            });
+        });
+    }
+    
     // Helper function to evaluate refinement point at index
     async function evaluateRefinementPoint(idx) {
         if (idx < 0 || idx >= refinementPoints.length) return Infinity;
@@ -294,16 +310,19 @@ async function findBestRectangularStart(measurements, initialGuess, logFn = () =
         const testMeasurements = JSON.parse(JSON.stringify(measurements));
         const result = computeLinesFitness(testMeasurements, guess, true);
         
+        // Update the visualization point that was added earlier
         if (testedPoints !== null) {
-            testedPoints.push({
-                width: w,
-                height: h,
-                aspectRatio: w / h,
-                fitness: result.fitness,
-                guess: JSON.parse(JSON.stringify(guess)),
-                onArc: true,
-                isRefinement: true
-            });
+            // Find and update the unevaluated point
+            const pointToUpdate = testedPoints.find(p => 
+                p.unevaluated && 
+                Math.abs(p.width - w) < 0.1 && 
+                Math.abs(p.height - h) < 0.1
+            );
+            if (pointToUpdate) {
+                pointToUpdate.fitness = result.fitness;
+                pointToUpdate.guess = JSON.parse(JSON.stringify(guess));
+                pointToUpdate.unevaluated = false;  // Mark as evaluated
+            }
         }
         
         if (result.fitness < bestFitness) {

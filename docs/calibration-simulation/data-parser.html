@@ -375,8 +375,11 @@
             testedPoints.forEach(p => {
                 maxWidth = Math.max(maxWidth, p.width);
                 maxHeight = Math.max(maxHeight, p.height);
-                minFitness = Math.min(minFitness, p.fitness);
-                maxFitness = Math.max(maxFitness, p.fitness);
+                // Only consider evaluated points for fitness range
+                if (p.fitness !== null && !p.unevaluated) {
+                    minFitness = Math.min(minFitness, p.fitness);
+                    maxFitness = Math.max(maxFitness, p.fitness);
+                }
             });
             
             // Add padding
@@ -479,15 +482,25 @@
                 const x = scaleX(p.width);
                 const y = scaleY(p.height);
                 
-                // Color by fitness (green = good, red = bad)
-                const fitnessNorm = (p.fitness - minFitness) / (maxFitness - minFitness);
-                const hue = (1 - fitnessNorm) * 120; // 120 = green, 0 = red
                 const isRefinement = p.isRefinement === true;
+                const isUnevaluated = p.unevaluated === true;
                 
-                ctx.fillStyle = `hsla(${hue}, 80%, 50%, ${isRefinement ? 0.8 : 0.5})`;
-                ctx.beginPath();
-                ctx.arc(x, y, isRefinement ? 3 : 2, 0, 2 * Math.PI);
-                ctx.fill();
+                if (isUnevaluated) {
+                    // Show unevaluated refinement points in light gray
+                    ctx.fillStyle = 'rgba(200, 200, 200, 0.3)';
+                    ctx.beginPath();
+                    ctx.arc(x, y, 2, 0, 2 * Math.PI);
+                    ctx.fill();
+                } else {
+                    // Color by fitness (green = good, red = bad)
+                    const fitnessNorm = (p.fitness - minFitness) / (maxFitness - minFitness);
+                    const hue = (1 - fitnessNorm) * 120; // 120 = green, 0 = red
+                    
+                    ctx.fillStyle = `hsla(${hue}, 80%, 50%, ${isRefinement ? 0.8 : 0.5})`;
+                    ctx.beginPath();
+                    ctx.arc(x, y, isRefinement ? 4 : 2, 0, 2 * Math.PI);
+                    ctx.fill();
+                }
             });
             
             // Draw best solution
@@ -541,6 +554,37 @@
             ctx.fillText('Good', legendX, legendY + legendHeight + 12);
             ctx.textAlign = 'right';
             ctx.fillText('Poor', legendX + legendWidth, legendY + legendHeight + 12);
+            
+            // Point type legend
+            ctx.textAlign = 'left';
+            ctx.font = '11px Arial';
+            ctx.fillStyle = '#2d3748';
+            const typeLegendY = legendY + legendHeight + 35;
+            ctx.fillText('Point types:', legendX, typeLegendY);
+            
+            // Evaluated point
+            ctx.fillStyle = 'hsla(60, 80%, 50%, 0.5)';
+            ctx.beginPath();
+            ctx.arc(legendX + 5, typeLegendY + 15, 2, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.fillStyle = '#4a5568';
+            ctx.fillText('Coarse search', legendX + 12, typeLegendY + 18);
+            
+            // Refinement point
+            ctx.fillStyle = 'hsla(60, 80%, 50%, 0.8)';
+            ctx.beginPath();
+            ctx.arc(legendX + 5, typeLegendY + 30, 4, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.fillStyle = '#4a5568';
+            ctx.fillText('Evaluated (refine)', legendX + 12, typeLegendY + 33);
+            
+            // Unevaluated point
+            ctx.fillStyle = 'rgba(200, 200, 200, 0.3)';
+            ctx.beginPath();
+            ctx.arc(legendX + 5, typeLegendY + 45, 2, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.fillStyle = '#4a5568';
+            ctx.fillText('Refinement space', legendX + 12, typeLegendY + 48);
         }
 
         function parseCalibrationData() {
