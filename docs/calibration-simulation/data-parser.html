@@ -739,6 +739,9 @@
                 log(`Frame dimensions: ${frameWidth.toFixed(1)}mm x ${frameHeight.toFixed(1)}mm (aspect ratio: ${aspectRatio.toFixed(2)}:1)`);
 
                 let startingGuess = JSON.parse(JSON.stringify(initialGuess));
+                
+                // Collect tested points for visualization (declare at function scope for optimization callback)
+                const testedPoints = [];
 
                 // Run rectangular optimization if needed (same logic as ESP3D-WEBUI)
                 if (initialFitness < 0.1 || (aspectRatio > 0.95 && aspectRatio < 1.05)) {
@@ -747,9 +750,6 @@
                     } else {
                         log(`Frame is nearly square (aspect ratio ${aspectRatio.toFixed(2)}:1), running rectangular optimization to find better dimensions.`);
                     }
-                    
-                    // Collect tested points for visualization
-                    const testedPoints = [];
                     startingGuess = await findBestRectangularStart(projectedMeasurements, initialGuess, log, testedPoints);
                     
                     // Visualize the search
