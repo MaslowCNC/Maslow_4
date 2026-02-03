@@ -243,7 +243,7 @@ void Maslow_::update() {
             digitalWrite(coolingFanPin, HIGH);  //keep the cooling fan on
         }
         //If we are doing calibration turn the cooling fan on
-        else if (calibration.calibrationInProgress || calibration.getCurrentState() == EXTENDING ||
+        else if (calibration.getCurrentState() == EXTENDING ||
                  calibration.getCurrentState() == RETRACTING || calibration.getCurrentState() == RELEASE_TENSION) {
             digitalWrite(coolingFanPin, HIGH);  //keep the cooling fan on
         } else {
@@ -995,7 +995,6 @@ void Maslow_::reset_all_axis() {
 // Stop all motors and reset all state variables
 void Maslow_::stop() {
     stopMotors();
-    calibration.calibrationInProgress = false;
     test                              = false;
     takeSlack                         = false;
 
@@ -1124,10 +1123,9 @@ void Maslow_::getInfo() {
     char* buffer = getLogBuffer();
     snprintf(buffer,
              1400,
-             "MINFO: { \"homed\": %s, \"calibrationInProgress\": %s, \"tl\": %g, \"tr\": %g, \"br\": %g, \"bl\": %g, "
+             "MINFO: { \"homed\": %s, \"tl\": %g, \"tr\": %g, \"br\": %g, \"bl\": %g, "
              "\"etl\": %g, \"etr\": %g, \"ebr\": %g, \"ebl\": %g, \"extended\": %s }",
              calibration.all_axis_homed() ? "true" : "false",
-             calibration.calibrationInProgress ? "true" : "false",
              axis[_TL].getPosition(),
              axis[_TR].getPosition(),
              axis[_BR].getPosition(),

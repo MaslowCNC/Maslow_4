@@ -234,9 +234,6 @@ bool Calibration::requestStateChange(int newState) {
                     plan_sync_position();
                 }
 
-                sys.set_state(State::Homing);
-
-                calibrationInProgress = true;  //Should be replaced by state machine
                 success               = true;
                 break;
             } else {
@@ -246,7 +243,6 @@ bool Calibration::requestStateChange(int newState) {
         case CALIBRATION_COMPUTING:  //We can enter calibration computing from calibration in progress
             if (currentState == CALIBRATION_IN_PROGRESS) {
                 currentState          = CALIBRATION_COMPUTING;
-                calibrationInProgress = false;
                 success               = true;
                 break;
             } else {
@@ -403,11 +399,6 @@ void Calibration::home() {
 
     handleMotorOverides();
 
-    //if we are done with all the homing moves, switch system state back to Idle?
-    if (currentState != RETRACTING && currentState != EXTENDING && currentState != RELEASE_TENSION && !calibrationInProgress &&
-        !takeSlack && !checkOverides()) {
-        sys.set_state(State::Idle);
-    }
 }
 
 //------------------------------------------------------
@@ -1645,7 +1636,6 @@ void Calibration::resetCalibrationState() {
     waypoint               = 0;
     pointCount             = 0;
     recomputeCountIndex    = 0;
-    calibrationInProgress  = false;
     calibrationDataWaiting = -1;
 
     // Reset calibration loop state variables
@@ -1658,8 +1648,6 @@ void Calibration::resetCalibrationState() {
 
     // Deallocate memory if allocated
     deallocateCalibrationMemory();
-
-    log_info("Calibration state reset");
 }
 
 //Takes a raw measurement, projects it into the XY plane, then adds the belt end extension and arm length to get the actual distance.

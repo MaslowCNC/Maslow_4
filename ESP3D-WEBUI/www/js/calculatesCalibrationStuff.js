@@ -328,9 +328,6 @@ async function findMaxFitness(measurements) {
         refreshSettings(current_setting_filter);
         saveMaslowYaml();
 
-        messagesBox.textContent += '\nA command to save these values has been successfully sent for you. Please check for any error messages.';
-        messagesBox.scrollTop = messagesBox.scrollHeight;
-
         initialGuess = bestGuess;
         initialGuess.fitness = 100000000;
 
