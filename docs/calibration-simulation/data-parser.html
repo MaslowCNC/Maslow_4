@@ -484,12 +484,23 @@
                 
                 const isRefinement = p.isRefinement === true;
                 const isUnevaluated = p.unevaluated === true;
+                const isOptimization = p.isOptimization === true;
                 
                 if (isUnevaluated) {
                     // Show unevaluated refinement points in light gray
                     ctx.fillStyle = 'rgba(200, 200, 200, 0.3)';
                     ctx.beginPath();
                     ctx.arc(x, y, 2, 0, 2 * Math.PI);
+                    ctx.fill();
+                } else if (isOptimization) {
+                    // Show optimization iteration points in purple/magenta
+                    const fitnessNorm = (p.fitness - minFitness) / (maxFitness - minFitness);
+                    const hue = 280; // Purple/magenta hue
+                    const alpha = 0.3 + (fitnessNorm * 0.4); // Vary opacity by fitness
+                    
+                    ctx.fillStyle = `hsla(${hue}, 70%, 60%, ${alpha})`;
+                    ctx.beginPath();
+                    ctx.arc(x, y, 3, 0, 2 * Math.PI);
                     ctx.fill();
                 } else {
                     // Color by fitness (green = good, red = bad)
@@ -578,13 +589,21 @@
             ctx.fillStyle = '#4a5568';
             ctx.fillText('Evaluated (refine)', legendX + 12, typeLegendY + 33);
             
+            // Optimization iteration point
+            ctx.fillStyle = 'hsla(280, 70%, 60%, 0.5)';
+            ctx.beginPath();
+            ctx.arc(legendX + 5, typeLegendY + 45, 3, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.fillStyle = '#4a5568';
+            ctx.fillText('Optimization iter', legendX + 12, typeLegendY + 48);
+            
             // Unevaluated point
             ctx.fillStyle = 'rgba(200, 200, 200, 0.3)';
             ctx.beginPath();
-            ctx.arc(legendX + 5, typeLegendY + 45, 2, 0, 2 * Math.PI);
+            ctx.arc(legendX + 5, typeLegendY + 60, 2, 0, 2 * Math.PI);
             ctx.fill();
             ctx.fillStyle = '#4a5568';
-            ctx.fillText('Refinement space', legendX + 12, typeLegendY + 48);
+            ctx.fillText('Refinement space', legendX + 12, typeLegendY + 63);
         }
 
         function parseCalibrationData() {
@@ -770,6 +789,25 @@
                 const result = await computer.processDataChunk(projectedMeasurements, (iterations, fitness) => {
                     if (iterations % 500 === 0) {
                         log(`  Iteration ${iterations}: Fitness = ${fitness.toFixed(6)}`);
+                        
+                        // Add optimization iteration point to visualization
+                        // Use TR corner position as width/height coordinate
+                        const currentState = computer.getStatus();
+                        if (currentState && currentState.bestGuess) {
+                            const guess = currentState.bestGuess;
+                            const width = guess.tr.x - guess.tl.x;
+                            const height = guess.tl.y - guess.bl.y;
+                            
+                            testedPoints.push({
+                                width: width,
+                                height: height,
+                                fitness: fitness,
+                                isOptimization: true  // Mark as optimization iteration point
+                            });
+                            
+                            // Update visualization with new point
+                            visualizeSearch(testedPoints, arcPoints, bestSolution);
+                        }
                     }
                 });
 
