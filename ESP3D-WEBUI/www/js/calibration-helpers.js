@@ -188,8 +188,8 @@ async function findBestRectangularStart(measurements, initialGuess, logFn = () =
     let right = validPoints.length - 1;
     
     while (right - left > TERNARY_SEARCH_THRESHOLD) {
-        const mid1 = Math.floor(left + (right - left) / 3);
-        const mid2 = Math.floor(right - (right - left) / 3);
+        const mid1 = left + Math.floor((right - left) / 3);
+        const mid2 = left + Math.floor(2 * (right - left) / 3);
         
         const fitness1 = await evaluatePointAtIndex(mid1);
         const fitness2 = await evaluatePointAtIndex(mid2);
@@ -232,10 +232,10 @@ async function findBestRectangularStart(measurements, initialGuess, logFn = () =
     // Phase 3: Refine by sampling finer along the arc near best solution
     logFn('Phase 3: Refining best solution on arc with finer sampling...');
     
-    const REFINEMENT_WIDTH_MARGIN = 150;  // mm to search around best width
+    const REFINEMENT_WIDTH_HALF_RANGE = 150;  // mm to search on each side of best width
     const bestWidth = bestGuess.tr.x - bestGuess.tl.x;
-    const refineWidthMin = Math.max(widthMin, bestWidth - REFINEMENT_WIDTH_MARGIN);
-    const refineWidthMax = bestWidth + REFINEMENT_WIDTH_MARGIN;
+    const refineWidthMin = Math.max(widthMin, bestWidth - REFINEMENT_WIDTH_HALF_RANGE);
+    const refineWidthMax = bestWidth + REFINEMENT_WIDTH_HALF_RANGE;
     const refineWidthStep = 5;  // Finer sampling for refinement
     
     let refinementCount = 0;
@@ -322,8 +322,8 @@ async function findBestRectangularStart(measurements, initialGuess, logFn = () =
     let refRight = refinementPoints.length - 1;
     
     while (refRight - refLeft > REFINEMENT_SEARCH_THRESHOLD) {
-        const refMid1 = Math.floor(refLeft + (refRight - refLeft) / 3);
-        const refMid2 = Math.floor(refRight - (refRight - refLeft) / 3);
+        const refMid1 = refLeft + Math.floor((refRight - refLeft) / 3);
+        const refMid2 = refLeft + Math.floor(2 * (refRight - refLeft) / 3);
         
         const refFitness1 = await evaluateRefinementPoint(refMid1);
         const refFitness2 = await evaluateRefinementPoint(refMid2);
