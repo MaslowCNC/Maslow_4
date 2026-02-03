@@ -805,8 +805,8 @@
                                 isOptimization: true  // Mark as optimization iteration point
                             });
                             
-                            // Update visualization with new point
-                            visualizeSearch(testedPoints, bestSolution);
+                            // Update visualization with new point (bestSolution not available yet during optimization)
+                            visualizeSearch(testedPoints, null);
                         }
                     }
                 });
