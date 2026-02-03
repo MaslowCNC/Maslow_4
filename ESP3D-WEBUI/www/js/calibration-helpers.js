@@ -131,17 +131,18 @@ async function findBestRectangularStart(measurements, initialGuess, logFn = () =
     }
     
     logFn(`Found ${validPoints.length} points on geometric locus arc`);
-    logFn('Phase 2: Evaluating fitness along arc...');
+    logFn('Phase 2: Optimized search along arc using ternary search...');
     
-    // Now evaluate fitness for each point on the arc
-    for (let i = 0; i < validPoints.length; i++) {
-        const point = validPoints[i];
+    // Helper function to evaluate fitness at a specific index
+    async function evaluatePointAtIndex(idx) {
+        if (idx < 0 || idx >= validPoints.length) return Infinity;
+        
+        const point = validPoints[idx];
         const W = point.w;
         const H = point.h;
         
         testedCount++;
         
-        // The point (x, y) is where the TL corner must be relative to the first measurement
         // Transform to absolute coordinates
         const tl_x = x0 + point.x;
         const tl_y = y0 + point.y;
@@ -177,9 +178,39 @@ async function findBestRectangularStart(measurements, initialGuess, logFn = () =
             bestGuess.fitness = result.fitness;
         }
         
-        // Yield frequently and log progress to keep UI responsive
-        if (testedCount % 50 === 0) {
-            logFn(`Progress: ${testedCount}/${validPoints.length} tested, best fitness so far: ${bestFitness < Infinity ? (1/bestFitness).toFixed(4) : 'N/A'}`);
+        return result.fitness;
+    }
+    
+    // Ternary search to find the minimum fitness along the arc
+    // This reduces evaluations from O(n) to O(log n)
+    let left = 0;
+    let right = validPoints.length - 1;
+    
+    while (right - left > 5) {  // Continue until range is small
+        const mid1 = Math.floor(left + (right - left) / 3);
+        const mid2 = Math.floor(right - (right - left) / 3);
+        
+        const fitness1 = await evaluatePointAtIndex(mid1);
+        const fitness2 = await evaluatePointAtIndex(mid2);
+        
+        logFn(`Ternary search: range [${left}, ${right}], tested indices ${mid1} (fitness: ${(1/fitness1).toFixed(4)}) and ${mid2} (fitness: ${(1/fitness2).toFixed(4)})`);
+        
+        if (fitness1 > fitness2) {
+            // Minimum is in right 2/3
+            left = mid1;
+        } else {
+            // Minimum is in left 2/3
+            right = mid2;
+        }
+        
+        await new Promise(resolve => setTimeout(resolve, 10));
+    }
+    
+    // Evaluate remaining points in final range
+    logFn(`Fine search in range [${left}, ${right}]...`);
+    for (let i = left; i <= right; i++) {
+        await evaluatePointAtIndex(i);
+        if (testedCount % 5 === 0) {
             await new Promise(resolve => setTimeout(resolve, 10));
         }
     }
@@ -198,79 +229,116 @@ async function findBestRectangularStart(measurements, initialGuess, logFn = () =
     logFn(`Best: ${(bestGuess.tr.x - bestGuess.tl.x).toFixed(0)}mm x ${(bestGuess.tl.y - bestGuess.bl.y).toFixed(0)}mm, Fitness: ${(1/bestGuess.fitness).toFixed(4)}`);
     
     // Phase 3: Refine by sampling finer along the arc near best solution
-    logFn('Phase 3: Refining best solution on arc...');
+    logFn('Phase 3: Refining best solution on arc with finer sampling...');
     
     const bestWidth = bestGuess.tr.x - bestGuess.tl.x;
-    const refineWidthMin = Math.max(widthMin, bestWidth - 300);
-    const refineWidthMax = bestWidth + 300;
-    const refineWidthStep = 5;  // Much finer sampling for refinement
+    const refineWidthMin = Math.max(widthMin, bestWidth - 150);  // Narrower range
+    const refineWidthMax = bestWidth + 150;
+    const refineWidthStep = 5;  // Finer sampling for refinement
     
     let refinementCount = 0;
+    const refinementPoints = [];
     
+    // Build refined arc points near best solution
     for (let w = refineWidthMin; w <= refineWidthMax; w += refineWidthStep) {
-        // Compute points on arc for this width
-        const x = (w*w + Kx) / (2*w);  // X offset of TL corner from first measurement point
-        const rem = TL2 - x*x;  // Remaining Y distance squared
+        const x = (w*w + Kx) / (2*w);
+        const rem = TL2 - x*x;
         
         if (rem >= 0) {
-            const v = Math.sqrt(rem);  // Y distance from measurement to TL corner
+            const v = Math.sqrt(rem);
             
             [v, -v].forEach(yDistance => {
-                const disc = 4*yDistance*yDistance - 4*Ky;  // Discriminant of quadratic equation
+                const disc = 4*yDistance*yDistance - 4*Ky;
                 if (disc >= 0) {
-                    const sqrtDisc = Math.sqrt(disc);  // Square root of discriminant
+                    const sqrtDisc = Math.sqrt(disc);
                     [(-2*yDistance + sqrtDisc)/2, (-2*yDistance - sqrtDisc)/2].forEach(h => {
                         if (h > 100) {
-                            const y = (h*h - Ky) / (2*h);  // Y offset of TL corner from measurement
+                            const y = (h*h - Ky) / (2*h);
                             
                             if (x >= -0.05 && x <= w+0.05 && y >= -0.05 && y <= h+0.05) {
-                                testedCount++;
-                                refinementCount++;
-                                
-                                const tl_x = x0 + x;
-                                const tl_y = y0 + y;
-                                
-                                const guess = {
-                                    tl: { x: tl_x, y: tl_y },
-                                    tr: { x: tl_x + w, y: tl_y },
-                                    bl: { x: tl_x, y: tl_y - h },
-                                    br: { x: tl_x + w, y: tl_y - h },
-                                    fitness: 0
-                                };
-                                
-                                const testMeasurements = JSON.parse(JSON.stringify(measurements));
-                                const result = computeLinesFitness(testMeasurements, guess, true);
-                                
-                                if (testedPoints !== null) {
-                                    testedPoints.push({
-                                        width: w,
-                                        height: h,
-                                        aspectRatio: w / h,
-                                        fitness: result.fitness,
-                                        guess: JSON.parse(JSON.stringify(guess)),
-                                        onArc: true,
-                                        isRefinement: true
-                                    });
-                                }
-                                
-                                if (result.fitness < bestFitness) {
-                                    bestFitness = result.fitness;
-                                    bestGuess = JSON.parse(JSON.stringify(guess));
-                                    bestGuess.fitness = result.fitness;
-                                }
+                                refinementPoints.push({w, h, x, y});
                             }
                         }
                     });
                 }
             });
         }
-        
-        // Yield occasionally during refinement
-        if (refinementCount % 20 === 0) {
-            logFn(`Refinement progress: ${refinementCount} tested`);
-            await new Promise(resolve => setTimeout(resolve, 10));
-        }
     }
+    
+    logFn(`Generated ${refinementPoints.length} refinement points, using ternary search...`);
+    
+    // Helper function to evaluate refinement point at index
+    async function evaluateRefinementPoint(idx) {
+        if (idx < 0 || idx >= refinementPoints.length) return Infinity;
+        
+        const point = refinementPoints[idx];
+        const w = point.w;
+        const h = point.h;
+        
+        testedCount++;
+        refinementCount++;
+        
+        const tl_x = x0 + point.x;
+        const tl_y = y0 + point.y;
+        
+        const guess = {
+            tl: { x: tl_x, y: tl_y },
+            tr: { x: tl_x + w, y: tl_y },
+            bl: { x: tl_x, y: tl_y - h },
+            br: { x: tl_x + w, y: tl_y - h },
+            fitness: 0
+        };
+        
+        const testMeasurements = JSON.parse(JSON.stringify(measurements));
+        const result = computeLinesFitness(testMeasurements, guess, true);
+        
+        if (testedPoints !== null) {
+            testedPoints.push({
+                width: w,
+                height: h,
+                aspectRatio: w / h,
+                fitness: result.fitness,
+                guess: JSON.parse(JSON.stringify(guess)),
+                onArc: true,
+                isRefinement: true
+            });
+        }
+        
+        if (result.fitness < bestFitness) {
+            bestFitness = result.fitness;
+            bestGuess = JSON.parse(JSON.stringify(guess));
+            bestGuess.fitness = result.fitness;
+        }
+        
+        return result.fitness;
+    }
+    
+    // Ternary search on refinement points
+    let refLeft = 0;
+    let refRight = refinementPoints.length - 1;
+    
+    while (refRight - refLeft > 3) {
+        const refMid1 = Math.floor(refLeft + (refRight - refLeft) / 3);
+        const refMid2 = Math.floor(refRight - (refRight - refLeft) / 3);
+        
+        const refFitness1 = await evaluateRefinementPoint(refMid1);
+        const refFitness2 = await evaluateRefinementPoint(refMid2);
+        
+        if (refFitness1 > refFitness2) {
+            refLeft = refMid1;
+        } else {
+            refRight = refMid2;
+        }
+        
+        await new Promise(resolve => setTimeout(resolve, 10));
+    }
+    
+    // Evaluate remaining refinement points
+    for (let i = refLeft; i <= refRight; i++) {
+        await evaluateRefinementPoint(i);
+    }
+    
+    logFn(`Refinement complete: tested ${refinementCount} points`);
     
     logFn(`Total configurations tested: ${testedCount}`);
     logFn(`Final solution: ${(bestGuess.tr.x - bestGuess.tl.x).toFixed(1)}mm x ${(bestGuess.tl.y - bestGuess.bl.y).toFixed(1)}mm`);
