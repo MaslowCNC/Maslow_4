@@ -727,17 +727,13 @@ var collectHandler = undefined
 var collectedSettings = null
 
 async function handleCalibrationData(measurements) {
-  console.log('[DEBUG] handleCalibrationData called with', measurements.length, 'measurements');
   document.querySelector('#messages').textContent += '\nComputing... This may take several minutes'
-  console.log('[DEBUG] Sending $ACKCAL command to acknowledge calibration data received');
   sendCommand("$ACKCAL");
   await sleep(500)
   try {
-    console.log('[DEBUG] Starting findMaxFitness computation');
     calibrationResults = await findMaxFitness(measurements)
-    console.log('[DEBUG] findMaxFitness completed - fitness:', calibrationResults?.fitness);
   } catch (error) {
-    console.error('[ERROR] findMaxFitness failed:', error)
+    console.error('An error occurred:', error)
   }
 }
 

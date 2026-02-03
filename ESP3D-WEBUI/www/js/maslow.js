@@ -277,11 +277,6 @@ const maslowInfoMsgHandling = (msg) => {
 				console.error("Invalid state received from machine: " + state);
 				return false;
 			}
-			const stateNames = ['UNKNOWN', 'RETRACTING', 'RETRACTED', 'EXTENDING', 'EXTENDEDOUT', 'TAKING_SLACK', 'CALIBRATION_IN_PROGRESS', 'READY_TO_CUT', 'RELEASE_TENSION', 'CALIBRATION_COMPUTING'];
-			const oldState = maslowStatus.state;
-			const oldStateName = stateNames[oldState] || 'UNKNOWN';
-			const newStateName = stateNames[state] || 'UNKNOWN';
-			console.log(`[DEBUG] Maslow state change: ${oldState} (${oldStateName}) → ${state} (${newStateName})`);
 			maslowStatus.state = state;
 			updateDynamicButtons();
 		}
@@ -489,10 +484,6 @@ const checkHomed = () => {
  * Uses the global function get_position, which is also a SendPrinterCommand with presets
  */
 const sendCommand = (cmd) => {
-	// Log calibration-related commands for debugging
-	if (cmd.includes('CAL') || cmd.includes('kinematics')) {
-		console.log('[DEBUG] sendCommand:', cmd);
-	}
 	SendPrinterCommand(cmd, true, get_Position);
 }
 
