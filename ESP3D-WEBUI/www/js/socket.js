@@ -88,7 +88,11 @@ const Disable_interface = (lostconnection) => {
 	}
 	ws_source.close();
 	document.title += `('${HTMLDecode(translate_text_item("Disabled"))})`;
-	UIdisableddlg(lostcon);
+	// Only show the disconnect popup for intentional disconnects or errors
+	// For connection timeouts (lostcon=true), automatic reconnection will handle it
+	if (!lostcon) {
+		UIdisableddlg(lostcon);
+	}
 };
 
 const EventListenerSetup = () => {
@@ -163,7 +167,12 @@ const startSocket = () => {
 	}
 	ws_source.binaryType = "arraybuffer";
 	ws_source.onopen = (e) => {
-		console.log("Connected");
+		console.log("WebSocket connected");
+		// Check if this is a reconnection (not initial connection)
+		const isReconnection = http_communication_locked === true;
+		if (isReconnection) {
+			console.log("WebSocket reconnected - restoring communication");
+		}
 		// Unlock HTTP communication on reconnection
 		http_communication_locked = false;
 		log_off = false;
