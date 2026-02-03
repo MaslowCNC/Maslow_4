@@ -272,6 +272,10 @@ async function findMaxFitness(measurements) {
           messagesBox.textContent += '\n  1. Click "Calibrate" to restart with updated frame size estimate';
           messagesBox.textContent += '\n  2. Manually check belt tension and frame measurements';
           messagesBox.textContent += '\n  3. Verify measurements are accurate';
+          messagesBox.textContent += '\n[DEBUG] Sending $CALRESET command to reset calibration state';
+          console.log('[DEBUG] Maximum retries reached - count:', lowFitnessRetryCount, 'fitness:', currentFitness);
+          console.log('[DEBUG] Sending calibration event (good: false, maxRetriesReached: true)');
+          console.log('[DEBUG] Sending $CALRESET command');
           messagesBox.scrollTop = messagesBox.scrollHeight;
 
           sendCalibrationEvent({
@@ -310,6 +314,9 @@ async function findMaxFitness(measurements) {
       messagesBox.scrollTop = messagesBox.scrollHeight;
 
       if (currentFitness > acceptableCalibrationThreshold) {
+        console.log('[DEBUG] Calibration successful - fitness:', currentFitness);
+        messagesBox.textContent += '\n[DEBUG] Sending calibration parameters to firmware...';
+        
         sendCommand(`$/kinematics/MaslowKinematics/tlX=${tlxStr}`);
         sendCommand(`$/kinematics/MaslowKinematics/tlY=${tlyStr}`);
         sendCommand(`$/kinematics/MaslowKinematics/trX=${trxStr}`);
@@ -319,30 +326,41 @@ async function findMaxFitness(measurements) {
         sendCommand(`$/kinematics/MaslowKinematics/brX=${brxStr}`);
         sendCommand(`$/kinematics/MaslowKinematics/brY=${bryStr}`);
 
+        console.log('[DEBUG] Sending calibration event (good: true, final: true)');
         sendCalibrationEvent({
           good: true,
           final: true,
           bestGuess: bestGuess
         }, true);
         
+        console.log('[DEBUG] Refreshing settings and saving Maslow YAML');
         refreshSettings(current_setting_filter);
         saveMaslowYaml();
 
         messagesBox.textContent += '\nA command to save these values has been successfully sent for you. Please check for any error messages.';
+        messagesBox.textContent += '\n[DEBUG] Calibration parameters sent. Waiting 2s before next calibration cycle...';
+        console.log('[DEBUG] Scheduling next $CAL command in 2 seconds');
         messagesBox.scrollTop = messagesBox.scrollHeight;
 
         initialGuess = bestGuess;
         initialGuess.fitness = 100000000;
 
-        scheduleCallback(() => { onCalibrationButtonsClick('$CAL', 'Calibrate'); }, 2000);
+        scheduleCallback(() => { 
+          console.log('[DEBUG] Executing scheduled $CAL command');
+          onCalibrationButtonsClick('$CAL', 'Calibrate'); 
+        }, 2000);
       } else {
+        console.log('[DEBUG] Fitness below threshold - fitness:', currentFitness, 'threshold:', acceptableCalibrationThreshold);
+        console.log('[DEBUG] Sending calibration event (good: false, final: true)');
         sendCalibrationEvent({
           good: false,
           final: true,
           guess: bestGuess
         }, true);
 
-        messagesBox.textContent += '\n Restarting';
+        messagesBox.textContent += '\n[DEBUG] Restarting calibration with random perturbation...';
+        console.log('[DEBUG] Adding random perturbation (±50mm) to initial guess');
+        messagesBox.scrollTop = messagesBox.scrollHeight;
 
         // Add random perturbation and retry
         initialGuess.tl.x = bestGuess.tl.x + Math.random() * 100 - 50;
