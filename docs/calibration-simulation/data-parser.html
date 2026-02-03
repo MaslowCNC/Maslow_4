@@ -367,14 +367,13 @@
             }
             
             // Find min/max for scaling
-            let minWidth = Infinity, maxWidth = -Infinity;
-            let minHeight = Infinity, maxHeight = -Infinity;
+            // Always include origin (0, 0) in the plot
+            let minWidth = 0, maxWidth = -Infinity;
+            let minHeight = 0, maxHeight = -Infinity;
             let minFitness = Infinity, maxFitness = -Infinity;
             
             testedPoints.forEach(p => {
-                minWidth = Math.min(minWidth, p.width);
                 maxWidth = Math.max(maxWidth, p.width);
-                minHeight = Math.min(minHeight, p.height);
                 maxHeight = Math.max(maxHeight, p.height);
                 minFitness = Math.min(minFitness, p.fitness);
                 maxFitness = Math.max(maxFitness, p.fitness);
@@ -385,7 +384,7 @@
             const plotWidth = canvas.width - 2 * padding;
             const plotHeight = canvas.height - 2 * padding;
             
-            // Scale functions
+            // Scale functions - origin (0,0) is at bottom-left
             const scaleX = (w) => padding + (w - minWidth) / (maxWidth - minWidth) * plotWidth;
             const scaleY = (h) => canvas.height - padding - (h - minHeight) / (maxHeight - minHeight) * plotHeight;
             
