@@ -651,6 +651,13 @@
             showStatus('compute-status', 'Computing...', 'info');
             document.getElementById('compute-button').disabled = true;
 
+            // Constants matching ESP3D-WEBUI production code
+            const MAX_LOW_FITNESS_RETRIES = 10;
+            const acceptableCalibrationThreshold = 0.5;
+            let lowFitnessRetryCount = 0;
+            let bestFitnessAcrossAllRetries = 0;
+            let bestGuessAcrossAllRetries = null;
+
             try {
                 // Project measurements to account for Z-height
                 log('Projecting measurements to machine plane...');
@@ -725,6 +732,12 @@
                 const status = computer.getStatus();
                 const fitness = status.bestFitness;
                 
+                // Track best fitness across all retries
+                if (fitness > bestFitnessAcrossAllRetries) {
+                    bestFitnessAcrossAllRetries = fitness;
+                    bestGuessAcrossAllRetries = JSON.parse(JSON.stringify(result));
+                }
+                
                 log(`\n=== Computation Complete ===`);
                 log(`Total iterations: ${status.totalIterations}`);
                 log(`Final fitness: ${fitness.toFixed(6)}`);
@@ -734,20 +747,70 @@
                 log(`  Bottom Left:  X = ${result.bl.x.toFixed(2)} mm, Y = ${result.bl.y.toFixed(2)} mm`);
                 log(`  Bottom Right: X = ${result.br.x.toFixed(2)} mm, Y = ${result.br.y.toFixed(2)} mm`);
 
-                // Display results
-                document.getElementById('result-tlx').textContent = result.tl.x.toFixed(2) + ' mm';
-                document.getElementById('result-tly').textContent = result.tl.y.toFixed(2) + ' mm';
-                document.getElementById('result-trx').textContent = result.tr.x.toFixed(2) + ' mm';
-                document.getElementById('result-try').textContent = result.tr.y.toFixed(2) + ' mm';
-                document.getElementById('result-brx').textContent = result.br.x.toFixed(2) + ' mm';
-                document.getElementById('result-fitness').textContent = fitness.toFixed(6);
-                document.getElementById('results-box').style.display = 'block';
-
-                if (fitness > 0.5) {
-                    showStatus('compute-status', '✓ Computation successful!', 'success');
+                // Check if fitness is acceptable (matching ESP3D-WEBUI logic)
+                if (fitness < acceptableCalibrationThreshold) {
+                    log(`\n⚠ Calculated Fitness Too Low (${fitness.toFixed(6)} < ${acceptableCalibrationThreshold}).`);
+                    
+                    if (lowFitnessRetryCount >= MAX_LOW_FITNESS_RETRIES) {
+                        log(`\n⚠️ Maximum retry attempts (${MAX_LOW_FITNESS_RETRIES}) reached.`);
+                        log(`Best fitness achieved across all attempts: ${bestFitnessAcrossAllRetries.toFixed(6)}`);
+                        log('Using best estimate from all attempts.');
+                        
+                        // Use best result from all attempts
+                        result = bestGuessAcrossAllRetries;
+                        
+                        // Display best results
+                        document.getElementById('result-tlx').textContent = result.tl.x.toFixed(2) + ' mm';
+                        document.getElementById('result-tly').textContent = result.tl.y.toFixed(2) + ' mm';
+                        document.getElementById('result-trx').textContent = result.tr.x.toFixed(2) + ' mm';
+                        document.getElementById('result-try').textContent = result.tr.y.toFixed(2) + ' mm';
+                        document.getElementById('result-brx').textContent = result.br.x.toFixed(2) + ' mm';
+                        document.getElementById('result-fitness').textContent = bestFitnessAcrossAllRetries.toFixed(6);
+                        document.getElementById('results-box').style.display = 'block';
+                        
+                        showStatus('compute-status', '❌ Calibration stopped due to low fitness after maximum retries', 'error');
+                        log('\n❌ Calibration stopped due to low fitness after maximum retries.');
+                        log('Options:');
+                        log('  1. Click "Compute Anchor Positions" to restart calibration');
+                        log('  2. Manually adjust initial anchor position inputs');
+                        log('  3. Verify measurements are accurate');
+                    } else {
+                        // Retry with random perturbation (matching ESP3D-WEBUI behavior)
+                        lowFitnessRetryCount++;
+                        log(` Retry ${lowFitnessRetryCount}/${MAX_LOW_FITNESS_RETRIES}...`);
+                        log('Adding random perturbation to guess and restarting...');
+                        
+                        // Add random perturbation (±50mm, matching ESP3D-WEBUI)
+                        initialGuess.tl.x = result.tl.x + Math.random() * 100 - 50;
+                        initialGuess.tl.y = result.tl.y + Math.random() * 100 - 50;
+                        initialGuess.tr.x = result.tr.x + Math.random() * 100 - 50;
+                        initialGuess.tr.y = result.tr.y + Math.random() * 100 - 50;
+                        initialGuess.br.x = result.br.x + Math.random() * 100 - 50;
+                        initialGuess.bl.x = 0;
+                        initialGuess.bl.y = 0;
+                        
+                        log(`Perturbed guess: TL(${initialGuess.tl.x.toFixed(1)}, ${initialGuess.tl.y.toFixed(1)}), TR(${initialGuess.tr.x.toFixed(1)}, ${initialGuess.tr.y.toFixed(1)}), BR(${initialGuess.br.x.toFixed(1)}, 0)`);
+                        
+                        // Recursively retry (will go back to start of try block)
+                        document.getElementById('compute-button').disabled = false;
+                        await computeAnchorPositions();
+                        return; // Exit this iteration
+                    }
                 } else {
-                    showStatus('compute-status', '⚠ Low fitness - results may be inaccurate', 'error');
-                    log('\n⚠ Warning: Fitness below threshold (0.5). Results may not be reliable.');
+                    // Success! Display results
+                    document.getElementById('result-tlx').textContent = result.tl.x.toFixed(2) + ' mm';
+                    document.getElementById('result-tly').textContent = result.tl.y.toFixed(2) + ' mm';
+                    document.getElementById('result-trx').textContent = result.tr.x.toFixed(2) + ' mm';
+                    document.getElementById('result-try').textContent = result.tr.y.toFixed(2) + ' mm';
+                    document.getElementById('result-brx').textContent = result.br.x.toFixed(2) + ' mm';
+                    document.getElementById('result-fitness').textContent = fitness.toFixed(6);
+                    document.getElementById('results-box').style.display = 'block';
+
+                    showStatus('compute-status', '✓ Computation successful!', 'success');
+                    
+                    if (lowFitnessRetryCount > 0) {
+                        log(`\n✓ Success after ${lowFitnessRetryCount} ${lowFitnessRetryCount === 1 ? 'retry' : 'retries'}!`);
+                    }
                 }
 
             } catch (error) {
