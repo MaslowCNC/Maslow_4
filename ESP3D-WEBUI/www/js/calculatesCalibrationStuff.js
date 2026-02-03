@@ -338,17 +338,12 @@ async function findMaxFitness(measurements) {
         saveMaslowYaml();
 
         messagesBox.textContent += '\nA command to save these values has been successfully sent for you. Please check for any error messages.';
-        messagesBox.textContent += '\n[DEBUG] Calibration parameters sent. Waiting 2s before next calibration cycle...';
-        console.log('[DEBUG] Scheduling next $CAL command in 2 seconds');
+        messagesBox.textContent += '\n[DEBUG] Calibration complete. Machine should now exit Home state.';
+        console.log('[DEBUG] Calibration complete - fitness above threshold, not scheduling additional $CAL command');
         messagesBox.scrollTop = messagesBox.scrollHeight;
 
         initialGuess = bestGuess;
         initialGuess.fitness = 100000000;
-
-        scheduleCallback(() => { 
-          console.log('[DEBUG] Executing scheduled $CAL command');
-          onCalibrationButtonsClick('$CAL', 'Calibrate'); 
-        }, 2000);
       } else {
         console.log('[DEBUG] Fitness below threshold - fitness:', currentFitness, 'threshold:', acceptableCalibrationThreshold);
         console.log('[DEBUG] Sending calibration event (good: false, final: true)');
