@@ -229,7 +229,7 @@
                 <br>• CLBM: <code>CLBM:[{bl:2960.58, br:3150.08, tr:3067.72, tl:3049.85},...]</code>
             </p>
             <label for="calibration-input">Measurement Data:</label>
-            <textarea id="calibration-input" rows="6" placeholder="Example: CLBM:[{bl:2960.58, br:3150.08, tr:3067.72, tl:3049.85},{bl:3066.96, br:3042.59, tr:2957.53, tl:3158.38},...]"></textarea>
+            <textarea id="calibration-input" rows="6" placeholder="Example: CLBM:[{bl:2960.58, br:3150.08, tr:3067.72, tl:3049.85},{bl:3066.96, br:3042.59, tr:2957.53, tl:3158.38},...]">CLBM:[{bl:2960.58,   br:3150.08,   tr:3067.72,   tl:3049.85},{bl:3066.96,   br:3042.59,   tr:2957.53,   tl:3158.38},{bl:3167.61,   br:3134.33,   tr:2860.94,   tl:3079.01},{bl:3071.33,   br:3245.05,   tr:2969.86,   tl:2960.50},{bl:2966.88,   br:3356.74,   tr:3090.81,   tl:2843.43},{bl:2859.27,   br:3272.34,   tr:3179.93,   tl:2930.26},]</textarea>
             <div class="button-group">
                 <button id="parse-button">Parse and Validate</button>
                 <span id="parse-status" class="status-message"></span>
@@ -814,6 +814,11 @@
                 const status = computer.getStatus();
                 const fitness = status.bestFitness;
                 
+                // Fix BL and BR positions (BL should always be at origin, BR.y should always be 0)
+                result.bl.x = 0;
+                result.bl.y = 0;
+                result.br.y = 0;
+                
                 // Track best fitness across all retries
                 if (fitness > bestFitnessAcrossAllRetries) {
                     bestFitnessAcrossAllRetries = fitness;
@@ -840,6 +845,11 @@
                         
                         // Use best result from all attempts
                         result = bestGuessAcrossAllRetries;
+                        
+                        // Fix BL and BR positions
+                        result.bl.x = 0;
+                        result.bl.y = 0;
+                        result.br.y = 0;
                         
                         // Display best results
                         document.getElementById('result-tlx').textContent = result.tl.x.toFixed(2) + ' mm';
