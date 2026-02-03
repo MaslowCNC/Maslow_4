@@ -106,8 +106,8 @@ bool Calibration::requestStateChange(int newState) {
                 log_info("Cannot extend the belts until they have been retracted");
                 break;
             }
-        case EXTENDEDOUT:  //We can enter extended from extending or in the event of a failure from taking slack or release tension
-            if (currentState == EXTENDING || currentState == TAKING_SLACK || currentState == RELEASE_TENSION) {
+        case EXTENDEDOUT:  //We can enter extended from extending or in the event of a failure from taking slack or release tension or in the event that calibration can't find a valid solution from calibration computing
+            if (currentState == EXTENDING || currentState == TAKING_SLACK || currentState == RELEASE_TENSION || currentState == CALIBRATION_COMPUTING) {
                 currentState = EXTENDEDOUT;
                 sys.set_state(State::Idle);
                 // Save belt positions now that belts are extended and at a known position
