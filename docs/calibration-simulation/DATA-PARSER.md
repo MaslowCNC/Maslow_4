@@ -110,9 +110,11 @@ This tool uses the **exact same calibration computation code** as the ESP3D-WEBU
 - The machine simulator (`index.html`)
 - The actual ESP3D-WEBUI calibration
 
-The data parser now includes the **retry logic with randomized starting positions**, matching the real machine behavior:
-- If fitness is below 0.5 threshold, the algorithm retries with random perturbations (±50mm) to anchor positions
-- Up to 10 retry attempts are made before giving up
+The data parser now includes the **retry logic with aspect ratio-based starting positions**, matching the real machine behavior:
+- If fitness is below 0.5 threshold, the algorithm retries with predefined aspect ratios instead of random points
+- The 5 aspect ratios tested are: 2:1, 1.5:1, 1:1, 1:1.5, and 1:2 (width:height)
+- These points are calculated on the arc found in Phase 2 using the optimal radius
+- Up to 10 retry attempts are made (5 with aspect ratios, then 5 with original guess) before giving up
 - The best result across all attempts is displayed if maximum retries are reached
 - This ensures offline testing behaves identically to the machine
 
