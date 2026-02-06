@@ -338,6 +338,8 @@
 
     <!-- Load shared calibration computation library -->
     <script src="../../ESP3D-WEBUI/www/js/calibration-computation.js"></script>
+    <!-- Load calibration utilities including aspect ratio calculations -->
+    <script src="../../ESP3D-WEBUI/www/js/calculatesCalibrationStuff.js"></script>
 
     <script>
         let parsedMeasurements = null;
@@ -352,12 +354,9 @@
         const blZ = 34;
         const brZ = 78;
 
-        // Maximum number of low-fitness retry attempts before giving up (matches ESP3D-WEBUI behavior)
-        const MAX_LOW_FITNESS_RETRIES = 10;
+        // Note: MAX_LOW_FITNESS_RETRIES, RETRY_ASPECT_RATIOS, and calculateAspectRatioFrame
+        // are loaded from calculatesCalibrationStuff.js to avoid code duplication
         const acceptableCalibrationThreshold = 0.5;
-
-        // Aspect ratios to test as retry points (width:height)
-        const RETRY_ASPECT_RATIOS = [2.0, 1.5, 1.0, 1.0/1.5, 1.0/2.0];
 
         function log(message, clear = false) {
             const output = document.getElementById('output');
@@ -1082,25 +1081,18 @@
                             // Test points with aspect ratios: 2:1, 1.5:1, 1:1, 1:1.5, 1:2
                             if (optimalRadiusForRetry !== null && lowFitnessRetryCount <= RETRY_ASPECT_RATIOS.length) {
                                 const aspectRatio = RETRY_ASPECT_RATIOS[lowFitnessRetryCount - 1];
+                                const frame = calculateAspectRatioFrame(aspectRatio, optimalRadiusForRetry);
                                 
-                                // Calculate angle from aspect ratio
-                                // For width:height = aspectRatio, we have width = radius * cos(angle), height = radius * sin(angle)
-                                // aspectRatio = width/height = cos(angle)/sin(angle) = cot(angle)
-                                // Therefore angle = atan(1/aspectRatio)
-                                const angle = Math.atan(1.0 / aspectRatio);
-                                const width = optimalRadiusForRetry * Math.cos(angle);
-                                const height = optimalRadiusForRetry * Math.sin(angle);
+                                currentStartingGuess.tl.x = frame.tl.x;
+                                currentStartingGuess.tl.y = frame.tl.y;
+                                currentStartingGuess.tr.x = frame.tr.x;
+                                currentStartingGuess.tr.y = frame.tr.y;
+                                currentStartingGuess.bl.x = frame.bl.x;
+                                currentStartingGuess.bl.y = frame.bl.y;
+                                currentStartingGuess.br.x = frame.br.x;
+                                currentStartingGuess.br.y = frame.br.y;
                                 
-                                currentStartingGuess.tl.x = 0;
-                                currentStartingGuess.tl.y = height;
-                                currentStartingGuess.tr.x = width;
-                                currentStartingGuess.tr.y = height;
-                                currentStartingGuess.bl.x = 0;
-                                currentStartingGuess.bl.y = 0;
-                                currentStartingGuess.br.x = width;
-                                currentStartingGuess.br.y = 0;
-                                
-                                log(`Using aspect ratio ${aspectRatio.toFixed(2)}:1 retry point (Width: ${width.toFixed(1)}mm, Height: ${height.toFixed(1)}mm)`);
+                                log(`Using aspect ratio ${aspectRatio.toFixed(2)}:1 retry point (Width: ${frame.tr.x.toFixed(1)}mm, Height: ${frame.tr.y.toFixed(1)}mm)`);
                             } else {
                                 // Fallback to original guess if we don't have optimal radius or exceeded aspect ratio retries
                                 currentStartingGuess.tl.x = startingGuess.tl.x;

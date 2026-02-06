@@ -17,6 +17,29 @@ const MAX_LOW_FITNESS_RETRIES = 10;
 // Aspect ratios to test as retry points (width:height)
 const RETRY_ASPECT_RATIOS = [2.0, 1.5, 1.0, 1.0/1.5, 1.0/2.0];
 
+/**
+ * Calculate a rectangular frame configuration from aspect ratio on an arc
+ * @param {number} aspectRatio - Width:height ratio (e.g., 2.0 for 2:1)
+ * @param {number} radius - Optimal radius from phase 2
+ * @returns {Object} Frame configuration with tl, tr, bl, br coordinates
+ */
+function calculateAspectRatioFrame(aspectRatio, radius) {
+  // Calculate angle from aspect ratio
+  // For width:height = aspectRatio, we have width = radius * cos(angle), height = radius * sin(angle)
+  // aspectRatio = width/height = cos(angle)/sin(angle) = cot(angle)
+  // Therefore angle = atan(1/aspectRatio)
+  const angle = Math.atan(1.0 / aspectRatio);
+  const width = radius * Math.cos(angle);
+  const height = radius * Math.sin(angle);
+  
+  return {
+    tl: { x: 0, y: height },
+    tr: { x: width, y: height },
+    bl: { x: 0, y: 0 },
+    br: { x: width, y: 0 }
+  };
+}
+
 //Establish initial guesses for the corners
 var initialGuess = {
   tl: { x: 0, y: 2000 },
@@ -528,25 +551,18 @@ async function findMaxFitness(measurements) {
         // Test points with aspect ratios: 2:1, 1.5:1, 1:1, 1:1.5, 1:2
         if (optimalRadiusForRetry !== null && lowFitnessRetryCount > 0 && lowFitnessRetryCount <= RETRY_ASPECT_RATIOS.length) {
           const aspectRatio = RETRY_ASPECT_RATIOS[lowFitnessRetryCount - 1];
+          const frame = calculateAspectRatioFrame(aspectRatio, optimalRadiusForRetry);
           
-          // Calculate angle from aspect ratio
-          // For width:height = aspectRatio, we have width = radius * cos(angle), height = radius * sin(angle)
-          // aspectRatio = width/height = cos(angle)/sin(angle) = cot(angle)
-          // Therefore angle = atan(1/aspectRatio)
-          const angle = Math.atan(1.0 / aspectRatio);
-          const width = optimalRadiusForRetry * Math.cos(angle);
-          const height = optimalRadiusForRetry * Math.sin(angle);
+          initialGuess.tl.x = frame.tl.x;
+          initialGuess.tl.y = frame.tl.y;
+          initialGuess.tr.x = frame.tr.x;
+          initialGuess.tr.y = frame.tr.y;
+          initialGuess.bl.x = frame.bl.x;
+          initialGuess.bl.y = frame.bl.y;
+          initialGuess.br.x = frame.br.x;
+          initialGuess.br.y = frame.br.y;
           
-          initialGuess.tl.x = 0;
-          initialGuess.tl.y = height;
-          initialGuess.tr.x = width;
-          initialGuess.tr.y = height;
-          initialGuess.bl.x = 0;
-          initialGuess.bl.y = 0;
-          initialGuess.br.x = width;
-          initialGuess.br.y = 0;
-          
-          messagesBox.textContent += ` with aspect ratio ${aspectRatio.toFixed(2)}:1 (Width: ${width.toFixed(1)}mm, Height: ${height.toFixed(1)}mm)`;
+          messagesBox.textContent += ` with aspect ratio ${aspectRatio.toFixed(2)}:1 (Width: ${frame.tr.x.toFixed(1)}mm, Height: ${frame.tr.y.toFixed(1)}mm)`;
         } else {
           // Fallback to original guess if we don't have optimal radius or exceeded retry attempts
           initialGuess.tl.x = startingGuess.tl.x;
