@@ -14,6 +14,9 @@ var acceptableCalibrationThreshold = 0.5
 // Maximum number of low-fitness retry attempts before giving up
 const MAX_LOW_FITNESS_RETRIES = 10;
 
+// Aspect ratios to test as retry points (width:height)
+const RETRY_ASPECT_RATIOS = [2.0, 1.5, 1.0, 1.0/1.5, 1.0/2.0];
+
 //Establish initial guesses for the corners
 var initialGuess = {
   tl: { x: 0, y: 2000 },
@@ -334,6 +337,9 @@ async function findBestRectangularStart(measurements) {
   messagesBox.textContent += "Starting optimization...\n";
   messagesBox.scrollTop = messagesBox.scrollHeight;
 
+  // Store the optimal radius for retry point calculations
+  bestGuess.optimalRadius = optimalRadius;
+
   return bestGuess;
 }
 
@@ -387,6 +393,9 @@ async function findMaxFitness(measurements) {
   let lowFitnessRetryCount = 0;
   let bestGuessAcrossAllRetries = JSON.parse(JSON.stringify(startingGuess));
   let bestFitnessAcrossAllRetries = 1 / bestGuess.fitness;
+
+  // Store optimal radius from rectangular optimization for retry point calculations
+  let optimalRadiusForRetry = startingGuess.optimalRadius || null;
 
   function iterate() {
     if (stagnantCounter < 1000 && totalCounter < 200000) {
@@ -515,12 +524,40 @@ async function findMaxFitness(measurements) {
 
         messagesBox.textContent += '\n Restarting';
 
-        // Add random perturbation and retry
-        initialGuess.tl.x = bestGuess.tl.x + Math.random() * 100 - 50;
-        initialGuess.tl.y = bestGuess.tl.y + Math.random() * 100 - 50;
-        initialGuess.tr.x = bestGuess.tr.x + Math.random() * 100 - 50;
-        initialGuess.tr.y = bestGuess.tr.y + Math.random() * 100 - 50;
-        initialGuess.br.x = bestGuess.br.x + Math.random() * 100 - 50;
+        // Use aspect ratio-based retry points instead of random perturbation
+        // Test points with aspect ratios: 2:1, 1.5:1, 1:1, 1:1.5, 1:2
+        if (optimalRadiusForRetry !== null && lowFitnessRetryCount > 0 && lowFitnessRetryCount <= RETRY_ASPECT_RATIOS.length) {
+          const aspectRatio = RETRY_ASPECT_RATIOS[lowFitnessRetryCount - 1];
+          
+          // Calculate angle from aspect ratio
+          // For width:height = aspectRatio, we have width = radius * cos(angle), height = radius * sin(angle)
+          // aspectRatio = width/height = cos(angle)/sin(angle) = cot(angle)
+          // Therefore angle = atan(1/aspectRatio)
+          const angle = Math.atan(1.0 / aspectRatio);
+          const width = optimalRadiusForRetry * Math.cos(angle);
+          const height = optimalRadiusForRetry * Math.sin(angle);
+          
+          initialGuess.tl.x = 0;
+          initialGuess.tl.y = height;
+          initialGuess.tr.x = width;
+          initialGuess.tr.y = height;
+          initialGuess.bl.x = 0;
+          initialGuess.bl.y = 0;
+          initialGuess.br.x = width;
+          initialGuess.br.y = 0;
+          
+          messagesBox.textContent += ` with aspect ratio ${aspectRatio.toFixed(2)}:1 (Width: ${width.toFixed(1)}mm, Height: ${height.toFixed(1)}mm)`;
+        } else {
+          // Fallback to original guess if we don't have optimal radius or exceeded retry attempts
+          initialGuess.tl.x = startingGuess.tl.x;
+          initialGuess.tl.y = startingGuess.tl.y;
+          initialGuess.tr.x = startingGuess.tr.x;
+          initialGuess.tr.y = startingGuess.tr.y;
+          initialGuess.bl.x = startingGuess.bl.x;
+          initialGuess.bl.y = startingGuess.bl.y;
+          initialGuess.br.x = startingGuess.br.x;
+          initialGuess.br.y = startingGuess.br.y;
+        }
 
         stagnantCounter = 0;
         totalCounter = 0;

@@ -356,6 +356,9 @@
         const MAX_LOW_FITNESS_RETRIES = 10;
         const acceptableCalibrationThreshold = 0.5;
 
+        // Aspect ratios to test as retry points (width:height)
+        const RETRY_ASPECT_RATIOS = [2.0, 1.5, 1.0, 1.0/1.5, 1.0/2.0];
+
         function log(message, clear = false) {
             const output = document.getElementById('output');
             if (clear) {
@@ -825,6 +828,9 @@
             // Final visualization update
             drawVisualization();
 
+            // Store the optimal radius for retry point calculations
+            bestGuess.optimalRadius = optimalRadiusLocal;
+
             return bestGuess;
         }
 
@@ -983,6 +989,9 @@
                 // Current guess for optimization - starts with startingGuess, may be perturbed on retries
                 let currentStartingGuess = JSON.parse(JSON.stringify(startingGuess));
 
+                // Store optimal radius from rectangular optimization for retry point calculations
+                let optimalRadiusForRetry = startingGuess.optimalRadius || null;
+
                 // Retry loop - ONLY the final optimization step is repeated (matches machine behavior)
                 while (lowFitnessRetryCount <= MAX_LOW_FITNESS_RETRIES) {
                     if (lowFitnessRetryCount > 0) {
@@ -1065,18 +1074,46 @@
                             showStatus('compute-status', '⚠ Low fitness after max retries - results may be inaccurate', 'error');
                             break; // Exit retry loop
                         } else {
-                            // Increment retry count and add random perturbation (matches ESP3D-WEBUI)
+                            // Increment retry count and use aspect ratio-based retry points
                             lowFitnessRetryCount++;
                             log(` Retry ${lowFitnessRetryCount}/${MAX_LOW_FITNESS_RETRIES}...`);
-                            log('Adding random perturbation to final optimization starting point (±50mm)...');
 
-                            // Add random perturbation to the result for next iteration (same as machine behavior)
-                            currentStartingGuess.tl.x = result.tl.x + Math.random() * 100 - 50;
-                            currentStartingGuess.tl.y = result.tl.y + Math.random() * 100 - 50;
-                            currentStartingGuess.tr.x = result.tr.x + Math.random() * 100 - 50;
-                            currentStartingGuess.tr.y = result.tr.y + Math.random() * 100 - 50;
-                            currentStartingGuess.br.x = result.br.x + Math.random() * 100 - 50;
-                            // bl stays at (0, 0)
+                            // Use aspect ratio-based retry points instead of random perturbation
+                            // Test points with aspect ratios: 2:1, 1.5:1, 1:1, 1:1.5, 1:2
+                            if (optimalRadiusForRetry !== null && lowFitnessRetryCount <= RETRY_ASPECT_RATIOS.length) {
+                                const aspectRatio = RETRY_ASPECT_RATIOS[lowFitnessRetryCount - 1];
+                                
+                                // Calculate angle from aspect ratio
+                                // For width:height = aspectRatio, we have width = radius * cos(angle), height = radius * sin(angle)
+                                // aspectRatio = width/height = cos(angle)/sin(angle) = cot(angle)
+                                // Therefore angle = atan(1/aspectRatio)
+                                const angle = Math.atan(1.0 / aspectRatio);
+                                const width = optimalRadiusForRetry * Math.cos(angle);
+                                const height = optimalRadiusForRetry * Math.sin(angle);
+                                
+                                currentStartingGuess.tl.x = 0;
+                                currentStartingGuess.tl.y = height;
+                                currentStartingGuess.tr.x = width;
+                                currentStartingGuess.tr.y = height;
+                                currentStartingGuess.bl.x = 0;
+                                currentStartingGuess.bl.y = 0;
+                                currentStartingGuess.br.x = width;
+                                currentStartingGuess.br.y = 0;
+                                
+                                log(`Using aspect ratio ${aspectRatio.toFixed(2)}:1 retry point (Width: ${width.toFixed(1)}mm, Height: ${height.toFixed(1)}mm)`);
+                            } else {
+                                // Fallback to original guess if we don't have optimal radius or exceeded aspect ratio retries
+                                currentStartingGuess.tl.x = startingGuess.tl.x;
+                                currentStartingGuess.tl.y = startingGuess.tl.y;
+                                currentStartingGuess.tr.x = startingGuess.tr.x;
+                                currentStartingGuess.tr.y = startingGuess.tr.y;
+                                currentStartingGuess.bl.x = startingGuess.bl.x;
+                                currentStartingGuess.bl.y = startingGuess.bl.y;
+                                currentStartingGuess.br.x = startingGuess.br.x;
+                                currentStartingGuess.br.y = startingGuess.br.y;
+                                
+                                log('Falling back to original starting guess for retry.');
+                            }
                         }
                     }
                 }
