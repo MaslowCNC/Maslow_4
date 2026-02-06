@@ -547,9 +547,10 @@ async function findMaxFitness(measurements) {
 
         messagesBox.textContent += '\n Restarting';
 
-        // Use aspect ratio-based retry points instead of random perturbation
-        // Test points with aspect ratios: 2:1, 1.5:1, 1:1, 1:1.5, 1:2
+        // Use aspect ratio-based retry points if phase 1&2 ran (optimalRadius available)
+        // Otherwise fall back to random perturbations (old behavior)
         if (optimalRadiusForRetry !== null && lowFitnessRetryCount > 0 && lowFitnessRetryCount <= RETRY_ASPECT_RATIOS.length) {
+          // New behavior: Use aspect ratio points on the arc from phase 2
           const aspectRatio = RETRY_ASPECT_RATIOS[lowFitnessRetryCount - 1];
           const frame = calculateAspectRatioFrame(aspectRatio, optimalRadiusForRetry);
           
@@ -563,8 +564,17 @@ async function findMaxFitness(measurements) {
           initialGuess.br.y = frame.br.y;
           
           messagesBox.textContent += ` with aspect ratio ${aspectRatio.toFixed(2)}:1 (Width: ${frame.tr.x.toFixed(1)}mm, Height: ${frame.tr.y.toFixed(1)}mm)`;
+        } else if (optimalRadiusForRetry === null) {
+          // Old behavior: Random perturbations when phase 1&2 were skipped
+          initialGuess.tl.x = bestGuess.tl.x + Math.random() * 100 - 50;
+          initialGuess.tl.y = bestGuess.tl.y + Math.random() * 100 - 50;
+          initialGuess.tr.x = bestGuess.tr.x + Math.random() * 100 - 50;
+          initialGuess.tr.y = bestGuess.tr.y + Math.random() * 100 - 50;
+          initialGuess.br.x = bestGuess.br.x + Math.random() * 100 - 50;
+          
+          messagesBox.textContent += ' with random perturbations (±50mm)';
         } else {
-          // Fallback to original guess if we don't have optimal radius or exceeded retry attempts
+          // Fallback to original guess if exceeded retry attempts with aspect ratios
           initialGuess.tl.x = startingGuess.tl.x;
           initialGuess.tl.y = startingGuess.tl.y;
           initialGuess.tr.x = startingGuess.tr.x;
