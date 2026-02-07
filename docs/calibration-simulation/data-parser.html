@@ -348,15 +348,9 @@
         let bestConfiguration = null;
         let optimalRadius = null; // Store the radius from Phase 1 for visualization
 
-        // Z-heights for belt anchor points (used in projection calculations)
-        const tlZ = 100;
-        const trZ = 56;
-        const blZ = 34;
-        const brZ = 78;
-
-        // Note: MAX_LOW_FITNESS_RETRIES, RETRY_ASPECT_RATIOS, and calculateAspectRatioFrame
-        // are loaded from calculatesCalibrationStuff.js to avoid code duplication
-        const acceptableCalibrationThreshold = 0.5;
+        // Note: tlZ, trZ, blZ, brZ, acceptableCalibrationThreshold, MAX_LOW_FITNESS_RETRIES, 
+        // RETRY_ASPECT_RATIOS, and calculateAspectRatioFrame are loaded from 
+        // calculatesCalibrationStuff.js to avoid code duplication
 
         function log(message, clear = false) {
             const output = document.getElementById('output');

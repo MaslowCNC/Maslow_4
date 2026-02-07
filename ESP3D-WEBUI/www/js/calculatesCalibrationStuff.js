@@ -5,12 +5,6 @@
 // NOTE: Core calibration computation functions are now in calibration-computation.js
 // This file contains only UI-specific logic and helper functions
 
-var tlZ = 100
-var trZ = 56
-var blZ = 34
-var brZ = 78
-var acceptableCalibrationThreshold = 0.5
-
 // Maximum number of low-fitness retry attempts before giving up
 const MAX_LOW_FITNESS_RETRIES = 10;
 
@@ -39,6 +33,13 @@ function calculateAspectRatioFrame(aspectRatio, radius) {
     br: { x: width, y: 0 }
   };
 }
+
+// ESP3D-WEBUI specific variables (not shared with data-parser)
+var tlZ = 100
+var trZ = 56
+var blZ = 34
+var brZ = 78
+var acceptableCalibrationThreshold = 0.5
 
 //Establish initial guesses for the corners
 var initialGuess = {
