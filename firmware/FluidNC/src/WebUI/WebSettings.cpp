@@ -16,6 +16,7 @@
 #include "../Uart.h"       // Uart0.baud
 #include "../Report.h"     // git_info
 #include "../InputFile.h"  // InputFile
+#include "../Planner.h"    // plan_reset_buffer
 
 #include "Driver/localfs.h"  // localfs_format
 
@@ -331,6 +332,12 @@ namespace WebUI {
             log_to(out, "Busy");
             return Error::IdleError;
         }
+
+        // Stop any existing file jobs and flush the planner buffer
+        // This ensures old gcode commands don't execute when loading a new file
+        allChannels.stopJob();
+        plan_reset_buffer();
+
         InputFile* theFile;
         if ((err = openFile(fs, parameter, auth_level, out, theFile)) != Error::Ok) {
             return err;
