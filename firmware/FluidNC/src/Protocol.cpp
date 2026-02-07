@@ -841,12 +841,12 @@ static void protocol_do_late_reset() {
     // turn off all User I/O immediately
     config->_userOutputs->all_off();
 
+    // Stop any running file job first before clearing the planner buffer
+    allChannels.stopJob();
+
     // Clear the planner buffer to ensure no old commands execute
     // This prevents commands from a previous file or operation from executing after reset
     plan_reset_buffer();
-
-    // do we need to stop a running file job?
-    allChannels.stopJob();
 }
 
 void protocol_exec_rt_system() {
