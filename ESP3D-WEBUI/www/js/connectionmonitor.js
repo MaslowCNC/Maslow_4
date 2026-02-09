@@ -18,6 +18,7 @@ let connectionMonitor = {
     // State
     enabled: false,
     intervalId: null,
+    timeoutIntervalId: null,  // Separate interval for timeout checks
     sentPings: new Map(),  // Map<number, timestamp>
     receivedPings: [],  // Array of received numbers
     statistics: {
@@ -64,8 +65,8 @@ let connectionMonitor = {
         // Start sending pings
         this.intervalId = setInterval(() => this.sendPing(), this.pingInterval);
         
-        // Check for timeouts periodically
-        setInterval(() => this.checkTimeouts(), 500);
+        // Check for timeouts periodically (store separate ID to clear on stop)
+        this.timeoutIntervalId = setInterval(() => this.checkTimeouts(), 500);
         
         this.updateUI();
     },
@@ -84,6 +85,11 @@ let connectionMonitor = {
         if (this.intervalId) {
             clearInterval(this.intervalId);
             this.intervalId = null;
+        }
+        
+        if (this.timeoutIntervalId) {
+            clearInterval(this.timeoutIntervalId);
+            this.timeoutIntervalId = null;
         }
         
         this.updateUI();
@@ -241,6 +247,8 @@ let connectionMonitor = {
         }
         
         // Calculate packet loss percentage (of completed pings)
+        // Note: This excludes pings still in flight (pending in sentPings Map)
+        // to avoid showing artificially high loss during normal operation
         const totalCompleted = totalReceived + totalLost;
         const lossPercent = totalCompleted > 0 ? (totalLost / totalCompleted) * 100 : 0;
         

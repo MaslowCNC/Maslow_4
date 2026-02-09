@@ -195,11 +195,13 @@ const startSocket = () => {
 					// Handle ECHO responses for connection monitoring
 					if (thismsg.startsWith("ECHO:") && typeof connectionMonitor !== 'undefined') {
 						connectionMonitor.handleEcho(thismsg);
+						// Skip further processing for ECHO messages
+						continue;
 					}
 					
 					Monitor_output_Update(thismsg);
 					process_socket_response(thismsg);
-					const noNeedToShowMsg = ["<", "ok T:", "X:", "FR:", "echo:E0 Flow", "ECHO:"].some((msgStart) => thismsg.startsWith(msgStart));
+					const noNeedToShowMsg = ["<", "ok T:", "X:", "FR:", "echo:E0 Flow"].some((msgStart) => thismsg.startsWith(msgStart));
 					if (!noNeedToShowMsg && thismsg !== "ok") {
 						console.log(thismsg);
 					}
