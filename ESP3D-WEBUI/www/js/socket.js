@@ -160,9 +160,17 @@ const startSocket = () => {
 	ws_source.binaryType = "arraybuffer";
 	ws_source.onopen = (e) => {
 		console.log("Connected");
+		// Start connection monitoring
+		if (typeof connectionMonitor !== 'undefined') {
+			connectionMonitor.start();
+		}
 	};
 	ws_source.onclose = (e) => {
 		console.log("Disconnected");
+		// Stop connection monitoring
+		if (typeof connectionMonitor !== 'undefined') {
+			connectionMonitor.stop();
+		}
 		//seems sometimes it disconnect so wait 3s and reconnect
 		//if it is not a log off
 		if (!log_off) setTimeout(startSocket, 3000);
@@ -183,9 +191,15 @@ const startSocket = () => {
 					const thismsg = wsmsg.trim();
 					wsmsg = "";
 					msg = "";
+					
+					// Handle ECHO responses for connection monitoring
+					if (thismsg.startsWith("ECHO:") && typeof connectionMonitor !== 'undefined') {
+						connectionMonitor.handleEcho(thismsg);
+					}
+					
 					Monitor_output_Update(thismsg);
 					process_socket_response(thismsg);
-					const noNeedToShowMsg = ["<", "ok T:", "X:", "FR:", "echo:E0 Flow"].some((msgStart) => thismsg.startsWith(msgStart));
+					const noNeedToShowMsg = ["<", "ok T:", "X:", "FR:", "echo:E0 Flow", "ECHO:"].some((msgStart) => thismsg.startsWith(msgStart));
 					if (!noNeedToShowMsg && thismsg !== "ok") {
 						console.log(thismsg);
 					}

@@ -1331,6 +1331,12 @@ Error execute_line(char* line, Channel& channel, WebUI::AuthenticationLevel auth
     if (line[0] == '$' || line[0] == '[') {
         return settings_execute_line(line, channel, auth_level);
     }
+    // Connection monitoring ECHO command - echo back the number for bidirectional communication check
+    if (strncmp(line, "ECHO:", 5) == 0) {
+        channel.print(line);
+        channel.print('\n');
+        return Error::Ok;
+    }
     // Everything else is gcode. Block if in alarm or jog mode.
     if (sys.state() == State::Alarm || sys.state() == State::ConfigAlarm || sys.state() == State::Jog) {
         return Error::SystemGcLock;
