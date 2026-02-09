@@ -36,7 +36,7 @@ let connectionMonitor = {
      * Initialize the connection monitor
      */
     init() {
-        log("Connection Monitor: Initializing");
+        console.log("Connection Monitor: Initializing");
         this.hookIntoSocket();
     },
     
@@ -48,7 +48,7 @@ let connectionMonitor = {
             return;
         }
         
-        log("Connection Monitor: Starting");
+        console.log("Connection Monitor: Starting");
         this.enabled = true;
         this.statistics = {
             totalSent: 0,
@@ -78,7 +78,7 @@ let connectionMonitor = {
             return;
         }
         
-        log("Connection Monitor: Stopping");
+        console.log("Connection Monitor: Stopping");
         this.enabled = false;
         
         if (this.intervalId) {
@@ -120,7 +120,7 @@ let connectionMonitor = {
                 SendPrinterCommand(cmd, false, true);
             }
         } catch (e) {
-            log("Connection Monitor: Error sending ping: " + e);
+            console.log("Connection Monitor: Error sending ping: " + e);
         }
     },
     
@@ -210,7 +210,7 @@ let connectionMonitor = {
     hookIntoSocket() {
         // We need to intercept WebSocket messages
         // This will be called from socket.js when messages are received
-        log("Connection Monitor: Hooked into socket");
+        console.log("Connection Monitor: Hooked into socket");
     },
     
     /**
