@@ -36,7 +36,6 @@ The browser-side connection monitor (`connectionmonitor.js`) performs the follow
 3. **Calculates Metrics**:
    - Round-trip latency (time between send and receive)
    - Packet loss percentage (pings sent vs received)
-   - Foreign pings (numbers received that weren't sent by this tab)
 4. **Updates UI**: Shows connection status with color-coded indicator
 
 ### Firmware Implementation
@@ -79,7 +78,6 @@ The indicator shows:
 - `Connection Status: Degraded` with detailed stats - Some issues detected
 - `Connection Status: Poor` with warning message - Significant packet loss
 - `Connection Status: LOST` with alert - Communication failure
-- `WARNING: Multiple tabs detected!` - Another browser tab is connected
 
 ### Tooltip Content
 
@@ -94,9 +92,8 @@ When hovering over the indicator, users see:
 
 1. **Real-time Monitoring**: Continuous validation of bidirectional communication
 2. **Early Warning**: Detects connection degradation before commands fail
-3. **Multi-tab Detection**: Warns users when multiple tabs are controlling the machine
-4. **Diagnostics**: Provides latency and packet loss metrics for troubleshooting
-5. **Lightweight**: Minimal overhead (one 10-byte command every 250ms)
+3. **Diagnostics**: Provides latency and packet loss metrics for troubleshooting
+4. **Lightweight**: Minimal overhead (one 10-byte command every 250ms)
 
 ## Technical Details
 
@@ -118,7 +115,6 @@ connectionMonitor = {
 - `totalSent`: Total number of pings sent
 - `totalReceived`: Total number of pings received
 - `totalLost`: Total number of pings that timed out
-- `totalForeign`: Total number of pings from other tabs
 - `averageLatency`: Moving average of round-trip time
 - `latencies[]`: Array of recent latency measurements
 
