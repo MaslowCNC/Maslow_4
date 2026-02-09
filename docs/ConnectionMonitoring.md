@@ -65,13 +65,30 @@ The connection status indicator is located directly below the "Setup" button on 
 - **Dark Orange**: Poor connection (20-50% packet loss)
 - **Red**: Connection lost (> 50% packet loss)
 
-### Status Messages
+### Display Format
 
-- `✓ Connected (XXXms, X.X% loss)` - Normal operation
-- `⚠️ Degraded (XXXms, X.X% loss)` - Some issues detected
-- `⚠️ Poor connection (X.X% loss)` - Significant packet loss
-- `✗ Connection lost (X.X% loss)` - Communication failure
-- `⚠️ Multiple tabs detected (N foreign pings)` - Another browser tab is connected
+The indicator shows:
+- **Static text**: "Connection Monitoring" (always the same)
+- **Background color**: Changes based on connection status
+- **Warning icon**: "!" appears when issues are detected
+- **Hover tooltip**: Shows detailed metrics on mouse hover
+
+### Status Messages (in Tooltip)
+
+- `Connection Status: Good` with latency and packet loss details - Normal operation
+- `Connection Status: Degraded` with detailed stats - Some issues detected
+- `Connection Status: Poor` with warning message - Significant packet loss
+- `Connection Status: LOST` with alert - Communication failure
+- `WARNING: Multiple tabs detected!` - Another browser tab is connected
+
+### Tooltip Content
+
+When hovering over the indicator, users see:
+- Connection status (Good/Degraded/Poor/Lost)
+- Latency in milliseconds (when available)
+- Packet loss percentage
+- Pings sent, received, and lost counts
+- Helpful messages for problem states
 
 ## Benefits
 
