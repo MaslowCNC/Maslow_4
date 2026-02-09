@@ -371,28 +371,41 @@ void Calibration::home() {
             }
             break;
         case RELEASE_TENSION:
-            //decompress belts for the first half second
-            if (millis() - complyCallTimer < 40) {
-                Maslow.axis[_BR].decompressBelt();
-                Maslow.axis[_BL].decompressBelt();
-                Maslow.axis[_TR].decompressBelt();
-                Maslow.axis[_TL].decompressBelt();
-            } else if (millis() - complyCallTimer < 800) {
-                for (int arm = _TL; arm < ARM_COUNT; arm++) {
-                    Maslow.axis[arm].comply();
+            {
+                unsigned long elapsed = millis() - complyCallTimer;
+                //decompress belts for the first 40ms
+                if (elapsed < 40) {
+                    Maslow.axis[_BR].decompressBelt();
+                    Maslow.axis[_BL].decompressBelt();
+                    Maslow.axis[_TR].decompressBelt();
+                    Maslow.axis[_TL].decompressBelt();
                 }
-            } else {
-                for (int arm = _TL; arm < ARM_COUNT; arm++) {
-                    Maslow.axis[arm].stop();
+                //comply for 760ms (40-800ms)
+                else if (elapsed < 800) {
+                    for (int arm = _TL; arm < ARM_COUNT; arm++) {
+                        Maslow.axis[arm].comply();
+                    }
                 }
-                sys.set_state(State::Idle);
+                //stop motors and wait for settling (800-1300ms)
+                else if (elapsed < 1300) {
+                    for (int arm = _TL; arm < ARM_COUNT; arm++) {
+                        Maslow.axis[arm].stop();
+                    }
+                }
+                //transition to next state after settling period
+                else {
+                    for (int arm = _TL; arm < ARM_COUNT; arm++) {
+                        Maslow.axis[arm].stop();
+                    }
+                    // Don't call sys.set_state here - it will be called by requestStateChange
 
-                // If the machine was in READY_TO_CUT, EXTENDEDOUT, or CALIBRATION_COMPUTING state before releasing tension,
-                // return to EXTENDEDOUT state, otherwise go to UNKNOWN
-                if (previousState == READY_TO_CUT || previousState == EXTENDEDOUT || previousState == CALIBRATION_COMPUTING) {
-                    requestStateChange(EXTENDEDOUT);
-                } else {
-                    requestStateChange(UNKNOWN);
+                    // If the machine was in READY_TO_CUT, EXTENDEDOUT, or CALIBRATION_COMPUTING state before releasing tension,
+                    // return to EXTENDEDOUT state, otherwise go to UNKNOWN
+                    if (previousState == READY_TO_CUT || previousState == EXTENDEDOUT || previousState == CALIBRATION_COMPUTING) {
+                        requestStateChange(EXTENDEDOUT);
+                    } else {
+                        requestStateChange(UNKNOWN);
+                    }
                 }
             }
             break;

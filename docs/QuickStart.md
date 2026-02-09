@@ -217,5 +217,5 @@ The machine will begin following the toolpath in your gcode file. You can:
 
 Stay nearby while the machine is cutting, especially for your first few cuts. This will help you identify any issues early and ensure everything is working correctly.
 
-If you encounter any problems or error messages, check the [error messages documentation](/error-messages) or ask for help in the [Maslow forums](https://forums.maslowcnc.com/).
+If you encounter any problems or error messages, check the [error messages documentation](https://www.maslowcnc.com/error-messages) or ask for help in the [Maslow forums](https://forums.maslowcnc.com/).
 
