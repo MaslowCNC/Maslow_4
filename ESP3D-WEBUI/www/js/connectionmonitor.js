@@ -20,12 +20,10 @@ let connectionMonitor = {
     intervalId: null,
     timeoutIntervalId: null,  // Separate interval for timeout checks
     sentPings: new Map(),  // Map<number, timestamp>
-    receivedPings: [],  // Array of received numbers
     statistics: {
         totalSent: 0,
         totalReceived: 0,
         totalLost: 0,
-        totalForeign: 0,  // Numbers received that we didn't send
         averageLatency: 0,
         latencies: []
     },
@@ -55,12 +53,10 @@ let connectionMonitor = {
             totalSent: 0,
             totalReceived: 0,
             totalLost: 0,
-            totalForeign: 0,
             averageLatency: 0,
             latencies: []
         };
         this.sentPings.clear();
-        this.receivedPings = [];
         
         // Start sending pings
         this.intervalId = setInterval(() => this.sendPing(), this.pingInterval);
@@ -197,17 +193,10 @@ let connectionMonitor = {
             
             // Remove from pending
             this.sentPings.delete(pingNum);
-        } else {
-            // This is a foreign ping (from another tab or stale)
-            this.statistics.totalForeign++;
+            
+            this.updateUI();
         }
-        
-        this.receivedPings.push(pingNum);
-        if (this.receivedPings.length > this.maxPingHistory) {
-            this.receivedPings.shift();
-        }
-        
-        this.updateUI();
+        // Ignore pings that we didn't send (could be from stale data or other sources)
     },
     
     /**
@@ -236,7 +225,6 @@ let connectionMonitor = {
         const totalSent = this.statistics.totalSent;
         const totalReceived = this.statistics.totalReceived;
         const totalLost = this.statistics.totalLost;
-        const totalForeign = this.statistics.totalForeign;
         const avgLatency = this.statistics.averageLatency;
         
         // Not enough data yet
@@ -260,15 +248,8 @@ let connectionMonitor = {
         let status, tooltip, color, showWarning;
         const displayText = 'Connection Monitoring';
         
-        // Check for multiple tabs
-        if (totalForeign > 3) {
-            status = 'warning';
-            tooltip = `WARNING: Multiple tabs detected!\n${totalForeign} foreign pings received.\nOnly one tab should control the machine at a time.`;
-            color = '#ff8c00';
-            showWarning = true;
-        }
         // Good connection
-        else if (lossPercent < 5 && avgLatency < 500) {
+        if (lossPercent < 5 && avgLatency < 500) {
             status = 'good';
             tooltip = `Connection Status: Good\nLatency: ${avgLatency}ms\nPacket Loss: ${lossPercent.toFixed(1)}%\nPings Sent: ${totalSent}\nPings Received: ${totalReceived}`;
             color = '#4aa85c';
@@ -296,7 +277,7 @@ let connectionMonitor = {
             showWarning = true;
         }
         
-        return { status, displayText, tooltip, color, showWarning, lossPercent, avgLatency, totalForeign };
+        return { status, displayText, tooltip, color, showWarning, lossPercent, avgLatency };
     },
     
     /**
