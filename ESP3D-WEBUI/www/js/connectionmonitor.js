@@ -20,6 +20,8 @@ let connectionMonitor = {
     intervalId: null,
     timeoutIntervalId: null,  // Separate interval for timeout checks
     sentPings: new Map(),  // Map<number, timestamp>
+    recentPingResults: [],  // Array of recent ping results {received: bool, lost: bool} - last 20
+    maxRecentPings: 20,  // Track only last 20 pings for current status
     statistics: {
         totalSent: 0,
         totalReceived: 0,
@@ -66,6 +68,7 @@ let connectionMonitor = {
             latencies: []
         };
         this.sentPings.clear();
+        this.recentPingResults = [];  // Clear recent results
         
         // Start sending pings
         this.intervalId = setInterval(() => this.sendPing(), this.pingInterval);
@@ -151,6 +154,12 @@ let connectionMonitor = {
                 lostCount++;
                 this.sentPings.delete(num);
                 this.statistics.totalLost++;
+                
+                // Track in recent results
+                this.recentPingResults.push({ received: false, lost: true });
+                if (this.recentPingResults.length > this.maxRecentPings) {
+                    this.recentPingResults.shift();
+                }
             }
         }
         
@@ -188,6 +197,12 @@ let connectionMonitor = {
             // Update statistics
             this.statistics.totalReceived++;
             this.statistics.latencies.push(latency);
+            
+            // Track in recent results
+            this.recentPingResults.push({ received: true, lost: false });
+            if (this.recentPingResults.length > this.maxRecentPings) {
+                this.recentPingResults.shift();
+            }
             
             // Keep only recent latencies
             if (this.statistics.latencies.length > this.maxPingHistory) {
@@ -279,24 +294,28 @@ let connectionMonitor = {
             };
         }
         
-        // Calculate packet loss percentage (of completed pings)
-        // Note: This excludes pings still in flight (pending in sentPings Map)
-        // to avoid showing artificially high loss during normal operation
-        const totalCompleted = totalReceived + totalLost;
-        const lossPercent = totalCompleted > 0 ? (totalLost / totalCompleted) * 100 : 0;
+        // Calculate packet loss percentage based on RECENT pings (last 20)
+        let recentReceived = 0;
+        let recentLost = 0;
+        for (const result of this.recentPingResults) {
+            if (result.received) recentReceived++;
+            if (result.lost) recentLost++;
+        }
+        const recentTotal = recentReceived + recentLost;
+        const lossPercent = recentTotal > 0 ? (recentLost / recentTotal) * 100 : 0;
         
-        // Check if we have pending pings that are timing out (machine might be off)
+        // Check for severely degraded connection (many pending pings AND high recent loss)
         const now = Date.now();
-        let oldestPendingAge = 0;
+        let veryOldPendingCount = 0;  // Count pings older than 4 seconds
         for (const [num, timestamp] of this.sentPings.entries()) {
             const age = now - timestamp;
-            if (age > oldestPendingAge) {
-                oldestPendingAge = age;
+            if (age > this.timeoutThreshold * 2) {  // 4 seconds
+                veryOldPendingCount++;
             }
         }
         
-        // If we have pings pending for more than threshold, connection is likely lost
-        const connectionTimedOut = oldestPendingAge > this.timeoutThreshold;
+        // Connection is truly lost only if multiple pings are VERY old AND recent loss is high
+        const connectionTimedOut = veryOldPendingCount >= 3 && lossPercent > 80;
         
         // WiFi info section for tooltip
         const wifiSection = `\n\n━━━ WiFi Information ━━━\nSSID: ${this.wifiInfo.ssid}\nSignal Strength: ${this.wifiInfo.signal}\nIP Address: ${this.wifiInfo.ip}\nMAC Address: ${this.wifiInfo.mac}\nChannel: ${this.wifiInfo.channel}`;
@@ -306,37 +325,37 @@ let connectionMonitor = {
         const displayText = 'Wifi<br>Connection';
         
         // Connection timed out - no responses for extended period
-        if (connectionTimedOut && this.sentPings.size > 0) {
+        if (connectionTimedOut) {
             status = 'lost';
-            tooltip = `Connection Status: LOST\nNo responses received\nOldest pending ping: ${Math.round(oldestPendingAge / 1000)}s\nPings Sent: ${totalSent}\nPings Received: ${totalReceived}\n\nMachine may be powered off or disconnected!${wifiSection}`;
+            tooltip = `Connection Status: LOST\nRecent Packet Loss: ${lossPercent.toFixed(1)}% (last ${recentTotal} pings)\nPings Sent: ${totalSent}\nPings Received: ${totalReceived}\n\nMachine may be powered off or disconnected!${wifiSection}`;
             color = '#ce654c';
             showWarning = true;
         }
         // Good connection
         else if (lossPercent < 5 && avgLatency < 500) {
             status = 'good';
-            tooltip = `Connection Status: Good\nLatency: ${avgLatency}ms\nPacket Loss: ${lossPercent.toFixed(1)}%\nPings Sent: ${totalSent}\nPings Received: ${totalReceived}${wifiSection}`;
+            tooltip = `Connection Status: Good\nLatency: ${avgLatency}ms\nRecent Packet Loss: ${lossPercent.toFixed(1)}% (last ${recentTotal} pings)\nTotal Pings Sent: ${totalSent}\nTotal Received: ${totalReceived}${wifiSection}`;
             color = '#4aa85c';
             showWarning = false;
         }
         // Degraded connection
         else if (lossPercent < 20 || avgLatency < 1000) {
             status = 'degraded';
-            tooltip = `Connection Status: Degraded\nLatency: ${avgLatency}ms\nPacket Loss: ${lossPercent.toFixed(1)}%\nPings Sent: ${totalSent}\nPings Received: ${totalReceived}\nPings Lost: ${totalLost}${wifiSection}`;
+            tooltip = `Connection Status: Degraded\nLatency: ${avgLatency}ms\nRecent Packet Loss: ${lossPercent.toFixed(1)}% (last ${recentTotal} pings)\nRecent Received: ${recentReceived}\nRecent Lost: ${recentLost}${wifiSection}`;
             color = '#ffa500';
             showWarning = true;
         }
         // Poor connection
         else if (lossPercent < 50) {
             status = 'poor';
-            tooltip = `Connection Status: Poor\nPacket Loss: ${lossPercent.toFixed(1)}%\nPings Sent: ${totalSent}\nPings Received: ${totalReceived}\nPings Lost: ${totalLost}\n\nConsider checking your WiFi connection.${wifiSection}`;
+            tooltip = `Connection Status: Poor\nRecent Packet Loss: ${lossPercent.toFixed(1)}% (last ${recentTotal} pings)\nRecent Received: ${recentReceived}\nRecent Lost: ${recentLost}\n\nConsider checking your WiFi connection.${wifiSection}`;
             color = '#ff6600';
             showWarning = true;
         }
         // Connection lost (high packet loss)
         else {
             status = 'lost';
-            tooltip = `Connection Status: LOST\nPacket Loss: ${lossPercent.toFixed(1)}%\nPings Sent: ${totalSent}\nPings Received: ${totalReceived}\nPings Lost: ${totalLost}\n\nConnection to machine may be lost!${wifiSection}`;
+            tooltip = `Connection Status: LOST\nRecent Packet Loss: ${lossPercent.toFixed(1)}% (last ${recentTotal} pings)\nRecent Received: ${recentReceived}\nRecent Lost: ${recentLost}\n\nConnection to machine may be lost!${wifiSection}`;
             color = '#ce654c';
             showWarning = true;
         }
