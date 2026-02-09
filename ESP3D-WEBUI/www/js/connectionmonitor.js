@@ -226,8 +226,10 @@ let connectionMonitor = {
         if (!this.enabled) {
             return {
                 status: 'disabled',
-                message: 'Connection monitoring disabled',
-                color: '#888'
+                displayText: 'Connection Monitoring',
+                tooltip: 'Connection monitoring is disabled',
+                color: '#888',
+                showWarning: false
             };
         }
         
@@ -241,8 +243,10 @@ let connectionMonitor = {
         if (totalSent < 5) {
             return {
                 status: 'starting',
-                message: 'Initializing connection monitor...',
-                color: '#ffa500'
+                displayText: 'Connection Monitoring',
+                tooltip: 'Initializing connection monitor...',
+                color: '#ffa500',
+                showWarning: false
             };
         }
         
@@ -253,40 +257,46 @@ let connectionMonitor = {
         const lossPercent = totalCompleted > 0 ? (totalLost / totalCompleted) * 100 : 0;
         
         // Determine status
-        let status, message, color;
+        let status, tooltip, color, showWarning;
+        const displayText = 'Connection Monitoring';
         
         // Check for multiple tabs
         if (totalForeign > 3) {
             status = 'warning';
-            message = `⚠️ Multiple tabs detected (${totalForeign} foreign pings)`;
+            tooltip = `WARNING: Multiple tabs detected!\n${totalForeign} foreign pings received.\nOnly one tab should control the machine at a time.`;
             color = '#ff8c00';
+            showWarning = true;
         }
         // Good connection
         else if (lossPercent < 5 && avgLatency < 500) {
             status = 'good';
-            message = `✓ Connected (${avgLatency}ms, ${lossPercent.toFixed(1)}% loss)`;
+            tooltip = `Connection Status: Good\nLatency: ${avgLatency}ms\nPacket Loss: ${lossPercent.toFixed(1)}%\nPings Sent: ${totalSent}\nPings Received: ${totalReceived}`;
             color = '#4aa85c';
+            showWarning = false;
         }
         // Degraded connection
         else if (lossPercent < 20 || avgLatency < 1000) {
             status = 'degraded';
-            message = `⚠️ Degraded (${avgLatency}ms, ${lossPercent.toFixed(1)}% loss)`;
+            tooltip = `Connection Status: Degraded\nLatency: ${avgLatency}ms\nPacket Loss: ${lossPercent.toFixed(1)}%\nPings Sent: ${totalSent}\nPings Received: ${totalReceived}\nPings Lost: ${totalLost}`;
             color = '#ffa500';
+            showWarning = true;
         }
         // Poor connection
         else if (lossPercent < 50) {
             status = 'poor';
-            message = `⚠️ Poor connection (${lossPercent.toFixed(1)}% loss)`;
+            tooltip = `Connection Status: Poor\nPacket Loss: ${lossPercent.toFixed(1)}%\nPings Sent: ${totalSent}\nPings Received: ${totalReceived}\nPings Lost: ${totalLost}\n\nConsider checking your WiFi connection.`;
             color = '#ff6600';
+            showWarning = true;
         }
         // Connection lost
         else {
             status = 'lost';
-            message = `✗ Connection lost (${lossPercent.toFixed(1)}% loss)`;
+            tooltip = `Connection Status: LOST\nPacket Loss: ${lossPercent.toFixed(1)}%\nPings Sent: ${totalSent}\nPings Received: ${totalReceived}\nPings Lost: ${totalLost}\n\nConnection to machine may be lost!`;
             color = '#ce654c';
+            showWarning = true;
         }
         
-        return { status, message, color, lossPercent, avgLatency, totalForeign };
+        return { status, displayText, tooltip, color, showWarning, lossPercent, avgLatency, totalForeign };
     },
     
     /**
@@ -303,9 +313,16 @@ let connectionMonitor = {
         
         const indicator = document.getElementById('connection-status-indicator');
         if (indicator) {
-            indicator.innerHTML = statusInfo.message;
+            // Set display text with optional warning icon
+            const warningIcon = statusInfo.showWarning ? ' !' : '';
+            indicator.innerHTML = statusInfo.displayText + warningIcon;
+            
+            // Set background color
             indicator.style.backgroundColor = statusInfo.color;
             indicator.style.color = 'white';
+            
+            // Set tooltip with detailed information
+            indicator.title = statusInfo.tooltip;
         }
     }
 };
