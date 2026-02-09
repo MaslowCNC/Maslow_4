@@ -231,7 +231,7 @@ let connectionMonitor = {
         if (totalSent < 5) {
             return {
                 status: 'starting',
-                displayText: 'Connection Monitoring',
+                displayText: 'Connection<br>Monitoring',
                 tooltip: 'Initializing connection monitor...',
                 color: '#ffa500',
                 showWarning: false
@@ -244,12 +244,32 @@ let connectionMonitor = {
         const totalCompleted = totalReceived + totalLost;
         const lossPercent = totalCompleted > 0 ? (totalLost / totalCompleted) * 100 : 0;
         
+        // Check if we have pending pings that are timing out (machine might be off)
+        const now = Date.now();
+        let oldestPendingAge = 0;
+        for (const [num, timestamp] of this.sentPings.entries()) {
+            const age = now - timestamp;
+            if (age > oldestPendingAge) {
+                oldestPendingAge = age;
+            }
+        }
+        
+        // If we have pings pending for more than threshold, connection is likely lost
+        const connectionTimedOut = oldestPendingAge > this.timeoutThreshold;
+        
         // Determine status
         let status, tooltip, color, showWarning;
-        const displayText = 'Connection Monitoring';
+        const displayText = 'Connection<br>Monitoring';
         
+        // Connection timed out - no responses for extended period
+        if (connectionTimedOut && this.sentPings.size > 0) {
+            status = 'lost';
+            tooltip = `Connection Status: LOST\nNo responses received\nOldest pending ping: ${Math.round(oldestPendingAge / 1000)}s\nPings Sent: ${totalSent}\nPings Received: ${totalReceived}\n\nMachine may be powered off or disconnected!`;
+            color = '#ce654c';
+            showWarning = true;
+        }
         // Good connection
-        if (lossPercent < 5 && avgLatency < 500) {
+        else if (lossPercent < 5 && avgLatency < 500) {
             status = 'good';
             tooltip = `Connection Status: Good\nLatency: ${avgLatency}ms\nPacket Loss: ${lossPercent.toFixed(1)}%\nPings Sent: ${totalSent}\nPings Received: ${totalReceived}`;
             color = '#4aa85c';
@@ -269,7 +289,7 @@ let connectionMonitor = {
             color = '#ff6600';
             showWarning = true;
         }
-        // Connection lost
+        // Connection lost (high packet loss)
         else {
             status = 'lost';
             tooltip = `Connection Status: LOST\nPacket Loss: ${lossPercent.toFixed(1)}%\nPings Sent: ${totalSent}\nPings Received: ${totalReceived}\nPings Lost: ${totalLost}\n\nConnection to machine may be lost!`;
