@@ -389,17 +389,44 @@ let connectionMonitor = {
             indicator.style.backgroundColor = statusInfo.color;
             indicator.style.color = 'white';
             
-            // Set tooltip with detailed information (always update for real-time)
-            indicator.title = statusInfo.tooltip;
+            // Update custom tooltip content if it exists
+            const customTooltip = document.getElementById('connection-monitor-tooltip');
+            if (customTooltip && this.hovering) {
+                // Replace \n with <br> for HTML display
+                customTooltip.innerHTML = statusInfo.tooltip.replace(/\n/g, '<br>');
+            }
             
-            // Setup hover listeners if not already done
+            // Setup hover listeners and custom tooltip if not already done
             if (!indicator.hasAttribute('data-hover-setup')) {
                 indicator.setAttribute('data-hover-setup', 'true');
                 
-                indicator.addEventListener('mouseenter', () => {
+                // Create custom tooltip element
+                const tooltip = document.createElement('div');
+                tooltip.id = 'connection-monitor-tooltip';
+                tooltip.style.cssText = `
+                    position: fixed;
+                    background-color: rgba(0, 0, 0, 0.9);
+                    color: white;
+                    padding: 8px 12px;
+                    border-radius: 4px;
+                    font-size: 12px;
+                    font-family: monospace;
+                    white-space: pre-line;
+                    z-index: 10000;
+                    pointer-events: none;
+                    display: none;
+                    max-width: 400px;
+                    line-height: 1.4;
+                `;
+                document.body.appendChild(tooltip);
+                
+                indicator.addEventListener('mouseenter', (e) => {
                     this.hovering = true;
                     // Fetch WiFi info when user hovers
                     this.fetchWifiInfo();
+                    // Show custom tooltip
+                    tooltip.style.display = 'block';
+                    tooltip.innerHTML = statusInfo.tooltip.replace(/\n/g, '<br>');
                     // Start interval to update tooltip while hovering
                     if (this.hoverUpdateInterval) {
                         clearInterval(this.hoverUpdateInterval);
@@ -411,8 +438,16 @@ let connectionMonitor = {
                     }, 500);  // Update every 500ms while hovering
                 });
                 
+                indicator.addEventListener('mousemove', (e) => {
+                    // Position tooltip near mouse cursor
+                    tooltip.style.left = (e.clientX + 15) + 'px';
+                    tooltip.style.top = (e.clientY + 15) + 'px';
+                });
+                
                 indicator.addEventListener('mouseleave', () => {
                     this.hovering = false;
+                    // Hide custom tooltip
+                    tooltip.style.display = 'none';
                     // Stop updating when not hovering
                     if (this.hoverUpdateInterval) {
                         clearInterval(this.hoverUpdateInterval);
