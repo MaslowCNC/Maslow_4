@@ -331,15 +331,15 @@ let connectionMonitor = {
             color = '#ce654c';
             showWarning = true;
         }
-        // Good connection
-        else if (lossPercent < 5 && avgLatency < 500) {
+        // Good connection - relaxed thresholds for real-world conditions
+        else if (lossPercent < 10 && avgLatency < 1000) {
             status = 'good';
             tooltip = `Connection Status: Good\nLatency: ${avgLatency}ms\nRecent Packet Loss: ${lossPercent.toFixed(1)}% (last ${recentTotal} pings)\nTotal Pings Sent: ${totalSent}\nTotal Received: ${totalReceived}${wifiSection}`;
             color = '#4aa85c';
             showWarning = false;
         }
         // Degraded connection
-        else if (lossPercent < 20 || avgLatency < 1000) {
+        else if (lossPercent < 25 || avgLatency < 2000) {
             status = 'degraded';
             tooltip = `Connection Status: Degraded\nLatency: ${avgLatency}ms\nRecent Packet Loss: ${lossPercent.toFixed(1)}% (last ${recentTotal} pings)\nRecent Received: ${recentReceived}\nRecent Lost: ${recentLost}${wifiSection}`;
             color = '#ffa500';
@@ -439,8 +439,9 @@ let connectionMonitor = {
                 });
                 
                 indicator.addEventListener('mousemove', (e) => {
-                    // Position tooltip near mouse cursor
-                    tooltip.style.left = (e.clientX + 15) + 'px';
+                    // Position tooltip to the left of the cursor to avoid going off screen
+                    const tooltipWidth = tooltip.offsetWidth || 400;  // Use actual width or max-width
+                    tooltip.style.left = (e.clientX - tooltipWidth - 15) + 'px';
                     tooltip.style.top = (e.clientY + 15) + 'px';
                 });
                 
