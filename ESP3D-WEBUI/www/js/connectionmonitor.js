@@ -27,9 +27,18 @@ let connectionMonitor = {
         averageLatency: 0,
         latencies: []
     },
+    wifiInfo: {
+        ssid: 'N/A',
+        signal: 'N/A',
+        ip: 'N/A',
+        mac: 'N/A',
+        channel: 'N/A'
+    },
     
     // UI state
     lastStatus: null,
+    hovering: false,  // Track if mouse is hovering
+    hoverUpdateInterval: null,  // Interval for updating tooltip while hovering
     
     /**
      * Initialize the connection monitor
@@ -209,6 +218,38 @@ let connectionMonitor = {
     },
     
     /**
+     * Fetch WiFi information from the ESP
+     */
+    async fetchWifiInfo() {
+        try {
+            // Use ESP420 command to get WiFi status
+            const cmd = buildHttpCommandCmd(httpCmdType.plain, "[ESP420]plain");
+            const response = await new Promise((resolve, reject) => {
+                SendGetHttp(cmd, resolve, reject);
+            });
+            
+            // Parse the response for WiFi information
+            // Response format varies, but typically includes SSID, Signal, IP, MAC, Channel
+            const lines = response.split('\n');
+            for (const line of lines) {
+                if (line.includes('SSID:')) {
+                    this.wifiInfo.ssid = line.split(':')[1]?.trim() || 'N/A';
+                } else if (line.includes('Signal:')) {
+                    this.wifiInfo.signal = line.split(':')[1]?.trim() || 'N/A';
+                } else if (line.includes('IP:')) {
+                    this.wifiInfo.ip = line.split(':')[1]?.trim() || 'N/A';
+                } else if (line.includes('MAC:')) {
+                    this.wifiInfo.mac = line.split(':')[1]?.trim() || 'N/A';
+                } else if (line.includes('Channel:')) {
+                    this.wifiInfo.channel = line.split(':')[1]?.trim() || 'N/A';
+                }
+            }
+        } catch (e) {
+            console.log("Connection Monitor: Error fetching WiFi info: " + e);
+        }
+    },
+    
+    /**
      * Get current connection status
      */
     getStatus() {
@@ -231,7 +272,7 @@ let connectionMonitor = {
         if (totalSent < 5) {
             return {
                 status: 'starting',
-                displayText: 'Connection<br>Monitoring',
+                displayText: 'Wifi<br>Connection',
                 tooltip: 'Initializing connection monitor...',
                 color: '#ffa500',
                 showWarning: false
@@ -257,42 +298,45 @@ let connectionMonitor = {
         // If we have pings pending for more than threshold, connection is likely lost
         const connectionTimedOut = oldestPendingAge > this.timeoutThreshold;
         
+        // WiFi info section for tooltip
+        const wifiSection = `\n\n━━━ WiFi Information ━━━\nSSID: ${this.wifiInfo.ssid}\nSignal Strength: ${this.wifiInfo.signal}\nIP Address: ${this.wifiInfo.ip}\nMAC Address: ${this.wifiInfo.mac}\nChannel: ${this.wifiInfo.channel}`;
+        
         // Determine status
         let status, tooltip, color, showWarning;
-        const displayText = 'Connection<br>Monitoring';
+        const displayText = 'Wifi<br>Connection';
         
         // Connection timed out - no responses for extended period
         if (connectionTimedOut && this.sentPings.size > 0) {
             status = 'lost';
-            tooltip = `Connection Status: LOST\nNo responses received\nOldest pending ping: ${Math.round(oldestPendingAge / 1000)}s\nPings Sent: ${totalSent}\nPings Received: ${totalReceived}\n\nMachine may be powered off or disconnected!`;
+            tooltip = `Connection Status: LOST\nNo responses received\nOldest pending ping: ${Math.round(oldestPendingAge / 1000)}s\nPings Sent: ${totalSent}\nPings Received: ${totalReceived}\n\nMachine may be powered off or disconnected!${wifiSection}`;
             color = '#ce654c';
             showWarning = true;
         }
         // Good connection
         else if (lossPercent < 5 && avgLatency < 500) {
             status = 'good';
-            tooltip = `Connection Status: Good\nLatency: ${avgLatency}ms\nPacket Loss: ${lossPercent.toFixed(1)}%\nPings Sent: ${totalSent}\nPings Received: ${totalReceived}`;
+            tooltip = `Connection Status: Good\nLatency: ${avgLatency}ms\nPacket Loss: ${lossPercent.toFixed(1)}%\nPings Sent: ${totalSent}\nPings Received: ${totalReceived}${wifiSection}`;
             color = '#4aa85c';
             showWarning = false;
         }
         // Degraded connection
         else if (lossPercent < 20 || avgLatency < 1000) {
             status = 'degraded';
-            tooltip = `Connection Status: Degraded\nLatency: ${avgLatency}ms\nPacket Loss: ${lossPercent.toFixed(1)}%\nPings Sent: ${totalSent}\nPings Received: ${totalReceived}\nPings Lost: ${totalLost}`;
+            tooltip = `Connection Status: Degraded\nLatency: ${avgLatency}ms\nPacket Loss: ${lossPercent.toFixed(1)}%\nPings Sent: ${totalSent}\nPings Received: ${totalReceived}\nPings Lost: ${totalLost}${wifiSection}`;
             color = '#ffa500';
             showWarning = true;
         }
         // Poor connection
         else if (lossPercent < 50) {
             status = 'poor';
-            tooltip = `Connection Status: Poor\nPacket Loss: ${lossPercent.toFixed(1)}%\nPings Sent: ${totalSent}\nPings Received: ${totalReceived}\nPings Lost: ${totalLost}\n\nConsider checking your WiFi connection.`;
+            tooltip = `Connection Status: Poor\nPacket Loss: ${lossPercent.toFixed(1)}%\nPings Sent: ${totalSent}\nPings Received: ${totalReceived}\nPings Lost: ${totalLost}\n\nConsider checking your WiFi connection.${wifiSection}`;
             color = '#ff6600';
             showWarning = true;
         }
         // Connection lost (high packet loss)
         else {
             status = 'lost';
-            tooltip = `Connection Status: LOST\nPacket Loss: ${lossPercent.toFixed(1)}%\nPings Sent: ${totalSent}\nPings Received: ${totalReceived}\nPings Lost: ${totalLost}\n\nConnection to machine may be lost!`;
+            tooltip = `Connection Status: LOST\nPacket Loss: ${lossPercent.toFixed(1)}%\nPings Sent: ${totalSent}\nPings Received: ${totalReceived}\nPings Lost: ${totalLost}\n\nConnection to machine may be lost!${wifiSection}`;
             color = '#ce654c';
             showWarning = true;
         }
@@ -306,10 +350,14 @@ let connectionMonitor = {
     updateUI() {
         const statusInfo = this.getStatus();
         
-        // Only update if status changed
-        if (JSON.stringify(statusInfo) === JSON.stringify(this.lastStatus)) {
+        // Always update tooltip if hovering (for real-time updates)
+        // Update display if status changed
+        const statusChanged = JSON.stringify(statusInfo) !== JSON.stringify(this.lastStatus);
+        
+        if (!statusChanged && !this.hovering) {
             return;
         }
+        
         this.lastStatus = statusInfo;
         
         const indicator = document.getElementById('connection-status-indicator');
@@ -322,8 +370,37 @@ let connectionMonitor = {
             indicator.style.backgroundColor = statusInfo.color;
             indicator.style.color = 'white';
             
-            // Set tooltip with detailed information
+            // Set tooltip with detailed information (always update for real-time)
             indicator.title = statusInfo.tooltip;
+            
+            // Setup hover listeners if not already done
+            if (!indicator.hasAttribute('data-hover-setup')) {
+                indicator.setAttribute('data-hover-setup', 'true');
+                
+                indicator.addEventListener('mouseenter', () => {
+                    this.hovering = true;
+                    // Fetch WiFi info when user hovers
+                    this.fetchWifiInfo();
+                    // Start interval to update tooltip while hovering
+                    if (this.hoverUpdateInterval) {
+                        clearInterval(this.hoverUpdateInterval);
+                    }
+                    this.hoverUpdateInterval = setInterval(() => {
+                        if (this.hovering) {
+                            this.updateUI();
+                        }
+                    }, 500);  // Update every 500ms while hovering
+                });
+                
+                indicator.addEventListener('mouseleave', () => {
+                    this.hovering = false;
+                    // Stop updating when not hovering
+                    if (this.hoverUpdateInterval) {
+                        clearInterval(this.hoverUpdateInterval);
+                        this.hoverUpdateInterval = null;
+                    }
+                });
+            }
         }
     }
 };
