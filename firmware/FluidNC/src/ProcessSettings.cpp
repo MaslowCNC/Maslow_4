@@ -1333,8 +1333,7 @@ Error execute_line(char* line, Channel& channel, WebUI::AuthenticationLevel auth
     }
     // Connection monitoring ECHO command - echo back the number for bidirectional communication check
     if (strncmp(line, "ECHO:", 5) == 0) {
-        channel.print(line);
-        channel.print('\n');
+        channel.println(line);
         return Error::Ok;
     }
     // Everything else is gcode. Block if in alarm or jog mode.

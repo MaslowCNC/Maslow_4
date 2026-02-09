@@ -115,11 +115,11 @@ let connectionMonitor = {
             }
         }
         
-        // Send via WebSocket
-        const cmd = `ECHO:${pingNum}`;
+        // Send via WebSocket directly (not HTTP) to avoid blocking during GCode execution
+        const cmd = `ECHO:${pingNum}\n`;
         try {
-            if (typeof SendPrinterCommand === 'function') {
-                SendPrinterCommand(cmd, false, true);
+            if (typeof ws_source !== 'undefined' && ws_source && ws_source.readyState === WebSocket.OPEN) {
+                ws_source.send(cmd);
             }
         } catch (e) {
             console.log("Connection Monitor: Error sending ping: " + e);
