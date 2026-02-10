@@ -128,10 +128,13 @@ let connectionMonitor = {
         }
         
         // Send via WebSocket directly (not HTTP) to avoid blocking during GCode execution
-        const cmd = `ECHO:${pingNum}\n`;
+        const cmd = `ECHO:${pingNum}`;
         try {
             if (typeof ws_source !== 'undefined' && ws_source && ws_source.readyState === WebSocket.OPEN) {
-                ws_source.send(cmd);
+                ws_source.send(cmd + '\n');
+                console.log("Connection Monitor: Sent ping " + pingNum);
+            } else {
+                console.log("Connection Monitor: WebSocket not available (readyState: " + (ws_source ? ws_source.readyState : 'undefined') + ")");
             }
         } catch (e) {
             console.log("Connection Monitor: Error sending ping: " + e);
@@ -173,6 +176,7 @@ let connectionMonitor = {
      */
     handleEcho(line) {
         if (!this.enabled) {
+            console.log("Connection Monitor: ECHO received but monitoring disabled");
             return;
         }
         
@@ -184,7 +188,10 @@ let connectionMonitor = {
         const numStr = line.substring(5).trim();
         const pingNum = parseInt(numStr, 10);
         
+        console.log("Connection Monitor: Received ECHO:" + pingNum);
+        
         if (isNaN(pingNum)) {
+            console.log("Connection Monitor: Invalid ping number");
             return;
         }
         
@@ -193,6 +200,8 @@ let connectionMonitor = {
             const sentTime = this.sentPings.get(pingNum);
             const now = Date.now();
             const latency = now - sentTime;
+            
+            console.log("Connection Monitor: Valid response, latency " + latency + "ms");
             
             // Update statistics
             this.statistics.totalReceived++;

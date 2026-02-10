@@ -194,6 +194,7 @@ const startSocket = () => {
 					
 					// Handle ECHO responses for connection monitoring
 					if (thismsg.startsWith("ECHO:") && typeof connectionMonitor !== 'undefined') {
+						console.log("Socket.js: Intercepted ECHO message: " + thismsg);
 						connectionMonitor.handleEcho(thismsg);
 						// Skip further processing for ECHO messages
 						continue;
