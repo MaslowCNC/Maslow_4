@@ -85,7 +85,11 @@ bool Calibration::requestStateChange(int newState) {
         case RETRACTED:  //We can enter retracted from retracting only
             if (currentState == RETRACTING) {
                 currentState = RETRACTED;
-                sys.set_state(State::Idle);
+                // When Maslow enters RETRACTED state, change FluidNC state to Homing
+                if (sys.state() != State::Homing) {
+                    log_info("Changing FluidNC state to Homing as Maslow enters RETRACTED state");
+                    sys.set_state(State::Homing);
+                }
                 // Explicitly save belt positions now that belts are retracted and tight
                 Maslow.saveBeltPositions();
                 success = true;
