@@ -31,7 +31,7 @@ function restart_esp_success(response) {
 		x.value = i;
 		setHTML(
 			"restartmsg",
-			`${translate_text_item("Restarting, please wait....")} ${x.max - i} ${translate_text_item("seconds")}`,
+			`${translate_text_item("Restarting, please wait....")} ${x.max + 1 - i} ${translate_text_item("seconds")}`,
 		);
 		if (i > x.max) {
 			clearInterval(interval);
