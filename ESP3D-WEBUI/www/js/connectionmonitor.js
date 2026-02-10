@@ -331,15 +331,15 @@ let connectionMonitor = {
             color = '#ce654c';
             showWarning = true;
         }
-        // Good connection - relaxed thresholds for real-world conditions
-        else if (lossPercent < 10 && avgLatency < 1000) {
+        // Good connection - optimized thresholds for real-world conditions
+        else if (lossPercent < 10 && avgLatency < 650) {
             status = 'good';
             tooltip = `Connection Status: Good\nLatency: ${avgLatency}ms\nRecent Packet Loss: ${lossPercent.toFixed(1)}% (last ${recentTotal} pings)\nTotal Pings Sent: ${totalSent}\nTotal Received: ${totalReceived}${wifiSection}`;
             color = '#4aa85c';
             showWarning = false;
         }
         // Degraded connection
-        else if (lossPercent < 25 || avgLatency < 2000) {
+        else if (lossPercent < 25 || avgLatency < 1300) {
             status = 'degraded';
             tooltip = `Connection Status: Degraded\nLatency: ${avgLatency}ms\nRecent Packet Loss: ${lossPercent.toFixed(1)}% (last ${recentTotal} pings)\nRecent Received: ${recentReceived}\nRecent Lost: ${recentLost}${wifiSection}`;
             color = '#ffa500';
