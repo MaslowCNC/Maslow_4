@@ -62,7 +62,7 @@ bool Calibration::requestStateChange(int newState) {
     switch (newState) {
         case UNKNOWN:  //We can enter unknown from any stable state (the machine is not currently performing an action)
             currentState = UNKNOWN;
-            // When error happens that takes Maslow to UNKNOWN state, change FluidNC state to ALARM
+            // When error happens that takes Maslow to UNKNOWN state, change FluidNC state to Alarm
             log_info("Changing FluidNC state to Alarm due to Maslow entering UNKNOWN state");
             sys.set_state(State::Alarm);
             success      = true;
@@ -269,7 +269,6 @@ bool Calibration::requestStateChange(int newState) {
                     // Always transition to Idle when Maslow is READY_TO_CUT
                     sys.set_state(State::Idle);
                 }
-                // If already Idle, no action needed
 
                 // Explicitly save belt positions now that calibration/take-slack is complete and belts are tight
                 Maslow.saveBeltPositions();
