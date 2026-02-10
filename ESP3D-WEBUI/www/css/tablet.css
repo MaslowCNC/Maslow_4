@@ -883,7 +883,7 @@ float: left;
 width: 100%;
 }
 
-/* Increase font size by 1pt and make bold for smallest font elements */
+/* Make bold for smallest font elements */
 #mpos-x, #mpos-y, #mpos-z {
   font-weight: bold;
 }
@@ -898,61 +898,4 @@ width: 100%;
 
 #tablettab_gcode_upload span, #tablettab_gcode_delete span {
   font-weight: bold;
-}
-
-/* Responsive font size adjustments for these elements */
-@media (min-width: 300px) {
-  #mpos-x, #mpos-y, #mpos-z, #disM, #disZ,
-  #tablettab_set_z_home, #tablettab_set_xy_home, #tablettab_toggle_units {
-    font-size: 9px;
-  }
-}
-
-@media (min-width: 400px) {
-  #mpos-x, #mpos-y, #mpos-z, #disM, #disZ,
-  #tablettab_set_z_home, #tablettab_set_xy_home, #tablettab_toggle_units {
-    font-size: 11px;
-  }
-}
-
-@media (min-width: 512px) {
-  #mpos-x, #mpos-y, #mpos-z, #disM, #disZ,
-  #tablettab_set_z_home, #tablettab_set_xy_home, #tablettab_toggle_units {
-    font-size: 13px;
-  }
-}
-
-@media (min-width: 640px) {
-  #mpos-x, #mpos-y, #mpos-z, #disM, #disZ,
-  #tablettab_set_z_home, #tablettab_set_xy_home, #tablettab_toggle_units {
-    font-size: 15px;
-  }
-}
-
-@media (min-width: 736px) {
-  #mpos-x, #mpos-y, #mpos-z, #disM, #disZ,
-  #tablettab_set_z_home, #tablettab_set_xy_home, #tablettab_toggle_units {
-    font-size: 18px;
-  }
-}
-
-@media (min-width: 768px) {
-  #mpos-x, #mpos-y, #mpos-z, #disM, #disZ,
-  #tablettab_set_z_home, #tablettab_set_xy_home, #tablettab_toggle_units {
-    font-size: 21px;
-  }
-}
-
-@media (min-width: 992px) {
-  #mpos-x, #mpos-y, #mpos-z, #disM, #disZ,
-  #tablettab_set_z_home, #tablettab_set_xy_home, #tablettab_toggle_units {
-    font-size: 21px;
-  }
-}
-
-@media (min-width: 1200px) {
-  #mpos-x, #mpos-y, #mpos-z, #disM, #disZ,
-  #tablettab_set_z_home, #tablettab_set_xy_home, #tablettab_toggle_units {
-    font-size: 25px;
-  }
 }
