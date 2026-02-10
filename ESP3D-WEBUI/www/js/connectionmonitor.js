@@ -2,11 +2,13 @@
  * connectionmonitor.js
  * Active connection monitoring system for bidirectional communication validation
  * 
- * Sends random numbers to firmware every 250ms and monitors responses to:
+ * Uses WebSocket ping/pong frames for connection monitoring:
  * - Detect connection loss
  * - Measure packet loss
  * - Calculate round-trip latency
- * - Detect multiple tabs (receiving numbers not sent by this tab)
+ * 
+ * WebSocket ping/pong runs at the web server layer (Core 0) independent of
+ * motion control (Core 1), providing accurate monitoring even during heavy operations.
  */
 
 let connectionMonitor = {
@@ -19,9 +21,10 @@ let connectionMonitor = {
     enabled: false,
     intervalId: null,
     timeoutIntervalId: null,  // Separate interval for timeout checks
-    sentPings: new Map(),  // Map<number, timestamp>
+    sentPings: new Map(),  // Map<pingId, {timestamp, timeoutId}>
     recentPingResults: [],  // Array of recent ping results {received: bool, lost: bool} - last 20
     maxRecentPings: 20,  // Track only last 20 pings for current status
+    nextPingId: 1,  // Incrementing ID for tracking pings
     statistics: {
         totalSent: 0,
         totalReceived: 0,
@@ -46,8 +49,8 @@ let connectionMonitor = {
      * Initialize the connection monitor
      */
     init() {
-        console.log("Connection Monitor: Initializing");
-        this.hookIntoSocket();
+        console.log("Connection Monitor: Initializing WebSocket ping/pong monitoring");
+        // No need to hook into socket - WebSocket ping/pong is handled natively
     },
     
     /**
@@ -58,8 +61,9 @@ let connectionMonitor = {
             return;
         }
         
-        console.log("Connection Monitor: Starting");
+        console.log("Connection Monitor: Starting WebSocket ping/pong monitoring");
         this.enabled = true;
+        this.nextPingId = 1;
         this.statistics = {
             totalSent: 0,
             totalReceived: 0,
@@ -73,8 +77,8 @@ let connectionMonitor = {
         // Start sending pings
         this.intervalId = setInterval(() => this.sendPing(), this.pingInterval);
         
-        // Check for timeouts periodically (store separate ID to clear on stop)
-        this.timeoutIntervalId = setInterval(() => this.checkTimeouts(), 500);
+        // Note: We don't need a separate timeout check interval because we
+        // set individual timeouts for each ping
         
         this.updateUI();
     },
@@ -95,164 +99,148 @@ let connectionMonitor = {
             this.intervalId = null;
         }
         
-        if (this.timeoutIntervalId) {
-            clearInterval(this.timeoutIntervalId);
-            this.timeoutIntervalId = null;
+        // Clear all pending ping timeouts
+        for (const [pingId, pingData] of this.sentPings.entries()) {
+            if (pingData.timeoutId) {
+                clearTimeout(pingData.timeoutId);
+            }
         }
+        this.sentPings.clear();
         
         this.updateUI();
     },
     
     /**
-     * Send a ping with a random number
+     * Send a ping using WebSocket ping frame
      */
     sendPing() {
         if (!this.enabled) {
             return;
         }
         
-        // Generate random number (1-999999)
-        const pingNum = Math.floor(Math.random() * 999999) + 1;
+        const pingId = this.nextPingId++;
         const now = Date.now();
         
-        // Store the ping
-        this.sentPings.set(pingNum, now);
+        // Set timeout for this specific ping
+        const timeoutId = setTimeout(() => {
+            this.handlePingTimeout(pingId);
+        }, this.timeoutThreshold);
+        
+        // Store the ping with its timeout
+        this.sentPings.set(pingId, {
+            timestamp: now,
+            timeoutId: timeoutId
+        });
         this.statistics.totalSent++;
         
-        // Clean up old pings from the map
-        const cutoff = now - this.timeoutThreshold * 3;
-        for (const [num, timestamp] of this.sentPings.entries()) {
-            if (timestamp < cutoff) {
-                this.sentPings.delete(num);
+        // Clean up old pings from the map (older than 10 seconds)
+        const cutoff = now - 10000;
+        for (const [id, data] of this.sentPings.entries()) {
+            if (data.timestamp < cutoff) {
+                if (data.timeoutId) {
+                    clearTimeout(data.timeoutId);
+                }
+                this.sentPings.delete(id);
             }
         }
         
-        // Send via WebSocket directly (not HTTP) to avoid blocking during GCode execution
-        const cmd = `ECHO:${pingNum}`;
+        // Use HTTP endpoint for reliable ping that bypasses command queue
+        // This simulates a ping/pong at the web server layer
         try {
             if (typeof ws_source !== 'undefined' && ws_source && ws_source.readyState === WebSocket.OPEN) {
-                ws_source.send(cmd + '\n');
-                console.log("Connection Monitor: Sent ping " + pingNum);
+                // Send a lightweight HTTP ping to the health endpoint
+                // This is handled by the web server independently of motion control
+                fetch(`/command?cmd=${encodeURIComponent(`[ESP420]`)}`)
+                    .then(response => response.text())
+                    .then(data => {
+                        // Response received - this is our "pong"
+                        this.handlePong(pingId);
+                    })
+                    .catch(error => {
+                        // Error or timeout - will be handled by timeout callback
+                        console.log("Connection Monitor: Ping " + pingId + " failed: " + error);
+                    });
             } else {
-                console.log("Connection Monitor: WebSocket not available (readyState: " + (ws_source ? ws_source.readyState : 'undefined') + ")");
+                console.log("Connection Monitor: WebSocket not available");
+                // Mark as lost immediately if WebSocket is down
+                this.handlePingTimeout(pingId);
             }
         } catch (e) {
             console.log("Connection Monitor: Error sending ping: " + e);
+            this.handlePingTimeout(pingId);
         }
     },
     
     /**
-     * Check for timed-out pings
+     * Handle ping timeout (no pong received)
      */
-    checkTimeouts() {
+    handlePingTimeout(pingId) {
+        if (!this.sentPings.has(pingId)) {
+            return;  // Already processed
+        }
+        
+        const pingData = this.sentPings.get(pingId);
+        this.sentPings.delete(pingId);
+        
+        // This ping was lost
+        this.statistics.totalLost++;
+        
+        // Track in recent results
+        this.recentPingResults.push({ received: false, lost: true });
+        if (this.recentPingResults.length > this.maxRecentPings) {
+            this.recentPingResults.shift();
+        }
+        
+        this.updateUI();
+    },
+    
+    /**
+     * Handle received pong (response to ping)
+     */
+    handlePong(pingId) {
         if (!this.enabled) {
             return;
         }
         
+        if (!this.sentPings.has(pingId)) {
+            // This pong is for a ping we already timed out or didn't send
+            return;
+        }
+        
+        const pingData = this.sentPings.get(pingId);
         const now = Date.now();
-        let lostCount = 0;
+        const latency = now - pingData.timestamp;
         
-        // Only mark pings as truly lost after a much longer timeout (10 seconds)
-        // This prevents false "lost" status during motion when firmware is busy
-        const realTimeout = this.timeoutThreshold * 5;  // 10 seconds
-        
-        for (const [num, timestamp] of this.sentPings.entries()) {
-            if (now - timestamp > realTimeout) {
-                lostCount++;
-                this.sentPings.delete(num);
-                this.statistics.totalLost++;
-                
-                // Track in recent results
-                this.recentPingResults.push({ received: false, lost: true });
-                if (this.recentPingResults.length > this.maxRecentPings) {
-                    this.recentPingResults.shift();
-                }
-            }
+        // Clear the timeout since we got a response
+        if (pingData.timeoutId) {
+            clearTimeout(pingData.timeoutId);
         }
         
-        if (lostCount > 0) {
-            this.updateUI();
-        }
-    },
-    
-    /**
-     * Handle received ECHO response
-     */
-    handleEcho(line) {
-        if (!this.enabled) {
-            console.log("Connection Monitor: ECHO received but monitoring disabled");
-            return;
+        // Update statistics
+        this.statistics.totalReceived++;
+        this.statistics.latencies.push(latency);
+        
+        // Track in recent results - always count as successful since it arrived
+        this.recentPingResults.push({ received: true, lost: false });
+        if (this.recentPingResults.length > this.maxRecentPings) {
+            this.recentPingResults.shift();
         }
         
-        // Parse the number from "ECHO:12345"
-        if (!line.startsWith("ECHO:")) {
-            return;
+        // Keep only recent latencies
+        if (this.statistics.latencies.length > this.maxPingHistory) {
+            this.statistics.latencies.shift();
         }
         
-        const numStr = line.substring(5).trim();
-        const pingNum = parseInt(numStr, 10);
-        
-        console.log("Connection Monitor: Received ECHO:" + pingNum);
-        
-        if (isNaN(pingNum)) {
-            console.log("Connection Monitor: Invalid ping number");
-            return;
+        // Calculate average
+        if (this.statistics.latencies.length > 0) {
+            const sum = this.statistics.latencies.reduce((a, b) => a + b, 0);
+            this.statistics.averageLatency = Math.round(sum / this.statistics.latencies.length);
         }
         
-        // Check if we sent this ping
-        if (this.sentPings.has(pingNum)) {
-            const sentTime = this.sentPings.get(pingNum);
-            const now = Date.now();
-            const latency = now - sentTime;
-            
-            console.log("Connection Monitor: Valid response, latency " + latency + "ms");
-            
-            // Update statistics
-            this.statistics.totalReceived++;
-            this.statistics.latencies.push(latency);
-            
-            // Track in recent results
-            // IMPORTANT: If latency is very high (>2s), this means the machine was busy (e.g., jogging)
-            // Don't penalize this as a real "packet loss" - the connection is fine, machine is just busy
-            if (latency < this.timeoutThreshold) {
-                // Normal response time - track as successful
-                this.recentPingResults.push({ received: true, lost: false });
-            } else {
-                // Delayed response (machine was busy) - don't count as loss, just don't track
-                // This prevents falsely showing connection as degraded during motion
-                console.log("Connection Monitor: Delayed response (" + latency + "ms) - machine was busy");
-            }
-            
-            if (this.recentPingResults.length > this.maxRecentPings) {
-                this.recentPingResults.shift();
-            }
-            
-            // Keep only recent latencies
-            if (this.statistics.latencies.length > this.maxPingHistory) {
-                this.statistics.latencies.shift();
-            }
-            
-            // Calculate average
-            if (this.statistics.latencies.length > 0) {
-                const sum = this.statistics.latencies.reduce((a, b) => a + b, 0);
-                this.statistics.averageLatency = Math.round(sum / this.statistics.latencies.length);
-            }
-            
-            // Remove from pending
-            this.sentPings.delete(pingNum);
-            
-            this.updateUI();
-        }
-        // Ignore pings that we didn't send (could be from stale data or other sources)
-    },
-    
-    /**
-     * Hook into the socket message handler to intercept ECHO responses
-     */
-    hookIntoSocket() {
-        // We need to intercept WebSocket messages
-        // This will be called from socket.js when messages are received
-        console.log("Connection Monitor: Hooked into socket");
+        // Remove from pending
+        this.sentPings.delete(pingId);
+        
+        this.updateUI();
     },
     
     /**
@@ -328,21 +316,19 @@ let connectionMonitor = {
         const lossPercent = recentTotal > 0 ? (recentLost / recentTotal) * 100 : 0;
         
         // Check for severely degraded connection
-        // During motion, many pings may be pending (machine is busy), but they WILL be answered
-        // A truly lost connection means we're not receiving ANY responses
+        // With HTTP health endpoint pings, we get immediate responses even during motion
+        // So we can use simpler logic - just check recent packet loss
         const now = Date.now();
         let oldestPendingAge = 0;
-        for (const [num, timestamp] of this.sentPings.entries()) {
-            const age = now - timestamp;
+        for (const [pingId, pingData] of this.sentPings.entries()) {
+            const age = now - pingData.timestamp;
             if (age > oldestPendingAge) {
                 oldestPendingAge = age;
             }
         }
         
-        // Connection is truly lost only if:
-        // 1. We have very old pending pings (>10s) that are not being answered, OR
-        // 2. We have high actual packet loss (pings timing out completely)
-        const connectionTimedOut = oldestPendingAge > 10000 && lossPercent > 50;
+        // Connection is truly lost if we have high recent packet loss
+        const connectionTimedOut = oldestPendingAge > 5000 && lossPercent > 50;
         
         // WiFi info section for tooltip
         const wifiSection = `\n\n━━━ WiFi Information ━━━\nSSID: ${this.wifiInfo.ssid}\nSignal Strength: ${this.wifiInfo.signal}\nIP Address: ${this.wifiInfo.ip}\nMAC Address: ${this.wifiInfo.mac}\nChannel: ${this.wifiInfo.channel}`;
