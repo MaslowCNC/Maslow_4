@@ -62,6 +62,9 @@ bool Calibration::requestStateChange(int newState) {
     switch (newState) {
         case UNKNOWN:  //We can enter unknown from any stable state (the machine is not currently performing an action)
             currentState = UNKNOWN;
+            // When error happens that takes Maslow to UNKNOWN state, change FluidNC state to ALARM
+            sys.set_state(State::Alarm);
+            log_info("FluidNC state changed to Alarm due to Maslow entering UNKNOWN state");
             success      = true;
             break;
         case RETRACTING:  //We can enter retracting from any state
@@ -256,7 +259,20 @@ bool Calibration::requestStateChange(int newState) {
         case READY_TO_CUT:  //We can enter ready to cut from calibration in progress, calibration computing or taking slack
             if (currentState == CALIBRATION_IN_PROGRESS || currentState == CALIBRATION_COMPUTING || currentState == TAKING_SLACK) {
                 currentState = READY_TO_CUT;
-                sys.set_state(State::Idle);
+
+                // When Maslow enters READY_TO_CUT state, clear FluidNC state from alarm/home to idle
+                State currentFluidNCState = sys.state();
+                if (currentFluidNCState == State::Alarm || currentFluidNCState == State::Homing) {
+                    sys.set_state(State::Idle);
+                    log_info("FluidNC state changed from " << stateName(currentFluidNCState) << " to Idle as Maslow entered READY_TO_CUT state");
+                } else if (currentFluidNCState != State::Idle) {
+                    // Log if FluidNC is in some other state
+                    log_info("Maslow entering READY_TO_CUT state while FluidNC is in state: " << stateName(currentFluidNCState));
+                    sys.set_state(State::Idle);
+                } else {
+                    sys.set_state(State::Idle);
+                }
+
                 // Explicitly save belt positions now that calibration/take-slack is complete and belts are tight
                 Maslow.saveBeltPositions();
                 success = true;
@@ -269,6 +285,13 @@ bool Calibration::requestStateChange(int newState) {
                 currentState == CALIBRATION_COMPUTING) {
                 previousState   = currentState;  // Store the previous state
                 currentState    = RELEASE_TENSION;
+
+                // When tension is released from READY_TO_CUT, change FluidNC state to Homing
+                if (previousState == READY_TO_CUT) {
+                    sys.set_state(State::Homing);
+                    log_info("FluidNC state changed to Homing as tension is released from READY_TO_CUT state");
+                }
+
                 complyCallTimer = millis();
                 retracting[_TL] = false;
                 retracting[_TR] = false;
