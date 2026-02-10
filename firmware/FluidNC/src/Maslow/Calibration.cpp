@@ -63,8 +63,8 @@ bool Calibration::requestStateChange(int newState) {
         case UNKNOWN:  //We can enter unknown from any stable state (the machine is not currently performing an action)
             currentState = UNKNOWN;
             // When error happens that takes Maslow to UNKNOWN state, change FluidNC state to ALARM
+            log_info("Changing FluidNC state to Alarm due to Maslow entering UNKNOWN state");
             sys.set_state(State::Alarm);
-            log_info("FluidNC state changed to Alarm due to Maslow entering UNKNOWN state");
             success      = true;
             break;
         case RETRACTING:  //We can enter retracting from any state
@@ -266,7 +266,7 @@ bool Calibration::requestStateChange(int newState) {
                 if (currentFluidNCState != State::Idle) {
                     // Log the state transition for alarm/home or other states
                     if (currentFluidNCState == State::Alarm || currentFluidNCState == State::Homing) {
-                        log_info("FluidNC state changed from " << stateName(currentFluidNCState) << " to Idle as Maslow entered READY_TO_CUT state");
+                        log_info("Changing FluidNC state from " << stateName(currentFluidNCState) << " to Idle as Maslow entered READY_TO_CUT state");
                     } else {
                         log_info("Maslow entering READY_TO_CUT state while FluidNC is in state: " << stateName(currentFluidNCState));
                     }
@@ -291,8 +291,8 @@ bool Calibration::requestStateChange(int newState) {
                 // When tension is released from READY_TO_CUT, change FluidNC state to Homing
                 // Per requirements: Only transition to Homing when releasing from READY_TO_CUT specifically
                 if (previousState == READY_TO_CUT) {
+                    log_info("Changing FluidNC state to Homing as tension is released from READY_TO_CUT state");
                     sys.set_state(State::Homing);
-                    log_info("FluidNC state changed to Homing as tension is released from READY_TO_CUT state");
                 }
                 // Note: No FluidNC state change when releasing tension from other Maslow states
 
