@@ -152,8 +152,12 @@ let connectionMonitor = {
         const now = Date.now();
         let lostCount = 0;
         
+        // Only mark pings as truly lost after a much longer timeout (10 seconds)
+        // This prevents false "lost" status during motion when firmware is busy
+        const realTimeout = this.timeoutThreshold * 5;  // 10 seconds
+        
         for (const [num, timestamp] of this.sentPings.entries()) {
-            if (now - timestamp > this.timeoutThreshold) {
+            if (now - timestamp > realTimeout) {
                 lostCount++;
                 this.sentPings.delete(num);
                 this.statistics.totalLost++;
@@ -208,7 +212,17 @@ let connectionMonitor = {
             this.statistics.latencies.push(latency);
             
             // Track in recent results
-            this.recentPingResults.push({ received: true, lost: false });
+            // IMPORTANT: If latency is very high (>2s), this means the machine was busy (e.g., jogging)
+            // Don't penalize this as a real "packet loss" - the connection is fine, machine is just busy
+            if (latency < this.timeoutThreshold) {
+                // Normal response time - track as successful
+                this.recentPingResults.push({ received: true, lost: false });
+            } else {
+                // Delayed response (machine was busy) - don't count as loss, just don't track
+                // This prevents falsely showing connection as degraded during motion
+                console.log("Connection Monitor: Delayed response (" + latency + "ms) - machine was busy");
+            }
+            
             if (this.recentPingResults.length > this.maxRecentPings) {
                 this.recentPingResults.shift();
             }
@@ -313,18 +327,22 @@ let connectionMonitor = {
         const recentTotal = recentReceived + recentLost;
         const lossPercent = recentTotal > 0 ? (recentLost / recentTotal) * 100 : 0;
         
-        // Check for severely degraded connection (many pending pings AND high recent loss)
+        // Check for severely degraded connection
+        // During motion, many pings may be pending (machine is busy), but they WILL be answered
+        // A truly lost connection means we're not receiving ANY responses
         const now = Date.now();
-        let veryOldPendingCount = 0;  // Count pings older than 4 seconds
+        let oldestPendingAge = 0;
         for (const [num, timestamp] of this.sentPings.entries()) {
             const age = now - timestamp;
-            if (age > this.timeoutThreshold * 2) {  // 4 seconds
-                veryOldPendingCount++;
+            if (age > oldestPendingAge) {
+                oldestPendingAge = age;
             }
         }
         
-        // Connection is truly lost only if multiple pings are VERY old AND recent loss is high
-        const connectionTimedOut = veryOldPendingCount >= 3 && lossPercent > 80;
+        // Connection is truly lost only if:
+        // 1. We have very old pending pings (>10s) that are not being answered, OR
+        // 2. We have high actual packet loss (pings timing out completely)
+        const connectionTimedOut = oldestPendingAge > 10000 && lossPercent > 50;
         
         // WiFi info section for tooltip
         const wifiSection = `\n\n━━━ WiFi Information ━━━\nSSID: ${this.wifiInfo.ssid}\nSignal Strength: ${this.wifiInfo.signal}\nIP Address: ${this.wifiInfo.ip}\nMAC Address: ${this.wifiInfo.mac}\nChannel: ${this.wifiInfo.channel}`;
