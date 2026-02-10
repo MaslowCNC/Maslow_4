@@ -261,6 +261,7 @@ bool Calibration::requestStateChange(int newState) {
                 currentState = READY_TO_CUT;
 
                 // When Maslow enters READY_TO_CUT state, clear FluidNC state from alarm/home to idle
+                // Per requirements: Always transition to Idle regardless of current FluidNC state
                 State currentFluidNCState = sys.state();
                 if (currentFluidNCState != State::Idle) {
                     // Log the state transition for alarm/home or other states
@@ -269,6 +270,7 @@ bool Calibration::requestStateChange(int newState) {
                     } else {
                         log_info("Maslow entering READY_TO_CUT state while FluidNC is in state: " << stateName(currentFluidNCState));
                     }
+                    // Always transition to Idle when Maslow is READY_TO_CUT
                     sys.set_state(State::Idle);
                 }
                 // If already Idle, no action needed
@@ -287,10 +289,12 @@ bool Calibration::requestStateChange(int newState) {
                 currentState    = RELEASE_TENSION;
 
                 // When tension is released from READY_TO_CUT, change FluidNC state to Homing
+                // Per requirements: Only transition to Homing when releasing from READY_TO_CUT specifically
                 if (previousState == READY_TO_CUT) {
                     sys.set_state(State::Homing);
                     log_info("FluidNC state changed to Homing as tension is released from READY_TO_CUT state");
                 }
+                // Note: No FluidNC state change when releasing tension from other Maslow states
 
                 complyCallTimer = millis();
                 retracting[_TL] = false;
