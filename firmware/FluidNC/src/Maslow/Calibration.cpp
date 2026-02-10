@@ -287,7 +287,7 @@ bool Calibration::requestStateChange(int newState) {
 
                 // When tension is released from READY_TO_CUT, change FluidNC state to Homing
                 // Per requirements: Only transition to Homing when releasing from READY_TO_CUT specifically
-                if (previousState == READY_TO_CUT) {
+                if (previousState == READY_TO_CUT && sys.state() != State::Homing) {
                     log_info("Changing FluidNC state to Homing as tension is released from READY_TO_CUT state");
                     sys.set_state(State::Homing);
                 }
