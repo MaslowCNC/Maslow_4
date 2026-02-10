@@ -814,6 +814,8 @@ const tabletCalRelax = () => {
 };
 
 // Toggle tension button handler
+// Note: This state is stored in memory and will reset on page reload.
+// For production use, consider deriving state from system status or persisting to storage.
 let tensionApplied = false;
 const toggleTension = () => {
   if (tensionApplied) {

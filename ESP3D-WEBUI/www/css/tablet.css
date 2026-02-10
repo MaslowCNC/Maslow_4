@@ -932,14 +932,14 @@ width: 100%;
 @media (min-width: 736px) {
   #mpos-x, #mpos-y, #mpos-z, #disM, #disZ,
   #tablettab_set_z_home, #tablettab_set_xy_home, #tablettab_toggle_units {
-    font-size: 1.8rem;
+    font-size: 18px;
   }
 }
 
 @media (min-width: 768px) {
   #mpos-x, #mpos-y, #mpos-z, #disM, #disZ,
   #tablettab_set_z_home, #tablettab_set_xy_home, #tablettab_toggle_units {
-    font-size: 2.1rem;
+    font-size: 21px;
   }
 }
 
