@@ -63,8 +63,10 @@ bool Calibration::requestStateChange(int newState) {
         case UNKNOWN:  //We can enter unknown from any stable state (the machine is not currently performing an action)
             currentState = UNKNOWN;
             // When error happens that takes Maslow to UNKNOWN state, change FluidNC state to Alarm
-            log_info("Changing FluidNC state to Alarm due to Maslow entering UNKNOWN state");
-            sys.set_state(State::Alarm);
+            if (sys.state() != State::Alarm) {
+                log_info("Changing FluidNC state to Alarm due to Maslow entering UNKNOWN state");
+                sys.set_state(State::Alarm);
+            }
             success      = true;
             break;
         case RETRACTING:  //We can enter retracting from any state
@@ -265,7 +267,7 @@ bool Calibration::requestStateChange(int newState) {
                 State currentFluidNCState = sys.state();
                 if (currentFluidNCState != State::Idle) {
                     // Log the state transition
-                    log_info("Changing FluidNC state from " << stateName(currentFluidNCState) << " to Idle as Maslow enters READY_TO_CUT state");
+                    log_info("Changing FluidNC state from " << stateName(currentFluidNCState) << " to Idle as Maslow entered READY_TO_CUT state");
                     // Always transition to Idle when Maslow is READY_TO_CUT
                     sys.set_state(State::Idle);
                 }
