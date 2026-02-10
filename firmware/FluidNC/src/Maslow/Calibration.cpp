@@ -263,15 +263,12 @@ bool Calibration::requestStateChange(int newState) {
                 // When Maslow enters READY_TO_CUT state, clear FluidNC state from alarm/home to idle
                 State currentFluidNCState = sys.state();
                 if (currentFluidNCState == State::Alarm || currentFluidNCState == State::Homing) {
-                    sys.set_state(State::Idle);
                     log_info("FluidNC state changed from " << stateName(currentFluidNCState) << " to Idle as Maslow entered READY_TO_CUT state");
                 } else if (currentFluidNCState != State::Idle) {
                     // Log if FluidNC is in some other state
                     log_info("Maslow entering READY_TO_CUT state while FluidNC is in state: " << stateName(currentFluidNCState));
-                    sys.set_state(State::Idle);
-                } else {
-                    sys.set_state(State::Idle);
                 }
+                sys.set_state(State::Idle);
 
                 // Explicitly save belt positions now that calibration/take-slack is complete and belts are tight
                 Maslow.saveBeltPositions();
