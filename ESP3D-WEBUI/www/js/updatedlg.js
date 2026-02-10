@@ -140,7 +140,7 @@ function updatesuccess(response) {
 		x.value = i;
 		setHTML(
 			"updatemsg",
-			`${translate_text_item("Restarting, please wait....")} ${41 - i} ${translate_text_item("seconds")}`,
+			`${translate_text_item("Restarting, please wait....")} ${x.max + 1 - i} ${translate_text_item("seconds")}`,
 		);
 		if (i > x.max) {
 			update_ongoing = false;
