@@ -412,15 +412,20 @@ void Calibration::home() {
         case CALIBRATION_IN_PROGRESS:
             calibration_loop();
             break;
+        case READY_TO_CUT:
+            // Ensure we're in Idle state when in READY_TO_CUT
+            // This handles cases where the state machine may not have properly transitioned
+            if (sys.state() != State::Idle) {
+                sys.set_state(State::Idle);
+            }
+            break;
     }
 
     handleMotorOverides();
 
     //if we are done with all the homing moves, switch system state back to Idle?
-    //Exclude CALIBRATION_IN_PROGRESS and READY_TO_CUT states as they manage sys.set_state() in requestStateChange()
-    if (currentState != RETRACTING && currentState != EXTENDING && currentState != RELEASE_TENSION &&
-        currentState != CALIBRATION_IN_PROGRESS && currentState != READY_TO_CUT && !calibrationInProgress && !takeSlack &&
-        !checkOverides()) {
+    if (currentState != RETRACTING && currentState != EXTENDING && currentState != RELEASE_TENSION && !calibrationInProgress &&
+        !takeSlack && !checkOverides()) {
         sys.set_state(State::Idle);
     }
 }
