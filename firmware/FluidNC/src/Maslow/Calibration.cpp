@@ -263,11 +263,11 @@ bool Calibration::requestStateChange(int newState) {
                 currentState = READY_TO_CUT;
 
                 // When Maslow enters READY_TO_CUT state, clear FluidNC state from alarm/home to idle
-                // Per requirements: Always transition to Idle regardless of current FluidNC state
+                // Per requirements: Transition to Idle when not already idle
                 State currentFluidNCState = sys.state();
                 if (currentFluidNCState != State::Idle) {
                     // Log the state transition
-                    log_info("Changing FluidNC state from " << stateName(currentFluidNCState) << " to Idle as Maslow entered READY_TO_CUT state");
+                    log_info("Changing FluidNC state from " << stateName(currentFluidNCState) << " to Idle as Maslow enters READY_TO_CUT state");
                     // Always transition to Idle when Maslow is READY_TO_CUT
                     sys.set_state(State::Idle);
                 }
