@@ -190,6 +190,12 @@ void Maslow_::update() {
 
         //------------------------ Maslow State Machine
 
+        // Ensure system state is Idle when in READY_TO_CUT calibration state
+        // This prevents the machine from getting stuck in Homing state after calibration
+        if (calibration.getCurrentState() == READY_TO_CUT && sys.state() != State::Idle && sys.state() != State::Jog && sys.state() != State::Cycle) {
+            sys.set_state(State::Idle);
+        }
+
         //-------Jog or G-code execution.
         if (sys.state() == State::Jog || sys.state() == State::Cycle) {
             // With MaslowKinematics, read belt motor positions directly from the axis system
