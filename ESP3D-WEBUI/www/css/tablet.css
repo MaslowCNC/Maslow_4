@@ -105,9 +105,15 @@ width: 100%;
 #small-toolpath {
 border: 1px solid black;
   border-radius: 5px;
+  margin-right: 10px;
 }
 #gcode {
 margin: 10px 0px;
+}
+
+#tablettab_gcode {
+  margin-top: 10px;
+  margin-right: 10px;
 }
 
 
