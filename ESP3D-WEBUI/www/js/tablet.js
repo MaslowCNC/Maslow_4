@@ -9,11 +9,6 @@ var sndok = true;
 
 var versionNumber = "replaceVERSION";
 
-const shouldAutoScroll = () => {
-  const checkbox = id("auto-scroll-checkbox");
-  return checkbox ? checkbox.checked : true; // Default to true if checkbox not found
-};
-
 const addMessage = (msg, scroll = true, clear = false) => {
   const msgWindow = id("messages");
   if (msgWindow) {

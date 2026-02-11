@@ -296,3 +296,12 @@ const HTMLDecode = (value) => {
   tmpelement.textContent = '';
   return value;
 }
+
+/**
+ * Check if auto-scroll to bottom is enabled for the serial messages window.
+ * @returns {boolean} - True if auto-scroll checkbox is checked or not found (default behavior)
+ */
+const shouldAutoScroll = () => {
+  const checkbox = id("auto-scroll-checkbox");
+  return checkbox ? checkbox.checked : true; // Default to true if checkbox not found
+};
