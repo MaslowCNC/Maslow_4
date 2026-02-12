@@ -445,7 +445,11 @@ void Calibration::home() {
     if (currentState != RETRACTING && currentState != EXTENDING && currentState != RELEASE_TENSION && !calibrationInProgress &&
         !takeSlack && !checkOverides()) {
         sys.set_state(State::Idle);
+        log_info("home() function set FluidNC to Idle. Current Maslow state: " << stateNames[currentState].name);
     }
+    
+    // Log the final FluidNC state at the end of home() for debugging
+    log_info("Exiting home() function. FluidNC state: " << stateName(sys.state()) << ", Maslow state: " << stateNames[currentState].name);
 }
 
 //------------------------------------------------------
