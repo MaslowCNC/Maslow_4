@@ -446,6 +446,13 @@ void Calibration::home() {
         !takeSlack && !checkOverides()) {
         sys.set_state(State::Idle);
     }
+    
+    // Ensure FluidNC is in Idle state when Maslow is in READY_TO_CUT
+    // This is a safety check to prevent the system from getting stuck in Homing state
+    if (currentState == READY_TO_CUT && sys.state() != State::Idle) {
+        log_info("Forcing FluidNC to Idle state because Maslow is in READY_TO_CUT state. Current state was: " << stateName(sys.state()));
+        sys.set_state(State::Idle);
+    }
 }
 
 //------------------------------------------------------
