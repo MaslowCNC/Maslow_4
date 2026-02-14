@@ -77,16 +77,12 @@ union SpindleStop {
 
 static SpindleStop spindle_stop_ovr;
 
-// Z-axis management for pause/stop to prevent belt relaxation from affecting work
+// Z-axis management for pause/stop to prevent motors from moving work
 static float saved_z_position = 0.0f;
 static bool  z_was_raised     = false;
 
 // Z-axis management constants
-static constexpr float        Z_SAFE_RETRACT_FEED_RATE        = 500.0f;  // mm/min - safe speed for Z retraction
-static constexpr unsigned int BELT_DECOMPRESS_DELAY_MS        = 100;     // ms - time to allow belts to decompress
-static constexpr int          BELT_TIGHTENING_CURRENT_THRESH  = 600;     // current threshold for pull_tight
-static constexpr unsigned int BELT_TIGHTENING_TIMEOUT_MS      = 5000;    // ms - timeout for belt tightening operation
-static constexpr unsigned int BELT_TIGHTENING_POLL_DELAY_MS   = 5;       // ms - delay between belt tightening polls
+static constexpr float Z_SAFE_RETRACT_FEED_RATE = 500.0f;  // mm/min - safe speed for Z retraction
 
 void protocol_reset() {
     probeState             = ProbeState::Off;
@@ -101,7 +97,7 @@ void protocol_reset() {
     // rtAlarm = ExecAlarm::None;
 }
 
-// Helper function to raise Z axis to safe position (Z-home) to prevent belt relaxation from affecting work
+// Helper function to raise Z axis to safe position (Z-home) before powering off motors
 static void protocol_raise_z_for_pause() {
     if (z_was_raised) {
         return;  // Already raised, don't raise again
@@ -114,7 +110,7 @@ static void protocol_raise_z_for_pause() {
     // Only raise Z if we're below Z-home (Z=0)
     // Note: In CNC machines, Z-home is typically at the top, and negative Z goes down into material
     if (saved_z_position < 0.0f) {
-        log_info("Raising Z from " << saved_z_position << " to 0.0 before relaxing belts");
+        log_info("Raising Z from " << saved_z_position << " to 0.0 before powering off motors");
 
         // Create target position at Z-home (Z=0)
         float target[MAX_N_AXIS];
@@ -148,7 +144,7 @@ static void protocol_raise_z_for_pause() {
     }
 
     // Mark as raised regardless of whether we actually moved Z
-    // This prevents repeated calls to this function and belt relax/tighten cycles
+    // This prevents repeated calls to this function
     z_was_raised = true;
 }
 
@@ -190,51 +186,6 @@ static void protocol_restore_z_after_resume() {
     }
 
     z_was_raised = false;
-}
-
-// Helper function to relax belts after Z has been raised
-static void protocol_relax_belts() {
-    log_info("Relaxing belts");
-    // Decompress all belt motors to release tension
-    for (int arm = 0; arm < ARM_COUNT; arm++) {
-        Maslow.axis[arm].decompressBelt();
-    }
-    // Give belts time to decompress
-    vTaskDelay(pdMS_TO_TICKS(BELT_DECOMPRESS_DELAY_MS));
-    // Stop all motors after decompression
-    for (int arm = 0; arm < ARM_COUNT; arm++) {
-        Maslow.axis[arm].stop();
-    }
-}
-
-// Helper function to tighten belts before restoring Z
-static void protocol_tighten_belts() {
-    log_info("Tightening belts");
-    // Pull belts tight using current threshold
-    bool          all_tight  = false;
-    unsigned long start_time = millis();
-
-    while (!all_tight && (millis() - start_time < BELT_TIGHTENING_TIMEOUT_MS)) {
-        all_tight = true;
-        for (int arm = 0; arm < ARM_COUNT; arm++) {
-            // Use pull_tight with a reasonable current threshold
-            if (!Maslow.axis[arm].pull_tight(BELT_TIGHTENING_CURRENT_THRESH)) {
-                all_tight = false;
-            }
-        }
-        protocol_exec_rt_system();
-        if (sys.abort()) {
-            return;
-        }
-        vTaskDelay(pdMS_TO_TICKS(BELT_TIGHTENING_POLL_DELAY_MS));
-    }
-
-    unsigned long elapsed_time = millis() - start_time;
-    if (!all_tight) {
-        log_warn("Belt tightening timed out after " << (unsigned int)elapsed_time << "ms");
-    } else {
-        log_info("Belts tightened successfully");
-    }
 }
 
 static int32_t idleEndTime = 0;
@@ -863,9 +814,8 @@ static void protocol_do_cycle_start() {
         case State::Hold:
             // Cycle start only when IDLE or when a hold is complete and ready to resume.
             if (sys.suspend().bit.holdComplete) {
-                // Before resuming, tighten belts and restore Z position
+                // Before resuming, restore Z position (motors will be powered on during cycle initiation)
                 if (z_was_raised) {
-                    protocol_tighten_belts();
                     protocol_restore_z_after_resume();
                 }
 
@@ -986,10 +936,10 @@ static void update_velocities() {
 // This is the final phase of the shutdown activity that is initiated by mc_reset().
 // The stuff herein is not necessarily safe to do in an ISR.
 static void protocol_do_late_reset() {
-    // Raise Z before relaxing belts on stop/abort to prevent work damage
+    // Raise Z before powering off motors on stop/abort to prevent work damage
     if (!z_was_raised && (sys.state() == State::Cycle || sys.state() == State::Hold)) {
         protocol_raise_z_for_pause();
-        protocol_relax_belts();
+        Maslow.stopMotors();
     }
 
     // Kill spindle and coolant.
@@ -1112,10 +1062,10 @@ static void protocol_exec_rt_suspend() {
         }
         // Block until initial hold is complete and the machine has stopped motion.
         if (sys.suspend().bit.holdComplete) {
-            // For Hold state (pause), raise Z and relax belts to prevent movement
+            // For Hold state (pause), raise Z and power off motors
             if (sys.state() == State::Hold && !z_was_raised) {
                 protocol_raise_z_for_pause();
-                protocol_relax_belts();
+                Maslow.stopMotors();
             }
 
             // Parking manager. Handles de/re-energizing, switch state checks, and parking motions for
