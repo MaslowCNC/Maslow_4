@@ -19,7 +19,7 @@
 #include "Settings.h"       // settings_execute_startup
 #include "Machine/LimitPin.h"
 #include "./Maslow/Maslow.h"
-#include "Stepper.h"        // Stepper::parking_setup_buffer, Stepper::parking_restore_buffer
+#include "Stepper.h"  // Stepper::parking_setup_buffer, Stepper::parking_restore_buffer
 
 volatile ExecAlarm rtAlarm;  // Global realtime executor bitflag variable for setting various alarms.
 
@@ -114,11 +114,11 @@ static void protocol_raise_z_for_pause() {
         target[Z_AXIS] = 0.0f;  // Move to Z-home
 
         // Setup plan data for system motion
-        plan_line_data_t plan_data         = {};
-        plan_data.motion.systemMotion      = 1;
-        plan_data.motion.noFeedOverride    = 1;
-        plan_data.feed_rate                = 500.0f;  // mm/min - reasonable safe speed for Z retraction
-        plan_data.line_number              = PARKING_MOTION_LINE_NUMBER;
+        plan_line_data_t plan_data      = {};
+        plan_data.motion.systemMotion   = 1;
+        plan_data.motion.noFeedOverride = 1;
+        plan_data.feed_rate             = 500.0f;  // mm/min - reasonable safe speed for Z retraction
+        plan_data.line_number           = PARKING_MOTION_LINE_NUMBER;
 
         // Execute the motion synchronously (blocks until complete)
         if (plan_buffer_line(target, &plan_data)) {
@@ -157,11 +157,11 @@ static void protocol_restore_z_after_resume() {
     target[Z_AXIS] = saved_z_position;
 
     // Setup plan data for system motion
-    plan_line_data_t plan_data         = {};
-    plan_data.motion.systemMotion      = 1;
-    plan_data.motion.noFeedOverride    = 1;
-    plan_data.feed_rate                = 500.0f;  // mm/min - reasonable safe speed
-    plan_data.line_number              = PARKING_MOTION_LINE_NUMBER;
+    plan_line_data_t plan_data      = {};
+    plan_data.motion.systemMotion   = 1;
+    plan_data.motion.noFeedOverride = 1;
+    plan_data.feed_rate             = 500.0f;  // mm/min - reasonable safe speed
+    plan_data.line_number           = PARKING_MOTION_LINE_NUMBER;
 
     // Execute the motion synchronously (blocks until complete)
     if (plan_buffer_line(target, &plan_data)) {
@@ -201,9 +201,9 @@ static void protocol_relax_belts() {
 static void protocol_tighten_belts() {
     log_info("Tightening belts");
     // Pull belts tight using current threshold
-    bool all_tight = false;
-    unsigned long start_time = millis();
-    const unsigned long timeout = 5000;  // 5 second timeout
+    bool                all_tight  = false;
+    unsigned long       start_time = millis();
+    const unsigned long timeout    = 5000;  // 5 second timeout
 
     while (!all_tight && (millis() - start_time < timeout)) {
         all_tight = true;
