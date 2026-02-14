@@ -143,11 +143,13 @@ static void protocol_raise_z_for_pause() {
             } while (sys.step_control.executeSysMotion);
             Stepper::parking_restore_buffer();
         }
-
-        z_was_raised = true;
     } else {
         log_debug("Z already at or above home position (" << saved_z_position << "), not raising");
     }
+
+    // Mark as raised regardless of whether we actually moved Z
+    // This prevents repeated calls to this function and belt relax/tighten cycles
+    z_was_raised = true;
 }
 
 // Helper function to restore Z axis to saved position after resuming from pause
