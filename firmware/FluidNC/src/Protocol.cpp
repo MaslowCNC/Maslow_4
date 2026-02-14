@@ -81,6 +81,12 @@ static SpindleStop spindle_stop_ovr;
 static float saved_z_position = 0.0f;
 static bool  z_was_raised     = false;
 
+// Z-axis management constants
+static constexpr float        Z_SAFE_RETRACT_FEED_RATE        = 500.0f;  // mm/min - safe speed for Z retraction
+static constexpr unsigned int BELT_DECOMPRESS_DELAY_MS        = 100;     // ms - time to allow belts to decompress
+static constexpr int          BELT_TIGHTENING_CURRENT_THRESH  = 600;     // current threshold for pull_tight
+static constexpr unsigned int BELT_TIGHTENING_TIMEOUT_MS      = 5000;    // ms - timeout for belt tightening operation
+
 void protocol_reset() {
     probeState             = ProbeState::Off;
     soft_limit             = false;
@@ -117,7 +123,7 @@ static void protocol_raise_z_for_pause() {
         plan_line_data_t plan_data      = {};
         plan_data.motion.systemMotion   = 1;
         plan_data.motion.noFeedOverride = 1;
-        plan_data.feed_rate             = 500.0f;  // mm/min - reasonable safe speed for Z retraction
+        plan_data.feed_rate             = Z_SAFE_RETRACT_FEED_RATE;
         plan_data.line_number           = PARKING_MOTION_LINE_NUMBER;
 
         // Execute the motion synchronously (blocks until complete)
@@ -160,7 +166,7 @@ static void protocol_restore_z_after_resume() {
     plan_line_data_t plan_data      = {};
     plan_data.motion.systemMotion   = 1;
     plan_data.motion.noFeedOverride = 1;
-    plan_data.feed_rate             = 500.0f;  // mm/min - reasonable safe speed
+    plan_data.feed_rate             = Z_SAFE_RETRACT_FEED_RATE;
     plan_data.line_number           = PARKING_MOTION_LINE_NUMBER;
 
     // Execute the motion synchronously (blocks until complete)
@@ -190,7 +196,7 @@ static void protocol_relax_belts() {
         Maslow.axis[arm].decompressBelt();
     }
     // Give belts time to decompress
-    vTaskDelay(pdMS_TO_TICKS(100));
+    vTaskDelay(pdMS_TO_TICKS(BELT_DECOMPRESS_DELAY_MS));
     // Stop all motors after decompression
     for (int arm = 0; arm < ARM_COUNT; arm++) {
         Maslow.axis[arm].stop();
@@ -203,13 +209,13 @@ static void protocol_tighten_belts() {
     // Pull belts tight using current threshold
     bool                all_tight  = false;
     unsigned long       start_time = millis();
-    const unsigned long timeout    = 5000;  // 5 second timeout
+    const unsigned long timeout    = BELT_TIGHTENING_TIMEOUT_MS;
 
     while (!all_tight && (millis() - start_time < timeout)) {
         all_tight = true;
         for (int arm = 0; arm < ARM_COUNT; arm++) {
-            // Use pull_tight with a reasonable current threshold (600 seems to be used elsewhere)
-            if (!Maslow.axis[arm].pull_tight(600)) {
+            // Use pull_tight with a reasonable current threshold
+            if (!Maslow.axis[arm].pull_tight(BELT_TIGHTENING_CURRENT_THRESH)) {
                 all_tight = false;
             }
         }
