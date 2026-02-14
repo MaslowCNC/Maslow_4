@@ -86,6 +86,7 @@ static constexpr float        Z_SAFE_RETRACT_FEED_RATE        = 500.0f;  // mm/m
 static constexpr unsigned int BELT_DECOMPRESS_DELAY_MS        = 100;     // ms - time to allow belts to decompress
 static constexpr int          BELT_TIGHTENING_CURRENT_THRESH  = 600;     // current threshold for pull_tight
 static constexpr unsigned int BELT_TIGHTENING_TIMEOUT_MS      = 5000;    // ms - timeout for belt tightening operation
+static constexpr unsigned int BELT_TIGHTENING_POLL_DELAY_MS   = 5;       // ms - delay between belt tightening polls
 
 void protocol_reset() {
     probeState             = ProbeState::Off;
@@ -207,11 +208,10 @@ static void protocol_relax_belts() {
 static void protocol_tighten_belts() {
     log_info("Tightening belts");
     // Pull belts tight using current threshold
-    bool                all_tight  = false;
-    unsigned long       start_time = millis();
-    const unsigned long timeout    = BELT_TIGHTENING_TIMEOUT_MS;
+    bool          all_tight  = false;
+    unsigned long start_time = millis();
 
-    while (!all_tight && (millis() - start_time < timeout)) {
+    while (!all_tight && (millis() - start_time < BELT_TIGHTENING_TIMEOUT_MS)) {
         all_tight = true;
         for (int arm = 0; arm < ARM_COUNT; arm++) {
             // Use pull_tight with a reasonable current threshold
@@ -223,11 +223,12 @@ static void protocol_tighten_belts() {
         if (sys.abort()) {
             return;
         }
-        vTaskDelay(pdMS_TO_TICKS(5));
+        vTaskDelay(pdMS_TO_TICKS(BELT_TIGHTENING_POLL_DELAY_MS));
     }
 
+    unsigned long elapsed_time = millis() - start_time;
     if (!all_tight) {
-        log_warn("Belt tightening timed out after " << (unsigned int)(millis() - start_time) << "ms");
+        log_warn("Belt tightening timed out after " << (unsigned int)elapsed_time << "ms");
     } else {
         log_info("Belts tightened successfully");
     }
