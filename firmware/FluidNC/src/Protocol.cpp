@@ -19,6 +19,7 @@
 #include "Settings.h"       // settings_execute_startup
 #include "Machine/LimitPin.h"
 #include "./Maslow/Maslow.h"
+#include "Stepper.h"        // Stepper::parking_setup_buffer, Stepper::parking_restore_buffer
 
 volatile ExecAlarm rtAlarm;  // Global realtime executor bitflag variable for setting various alarms.
 
@@ -76,15 +77,154 @@ union SpindleStop {
 
 static SpindleStop spindle_stop_ovr;
 
+// Z-axis management for pause/stop to prevent belt relaxation from affecting work
+static float saved_z_position = 0.0f;
+static bool  z_was_raised     = false;
+
 void protocol_reset() {
     probeState             = ProbeState::Off;
     soft_limit             = false;
     rtReset                = false;
     rtSafetyDoor           = false;
     spindle_stop_ovr.value = 0;
+    saved_z_position       = 0.0f;
+    z_was_raised           = false;
 
     // Do not clear rtAlarm because it might have been set during configuration
     // rtAlarm = ExecAlarm::None;
+}
+
+// Helper function to raise Z axis to safe position (Z-home) to prevent belt relaxation from affecting work
+static void protocol_raise_z_for_pause() {
+    if (z_was_raised) {
+        return;  // Already raised, don't raise again
+    }
+
+    float* current_mpos = get_mpos();
+    saved_z_position    = current_mpos[Z_AXIS];
+
+    // Only raise Z if we're below Z-home (Z=0)
+    // Note: In CNC machines, Z-home is typically at the top, and negative Z goes down into material
+    if (saved_z_position < 0.0f) {
+        log_info("Raising Z from " << saved_z_position << " to 0.0 before relaxing belts");
+
+        // Create target position at Z-home (Z=0)
+        float target[MAX_N_AXIS];
+        copyAxes(target, current_mpos);
+        target[Z_AXIS] = 0.0f;  // Move to Z-home
+
+        // Setup plan data for system motion
+        plan_line_data_t plan_data         = {};
+        plan_data.motion.systemMotion      = 1;
+        plan_data.motion.noFeedOverride    = 1;
+        plan_data.feed_rate                = 500.0f;  // mm/min - reasonable safe speed for Z retraction
+        plan_data.line_number              = PARKING_MOTION_LINE_NUMBER;
+
+        // Execute the motion synchronously (blocks until complete)
+        if (plan_buffer_line(target, &plan_data)) {
+            sys.step_control.executeSysMotion = true;
+            sys.step_control.endMotion        = false;
+            Stepper::parking_setup_buffer();
+            Stepper::prep_buffer();
+            Stepper::wake_up();
+            do {
+                protocol_exec_rt_system();
+                if (sys.abort()) {
+                    return;
+                }
+            } while (sys.step_control.executeSysMotion);
+            Stepper::parking_restore_buffer();
+        }
+
+        z_was_raised = true;
+    } else {
+        log_debug("Z already at or above home position (" << saved_z_position << "), not raising");
+    }
+}
+
+// Helper function to restore Z axis to saved position after resuming from pause
+static void protocol_restore_z_after_resume() {
+    if (!z_was_raised) {
+        return;  // Z wasn't raised, nothing to restore
+    }
+
+    log_info("Restoring Z from 0.0 to " << saved_z_position);
+
+    // Create target position at saved Z
+    float* current_mpos = get_mpos();
+    float  target[MAX_N_AXIS];
+    copyAxes(target, current_mpos);
+    target[Z_AXIS] = saved_z_position;
+
+    // Setup plan data for system motion
+    plan_line_data_t plan_data         = {};
+    plan_data.motion.systemMotion      = 1;
+    plan_data.motion.noFeedOverride    = 1;
+    plan_data.feed_rate                = 500.0f;  // mm/min - reasonable safe speed
+    plan_data.line_number              = PARKING_MOTION_LINE_NUMBER;
+
+    // Execute the motion synchronously (blocks until complete)
+    if (plan_buffer_line(target, &plan_data)) {
+        sys.step_control.executeSysMotion = true;
+        sys.step_control.endMotion        = false;
+        Stepper::parking_setup_buffer();
+        Stepper::prep_buffer();
+        Stepper::wake_up();
+        do {
+            protocol_exec_rt_system();
+            if (sys.abort()) {
+                return;
+            }
+        } while (sys.step_control.executeSysMotion);
+        Stepper::parking_restore_buffer();
+    }
+
+    z_was_raised = false;
+}
+
+// Helper function to relax belts after Z has been raised
+static void protocol_relax_belts() {
+    log_info("Relaxing belts");
+    // Decompress all belt motors to release tension
+    for (int arm = 0; arm < ARM_COUNT; arm++) {
+        Maslow.axis[arm].decompressBelt();
+    }
+    // Give belts time to decompress
+    vTaskDelay(pdMS_TO_TICKS(100));
+    // Stop all motors after decompression
+    for (int arm = 0; arm < ARM_COUNT; arm++) {
+        Maslow.axis[arm].stop();
+    }
+}
+
+// Helper function to tighten belts before restoring Z
+static void protocol_tighten_belts() {
+    log_info("Tightening belts");
+    // Pull belts tight using current threshold
+    bool all_tight = false;
+    unsigned long start_time = millis();
+    const unsigned long timeout = 5000;  // 5 second timeout
+
+    while (!all_tight && (millis() - start_time < timeout)) {
+        all_tight = true;
+        for (int arm = 0; arm < ARM_COUNT; arm++) {
+            // Use pull_tight with a reasonable current threshold (600 seems to be used elsewhere)
+            if (!Maslow.axis[arm].pull_tight(600)) {
+                all_tight = false;
+            }
+        }
+        protocol_exec_rt_system();
+        if (sys.abort()) {
+            return;
+        }
+        vTaskDelay(pdMS_TO_TICKS(5));
+    }
+
+    if (!all_tight) {
+        log_warn("Belt tightening timed out after " << (unsigned int)(millis() - start_time) << "ms");
+    } else {
+        log_info("Belts tightened successfully");
+    }
 }
 
 static int32_t idleEndTime = 0;
@@ -713,6 +853,12 @@ static void protocol_do_cycle_start() {
         case State::Hold:
             // Cycle start only when IDLE or when a hold is complete and ready to resume.
             if (sys.suspend().bit.holdComplete) {
+                // Before resuming, tighten belts and restore Z position
+                if (z_was_raised) {
+                    protocol_tighten_belts();
+                    protocol_restore_z_after_resume();
+                }
+
                 if (spindle_stop_ovr.value) {
                     spindle_stop_ovr.bit.restoreCycle = true;  // Set to restore in suspend routine and cycle start after.
                 } else {
@@ -830,6 +976,12 @@ static void update_velocities() {
 // This is the final phase of the shutdown activity that is initiated by mc_reset().
 // The stuff herein is not necessarily safe to do in an ISR.
 static void protocol_do_late_reset() {
+    // Raise Z before relaxing belts on stop/abort to prevent work damage
+    if (!z_was_raised && (sys.state() == State::Cycle || sys.state() == State::Hold)) {
+        protocol_raise_z_for_pause();
+        protocol_relax_belts();
+    }
+
     // Kill spindle and coolant.
     spindle->stop();
     report_ovr_counter = 0;  // Set to report change immediately
@@ -950,6 +1102,12 @@ static void protocol_exec_rt_suspend() {
         }
         // Block until initial hold is complete and the machine has stopped motion.
         if (sys.suspend().bit.holdComplete) {
+            // For Hold state (pause), raise Z and relax belts to prevent movement
+            if (sys.state() == State::Hold && !z_was_raised) {
+                protocol_raise_z_for_pause();
+                protocol_relax_belts();
+            }
+
             // Parking manager. Handles de/re-energizing, switch state checks, and parking motions for
             // the safety door and sleep states.
             if (sys.state() == State::SafetyDoor || sys.state() == State::Sleep) {
