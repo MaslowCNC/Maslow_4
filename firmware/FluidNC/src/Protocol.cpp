@@ -108,7 +108,8 @@ static void protocol_raise_z_for_pause() {
     }
 
     float* current_mpos = get_mpos();
-    saved_z_position    = current_mpos[Z_AXIS];
+    // Copy Z position immediately since get_mpos() may return a pointer to a static buffer
+    saved_z_position = current_mpos[Z_AXIS];
 
     // Only raise Z if we're below Z-home (Z=0)
     // Note: In CNC machines, Z-home is typically at the top, and negative Z goes down into material
