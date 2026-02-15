@@ -107,9 +107,11 @@ static void protocol_raise_z_for_pause() {
     // Copy Z position immediately since get_mpos() may return a pointer to a static buffer
     saved_z_position = current_mpos[Z_AXIS];
 
-    // Only raise Z if we're below Z-home (Z=0)
+    log_info("Saving Z position: " << saved_z_position);
+
+    // Always raise Z to Z-home (Z=0) regardless of current position
     // Note: In CNC machines, Z-home is typically at the top, and negative Z goes down into material
-    if (saved_z_position < 0.0f) {
+    if (saved_z_position != 0.0f) {
         log_info("Raising Z from " << saved_z_position << " to 0.0 before powering off motors");
 
         // Create target position at Z-home (Z=0)
@@ -126,6 +128,7 @@ static void protocol_raise_z_for_pause() {
 
         // Execute the motion synchronously (blocks until complete)
         if (plan_buffer_line(target, &plan_data)) {
+            log_info("Z motion queued successfully");
             sys.step_control.executeSysMotion = true;
             sys.step_control.endMotion        = false;
             Stepper::parking_setup_buffer();
@@ -134,13 +137,17 @@ static void protocol_raise_z_for_pause() {
             do {
                 protocol_exec_rt_system();
                 if (sys.abort()) {
+                    log_warn("Z raise aborted");
                     return;
                 }
             } while (sys.step_control.executeSysMotion);
             Stepper::parking_restore_buffer();
+            log_info("Z raised successfully");
+        } else {
+            log_warn("Failed to queue Z motion - plan_buffer_line returned false");
         }
     } else {
-        log_debug("Z already at or above home position (" << saved_z_position << "), not raising");
+        log_debug("Z already at home position (0.0), not raising");
     }
 
     // Mark as raised regardless of whether we actually moved Z
@@ -171,6 +178,7 @@ static void protocol_restore_z_after_resume() {
 
     // Execute the motion synchronously (blocks until complete)
     if (plan_buffer_line(target, &plan_data)) {
+        log_info("Z restore motion queued successfully");
         sys.step_control.executeSysMotion = true;
         sys.step_control.endMotion        = false;
         Stepper::parking_setup_buffer();
@@ -179,10 +187,14 @@ static void protocol_restore_z_after_resume() {
         do {
             protocol_exec_rt_system();
             if (sys.abort()) {
+                log_warn("Z restore aborted");
                 return;
             }
         } while (sys.step_control.executeSysMotion);
         Stepper::parking_restore_buffer();
+        log_info("Z restored successfully");
+    } else {
+        log_warn("Failed to queue Z restore motion - plan_buffer_line returned false");
     }
 
     z_was_raised = false;
