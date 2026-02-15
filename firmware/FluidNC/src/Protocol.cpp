@@ -77,13 +77,11 @@ union SpindleStop {
 
 static SpindleStop spindle_stop_ovr;
 
-// Z-axis management for pause/stop to prevent sled from falling
-// Motors remain powered during pause to hold position
+// Z-axis management for pause/stop
+// Motors remain powered during pause to hold sled at current position and prevent falling
+// No Z motion is performed - position is saved for reference only
 static float saved_z_position = 0.0f;
-static bool  z_was_raised     = false;
-
-// Z-axis management constants
-static constexpr float Z_SAFE_RETRACT_FEED_RATE = 500.0f;  // mm/min - safe speed for Z retraction
+static bool  z_was_raised     = false;  // Flag tracks if Z position was saved
 
 void protocol_reset() {
     probeState             = ProbeState::Off;
@@ -98,108 +96,21 @@ void protocol_reset() {
     // rtAlarm = ExecAlarm::None;
 }
 
-// Helper function to raise Z axis to safe position (Z-home) during pause
-// Motors remain powered to hold position and prevent sled from falling
-static void protocol_raise_z_for_pause() {
+// Helper function to save Z position during pause
+// No Z motion is performed - motors stay powered at current position to prevent sled from falling
+static void protocol_save_z_for_pause() {
     if (z_was_raised) {
-        return;  // Already raised, don't raise again
+        return;  // Already saved, don't save again
     }
 
     float* current_mpos = get_mpos();
     // Copy Z position immediately since get_mpos() may return a pointer to a static buffer
     saved_z_position = current_mpos[Z_AXIS];
 
-    log_info("Saving Z position: " << saved_z_position);
+    log_info("Pause: Saving Z position: " << saved_z_position << " (no Z motion, motors hold position)");
 
-    // Always raise Z to Z-home (Z=0) regardless of current position
-    // Note: In CNC machines, Z-home is typically at the top, and negative Z goes down into material
-    if (saved_z_position != 0.0f) {
-        log_info("Raising Z from " << saved_z_position << " to 0.0 (motors remain powered)");
-
-        // Create target position at Z-home (Z=0)
-        float target[MAX_N_AXIS];
-        copyAxes(target, current_mpos);
-        target[Z_AXIS] = 0.0f;  // Move to Z-home
-
-        // Setup plan data for system motion
-        plan_line_data_t plan_data      = {};
-        plan_data.motion.systemMotion   = 1;
-        plan_data.motion.noFeedOverride = 1;
-        plan_data.feed_rate             = Z_SAFE_RETRACT_FEED_RATE;
-        plan_data.line_number           = PARKING_MOTION_LINE_NUMBER;
-
-        // Execute the motion synchronously (blocks until complete)
-        if (plan_buffer_line(target, &plan_data)) {
-            log_info("Z motion queued successfully");
-            sys.step_control.executeSysMotion = true;
-            sys.step_control.endMotion        = false;
-            Stepper::parking_setup_buffer();
-            Stepper::prep_buffer();
-            Stepper::wake_up();
-            do {
-                protocol_exec_rt_system();
-                if (sys.abort()) {
-                    log_warn("Z raise aborted");
-                    return;
-                }
-            } while (sys.step_control.executeSysMotion);
-            Stepper::parking_restore_buffer();
-            log_info("Z raised successfully");
-        } else {
-            log_warn("Failed to queue Z motion - plan_buffer_line returned false");
-        }
-    } else {
-        log_debug("Z already at home position (0.0), not raising");
-    }
-
-    // Mark as raised regardless of whether we actually moved Z
-    // This prevents repeated calls to this function
+    // Mark as saved to prevent repeated calls
     z_was_raised = true;
-}
-
-// Helper function to restore Z axis to saved position after resuming from pause
-static void protocol_restore_z_after_resume() {
-    if (!z_was_raised) {
-        return;  // Z wasn't raised, nothing to restore
-    }
-
-    log_info("Restoring Z from 0.0 to " << saved_z_position);
-
-    // Create target position at saved Z
-    float* current_mpos = get_mpos();
-    float  target[MAX_N_AXIS];
-    copyAxes(target, current_mpos);
-    target[Z_AXIS] = saved_z_position;
-
-    // Setup plan data for system motion
-    plan_line_data_t plan_data      = {};
-    plan_data.motion.systemMotion   = 1;
-    plan_data.motion.noFeedOverride = 1;
-    plan_data.feed_rate             = Z_SAFE_RETRACT_FEED_RATE;
-    plan_data.line_number           = PARKING_MOTION_LINE_NUMBER;
-
-    // Execute the motion synchronously (blocks until complete)
-    if (plan_buffer_line(target, &plan_data)) {
-        log_info("Z restore motion queued successfully");
-        sys.step_control.executeSysMotion = true;
-        sys.step_control.endMotion        = false;
-        Stepper::parking_setup_buffer();
-        Stepper::prep_buffer();
-        Stepper::wake_up();
-        do {
-            protocol_exec_rt_system();
-            if (sys.abort()) {
-                log_warn("Z restore aborted");
-                return;
-            }
-        } while (sys.step_control.executeSysMotion);
-        Stepper::parking_restore_buffer();
-        log_info("Z restored successfully");
-    } else {
-        log_warn("Failed to queue Z restore motion - plan_buffer_line returned false");
-    }
-
-    z_was_raised = false;
 }
 
 static int32_t idleEndTime = 0;
@@ -828,9 +739,10 @@ static void protocol_do_cycle_start() {
         case State::Hold:
             // Cycle start only when IDLE or when a hold is complete and ready to resume.
             if (sys.suspend().bit.holdComplete) {
-                // Before resuming, restore Z position (motors will be powered on during cycle initiation)
+                // Resume from pause - Z position unchanged, motors stayed powered
                 if (z_was_raised) {
-                    protocol_restore_z_after_resume();
+                    z_was_raised = false;  // Reset flag for next pause
+                    log_info("Resume: Continuing from paused position (Z=" << saved_z_position << ")");
                 }
 
                 if (spindle_stop_ovr.value) {
@@ -950,10 +862,10 @@ static void update_velocities() {
 // This is the final phase of the shutdown activity that is initiated by mc_reset().
 // The stuff herein is not necessarily safe to do in an ISR.
 static void protocol_do_late_reset() {
-    // Raise Z on stop/abort to prevent work damage
+    // Save Z position on stop/abort for reference
     // Motors will be disabled by protocol_disable_steppers() below
     if (!z_was_raised && (sys.state() == State::Cycle || sys.state() == State::Hold)) {
-        protocol_raise_z_for_pause();
+        protocol_save_z_for_pause();
     }
 
     // Kill spindle and coolant.
@@ -1076,10 +988,10 @@ static void protocol_exec_rt_suspend() {
         }
         // Block until initial hold is complete and the machine has stopped motion.
         if (sys.suspend().bit.holdComplete) {
-            // For Hold state (pause), raise Z to safe position
-            // Motors remain powered to hold position (preventing sled from falling)
+            // For Hold state (pause), save Z position
+            // Motors remain powered at current position to hold sled (preventing it from falling)
             if (sys.state() == State::Hold && !z_was_raised) {
-                protocol_raise_z_for_pause();
+                protocol_save_z_for_pause();
             }
 
             // Parking manager. Handles de/re-energizing, switch state checks, and parking motions for
