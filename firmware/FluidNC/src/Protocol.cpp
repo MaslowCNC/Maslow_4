@@ -77,7 +77,8 @@ union SpindleStop {
 
 static SpindleStop spindle_stop_ovr;
 
-// Z-axis management for pause/stop to prevent motors from moving work
+// Z-axis management for pause/stop to prevent sled from falling
+// Motors remain powered during pause to hold position
 static float saved_z_position = 0.0f;
 static bool  z_was_raised     = false;
 
@@ -97,7 +98,8 @@ void protocol_reset() {
     // rtAlarm = ExecAlarm::None;
 }
 
-// Helper function to raise Z axis to safe position (Z-home) before powering off motors
+// Helper function to raise Z axis to safe position (Z-home) during pause
+// Motors remain powered to hold position and prevent sled from falling
 static void protocol_raise_z_for_pause() {
     if (z_was_raised) {
         return;  // Already raised, don't raise again
@@ -112,7 +114,7 @@ static void protocol_raise_z_for_pause() {
     // Always raise Z to Z-home (Z=0) regardless of current position
     // Note: In CNC machines, Z-home is typically at the top, and negative Z goes down into material
     if (saved_z_position != 0.0f) {
-        log_info("Raising Z from " << saved_z_position << " to 0.0 before powering off motors");
+        log_info("Raising Z from " << saved_z_position << " to 0.0 (motors remain powered)");
 
         // Create target position at Z-home (Z=0)
         float target[MAX_N_AXIS];
@@ -948,10 +950,10 @@ static void update_velocities() {
 // This is the final phase of the shutdown activity that is initiated by mc_reset().
 // The stuff herein is not necessarily safe to do in an ISR.
 static void protocol_do_late_reset() {
-    // Raise Z before powering off motors on stop/abort to prevent work damage
+    // Raise Z on stop/abort to prevent work damage
+    // Motors will be disabled by protocol_disable_steppers() below
     if (!z_was_raised && (sys.state() == State::Cycle || sys.state() == State::Hold)) {
         protocol_raise_z_for_pause();
-        Maslow.stopMotors();
     }
 
     // Kill spindle and coolant.
@@ -1074,10 +1076,10 @@ static void protocol_exec_rt_suspend() {
         }
         // Block until initial hold is complete and the machine has stopped motion.
         if (sys.suspend().bit.holdComplete) {
-            // For Hold state (pause), raise Z and power off motors
+            // For Hold state (pause), raise Z to safe position
+            // Motors remain powered to hold position (preventing sled from falling)
             if (sys.state() == State::Hold && !z_was_raised) {
                 protocol_raise_z_for_pause();
-                Maslow.stopMotors();
             }
 
             // Parking manager. Handles de/re-energizing, switch state checks, and parking motions for
