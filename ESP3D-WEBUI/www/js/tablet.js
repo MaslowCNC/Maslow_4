@@ -723,7 +723,14 @@ function tabletGrblState(grbl, response) {
 
   if (WPOS) {
     WPOS.forEach((pos, index) => {
-      setTextContent(`mpos-${axisNames[index]}`, Number(pos * factor).toFixed(index > 2 ? 2 : digits));
+      const wposValue = Number(pos * factor).toFixed(index > 2 ? 2 : digits);
+      // For Z axis (index 2), also show machine position in parenthesis
+      if (index === 2 && MPOS && MPOS[index] !== undefined) {
+        const mposValue = Number(MPOS[index] * factor).toFixed(index > 2 ? 2 : digits);
+        setTextContent(`mpos-${axisNames[index]}`, `${wposValue} (Zm: ${mposValue})`);
+      } else {
+        setTextContent(`mpos-${axisNames[index]}`, wposValue);
+      }
     })
   }
 
