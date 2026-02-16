@@ -106,8 +106,9 @@ bool Calibration::requestStateChange(int newState) {
                 log_info("Cannot extend the belts until they have been retracted");
                 break;
             }
-        case EXTENDEDOUT:  //We can enter extended from extending or in the event of a failure from taking slack or release tension
-            if (currentState == EXTENDING || currentState == TAKING_SLACK || currentState == RELEASE_TENSION) {
+        case EXTENDEDOUT:  //We can enter extended from extending or in the event of a failure from taking slack, release tension, or calibration computing
+            if (currentState == EXTENDING || currentState == TAKING_SLACK || currentState == RELEASE_TENSION ||
+                currentState == CALIBRATION_COMPUTING) {
                 currentState = EXTENDEDOUT;
                 sys.set_state(State::Idle);
                 // Save belt positions now that belts are extended and at a known position
@@ -455,6 +456,7 @@ void Calibration::calibration_loop() {
                 requestStateChange(CALIBRATION_COMPUTING);
                 print_calibration_data();
                 calibrationDataWaiting = millis();
+                calibrationDataRetries = 0;  // Reset retry counter when starting to wait for calibration data
                 sys.set_state(State::Idle);
                 recomputeCountIndex++;
             } else {
@@ -1549,9 +1551,17 @@ bool Calibration::adjustFrameSizeToMatchFirstMeasurement() {
 void Calibration::checkCalibrationData() {
     if (calibrationDataWaiting > 0) {
         if (millis() - calibrationDataWaiting > 30007) {
-            log_error("Calibration data not acknowledged by computer, resending");
-            print_calibration_data();
-            calibrationDataWaiting = millis();
+            calibrationDataRetries++;
+            if (calibrationDataRetries >= 10) {
+                log_error("Calibration data not acknowledged by computer after 10 attempts, giving up");
+                resetCalibrationState();
+                calibrationDataRetries = 0;
+                requestStateChange(EXTENDEDOUT);
+            } else {
+                log_error("Calibration data not acknowledged by computer, resending (attempt " << calibrationDataRetries << " of 10)");
+                print_calibration_data();
+                calibrationDataWaiting = millis();
+            }
         }
     }
 }
@@ -1584,6 +1594,7 @@ void Calibration::print_calibration_data() {
 void Calibration::calibrationDataRecieved() {
     // log_info("Calibration data acknowledged received by computer");
     calibrationDataWaiting = -1;
+    calibrationDataRetries = 0;  // Reset retry counter when data is acknowledged
 }
 
 //non-blocking delay, just pauses everything for specified time
@@ -1673,6 +1684,7 @@ void Calibration::resetCalibrationState() {
     recomputeCountIndex    = 0;
     calibrationInProgress  = false;
     calibrationDataWaiting = -1;
+    calibrationDataRetries = 0;  // Reset retry counter
 
     // Reset calibration loop state variables
     calibrationDirection  = UP;    // Default direction

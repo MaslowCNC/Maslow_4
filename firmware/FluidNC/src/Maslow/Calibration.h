@@ -119,6 +119,7 @@ private:
     int    recomputeCountIndex    = 0;   // Stores the index of the recompute point we are currently on
     int    recomputeCount         = 0;   // Stores the number of recompute points
     double calibrationDataWaiting = -1;  //-1 if data is not waiting, other wise the milis since the data was last sent
+    int    calibrationDataRetries = 0;   // Number of times calibration data has been resent without acknowledgment
 
     //Used to keep track of how often the PID controller is updated
     unsigned long lastCallToPID    = millis();
