@@ -530,7 +530,7 @@ async function findMaxFitness(measurements) {
           messagesBox.textContent += '\n\n❌ Find Anchors stopped due to low fitness after maximum retries.';
           messagesBox.textContent += '\nOptions:';
           messagesBox.textContent += '\n  1. Click "Find Anchors" to restart with updated frame size estimate';
-          messagesBox.textContent += '\n  2. Manually check belt tension and frame measurements';
+          messagesBox.textContent += '\n  2. Manually check belt tension';
           messagesBox.textContent += '\n  3. Verify measurements are accurate';
           messagesBox.scrollTop = messagesBox.scrollHeight;
 
