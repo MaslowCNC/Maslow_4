@@ -839,7 +839,10 @@ const tabletSetZHomeMDown = () => zeroAxis("Z");
 const tabletSetZHomeMUp = () => refreshGcode();
 // Button event handlers - Fifth Row - nothing special here, move on
 // Button event handlers - Sixth Row
-const tabletGCodeStop = () => onCalibrationButtonsClick("$STOP", "Stop Maslow and Gcode");
+const tabletGCodeStop = () => {
+  addMessage("Stop Maslow and Gcode");
+  stopGCode();
+};
 // Control event handlers - Calibration Popup
 const tabletCalPopupHide = () => hideModal("calibration-popup");
 
@@ -873,7 +876,8 @@ const tabletCalOpenConfig = () => {
   openModal("configuration-popup");
 };
 const tabletCalStop = () => {
-  onCalibrationButtonsClick("$STOP", "Stop");
+  addMessage("Stop");
+  stopGCode();
   returnFocusToTablet();
 };
 const tabletCalSetZStop = () => {
