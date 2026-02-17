@@ -711,7 +711,7 @@ void Maslow_::loadBeltPositions() {
         axis[_TR].setTarget(trPos);
         axis[_TR].setPosition(trPos);
     } else if (ret != ESP_ERR_NVS_NOT_FOUND) {
-        log_info("Error " + std::string(esp_err_to_name(ret)) + " reading TR belt position from NVS!");
+        log_info("Error " + std::string(esp_err_to_name(ret)) + " reading TR belt position from NVS!"); 
     }
 
     // Load BL belt position
