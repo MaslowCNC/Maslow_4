@@ -25,6 +25,7 @@
 #include "Driver/fluidnc_gpio.h"  // gpio_dump()
 #include "Maslow/Maslow.h"
 #include "Maslow/Calibration.h"
+#include "Stepper.h"
 
 #include "FluidPath.h"
 
@@ -841,8 +842,14 @@ static Error maslow_stop(const char* value, WebUI::AuthenticationLevel auth_leve
     if (Maslow.using_default_config) {
         return Error::ConfigurationInvalid;
     }
-    sys.set_state(State::Alarm);
+    // Stop steppers immediately if in motion
+    if (inMotionState() || sys.step_control.executeHold || sys.step_control.executeSysMotion) {
+        Stepper::stop_stepping();
+    }
+    // Stop Maslow-specific motors and reset state
     Maslow.stop();
+    // Go to Idle state instead of Alarm
+    sys.set_state(State::Idle);
     return Error::Ok;
 }
 static Error maslow_telemetry_dump(const char* value, WebUI::AuthenticationLevel auth_level, Channel& out) {

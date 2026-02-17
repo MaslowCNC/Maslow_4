@@ -846,9 +846,6 @@ static void protocol_do_late_reset() {
     // turn off all User I/O immediately
     config->_userOutputs->all_off();
 
-    // Reset Maslow-specific state
-    Maslow.stop();
-
     // do we need to stop a running file job?
     allChannels.stopJob();
 }
