@@ -736,6 +736,11 @@ void protocol_disable_steppers() {
         config->_axes->set_disable(false);
         return;
     }
+    if (sys.state() == State::Hold) {
+        // Leave steppers enabled while paused to maintain belt tension
+        config->_axes->set_disable(false);
+        return;
+    }
     if (sys.state() == State::Sleep || rtAlarm != ExecAlarm::None) {
         // Disable steppers immediately in sleep or alarm state
         config->_axes->set_disable(true);

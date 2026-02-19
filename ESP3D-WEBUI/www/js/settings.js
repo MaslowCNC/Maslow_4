@@ -14,9 +14,9 @@ var setup_is_done = false;
 let do_not_build_settings = false;
 const CONFIG_TOOLTIPS = {
   Maslow_vertical: `If the ${M} is oriented horizontally, set this to false`,
-  maslow_calibration_grid_width_mm_X: "Define the distance from the anchor points to the corners of the calibration grid in mm (X dimension)",
-  maslow_calibration_grid_height_mm_Y: "Define the distance from the anchor points to the corners of the calibration grid in mm (Y dimension)",
-  maslow_calibration_grid_size: "Defines the number of points in the calibration grid. Options are 3,5,7,9",
+  Maslow_calibration_grid_width_mm_X: "Define the distance from the anchor points to the corners of the calibration grid in mm (X dimension)",
+  Maslow_calibration_grid_height_mm_Y: "Define the distance from the anchor points to the corners of the calibration grid in mm (Y dimension)",
+  Maslow_calibration_grid_size: "Defines the number of points in the calibration grid. Options are 3,5,7,9",
   "kinematics/MaslowKinematics/brX": "Bottom right anchor x (normally width in mm)",
   "kinematics/MaslowKinematics/brY": "Bottom right anchor y (normally 0)",
   "kinematics/MaslowKinematics/brZ": "Bottom right anchor z (normally 117)",
@@ -332,9 +332,13 @@ const build_HTML_setting_list = (filter) => {
     const fname = scl[i].F.trim().toLowerCase();
     if (fname === "network" || fname === filter || filter === "all") {
       let tr = `<tr><td style='vertical-align:middle'>${translate_text_item(scl[i].label, true)}`;
-      const tooltip = CONFIG_TOOLTIPS[scl[i].label.substring(1)];
+      let tooltipKey = scl[i].label.trim();
+      if (tooltipKey.startsWith('/')) {
+        tooltipKey = tooltipKey.substring(1);
+      }
+      const tooltip = CONFIG_TOOLTIPS[tooltipKey];
       if (tooltip) {
-        tr += '<div class="tooltip" style="padding-left: 20px; margin-top: 10px;">';
+        tr += '<div class="tooltip" style="padding-left: 20px;">';
         tr += '<svg width="16" height="16" fill="#3276c3" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 416.979 416.979" xml:space="preserve" stroke="#3276c3">';
         tr += '<g id="SVGRepo_bgCarrier" stroke-width="0"></g>';
         tr += '<g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g>';

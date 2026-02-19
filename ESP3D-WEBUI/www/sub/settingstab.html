@@ -66,15 +66,13 @@
         <div class="loader hide_it" id="settings_loader"></div>
         <div class="container hide_it" id="settings_list_content">
             <span id="settings_filters">
-                <div class="radio-inline tooltip">
-                  <span class="tooltip-text">Settings that are saved immediately</span>
+                <div class="radio-inline">
                     <label>
                         <input type="radio" id="nvs_setting_filter" name="setting_filter" value="nvs" onclick="build_HTML_setting_list('nvs')" checked>
                         <span translate>Flash Settings</span>
                     </label>
                 </div>
-                <div class="radio-inline tooltip">
-                  <span class="tooltip-text">Settings from the config file, saved only on command</span>
+                <div class="radio-inline">
                     <label>
                         <input type="radio" id="tree_setting_filter" name="setting_filter" value="configfile" onclick="build_HTML_setting_list('tree')">
                         <span translate>Config Items</span>

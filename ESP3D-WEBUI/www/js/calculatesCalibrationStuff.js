@@ -529,9 +529,9 @@ async function findMaxFitness(measurements) {
 
           messagesBox.textContent += '\n\n❌ Find Anchors stopped due to low fitness after maximum retries.';
           messagesBox.textContent += '\nOptions:';
-          messagesBox.textContent += '\n  1. Click "Find Anchors" to restart with updated frame size estimate';
-          messagesBox.textContent += '\n  2. Manually check belt tension and frame measurements';
-          messagesBox.textContent += '\n  3. Verify measurements are accurate';
+          messagesBox.textContent += '\n  1. Click "Find Anchors" to restart.';
+          messagesBox.textContent += '\n  2. Check to make sure that all four belts are fully tight with each measurement.';
+          messagesBox.textContent += '\n  3. Check to see if the frame could be flexing when the measurements are taken which will lead to inacruate measurements.';
           if (shouldAutoScroll()) messagesBox.scrollTop = messagesBox.scrollHeight;
 
           sendCalibrationEvent({

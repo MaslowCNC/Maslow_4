@@ -114,6 +114,17 @@ namespace WebUI {
         static void sendCaptivePortal();
         static void send404Page();
 
+        // Captive portal detection handlers
+        static void handle_generate_204();
+        static void handle_hotspot_detect();
+        static void handle_connecttest();
+        static void handle_ncsi();
+        static void handle_firefox_detect();
+        static void handle_success();
+        static void handle_nm_check();
+        static void handle_kde_ok();
+        static void handle_ubuntu_connectivity();
+
         static int getPageid();
     };
 

@@ -191,7 +191,7 @@ void Maslow_::update() {
         //------------------------ Maslow State Machine
 
         //-------Jog or G-code execution.
-        if (sys.state() == State::Jog || sys.state() == State::Cycle) {
+        if (sys.state() == State::Jog || sys.state() == State::Cycle || sys.state() == State::Hold) {
             // With MaslowKinematics, read belt motor positions directly from the axis system
             // Axis mapping: A=TL, B=TR, C=BL, D=BR, Z=Router
             float beltLength[ARM_COUNT];
