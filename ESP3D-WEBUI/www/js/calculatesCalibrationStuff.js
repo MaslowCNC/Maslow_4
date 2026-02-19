@@ -267,7 +267,7 @@ async function findBestRectangularStart(measurements) {
   const messagesBox = document.getElementById('messages');
   messagesBox.textContent += "Searching for best rectangular starting configuration...\n";
   messagesBox.textContent += "Phase 1: Finding optimal radius along diagonal using ternary search...\n";
-  messagesBox.scrollTop = messagesBox.scrollHeight;
+  if (shouldAutoScroll()) messagesBox.scrollTop = messagesBox.scrollHeight;
 
   // Deep copy measurements
   const measurementsCopy = JSON.parse(JSON.stringify(measurements));
@@ -329,11 +329,11 @@ async function findBestRectangularStart(measurements) {
 
   const optimalRadius = diagonalBestSize;
   messagesBox.textContent += `Phase 1 complete: Optimal radius found at ${diagonalBestSize}mm using ${phase1TestCount} evaluations\n`;
-  messagesBox.scrollTop = messagesBox.scrollHeight;
+  if (shouldAutoScroll()) messagesBox.scrollTop = messagesBox.scrollHeight;
 
   // PHASE 2: Search for best aspect ratio on arc at optimal radius
   messagesBox.textContent += `Phase 2: Finding best aspect ratio on arc at ${optimalRadius.toFixed(0)}mm radius...\n`;
-  messagesBox.scrollTop = messagesBox.scrollHeight;
+  if (shouldAutoScroll()) messagesBox.scrollTop = messagesBox.scrollHeight;
 
   let bestGuess = null;
   let bestFitnessOverall = Infinity;
@@ -415,7 +415,7 @@ async function findBestRectangularStart(measurements) {
   messagesBox.textContent += `Search complete! Tested ${testedCount} points using ternary search.\n`;
   messagesBox.textContent += `Best rectangular start: Width: ${bestGuess.tr.x.toFixed(1)}mm, Height: ${bestGuess.tr.y.toFixed(1)}mm, Fitness: ${(1 / bestGuess.fitness).toFixed(4)}\n`;
   messagesBox.textContent += "Starting optimization...\n";
-  messagesBox.scrollTop = messagesBox.scrollHeight;
+  if (shouldAutoScroll()) messagesBox.scrollTop = messagesBox.scrollHeight;
 
   // Store the optimal radius for retry point calculations
   bestGuess.optimalRadius = optimalRadius;
@@ -436,7 +436,7 @@ async function findMaxFitness(measurements) {
   // Calculate initial fitness
   const initialFitness = 1 / computeLinesFitness(projectedMeasurements, initialGuess).fitness;
   messagesBox.textContent += `Initial guess fitness: ${initialFitness.toFixed(7)}\n`;
-  messagesBox.scrollTop = messagesBox.scrollHeight;
+  if (shouldAutoScroll()) messagesBox.scrollTop = messagesBox.scrollHeight;
 
   // Determine if we should do rectangular optimization
   const frameWidth = initialGuess.tr.x - initialGuess.tl.x;
@@ -444,7 +444,7 @@ async function findMaxFitness(measurements) {
   const aspectRatio = frameWidth / frameHeight;
 
   messagesBox.textContent += `Frame dimensions: ${frameWidth.toFixed(1)}mm x ${frameHeight.toFixed(1)}mm (aspect ratio: ${aspectRatio.toFixed(2)}:1)\n`;
-  messagesBox.scrollTop = messagesBox.scrollHeight;
+  if (shouldAutoScroll()) messagesBox.scrollTop = messagesBox.scrollHeight;
 
   let startingGuess = JSON.parse(JSON.stringify(initialGuess));
 
@@ -455,12 +455,12 @@ async function findMaxFitness(measurements) {
     } else {
       messagesBox.textContent += "Frame is nearly square (aspect ratio " + aspectRatio.toFixed(2) + ":1), running rectangular optimization to find better dimensions.\n";
     }
-    messagesBox.scrollTop = messagesBox.scrollHeight;
+    if (shouldAutoScroll()) messagesBox.scrollTop = messagesBox.scrollHeight;
 
     startingGuess = await findBestRectangularStart(projectedMeasurements);
   } else {
     messagesBox.textContent += "Initial fitness >= 0.1 and frame is not square, skipping rectangular optimization and using initial guess directly.\n";
-    messagesBox.scrollTop = messagesBox.scrollHeight;
+    if (shouldAutoScroll()) messagesBox.scrollTop = messagesBox.scrollHeight;
   }
 
   // Main optimization loop using the shared computation library
@@ -501,7 +501,7 @@ async function findMaxFitness(measurements) {
       // Every 100 iterations print out the fitness
       if (totalCounter % 100 === 0) {
         messagesBox.textContent += `Fitness: ${(1 / bestGuess.fitness).toFixed(7)} in ${totalCounter}\n`;
-        messagesBox.scrollTop = messagesBox.scrollHeight;
+        if (shouldAutoScroll()) messagesBox.scrollTop = messagesBox.scrollHeight;
       }
 
       // Schedule the next iteration
@@ -522,7 +522,7 @@ async function findMaxFitness(measurements) {
           messagesBox.textContent += `\n\n⚠️ Maximum retry attempts (${MAX_LOW_FITNESS_RETRIES}) reached.`;
           messagesBox.textContent += `\nBest fitness achieved: ${bestFitnessAcrossAllRetries.toFixed(7)}`;
           messagesBox.textContent += '\nUpdating initial frame size with best estimate from all attempts.';
-          messagesBox.scrollTop = messagesBox.scrollHeight;
+          if (shouldAutoScroll()) messagesBox.scrollTop = messagesBox.scrollHeight;
 
           initialGuess = JSON.parse(JSON.stringify(bestGuessAcrossAllRetries));
           initialGuess.fitness = 100000000;
@@ -532,7 +532,7 @@ async function findMaxFitness(measurements) {
           messagesBox.textContent += '\n  1. Click "Find Anchors" to restart.';
           messagesBox.textContent += '\n  2. Check to make sure that all four belts are fully tight with each measurement.';
           messagesBox.textContent += '\n  3. Check to see if the frame could be flexing when the measurements are taken which will lead to inacruate measurements.';
-          messagesBox.scrollTop = messagesBox.scrollHeight;
+          if (shouldAutoScroll()) messagesBox.scrollTop = messagesBox.scrollHeight;
 
           sendCalibrationEvent({
             good: false,
@@ -567,7 +567,7 @@ async function findMaxFitness(measurements) {
       messagesBox.textContent += `\n${M}_blY: ${blyStr}`;
       messagesBox.textContent += `\n${M}_brX: ${brxStr}`;
       messagesBox.textContent += `\n${M}_brY: ${bryStr}`;
-      messagesBox.scrollTop = messagesBox.scrollHeight;
+      if (shouldAutoScroll()) messagesBox.scrollTop = messagesBox.scrollHeight;
 
       if (currentFitness > acceptableCalibrationThreshold) {
         sendCommand(`$/kinematics/MaslowKinematics/tlX=${tlxStr}`);
@@ -589,7 +589,7 @@ async function findMaxFitness(measurements) {
         saveMaslowYaml();
 
         messagesBox.textContent += '\nA command to save these values has been successfully sent for you. Please check for any error messages.';
-        messagesBox.scrollTop = messagesBox.scrollHeight;
+        if (shouldAutoScroll()) messagesBox.scrollTop = messagesBox.scrollHeight;
 
         initialGuess = bestGuess;
         initialGuess.fitness = 100000000;

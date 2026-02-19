@@ -97,8 +97,8 @@
           </div>
         </div>
         <!-- Controls row 5 -->
-        <div style="grid-template-columns: 60% 20% 20%;" class="maslow-grid-container tablettab-controls-item"
-          style="height: 60px;">
+        <div class="maslow-grid-container tablettab-controls-item"
+          style="grid-template-columns: 66% 17% 17%; height: 60px;">
           <select id="filelist" class="form-control">
             <option>Load File...</option>
           </select>
@@ -156,6 +156,11 @@
               <span id="job-bounds-text">No file loaded</span>
             </div>
           </div>
+        </div>
+        <div style="padding: 5px 0;">
+          <label style="font-size: 12px;">
+            <input type="checkbox" id="auto-scroll-checkbox" checked> Auto-scroll to bottom
+          </label>
         </div>
         <textarea style="border: none" class="messages tablettab-controls-item" id="messages" rows="14"
           spellcheck="false" readonly>Serial Messages</textarea>

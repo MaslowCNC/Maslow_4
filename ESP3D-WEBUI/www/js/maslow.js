@@ -478,7 +478,9 @@ const checkHomed = () => {
 		const msgWindow = id('messages');
 		if (msgWindow) {
 			msgWindow.textContent = `${msgWindow.textContent}\n${err_msg}`;
-			msgWindow.scrollTop = msgWindow.scrollHeight;
+			if (shouldAutoScroll()) {
+				msgWindow.scrollTop = msgWindow.scrollHeight;
+			}
 		}
 	}
 

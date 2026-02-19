@@ -105,9 +105,15 @@ width: 100%;
 #small-toolpath {
 border: 1px solid black;
   border-radius: 5px;
+  margin-right: 10px;
 }
 #gcode {
 margin: 10px 0px;
+}
+
+#tablettab_gcode {
+  margin-top: 10px;
+  margin-right: 10px;
 }
 
 
@@ -881,4 +887,21 @@ float: left;
 
 .calibration-modal-input {
 width: 100%;
+}
+
+/* Make bold for smallest font elements */
+#mpos-x, #mpos-y, #mpos-z {
+  font-weight: bold;
+}
+
+#disM, #disZ {
+  font-weight: bold;
+}
+
+#tablettab_set_z_home, #tablettab_set_xy_home, #tablettab_toggle_units {
+  font-weight: bold;
+}
+
+#tablettab_gcode_upload span, #tablettab_gcode_delete span {
+  font-weight: bold;
 }

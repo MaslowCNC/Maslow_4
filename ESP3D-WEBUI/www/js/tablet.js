@@ -16,7 +16,7 @@ const addMessage = (msg, scroll = true, clear = false) => {
   const msgWindow = id("messages");
   if (msgWindow) {
     msgWindow.textContent = clear ? msg : `${msgWindow.textContent}\n${msg}`;
-    if (scroll) {
+    if (scroll && shouldAutoScroll()) {
       msgWindow.scrollTop = msgWindow.scrollHeight;
     }
   }
