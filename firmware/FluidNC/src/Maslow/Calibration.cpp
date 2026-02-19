@@ -156,7 +156,17 @@ bool Calibration::requestStateChange(int newState) {
                     resetCalibrationState();
                     return requestStateChange(READY_TO_CUT);
                 }
-                
+
+                // When resuming from CALIBRATION_COMPUTING (after a successful partial calibration
+                // round), reset waypoint to 0 so all measurements are re-taken with the current
+                // (updated) kinematics. Without this, measurements from the previous round (taken
+                // with outdated anchor positions) are mixed with new measurements, making the
+                // combined dataset geometrically inconsistent and causing very low fitness scores.
+                if (currentState == CALIBRATION_COMPUTING && waypoint > 0 && waypoint <= pointCount) {
+                    log_debug("Resetting calibration to start of round - re-taking all measurements with updated kinematics");
+                    waypoint = 0;
+                }
+
                 currentState = CALIBRATION_IN_PROGRESS;
 
                 //Reset the axis targets at the beginning of calibration
