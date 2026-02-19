@@ -319,6 +319,16 @@ bool Calibration::requestStateChange(int newState) {
 
 // -Maslow homing loop. This is used whenver any of the homing funcitons are active (belts extending or retracting)
 void Calibration::home() {
+    // Debug logging to track when home() is called with READY_TO_CUT state
+    static bool logged_ready_to_cut_home = false;
+    if (currentState == READY_TO_CUT && !logged_ready_to_cut_home) {
+        log_info("home() called with Maslow in READY_TO_CUT state. FluidNC state: " << stateName(sys.state()));
+        logged_ready_to_cut_home = true;
+    }
+    if (currentState != READY_TO_CUT) {
+        logged_ready_to_cut_home = false;  // Reset for next calibration
+    }
+    
     switch (currentState) {
         case RETRACTING:
             //run all the retract functions untill we hit the current limit
