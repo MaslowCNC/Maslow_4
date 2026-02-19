@@ -159,6 +159,7 @@ bool Calibration::requestStateChange(int newState) {
                 Maslow.axis[_TL].setTarget(Maslow.axis[_TL].getPosition());
                 Maslow.axis[_TR].setTarget(Maslow.axis[_TR].getPosition());
 
+                log_info("CALIBRATION_IN_PROGRESS: Setting FluidNC to Homing (entry point 1). Previous Maslow state: " << stateNames[currentState - 1].name);
                 sys.set_state(State::Homing);
 
                 //If we are at the first point we need to generate the grid before we can start
@@ -239,6 +240,7 @@ bool Calibration::requestStateChange(int newState) {
                     plan_sync_position();
                 }
 
+                log_info("CALIBRATION_IN_PROGRESS: Setting FluidNC to Homing (entry point 2). Waypoint: " << waypoint);
                 sys.set_state(State::Homing);
 
                 calibrationInProgress = true;  //Should be replaced by state machine
