@@ -53,9 +53,7 @@
           <div id="tablettab_right" class="maslow-grid-item maslow-grid-item-btn" style="background-color: #9d88c0;">
             <canvas id="rBtn" style="width: 100%; height: 100%"></canvas>
           </div>
-          <div id="dynamic_button_1" class="maslow-grid-item maslow-grid-item-btn" style="background-color: #f2f0e4; cursor: pointer;"
-               title="Extend all anchors">
-            Extend
+          <div id="dynamic_button_1" class="maslow-grid-item maslow-grid-item-btn" style="background-color: #f2f0e4;">
           </div>
           <!-- Buttons row 3 -->
           <div id="tablettab_zDown" class="maslow-grid-item maslow-grid-item-btn"
@@ -76,9 +74,10 @@
           </div>
           <div id="tablettab_bottomRight" class="maslow-grid-item maslow-grid-item-btn"
             style="background-color: #b69fcb;"><canvas id="brBtn" style="width: 100%; height: 100%"></canvas> </div>
-          <div id="dynamic_button_2" class="maslow-grid-item maslow-grid-item-btn" style="background-color: #f2f0e4; cursor: pointer;"
-               title="Retract all anchors">
-            Retract
+          <div id="maslowActionButton" class="maslow-grid-item maslow-grid-item-btn maslow-action-button"
+               style="background-color: #4aa85c; font-size: 1.2vw; color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; font-weight: bold; visibility: hidden;"
+               title="State-dependent action button">
+            <span id="maslowActionText">Idle</span>
           </div>
           <!-- Buttons row 4 -->
           <div id="tablettab_set_z_home" class="maslow-grid-item maslow-grid-item-btn"
@@ -89,9 +88,12 @@
             style="background-color: #f2f0e4;" title="Toggle Units">mm</div>
           <div id="tablettab_set_xy_home" class="maslow-grid-item maslow-grid-item-btn"
             style="background-color: #f2f0e4;" title="Press and hold, or tap twice">Define XY Home</div>
-          <div id="dynamic_button_3" class="maslow-grid-item maslow-grid-item-btn" style="background-color: #f2f0e4; cursor: pointer;"
-               title="Toggle tension on/off">
-            <span id="tensionButtonText">Apply Tension</span>
+          <div id="dynamic_button_3" class="maslow-grid-item maslow-grid-item-btn" style="background-color: #f2f0e4;">
+            <div id="tablettab_trace_boundary" class="maslow-grid-item maslow-grid-item-btn"
+                 style="background-color: #f2f0e4; cursor: pointer;"
+                 title="Move around the job boundary to check positioning">
+              Trace Boundary
+            </div>
           </div>
         </div>
         <!-- Controls row 5 -->

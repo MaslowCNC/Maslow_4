@@ -813,24 +813,6 @@ const tabletCalRelax = () => {
   returnFocusToTablet();
 };
 
-// Toggle tension button handler
-// Note: This state is stored in memory and will reset on page reload.
-// For production use, consider deriving state from system status or persisting to storage.
-let tensionApplied = false;
-const toggleTension = () => {
-  if (tensionApplied) {
-    // Release tension
-    tabletCalRelax();
-    tensionApplied = false;
-    id("tensionButtonText").innerText = "Apply Tension";
-  } else {
-    // Apply tension
-    tabletCalTense();
-    tensionApplied = true;
-    id("tensionButtonText").innerText = "Release Tension";
-  }
-};
-
 // Handler for the new Maslow action button (below Setup button)
 const handleMaslowActionButtonClick = () => {
   if (typeof maslowStatus === 'undefined') {
@@ -950,12 +932,13 @@ function tabletInit() {
     id("tablettab_gcode_stop").addEventListener("click", tabletGCodeStop);
     id("systemStatus").addEventListener("click", clearAlarm);
 
-    // Dynamic buttons for Extend/Retract/Tension
-    id("dynamic_button_1").addEventListener("click", tabletCalExtend);
-    id("dynamic_button_2").addEventListener("click", tabletCalRetract);
-    id("dynamic_button_3").addEventListener("click", toggleTension);
+    // New Maslow action button (below Setup)
+    id("maslowActionButton").addEventListener("click", handleMaslowActionButtonClick);
 
     id("tablettab_save_serial_msg").addEventListener("click", saveSerialMessages);
+
+    // Trace boundary button
+    id("tablettab_trace_boundary").addEventListener("click", traceBoundary);
 
     // Buttons - Calibration Pop-up
     id("calibration-popup").addEventListener("click", tabletCalPopupHide);
