@@ -154,7 +154,7 @@ bool Calibration::requestStateChange(int newState) {
         case CALIBRATION_IN_PROGRESS:  //We can enter calibration in progress from EXTENDEDOUT, READY_TO_CUT, or CALIBRATION_COMPUTING
             if (currentState == EXTENDEDOUT || currentState == READY_TO_CUT || currentState == CALIBRATION_COMPUTING) {
                 // Store the state we're transitioning from before changing currentState
-                int transitionFrom = currentState;
+                previousState = currentState;
                 currentState = CALIBRATION_IN_PROGRESS;
 
                 //Reset the axis targets at the beginning of calibration
@@ -163,8 +163,8 @@ bool Calibration::requestStateChange(int newState) {
 
                 // Only set FluidNC to Homing if NOT transitioning from READY_TO_CUT
                 // When transitioning from READY_TO_CUT, FluidNC was just set to Idle and should stay that way
-                if (transitionFrom != READY_TO_CUT) {
-                    log_info("CALIBRATION_IN_PROGRESS: Setting FluidNC to Homing (entry point 1). Previous Maslow state: " << stateNames[transitionFrom - 1].name);
+                if (previousState != READY_TO_CUT) {
+                    log_info("CALIBRATION_IN_PROGRESS: Setting FluidNC to Homing (entry point 1). Previous Maslow state: " << stateNames[previousState - 1].name);
                     sys.set_state(State::Homing);
                 } else {
                     log_info("CALIBRATION_IN_PROGRESS: Keeping FluidNC in Idle (transitioning from READY_TO_CUT)");
@@ -250,7 +250,7 @@ bool Calibration::requestStateChange(int newState) {
 
                 // Only set FluidNC to Homing if NOT transitioning from READY_TO_CUT
                 // When transitioning from READY_TO_CUT, FluidNC was just set to Idle and should stay that way
-                if (transitionFrom != READY_TO_CUT) {
+                if (previousState != READY_TO_CUT) {
                     log_info("CALIBRATION_IN_PROGRESS: Setting FluidNC to Homing (entry point 2). Waypoint: " << waypoint);
                     sys.set_state(State::Homing);
                 } else {
