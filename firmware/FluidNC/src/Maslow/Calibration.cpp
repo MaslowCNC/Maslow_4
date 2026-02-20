@@ -154,7 +154,7 @@ bool Calibration::requestStateChange(int newState) {
         case CALIBRATION_IN_PROGRESS:  //We can enter calibration in progress from EXTENDEDOUT, READY_TO_CUT, or CALIBRATION_COMPUTING
             if (currentState == EXTENDEDOUT || currentState == READY_TO_CUT || currentState == CALIBRATION_COMPUTING) {
                 // Store the state we're transitioning from before changing currentState
-                previousState = currentState;
+                int transitioningFrom = currentState;
                 currentState = CALIBRATION_IN_PROGRESS;
 
                 //Reset the axis targets at the beginning of calibration
@@ -163,8 +163,8 @@ bool Calibration::requestStateChange(int newState) {
 
                 // Only set FluidNC to Homing if NOT transitioning from READY_TO_CUT
                 // When transitioning from READY_TO_CUT, FluidNC was just set to Idle and should stay that way
-                if (previousState != READY_TO_CUT) {
-                    log_info("CALIBRATION_IN_PROGRESS: Setting FluidNC to Homing (entry point 1). Previous Maslow state: " << stateNames[previousState - 1].name);
+                if (transitioningFrom != READY_TO_CUT) {
+                    log_info("CALIBRATION_IN_PROGRESS: Setting FluidNC to Homing (entry point 1). Previous Maslow state: " << stateNames[transitioningFrom - 1].name);
                     sys.set_state(State::Homing);
                 } else {
                     log_info("CALIBRATION_IN_PROGRESS: Keeping FluidNC in Idle (transitioning from READY_TO_CUT)");
@@ -248,13 +248,13 @@ bool Calibration::requestStateChange(int newState) {
                     plan_sync_position();
                 }
 
-                // Only set FluidNC to Homing if NOT transitioning from READY_TO_CUT
-                // When transitioning from READY_TO_CUT, FluidNC was just set to Idle and should stay that way
-                if (previousState != READY_TO_CUT) {
+                // Only set FluidNC to Homing if we're not starting fresh calibration at waypoint 0 with Idle state
+                // When waypoint==0 and FluidNC is already Idle, we just transitioned from READY_TO_CUT and should keep Idle
+                if (waypoint == 0 && sys.state() == State::Idle) {
+                    log_info("CALIBRATION_IN_PROGRESS: Keeping FluidNC in Idle (waypoint 0, already Idle - likely just transitioned from READY_TO_CUT)");
+                } else {
                     log_info("CALIBRATION_IN_PROGRESS: Setting FluidNC to Homing (entry point 2). Waypoint: " << waypoint);
                     sys.set_state(State::Homing);
-                } else {
-                    log_info("CALIBRATION_IN_PROGRESS: Keeping FluidNC in Idle (entry point 2, transitioning from READY_TO_CUT)");
                 }
 
                 calibrationInProgress = true;  //Should be replaced by state machine
