@@ -741,7 +741,7 @@ function tabletGrblState(grbl, response) {
     const homeX = Number(WCO[0] * factor).toFixed(digits);
     const homeY = Number(WCO[1] * factor).toFixed(digits);
     const homeZ = Number(WCO[2] * factor).toFixed(digits);
-    setTextContent('home-pos', `mX: ${homeX} mY: ${homeY} mZ: ${homeZ}`);
+    setTextContent('home-pos', `Xm: ${homeX} Ym: ${homeY} Zm: ${homeZ}`);
   }
 }
 
