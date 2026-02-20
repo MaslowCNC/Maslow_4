@@ -736,6 +736,13 @@ function tabletGrblState(grbl, response) {
       setTextContent(`mpos-${axisNames[index]}`, `(${axisName}m: ${Number(pos * factor).toFixed(index > 2 ? 2 : digits)})`);
     })
   }
+
+  if (WCO && WCO.length >= 3) {
+    const homeX = Number(WCO[0] * factor).toFixed(digits);
+    const homeY = Number(WCO[1] * factor).toFixed(digits);
+    const homeZ = Number(WCO[2] * factor).toFixed(digits);
+    setTextContent('home-pos', `mX: ${homeX} mY: ${homeY} mZ: ${homeZ}`);
+  }
 }
 
 let gCodeFilename = '';
