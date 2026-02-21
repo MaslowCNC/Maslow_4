@@ -20,6 +20,7 @@ WebUI::WiFiConfig wifi_config;
 #    include "WebServer.h"             // webServer.port()
 #    include "TelnetServer.h"          // telnetServer
 #    include "NotificationsService.h"  // notificationsservice
+#    include "../Protocol.h"           // feedHoldEvent, protocol_send_event
 
 #    include <WiFi.h>
 #    include <esp_wifi.h>
@@ -560,6 +561,7 @@ namespace WebUI {
                 break;
             case SYSTEM_EVENT_STA_DISCONNECTED:
                 log_info("WiFi Disconnected");
+                protocol_send_event(&feedHoldEvent);
                 break;
             case SYSTEM_EVENT_AP_STACONNECTED:
                 // Memory optimized - avoid << operator
@@ -567,6 +569,9 @@ namespace WebUI {
                 break;
             case SYSTEM_EVENT_AP_STADISCONNECTED:
                 log_debug(("WiFi AP: Client disconnected (remaining: " + std::to_string(WiFi.softAPgetStationNum()) + ")").c_str());
+                if (WiFi.softAPgetStationNum() == 0) {
+                    protocol_send_event(&feedHoldEvent);
+                }
                 break;
             case SYSTEM_EVENT_AP_START:
                 log_debug("WiFi AP: Access Point started");
