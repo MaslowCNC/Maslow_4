@@ -1554,8 +1554,22 @@ Error gc_execute_line(char* line) {
             coords[coord_select]->set(coord_data);
             // Update system coordinate system if currently active.
             if (gc_state.modal.coord_select == coord_select) {
-                copyAxes(gc_state.coord_system, coord_data);
-                gc_wco_changed();
+                // Guard against NaN propagating into the in-memory coordinate system.
+                // Coordinates::set() already protects NVS flash, but without this check
+                // a NaN position from kinematics (e.g. invalid belt lengths) would corrupt
+                // gc_state.coord_system and cause WCO:nan to be reported to the UI.
+                bool coordDataValid = true;
+                for (size_t i = 0; i < MAX_N_AXIS; i++) {
+                    if (isnan(coord_data[i])) {
+                        log_error("G10: NaN coordinate for axis " << i << " - not updating coordinate system");
+                        coordDataValid = false;
+                        break;
+                    }
+                }
+                if (coordDataValid) {
+                    copyAxes(gc_state.coord_system, coord_data);
+                    gc_wco_changed();
+                }
             }
             break;
         case NonModal::GoHome0:

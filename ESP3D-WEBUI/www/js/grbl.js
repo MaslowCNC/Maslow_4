@@ -680,12 +680,18 @@ function grblProcessStatus(response) {
   if (grbl.mpos && !grbl.mpos.some(isNaN)) {
     MPOS = grbl.mpos;
     if (WCO) {
-      WPOS = grbl.mpos.map((v, index) => v - WCO[index]);
+      WPOS = grbl.mpos.map((v, index) => {
+        const offset = WCO[index];
+        return (offset !== undefined && !isNaN(offset)) ? v - offset : v;
+      });
     }
   } else if (grbl.wpos && !grbl.wpos.some(isNaN)) {
     WPOS = grbl.wpos;
     if (WCO) {
-      MPOS = grbl.wpos.map((v, index) => v + WCO[index]);
+      MPOS = grbl.wpos.map((v, index) => {
+        const offset = WCO[index];
+        return (offset !== undefined && !isNaN(offset)) ? v + offset : v;
+      });
     }
   }
   show_grbl_position(WPOS, MPOS);

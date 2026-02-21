@@ -237,6 +237,10 @@ const checkParams = (params = {}) => {
 
   const s = [];
   for (key in params) {
+    if (isNaN(params[key])) {
+      addMessage(`Could not perform Jog. Invalid position for axis ${key} - machine position may not be synced. Try refreshing the page if this persists.`);
+      return "";
+    }
     s.push(`${key}${params[key]}`);
   }
   return s.join("");
@@ -358,7 +362,10 @@ const moveHome = () => {
   // Use the MPOS global array which contains the current machine position.
   // Note: getText('mpos-x') returns formatted text like "(Xm: 150.000)" which
   // parseFloat cannot handle, so we use the MPOS array directly.
-  if (!MPOS || MPOS.some(isNaN)) {
+  // Only check X (index 0) and Y (index 1) since those are the axes used for
+  // the home jog. Extra axes (3+) may be NaN for unused axes but that should
+  // not block the home operation.
+  if (!MPOS || isNaN(MPOS[0]) || isNaN(MPOS[1])) {
     addMessage("Cannot move to XY Home: machine position is unknown.");
     return;
   }
