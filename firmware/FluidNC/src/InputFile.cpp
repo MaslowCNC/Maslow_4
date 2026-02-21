@@ -5,6 +5,7 @@
 
 #include "Report.h"
 #include "GCode.h"
+#include "System.h"
 
 InputFile::InputFile(const char* defaultFs, const char* path, WebUI::AuthenticationLevel auth_level, Channel& out) :
     FileStream(path, "r", defaultFs), _auth_level(auth_level), _out(out), _line_num(0) {}
@@ -95,10 +96,21 @@ void InputFile::stopJob() {
 }
 
 void InputFile::pauseJob() {
+    float* mpos = get_mpos();
+    float  x    = mpos[X_AXIS];
+    float  y    = mpos[Y_AXIS];
+    float  z    = mpos[Z_AXIS];
     //Report print paused
-    _notifyf("File print paused", "Paused file job at line: %d (%.2f%% complete)", getLineNumber(), percent_complete());
+    _notifyf("File print paused",
+             "Paused file job at line: %d (%.2f%% complete) - Position: X=%.3f Y=%.3f Z=%.3f",
+             getLineNumber(),
+             percent_complete(),
+             x,
+             y,
+             z);
     log_info("Paused file job at line: " << getLineNumber() << " (" << percent_complete() << "% complete)"
-             << " - Last motion command: " << getMotionCommandString());
+             << " - Last motion command: " << getMotionCommandString()
+             << " - Position: X=" << x << " Y=" << y << " Z=" << z);
 }
 
 const char* InputFile::getMotionCommandString() {
