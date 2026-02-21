@@ -213,8 +213,21 @@ namespace Kinematics {
         float motors[n_axis];
         transform_cartesian_to_motors(motors, target);
 
-        // Feedrate scaling removed: feedrate now stays in XY coordinates
-        // The machine will move at the set feedrate in XY coordinates rather than scaling to belt space
+        // Scale feed rate to maintain cartesian-space speed.
+        // The planner uses motor-space distance to compute velocity, so we compensate
+        // for the kinematic transformation ratio between cartesian and motor space.
+        // This ensures equal feed rates in X and Y directions (same approach as CoreXY).
+        if (!pl_data->motion.rapidMotion) {
+            float cartesian_distance = vector_distance(target, position, 3);
+            if (cartesian_distance > 0.0f) {
+                float last_motors[n_axis];
+                transform_cartesian_to_motors(last_motors, position);
+                float motor_distance = vector_distance(motors, last_motors, n_axis);
+                if (motor_distance > 0.0f) {
+                    pl_data->feed_rate *= motor_distance / cartesian_distance;
+                }
+            }
+        }
 
         return mc_move_motors(motors, pl_data);
     }
