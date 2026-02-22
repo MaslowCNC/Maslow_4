@@ -54,7 +54,8 @@ void InputFile::ack(Error status) {
     _readyNext = true;
 }
 
-std::string InputFile::_progress = "";
+std::string InputFile::_progress    = "";
+std::string InputFile::_pauseStatus = "";
 
 #include <sstream>
 #include <iomanip>
@@ -73,7 +74,8 @@ Channel* InputFile::pollLine(char* line) {
         }
             return &allChannels;
         case Error::Eof:
-            _progress = "";
+            _progress    = "";
+            _pauseStatus = "";
             _notifyf("File job done", "%s file job succeeded", path());
             log_msg(path() << " file job succeeded");
             allChannels.kill(this);
@@ -88,6 +90,7 @@ Channel* InputFile::pollLine(char* line) {
 
 
 void InputFile::stopJob() {
+    _pauseStatus = "";
     //Report print stopped
     _notifyf("File print canceled", "Reset during file job at line: %d (%.2f%% complete)", getLineNumber(), percent_complete());
     log_info("Reset during file job at line: " << getLineNumber() << " (" << percent_complete() << "% complete)"
@@ -108,9 +111,12 @@ void InputFile::pauseJob() {
              x,
              y,
              z);
-    log_info("Paused file job at line: " << getLineNumber() << " (" << percent_complete() << "% complete)"
-             << " - Last motion command: " << getMotionCommandString()
-             << " - Position: X=" << x << " Y=" << y << " Z=" << z);
+    std::ostringstream s;
+    s << "Paused file job at line: " << getLineNumber() << " (" << std::fixed << std::setprecision(2) << percent_complete() << "% complete)"
+      << " - Last motion command: " << getMotionCommandString()
+      << " - Position: X=" << std::setprecision(3) << x << " Y=" << y << " Z=" << z;
+    _pauseStatus = s.str();
+    log_info(_pauseStatus);
 }
 
 const char* InputFile::getMotionCommandString() {
@@ -129,5 +135,6 @@ const char* InputFile::getMotionCommandString() {
 }
 
 InputFile::~InputFile() {
-    _progress = "";
+    _progress    = "";
+    _pauseStatus = "";
 }

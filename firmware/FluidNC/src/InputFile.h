@@ -32,6 +32,7 @@ private:
 
 public:
     static std::string _progress;
+    static std::string _pauseStatus;
 
     // fsname is the default file system on which the file is located, in case the path does not specify
     // path is the full path to the file

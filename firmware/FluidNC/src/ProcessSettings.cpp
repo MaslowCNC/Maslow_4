@@ -20,6 +20,7 @@
 #include "Protocol.h"             // LINE_BUFFER_SIZE
 #include "UartChannel.h"          // Uart0.write()
 #include "FileStream.h"           // FileStream()
+#include "InputFile.h"            // InputFile::_pauseStatus
 #include "xmodem.h"               // xmodemReceive(), xmodemTransmit()
 #include "StartupLog.h"           // startupLog
 #include "Driver/fluidnc_gpio.h"  // gpio_dump()
@@ -802,6 +803,11 @@ static Error setReportInterval(const char* value, WebUI::AuthenticationLevel aut
         log_info("Channel auto reporting turned off");
     }
 #endif
+
+    // If a job is currently paused, re-send the pause status to the reconnecting channel
+    if (actual && !InputFile::_pauseStatus.empty()) {
+        log_info_to(out, InputFile::_pauseStatus);
+    }
 
     // Send a full status report immediately so the client has all the data
     report_wco_counter = 0;
