@@ -9,7 +9,7 @@ var tlZ = 100
 var trZ = 56
 var blZ = 34
 var brZ = 78
-var acceptableCalibrationThreshold = 0.5
+var acceptableCalibrationThreshold = 0.5 
 
 // Maximum number of low-fitness retry attempts before giving up
 const MAX_LOW_FITNESS_RETRIES = 10;
