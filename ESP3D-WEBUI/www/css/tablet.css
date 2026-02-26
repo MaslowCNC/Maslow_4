@@ -87,7 +87,6 @@ justify-content: center;
   align-items: center;
   display: flex;
 padding: 10px;
-font-size: 12px;
 text-align: center;
 }
 
@@ -117,12 +116,6 @@ display: grid;
 grid-template-columns: 100%;
 }
 
-
-@media only screen and (max-width: 980) {
-.maslow-grid-item {
-  font-size: 10px;
-}
-}
 
 @media only screen and (max-width: 767px) {
 .maslow {
@@ -660,6 +653,7 @@ height: unset;
   font-size: 24px;
 }
 .tablettab .btn,
+.tablettab .maslow-grid-item,
 .tablettab .position,
 .tablettab .form-control {
   font-size: 1.7rem;
@@ -690,6 +684,7 @@ textarea {
   font-size: 24px;
 }
 .tablettab .btn,
+.tablettab .maslow-grid-item,
 .tablettab .position,
 .tablettab .form-control {
   font-size: 2rem;
