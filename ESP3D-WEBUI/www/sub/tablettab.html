@@ -125,6 +125,15 @@
             style="background-color: #ce654c;"><canvas id="stopBtn" style="width: 100%; height: 100%"></canvas></div>
           <div id="systemStatus" class="maslow-grid-item system-status">Idle</div>
         </div>
+        <!-- Workpiece Thickness row -->
+        <div class="maslow-grid-container tablettab-controls-item" style="grid-template-columns: 35% 20% 22% 23%; align-items: center;">
+          <div class="maslow-grid-item" style="background-color: #f2f0e4;">Workpiece Thickness</div>
+          <div class="maslow-grid-item" style="background-color: #f2f0e4; padding: 4px;">
+            <input id="workpieceThickness" type="number" min="0" max="200" step="0.1" style="width: 100%; padding: 2px; box-sizing: border-box;" placeholder="mm">
+          </div>
+          <div id="tablettab_set_workpiece_thickness" class="maslow-grid-item maslow-grid-item-btn" style="background-color: #337ab7; color: white;">Set</div>
+          <div id="tablettab_save_workpiece_thickness" class="maslow-grid-item maslow-grid-item-btn" style="background-color: #4aa85c; color: white;">Save as Default</div>
+        </div>
         <div class="maslow-grid-container tablettab-controls-item" style="grid-template-columns: auto;">
           <div class="maslow-grid-item">
             <table style="width:100%">
@@ -273,7 +282,9 @@
         <hr style="border-top: 1px dashed;">
         <div class="grid-container" title="Valid Range is 0-50mm">
           <div class="input-row">
-            <label for="spoilboardThickness" class="input-label">Spoil Board Thickness (mm)</label>
+            <label for="spoilboardThickness" class="input-label">Spoil Board Thickness (mm)
+              <span title="Distance from the anchor locations to the top of the spoilboard. Use positive numbers when the spoilboard is higher than the anchors." style="cursor: help; color: #3276c3; margin-left: 4px; font-weight: bold;">ⓘ</span>
+            </label>
           </div>
           <div class="input-row">
             <input id="spoilboardThickness" type="number" min="0" max="50" step="0.1" class="calibration-modal-input">

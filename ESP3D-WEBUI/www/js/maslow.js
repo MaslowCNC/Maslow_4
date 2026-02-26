@@ -355,7 +355,7 @@ const maslowErrorMsgHandling = (msg) => {
 const cfgDef = {
 	Retract_Current_Threshold: { name: "retractionForce", type: "A", cmd: "Maslow_Retract_Current_Threshold" },
 	spoilboardThickness: { name: "spoilboardThickness", type: "A", cmd: "Maslow_spoilboardThickness" },
-	workThickness: { name: "workThickness", type: "A", cmd: "Maslow_workThickness" },
+	workThickness: { name: "workThickness", type: "A", cmd: "Maslow_workThickness", also: "workpieceThickness" },
 	Acceptable_Calibration_Threshold: { name: "acceptableCalibrationThreshold", type: "A", cmd: "Maslow_Acceptable_Calibration_Threshold" },
 	Extend_Dist: { name: "extendDist", type: "A", cmd: "Maslow_Extend_Dist" },
 	Scale_X: { name: "scaleX", type: "A", cmd: "Maslow_Scale_X" },
@@ -406,6 +406,10 @@ const maslowMsgHandling = (msg) => {
 			globalThis.loadedValues = {};
 		}
 		globalThis.loadedValues[id] = val; // Store the transformed value
+		// Also update any mirrored element (e.g. workpieceThickness mirrors workThickness)
+		if (cfgVal.also) {
+			globalThis.setValue(cfgVal.also, val);
+		}
 	};
 
 	const stdDimensionAction = (value) => Number.parseFloat(value);

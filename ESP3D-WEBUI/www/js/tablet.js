@@ -1004,6 +1004,21 @@ const tabletConfigPopupHide = () => hideModal("configuration-popup");
 // Control event handlers - Common
 const tabletPopupStopProp = (event) => event.stopPropagation();
 
+// Workpiece Thickness handlers
+const setWorkpieceThickness = () => {
+  const value = getValue("workpieceThickness");
+  if (!value?.trim()) return;
+  sendCommand(`$/Maslow_workThickness=${value}`);
+  setValue("workThickness", value);
+  if (!globalThis.loadedValues) globalThis.loadedValues = {};
+  globalThis.loadedValues["workThickness"] = value;
+};
+
+const saveWorkpieceThicknessAsDefault = () => {
+  setWorkpieceThickness();
+  saveMaslowYaml();
+};
+
 function tabletInit() {
   // put in a timeout to allow things to settle. when they were here at startup ui froze from time to time.
   setTimeout(() => {
@@ -1127,6 +1142,10 @@ function tabletInit() {
     id("configuration-popup").addEventListener("click", tabletConfigPopupHide);
     id("configuration_popup_content").addEventListener("click", tabletPopupStopProp);
     id("tablettab_config_save").addEventListener("click", saveConfigValues);
+
+    // Workpiece Thickness buttons
+    id("tablettab_set_workpiece_thickness").addEventListener("click", setWorkpieceThickness);
+    id("tablettab_save_workpiece_thickness").addEventListener("click", saveWorkpieceThicknessAsDefault);
 
   }, 1000);
 }
