@@ -415,6 +415,9 @@ const populateTabletFileSelector = (files, path) => {
 	const legend = `Load GCode File from /SD${path}`;
 	addOption(selector, legend, -2, true, true); // A different one might be selected later
 
+	// Add "Clear GCode from Memory" option at the top
+	addOption(selector, "Clear GCode from Memory", -4, false, false);
+
 	if (!inRoot) {
 		addOption(selector, "..", -1, false, false);
 	}

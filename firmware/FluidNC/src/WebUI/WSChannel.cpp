@@ -89,9 +89,15 @@ namespace WebUI {
         if (_dead) {
             return false;
         }
+        if (_server->canSend(_clientNum) <= 0) {
+            _dead = true;
+            log_warn("WebSocket client not ready; closing");
+            WSChannels::removeChannel(this);
+            return false;
+        }
         if (!_server->sendTXT(_clientNum, s.c_str())) {
             _dead = true;
-            log_debug("WebSocket is unresponsive; closing");
+            log_warn("WebSocket is unresponsive; closing");
             WSChannels::removeChannel(this);
             return false;
         }
@@ -100,11 +106,19 @@ namespace WebUI {
     void WSChannel::flush(void) {
         if (_TXbufferSize > 0) {
             if (_dead) {
+                _TXbufferSize = 0;
+                return;
+            }
+            if (_server->canSend(_clientNum) <= 0) {
+                _dead = true;
+                log_warn("WebSocket client not ready; closing");
+                WSChannels::removeChannel(this);
+                _TXbufferSize = 0;
                 return;
             }
             if (!_server->sendBIN(_clientNum, _TXbuffer, _TXbufferSize)) {
                 _dead = true;
-                log_debug("WebSocket is unresponsive; closing");
+                log_warn("WebSocket is unresponsive; closing");
                 WSChannels::removeChannel(this);
             }
 

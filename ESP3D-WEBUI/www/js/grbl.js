@@ -666,23 +666,23 @@ function grblProcessStatus(response) {
   var grbl = parseGrblStatus(response)
   // Record persistent values of data
   const oldWCO = WCO ? [WCO[0], WCO[1], WCO[2]] : null;
-  if (grbl.wco) {
+  if (grbl.wco && !grbl.wco.some(isNaN)) {
     WCO = grbl.wco;
-    // Check if WCO has changed and trigger callback if set
-    if (onWCOUpdateCallback && oldWCO &&
-        (WCO[0] !== oldWCO[0] || WCO[1] !== oldWCO[1] || WCO[2] !== oldWCO[2])) {
+    // Check if WCO has changed (or arrived for the first time) and trigger callback if set
+    if (onWCOUpdateCallback &&
+        (!oldWCO || WCO[0] !== oldWCO[0] || WCO[1] !== oldWCO[1] || WCO[2] !== oldWCO[2])) {
       onWCOUpdateCallback(WCO, oldWCO);
     }
   }
   if (grbl.ovr) {
     OVR = grbl.ovr;
   }
-  if (grbl.mpos) {
+  if (grbl.mpos && !grbl.mpos.some(isNaN)) {
     MPOS = grbl.mpos;
     if (WCO) {
       WPOS = grbl.mpos.map((v, index) => v - WCO[index]);
     }
-  } else if (grbl.wpos) {
+  } else if (grbl.wpos && !grbl.wpos.some(isNaN)) {
     WPOS = grbl.wpos;
     if (WCO) {
       MPOS = grbl.wpos.map((v, index) => v + WCO[index]);

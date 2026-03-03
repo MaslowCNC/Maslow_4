@@ -840,6 +840,9 @@ static void protocol_do_late_reset() {
     report_ovr_counter = 0;  // Set to report change immediately
     config->_coolant->stop();
 
+    // Stop arm motors before disabling steppers so all motion output is off
+    Maslow.stopMotors();
+
     protocol_disable_steppers();
     config->_stepping->reset();
 

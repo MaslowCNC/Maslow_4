@@ -105,6 +105,7 @@ width: 100%;
 #small-toolpath {
 border: 1px solid black;
   border-radius: 5px;
+  aspect-ratio: 2 / 1;
 }
 #gcode {
 margin: 10px 0px;
@@ -843,6 +844,10 @@ background-color: #cd654c!important;
 /* Calibration modal END */
 
 /* z-axis-popup */
+#set-home-popup .buttons-row {
+  grid-template-columns: repeat(2, 47%);
+}
+
 .calibration-modal-info {
 display: flex;
 align-items: center;

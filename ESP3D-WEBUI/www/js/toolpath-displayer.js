@@ -318,6 +318,12 @@ var tpBbox = {
     }
 };
 
+// Bounding box for the work area rectangle only (excludes belt anchor points)
+var workAreaBbox = {
+    min: { x: Infinity, y: Infinity },
+    max: { x: -Infinity, y: -Infinity }
+};
+
 // Separate tracking for just the job/gcode bounding box (excluding machine bounds)
 var jobBbox = {
     min: {
@@ -348,6 +354,12 @@ var resetBbox = function() {
     tpBbox.max.y = -Infinity;
     tpBbox.max.z = -Infinity;
     bboxIsSet = false;
+
+    // Reset work area bbox
+    workAreaBbox.min.x = Infinity;
+    workAreaBbox.min.y = Infinity;
+    workAreaBbox.max.x = -Infinity;
+    workAreaBbox.max.y = -Infinity;
 
     // Also reset job bounding box
     jobBbox.min.x = Infinity;
@@ -749,6 +761,12 @@ var drawMachineBounds = function() {
     tpBbox.max.y = Math.max(tpBbox.max.y, p2.y);
     bboxIsSet = true;
 
+    // Track the work area bounds separately (excludes belt anchor points)
+    workAreaBbox.min.x = Math.min(workAreaBbox.min.x, p0.x);
+    workAreaBbox.min.y = Math.min(workAreaBbox.min.y, p0.y);
+    workAreaBbox.max.x = Math.max(workAreaBbox.max.x, p2.x);
+    workAreaBbox.max.y = Math.max(workAreaBbox.max.y, p2.y);
+
     // Draw the work area rectangle
     tp.beginPath();
     tp.moveTo(p0.x, p0.y);
@@ -922,11 +940,13 @@ var clearCanvas = function() {
     // Reset the transform and clear the canvas
     tp.setTransform(1,0,0,1,0,0);
 
-//    if (tpRect == undefined) {
-        var tpRect = canvas.parentNode.getBoundingClientRect();
-        // canvas.width = tpRect.width ? tpRect.width : 400;
-        // canvas.height = tpRect.height ? tpRect.height : 400;
-//    }
+    // Resize the canvas pixel buffer to match the actual rendered display size.
+    // Without this the browser stretches the buffer non-uniformly, distorting the aspect ratio.
+    var tpRect = canvas.getBoundingClientRect();
+    if (tpRect.width > 0 && tpRect.height > 0) {
+        canvas.width = tpRect.width * scale;
+        canvas.height = tpRect.height * scale;
+    }
 
     tp.fillStyle = "white";
     tp.fillRect(0, 0, canvas.width, canvas.height);
@@ -997,6 +1017,13 @@ var transformCanvas = function() {
             min: { x: minX, y: minY },
             max: { x: maxX, y: maxY }
         };
+        // Also include machine work area bounds so the border rectangle is always fully visible
+        if (isFinite(workAreaBbox.min.x) && isFinite(workAreaBbox.min.y) && isFinite(workAreaBbox.max.x) && isFinite(workAreaBbox.max.y)) {
+            displayBbox.min.x = Math.min(displayBbox.min.x, workAreaBbox.min.x);
+            displayBbox.min.y = Math.min(displayBbox.min.y, workAreaBbox.min.y);
+            displayBbox.max.x = Math.max(displayBbox.max.x, workAreaBbox.max.x);
+            displayBbox.max.y = Math.max(displayBbox.max.y, workAreaBbox.max.y);
+        }
     } else {
         // Fall back to tpBbox which is already in projected coordinates
         displayBbox = tpBbox;
@@ -1020,8 +1047,24 @@ var transformCanvas = function() {
     if (scaler < 0) {
         scaler = -scaler;
     }
-    xOffset = inset - displayBbox.min.x * scaler;
-    yOffset = (canvas.height-inset) - displayBbox.min.y * (-scaler);
+
+    // Determine what should be centered in the canvas:
+    // - Border views (workAreaBbox is valid): center the work area border
+    // - Zoomed-in views: center the displayBbox content
+    var centerX, centerY;
+    if (isFinite(workAreaBbox.min.x) && isFinite(workAreaBbox.min.y) && isFinite(workAreaBbox.max.x) && isFinite(workAreaBbox.max.y)) {
+        centerX = (workAreaBbox.min.x + workAreaBbox.max.x) / 2;
+        centerY = (workAreaBbox.min.y + workAreaBbox.max.y) / 2;
+    } else {
+        centerX = (displayBbox.min.x + displayBbox.max.x) / 2;
+        centerY = (displayBbox.min.y + displayBbox.max.y) / 2;
+    }
+    // The transform is: x' = scaler*x + xOffset, y' = -scaler*y + yOffset
+    // We want the center of the chosen bbox to map to the canvas center:
+    //   scaler*centerX + xOffset = canvas.width/2  => xOffset = canvas.width/2 - scaler*centerX
+    //  -scaler*centerY + yOffset = canvas.height/2 => yOffset = canvas.height/2 + scaler*centerY
+    xOffset = canvas.width / 2 - scaler * centerX;
+    yOffset = canvas.height / 2 + scaler * centerY;
 
     // Canvas coordinates of image bounding box top and right
     var imageTop = scaler * imageHeight;
@@ -1693,8 +1736,10 @@ ToolpathDisplayer.prototype.showToolpath = function(gcode, modal, initialPositio
     }
 
     // Draw the work origin (cross and circle) after transform is set up
-    var imageWidth = tpBbox.max.x - tpBbox.min.x;
-    drawOrigin(imageWidth * 0.04);
+    // Use canvas.width / scaler to get the effective world-space width of the visible area.
+    // This avoids huge crosshairs when transformCanvas() zoomed in on a small jobBbox
+    // while tpBbox (which includes full machine bounds) is much larger.
+    drawOrigin(canvas.width / scaler * 0.04);
 
     initialMoves = true;
     displayHandlers.position = initialPosition;
@@ -1770,12 +1815,6 @@ ToolpathDisplayer.prototype.showToolPosition = function(modal, position) {
 
     // Only draw if we have a valid bounding box
     if (bboxIsSet) {
-        // Calculate image dimensions for proper origin size
-        var imageWidth = tpBbox.max.x - tpBbox.min.x;
-        if (imageWidth == 0) {
-            imageWidth = 1;
-        }
-
         // Draw visible elements based on camera angle
         if(drawBounds){
             drawMachineBounds();
@@ -1785,7 +1824,9 @@ ToolpathDisplayer.prototype.showToolPosition = function(modal, position) {
         }
 
         // Draw the work origin (cross and circle)
-        drawOrigin(imageWidth * 0.04);
+        // Use canvas.width / scaler so the crosshair is proportional to the visible area,
+        // not to tpBbox which may be much larger than the displayed jobBbox.
+        drawOrigin(canvas.width / scaler * 0.04);
 
         // Draw job bounding box if available (updates with WCO changes)
         drawJobBoundingBox();

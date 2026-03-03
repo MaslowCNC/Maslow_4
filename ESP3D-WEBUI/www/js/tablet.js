@@ -184,6 +184,121 @@ const zeroAxis = (axis) => {
   addMessage(`Home pos set for: ${axis}`);
 }
 
+const getUnitInfo = () => {
+  const isInchMode = gCodeModal.units === 'G20';
+  const mmPerInch = 25.4;
+  return {
+    unitLabel: isInchMode ? 'in' : 'mm',
+    decimals: isInchMode ? 4 : 3,
+    toDisplay: (mm) => isInchMode ? mm / mmPerInch : mm,
+  };
+}
+
+const getWorkAreaBounds = () => {
+  const lv = globalThis.loadedValues || {};
+  const areaX = parseFloat(lv.workAreaX) || 2440;
+  const areaY = parseFloat(lv.workAreaY) || 1220;
+  const offX = parseFloat(lv.workAreaCenterOffsetX) || 0;
+  const offY = parseFloat(lv.workAreaCenterOffsetY) || 0;
+  return {
+    minX: offX - areaX / 2,
+    maxX: offX + areaX / 2,
+    minY: offY - areaY / 2,
+    maxY: offY + areaY / 2,
+  };
+}
+
+const openSetHomePopup = () => {
+  tabletClick();
+  const bounds = getWorkAreaBounds();
+  // Pre-fill with current machine position so jogging to a spot and opening
+  // the popup defaults to "set home here" (confirming without changes sets
+  // GCode origin at the current machine position)
+  const { unitLabel, decimals, toDisplay } = getUnitInfo();
+  const dispMinX = toDisplay(bounds.minX);
+  const dispMaxX = toDisplay(bounds.maxX);
+  const dispMinY = toDisplay(bounds.minY);
+  const dispMaxY = toDisplay(bounds.maxY);
+  const xInput = id("setHomeX");
+  const yInput = id("setHomeY");
+  if (xInput) {
+    xInput.value = MPOS ? toDisplay(MPOS[0]).toFixed(decimals) : "0";
+    xInput.min = dispMinX;
+    xInput.max = dispMaxX;
+    xInput.title = `X: ${dispMinX.toFixed(decimals)} to ${dispMaxX.toFixed(decimals)} ${unitLabel}`;
+  }
+  if (yInput) {
+    yInput.value = MPOS ? toDisplay(MPOS[1]).toFixed(decimals) : "0";
+    yInput.min = dispMinY;
+    yInput.max = dispMaxY;
+    yInput.title = `Y: ${dispMinY.toFixed(decimals)} to ${dispMaxY.toFixed(decimals)} ${unitLabel}`;
+  }
+  const xUnit = id("setHomeXUnit");
+  if (xUnit) xUnit.textContent = `(${unitLabel})`;
+  const yUnit = id("setHomeYUnit");
+  if (yUnit) yUnit.textContent = `(${unitLabel})`;
+  const homeLabel = id("currentHomePositionLabel");
+  if (homeLabel) {
+    const hx = (WCO && WCO.length >= 2) ? toDisplay(WCO[0]).toFixed(decimals) : "0";
+    const hy = (WCO && WCO.length >= 2) ? toDisplay(WCO[1]).toFixed(decimals) : "0";
+    homeLabel.textContent = `Current: (${hx}, ${hy}) ${unitLabel}`;
+  }
+  openModal("set-home-popup");
+}
+
+const confirmSetHome = () => {
+  const bounds = getWorkAreaBounds();
+  const { toDisplay } = getUnitInfo();
+
+  // Clamp entered values to work area boundary (values are in current display units)
+  const rawX = parseFloat(id("setHomeX").value);
+  const rawY = parseFloat(id("setHomeY").value);
+  const dispMinX = toDisplay(bounds.minX);
+  const dispMaxX = toDisplay(bounds.maxX);
+  const dispMinY = toDisplay(bounds.minY);
+  const dispMaxY = toDisplay(bounds.maxY);
+  const xVal = isNaN(rawX) ? 0 : Math.max(dispMinX, Math.min(dispMaxX, rawX));
+  const yVal = isNaN(rawY) ? 0 : Math.max(dispMinY, Math.min(dispMaxY, rawY));
+
+  if (xVal !== rawX || yVal !== rawY) {
+    addMessage(`Home position clamped to work area: X=${xVal} Y=${yVal}`);
+  }
+
+  hideModal("set-home-popup");
+
+  // xVal, yVal are the desired machine coordinates for the GCode origin (WPOS=0).
+  // G10 L20 P0 X{v} sets the current machine position as WPOS=v, so WCO = MPOS - v.
+  // To place origin at machine (xVal, yVal), we need WCO = (xVal, yVal),
+  // which means we set current WPOS = MPOS - xVal.
+  // MPOS is always in mm; convert to current display units for the G10 command.
+  const mposX = toDisplay(MPOS ? MPOS[0] : 0);
+  const mposY = toDisplay(MPOS ? MPOS[1] : 0);
+  const cmd = `G10 L20 P0 X${mposX - xVal} Y${mposY - yVal}`;
+  sendCommand(cmd);
+  addMessage(`Home pos set: X=${xVal} Y=${yVal}`);
+  setXYHomeBtnText(xyHomeLabelRedefined);
+  setTimeout(setXYHomeBtnText, 1000);
+
+  // Refresh the canvas once firmware confirms the WCO change.
+  // The WCO callback in grbl.js fires synchronously inside grblProcessStatus,
+  // before MPOS/WPOS are recalculated with the new WCO.  Using setTimeout(fn,0)
+  // defers refreshGcode until after grblProcessStatus finishes, ensuring WPOS
+  // is already updated when the canvas redraws.
+  // A fallback timeout handles slow connections or cases where WCO value is
+  // unchanged (callback won't fire).
+  const originalCallback = onWCOUpdateCallback;
+  let fallbackId = setTimeout(() => {
+    onWCOUpdateCallback = originalCallback;
+    refreshGcode();
+  }, 3000);
+
+  onWCOUpdateCallback = (newWCO, prevWCO) => {
+    clearTimeout(fallbackId);
+    onWCOUpdateCallback = originalCallback;
+    setTimeout(refreshGcode, 0);
+  };
+}
+
 const toggleUnits = () => {
   tabletClick()
   sendCommand(gCodeModal.units === 'G21' ? 'G20' : 'G21');
@@ -355,11 +470,7 @@ const moveHome = () => {
     return;
   }
 
-  //We want to move to the opposite of the machine's current X,Y cordinates
-  const x = Number.parseFloat(getText('mpos-x'));
-  const y = Number.parseFloat(getText('mpos-y'));
-
-  jog({ X: -1 * x, Y: -1 * y })
+  move({ X: 0, Y: 0 });
 }
 
 function saveSerialMessages() {
@@ -582,6 +693,9 @@ function scaleUnits(target) {
 
 function tabletUpdateModal() {
   const newUnits = gCodeModal.units === "G21" ? "mm" : "Inch";
+  const isInch = gCodeModal.units === "G20";
+  id("tablettab_toggle_units").style.backgroundColor = isInch ? "#e6c800" : "#f2f0e4";
+
   if (getValue("tablettab_toggle_units") === newUnits) {
     return;
   }
@@ -733,7 +847,7 @@ function tabletGrblState(grbl, response) {
   if (MPOS) {
     MPOS.forEach((pos, index) => {
       const axisName = axisNames[index].toUpperCase();
-      setTextContent(`mpos-${axisNames[index]}`, `(${axisName}m: ${Number(pos * factor).toFixed(index > 2 ? 2 : digits)})`);
+      setTextContent(`mpos-${axisNames[index]}`, `|${axisName}m: ${Number(pos * factor).toFixed(index > 2 ? 2 : digits)}|`);
     })
   }
 }
@@ -993,9 +1107,13 @@ function tabletInit() {
     id("tablettab_set_z_home").addEventListener("mouseup", tabletSetZHomeMUp);
     id("tablettab_move_to_xy_home").addEventListener("click", moveHome);
     id("tablettab_toggle_units").addEventListener("click", toggleUnits);
-    id("tablettab_set_xy_home").addEventListener("mousedown", setHomeClickDown);
-    id("tablettab_set_xy_home").addEventListener("mouseup", setHomeClickUp);
-    id("tablettab_set_xy_home").addEventListener("dblclick", setXYHome);
+    id("tablettab_set_xy_home").addEventListener("click", openSetHomePopup);
+
+    // Buttons - Set Home Pop-up
+    id("set-home-popup").addEventListener("click", () => hideModal("set-home-popup"));
+    id("set_home_popup_content").addEventListener("click", tabletPopupStopProp);
+    id("tablettab_set_home_cancel").addEventListener("click", () => hideModal("set-home-popup"));
+    id("tablettab_set_home_confirm").addEventListener("click", confirmSetHome);
 
     // Controls - Fifth Row
     id("filelist").addEventListener("change", selectFile);
@@ -1248,6 +1366,18 @@ function selectFile() {
   if (index === -2) {
     // Blank entry selected
     updateDeleteButtonState();
+    return;
+  }
+  if (index === -4) {
+    // Clear GCode from memory
+    gCodeFilename = "";
+    gCodeDisplayable = false;
+    showGCode("");
+    clearGCodeState();
+    // Reset dropdown to the first option (legend)
+    filelist.selectedIndex = 0;
+    updateDeleteButtonState();
+    addMessage("GCode cleared from memory");
     return;
   }
   if (index === -1) {

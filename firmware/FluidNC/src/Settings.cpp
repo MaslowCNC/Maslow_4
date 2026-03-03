@@ -9,6 +9,7 @@
 #include <map>
 #include <limits>
 #include <cstring>
+#include <cmath>
 #include <vector>
 #include <nvs.h>
 
@@ -409,6 +410,14 @@ bool Coordinates::load() {
         case ESP_OK:
             // Verify we got the expected amount of data
             if (len == sizeof(_currentValue)) {
+                // Check for NaN values that may have been stored previously due to
+                // kinematics producing NaN when belt lengths were invalid.
+                for (int i = 0; i < MAX_N_AXIS; i++) {
+                    if (std::isnan(_currentValue[i])) {
+                        log_error("Coordinates::load: NaN value detected for axis " << i << " in " << _name << ", resetting to defaults");
+                        return false;
+                    }
+                }
                 return true;
             }
             // If length mismatch, fall through to use defaults
@@ -426,6 +435,14 @@ bool Coordinates::load() {
 };
 
 void Coordinates::set(float value[MAX_N_AXIS]) {
+    // Validate that no NaN values are stored - NaN in coordinate offsets would
+    // permanently corrupt the home position stored in NVS.
+    for (int i = 0; i < MAX_N_AXIS; i++) {
+        if (std::isnan(value[i])) {
+            log_error("Coordinates::set: refusing to store NaN value for axis " << i << " in " << _name);
+            return;
+        }
+    }
     memcpy(&_currentValue, value, sizeof(_currentValue));
     if (FORCE_BUFFER_SYNC_DURING_NVS_WRITE) {
         protocol_buffer_synchronize();

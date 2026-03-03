@@ -119,6 +119,7 @@ namespace WebUI {
         _socket_server = new WebSocketsServer(_port + 1);
         _socket_server->begin();
         _socket_server->onEvent(handle_Websocket_Event);
+        log_info("WebSocket send protection active (canSend() checks enabled)");
 
         //events functions
         //_web_events->onConnect(handle_onevent_connect);

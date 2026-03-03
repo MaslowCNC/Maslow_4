@@ -891,6 +891,10 @@ static Error maslow_start_calibration(const char* value, WebUI::AuthenticationLe
         return Error::ConfigurationInvalid;
     }
     sys.set_state(State::Homing);
+    // requestStateChange(CALIBRATION_IN_PROGRESS) performs significant initialization work
+    // (memory allocation, grid generation, position computation). Reset the update watchdog
+    // before calling it to prevent a false emergency stop.
+    Maslow.resetUpdateWatchdog();
     Maslow.calibration.requestStateChange(CALIBRATION_IN_PROGRESS);
     return Error::Ok;
 }
@@ -899,8 +903,12 @@ static Error overwrite_config(const char* value, WebUI::AuthenticationLevel auth
     if (Maslow.using_default_config) {
         return Error::ConfigurationInvalid;
     }
-    // value will be ignored, we will use the config_filename value instead
-    return dump_config(config_filename->get(), auth_level, out);
+    // Writing to LittleFS can block the main loop for hundreds of milliseconds.
+    // Reset the update watchdog before and after to prevent a false emergency stop.
+    Maslow.resetUpdateWatchdog();
+    Error result = dump_config(config_filename->get(), auth_level, out);
+    Maslow.resetUpdateWatchdog();
+    return result;
 }
 
 static Error maslow_TLO(const char* value, WebUI::AuthenticationLevel auth_level, Channel& out) {
@@ -1182,6 +1190,9 @@ Error do_command_or_setting(const char* key, char* value, WebUI::AuthenticationL
         if (rts.isHandled_) {
             if (value) {
                 // Validate only if something changed, not for display
+                // Traversing the full config tree for validation can take significant time.
+                // Reset the update watchdog before validation to prevent a false emergency stop.
+                Maslow.resetUpdateWatchdog();
                 try {
                     Configuration::Validator validator;
                     config->validate();
@@ -1191,9 +1202,14 @@ Error do_command_or_setting(const char* key, char* value, WebUI::AuthenticationL
                     return Error::ConfigurationInvalid;
                 }
 
+                // Traversing the full config tree for afterParse can take significant time.
+                // Reset the update watchdog before and after to prevent a false emergency stop.
+                // This also serves as the post-validation watchdog reset.
+                Maslow.resetUpdateWatchdog();
                 Configuration::AfterParse afterParseHandler;
                 config->afterParse();
                 config->group(afterParseHandler);
+                Maslow.resetUpdateWatchdog();
             }
             return Error::Ok;
         }
