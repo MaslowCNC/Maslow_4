@@ -471,6 +471,11 @@ const moveHome = () => {
     return;
   }
 
+  const safeZ = 2;
+  const currentZ = (WPOS && WPOS[2] !== undefined) ? WPOS[2] : -Infinity;
+  if (currentZ < safeZ) {
+    sendCommand(`G90 G0 Z${safeZ}`);
+  }
   move({ X: 0, Y: 0 });
 }
 
