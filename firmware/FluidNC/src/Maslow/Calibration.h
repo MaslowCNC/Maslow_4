@@ -84,7 +84,7 @@ public:
     bool  orientation;
     float acceptableCalibrationThreshold = 0.5;
     int   calibrationGridSize            = 9;
-    float calibration_grid_width_mm_X    = 0;      // mm grid width (0 = auto-calculate as 50% of frame width)
+    float calibration_grid_width_mm_X    = 0;      // mm grid width (0 = auto-calculate as 35% of frame width)
     float calibration_grid_height_mm_Y   = 0;      // mm grid height (0 = auto-calculate as 20% of frame height)
     float calibrationMaxSpacingMm        = 260.0;  // Maximum allowed spacing between calibration points when auto-selecting grid size
     bool  calibrationInProgress;                   //Used to turn off regular movements during calibration

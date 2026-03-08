@@ -1414,29 +1414,40 @@ bool Calibration::generate_calibration_grid() {
     //Allocate memory for the calibration grid
     allocateCalibrationMemory();
 
+    // Get frame dimensions from anchor positions once for use in all constraints
+    auto kinematics = getKinematics();
+    if (!kinematics) {
+        log_error("generate_calibration_grid: MaslowKinematics not available");
+        return false;
+    }
+    float frameWidth  = kinematics->getTrX() - kinematics->getTlX();
+    float frameHeight = kinematics->getTlY() - kinematics->getBlY();
+
     float xSpacing = calibration_grid_width_mm_X / (calibrationGridSize - 1);
     float ySpacing = calibration_grid_height_mm_Y / (calibrationGridSize - 1);
 
-    //If either dimension is set to zero we automatically compute it as half the frame size
+    //If either dimension is set to zero we automatically compute it
     if (calibration_grid_height_mm_Y == 0 || calibration_grid_width_mm_X == 0) {
-        float frameWidth  = getKinematics()->getTrX() - getKinematics()->getTlX();
-        float frameHeight = getKinematics()->getTlY() - getKinematics()->getBlY();
+        // Calculate initial grid size based on frame dimensions.
+        // Use 35% of frame width (reduced from 50%) to keep calibration points a safe
+        // distance from anchors, preventing excessive belt tension on smaller frames.
+        float gridWidth  = frameWidth * 0.35f;
+        float gridHeight = frameHeight * 0.2f;
 
-        // Calculate initial grid size based on frame dimensions
-        float gridWidth  = frameWidth * 0.5;
-        float gridHeight = frameHeight * 0.2;
-
-        // Constrain grid to be at most 200mm less than work area to ensure it stays within bounds
-        float maxGridWidth  = Maslow.workAreaX - 200.0;
-        float maxGridHeight = Maslow.workAreaY - 200.0;
+        // Constrain grid based on both work area and frame dimensions to prevent
+        // calibration points from getting too close to the anchors.
+        // The frame-based limit (70% of frame dimension) ensures outer points keep at
+        // least 15% of the frame dimension as clearance from each anchor edge.
+        float maxGridWidth  = min(Maslow.workAreaX - 200.0f, frameWidth * 0.7f);
+        float maxGridHeight = min(Maslow.workAreaY - 200.0f, frameHeight * 0.7f);
 
         if (gridWidth > maxGridWidth) {
             gridWidth = maxGridWidth;
-            log_info("Grid width constrained to work area: " << gridWidth << " mm (work area X: " << Maslow.workAreaX << " mm)");
+            log_info("Grid width constrained: " << gridWidth << " mm");
         }
         if (gridHeight > maxGridHeight) {
             gridHeight = maxGridHeight;
-            log_info("Grid height constrained to work area: " << gridHeight << " mm (work area Y: " << Maslow.workAreaY << " mm)");
+            log_info("Grid height constrained: " << gridHeight << " mm");
         }
 
         // Automatically select the grid spacing (3x3, 5x5, 7x7, or 9x9) such that
@@ -1462,6 +1473,25 @@ bool Calibration::generate_calibration_grid() {
 
         xSpacing = gridWidth / (calibrationGridSize - 1);
         ySpacing = gridHeight / (calibrationGridSize - 1);
+    }
+
+    // Apply anchor-clearance constraint to both auto-computed and manual cases.
+    // Outer calibration points must stay within 40% of the frame dimension from center,
+    // ensuring at least 10% of the frame dimension as clearance from each anchor edge.
+    // This prevents excessive belt tension caused by calibration points being too close
+    // to anchor positions, particularly important on smaller frames.
+    int halfGrid = (calibrationGridSize - 1) / 2;
+    if (halfGrid > 0) {
+        float maxXSpacing = frameWidth  * 0.40f / halfGrid;
+        float maxYSpacing = frameHeight * 0.40f / halfGrid;
+        if (xSpacing > maxXSpacing) {
+            xSpacing = maxXSpacing;
+            log_info("Calibration X spacing clamped for anchor clearance: " << xSpacing << " mm/step");
+        }
+        if (ySpacing > maxYSpacing) {
+            ySpacing = maxYSpacing;
+            log_info("Calibration Y spacing clamped for anchor clearance: " << ySpacing << " mm/step");
+        }
     }
 
     int numberOfCycles = 0;
