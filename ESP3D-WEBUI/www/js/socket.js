@@ -160,6 +160,11 @@ const startSocket = () => {
 	ws_source.binaryType = "arraybuffer";
 	ws_source.onopen = (e) => {
 		console.log("Connected");
+		// Set up firmware auto-reporting immediately via WebSocket.
+		// Sending directly via WebSocket bypasses the HTTP/PAGEID routing,
+		// so it works before CURRENT_ID is received and is not affected by
+		// HTTP command queue ordering or PAGEID availability.
+		ws_source.send('$Report/Interval=50\n');
 		// Restore GCode state if any exists from previous session
 		// Use typeof check since this might be called before tablet.js is fully loaded
 		if (typeof restoreGCodeState === 'function') {
