@@ -160,10 +160,6 @@ const startSocket = () => {
 	ws_source.binaryType = "arraybuffer";
 	ws_source.onopen = (e) => {
 		console.log("Connected");
-		// Request status immediately to get current positions and machine state
-		if (typeof SendRealtimeCmd === 'function') {
-			SendRealtimeCmd(0x3f); // '?'
-		}
 		// Restore GCode state if any exists from previous session
 		// Use typeof check since this might be called before tablet.js is fully loaded
 		if (typeof restoreGCodeState === 'function') {
@@ -216,6 +212,13 @@ const startSocket = () => {
 				if (tval[0] === "CURRENT_ID") {
 					pageID(tval[1]);
 					console.log(`connection id = ${pageID()}`);
+					// Request status and start auto-reporting immediately now that we have the
+					// correct page ID. The firmware needs the page ID to route commands to the
+					// right WebSocket channel; without it the ? command is silently dropped.
+					// Also starts auto-reporting which resets the WCO counter so positions are
+					// included in the first response.
+					get_status?.();
+					tryAutoReport?.();
 				}
 				if (enable_ping) {
 					if (tval[0] === "PING") {
