@@ -833,6 +833,28 @@ function tabletGrblState(grbl, response) {
       scrollToLine(grbl.sdLineNumber);
     }
   }
+
+  // Auto-load GCode if machine is running/holding a file but nothing is loaded in this session
+  const machineRunningFile = ["Run", "Hold"].includes(stateName) && grbl.sdName;
+  const noGCodeLoadedLocally = !gCodeFilename && !gCodeLoaded;
+  const noLoadInProgress = !restoringGCodeState && !autoLoadingGCode;
+  if (machineRunningFile && noGCodeLoadedLocally && noLoadInProgress) {
+    autoLoadingGCode = true;
+    fetch(encodeURIComponent(`SD${grbl.sdName}`), { method: 'HEAD' })
+      .then((response) => {
+        if (response.ok) {
+          const contentLength = response.headers.get('Content-Length');
+          const size = contentLength ? parseInt(contentLength, 10) : 0;
+          tabletLoadGCodeFile(grbl.sdName, size);
+        }
+      })
+      .catch((error) => {
+        console.log('Error checking running GCode file:', error);
+      })
+      .finally(() => {
+        autoLoadingGCode = false;
+      });
+  }
   // Always update tool position, even without GCode loaded
   tpDisplayer().reDrawTool(gCodeModal, arrayToXYZ(WPOS));
 
@@ -856,6 +878,9 @@ let gCodeFilename = '';
 
 // Flag to prevent concurrent GCode state restoration attempts
 let restoringGCodeState = false;
+
+// Flag to prevent concurrent auto-load attempts when GCode is running
+let autoLoadingGCode = false;
 
 // GCode state persistence functions
 const saveGCodeState = () => {
