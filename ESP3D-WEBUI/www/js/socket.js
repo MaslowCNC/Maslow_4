@@ -160,6 +160,10 @@ const startSocket = () => {
 	ws_source.binaryType = "arraybuffer";
 	ws_source.onopen = (e) => {
 		console.log("Connected");
+		// Request status immediately to get current positions and machine state
+		if (typeof SendRealtimeCmd === 'function') {
+			SendRealtimeCmd(0x3f); // '?'
+		}
 		// Restore GCode state if any exists from previous session
 		// Use typeof check since this might be called before tablet.js is fully loaded
 		if (typeof restoreGCodeState === 'function') {

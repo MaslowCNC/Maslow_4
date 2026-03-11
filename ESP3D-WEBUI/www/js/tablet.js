@@ -627,7 +627,12 @@ function doPlayButton() {
     playButtonHandler()
   }
 
-  addMessage(`Starting File: ${id('filelist').options[selectElement.selectedIndex].text}`);
+  if (playButtonHandler === runGCode) {
+    const filelist = id('filelist');
+    if (filelist && filelist.selectedIndex >= 0) {
+      addMessage(`Starting File: ${filelist.options[filelist.selectedIndex].text}`);
+    }
+  }
 }
 
 // var pauseButtonHandler
