@@ -544,6 +544,43 @@ function tabletShowMessage(msg, collecting) {
 
 function tabletShowResponse(response) { }
 
+// Alarm code descriptions matching firmware Protocol.cpp AlarmNames
+const alarmCodeNames = {
+  1: 'Hard Limit',
+  2: 'Soft Limit',
+  3: 'Abort Cycle',
+  4: 'Probe Fail (no initial contact)',
+  5: 'Probe Fail (contact lost)',
+  6: 'Homing Fail (reset during cycle)',
+  7: 'Homing Fail (door opened)',
+  8: 'Homing Fail (pulloff failed)',
+  9: 'Homing Fail (approach failed)',
+  10: 'Spindle Control Error',
+  11: 'Control Pin Active at Startup',
+  12: 'Ambiguous Homing Switch',
+}
+
+function buildAlarmBannerContent() {
+  const isEStop = typeof lastEStopMessage !== 'undefined' && lastEStopMessage.length > 0;
+  const code = typeof lastAlarmCode !== 'undefined' ? lastAlarmCode : 0;
+  // codeName and lastEStopMessage are both hardcoded JS constants (not firmware/user input)
+  const codeName = alarmCodeNames[code] || null;
+
+  let html = '<strong>&#x26A0; Red LED is blinking &#8212; Machine Alarm</strong>';
+
+  if (isEStop) {
+    html += '<div style="font-size:12px;margin-top:4px;">Cause: ' + lastEStopMessage + '</div>';
+    html += '<div style="font-size:12px;margin-top:4px;">&#x26D4; Not recoverable by clicking &#8212; turn the machine off and back on to reset.</div>';
+  } else if (codeName) {
+    html += '<div style="font-size:12px;margin-top:4px;">Cause: ' + codeName + ' (ALARM:' + code + ')</div>';
+    html += '<div style="font-size:12px;margin-top:4px;">&#x2714; Click here to try clearing the alarm ($X unlock). If the LED continues to blink, turn the machine off and back on.</div>';
+  } else {
+    html += '<div style="font-size:12px;margin-top:4px;">Click to try clearing the alarm. If the LED continues to blink, turn the machine off and back on to reset.</div>';
+  }
+
+  return html;
+}
+
 function clearAlarm() {
   if (getText('systemStatus') === 'Alarm') {
     id('systemStatus').classList.remove('system-status-alarm')
@@ -751,7 +788,15 @@ function tabletGrblState(grbl, response) {
   // Show or hide the red LED alarm notification banner
   const alarmBanner = id('alarm-notification-banner');
   if (alarmBanner) {
-    alarmBanner.style.display = stateName === 'Alarm' ? 'block' : 'none';
+    if (stateName === 'Alarm') {
+      const msgDiv = id('alarm-banner-msg');
+      if (msgDiv) {
+        msgDiv.innerHTML = buildAlarmBannerContent();
+      }
+      alarmBanner.style.display = 'block';
+    } else {
+      alarmBanner.style.display = 'none';
+    }
   }
 
   switch (stateName) {

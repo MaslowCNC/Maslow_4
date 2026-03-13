@@ -128,8 +128,7 @@
         <!-- Red LED alarm notification banner - shown when machine enters Alarm state -->
         <div id="alarm-notification-banner" class="maslow-grid-container tablettab-controls-item" style="display: none; grid-template-columns: auto;">
           <div class="maslow-grid-item" style="background-color: #f8d7da; border: 1px solid #f5c2c7; padding: 8px; text-align: center; cursor: pointer;" onclick="clearAlarm()">
-            <strong>&#x26A0; Red LED is blinking — Machine Alarm</strong>
-            <div style="font-size: 12px; margin-top: 4px;">The red LED indicates the machine has stopped due to an error. Click to try clearing the alarm. If the LED continues to blink, turn the machine off and back on to reset.</div>
+            <div id="alarm-banner-msg"></div>
           </div>
         </div>
         <div class="maslow-grid-container tablettab-controls-item" style="grid-template-columns: auto;">

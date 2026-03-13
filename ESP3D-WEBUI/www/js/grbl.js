@@ -1,9 +1,14 @@
 // When we can change to proper ESM - uncomment this
 // import { sendCommand } from "./maslow";
 
-var interval_status = -1
+const ESTOP_MSG_PREFIX = '[MSG:ERR: Emergency stop';
+const ESTOP_DISPLAY_MSG = 'Emergency stop triggered.';
+
+
 var probe_progress_status = 0
 var grbl_error_msg = ''
+var lastAlarmCode = 0
+var lastEStopMessage = ''
 var WCO = undefined
 var OVR = { feed: undefined, rapid: undefined, spindle: undefined }
 var MPOS = [0, 0, 0]
@@ -150,6 +155,8 @@ function init_grbl_panel() {
 function grbl_clear_status() {
   grbl_set_probe_detected(false)
   grbl_error_msg = ''
+  lastAlarmCode = 0
+  lastEStopMessage = ''
   setHTML('grbl_status_text', grbl_error_msg)
   setHTML('grbl_status', '')
 }
@@ -891,6 +898,10 @@ const grblHandleMessage = (msg) => {
     return;
   }
   if (valueStartsWith(msg, ["[MSG:"])) {
+    // Detect Maslow emergency stop (non-recoverable, requires power cycle)
+    if (msg.startsWith(ESTOP_MSG_PREFIX)) {
+      lastEStopMessage = ESTOP_DISPLAY_MSG;
+    }
     // Check for motor current debugging messages
     if (typeof parseMotorCurrentMessage === 'function' && parseMotorCurrentMessage(msg)) {
       return;
@@ -910,6 +921,10 @@ const grblHandleMessage = (msg) => {
     }
     if (grbl_error_msg.length === 0) {
       grbl_error_msg = translate_text_item(msg.trim());
+    }
+    // Capture alarm code for the banner
+    if (msg.startsWith('ALARM:')) {
+      lastAlarmCode = parseInt(msg.replace('ALARM:', '').trim(), 10) || 0;
     }
     return;
   }
