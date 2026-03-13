@@ -221,7 +221,7 @@ bool Calibration::requestStateChange(int newState) {
                     log_info("Machine Position found as X: " << x << " Y: " << y);
 
                     //Set the internal machine position using actual belt positions to avoid synchronization issues
-                    // Get current belt positions from hardware and set motor steps directly
+                    // Get current belt positions from hardware and set motor steps directly 
                     float beltLength[ARM_COUNT];
                     for (int arm = _TL; arm < ARM_COUNT; arm++) {
                         beltLength[arm] = Maslow.axis[arm].getPosition();  // Actual belt position from hardware
