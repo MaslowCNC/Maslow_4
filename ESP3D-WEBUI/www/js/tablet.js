@@ -748,6 +748,12 @@ function tabletGrblState(grbl, response) {
 
   tabletUpdateModal()
 
+  // Show or hide the red LED alarm notification banner
+  const alarmBanner = id('alarm-notification-banner');
+  if (alarmBanner) {
+    alarmBanner.style.display = stateName === 'Alarm' ? 'block' : 'none';
+  }
+
   switch (stateName) {
     case 'Sleep':
     case 'Alarm':
