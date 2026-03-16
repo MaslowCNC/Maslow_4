@@ -163,6 +163,10 @@ public:
     float workAreaCenterOffsetX = 0.0;
     float workAreaCenterOffsetY = 0.0;
 
+    // Maximum motor PWM output during normal cutting operations (0-1023).
+    // Limiting this prevents excessive belt tension when approaching corners.
+    float maxBeltForce = 700.0;
+
     bool test         = false;
     bool debugEnabled = false;
 

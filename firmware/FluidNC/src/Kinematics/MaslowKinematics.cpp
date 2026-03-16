@@ -335,7 +335,13 @@ namespace Kinematics {
 
         float XYlength = sqrt(a * a + b * b);  // Get the distance in the XY plane from the corner to the router center
         float XYBeltLength =
-            XYlength - (_beltEndExtension + _armLength);           // Subtract the belt end extension and arm length to get the belt length
+            XYlength - (_beltEndExtension + _armLength);  // Subtract the belt end extension and arm length to get the belt length
+        // Clamp to zero: if the router is closer to the anchor than the arm + belt-end
+        // extension (physically impossible during normal operation), treat it as if it
+        // is exactly at that minimum distance rather than producing a mathematically
+        // symmetric but physically wrong result that would cause the motor to fight
+        // against the belt and create excessive tension.
+        XYBeltLength = std::max(0.0f, XYBeltLength);
         float length = sqrt(XYBeltLength * XYBeltLength + c * c);  // Get the angled belt length
 
         return length;

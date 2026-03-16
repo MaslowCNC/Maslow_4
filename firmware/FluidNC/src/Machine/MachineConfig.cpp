@@ -114,6 +114,10 @@ namespace Machine {
         handler.item(M + "_Work_Area_Center_Offset_X", Maslow.workAreaCenterOffsetX, -5000.0, 5000.0);
         handler.item(M + "_Work_Area_Center_Offset_Y", Maslow.workAreaCenterOffsetY, -5000.0, 5000.0);
 
+        // Maximum motor PWM during normal cutting (100-1023). Lower values reduce
+        // belt tension when approaching corners at the cost of slower response.
+        handler.item(M + "_Max_Belt_Force", Maslow.maxBeltForce, 100.0, 1023.0);
+
         // Material thickness parameters - temporary storage for machine-level config
         handler.item(M + "_spoilboardThickness", _tempSpoilboardThickness, 0.0, 50.0);
         handler.item(M + "_workThickness", _tempWorkThickness, 0.0, 50.0);

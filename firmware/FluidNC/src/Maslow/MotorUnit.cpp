@@ -152,6 +152,15 @@ double MotorUnit::getPositionError() {
 double MotorUnit::recomputePID() {
     _commandPWM = positionPID.getOutput(getPosition(), setpoint);
 
+    // Clamp to the configurable maximum belt force to prevent excessive belt
+    // tension, especially when approaching corners where one belt must retract
+    // quickly while others resist.
+    if (_commandPWM > Maslow.maxBeltForce) {
+        _commandPWM = Maslow.maxBeltForce;
+    } else if (_commandPWM < -Maslow.maxBeltForce) {
+        _commandPWM = -Maslow.maxBeltForce;
+    }
+
     motor.runAtPWM(_commandPWM);
 
     return _commandPWM;

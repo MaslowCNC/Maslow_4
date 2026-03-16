@@ -36,6 +36,7 @@ const CONFIG_TOOLTIPS = {
   Maslow_Scale_X: "Sets the scale factor for the x axis",
   Maslow_Scale_Y: "Sets the scale factor for the y axis",
   Maslow_Extend_Dist: "Sets the distance to extend the belts during the calibration process. Max 4,250mm.",
+  Maslow_Max_Belt_Force: `Sets the maximum motor output (100-1023) applied to each belt during cutting. Lower values reduce belt tension when approaching corners. Default is 700.`,
 }
 
 function refreshSettings(hide_setting_list) {
