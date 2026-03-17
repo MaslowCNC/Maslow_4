@@ -1385,9 +1385,12 @@ function runGCode() {
     sendCommand(cmd);
     // Clear persisted GCode state so a second browser instance or a page
     // reload cannot accidentally trigger a second run of the same job.
-    // In-memory state (gCodeFilename, gCodeLoaded) is preserved for the
-    // current window so the play/pause/stop buttons keep working normally.
     clearGCodeState();
+    // Disable the Start button immediately to prevent accidental double-runs.
+    // gCodeFilename remains set so Pause/Stop keep working normally.
+    // The user must re-select the file to run it again after the job completes.
+    gCodeLoaded = false;
+    setRunControls();
   }
   setTimeout(() => { SendRealtimeCmd(0x7e); }, 1500);
   // expandVisualizer()
