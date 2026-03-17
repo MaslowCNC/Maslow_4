@@ -199,6 +199,11 @@ void AllChannels::registration(Channel* channel) {
     _channelq.push_back(channel);
     _mutex.unlock();
 }
+void AllChannels::registrationFront(Channel* channel) {
+    _mutex.lock();
+    _channelq.insert(_channelq.begin(), channel);
+    _mutex.unlock();
+}
 void AllChannels::deregistration(Channel* channel) {
     _mutex.lock();
     if (channel == _lastChannel) {

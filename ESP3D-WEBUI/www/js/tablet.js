@@ -785,6 +785,14 @@ function tabletGrblState(grbl, response) {
 
   tabletUpdateModal()
 
+  // When a stop was requested and the machine is now Idle or Alarm, cancel
+  // further retries.  Idle = normal stop; Alarm = stop triggered an alarm
+  // (e.g. watchdog fired mid-stop).  Either way the machine is no longer
+  // running, so continuing to send $STOP would be harmful.
+  if (_stopPending && (stateName === 'Idle' || stateName === 'Alarm')) {
+    _stopPending = false;
+  }
+
   // Show or hide the red LED alarm notification banner
   const alarmBanner = id('alarm-notification-banner');
   if (alarmBanner) {
@@ -1004,13 +1012,80 @@ const tabletMoveBottomRight = () => sendMove("X+Y-");
 const tabletSetZHomeMDown = () => zeroAxis("Z");
 const tabletSetZHomeMUp = () => refreshGcode();
 // Button event handlers - Fifth Row - nothing special here, move on
+
+// Send a command directly via WebSocket to bypass PAGEID routing.
+// Returns true if the command was sent, false if the WebSocket is not open.
+const sendViaWS = (cmd) => {
+  if (ws_source && ws_source.readyState === WebSocket.OPEN) {
+    try {
+      ws_source.send(cmd);
+      return true;
+    } catch (e) {
+      console.warn("WebSocket send failed:", e);
+    }
+  }
+  return false;
+};
+
+// True when a stop has been requested but not yet confirmed delivered.
+// onWSOpenCallback sends $STOP on every WebSocket (re)connect while this
+// flag is set, so the command reaches the firmware before any auto-reports
+// start flowing.
+let _stopPending = false;
+
+// Called from ws_source.onopen (socket.js) on every WebSocket (re)connect.
+// Does NOT clear _stopPending — tabletGrblState clears it once the firmware
+// confirms the machine is no longer running (stateName === 'Idle').
+const onWSOpenCallback = () => {
+  if (_stopPending) {
+    try {
+      ws_source.send("$STOP\n");
+    } catch (e) {
+      console.warn("Failed to send pending $STOP on connect:", e);
+    }
+  }
+};
+
+// Send $STOP directly via WebSocket to bypass PAGEID routing.
+// Sets _stopPending and retries every 300 ms for up to ~10 seconds.
+// _stopPending is cleared by tabletGrblState when the firmware confirms
+// the machine is Idle, or by the timeout.  onWSOpenCallback also sends
+// $STOP as the very first message on every WebSocket (re)connect while
+// the flag is set, so the command survives a TCP drop between send and
+// firmware processing.
+const sendStopCommand = () => {
+  const RETRY_INTERVAL_MS = 300;
+  const MAX_RETRY_ATTEMPTS = 33; // 33 * 300ms ≈ 10 seconds
+  _stopPending = true;
+  sendViaWS("$STOP\n"); // Try immediately; keep _stopPending for retries
+  let attempts = 0;
+  const retryTimer = setInterval(() => {
+    if (!_stopPending) {
+      clearInterval(retryTimer);
+      return;
+    }
+    sendViaWS("$STOP\n");
+    if (++attempts >= MAX_RETRY_ATTEMPTS) {
+      _stopPending = false;
+      clearInterval(retryTimer);
+      console.warn("$STOP retry limit reached without firmware confirmation; machine may not have stopped");
+    }
+  }, RETRY_INTERVAL_MS);
+  scheduleCallback(() => {
+    if (!sendViaWS("$MINFO\n")) {
+      sendCommand('$MINFO');
+    }
+  }, 1000);
+};
+
 // Button event handlers - Sixth Row
 const tabletGCodeStop = () => {
   const stopBtn = id("tablettab_gcode_stop");
   if (stopBtn) {
     stopBtn.style.backgroundColor = orange;
   }
-  onCalibrationButtonsClick("$STOP", "Stop Maslow and Gcode");
+  addMessage("Stop Maslow and Gcode");
+  sendStopCommand();
 };
 
 const resetStopButtonColors = () => {
@@ -1063,7 +1138,8 @@ const tabletCalStop = () => {
   if (stopBtn) {
     stopBtn.style.setProperty('background-color', orange, 'important');
   }
-  onCalibrationButtonsClick("$STOP", "Stop");
+  addMessage("Stop");
+  sendStopCommand();
   returnFocusToTablet();
 };
 const tabletCalSetZStop = () => {

@@ -160,6 +160,11 @@ const startSocket = () => {
 	ws_source.binaryType = "arraybuffer";
 	ws_source.onopen = (e) => {
 		console.log("Connected");
+		// Fire the open callback first so that critical commands (e.g. $STOP)
+		// are sent before any auto-reports start filling the TX buffer.
+		if (typeof onWSOpenCallback === 'function') {
+			onWSOpenCallback();
+		}
 		// Restore GCode state if any exists from previous session
 		// Use typeof check since this might be called before tablet.js is fully loaded
 		if (typeof restoreGCodeState === 'function') {
