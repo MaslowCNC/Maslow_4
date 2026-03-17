@@ -1383,6 +1383,11 @@ function runGCode() {
   if (gCodeFilename) {
     const cmd = `$sd/run=${gCodeFilename}`;
     sendCommand(cmd);
+    // Clear persisted GCode state so a second browser instance or a page
+    // reload cannot accidentally trigger a second run of the same job.
+    // In-memory state (gCodeFilename, gCodeLoaded) is preserved for the
+    // current window so the play/pause/stop buttons keep working normally.
+    clearGCodeState();
   }
   setTimeout(() => { SendRealtimeCmd(0x7e); }, 1500);
   // expandVisualizer()
