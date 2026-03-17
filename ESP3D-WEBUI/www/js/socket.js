@@ -61,6 +61,22 @@ const restorePingAfterUpload = () => {
 };
 
 let log_off = false;
+
+// Reset all disabled-state flags and restart ping monitoring after a
+// successful WebSocket reconnection.  Called from onopen (stale-timer path)
+// and from UIdisabledDlgReconnect (user-initiated reconnect button path).
+const resetConnectionState = () => {
+	log_off = false;
+	http_communication_locked = false;
+	interval_ping = -1;  // Reset so handlePing() can start a fresh interval
+	last_ping = Date.now();
+	handlePing();
+	// Close the "connection lost" modal if it is still visible
+	const disabledModal = id("UIdisableddlg.html");
+	if (disabledModal && disabledModal.style.display !== "none") {
+		closeModal("Reconnected");
+	}
+};
 const Disable_interface = (lostconnection) => {
 	let lostcon = false;
 	if (typeof lostconnection !== "undefined") lostcon = lostconnection;
@@ -69,6 +85,7 @@ const Disable_interface = (lostconnection) => {
 	log_off = true;
 	if (interval_ping !== -1) {
 		clearInterval(interval_ping);
+		interval_ping = -1;  // Reset so ping monitoring can restart on reconnect
 	}
 	//clear all waiting commands
 	clear_cmd_list();
@@ -160,6 +177,13 @@ const startSocket = () => {
 	ws_source.binaryType = "arraybuffer";
 	ws_source.onopen = (e) => {
 		console.log("Connected");
+		// Re-enable the interface if it was disabled due to a lost connection.
+		// This handles the case where the ping timeout fired (setting log_off=true
+		// and http_communication_locked=true) but a pending reconnect timer
+		// subsequently re-established the WebSocket connection.
+		if (log_off) {
+			resetConnectionState();
+		}
 		// Fire the open callback first so that critical commands (e.g. $STOP)
 		// are sent before any auto-reports start filling the TX buffer.
 		if (typeof onWSOpenCallback === 'function') {
