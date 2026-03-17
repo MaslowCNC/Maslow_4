@@ -189,9 +189,13 @@ const startSocket = () => {
 		if (typeof onWSOpenCallback === 'function') {
 			onWSOpenCallback();
 		}
-		// Restore GCode state if any exists from previous session
-		// Use typeof check since this might be called before tablet.js is fully loaded
-		if (typeof restoreGCodeState === 'function') {
+		// Restore GCode state only on a fresh page load (gCodeFilename is '').
+		// On reconnects, gCodeFilename is already in JS memory — no reload
+		// needed, and re-running restoreGCodeState() would re-enable the Start
+		// button even if GCode already completed while disconnected, causing
+		// the user to inadvertently start a second run.
+		if (typeof restoreGCodeState === 'function' &&
+				(typeof gCodeFilename === 'undefined' || !gCodeFilename)) {
 			restoreGCodeState();
 		}
 	};
