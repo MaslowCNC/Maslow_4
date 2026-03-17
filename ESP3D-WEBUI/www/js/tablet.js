@@ -759,10 +759,24 @@ function tabletGrblState(grbl, response) {
   switch (stateName) {
     case 'Sleep':
     case 'Alarm':
+      if (_gCodeWasRunning) {
+        _gCodeWasRunning = false;
+        delete_localdata('gCodeRunning');
+      }
       setPlayButton(true, gray, 'Start', null)
       //setPauseButton(false, gray, 'Pause', null)
       break
     case 'Idle':
+      if (_gCodeWasRunning) {
+        // GCode run (or stop) completed on this browser.  Re-enable the Start
+        // button and restore localStorage so other browsers can also re-run.
+        _gCodeWasRunning = false;
+        delete_localdata('gCodeRunning');
+        if (gCodeFilename) {
+          gCodeLoaded = true;
+          saveGCodeState();
+        }
+      }
       setRunControls()
       break
     case 'Hold':
@@ -880,10 +894,26 @@ const saveGCodeState = () => {
 const clearGCodeState = () => {
   delete_localdata('gCodeFilename');
   delete_localdata('gCodeLoaded');
+  delete_localdata('gCodeRunning');
   console.log('GCode state cleared');
 };
 
 const restoreGCodeState = () => {
+  // Don't restore if a file is already loaded in memory.
+  // This handles WS reconnects on the same browser page — the in-memory
+  // gCodeFilename is still correct, no localStorage lookup needed.
+  if (gCodeFilename) {
+    return;
+  }
+
+  // Don't fetch the file from SD while the firmware is executing GCode from SD.
+  // Concurrent SD access (HTTP read vs. firmware execution) causes the firmware's
+  // file-read position to reset, which restarts the GCode or causes unexpected movement.
+  if (get_localdata('gCodeRunning') === 'true') {
+    console.log('GCode is running on firmware, skipping state restoration to avoid SD card conflicts');
+    return;
+  }
+
   // Prevent concurrent restoration attempts
   if (restoringGCodeState) {
     console.log('GCode restoration already in progress, skipping');
@@ -981,6 +1011,14 @@ const sendViaWS = (cmd) => {
 // flag is set, so the command reaches the firmware before any auto-reports
 // start flowing.
 let _stopPending = false;
+
+// True when this browser instance started a GCode run.  Cleared when the
+// machine transitions to Idle (or Alarm/Sleep), at which point we re-enable
+// the Start button and save state to localStorage so other browsers can pick
+// it up.  Only the browser that called runGCode() sets this flag, so there is
+// no race condition with other browser instances that may also receive the Idle
+// status report.
+let _gCodeWasRunning = false;
 
 // Called from ws_source.onopen (socket.js) on every WebSocket (re)connect.
 // Does NOT clear _stopPending — tabletGrblState clears it once the firmware
@@ -1333,6 +1371,19 @@ function runGCode() {
     const cmd = `$sd/run=${gCodeFilename}`;
     sendCommand(cmd);
   }
+  // Signal to all browser instances that GCode is now running.  Other browsers
+  // must not fetch the file from SD while the firmware is executing it — doing
+  // so causes SD card access conflicts that reset the read position, restarting
+  // the GCode or causing unexpected machine movement.
+  _gCodeWasRunning = true;
+  // Clear the filename/loaded keys so other browsers don't attempt an SD fetch.
+  // gCodeFilename stays set in this browser's memory for Pause/Resume/Stop.
+  // clearGCodeState() also removes gCodeRunning, so we re-set it immediately after.
+  clearGCodeState();
+  store_localdata('gCodeRunning', 'true');
+  // Disable the Start button on this browser until the run finishes.
+  gCodeLoaded = false;
+  setRunControls();
   setTimeout(() => { SendRealtimeCmd(0x7e); }, 1500);
   // expandVisualizer()
 }
