@@ -814,10 +814,6 @@ function tabletGrblState(grbl, response) {
       //setPauseButton(false, gray, 'Pause', null)
       break
     case 'Idle':
-      // Machine is confirmed idle — no job is active.  Clear any persisted
-      // running flag so future page loads (including second browser instances)
-      // can restore the file and show the Start button normally.
-      delete_localdata('gCodeRunning');
       setRunControls()
       break
     case 'Hold':
@@ -935,7 +931,6 @@ const saveGCodeState = () => {
 const clearGCodeState = () => {
   delete_localdata('gCodeFilename');
   delete_localdata('gCodeLoaded');
-  delete_localdata('gCodeRunning');
   console.log('GCode state cleared');
 };
 
@@ -948,17 +943,8 @@ const restoreGCodeState = () => {
 
   const savedFilename = get_localdata('gCodeFilename');
   const savedLoaded = get_localdata('gCodeLoaded');
-  const savedRunning = get_localdata('gCodeRunning');
 
   if (savedFilename && savedLoaded === 'true') {
-    // If another browser instance dispatched a job that may still be running,
-    // do not auto-enable the Start button.  The machine's live state (Run →
-    // Idle) will clear this flag via tabletGrblState once it is confirmed idle.
-    if (savedRunning === 'true') {
-      console.log('GCode restore suppressed: job was dispatched from another window');
-      return;
-    }
-
     console.log(`Restoring GCode state: ${savedFilename}`);
     restoringGCodeState = true;
 
@@ -1397,15 +1383,11 @@ function runGCode() {
   if (gCodeFilename) {
     const cmd = `$sd/run=${gCodeFilename}`;
     sendCommand(cmd);
-    // Mark the job as dispatched in localStorage.  A second fresh browser
-    // instance will find this flag via restoreGCodeState() and will NOT
-    // auto-enable the Start button, preventing an accidental second run.
-    // The flag is cleared when any browser observes the machine go Idle
-    // (tabletGrblState), or when the file is explicitly unloaded
-    // (clearGCodeState).  gCodeFilename and gCodeLoaded remain in
-    // localStorage so the user's own browser can still see the file after
-    // a page reload once the job has completed.
-    store_localdata('gCodeRunning', 'true');
+    // Clear persisted GCode state so a second browser instance or a page
+    // reload cannot accidentally trigger a second run of the same job.
+    // In-memory state (gCodeFilename, gCodeLoaded) is preserved for the
+    // current window so the play/pause/stop buttons keep working normally.
+    clearGCodeState();
   }
   setTimeout(() => { SendRealtimeCmd(0x7e); }, 1500);
   // expandVisualizer()
