@@ -759,19 +759,23 @@ function tabletGrblState(grbl, response) {
   switch (stateName) {
     case 'Sleep':
     case 'Alarm':
+      // Always clear gCodeRunning so a stale flag from a closed/crashed browser
+      // doesn't permanently block file loading on other browsers.
+      delete_localdata('gCodeRunning');
       if (_gCodeWasRunning) {
         _gCodeWasRunning = false;
-        delete_localdata('gCodeRunning');
       }
       setPlayButton(true, gray, 'Start', null)
       //setPauseButton(false, gray, 'Pause', null)
       break
     case 'Idle':
+      // Always clear gCodeRunning — any browser that observes the machine go Idle
+      // can clean up the flag, even if it wasn't the one that started the run.
+      delete_localdata('gCodeRunning');
       if (_gCodeWasRunning) {
         // GCode run (or stop) completed on this browser.  Re-enable the Start
         // button and restore localStorage so other browsers can also re-run.
         _gCodeWasRunning = false;
-        delete_localdata('gCodeRunning');
         if (gCodeFilename) {
           gCodeLoaded = true;
           saveGCodeState();
