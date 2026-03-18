@@ -80,15 +80,22 @@ const cancelReconnectTimer = () => {
 // A page reload is blocked by the firmware's http_block_during_motion setting
 // while GCode is running, which prevents the user from regaining control after
 // a dropped connection.  Reconnecting only the WebSocket bypasses that block.
+//
+// NOTE: handlePing() is intentionally NOT called here.  Calling it before the
+// WebSocket connects starts the 20-second check_ping() timer immediately.  If
+// the firmware is still unreachable and the WebSocket keeps failing, check_ping()
+// fires Disable_interface() again — overriding the user's reconnect attempt
+// before a stable connection can be established.  Instead, handlePing() is called
+// from startSocket()'s onopen so the timer only begins when the socket is open.
 const resetConnectionState = () => {
 	log_off = false;
 	http_communication_locked = false;
-	// Clear any stale ping interval and restart it
+	// Clear any stale ping interval.  The new interval is started in onopen
+	// once the WebSocket actually connects.
 	if (interval_ping !== -1) {
 		clearInterval(interval_ping);
 		interval_ping = -1;
 	}
-	handlePing();
 	// Close the "You are disconnected" dialog
 	closeModal("Reconnecting");
 	// Open a fresh WebSocket connection
@@ -107,6 +114,7 @@ const Disable_interface = (lostconnection) => {
 	cancelReconnectTimer();
 	if (interval_ping !== -1) {
 		clearInterval(interval_ping);
+		interval_ping = -1;
 	}
 	//clear all waiting commands
 	clear_cmd_list();
@@ -120,7 +128,15 @@ const Disable_interface = (lostconnection) => {
 		event_source.removeEventListener("InitID", Init_events, false);
 		event_source.removeEventListener("DHT", DHT_events, false);
 	}
-	ws_source.close();
+	// Nullify handlers before closing so the onclose event cannot schedule
+	// another startSocket() call (which would bypass the disconnect dialog).
+	if (ws_source) {
+		ws_source.onopen   = null;
+		ws_source.onclose  = null;
+		ws_source.onerror  = null;
+		ws_source.onmessage = null;
+		try { ws_source.close(); } catch (e) { /* ignore */ }
+	}
 	document.title += `('${HTMLDecode(translate_text_item("Disabled"))})`;
 	UIdisableddlg(lostcon);
 };
@@ -216,6 +232,13 @@ const startSocket = () => {
 	ws_source.binaryType = "arraybuffer";
 	ws_source.onopen = (e) => {
 		console.log("Connected");
+		// Start (or restart) the ping watchdog now that the socket is open.
+		// Doing this here rather than in resetConnectionState() prevents the
+		// 20-second check_ping() timer from ticking during connection attempts.
+		// If the firmware is unreachable and the WebSocket keeps failing,
+		// starting the timer early would cause check_ping() to fire
+		// Disable_interface() again — overriding the user's reconnect attempt.
+		handlePing();
 		// Fire the open callback first so that critical commands (e.g. $STOP)
 		// are sent before any auto-reports start filling the TX buffer.
 		if (typeof onWSOpenCallback === 'function') {
