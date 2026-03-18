@@ -898,6 +898,16 @@ const clearGCodeState = () => {
   console.log('GCode state cleared');
 };
 
+// Clear only the file-selection keys from localStorage, leaving gCodeRunning untouched.
+// Use this instead of clearGCodeState() when the user navigates the file browser or
+// deletes a file — gCodeRunning has its own lifecycle (runGCode → tabletGrblState Idle/Alarm)
+// and must not be cleared by unrelated file-browser actions while a job is running.
+const clearFileSelectionState = () => {
+  delete_localdata('gCodeFilename');
+  delete_localdata('gCodeLoaded');
+  console.log('GCode file selection state cleared');
+};
+
 const restoreGCodeState = () => {
   // Don't restore if a file is already loaded in memory.
   // This handles WS reconnects on the same browser page — the in-memory
@@ -1389,6 +1399,13 @@ function runGCode() {
 }
 
 function tabletLoadGCodeFile(path, size) {
+  // Do not fetch from SD while GCode is executing. Concurrent SD card access
+  // (HTTP read vs. firmware GCode execution read) can corrupt the SD state,
+  // causing firmware hangs, watchdog fires, and machine non-responsiveness.
+  if (get_localdata('gCodeRunning') === 'true') {
+    addMessage('Cannot load GCode preview while a job is running. Stop the job first.');
+    return;
+  }
   gCodeFilename = path
   if ((Number.isNaN(size) && size.endsWith('GB')) || size > 10000000) {
     showGCode('GCode file too large to display (> 1MB)');
@@ -1536,7 +1553,7 @@ function selectFile() {
     gCodeFilename = "";
     gCodeDisplayable = false;
     showGCode("");
-    clearGCodeState();
+    clearFileSelectionState();
     // Reset dropdown to the first option (legend)
     filelist.selectedIndex = 0;
     updateDeleteButtonState();
@@ -1546,7 +1563,7 @@ function selectFile() {
   if (index === -1) {
     // Go up
     gCodeFilename = "";
-    clearGCodeState();
+    clearFileSelectionState();
     files_go_levelup()
     updateDeleteButtonState();
     return
@@ -1555,7 +1572,7 @@ function selectFile() {
   const filename = file.name;
   if (file.isdir) {
     gCodeFilename = "";
-    clearGCodeState();
+    clearFileSelectionState();
     files_enter_dir(filename);
   } else {
     tabletLoadGCodeFile(`${files_currentPath()}${filename}`, file.size);
@@ -1904,8 +1921,8 @@ function tabletFileDeleteSuccess(response) {
   gCodeFilename = "";
   showGCode(""); // Clear the GCode display
 
-  // Clear the saved GCode state
-  clearGCodeState();
+  // Clear the saved GCode state (file selection only; gCodeRunning is managed by runGCode/tabletGrblState)
+  clearFileSelectionState();
 
   // Reset the dropdown to the first option immediately
   const filelist = id("filelist");
