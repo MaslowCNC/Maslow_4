@@ -62,6 +62,20 @@ const restorePingAfterUpload = () => {
 
 let log_off = false;
 
+// Tracks any pending auto-reconnect timer so it can be cancelled when a
+// connection is established or the interface is deliberately disabled.
+// Without this, a stale timer left over from a previous disconnect fires
+// startSocket() 3 s after the user already reconnected — tearing down the
+// good connection and making sessions prone to dropping out after a failure.
+let reconnect_timer = null;
+
+const cancelReconnectTimer = () => {
+	if (reconnect_timer !== null) {
+		clearTimeout(reconnect_timer);
+		reconnect_timer = null;
+	}
+};
+
 // Reconnect the WebSocket without a full page reload.
 // A page reload is blocked by the firmware's http_block_during_motion setting
 // while GCode is running, which prevents the user from regaining control after
@@ -87,6 +101,10 @@ const Disable_interface = (lostconnection) => {
 	//block all communication
 	http_communication_locked = true;
 	log_off = true;
+	// Cancel any pending auto-reconnect timer. If we don't, the timer fires
+	// startSocket() after the disconnect dialog is shown — bypassing the user
+	// dialog and leaving the UI in a half-connected/half-disabled state.
+	cancelReconnectTimer();
 	if (interval_ping !== -1) {
 		clearInterval(interval_ping);
 	}
@@ -163,6 +181,10 @@ const Handle_DHT = (data) => {
 const process_socket_response = (msg) => msg.split("\n").forEach(grblHandleMessage);
 
 const startSocket = () => {
+	// Cancel any pending auto-reconnect timer before starting a fresh connection.
+	// A timer left from a previous disconnect could fire startSocket() again 3 s
+	// after we've already reconnected, tearing down the good connection.
+	cancelReconnectTimer();
 	// Close the previous WebSocket before creating a new one.  If we just
 	// reassign ws_source the old socket stays open until the server times it
 	// out.  When it finally closes its onclose handler fires, sees log_off===false,
@@ -209,7 +231,12 @@ const startSocket = () => {
 		console.log("Disconnected");
 		//seems sometimes it disconnect so wait 3s and reconnect
 		//if it is not a log off
-		if (!log_off) setTimeout(startSocket, 3000);
+		if (!log_off) {
+			reconnect_timer = setTimeout(() => {
+				reconnect_timer = null;
+				startSocket();
+			}, 3000);
+		}
 	};
 	ws_source.onerror = (e) => {
 		//Monitor_output_Update("[#]Error "+ e.code +" " + e.reason + "\n");
