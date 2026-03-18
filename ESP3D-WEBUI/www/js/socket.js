@@ -163,6 +163,20 @@ const Handle_DHT = (data) => {
 const process_socket_response = (msg) => msg.split("\n").forEach(grblHandleMessage);
 
 const startSocket = () => {
+	// Close the previous WebSocket before creating a new one.  If we just
+	// reassign ws_source the old socket stays open until the server times it
+	// out.  When it finally closes its onclose handler fires, sees log_off===false,
+	// and calls startSocket() again — creating a cascade of connections that can
+	// exhaust the firmware's WSChannel slots and cause a firmware hang.
+	if (ws_source) {
+		// Detach handlers first so the onclose of the dying socket does NOT
+		// trigger another startSocket() call.
+		ws_source.onopen  = null;
+		ws_source.onclose = null;
+		ws_source.onerror = null;
+		ws_source.onmessage = null;
+		try { ws_source.close(); } catch (e) { /* ignore */ }
+	}
 	try {
 		if (async_webcommunication) {
 			ws_source = new WebSocket(`ws://${document.location.host}/ws`, [
