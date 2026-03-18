@@ -1,6 +1,15 @@
 // import translate_text_item, id, setHTML, setactiveModal, showModal, saveSerialMessages
 
-const UIdisabledDlgReconnect = () => window.location.reload();
+const UIdisabledDlgReconnect = () => {
+	// Reconnect without a full page reload so the browser can regain control
+	// even while GCode is running.  A page reload would be blocked by the
+	// firmware's http_block_during_motion setting in that case.
+	if (typeof resetConnectionState === 'function') {
+		resetConnectionState();
+	} else {
+		window.location.reload();
+	}
+};
 
 //UIdisabled dialog
 const UIdisableddlg = (lostcon) => {

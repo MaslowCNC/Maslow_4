@@ -61,6 +61,26 @@ const restorePingAfterUpload = () => {
 };
 
 let log_off = false;
+
+// Reconnect the WebSocket without a full page reload.
+// A page reload is blocked by the firmware's http_block_during_motion setting
+// while GCode is running, which prevents the user from regaining control after
+// a dropped connection.  Reconnecting only the WebSocket bypasses that block.
+const resetConnectionState = () => {
+	log_off = false;
+	http_communication_locked = false;
+	// Clear any stale ping interval and restart it
+	if (interval_ping !== -1) {
+		clearInterval(interval_ping);
+		interval_ping = -1;
+	}
+	handlePing();
+	// Close the "You are disconnected" dialog
+	closeModal("Reconnecting");
+	// Open a fresh WebSocket connection
+	startSocket();
+};
+
 const Disable_interface = (lostconnection) => {
 	let lostcon = false;
 	if (typeof lostconnection !== "undefined") lostcon = lostconnection;
