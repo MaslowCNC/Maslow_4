@@ -18,8 +18,13 @@ const UIdisableddlg = (lostcon) => {
 		return;
 	}
 
-	id("UIdisabled_reconnect").addEventListener("click", UIdisabledDlgReconnect);
-	id("UIdisabled_save_serial_msg").addEventListener("click", saveSerialMessages);
+	// Use { once: true } so the listener auto-removes itself after the first
+	// click.  Without this, every call to UIdisableddlg() (each disconnection)
+	// stacks a new listener on top of any previous ones.  After N disconnections
+	// clicking the button fires resetConnectionState() N times in rapid succession,
+	// and each call tears down the connection the previous call just opened.
+	id("UIdisabled_reconnect").addEventListener("click", UIdisabledDlgReconnect, { once: true });
+	id("UIdisabled_save_serial_msg").addEventListener("click", saveSerialMessages, { once: true });
 
 	if (lostcon) {
 		setHTML("disconnection_msg", translate_text_item("Connection lost for more than 20s"));
