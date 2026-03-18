@@ -109,6 +109,13 @@ namespace WebUI {
         static bool ConnectSTA2AP();
         static void WiFiEvent(WiFiEvent_t event);
         static bool _events_registered;
+        // True after STA services are started by begin(). Cleared by StopWiFi().
+        // Allows WiFiEvent() to distinguish first connect from reconnect after drop.
+        static bool _sta_services_started;
+        // Set in the WiFi event handler (network task) when STA reconnects after a
+        // drop and gets a new IP.  Consumed in handle() (protocol task) to restart
+        // web services without cross-task API calls inside the event callback.
+        static volatile bool _needs_services_restart;
 
         static std::string _hostname;
     };

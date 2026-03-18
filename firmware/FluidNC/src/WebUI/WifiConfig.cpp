@@ -313,6 +313,12 @@ namespace WebUI {
 
     std::string WiFiConfig::_hostname("");
     bool        WiFiConfig::_events_registered = false;
+    // Set to true after STA services are successfully started; cleared on disconnect.
+    // Used to distinguish first-connect (no restart needed) from reconnect (restart needed).
+    bool        WiFiConfig::_sta_services_started = false;
+    // Set by the WiFi event handler (network task) when a reconnect gets an IP.
+    // Consumed by handle() (protocol task) to restart services on the correct task.
+    volatile bool WiFiConfig::_needs_services_restart = false;
 
     WiFiConfig::WiFiConfig() {
         new WebCommand(NULL, WEBCMD, WU, "ESP410", "WiFi/ListAPs", listAPs);
@@ -557,6 +563,14 @@ namespace WebUI {
     void WiFiConfig::WiFiEvent(WiFiEvent_t event) {
         switch (event) {
             case SYSTEM_EVENT_STA_GOT_IP:
+                // On the initial connect, services are started by begin() after StartSTA()
+                // returns, so _sta_services_started is still false here.  On a reconnect
+                // after a drop, _sta_services_started is true — we need to restart the
+                // web/WebSocket services so they can bind to the re-established network.
+                if (_sta_services_started) {
+                    log_info("WiFi reconnected - scheduling web services restart");
+                    _needs_services_restart = true;
+                }
                 break;
             case SYSTEM_EVENT_STA_DISCONNECTED:
                 log_info("WiFi Disconnected");
@@ -763,6 +777,8 @@ namespace WebUI {
             WiFi.enableAP(false);
             WiFi.mode(WIFI_OFF);
         }
+        _sta_services_started = false;
+        _needs_services_restart = false;
         log_info("WiFi Off");
     }
 
@@ -816,6 +832,7 @@ namespace WebUI {
         esp_wifi_set_ps(WIFI_PS_NONE);
         log_info("WiFi on");
         wifi_services.begin();
+        _sta_services_started = true;
         return true;
     }
 
@@ -852,6 +869,16 @@ namespace WebUI {
      * Handle not critical actions that must be done in sync environment
      */
     void WiFiConfig::handle() {
+        // Restart web services if a WiFi reconnect was detected by the event handler.
+        // We do this here (in the protocol task) rather than in the WiFi event callback
+        // (network task) to avoid thread-safety issues with the web server and WebSocket
+        // server internals.
+        if (_needs_services_restart) {
+            _needs_services_restart = false;
+            log_info("Restarting web services after WiFi reconnect");
+            wifi_services.end();
+            wifi_services.begin();
+        }
         wifi_services.handle();
     }
 
