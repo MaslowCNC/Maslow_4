@@ -6,6 +6,9 @@ const FILE_LIST_LOAD_DELAY_MS = 500; // Delay to ensure file list is loaded befo
 
 var gCodeLoaded = false;
 var gCodeDisplayable = false;
+// Set to true when the firmware enters Run state; used to re-enable the Start
+// button when the run completes (firmware transitions back to Idle).
+let _wasRunning = false;
 var _gcodeRaw = "";
 
 var snd = null;
@@ -762,10 +765,17 @@ function tabletGrblState(grbl, response) {
   switch (stateName) {
     case 'Sleep':
     case 'Alarm':
+      _wasRunning = false;
       setPlayButton(true, gray, 'Start', null)
       //setPauseButton(false, gray, 'Pause', null)
       break
     case 'Idle':
+      if (_wasRunning && gCodeFilename) {
+        // GCode file just finished — re-enable the Start button so the user
+        // can run it again.
+        gCodeLoaded = true;
+        _wasRunning = false;
+      }
       setRunControls()
       break
     case 'Hold':
@@ -777,6 +787,7 @@ function tabletGrblState(grbl, response) {
       setPlayButton(false, gray, 'Start', null)
       break
     case 'Run':
+      _wasRunning = true;
       setPlayButton(true, orange, 'Pause', pauseGCode)
       break
     case 'Check':
