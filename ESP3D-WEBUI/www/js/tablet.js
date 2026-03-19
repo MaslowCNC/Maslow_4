@@ -627,7 +627,10 @@ function doPlayButton() {
     playButtonHandler()
   }
 
-  addMessage(`Starting File: ${id('filelist').options[selectElement.selectedIndex].text}`);
+  const filelist = id('filelist');
+  if (filelist && filelist.options.length > 0) {
+    addMessage(`Starting File: ${filelist.options[filelist.selectedIndex].text}`);
+  }
 }
 
 // var pauseButtonHandler
@@ -1332,9 +1335,12 @@ function runGCode() {
   if (gCodeFilename) {
     const cmd = `$sd/run=${gCodeFilename}`;
     sendCommand(cmd);
+    // Immediately disable the Start button to prevent double-clicks or stale Idle
+    // status reports from re-enabling it before the firmware transitions to Run state.
+    gCodeLoaded = false;
+    setRunControls();
+    setTimeout(() => { SendRealtimeCmd(0x7e); }, 1500);
   }
-  setTimeout(() => { SendRealtimeCmd(0x7e); }, 1500);
-  // expandVisualizer()
 }
 
 function tabletLoadGCodeFile(path, size) {
