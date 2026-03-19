@@ -650,10 +650,6 @@ const gray = "#f6f6f6";
 const orange = "#ff9500";
 const stopRed = "#ce654c";
 
-// How long (ms) to wait for the firmware to enter Run/Hold before re-enabling
-// the Start button.  Prevents permanent lock-out when $sd/run is lost.
-const RUN_START_FALLBACK_TIMEOUT_MS = 20000;
-
 function setRunControls() {
   if (gCodeLoaded) {
     // A GCode file is ready to go
@@ -773,8 +769,6 @@ function tabletGrblState(grbl, response) {
       setRunControls()
       break
     case 'Hold':
-      clearTimeout(_runStartFallbackTimer);
-      _runStartFallbackTimer = null;
       setPlayButton(true, green, 'Resume', resumeGCode)
       //setPauseButton(true, red, 'Stop', stopAndRecover)
       break
@@ -783,8 +777,6 @@ function tabletGrblState(grbl, response) {
       setPlayButton(false, gray, 'Start', null)
       break
     case 'Run':
-      clearTimeout(_runStartFallbackTimer);
-      _runStartFallbackTimer = null;
       setPlayButton(true, orange, 'Pause', pauseGCode)
       break
     case 'Check':
@@ -992,10 +984,6 @@ const sendViaWS = (cmd) => {
 // flag is set, so the command reaches the firmware before any auto-reports
 // start flowing.
 let _stopPending = false;
-
-// Timer handle for the 20-second Start-button re-enable fallback set in
-// runGCode(). Cancelled when the firmware confirms it entered Run/Hold state.
-let _runStartFallbackTimer = null;
 
 // Called from ws_source.onopen (socket.js) on every WebSocket (re)connect.
 // Does NOT clear _stopPending — tabletGrblState clears it once the firmware
@@ -1352,15 +1340,6 @@ function runGCode() {
     gCodeLoaded = false;
     setRunControls();
     setTimeout(() => { SendRealtimeCmd(0x7e); }, 1500);
-    // Fallback: re-enable Start after 20 s if firmware never confirmed Run/Hold.
-    // This prevents the user from being permanently locked out if the $sd/run
-    // command is lost or the firmware rejects it.
-    clearTimeout(_runStartFallbackTimer);
-    _runStartFallbackTimer = setTimeout(() => {
-      _runStartFallbackTimer = null;
-      gCodeLoaded = true;
-      setRunControls();
-    }, RUN_START_FALLBACK_TIMEOUT_MS);
   }
 }
 
