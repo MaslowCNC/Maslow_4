@@ -62,13 +62,30 @@ const restorePingAfterUpload = () => {
 
 let log_off = false;
 
+// Stores the document title before Disable_interface() appends "(Disabled)".
+// resetConnectionState() uses this to restore the title without a page reload.
+let _originalTitle = null;
+// Stores whether auto-position-checking was enabled before disabling.
+// resetConnectionState() uses this to restore the previous autocheck state.
+let _autocheckBeforeDisable = false;
+
 // Reconnect the WebSocket without a full page reload.
 // This bypasses the HTTP block that prevents page reload during motion
 // (State::Cycle returns 503 for GET /), so the UI can reconnect while
 // gcode is running without accidentally showing the 503 feedhold page.
 const resetConnectionState = () => {
+	// Restore document title that Disable_interface() corrupted
+	if (_originalTitle !== null) {
+		document.title = _originalTitle;
+		_originalTitle = null;
+	}
 	log_off = false;
 	http_communication_locked = false;
+	// Restore auto-position-checking if it was enabled before the disconnect
+	if (_autocheckBeforeDisable) {
+		_autocheckBeforeDisable = false;
+		on_autocheck_position(true);
+	}
 	handlePing();
 	startSocket();
 };
@@ -86,7 +103,8 @@ const Disable_interface = (lostconnection) => {
 	clear_cmd_list();
 	//no camera
 	id("camera_frame").src = "";
-	//No auto check
+	//No auto check - store state first so resetConnectionState() can restore it
+	_autocheckBeforeDisable = getChecked('autocheck_position') === 'true';
 	on_autocheck_position(false);
 	reportNone();
 	if (async_webcommunication) {
@@ -95,6 +113,11 @@ const Disable_interface = (lostconnection) => {
 		event_source.removeEventListener("DHT", DHT_events, false);
 	}
 	ws_source.close();
+	// Save the original title before appending "(Disabled)" so
+	// resetConnectionState() can restore it without a page reload.
+	if (_originalTitle === null) {
+		_originalTitle = document.title;
+	}
 	document.title += `('${HTMLDecode(translate_text_item("Disabled"))})`;
 	UIdisableddlg(lostcon);
 };

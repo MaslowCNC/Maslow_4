@@ -19,7 +19,7 @@ const UIdisableddlg = (lostcon) => {
 	}
 
 	id("UIdisabled_reconnect").addEventListener("click", UIdisabledDlgReconnect, { once: true });
-	id("UIdisabled_save_serial_msg").addEventListener("click", saveSerialMessages, { once: true });
+	id("UIdisabled_save_serial_msg").addEventListener("click", saveSerialMessages);
 
 	if (lostcon) {
 		setHTML("disconnection_msg", translate_text_item("Connection lost for more than 20s"));
