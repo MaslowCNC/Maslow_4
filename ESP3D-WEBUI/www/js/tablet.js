@@ -884,6 +884,15 @@ const clearGCodeState = () => {
 };
 
 const restoreGCodeState = () => {
+  // Don't restore if a GCode file is already loaded in this JS session.
+  // gCodeFilename is set when a file was loaded for preview or is actively
+  // running; in either case the in-memory state is authoritative and
+  // there is nothing to restore from localStorage.
+  if (gCodeFilename) {
+    console.log('GCode already loaded, skipping restoration');
+    return;
+  }
+
   // Prevent concurrent restoration attempts
   if (restoringGCodeState) {
     console.log('GCode restoration already in progress, skipping');
@@ -907,8 +916,12 @@ const restoreGCodeState = () => {
           const contentLength = response.headers.get('Content-Length');
           const size = contentLength ? parseInt(contentLength, 10) : 0;
           tabletLoadGCodeFile(savedFilename, size);
+        } else if (response.status === 503) {
+          // HTTP blocked during motion — the file still exists, we just
+          // cannot serve it right now.  Do NOT clear the saved state.
+          console.log('HTTP blocked during motion (503), keeping saved GCode state');
         } else {
-          // File doesn't exist anymore, clear state
+          // File doesn't exist anymore (404 or other error), clear state
           console.log('Saved GCode file no longer exists, clearing state');
           clearGCodeState();
         }
@@ -1699,6 +1712,17 @@ function mdiEnterKey(event) {
 // tablet is active.
 window.addEventListener("keydown", handleKeyDown);
 window.addEventListener("keyup", handleKeyUp);
+
+// When the browser window loses focus (e.g. user Alt-Tabs to another app),
+// the browser may not deliver keyup events for held keys.  This leaves
+// ctrlDown / the jog-distance modifier (newChild) in a stale "pressed"
+// state.  Reset everything here so the next keydown after regaining focus
+// starts from a clean state.
+window.addEventListener("blur", () => {
+  ctrlDown = false;
+  shiftUp();
+  altUp();
+});
 
 function saveJogDists() {
   localStorage.setItem("disM", getText("disM"));

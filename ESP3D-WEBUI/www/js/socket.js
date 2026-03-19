@@ -61,6 +61,18 @@ const restorePingAfterUpload = () => {
 };
 
 let log_off = false;
+
+// Reconnect the WebSocket without a full page reload.
+// This bypasses the HTTP block that prevents page reload during motion
+// (State::Cycle returns 503 for GET /), so the UI can reconnect while
+// gcode is running without accidentally showing the 503 feedhold page.
+const resetConnectionState = () => {
+	log_off = false;
+	http_communication_locked = false;
+	handlePing();
+	startSocket();
+};
+
 const Disable_interface = (lostconnection) => {
 	let lostcon = false;
 	if (typeof lostconnection !== "undefined") lostcon = lostconnection;
@@ -165,9 +177,13 @@ const startSocket = () => {
 		if (typeof onWSOpenCallback === 'function') {
 			onWSOpenCallback();
 		}
-		// Restore GCode state if any exists from previous session
-		// Use typeof check since this might be called before tablet.js is fully loaded
-		if (typeof restoreGCodeState === 'function') {
+		// Restore GCode state only on fresh page load (gCodeFilename empty).
+		// If gCodeFilename is already set the JS session is still active
+		// (WS reconnect during gcode execution) and no restoration is needed —
+		// the in-memory state is correct and sending an HTTP request for the
+		// file during motion would hit the 503 block and clear localStorage
+		// needlessly.
+		if (typeof restoreGCodeState === 'function' && !gCodeFilename) {
 			restoreGCodeState();
 		}
 	};
