@@ -440,21 +440,17 @@ int32_t AS5600::getCumulativePosition(bool update)
   }
   int16_t value = _lastReadAngle;
 
-  // FLUIDNC CUSTOM MODIFICATION: Use quarter-circle thresholds (1024/3072) instead of half-circle (2048)
-  // to be more conservative about detecting full rotations and prevent accidental rotation loss
-  //A transition from the highest 1/4th to the loweset 1/4th
-  if ((value < 1024) && (_lastPosition > 3072)) {
-      _position += abs(4096 - abs(value - _lastPosition));
-  }
-  //A transition from the lowest 1/4th to the highest 1/4th
-  else if ((_lastPosition < 1024) && (value > 3072)) {
-      _position -= abs(4096 - abs(value - _lastPosition));
-  }
-  //We've just moved a bit up
-  else {
-      _position += (value - _lastPosition);
-  }
+  // Compute the signed delta between the new angle and the last angle.
+  // Both value and _lastPosition are in the range [0, 4095].
+  // Adjust for wrap-around: assume the motor moved less than half a revolution
+  // (2048 counts) between consecutive reads.  This is always true in practice
+  // because the encoders are read at ~250 Hz per axis and the motors cannot
+  // spin fast enough to cover half a revolution between reads.
+  int32_t delta = (int32_t)value - (int32_t)_lastPosition;
+  if (delta > 2048)  delta -= 4096;   // wrapped backward across 0
+  if (delta < -2048) delta += 4096;   // wrapped forward  across 0
 
+  _position += delta;
   _lastPosition = value;
   return _position;
 }
