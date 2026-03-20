@@ -445,7 +445,7 @@ void Calibration::home() {
             calibration_loop();
             break;
         case CALIBRATION_COMPUTING:
-            // In CALIBRATION_COMPUTING state, we're waiting for the computer to acknowledge
+            // In CALIBRATION_COMPUTING state, we're waiting for the computer to acknowledge 
             for (int arm = _TL; arm < ARM_COUNT; arm++) {
                 Maslow.axis[arm].stop();
             }
