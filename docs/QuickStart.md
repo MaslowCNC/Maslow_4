@@ -2,6 +2,18 @@
 
 This guide is intended to get your Maslow up and running in as few words as possible. It is intended to be used immediately after completing assembly so we can assume that the user has already assembled their machine and they are now looking for how to set it up.
 
+
+## Overall saftey meaures
+- Regularly check your machine  for evidence of wear or damage.
+- Only use in a safe and controlled space. 
+- Do not leave the machine running unattended.
+- Use personal protective equipment including masks, respirators, gloves, hearing protection,  and eye protection. 
+- Do not touch the machine while it is moving or turned on.
+- Do not change blades while the machine is plugged in. 
+- Have a **FIRE** suppression plan and equipment. This may be the biggest risk. Hot blades ignite dust.
+- Consider how you will cut power to the machine in an emergency.
+- Check for loose parts, tools, keys, and if the blades are in an appropriate place before providing power to the machine. 
+- Train yourself and anyone who will come in contact with the machine on your saftely plan. 
   
 ## Choosing your Anchors
 

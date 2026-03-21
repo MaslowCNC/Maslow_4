@@ -214,7 +214,7 @@ axes:
       tmc_2209: 
         uart_num: 1
         step_pin: gpio.46
-        direction_pin: gpio.38
+        direction_pin: NO_PIN
         disable_pin: NO_PIN
         r_sense_ohms: 0.110000
         run_amps: 1.000000

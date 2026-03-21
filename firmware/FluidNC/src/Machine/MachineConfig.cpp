@@ -262,7 +262,7 @@ namespace Machine {
         "  z:\n    max_rate_mm_per_min: 400\n    acceleration_mm_per_sec2: 10\n    max_travel_mm: 100\n    steps_per_mm: 100\n"
         "    homing:\n      cycle: -1\n"
         "    motor0:\n      tmc_2209:\n        addr: 0\n        direction_pin: gpio.16\n        step_pin: gpio.15\n" +
-        dcZMotor + "    motor1:\n      tmc_2209:\n        addr: 1\n        direction_pin: gpio.38\n        step_pin: gpio.46\n" + dcZMotor;
+        dcZMotor + "    motor1:\n      tmc_2209:\n        addr: 1\n        direction_pin: NO_PIN\n        step_pin: gpio.46\n" + dcZMotor;
 
     bool MachineConfig::load() {
         bool configOkay;
