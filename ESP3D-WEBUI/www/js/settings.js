@@ -36,6 +36,8 @@ const CONFIG_TOOLTIPS = {
   Maslow_Scale_X: "Sets the scale factor for the x axis",
   Maslow_Scale_Y: "Sets the scale factor for the y axis",
   Maslow_Extend_Dist: "Sets the distance to extend the belts during the calibration process. Max 4,250mm.",
+  Maslow_Frame_Size_Min: "Minimum valid frame side length in mm (default 500mm). Frames smaller than this are rejected during calibration.",
+  Maslow_Frame_Size_Max: "Maximum valid frame side length in mm (default 5500mm). Frames larger than this are rejected during calibration.",
 }
 
 function refreshSettings(hide_setting_list) {

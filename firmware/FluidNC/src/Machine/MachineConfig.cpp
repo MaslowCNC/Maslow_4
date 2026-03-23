@@ -114,6 +114,10 @@ namespace Machine {
         handler.item(M + "_Work_Area_Center_Offset_X", Maslow.workAreaCenterOffsetX, -5000.0, 5000.0);
         handler.item(M + "_Work_Area_Center_Offset_Y", Maslow.workAreaCenterOffsetY, -5000.0, 5000.0);
 
+        // Frame size limits
+        handler.item(M + "_Frame_Size_Min", Maslow.frameSizeMin, 100.0, 2000.0);
+        handler.item(M + "_Frame_Size_Max", Maslow.frameSizeMax, 1000.0, 20000.0);
+
         // Material thickness parameters - temporary storage for machine-level config
         handler.item(M + "_spoilboardThickness", _tempSpoilboardThickness, 0.0, 50.0);
         handler.item(M + "_workThickness", _tempWorkThickness, 0.0, 50.0);
@@ -166,6 +170,13 @@ namespace Machine {
         if (maslowKinematics != nullptr) {
             maslowKinematics->setSpoilboardThickness(_tempSpoilboardThickness);
             maslowKinematics->setWorkThickness(_tempWorkThickness);
+        }
+
+        // Validate frame size limits are consistent
+        if (Maslow.frameSizeMin >= Maslow.frameSizeMax) {
+            log_config_error(M + "_Frame_Size_Min must be less than " + M + "_Frame_Size_Max. Resetting to defaults (500, 5500).");
+            Maslow.frameSizeMin = 500.0;
+            Maslow.frameSizeMax = 5500.0;
         }
 
         // We do not auto-create an I2SO bus config node

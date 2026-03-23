@@ -388,6 +388,8 @@ const cfgDef = {
 	Work_Area_Y: { name: "workAreaY", type: "A", cmd: "Maslow_Work_Area_Y" },
 	Work_Area_Center_Offset_X: { name: "workAreaCenterOffsetX", type: "A", cmd: "Maslow_Work_Area_Center_Offset_X" },
 	Work_Area_Center_Offset_Y: { name: "workAreaCenterOffsetY", type: "A", cmd: "Maslow_Work_Area_Center_Offset_Y" },
+	Frame_Size_Min: { name: "frameSizeMin", type: "A", cmd: "Maslow_Frame_Size_Min" },
+	Frame_Size_Max: { name: "frameSizeMax", type: "A", cmd: "Maslow_Frame_Size_Max" },
 };
 
 /** Handle Maslow specific configuration messages
