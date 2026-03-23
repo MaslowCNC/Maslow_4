@@ -35,7 +35,7 @@ const CONFIG_TOOLTIPS = {
   Maslow_Acceptable_Calibration_Threshold: "Sets the acceptable fitness threshold for moving on to the next calibration round",
   Maslow_Scale_X: "Sets the scale factor for the x axis",
   Maslow_Scale_Y: "Sets the scale factor for the y axis",
-  Maslow_Extend_Dist: "Sets the distance to extend the belts during the calibration process. Max 4,250mm.",
+  Maslow_Extend_Dist: "Sets the distance to extend the belts during the calibration process. Max 8,000mm.",
 }
 
 function refreshSettings(hide_setting_list) {

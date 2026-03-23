@@ -529,9 +529,9 @@ void MaslowKinematics::validateAndCorrectAnchorCoordinates() {
         coordinatesCorrected          = true;
     }
 
-    // Check side lengths - minimum 500mm, maximum 5500mm
+    // Check side lengths - minimum 500mm, maximum 12000mm
     const float MIN_SIDE_LENGTH = 500.0f;
-    const float MAX_SIDE_LENGTH = 5500.0f;
+    const float MAX_SIDE_LENGTH = 12000.0f;
 
     // Calculate distances for each side of the frame
     float topSideLength = sqrt(
@@ -556,7 +556,7 @@ void MaslowKinematics::validateAndCorrectAnchorCoordinates() {
         char* buffer = getLogBuffer();
         snprintf(buffer,
                  1400,
-                 "Frame side lengths are outside valid range (500-5500mm). "
+                 "Frame side lengths are outside valid range (500-12000mm). "
                  "Top=%gmm, Right=%gmm, Bottom=%gmm, Left=%gmm. Calibration cannot proceed with these dimensions.",
                  topSideLength,
                  rightSideLength,

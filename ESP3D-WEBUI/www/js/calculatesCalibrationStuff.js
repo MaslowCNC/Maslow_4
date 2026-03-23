@@ -298,9 +298,9 @@ async function findBestRectangularStart(measurements) {
     return { fitness: result.fitness, size: size };
   }
 
-  // Ternary search for optimal diagonal size (100 to 5500mm range)
+  // Ternary search for optimal diagonal size (100 to 12000mm range)
   let leftSize = 100;
-  let rightSize = 5500;
+  let rightSize = 12000;
   const epsilon = 50; // Stop when range is less than 50mm
 
   while ((rightSize - leftSize) > epsilon) {

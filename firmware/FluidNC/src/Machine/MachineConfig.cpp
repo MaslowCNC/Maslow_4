@@ -96,13 +96,13 @@ namespace Machine {
 
     void MachineConfig::groupM4Items(Configuration::HandlerBase& handler) {
         handler.item(M + "_vertical", Maslow.calibration.orientation);
-        handler.item(M + "_calibration_grid_width_mm_X", Maslow.calibration.calibration_grid_width_mm_X, 0, 3000);
-        handler.item(M + "_calibration_grid_height_mm_Y", Maslow.calibration.calibration_grid_height_mm_Y, 0, 3000);
+        handler.item(M + "_calibration_grid_width_mm_X", Maslow.calibration.calibration_grid_width_mm_X, 0, 6000);
+        handler.item(M + "_calibration_grid_height_mm_Y", Maslow.calibration.calibration_grid_height_mm_Y, 0, 6000);
         handler.item(M + "_calibration_grid_size", Maslow.calibration.calibrationGridSize, 3, 9);
 
         handler.item(M + "_Retract_Current_Threshold", Maslow.calibration.retractCurrentThreshold, 0, 3500);
         handler.item(M + "_Acceptable_Calibration_Threshold", Maslow.calibration.acceptableCalibrationThreshold, 0, 1);
-        handler.item(M + "_Extend_Dist", Maslow.calibration.extendDist, 0, 4250);
+        handler.item(M + "_Extend_Dist", Maslow.calibration.extendDist, 0, 8000);
 
         handler.item(M + "_Scale_X", Maslow.scaleX, .8, 1.2);
         handler.item(M + "_Scale_Y", Maslow.scaleY, .8, 1.2);
