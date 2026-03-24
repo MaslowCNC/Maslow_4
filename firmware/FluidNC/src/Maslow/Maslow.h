@@ -149,6 +149,10 @@ public:
     bool   error = false;
     String errorMessage;
 
+    // Set from any task (e.g. WebSocket receive on Core 0) to immediately halt
+    // belt motors before the $ESTOP text command is processed by the protocol loop.
+    volatile bool immediateEStop = false;
+
     void test_();
     void reset_all_axis();
     //keep track of where Maslow actually is

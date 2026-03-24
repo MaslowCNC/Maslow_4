@@ -132,6 +132,24 @@ void Maslow_::update() {
     }
     esp_task_wdt_reset();
 
+    // Immediate E Stop: belt motors need to stop NOW, before the $ESTOP text
+    // command can be processed by the protocol loop (which may be blocked inside
+    // protocol_buffer_synchronize() waiting for the current GCode move to finish).
+    // Setting immediateEStop from the WebSocket receive handler (Core 0) causes
+    // the very next update() call (Core 1) to:
+    //   1. Stop PWM on all belt motors
+    //   2. Clear the planner buffer so protocol_buffer_synchronize() exits
+    //   3. Set Alarm state so the protocol loop stops queueing new moves
+    // The $ESTOP command is then processed normally: raiseZ() + eStop().
+    if (immediateEStop) {
+        immediateEStop = false;
+        stopMotors();
+        plan_reset();
+        Stepper::reset();
+        sys.set_state(State::Alarm);
+        return;
+    }
+
     static State prevState = sys.state();
 
     //If the watchdog fired, show a rapid double-blink on both RED and WiFi LEDs.

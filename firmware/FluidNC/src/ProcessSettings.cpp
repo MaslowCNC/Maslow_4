@@ -1040,6 +1040,9 @@ static Error maslow_estop(const char* value, WebUI::AuthenticationLevel auth_lev
     if (Maslow.using_default_config) {
         return Error::ConfigurationInvalid;
     }
+    // Clear the immediateEStop flag set by the WebSocket receiver — belt motors
+    // have already been stopped by the time $ESTOP is processed by the protocol loop.
+    Maslow.immediateEStop = false;
     // Stop belt motors immediately, then raise Z to Z home before setting Alarm.
     // Raising Z here (before Alarm state) prevents workpiece damage in an
     // emergency just as the controlled stop does, but without saving positions.

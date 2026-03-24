@@ -8,8 +8,9 @@
 #    include <WebSocketsServer.h>
 #    include <WiFi.h>
 
-#    include "../Serial.h"      // is_realtime_command
-#    include "../StartupLog.h"  // startupLog
+#    include "../Serial.h"        // is_realtime_command
+#    include "../StartupLog.h"    // startupLog
+#    include "../Maslow/Maslow.h" // Maslow.immediateEStop
 
 namespace WebUI {
     class WSChannels;
@@ -280,6 +281,14 @@ namespace WebUI {
             case WStype_TEXT:
             case WStype_BIN:
                 try {
+                    // If this is an $ESTOP command, immediately stop belt motors without
+                    // waiting for the protocol loop to dequeue and execute the text command.
+                    // This fires from Core 0 (WebSocket receive); Maslow.update() on Core 1
+                    // checks immediateEStop and stops motors + clears the planner on the very
+                    // next update() call, so protocol_buffer_synchronize() exits promptly.
+                    if (length >= 6 && memcmp(payload, "$ESTOP", 6) == 0) {
+                        Maslow.immediateEStop = true;
+                    }
                     _wsChannels.at(num)->push(payload, length);
                 } catch (std::out_of_range& oor) {}
                 break;
