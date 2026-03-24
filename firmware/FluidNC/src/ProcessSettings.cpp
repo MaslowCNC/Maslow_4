@@ -1048,6 +1048,14 @@ static Error maslow_estop(const char* value, WebUI::AuthenticationLevel auth_lev
     // emergency just as the controlled stop does, but without saving positions.
     Maslow.resetUpdateWatchdog();
     Maslow.stopMotors();  // Stop XY belt motors immediately
+    // Reset to Idle before raising Z so that Stepper::reset() inside raiseZ()
+    // does not immediately disable stepper drivers.  raiseZ() calls Stepper::reset()
+    // before setting State::Idle internally; if state is Alarm at that point,
+    // protocol_disable_steppers() immediately cuts power to all axes including Z,
+    // preventing the Z raise from executing.  Setting Idle here first mirrors the
+    // approach used by maslow_stop() and ensures only a timed disable is scheduled,
+    // which Stepper::wake_up() then cancels when the Z cycle starts.
+    sys.set_state(State::Idle);
     Maslow.raiseZ();      // Raise Z to Z home + 2mm to prevent workpiece damage
     Maslow.resetUpdateWatchdog();
     sys.set_state(State::Alarm);
