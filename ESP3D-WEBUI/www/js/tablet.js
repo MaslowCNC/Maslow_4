@@ -1037,6 +1037,15 @@ const tabletGCodeStop = () => {
   sendStopCommand();
 };
 
+const tabletEStop = () => {
+  const estopBtn = id("tablettab_gcode_estop");
+  if (estopBtn) {
+    estopBtn.style.backgroundColor = orange;
+  }
+  addMessage("Emergency Stop");
+  sendViaWS("$ESTOP\n");
+};
+
 const resetStopButtonColors = () => {
   // tablettab_gcode_stop uses an inline style so we must set it explicitly
   const gcodeStopBtn = id("tablettab_gcode_stop");
@@ -1225,6 +1234,7 @@ function tabletInit() {
     id("tablettab_gcode_play").addEventListener("click", doPlayButton);
     // id("tablettab_gcode_pause").addEventListener("click", doPauseButton);
     id("tablettab_gcode_stop").addEventListener("click", tabletGCodeStop);
+    id("tablettab_gcode_estop").addEventListener("click", tabletEStop);
     id("systemStatus").addEventListener("click", clearAlarm);
     
     // New Maslow action button (below Setup)

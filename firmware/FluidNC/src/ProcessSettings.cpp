@@ -1037,6 +1037,16 @@ static Error maslow_reset_calibration(const char* value, WebUI::AuthenticationLe
 }
 
 static Error maslow_estop(const char* value, WebUI::AuthenticationLevel auth_level, Channel& out) {
+    if (Maslow.using_default_config) {
+        return Error::ConfigurationInvalid;
+    }
+    // Stop belt motors immediately, then raise Z to Z home before setting Alarm.
+    // Raising Z here (before Alarm state) prevents workpiece damage in an
+    // emergency just as the controlled stop does, but without saving positions.
+    Maslow.resetUpdateWatchdog();
+    Maslow.stopMotors();  // Stop XY belt motors immediately
+    Maslow.raiseZ();      // Raise Z to Z home + 2mm to prevent workpiece damage
+    Maslow.resetUpdateWatchdog();
     sys.set_state(State::Alarm);
     Maslow.eStop();
     return Error::Ok;
