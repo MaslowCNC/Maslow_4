@@ -1044,6 +1044,10 @@ const tabletEStop = () => {
   }
   addMessage("Emergency Stop");
   sendViaWS("$ESTOP\n");
+  maslowStatus.state = 0;
+  if (typeof updateDynamicButtons === 'function') {
+    updateDynamicButtons();
+  }
 };
 
 const resetStopButtonColors = () => {

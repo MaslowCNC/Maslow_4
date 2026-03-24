@@ -1049,6 +1049,7 @@ static Error maslow_estop(const char* value, WebUI::AuthenticationLevel auth_lev
     Maslow.resetUpdateWatchdog();
     sys.set_state(State::Alarm);
     Maslow.eStop();
+    Maslow.calibration.requestStateChange(UNKNOWN);  // Reset calibration state to Unknown
     return Error::Ok;
 }
 
