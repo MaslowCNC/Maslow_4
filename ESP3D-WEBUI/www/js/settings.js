@@ -13,7 +13,6 @@ let current_setting_filter = "nvs";
 var setup_is_done = false;
 let do_not_build_settings = false;
 const CONFIG_TOOLTIPS = {
-  Maslow_vertical: `If the ${M} is oriented horizontally, set this to false`,
   Maslow_calibration_grid_width_mm_X: "Define the distance from the anchor points to the corners of the calibration grid in mm (X dimension)",
   Maslow_calibration_grid_height_mm_Y: "Define the distance from the anchor points to the corners of the calibration grid in mm (Y dimension)",
   Maslow_calibration_grid_size: "Defines the number of points in the calibration grid. Options are 3,5,7,9",

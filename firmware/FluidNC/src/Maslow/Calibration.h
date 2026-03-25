@@ -81,7 +81,7 @@ public:
     float extendDist = 1700;
 
     //Variables used by calibration
-    bool  orientation;
+    bool  orientation = VERTICAL;
     float acceptableCalibrationThreshold = 0.5;
     int   calibrationGridSize            = 9;
     float calibration_grid_width_mm_X    = 0;      // mm grid width (0 = auto-calculate as 50% of frame width)
@@ -126,12 +126,6 @@ private:
     unsigned long lastCallToUpdate = millis();
     unsigned long extendCallTimer  = millis();
     unsigned long complyCallTimer  = millis();
-
-    //Variables used for orientation detection
-    unsigned long orientationDetectTimer   = 0;
-    double        tlStartPosition          = 0;
-    double        trStartPosition          = 0;
-    bool          orientationDetectionDone = false;
 
     //Used to overide and drive motors directly...dangerous
     bool          TLIOveride   = false;
