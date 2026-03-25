@@ -163,6 +163,10 @@ public:
     float workAreaCenterOffsetX = 0.0;
     float workAreaCenterOffsetY = 0.0;
 
+    // Frame size limits used for validation during calibration
+    float frameSizeMin = 500.0;
+    float frameSizeMax = 5500.0;
+
     bool test         = false;
     bool debugEnabled = false;
 

@@ -1569,7 +1569,7 @@ bool Calibration::adjustFrameSizeToMatchFirstMeasurement() {
     // The algorithm works for any interior point E inside the square
     double L = SquareCalculation::calculateSquareSideLength(tlLen, trLen, blLen, brLen);
 
-    if (L < 500.0 || L > 5500.0) {  // Sanity check on square size
+    if (L < Maslow.frameSizeMin || L > Maslow.frameSizeMax) {  // Sanity check on square size
         log_error("Unable to adjust frame size. Calculated size " << L << "mm is outside reasonable range");
         return false;
     }
@@ -1941,126 +1941,11 @@ void Calibration::handleMotorOverides() {
 }
 
 /*
- * Detects the orientation (horizontal vs vertical) of the machine
- * by measuring TL and TR belt extension under gravity.
- * Returns true when detection is complete.
+ * Orientation detection is skipped — the machine always uses VERTICAL mode.
+ * Returns true immediately after setting orientation to VERTICAL.
  */
 bool Calibration::detectOrientation() {
-    const unsigned long STARTUP_DELAY_MS                = 50;    // Delay before starting test to ensure stable starting position
-    const unsigned long ORIENTATION_DETECT_DURATION_MS  = 1500;  // Duration in ms to run orientation detection test (1.5 seconds)
-    const float         ORIENTATION_DETECT_THRESHOLD_MM = 35.0;  // Minimum extension in mm to detect vertical orientation
-    const int           ORIENTATION_DETECT_SPEED        = 716;   // PWM speed for motors (70% of max 1023)
-    const unsigned long MOTOR_SETTLING_PAUSE_MS         = 500;   // Pause duration after retraction to allow motors to settle
-
-    // Track whether the settling pause has completed
-    static bool settlingCompleted = false;
-
-    // If settling has already completed, return true immediately on subsequent calls
-    // This prevents re-running detection on subsequent calibration_loop iterations
-    if (settlingCompleted) {
-        return true;
-    }
-
-    // Initialize timer on first call
-    if (orientationDetectTimer == 0) {
-        orientationDetectTimer = millis();
-        settlingCompleted      = false;  // Reset the flag when starting new detection
-    }
-
-    unsigned long elapsedTime = millis() - orientationDetectTimer;
-
-    // Phase 1: Record starting positions (once at beginning)
-    if (!orientationDetectionDone && elapsedTime < STARTUP_DELAY_MS) {
-        // Only record and log on first cycle (elapsedTime will be very small)
-        if (elapsedTime < 10) {  // First few milliseconds only
-            tlStartPosition = Maslow.axis[_TL].getPosition();
-            trStartPosition = Maslow.axis[_TR].getPosition();
-        }
-        return false;
-    }
-
-    // Phase 2: Actively drive TL and TR motors outward at 70% speed for 1.5 seconds
-    // BL and BR motors are kept stopped (not powered)
-    // In vertical orientation, gravity assists and belts extend significantly
-    // In horizontal orientation, belts extend minimally despite motor drive
-    if (!orientationDetectionDone && elapsedTime >= STARTUP_DELAY_MS && elapsedTime < (STARTUP_DELAY_MS + ORIENTATION_DETECT_DURATION_MS)) {
-        // Drive TL and TR motors at 70% speed in extend direction
-        Maslow.axis[_TL].driveOut(ORIENTATION_DETECT_SPEED);
-        Maslow.axis[_TR].driveOut(ORIENTATION_DETECT_SPEED);
-        // Ensure BL and BR are stopped
-        Maslow.axis[_BL].stop();
-        Maslow.axis[_BR].stop();
-        return false;
-    }
-
-    // Phase 3: Measure extension and return to starting positions
-    if (!orientationDetectionDone && elapsedTime >= (STARTUP_DELAY_MS + ORIENTATION_DETECT_DURATION_MS)) {
-        double tlCurrentPosition = Maslow.axis[_TL].getPosition();
-        double trCurrentPosition = Maslow.axis[_TR].getPosition();
-
-        double tlExtension  = tlCurrentPosition - tlStartPosition;
-        double trExtension  = trCurrentPosition - trStartPosition;
-        double avgExtension = (tlExtension + trExtension) / 2.0;
-
-        // Determine orientation based on extension amount
-        bool detectedOrientation = HORIZONTAL;
-        if (avgExtension > ORIENTATION_DETECT_THRESHOLD_MM) {
-            detectedOrientation = VERTICAL;
-            log_info("Detected VERTICAL orientation (extension > " << ORIENTATION_DETECT_THRESHOLD_MM << " mm)");
-        } else {
-            detectedOrientation = HORIZONTAL;
-            log_info("Detected HORIZONTAL orientation (extension <= " << ORIENTATION_DETECT_THRESHOLD_MM << " mm)");
-        }
-
-        // Update the calibration object's orientation
-        // This will be reflected in the Maslow_vertical configuration parameter
-        orientation = detectedOrientation;
-        log_info("Orientation set to: " << (orientation == VERTICAL ? "VERTICAL" : "HORIZONTAL")
-                                        << " (Maslow_vertical=" << (orientation ? "true" : "false") << ")");
-
-        // Set targets to return to starting positions
-        Maslow.axis[_TL].setTarget(tlStartPosition);
-        Maslow.axis[_TR].setTarget(trStartPosition);
-
-        orientationDetectionDone = true;
-        return false;
-    }
-
-    // Phase 4: Return to starting positions
-    if (orientationDetectionDone) {
-        // Use PID to return to starting positions
-        Maslow.axis[_TL].recomputePID();
-        Maslow.axis[_TR].recomputePID();
-
-        double tlCurrentPosition = Maslow.axis[_TL].getPosition();
-        double trCurrentPosition = Maslow.axis[_TR].getPosition();
-
-        // Check if we've returned to starting positions (within 5mm tolerance)
-        if (fabs(tlCurrentPosition - tlStartPosition) < 5.0 && fabs(trCurrentPosition - trStartPosition) < 5.0) {
-            // Phase 5: Power down all motors and pause to allow settling
-            // This prevents current spikes when immediately trying to pull belts tight in horizontal orientation
-            static unsigned long settlingStartTime = 0;
-
-            // Initialize settling timer on first entry to this phase
-            if (settlingStartTime == 0) {
-                settlingStartTime = millis();
-            }
-
-            // Power down all four motors during the settling pause
-            for (int arm = _TL; arm < ARM_COUNT; arm++) {
-                Maslow.axis[arm].stop();
-            }
-
-            // Check if settling pause is complete
-            if (millis() - settlingStartTime >= MOTOR_SETTLING_PAUSE_MS) {
-                settlingStartTime = 0;     // Reset for next calibration run
-                settlingCompleted = true;  // Mark settling as complete to prevent re-running detection
-                return true;
-            }
-
-            return false;  // Continue settling pause
-        }
-    }
-
-    return false;
+    orientation = VERTICAL;
+    log_info("Orientation set to VERTICAL (horizontal mode disabled)");
+    return true;
 }

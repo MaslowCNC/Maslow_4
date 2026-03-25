@@ -114,6 +114,10 @@ namespace Machine {
         handler.item(M + "_Work_Area_Center_Offset_X", Maslow.workAreaCenterOffsetX, -5000.0, 5000.0);
         handler.item(M + "_Work_Area_Center_Offset_Y", Maslow.workAreaCenterOffsetY, -5000.0, 5000.0);
 
+        // Frame size validation limits
+        handler.item(M + "_frame_size_min", Maslow.frameSizeMin, 100.0, 5000.0);
+        handler.item(M + "_frame_size_max", Maslow.frameSizeMax, 500.0, 20000.0);
+
         // Material thickness parameters - temporary storage for machine-level config
         handler.item(M + "_spoilboardThickness", _tempSpoilboardThickness, 0.0, 50.0);
         handler.item(M + "_workThickness", _tempWorkThickness, 0.0, 50.0);
@@ -211,7 +215,7 @@ namespace Machine {
     // Default Config - Board
     const std::string dcBoard = "name: Default (" + M + " S3 Board)\nboard: " + M + "\n";
 
-    const std::string dcM4Vert            = M + "_vertical: false\n";
+    const std::string dcM4Vert            = M + "_vertical: true\n";
     const std::string dcM4CalibrationGrid = mcgrid + "width_mm_X: 0\n" + mcgrid + "height_mm_Y: 0\n" + mcgrid + "size: 9\n";
 
     const std::string dcM4Anchors = M + "_tlX: -27.6\n" + M + "_tlY: 2064.9\n" + M + "_trX: 2924.3\n" + M + "_trY: 2066.5\n" + M +
