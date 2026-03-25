@@ -1945,7 +1945,10 @@ void Calibration::handleMotorOverides() {
  * Returns true immediately after setting orientation to VERTICAL.
  */
 bool Calibration::detectOrientation() {
-    orientation = VERTICAL;
-    log_info("Orientation set to VERTICAL (horizontal mode disabled)");
+    if (!orientationDetectionDone) {
+        orientation              = VERTICAL;
+        orientationDetectionDone = true;
+        log_info("Orientation set to VERTICAL");
+    }
     return true;
 }
