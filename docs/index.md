@@ -40,6 +40,10 @@ Step-by-step instructions for building your Maslow 4:
   - [Quick Start Guide](calibration-simulation/QUICKSTART.md)
   - [Full Documentation](calibration-simulation/README.md)
 
+## Release Notes
+
+- [Version 1.20](release-notes-v1.20.md) - Stop improvements, pause fix, GCode line highlighting, frame size increase, and more
+
 ## Contributing
 
 - [How To Edit This Wiki](HowToEditThisWiki.md) - Guide for contributing to the documentation
