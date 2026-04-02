@@ -35,6 +35,7 @@
 #    include "Driver/localfs.h"
 
 #    include "src/HashFS.h"
+#    include "../Maslow/Maslow.h"
 #    include <list>
 
 namespace WebUI {
@@ -1086,6 +1087,7 @@ namespace WebUI {
                     //**************
                 } else if (upload.status == UPLOAD_FILE_WRITE) {
                     vTaskDelay(1 / portTICK_RATE_MS);
+                    Maslow.resetUpdateWatchdog();
                     //check if no error
                     if (_upload_status == UploadStatus::ONGOING) {
                         if (((100 * upload.totalSize) / maxSketchSpace) != last_upload_update) {
@@ -1291,6 +1293,7 @@ namespace WebUI {
 
     void Web_Server::uploadWrite(uint8_t* buffer, size_t length) {
         vTaskDelay(1 / portTICK_RATE_MS);
+        Maslow.resetUpdateWatchdog();
         if (_uploadFile && _upload_status == UploadStatus::ONGOING) {
             //no error write post data
             if (length != _uploadFile->write(buffer, length)) {

@@ -2,19 +2,31 @@
 
 This guide is intended to get your Maslow up and running in as few words as possible. It is intended to be used immediately after completing assembly so we can assume that the user has already assembled their machine and they are now looking for how to set it up.
 
-  
+
+## Overall saftey meaures
+- Regularly check your machine  for evidence of wear or damage.
+- Only use in a safe and controlled space.
+- Do not leave the machine running unattended.
+- Use personal protective equipment including masks, respirators, gloves, hearing protection,  and eye protection.
+- Do not touch the machine while it is moving or turned on.
+- Do not change blades while the machine is plugged in.
+- Have a **FIRE** suppression plan and equipment. This may be the biggest risk. Hot blades ignite dust.
+- Consider how you will cut power to the machine in an emergency.
+- Check for loose parts, tools, keys, and if the blades are in an appropriate place before providing power to the machine.
+- Train yourself and anyone who will come in contact with the machine on your saftely plan.
+
 ## Choosing your Anchors
 
-Maslow 4 is designed to turn any flat rigid surface into a large format CNC router. This is powerful, but it can lead to an overwhelming number of options. 
+Maslow 4 is designed to turn any flat rigid surface into a large format CNC router. This is powerful, but it can lead to an overwhelming number of options.
 
 The best option is to attach the machine directly to a concrete floor. This can be done by either attaching 3D printed anchors to the floor or by adding threaded inserts into the concrete.
 
 <img src="https://github.com/user-attachments/assets/d23d8f62-3247-4021-b801-6f804004a208" alt="Floor anchor" width="400">
 
 The anchors are sized to fit a 10mm or 4/8ths inch bolt.
- 
+
 <img src="https://github.com/user-attachments/assets/eb3b7083-ba87-4b3d-877e-17002e466056" alt="Threaded insert" width="400">
- 
+
 You can find a complete list of different anchor types here: [ADD LINK]
 
   If you don't have a floor to connect to you can construct a flat rigid surface to use the machine on. You can find instructions to assemble a basic one that we recommend here: https://www.maslowcnc.com/frame-options
@@ -27,19 +39,19 @@ We've put together a tool to help you to better understand what size of frame yo
 
 - Size and other considerations
   - Belt ends need to be loose to rotate in the XY directions but gently held in the z direction so they don't pop up and down.
-  - Belt ends will be taken on and off a lot. 
+  - Belt ends will be taken on and off a lot.
   - Can be horizontal to 20 degrees from vertical.
   - Does not have to be exactly rectangular.
   - Software limits basic frames to less than 5 meters wide and tall.
-  - Belts are 4.4 meters long. Cutting area can not be farther than that from an anchor. 
+  - Belts are 4.4 meters long. Cutting area can not be farther than that from an anchor.
 
 ## Connecting
-	
-  Maslow4 is controlled using a built-in interface accessible from your web browser. You can connect to Maslow4 from any Windows, Mac, or Linux computer or iOS or Android tablet or phone. You do not need to install any software. 
+
+  Maslow4 is controlled using a built-in interface accessible from your web browser. You can connect to Maslow4 from any Windows, Mac, or Linux computer or iOS or Android tablet or phone. You do not need to install any software.
 
 Maslow4 will create a wifi network called **“maslow”** which you can connect to. The default password for this network will be **“12345678”**.
 
-Connecting to the network will automatically open the user interface on most devices. If it does not you can type **192.168.0.1** into your web browser to open the interface. 
+Connecting to the network will automatically open the user interface on most devices. If it does not you can type **192.168.0.1** into your web browser to open the interface.
 
 <img src="user-guide/images/guide-12.png" alt="File Upload" width="600">
 
@@ -71,7 +83,7 @@ Connecting to the network will automatically open the user interface on most dev
 
 Maslow4’s firmware is improving regularly.
 
-Luckily updating the Maslow4 firmware is easy. 
+Luckily updating the Maslow4 firmware is easy.
 
 To update Maslow4’s firmware click on the FluidNC tab at the top of the screen, then click on the Update the Firmware button, and select your new firmware file.
 
@@ -107,7 +119,7 @@ maslow.yaml contains the configuration settings for your machine. Your calibrati
 
 ## Extending and Retracting the Belts
 
-The Maslow 4 belts can be retracted for storage and extended for use. 
+The Maslow 4 belts can be retracted for storage and extended for use.
 
 Every time that the belts are retracted the machine will use that as an oportunity to reset it's understanding of how long each belt is. This is done by monitoring the current required to retract each belt. If your machine is in an unknown state retracting the belts will help it to understand exactly where it is.
 
@@ -133,11 +145,11 @@ Once all four belts are fully extended you will hear the cooling fan turn off. C
 
 ## Finding your anchor point locations
 
-If you haven't prevously connected your machine to these anchor points, you will need to locate them. This can be done with a tape measure, but that is slow and error prone. 
+If you haven't prevously connected your machine to these anchor points, you will need to locate them. This can be done with a tape measure, but that is slow and error prone.
 
-Press **Find Anchor Locations** to have the machine take a series of measruements to automatically locate the anchor points for you. The machine will move through a grid of points and take measurements at each one. 
+Press **Find Anchor Locations** to have the machine take a series of measruements to automatically locate the anchor points for you. The machine will move through a grid of points and take measurements at each one.
 
-Be sure to leave your web bowser tab open through the entire process because the calculations will be done there since your computer has much more processing power than the ESP32 in the Maslow. 
+Be sure to leave your web bowser tab open through the entire process because the calculations will be done there since your computer has much more processing power than the ESP32 in the Maslow.
 
 Keep an eye on the machine during this entire process, it may be tempting to walk away, but it is important to keep an eye on it.
 

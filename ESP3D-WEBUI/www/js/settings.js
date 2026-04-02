@@ -294,6 +294,9 @@ const saveConfigSuccess = (response) => {
   const configFileName = getConfigFileName();
   setHTML(configSaveResultId, `"Save" ${configFileName} succeeded`);
   saveConfigClearMessage();
+  if (typeof loadParkSettings === 'function') {
+    loadParkSettings();
+  }
 }
 
 const saveConfigFail = (response) => {

@@ -392,24 +392,14 @@ const jogTo = (axisAndDistance) => {
 const jogWithUnitsSafeguard = (feedrate, axisAndDistance) => {
   // Store what units the UI is currently displaying (what user expects)
   const uiExpectedUnits = gCodeModal.units;
-  
-  // Force firmware to use UI units, execute jog, then query to restore original state
-  // This ensures the jog distance is always interpreted correctly
-  sendCommand(uiExpectedUnits);
-  
-  // Small delay to ensure units command is processed
-  setTimeout(() => {
-    const cmd = `$J=G91F${feedrate}${axisAndDistance}`;
-    const unitsLabel = uiExpectedUnits === 'G20' ? 'inch' : 'mm';
-    addMessage(`JogTo: ${cmd} (${unitsLabel})`);
-    sendCommand(cmd + '\n');
-    
-    // After jog command, query current state to restore if needed
-    // The $G response will be handled by grblGetModal and update the UI automatically
-    setTimeout(() => {
-      sendCommand('$G');
-    }, 200);
-  }, 100);
+
+  // Embed the units code directly in the jog command (G20/G21 are allowed within $J= commands).
+  // This avoids sending a separate G20/G21 command which would fail with
+  // Error 9 (SystemGcLock) when the firmware is still in Jog state from a previous jog.
+  const unitsLabel = uiExpectedUnits === 'G20' ? 'inch' : 'mm';
+  const cmd = `$J=G91${uiExpectedUnits}F${feedrate}${axisAndDistance}`;
+  addMessage(`JogTo: ${cmd} (${unitsLabel})`);
+  sendCommand(cmd + '\n');
 }
 
 /** Peform a move command */
@@ -621,6 +611,41 @@ var playButtonHandler
 function setPlayButton(isEnabled, color, text, click) {
   setButton('playBtn', isEnabled, color, text);
   playButtonHandler = click;
+  // Update the parent div's background and redraw the canvas 2D content so the
+  // visual state accurately reflects the intended button state.  CSS backgroundColor
+  // on the canvas alone has no effect when the canvas has an opaque 2D fill.
+  const playDiv = id('tablettab_gcode_play');
+  const canvas = id('playBtn');
+  if (canvas && canvas.getContext) {
+    if (playDiv) {
+      playDiv.style.backgroundColor = color;
+    }
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      // canvas.width/height default to 300x150 per the HTML canvas spec
+      const w = canvas.width || 300;
+      const h = canvas.height || 150;
+      ctx.clearRect(0, 0, w, h); // Make canvas transparent so div color shows through
+      if (color !== gray) {
+        // Draw a centered white triangle to indicate an actionable state
+        const centerX = w / 2;
+        const centerY = h / 2;
+        const size = Math.min(w, h) * 0.3;
+        ctx.beginPath();
+        ctx.strokeStyle = 'white';
+        ctx.fillStyle = 'white';
+        ctx.lineWidth = 1;
+        ctx.lineCap = 'butt';
+        ctx.lineJoin = 'miter';
+        ctx.moveTo(centerX - size/2, centerY - size/2);
+        ctx.lineTo(centerX - size/2, centerY + size/2);
+        ctx.lineTo(centerX + size/2, centerY);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      }
+    }
+  }
 }
 function doPlayButton() {
   if (playButtonHandler) {
@@ -648,12 +673,13 @@ const orange = "#ff9500";
 const stopRed = "#ce654c";
 
 function setRunControls() {
-  if (gCodeLoaded) {
-    // A GCode file is ready to go
+  const isReadyToCut = typeof maslowStatus !== 'undefined' && maslowStatus.state === MASLOW_STATE_READY_TO_CUT;
+  if (gCodeLoaded && isReadyToCut) {
+    // A GCode file is ready to go and Maslow is ready to cut
     setPlayButton(true, green, 'Start', runGCode)
     //setPauseButton(false, gray, 'Pause', null)
   } else {
-    // Can't start because no GCode to run
+    // Can't start: no GCode loaded or Maslow is not ready to cut
     setPlayButton(false, gray, 'Start', null)
     //setPauseButton(false, gray, 'Pause', null)
   }
@@ -747,6 +773,14 @@ function tabletGrblState(grbl, response) {
   oldCannotClick = cannotClick
 
   tabletUpdateModal()
+
+  // When a stop was requested and the machine is now Idle or Alarm, cancel
+  // further retries.  Idle = normal stop; Alarm = stop triggered an alarm
+  // (e.g. watchdog fired mid-stop).  Either way the machine is no longer
+  // running, so continuing to send $STOP would be harmful.
+  if (_stopPending && (stateName === 'Idle' || stateName === 'Alarm')) {
+    _stopPending = false;
+  }
 
   switch (stateName) {
     case 'Sleep':
@@ -953,13 +987,87 @@ const tabletMoveBottomRight = () => sendMove("X+Y-");
 const tabletSetZHomeMDown = () => zeroAxis("Z");
 const tabletSetZHomeMUp = () => refreshGcode();
 // Button event handlers - Fifth Row - nothing special here, move on
+
+// Send a command directly via WebSocket to bypass PAGEID routing.
+// Returns true if the command was sent, false if the WebSocket is not open.
+const sendViaWS = (cmd) => {
+  if (ws_source && ws_source.readyState === WebSocket.OPEN) {
+    try {
+      ws_source.send(cmd);
+      return true;
+    } catch (e) {
+      console.warn("WebSocket send failed:", e);
+    }
+  }
+  return false;
+};
+
+// True when a stop has been requested but not yet confirmed delivered.
+// onWSOpenCallback sends $STOP on every WebSocket (re)connect while this
+// flag is set, so the command reaches the firmware before any auto-reports
+// start flowing.
+let _stopPending = false;
+
+// Called from ws_source.onopen (socket.js) on every WebSocket (re)connect.
+// Does NOT clear _stopPending — tabletGrblState clears it once the firmware
+// confirms the machine is no longer running (stateName === 'Idle').
+const onWSOpenCallback = () => {
+  if (_stopPending) {
+    try {
+      ws_source.send("$STOP\n");
+    } catch (e) {
+      console.warn("Failed to send pending $STOP on connect:", e);
+    }
+  }
+  // Refresh park settings after reconnect (e.g. after firmware restart with new maslow.yaml).
+  // A short delay lets the firmware send CURRENT_ID so PAGEID is established before querying.
+  scheduleCallback(() => {
+    if (typeof loadParkSettings === 'function') {
+      loadParkSettings();
+    }
+  }, 1000);
+};
+
+// Send $STOP directly via WebSocket to bypass PAGEID routing.
+// Sets _stopPending and retries every 300 ms for up to ~10 seconds.
+// _stopPending is cleared by tabletGrblState when the firmware confirms
+// the machine is Idle, or by the timeout.  onWSOpenCallback also sends
+// $STOP as the very first message on every WebSocket (re)connect while
+// the flag is set, so the command survives a TCP drop between send and
+// firmware processing.
+const sendStopCommand = () => {
+  const RETRY_INTERVAL_MS = 300;
+  const MAX_RETRY_ATTEMPTS = 33; // 33 * 300ms ≈ 10 seconds
+  _stopPending = true;
+  sendViaWS("$STOP\n"); // Try immediately; keep _stopPending for retries
+  let attempts = 0;
+  const retryTimer = setInterval(() => {
+    if (!_stopPending) {
+      clearInterval(retryTimer);
+      return;
+    }
+    sendViaWS("$STOP\n");
+    if (++attempts >= MAX_RETRY_ATTEMPTS) {
+      _stopPending = false;
+      clearInterval(retryTimer);
+      console.warn("$STOP retry limit reached without firmware confirmation; machine may not have stopped");
+    }
+  }, RETRY_INTERVAL_MS);
+  scheduleCallback(() => {
+    if (!sendViaWS("$MINFO\n")) {
+      sendCommand('$MINFO');
+    }
+  }, 1000);
+};
+
 // Button event handlers - Sixth Row
 const tabletGCodeStop = () => {
   const stopBtn = id("tablettab_gcode_stop");
   if (stopBtn) {
     stopBtn.style.backgroundColor = orange;
   }
-  onCalibrationButtonsClick("$STOP", "Stop Maslow and Gcode");
+  addMessage("Stop Maslow and Gcode");
+  sendStopCommand();
 };
 
 const resetStopButtonColors = () => {
@@ -1012,7 +1120,8 @@ const tabletCalStop = () => {
   if (stopBtn) {
     stopBtn.style.setProperty('background-color', orange, 'important');
   }
-  onCalibrationButtonsClick("$STOP", "Stop");
+  addMessage("Stop");
+  sendStopCommand();
   returnFocusToTablet();
 };
 const tabletCalSetZStop = () => {
@@ -1045,7 +1154,20 @@ const handleMaslowActionButtonClick = () => {
     case 4: // EXTENDEDOUT - Apply Tension
       tabletCalTense();
       break;
-    // State 7 (READY_TO_CUT) and others don't need a click action
+    case 7: // READY_TO_CUT - Park: lift Z to safe height (work coords), then move to park position (machine coords)
+    {
+      const lv = globalThis.loadedValues || {};
+      const parkZ = parseFloat(lv.parkZ);
+      const parkX = parseFloat(lv.parkX);
+      const parkY = parseFloat(lv.parkY);
+      const safeZ = isNaN(parkZ) ? 2.0 : parkZ;
+      const targetX = isNaN(parkX) ? 0.0 : parkX;
+      const targetY = isNaN(parkY) ? 0.0 : parkY;
+      sendCommand(`G90 G0 Z${safeZ}`);
+      sendCommand(`G53 G0 Y${targetY} X${targetX}`);
+      addMessage(`Parking: raising Z to ${safeZ}mm above Z home, then moving to machine X=${targetX}, Y=${targetY}`);
+      break;
+    }
   }
 };
 

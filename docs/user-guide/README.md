@@ -185,7 +185,25 @@ For detailed calibration instructions, see [Putting It All Together](../putting-
 
 ![Cutting Tips](images/guide-25.png)
 
+## LED Status Indicators
+
+The Maslow 4 control board has two LEDs that communicate machine state at a glance.
+
+| LED | Pattern | Meaning |
+| --- | --- | --- |
+| **Red** | Slow blink (300 ms) | Error or emergency stop — check the console for details, then power-cycle |
+| **Red + WiFi** | Rapid double-blink | Motion-control watchdog fired — power-cycle the machine |
+| **WiFi** | Short blinks on startup | Encoding the machine's IP address on the local network |
+
+For a full explanation of each error condition see the [Troubleshooting Guide](../Troubleshooting.md#led-indicators).
+
 ## Troubleshooting
+
+### Red LED is blinking
+
+The Red LED blinks slowly (300 ms on/off) when the machine has detected an error. Open the web interface console to read the error message. Common causes are a disconnected encoder or motor cable, a belt that has gone slack, or an emergency stop triggered during a job. Power-cycle the machine after fixing the underlying problem.
+
+If **both** the Red and WiFi LEDs flash together in a rapid double-blink, the motion-control watchdog fired. Power-cycle the machine.
 
 ### Cannot Connect to WiFi
 

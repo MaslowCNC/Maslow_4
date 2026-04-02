@@ -4,6 +4,9 @@
 /** Maslow Status */
 let maslowStatus = { homed: false, extended: false, state: 0 };
 
+/** Maslow state constants (mirror firmware Maslow.h defines) */
+const MASLOW_STATE_READY_TO_CUT = 7;
+
 /** This keeps track of when we saw the last heartbeat from the machine */
 //I think this is not used anymore and can be removed now
 let lastHeartBeatTime = new Date().getTime();
@@ -47,6 +50,7 @@ READY_TO_CUT 7
     -Retract All
     -Apply Tension
     -Release Tension
+    -Park (State-Dependent Button: moves to machine 0,0)
 */
 const updateDynamicButtons = () => {
 
@@ -193,6 +197,11 @@ const updateDynamicButtons = () => {
 			tenseButton.style.backgroundColor = greyBackground;
 			calibrateButton.style.backgroundColor = greyBackground;
 
+			// Load park settings so the park button uses configured values
+			if (typeof loadParkSettings === 'function') {
+				loadParkSettings();
+			}
+
 			break;
 		case 8:
 			stateLabel.innerHTML = "State: Releasing Tension";
@@ -240,6 +249,11 @@ const updateDynamicButtons = () => {
 	// Update the new Maslow action button when state changes
 	if (typeof updateMaslowActionButton === 'function') {
 		updateMaslowActionButton();
+	}
+
+	// Update run controls so the Start button reflects whether Maslow is ready to cut
+	if (typeof setRunControls === 'function') {
+		setRunControls();
 	}
 
 	// Reset stop button colors when action completes (state update received)
@@ -388,6 +402,9 @@ const cfgDef = {
 	Work_Area_Y: { name: "workAreaY", type: "A", cmd: "Maslow_Work_Area_Y" },
 	Work_Area_Center_Offset_X: { name: "workAreaCenterOffsetX", type: "A", cmd: "Maslow_Work_Area_Center_Offset_X" },
 	Work_Area_Center_Offset_Y: { name: "workAreaCenterOffsetY", type: "A", cmd: "Maslow_Work_Area_Center_Offset_Y" },
+	Park_Z: { name: "parkZ", type: "A", cmd: "Maslow_Park_Z" },
+	Park_X: { name: "parkX", type: "A", cmd: "Maslow_Park_X" },
+	Park_Y: { name: "parkY", type: "A", cmd: "Maslow_Park_Y" },
 };
 
 /** Handle Maslow specific configuration messages
@@ -479,7 +496,7 @@ globalThis.setValue = globalThis.setValue || function(id, value) {
 globalThis.loadedValues = globalThis.loadedValues || {};
 
 const checkHomed = () => {
-	if (maslowStatus.state != 7) { // If the state is not 'ready to cut'
+	if (maslowStatus.state != MASLOW_STATE_READY_TO_CUT) { // If the state is not 'ready to cut'
 		console.log("Maslow is not ready to move, current state: " + maslowStatus.state);
 		const err_msg = `${M} is not ready to move.`;
 		alert(err_msg);
@@ -492,7 +509,7 @@ const checkHomed = () => {
 		}
 	}
 
-	return maslowStatus.state == 7; // Return true if the state is 'ready to cut'
+	return maslowStatus.state == MASLOW_STATE_READY_TO_CUT; // Return true if the state is 'ready to cut'
 }
 
 /** Short hand convenience call to SendPrinterCommand with some preset values.
@@ -532,6 +549,16 @@ const loadCornerValues = () => {
 	});
 };
 
+/** Load park position settings from firmware (queried on demand) */
+const loadParkSettings = () => {
+	['Park_Z', 'Park_X', 'Park_Y'].forEach((key) => {
+		const cfgVal = cfgDef[key];
+		if (cfgVal) {
+			SendPrinterCommand(`$/${cfgVal.cmd}`);
+		}
+	});
+};
+
 const saveConfigValues = () => {
 	// Get all of the config data as entered, and as already loaded
 	for (const key of allConfigKeys()) {
@@ -549,6 +576,10 @@ const saveConfigValues = () => {
 		if (value !== cfgVal.loadedVal) {
 			const cmd = `$/${cfgVal.cmd || `${M}_${key}`}=${value}`;
 			sendCommand(cmd);
+			// Immediately update loadedValues so the new value is available without
+			// waiting for the async WebSocket round-trip from loadParkSettings()
+			if (!globalThis.loadedValues) globalThis.loadedValues = {};
+			globalThis.loadedValues[cfgVal.name] = value;
 		}
 	};
 
@@ -558,6 +589,7 @@ const saveConfigValues = () => {
 	refreshSettings(current_setting_filter);
 	saveMaslowYaml();
 	loadCornerValues();
+	loadParkSettings();
 
 	hideModal('configuration-popup');
 }

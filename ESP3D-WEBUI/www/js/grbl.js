@@ -10,6 +10,7 @@ var MPOS = [0, 0, 0]
 var WPOS = [0, 0, 0]
 var grblaxis = 3;
 var grblzerocmd = 'X0 Y0 Z0';
+var currentGrblStateName = '';
 
 let axis_feedrate = [0, 0, 0, 0, 0, 0];
 /** gets/sets the GRBL axis feedrates [x, y, z, a, b, c]
@@ -454,60 +455,23 @@ const updateUnifiedPlayPauseButton = (stateName, clickable) => {
       </svg>`;
     playButton.onclick = () => SendRealtimeCmd(0x7e); // Resume command
   } else {
-    // Machine is idle or in another state - reset button and let tablet.js handle it
-    // Only reset if the button was previously in pause mode (orange background) or resume mode (green background)
+    // Machine is idle or in another state - restore canvas if needed, then
+    // let setRunControls() determine the correct visual state based on Maslow
+    // readiness and whether a GCode file is loaded.
     const currentBgColor = playButton.style.backgroundColor;
-    if (currentBgColor === 'rgb(240, 173, 78)' || currentBgColor === '#f0ad4e' || 
+    if (currentBgColor === 'rgb(240, 173, 78)' || currentBgColor === '#f0ad4e' ||
         currentBgColor === 'rgb(92, 184, 92)' || currentBgColor === '#5cb85c') {
-      // Reset the button styling
-      playButton.style.backgroundColor = '#4aa85c'; // Set div background to green (same as HTML template)
-      playButton.onclick = null;
-      
-      // Restore the canvas element that tablet.js expects, if it doesn't exist
-      let playBtnCanvas = id("playBtn");
-      if (!playBtnCanvas) {
+      // Coming back from pause/resume mode - restore the canvas element
+      if (!id("playBtn")) {
         playButton.innerHTML = '<canvas id="playBtn" style="width:100%;height:100%"></canvas>';
-        playBtnCanvas = id("playBtn");
       }
-      
-      // Set up the proper click handler for idle state (same as tablet.js would do)
-      if (typeof doPlayButton === 'function') {
-        playButton.onclick = doPlayButton;
-      }
-      
-      // Draw the white triangle on transparent canvas so div's green background shows through
-      if (playBtnCanvas) {
-        // Clear any text content and draw triangle
-        playBtnCanvas.innerHTML = '';
-        
-        // Set canvas size to match container
-        const rect = playButton.getBoundingClientRect();
-        playBtnCanvas.width = rect.width || 200;
-        playBtnCanvas.height = rect.height || 200;
-        
-        const playC = playBtnCanvas.getContext("2d");
-        // Clear the canvas (transparent background)
-        playC.clearRect(0, 0, playBtnCanvas.width, playBtnCanvas.height);
-        
-        // Calculate center and size for triangle
-        const centerX = playBtnCanvas.width / 2;
-        const centerY = playBtnCanvas.height / 2;
-        const size = Math.min(playBtnCanvas.width, playBtnCanvas.height) * 0.3;
-        
-        // Draw white triangle
-        playC.beginPath();
-        playC.strokeStyle = 'white';
-        playC.fillStyle = 'white';
-        playC.lineWidth = 1;
-        playC.lineCap = 'butt';
-        playC.lineJoin = 'miter';
-        playC.moveTo(centerX - size/2, centerY - size/2);
-        playC.lineTo(centerX - size/2, centerY + size/2);
-        playC.lineTo(centerX + size/2, centerY);
-        playC.closePath();
-        playC.fill();
-        playC.stroke();
-      }
+      // Always clear onclick when leaving pause/resume mode so the grbl.js
+      // resume handler doesn't linger; the event listener from tabletInit remains.
+      playButton.onclick = null;
+    }
+    // Delegate button appearance to setRunControls so Maslow state is respected
+    if (typeof setRunControls === 'function') {
+      setRunControls();
     }
   }
 };
@@ -544,7 +508,7 @@ const updateMaslowActionButton = () => {
   let shouldShow = false;
   const backgroundColor = "#4aa85c"; // green when shown
   
-  // Only show button for states 0, 2, and 4
+  // Only show button for states 0, 2, 4, and 7
   switch (maslowStatus.state) {
     case 0: // UNKNOWN
       displayText = "Retract";
@@ -561,8 +525,14 @@ const updateMaslowActionButton = () => {
       isActionable = true;
       shouldShow = true;
       break;
+    case 7: // READY_TO_CUT - Park (only when GRBL is Idle)
+      if (currentGrblStateName === 'Idle') {
+        displayText = "Park";
+        isActionable = true;
+        shouldShow = true;
+      }
+      break;
     default:
-      // Hide button for all other states (including state 7 - READY_TO_CUT)
       shouldShow = false;
       break;
   }
@@ -612,6 +582,10 @@ const show_grbl_status = (stateName = "", message = "", hasSD = false) => {
   if (stateName == "Hold" && probe_progress_status != 0) {
     probe_failed_notification();
   }
+
+  // Track current GRBL state for use in updateMaslowActionButton
+  currentGrblStateName = stateName;
+  updateMaslowActionButton();
 }
 
 function finalize_probing() {

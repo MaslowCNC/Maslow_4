@@ -84,6 +84,7 @@ public:
     void kill(Channel* channel);
 
     void registration(Channel* channel);
+    void registrationFront(Channel* channel);
     void deregistration(Channel* channel);
     void init();
 

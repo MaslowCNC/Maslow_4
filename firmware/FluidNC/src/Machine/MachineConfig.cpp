@@ -117,6 +117,11 @@ namespace Machine {
         // Material thickness parameters - temporary storage for machine-level config
         handler.item(M + "_spoilboardThickness", _tempSpoilboardThickness, 0.0, 50.0);
         handler.item(M + "_workThickness", _tempWorkThickness, 0.0, 50.0);
+
+        // Park position settings (machine coordinates, Z is lifted first)
+        handler.item(M + "_Park_Z", Maslow.parkZ, -100.0, 100.0);
+        handler.item(M + "_Park_X", Maslow.parkX, -10000.0, 10000.0);
+        handler.item(M + "_Park_Y", Maslow.parkY, -10000.0, 10000.0);
     }
 
     void MachineConfig::afterParse() {
@@ -222,6 +227,8 @@ namespace Machine {
 
     const std::string dcM4Thickness = M + "_spoilboardThickness: 0.0\n" + M + "_workThickness: 0.0\n";
 
+    const std::string dcM4Park = M + "_Park_Z: 2.0\n" + M + "_Park_X: 0.0\n" + M + "_Park_Y: 0.0\n";
+
     const std::string dcSpi      = "spi:\n  miso_pin: gpio.13\n  mosi_pin: gpio.11\n  sck_pin: gpio.12\n";
     const std::string dcSDCard   = "sdcard:\n  card_detect_pin: NO_PIN\n  cs_pin: gpio.10\n";
     const std::string dcStepping = "stepping:\n  engine: RMT\n  idle_ms: 240\n";
@@ -255,14 +262,14 @@ namespace Machine {
     const std::string defaultConfig =
         dcBoard +
         // Maslow M4 default items
-        dcM4Vert + dcM4CalibrationGrid + dcM4CurrentThreshold + dcM4Thickness +
+        dcM4Vert + dcM4CalibrationGrid + dcM4CurrentThreshold + dcM4Thickness + dcM4Park +
         // Default sections
         dcSpi + dcSDCard + dcStepping + dcUart1 + dcKinematics +
         "axes:\n"
         "  z:\n    max_rate_mm_per_min: 400\n    acceleration_mm_per_sec2: 10\n    max_travel_mm: 100\n    steps_per_mm: 100\n"
         "    homing:\n      cycle: -1\n"
         "    motor0:\n      tmc_2209:\n        addr: 0\n        direction_pin: gpio.16\n        step_pin: gpio.15\n" +
-        dcZMotor + "    motor1:\n      tmc_2209:\n        addr: 1\n        direction_pin: gpio.38\n        step_pin: gpio.46\n" + dcZMotor;
+        dcZMotor + "    motor1:\n      tmc_2209:\n        addr: 1\n        direction_pin: NO_PIN\n        step_pin: gpio.46\n" + dcZMotor;
 
     bool MachineConfig::load() {
         bool configOkay;

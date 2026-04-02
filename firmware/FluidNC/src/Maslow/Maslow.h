@@ -163,6 +163,11 @@ public:
     float workAreaCenterOffsetX = 0.0;
     float workAreaCenterOffsetY = 0.0;
 
+    // Park position (machine coordinates, Z moved first)
+    float parkZ = 2.0;
+    float parkX = 0.0;
+    float parkY = 0.0;
+
     bool test         = false;
     bool debugEnabled = false;
 
