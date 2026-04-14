@@ -151,7 +151,7 @@ bool Calibration::requestStateChange(int newState) {
                 // If we're coming from CALIBRATION_COMPUTING and calibration is already complete,
                 // go directly to READY_TO_CUT instead of cycling through CALIBRATION_IN_PROGRESS
                 if (currentState == CALIBRATION_COMPUTING && waypoint > pointCount && pointCount > 0) {
-                    log_info("Calibration already complete (waypoint " << waypoint << " > pointCount " << pointCount 
+                    log_info("Find Anchors already complete (waypoint " << waypoint << " > pointCount " << pointCount
                              << "), transitioning directly to READY_TO_CUT");
                     resetCalibrationState();
                     return requestStateChange(READY_TO_CUT);
@@ -249,7 +249,7 @@ bool Calibration::requestStateChange(int newState) {
                 success               = true;
                 break;
             } else {
-                log_info("Cannot start calibration until the belts have been extended");
+                log_info("Cannot start Find Anchors until the belts have been extended");
                 break;
             }
         case CALIBRATION_COMPUTING:  //We can enter calibration computing from calibration in progress
@@ -259,7 +259,7 @@ bool Calibration::requestStateChange(int newState) {
                 success               = true;
                 break;
             } else {
-                log_info("Cannot enter calibration computing from state " << stateNames[currentState].name);
+                log_info("Cannot enter Find Anchors computing from state " << stateNames[currentState].name);
                 break;
             }
         case READY_TO_CUT:  //We can enter ready to cut from calibration in progress, calibration computing or taking slack
@@ -481,7 +481,7 @@ void Calibration::calibration_loop() {
         //Reset all of the calibration variables to the defaults so that calibration can be run again
         resetCalibrationState();
         requestStateChange(READY_TO_CUT);
-        log_info("Calibration complete");
+        log_info("Find Anchors complete");
         return;
     }
 
@@ -581,7 +581,7 @@ bool Calibration::takeSlackFunc() {
             double threshold = 12;
             if (abs(diff[_TL]) > threshold || abs(diff[_TR]) > threshold || abs(diff[_BL]) > threshold || abs(diff[_BR]) > threshold) {
                 log_error("Center point deviation over "
-                          << threshold << "mm, your coordinate system is not accurate, maybe try running calibration again?");
+                          << threshold << "mm, your coordinate system is not accurate, maybe try running Find Anchors again?");
                 //Should we enter an alarm state here to prevent things from going wrong?
 
                 //Reset
@@ -1059,7 +1059,7 @@ bool Calibration::take_measurement_avg_with_check(int waypoint, int dir) {
                 }
                 //reset the run counter to run the measurements again
                 if (criticalCounter++ > 8) {  //This updates the counter and checks
-                    log_error("Critical error, measurements are not within 1.5mm of each other 8 times in a row, stopping calibration");
+                    log_error("Critical error, measurements are not within 1.5mm of each other 8 times in a row, stopping Find Anchors");
                     resetCalibrationState();
                     criticalCounter = 0;
                     freeMeasurements();
@@ -1596,7 +1596,7 @@ bool Calibration::adjustFrameSizeToMatchFirstMeasurement() {
 void Calibration::checkCalibrationData() {
     if (calibrationDataWaiting > 0) {
         if (millis() - calibrationDataWaiting > 30007) {
-            log_error("Calibration data not acknowledged by computer, resending");
+            log_error("Find Anchors data not acknowledged by computer, resending");
             print_calibration_data();
             calibrationDataWaiting = millis();
         }

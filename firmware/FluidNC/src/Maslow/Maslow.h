@@ -112,6 +112,11 @@ public:
     void   eStop(String message = "Emergency stop triggered.");
     void   panic();
     void   resetUpdateWatchdog();
+
+    // Set true during file/firmware uploads to suppress the update-loop watchdog.
+    // Flash write operations stall both CPU cores; without this flag the 100 ms
+    // watchdog fires spuriously and latches the red LED until a power cycle.
+    volatile bool uploadInProgress = false;
     String axis_id_to_label(int axis_id);
     void   safety_control();
     bool   axis_homed[4] = { false, false, false, false };
@@ -166,6 +171,11 @@ public:
     // Frame size limits (mm)
     float frameSizeMin = 500.0;
     float frameSizeMax = 5500.0;
+
+    // Park position (machine coordinates, Z moved first)
+    float parkZ = 2.0;
+    float parkX = 0.0;
+    float parkY = 0.0;
 
     bool test         = false;
     bool debugEnabled = false;

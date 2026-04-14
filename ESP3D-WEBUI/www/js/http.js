@@ -8,34 +8,34 @@ let cmdInterval = 0;
 
 const processNextCmd = () => {
     if (!cmd_list.length) {
-        console.warn("Command list empty, no messages to process at this time");
         cmdInterval = 0;
         return;
     }
 
     switch (process_cmd_list(cmd_list[0], "process")) {
         case 1:
-            // Success, job done, move on ...
+            // Command submitted; the XHR callback (http_resultfn / http_errorfn)
+            // will call process_cmd_list("remove") which schedules the next command.
+            // Do NOT self-reschedule here — that would create a busy-wait loop while
+            // the XHR is in flight.
             break;
         case -3:
-            // Malformed command, remove from the list without changing anything else
+            // Malformed command, remove it and schedule the next one
             cmd_list.splice(0, 1);
+            if (cmd_list.length > 0 && cmdInterval) {
+                scheduleTask(processNextCmd);
+            } else {
+                cmdInterval = 0;
+            }
             break;
         case -2:
-            // TODO: Too many commands in the cmd_list, this should be reprocessed later
+            // Too many commands in the cmd_list, this should be reprocessed later
             break;
         case -1:
-            // TODO: Currently processing a command, this should be retried
+            // Currently processing a command, this should be retried
             break;
         default:
             break;
-    }
-    
-    // Schedule next processing if there are more commands
-    if (cmd_list.length > 0 && cmdInterval) {
-        scheduleTask(processNextCmd);
-    } else {
-        cmdInterval = 0;
     }
 }
 
@@ -159,12 +159,12 @@ const process_cmd_list = (cmd, step = "") => {
     cmd_lock = false;
 
     if (doNext) {
-        // Use scheduleTask (MessageChannel) to ensure command processing works in background tabs
-        // This provides immediate scheduling without the 10ms throttling, which is acceptable
-        // since HTTP requests themselves provide natural throttling
+        // Always schedule processNextCmd after completing a command.
+        // processNextCmd no longer self-reschedules, so the "remove" path must
+        // trigger the next command regardless of the current cmdInterval state.
+        scheduleTask(processNextCmd);
         if (!cmdInterval) {
             cmdInterval = 1; // Mark as active
-            scheduleTask(processNextCmd);
         }
     }
 
@@ -258,7 +258,10 @@ function SendGetHttp(url, result_fn, error_fn, cmd_code, max_cmd_code) {
 
 function ProcessGetHttp(cmd) {
     if (http_communication_locked) {
-        http_errorfn(cmd, 503, translate_text_item("Communication locked!"));
+        // Defer the error callback via scheduleTask to avoid calling
+        // process_cmd_list("remove") while cmd_lock is still true (reentrant call
+        // would be rejected, leaving the command stuck and causing a busy-wait loop).
+        scheduleTask(() => http_errorfn(cmd, 503, translate_text_item("Communication locked!")));
         console.log("locked");
         return;
     }
@@ -299,7 +302,8 @@ function SendFileHttp(url, postdata, progress_fn, result_fn, error_fn) {
 
 function ProcessFileHttp(cmd) {
     if (http_communication_locked) {
-        http_errorfn(cmd, 503, translate_text_item("Communication locked!"));
+        // Defer to avoid reentrant cmd_lock (same fix as ProcessGetHttp)
+        scheduleTask(() => http_errorfn(cmd, 503, translate_text_item("Communication locked!")));
         return;
     }
 

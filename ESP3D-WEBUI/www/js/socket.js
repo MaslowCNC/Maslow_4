@@ -61,6 +61,30 @@ const restorePingAfterUpload = () => {
 };
 
 let log_off = false;
+
+let reconnect_timer = null;
+
+/** Interval (ms) between auto-reconnect attempts while the disconnect dialog is visible */
+const RECONNECT_INTERVAL_MS = 3000;
+
+const cancelReconnectTimer = () => {
+	if (reconnect_timer !== null) {
+		clearInterval(reconnect_timer);
+		reconnect_timer = null;
+	}
+};
+
+/** Restore state and reconnect after a disconnection without a full page reload */
+const resetConnectionState = () => {
+	cancelReconnectTimer();
+	log_off = false;
+	http_communication_locked = false;
+	clear_cmd_list();
+	on_autocheck_position(false);
+	handlePing();
+	startSocket();
+};
+
 const Disable_interface = (lostconnection) => {
 	let lostcon = false;
 	if (typeof lostconnection !== "undefined") lostcon = lostconnection;
@@ -84,7 +108,15 @@ const Disable_interface = (lostconnection) => {
 	}
 	ws_source.close();
 	document.title += `('${HTMLDecode(translate_text_item("Disabled"))})`;
-	UIdisableddlg(lostcon);
+	// Only show the dialog if it is not already visible (avoids duplicate listmodal entries)
+	const disabledModal = id("UIdisableddlg.html");
+	if (!disabledModal || disabledModal.style.display === "none") {
+		UIdisableddlg(lostcon);
+	}
+	// Auto-reconnect: try once every 3 seconds (well under the 1/second limit).
+	// resetConnectionState() or a successful onopen will cancel this timer.
+	cancelReconnectTimer();
+	reconnect_timer = setInterval(startSocket, RECONNECT_INTERVAL_MS);
 };
 
 const EventListenerSetup = () => {
@@ -143,6 +175,16 @@ const Handle_DHT = (data) => {
 const process_socket_response = (msg) => msg.split("\n").forEach(grblHandleMessage);
 
 const startSocket = () => {
+	// Nullify handlers on any existing socket before replacing it.
+	// This prevents stale onclose callbacks from scheduling extra reconnects
+	// and frees the firmware's WebSocket connection slot more quickly.
+	if (ws_source) {
+		ws_source.onopen = null;
+		ws_source.onclose = null;
+		ws_source.onerror = null;
+		ws_source.onmessage = null;
+		try { ws_source.close(); } catch (e) { console.debug('Error closing previous WebSocket:', e); }
+	}
 	try {
 		if (async_webcommunication) {
 			ws_source = new WebSocket(`ws://${document.location.host}/ws`, [
@@ -156,10 +198,21 @@ const startSocket = () => {
 		}
 	} catch (exception) {
 		console.error(exception);
+		return;
 	}
 	ws_source.binaryType = "arraybuffer";
 	ws_source.onopen = (e) => {
 		console.log("Connected");
+		// Reconnected successfully after a disconnection: cancel the auto-retry timer,
+		// restore communication flags, and close the disconnect dialog.
+		cancelReconnectTimer();
+		const disabledModal = id("UIdisableddlg.html");
+		if (disabledModal && disabledModal.style.display !== "none") {
+			log_off = false;
+			http_communication_locked = false;
+			handlePing();
+			closeModal("Reconnected");
+		}
 		// Fire the open callback first so that critical commands (e.g. $STOP)
 		// are sent before any auto-reports start filling the TX buffer.
 		if (typeof onWSOpenCallback === 'function') {

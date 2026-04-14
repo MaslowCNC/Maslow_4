@@ -35,6 +35,7 @@
 #    include "Driver/localfs.h"
 
 #    include "src/HashFS.h"
+#    include "../Maslow/Maslow.h"
 #    include <list>
 
 namespace WebUI {
@@ -954,6 +955,7 @@ namespace WebUI {
         } else {
             if ((_upload_status != UploadStatus::FAILED) || (upload.status == UPLOAD_FILE_START)) {
                 if (upload.status == UPLOAD_FILE_START) {
+                    Maslow.uploadInProgress = true;
                     std::string sizeargname(upload.filename.c_str());
                     sizeargname += "S";
                     size_t filesize = _webserver->hasArg(sizeargname.c_str()) ? _webserver->arg(sizeargname.c_str()).toInt() : 0;
@@ -965,8 +967,10 @@ namespace WebUI {
                     sizeargname += "S";
                     size_t filesize = _webserver->hasArg(sizeargname.c_str()) ? _webserver->arg(sizeargname.c_str()).toInt() : 0;
                     uploadEnd(filesize);
+                    Maslow.uploadInProgress = false;
                 } else {  //Upload cancelled
                     uploadStop();
+                    Maslow.uploadInProgress = false;
                     return;
                 }
             }
@@ -1052,6 +1056,7 @@ namespace WebUI {
                 //Upload start
                 //**************
                 if (upload.status == UPLOAD_FILE_START) {
+                    Maslow.uploadInProgress = true;
                     log_info("Update Firmware");
                     _upload_status = UploadStatus::ONGOING;
                     std::string sizeargname(upload.filename.c_str());
@@ -1086,6 +1091,7 @@ namespace WebUI {
                     //**************
                 } else if (upload.status == UPLOAD_FILE_WRITE) {
                     vTaskDelay(1 / portTICK_RATE_MS);
+                    Maslow.resetUpdateWatchdog();
                     //check if no error
                     if (_upload_status == UploadStatus::ONGOING) {
                         if (((100 * upload.totalSize) / maxSketchSpace) != last_upload_update) {
@@ -1115,15 +1121,23 @@ namespace WebUI {
                         log_info("Update failed");
                         pushError(ESP_ERROR_UPLOAD, "Update upload failed");
                     }
+                    // On a successful OTA update the MCU restarts immediately, so
+                    // uploadInProgress stays true — it will be reset by the reboot.
+                    // On failure it is cleared here so the watchdog resumes normally.
+                    if (_upload_status != UploadStatus::SUCCESSFUL) {
+                        Maslow.uploadInProgress = false;
+                    }
                 } else if (upload.status == UPLOAD_FILE_ABORTED) {
                     log_info("Update failed");
                     _upload_status = UploadStatus::FAILED;
+                    Maslow.uploadInProgress = false;
                     return;
                 }
             }
         }
 
         if (_upload_status == UploadStatus::FAILED) {
+            Maslow.uploadInProgress = false;
             cancelUpload();
             Update.end();
         }
@@ -1291,6 +1305,7 @@ namespace WebUI {
 
     void Web_Server::uploadWrite(uint8_t* buffer, size_t length) {
         vTaskDelay(1 / portTICK_RATE_MS);
+        Maslow.resetUpdateWatchdog();
         if (_uploadFile && _upload_status == UploadStatus::ONGOING) {
             //no error write post data
             if (length != _uploadFile->write(buffer, length)) {
@@ -1353,6 +1368,7 @@ namespace WebUI {
     void Web_Server::uploadCheck() {
         std::error_code error_code;
         if (_upload_status == UploadStatus::FAILED) {
+            Maslow.uploadInProgress = false;
             cancelUpload();
             if (_uploadFile) {
                 auto fpath = _uploadFile->fpath();

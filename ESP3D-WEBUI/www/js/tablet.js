@@ -392,24 +392,14 @@ const jogTo = (axisAndDistance) => {
 const jogWithUnitsSafeguard = (feedrate, axisAndDistance) => {
   // Store what units the UI is currently displaying (what user expects)
   const uiExpectedUnits = gCodeModal.units;
-  
-  // Force firmware to use UI units, execute jog, then query to restore original state
-  // This ensures the jog distance is always interpreted correctly
-  sendCommand(uiExpectedUnits);
-  
-  // Small delay to ensure units command is processed
-  setTimeout(() => {
-    const cmd = `$J=G91F${feedrate}${axisAndDistance}`;
-    const unitsLabel = uiExpectedUnits === 'G20' ? 'inch' : 'mm';
-    addMessage(`JogTo: ${cmd} (${unitsLabel})`);
-    sendCommand(cmd + '\n');
-    
-    // After jog command, query current state to restore if needed
-    // The $G response will be handled by grblGetModal and update the UI automatically
-    setTimeout(() => {
-      sendCommand('$G');
-    }, 200);
-  }, 100);
+
+  // Embed the units code directly in the jog command (G20/G21 are allowed within $J= commands).
+  // This avoids sending a separate G20/G21 command which would fail with
+  // Error 9 (SystemGcLock) when the firmware is still in Jog state from a previous jog.
+  const unitsLabel = uiExpectedUnits === 'G20' ? 'inch' : 'mm';
+  const cmd = `$J=G91${uiExpectedUnits}F${feedrate}${axisAndDistance}`;
+  addMessage(`JogTo: ${cmd} (${unitsLabel})`);
+  sendCommand(cmd + '\n');
 }
 
 /** Peform a move command */
@@ -621,6 +611,41 @@ var playButtonHandler
 function setPlayButton(isEnabled, color, text, click) {
   setButton('playBtn', isEnabled, color, text);
   playButtonHandler = click;
+  // Update the parent div's background and redraw the canvas 2D content so the
+  // visual state accurately reflects the intended button state.  CSS backgroundColor
+  // on the canvas alone has no effect when the canvas has an opaque 2D fill.
+  const playDiv = id('tablettab_gcode_play');
+  const canvas = id('playBtn');
+  if (canvas && canvas.getContext) {
+    if (playDiv) {
+      playDiv.style.backgroundColor = color;
+    }
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      // canvas.width/height default to 300x150 per the HTML canvas spec
+      const w = canvas.width || 300;
+      const h = canvas.height || 150;
+      ctx.clearRect(0, 0, w, h); // Make canvas transparent so div color shows through
+      if (color !== gray) {
+        // Draw a centered white triangle to indicate an actionable state
+        const centerX = w / 2;
+        const centerY = h / 2;
+        const size = Math.min(w, h) * 0.3;
+        ctx.beginPath();
+        ctx.strokeStyle = 'white';
+        ctx.fillStyle = 'white';
+        ctx.lineWidth = 1;
+        ctx.lineCap = 'butt';
+        ctx.lineJoin = 'miter';
+        ctx.moveTo(centerX - size/2, centerY - size/2);
+        ctx.lineTo(centerX - size/2, centerY + size/2);
+        ctx.lineTo(centerX + size/2, centerY);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      }
+    }
+  }
 }
 function doPlayButton() {
   if (playButtonHandler) {
@@ -648,12 +673,13 @@ const orange = "#ff9500";
 const stopRed = "#ce654c";
 
 function setRunControls() {
-  if (gCodeLoaded) {
-    // A GCode file is ready to go
+  const isReadyToCut = typeof maslowStatus !== 'undefined' && maslowStatus.state === MASLOW_STATE_READY_TO_CUT;
+  if (gCodeLoaded && isReadyToCut) {
+    // A GCode file is ready to go and Maslow is ready to cut
     setPlayButton(true, green, 'Start', runGCode)
     //setPauseButton(false, gray, 'Pause', null)
   } else {
-    // Can't start because no GCode to run
+    // Can't start: no GCode loaded or Maslow is not ready to cut
     setPlayButton(false, gray, 'Start', null)
     //setPauseButton(false, gray, 'Pause', null)
   }
@@ -993,6 +1019,13 @@ const onWSOpenCallback = () => {
       console.warn("Failed to send pending $STOP on connect:", e);
     }
   }
+  // Refresh park settings after reconnect (e.g. after firmware restart with new maslow.yaml).
+  // A short delay lets the firmware send CURRENT_ID so PAGEID is established before querying.
+  scheduleCallback(() => {
+    if (typeof loadParkSettings === 'function') {
+      loadParkSettings();
+    }
+  }, 1000);
 };
 
 // Send $STOP directly via WebSocket to bypass PAGEID routing.
@@ -1070,8 +1103,16 @@ const tabletCalExtend = () => {
   returnFocusToTablet();
 };
 const tabletCalCalibrate = () => {
-  onCalibrationButtonsClick("$CAL", "Find Anchors");
-  scheduleCallback(() => { hideModal("calibration-popup"); }, 1000);
+  confirmdlg(
+    "Find Anchors",
+    "Please confirm Z is fully lowered to continue",
+    (response) => {
+      if (response === "yes") {
+        onCalibrationButtonsClick("$CAL", "Find Anchors");
+        scheduleCallback(() => { hideModal("calibration-popup"); }, 1000);
+      }
+    }
+  );
 };
 const tabletCalTense = () => {
   onCalibrationButtonsClick("$TKSLK", "Apply Tension");
@@ -1121,7 +1162,20 @@ const handleMaslowActionButtonClick = () => {
     case 4: // EXTENDEDOUT - Apply Tension
       tabletCalTense();
       break;
-    // State 7 (READY_TO_CUT) and others don't need a click action
+    case 7: // READY_TO_CUT - Park: lift Z to safe height (work coords), then move to park position (machine coords)
+    {
+      const lv = globalThis.loadedValues || {};
+      const parkZ = parseFloat(lv.parkZ);
+      const parkX = parseFloat(lv.parkX);
+      const parkY = parseFloat(lv.parkY);
+      const safeZ = isNaN(parkZ) ? 2.0 : parkZ;
+      const targetX = isNaN(parkX) ? 0.0 : parkX;
+      const targetY = isNaN(parkY) ? 0.0 : parkY;
+      sendCommand(`G90 G0 Z${safeZ}`);
+      sendCommand(`G53 G0 Y${targetY} X${targetX}`);
+      addMessage(`Parking: raising Z to ${safeZ}mm above Z home, then moving to machine X=${targetX}, Y=${targetY}`);
+      break;
+    }
   }
 };
 

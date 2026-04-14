@@ -17,6 +17,9 @@ Maslow_spoilboardThickness: 0.000000
 Maslow_workThickness: 0.000000
 Maslow_Frame_Size_Min: 500.000000
 Maslow_Frame_Size_Max: 5500.000000
+Maslow_Park_Z: 2.000000
+Maslow_Park_X: 0.000000
+Maslow_Park_Y: 0.000000
 stepping: 
   engine: Timed
   idle_ms: 240
