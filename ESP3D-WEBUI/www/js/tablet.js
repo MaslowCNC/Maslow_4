@@ -1116,7 +1116,8 @@ const tabletCalCalibrate = () => {
 };
 const tabletCalTense = () => {
   onCalibrationButtonsClick("$TKSLK", "Apply Tension");
-  scheduleCallback(() => { hideModal("calibration-popup"); }, 1000);
+  hideModal("calibration-popup");
+  returnFocusToTablet();
 };
 // const tabletCalZHome = () => onCalibrationButtonsClick("$TKSLK", "Home Z");
 const tabletCalOpenConfig = () => {
@@ -1141,8 +1142,16 @@ const tabletCalTest = () => {
   scheduleCallback(() => { hideModal("calibration-popup"); }, 1000);
 };
 const tabletCalRelax = () => {
-  onCalibrationButtonsClick("$CMP", "Release Tension");
-  returnFocusToTablet();
+  confirmdlg(
+    "Release Tension",
+    "Are you sure you want to release tension? This will loosen the belts.",
+    (response) => {
+      if (response === "yes") {
+        onCalibrationButtonsClick("$CMP", "Release Tension");
+        returnFocusToTablet();
+      }
+    }
+  );
 };
 
 // Handler for the new Maslow action button (below Setup button)
