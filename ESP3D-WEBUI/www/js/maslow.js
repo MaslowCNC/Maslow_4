@@ -287,7 +287,7 @@ const updateZButtonColors = () => {
 			btn.title = "";
 		} else {
 			btn.style.backgroundColor = untrustedColor;
-			btn.title = "Z-axis zero has not been set since the machine was in an unknown state. Use Setup → Set Z Stop to establish the Z home position before cutting.";
+			btn.title = "Z-axis zero has not been set since the machine was in an unknown state. Use Setup > Set Z Stop to establish the Z home position before cutting.";
 		}
 	});
 };

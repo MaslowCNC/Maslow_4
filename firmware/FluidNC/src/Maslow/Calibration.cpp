@@ -121,9 +121,10 @@ bool Calibration::requestStateChange(int newState) {
             }
         case TAKING_SLACK:  //We can enter taking slack from extended or ready to cut
             if (currentState == EXTENDEDOUT || currentState == READY_TO_CUT) {
-                // Block transition from EXTENDEDOUT if Z position has not been set since the
-                // machine last entered the UNKNOWN state.  When coming from READY_TO_CUT the Z
-                // was already trusted, so we only need to check for EXTENDEDOUT.
+                // Block the EXTENDEDOUT -> TAKING_SLACK path if Z has not been set
+                // since the machine last entered the UNKNOWN state.
+                // When coming from READY_TO_CUT the Z was already trusted, so that
+                // path is allowed regardless of zTrusted.
                 if (currentState == EXTENDEDOUT && !Maslow.zTrusted) {
                     log_info("Cannot apply tension: Z-axis zero has not been set since the machine was in an unknown state. "
                              "Please set the Z-zero position (Setup -> Set Z Stop) before applying tension.");
