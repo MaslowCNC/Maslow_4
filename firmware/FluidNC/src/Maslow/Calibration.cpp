@@ -62,6 +62,8 @@ bool Calibration::requestStateChange(int newState) {
     switch (newState) {
         case UNKNOWN:  //We can enter unknown from any stable state (the machine is not currently performing an action)
             currentState = UNKNOWN;
+            // Z-axis position can no longer be trusted when the machine state is unknown
+            Maslow.zTrusted = false;
             success      = true;
             break;
         case RETRACTING:  //We can enter retracting from any state
@@ -119,6 +121,15 @@ bool Calibration::requestStateChange(int newState) {
             }
         case TAKING_SLACK:  //We can enter taking slack from extended or ready to cut
             if (currentState == EXTENDEDOUT || currentState == READY_TO_CUT) {
+                // Block transition from EXTENDEDOUT if Z position has not been set since the
+                // machine last entered the UNKNOWN state.  When coming from READY_TO_CUT the Z
+                // was already trusted, so we only need to check for EXTENDEDOUT.
+                if (currentState == EXTENDEDOUT && !Maslow.zTrusted) {
+                    log_info("Cannot apply tension: Z-axis zero has not been set since the machine was in an unknown state. "
+                             "Please set the Z-zero position (Setup -> Set Z Stop) before applying tension.");
+                    break;
+                }
+
                 currentState = TAKING_SLACK;
 
                 //Reset the axis targets at the beginning of taking slack

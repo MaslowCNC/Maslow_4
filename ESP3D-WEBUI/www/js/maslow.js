@@ -2,7 +2,7 @@
 // import M from "constants";
 
 /** Maslow Status */
-let maslowStatus = { homed: false, extended: false, state: 0 };
+let maslowStatus = { homed: false, extended: false, state: 0, zTrusted: false };
 
 /** Maslow state constants (mirror firmware Maslow.h defines) */
 const MASLOW_STATE_READY_TO_CUT = 7;
@@ -256,11 +256,41 @@ const updateDynamicButtons = () => {
 		setRunControls();
 	}
 
+	// Reflect Z-trust status on Z-related buttons
+	updateZButtonColors();
+
 	// Reset stop button colors when action completes (state update received)
 	if (typeof resetStopButtonColors === 'function') {
 		resetStopButtonColors();
 	}
 }
+
+/**
+ * Updates the color of Z-axis buttons to indicate whether the Z-axis zero
+ * position is trusted.  When the machine has been in an UNKNOWN state and the
+ * Z-zero has not been re-confirmed, the buttons are highlighted in red to
+ * prompt the operator to run "Set Z Stop" before starting a cut.
+ */
+const updateZButtonColors = () => {
+	const zTrusted = maslowStatus.zTrusted;
+	const untrustedColor = "#f64646";  // red – Z position not known
+	const defaultColor   = "#f2f0e4"; // original button background color
+
+	const zUpBtn    = document.getElementById("tablettab_zUp");
+	const zDownBtn  = document.getElementById("tablettab_zDown");
+	const zHomeBtn  = document.getElementById("tablettab_set_z_home");
+
+	[zUpBtn, zDownBtn, zHomeBtn].forEach((btn) => {
+		if (!btn) return;
+		if (zTrusted) {
+			btn.style.backgroundColor = defaultColor;
+			btn.title = "";
+		} else {
+			btn.style.backgroundColor = untrustedColor;
+			btn.title = "Z-axis zero has not been set since the machine was in an unknown state. Use Setup → Set Z Stop to establish the Z home position before cutting.";
+		}
+	});
+};
 
 
 
@@ -288,6 +318,8 @@ const maslowInfoMsgHandling = (msg) => {
 		if (typeof resetStopButtonColors === 'function') {
 			resetStopButtonColors();
 		}
+		// Reflect any change to zTrusted immediately
+		updateZButtonColors();
 		return true;
 	}
 

@@ -535,6 +535,10 @@ void Maslow_::setZStop() {
     if (result != Error::Ok) {
         log_error("Failed to set Z home: " << errorString(result));
     }
+
+    // Z position is now known – mark it as trusted
+    zTrusted = true;
+    log_info("Z-axis zero set - Z position is now trusted");
 }
 
 //This function saves the current belt positions to non-volatile storage
@@ -878,6 +882,12 @@ void Maslow_::loadBeltPositions() {
     if (sys.state() == State::Alarm) {
         sys.set_state(State::Idle);
     }
+
+    // Belt positions loaded from NVS are valid, so the Z position saved at the
+    // same time is also trustworthy.
+    zTrusted = true;
+    log_info("Belt positions loaded from NVS - Z position is trusted");
+
     char* buffer2 = getLogBuffer();
     snprintf(
         buffer2, 1400, "Belt positions after encoder adjustment: TL=%g TR=%g BL=%g BR=%g newState=%d", tlPos, trPos, blPos, brPos, newState);
@@ -1235,7 +1245,7 @@ void Maslow_::getInfo() {
     snprintf(buffer,
              1400,
              "MINFO: { \"homed\": %s, \"calibrationInProgress\": %s, \"tl\": %g, \"tr\": %g, \"br\": %g, \"bl\": %g, "
-             "\"etl\": %g, \"etr\": %g, \"ebr\": %g, \"ebl\": %g, \"extended\": %s }",
+             "\"etl\": %g, \"etr\": %g, \"ebr\": %g, \"ebl\": %g, \"extended\": %s, \"zTrusted\": %s }",
              calibration.all_axis_homed() ? "true" : "false",
              calibration.calibrationInProgress ? "true" : "false",
              axis[_TL].getPosition(),
@@ -1246,7 +1256,8 @@ void Maslow_::getInfo() {
              axis[_TR].getPositionError(),
              axis[_BR].getPositionError(),
              axis[_BL].getPositionError(),
-             calibration.allAxisExtended() ? "true" : "false");
+             calibration.allAxisExtended() ? "true" : "false",
+             zTrusted ? "true" : "false");
     log_data(buffer);
     releaseLogBuffer();
 }

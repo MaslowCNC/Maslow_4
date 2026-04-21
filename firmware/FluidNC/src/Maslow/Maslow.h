@@ -176,6 +176,12 @@ public:
     bool test         = false;
     bool debugEnabled = false;
 
+    // True when the Z-axis zero position can be trusted.
+    // Set to false whenever the machine enters the UNKNOWN state.
+    // Set to true after setZStop() is called or when valid belt positions are
+    // restored from NVS (which also implies the Z position was saved correctly).
+    bool zTrusted = false;
+
 private:
     //Used to keep track of how often the PID controller is updated
     unsigned long lastCallToPID    = millis();
