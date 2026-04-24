@@ -2,7 +2,7 @@
 // import M from "constants";
 
 /** Maslow Status */
-let maslowStatus = { homed: false, extended: false, state: 0 };
+let maslowStatus = { homed: false, extended: false, state: 0, zm: 0, zhome: 0 };
 
 /** Maslow state constants (mirror firmware Maslow.h defines) */
 const MASLOW_STATE_READY_TO_CUT = 7;

@@ -443,6 +443,9 @@ void Maslow_::recomputePID() {
 //------------
 
 //This function saves the current z-axis position to the non-volitle storage
+// Both the machine Z position (targetZ, stored as "zPos") and the G92 Z work coordinate
+// offset (gc_state.coord_offset[Z_AXIS], stored as "zG92") are saved so that the Z home
+// position is fully restored after a power cycle or restart.
 void Maslow_::saveZPos() {
     nvs_handle_t nvsHandle;
     esp_err_t    ret = nvs_open("maslow", NVS_READWRITE, &nvsHandle);
@@ -451,38 +454,63 @@ void Maslow_::saveZPos() {
         return;
     }
 
-    // Read the current value
-    int32_t currentZPos;
-    ret = nvs_get_i32(nvsHandle, "zPos", &currentZPos);
-    if (ret != ESP_OK && ret != ESP_ERR_NVS_NOT_FOUND) {
-        log_info("Error " + std::string(esp_err_to_name(ret)) + " reading from NVS!\n");
-        return;
-    }
-
-    // Write - Convert the float to an int32_t and write only if it has changed
     union FloatInt32 {
         float   f;
         int32_t i;
     };
+
+    bool needsCommit = false;
+
+    // Save machine Z position (targetZ) - key "zPos"
+    int32_t currentZPos;
+    ret = nvs_get_i32(nvsHandle, "zPos", &currentZPos);
+    if (ret != ESP_OK && ret != ESP_ERR_NVS_NOT_FOUND) {
+        log_info("Error " + std::string(esp_err_to_name(ret)) + " reading zPos from NVS!\n");
+        nvs_close(nvsHandle);
+        return;
+    }
     FloatInt32 fi;
     fi.f = targetZ;
     if (ret == ESP_ERR_NVS_NOT_FOUND || currentZPos != fi.i) {  // Only write if the value has changed
         ret = nvs_set_i32(nvsHandle, "zPos", fi.i);
         if (ret != ESP_OK) {
-            log_info("Error " + std::string(esp_err_to_name(ret)) + " writing to NVS!\n");
+            log_info("Error " + std::string(esp_err_to_name(ret)) + " writing zPos to NVS!\n");
         } else {
-            //log_info("Written value = " + std::to_string(targetZ));
-
-            // Commit written value to non-volatile storage
-            ret = nvs_commit(nvsHandle);
-            if (ret != ESP_OK) {
-                log_info("Error " + std::string(esp_err_to_name(ret)) + " committing changes to NVS!\n");
-            }
+            needsCommit = true;
         }
     }
+
+    // Save G92 Z offset (Z home work coordinate) - key "zG92"
+    // This records where work Z=0 is relative to machine Z, ensuring the Z home
+    // position is restored correctly after a restart.
+    int32_t currentZG92;
+    FloatInt32 g92Fi;
+    g92Fi.f = gc_state.coord_offset[Z_AXIS];
+    ret     = nvs_get_i32(nvsHandle, "zG92", &currentZG92);
+    if (ret == ESP_ERR_NVS_NOT_FOUND || (ret == ESP_OK && currentZG92 != g92Fi.i)) {
+        ret = nvs_set_i32(nvsHandle, "zG92", g92Fi.i);
+        if (ret != ESP_OK) {
+            log_info("Error " + std::string(esp_err_to_name(ret)) + " writing zG92 to NVS!\n");
+        } else {
+            needsCommit = true;
+        }
+    }
+
+    if (needsCommit) {
+        ret = nvs_commit(nvsHandle);
+        if (ret != ESP_OK) {
+            log_info("Error " + std::string(esp_err_to_name(ret)) + " committing Z position changes to NVS!\n");
+        }
+    }
+
+    nvs_close(nvsHandle);
+    log_debug("Z position saved to NVS: machine Z=" << targetZ << "mm, Z home offset=" << gc_state.coord_offset[Z_AXIS] << "mm");
 }
 
 //This function loads the z-axis position from the non-volitle storage
+// Restores both the machine Z position ("zPos") and the G92 Z work coordinate offset
+// ("zG92") so that the Z home position is consistent with what was saved before
+// the last power cycle or restart.
 void Maslow_::loadZPos() {
     nvs_handle_t nvsHandle;
     esp_err_t    ret = nvs_open("maslow", NVS_READWRITE, &nvsHandle);
@@ -491,16 +519,17 @@ void Maslow_::loadZPos() {
         return;
     }
 
-    // Read
+    union FloatInt32 {
+        float   f;
+        int32_t i;
+    };
+
+    // Load machine Z position (targetZ) - key "zPos"
     int32_t value2;
     ret = nvs_get_i32(nvsHandle, "zPos", &value2);
     if (ret != ESP_OK) {
-        log_info("Error " + std::string(esp_err_to_name(ret)) + " reading from NVS!");
+        log_info("Error " + std::string(esp_err_to_name(ret)) + " reading zPos from NVS - using default Z=0");
     } else {
-        union FloatInt32 {
-            float   f;
-            int32_t i;
-        };
         FloatInt32 fi;
         fi.i    = value2;
         targetZ = fi.f;
@@ -510,11 +539,22 @@ void Maslow_::loadZPos() {
         mpos[Z_AXIS] = targetZ;
         set_motor_steps_from_mpos(mpos);
 
-        log_info("Current z-axis position loaded as: " << targetZ);
-
         gc_sync_position();  //This updates the Gcode engine with the new position from the stepping engine that we set with set_motor_steps
         plan_sync_position();
     }
+
+    // Load G92 Z offset (Z home work coordinate) - key "zG92"
+    // Restores where work Z=0 is relative to machine Z (set by setZStop via G92 Z0).
+    int32_t g92Value;
+    ret = nvs_get_i32(nvsHandle, "zG92", &g92Value);
+    if (ret == ESP_OK) {
+        FloatInt32 g92Fi;
+        g92Fi.i                       = g92Value;
+        gc_state.coord_offset[Z_AXIS] = g92Fi.f;
+    }
+
+    nvs_close(nvsHandle);
+    log_info("Z position loaded from NVS: machine Z=" << targetZ << "mm, Z home offset=" << gc_state.coord_offset[Z_AXIS] << "mm");
 }
 
 /** Sets the 'bottom' Z position, this is a 'stop' beyond which travel cannot continue */
@@ -535,6 +575,10 @@ void Maslow_::setZStop() {
     if (result != Error::Ok) {
         log_error("Failed to set Z home: " << errorString(result));
     }
+
+    // Persist the new Z=0 position and G92 Z=0 home offset immediately so that
+    // a power cycle right after setting Z stop does not lose the new home.
+    saveZPos();
 }
 
 //This function saves the current belt positions to non-volatile storage
@@ -1235,7 +1279,7 @@ void Maslow_::getInfo() {
     snprintf(buffer,
              1400,
              "MINFO: { \"homed\": %s, \"calibrationInProgress\": %s, \"tl\": %g, \"tr\": %g, \"br\": %g, \"bl\": %g, "
-             "\"etl\": %g, \"etr\": %g, \"ebr\": %g, \"ebl\": %g, \"extended\": %s }",
+             "\"etl\": %g, \"etr\": %g, \"ebr\": %g, \"ebl\": %g, \"extended\": %s, \"zm\": %g, \"zhome\": %g }",
              calibration.all_axis_homed() ? "true" : "false",
              calibration.calibrationInProgress ? "true" : "false",
              axis[_TL].getPosition(),
@@ -1246,7 +1290,9 @@ void Maslow_::getInfo() {
              axis[_TR].getPositionError(),
              axis[_BR].getPositionError(),
              axis[_BL].getPositionError(),
-             calibration.allAxisExtended() ? "true" : "false");
+             calibration.allAxisExtended() ? "true" : "false",
+             targetZ,
+             gc_state.coord_offset[Z_AXIS]);
     log_data(buffer);
     releaseLogBuffer();
 }
