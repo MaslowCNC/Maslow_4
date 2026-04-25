@@ -183,8 +183,12 @@ void Maslow_::update() {
         digitalWrite(ETHERNETLEDPIN, HIGH);
     }
 
-    //Save the z-axis position if the prevous state was jog or cycle and the current state is idle
-    if ((prevState == State::Jog || prevState == State::Cycle) && sys.state() == State::Idle) {
+    // Save Z position (machine Z and Z home offset) whenever the machine enters Idle from
+    // any other state.  Z can change during Jog, Cycle, Hold, and Homing operations; saving
+    // on every →Idle transition ensures the latest values are always persisted.
+    // saveZPos() compares the new values against the stored NVS values and skips the write
+    // when nothing has changed, so this does not wear out flash prematurely.
+    if (prevState != State::Idle && sys.state() == State::Idle) {
         saveZPos();
         // Only save belt positions when in READY_TO_CUT, RETRACTED, or EXTENDEDOUT state (belts are tight and valid)
         int currentMaslowState = calibration.getCurrentState();
