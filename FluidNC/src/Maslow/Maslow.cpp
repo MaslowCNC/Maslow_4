@@ -52,6 +52,9 @@
 #define WIFILED 35
 #define REDLED 14
 
+#define AUX1 48
+#define AUX2 38
+
 int ENCODER_READ_FREQUENCY_HZ = 1000;  //max frequency for polling the encoders
 
 //------------------------------------------------------
@@ -80,6 +83,7 @@ void Maslow_::begin(void (*sys_rt)()) {
     pinMode(ETHERNETLEDPIN, OUTPUT);
     pinMode(WIFILED, OUTPUT);
     pinMode(REDLED, OUTPUT);
+    pinMode(AUX1, INPUT_PULLDOWN);
 
     digitalWrite(ETHERNETLEDPIN, LOW);
 
@@ -94,6 +98,7 @@ void Maslow_::begin(void (*sys_rt)()) {
     Wire.setTimeOut(10);
 
     if (error) {
+        log_info("failed to initialize");
         log_error(M+" failed to initialize - fix errors and restart");
     } else {
         log_info("Starting "+M+" Version " << VERSION_NUMBER);
@@ -106,19 +111,46 @@ void Maslow_::update() {
 
     //If we are in an error state, blink the LED and stop the motors
     if (error) {
-        static unsigned long timer = millis();
+        static unsigned long ledTimer = millis();
         static bool          st    = true; //This is used to blink the LED
-        if (millis() - timer > 300) {
+        if (millis() - ledTimer > 300) {
             stopMotors();
             st = !st;
             digitalWrite(REDLED, st);
-            timer = millis();
-            if (errorMessage != "") {
-                log_error(errorMessage.c_str());
-            }
-            errorMessage = "";
+            ledTimer = millis();
         }
+
+        static unsigned long errorMessageTimer = millis();
+        if (millis() - errorMessageTimer > 5000) {
+            if (errorMessage != "") {
+                log_error("Error State: Latest Error: " << errorMessage.c_str());
+            }
+            //errorMessage = "";
+            errorMessageTimer = millis();
+        }
+
         return;
+    }
+
+    // Handle button press as trigger for Retracting
+    // TODO: Implement Button Debounce...
+    static bool buttonTriggeredRetract = false;
+    if (digitalRead(AUX1) == 1) {
+        if (calibration.currentState != RETRACTING)
+        {
+            log_info("Button pressed, requesting retracting state");
+            buttonTriggeredRetract = true;
+            sys.set_state(State::Homing);
+            calibration.requestStateChange(RETRACTING);
+        }
+    } else {
+        // Button released?
+        if (buttonTriggeredRetract && calibration.currentState == RETRACTING)
+        {
+            log_info("Button released, requesting retracted state");
+            buttonTriggeredRetract = false;
+            calibration.requestStateChange(RETRACTED);
+        }
     }
 
     //Blinks the Ethernet LEDs randomly...these have been removed from the board, this pin should be freed up
@@ -254,15 +286,16 @@ bool Maslow_::updateEncoderPositions() {
     }
 
     // if more than 1% of readings fail, warn user, if more than 10% fail, stop the machine and raise alarm
-    if (millis() - encoderFailTimer > 1000) {
+    if (millis() - encoderFailTimer > REPORT_ENCODER_FAIL_INTERVAL_MS) {
         for (int i = 0; i < 4; i++) {
             //turn i into proper label
             String label = axis_id_to_label(i);
             if (encoderFailCounter[i] > 0.1 * ENCODER_READ_FREQUENCY_HZ) {
                 // log error statement with appropriate label
-                log_error("Failure on " << label.c_str() << " encoder, failed to read " << encoderFailCounter[i]
+                log_warn /*log_error*/("Encoder Failure on " << label.c_str() << ", failed to read " << encoderFailCounter[i]
                                         << " times in the last second");
-                Maslow.panic();
+                // TODO:P0:aaronse HACK prevent panic for now...
+                //Maslow.panic();
             } else if (encoderFailCounter[i] > 0) {  //0.01*ENCODER_READ_FREQUENCY_HZ){
                 log_warn("Bad connection on " << label.c_str() << " encoder, failed to read " << encoderFailCounter[i]
                                               << " times in the last second");
@@ -631,6 +664,8 @@ static void stopEverything() {
 
 // Panic function, stops all motors and sets state to alarm
 void Maslow_::panic() {
+    log_error("Panic!");
+    log_warn("Panic!");
     stop();
     stopEverything();
 }
@@ -689,6 +724,7 @@ void Maslow_::safety_control() {
                 // log_info("Pull on " << axis_id_to_label(i).c_str() << " and restart!");
                 tick[i]             = true;
                 axisSlackCounter[i] = 0;
+                log_info("SLACK triggered panic ... TODO:P0 Log useful info");
                 Maslow.panic();
             }
         } else

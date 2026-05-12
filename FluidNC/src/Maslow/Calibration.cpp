@@ -235,7 +235,7 @@ bool Calibration::requestStateChange(int newState){
     }
 
     if(success){
-        log_info("Succeeded");
+        log_info("State Change Succeeded");
     }
 
     printCurrentState();

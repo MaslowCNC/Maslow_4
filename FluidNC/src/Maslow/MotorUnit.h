@@ -13,6 +13,10 @@
 #include "memory"
 #include "SparkFun_I2C_Mux_Arduino_Library.h"
 
+
+#define REPORT_ENCODER_FAIL_INTERVAL_MS 10000  // how often to report encoder failures
+
+
 class MotorUnit {
 public:
     void   begin(int forwardPin, int backwardPin, int readbackPin, int encoderAddress, int channel1, int channel2);

@@ -23,8 +23,9 @@ void MotorUnit::begin(int forwardPin, int backwardPin, int readbackPin, int enco
     Maslow.I2CMux.setPort(_encoderAddress);
     if (!encoder.begin()) {
         log_error("Encoder not found on " << encAddrLabel.c_str());
-        Maslow.error = true;
-        Maslow.errorMessage = "Encoder not found on " + encAddrLabel;
+        // TODO:P0:aaronse HACK to prevent panic on startup
+        //Maslow.error = true;
+        //Maslow.errorMessage = "Encoder not found on " + encAddrLabel;
     } else {
         log_info("Encoder connected on " << encAddrLabel.c_str());
     }
@@ -36,9 +37,10 @@ void MotorUnit::begin(int forwardPin, int backwardPin, int readbackPin, int enco
     positionPID.setOutputLimits(-1023, 1023);
 
     if (!motor_test()) {
-        log_error("Motor not found on " << encAddrLabel.c_str());
-        Maslow.error = true;
-        Maslow.errorMessage = "Motor not found on " + encAddrLabel;
+        log_error("MotorUnit::begin, Motor not found on " << encAddrLabel.c_str());
+        // TODO:P0:aaronse HACK to prevent panic on startup
+        //Maslow.error = true;
+        //Maslow.errorMessage = "MotorUnit::begin, Motor not found on " + encAddrLabel;
     } else {
         log_info("Motor detected on " << encAddrLabel.c_str());
     }
@@ -53,9 +55,9 @@ bool MotorUnit::test() {
 
     //Check if the motor / motor driver are connected
     if (!motor_test()) {
-        log_warn("Motor not found on " << encAddrLabel.c_str());
+        log_warn("MotorUnit::test, Motor not found on " << encAddrLabel.c_str());
         Maslow.error = true;
-        Maslow.errorMessage = "Motor not found on " + encAddrLabel;
+        Maslow.errorMessage = "MotorUnit::test, Motor not found on " + encAddrLabel;
         allTestsPassed = false;
     }
 
@@ -124,7 +126,7 @@ bool MotorUnit::updateEncoderPosition() {
     if (encoder.isConnected()) {                                               //this func has 50ms timeout (or worse?, hard to tell)
         mostRecentCumulativeEncoderReading = encoder.getCumulativePosition();  //This updates and returns the encoder value
         return true;
-    } else if (millis() - encoderReadFailurePrintTime > 5000) {
+    } else if (millis() - encoderReadFailurePrintTime > REPORT_ENCODER_FAIL_INTERVAL_MS) {
         encoderReadFailurePrintTime = millis();
         log_warn("Encoder read failure on " << encAddrLabel.c_str());
         //Maslow.panic();
