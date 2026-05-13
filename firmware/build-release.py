@@ -12,7 +12,7 @@ verbose = '-v' in sys.argv
 environ = dict(os.environ)
 
 # ============================================================================
-# User-configurable variables - modify these paths as needed for your system
+# User-configurable variables - modify these paths as needed for your system 
 # ============================================================================
 
 # Path to platformio executable
