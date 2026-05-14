@@ -108,6 +108,21 @@ jobs:
         cd firmware
         python3 build-release.py
 
+    - name: Generate changelog
+      run: |
+        CURRENT_TAG="${{ github.ref_name }}"
+        # Find the previous stable tag (v* without -exp), excluding the tag we are about to release
+        PREV_STABLE=$(git tag --sort=-version:refname | grep '^v' | grep -v '\-exp' | grep -v "^${CURRENT_TAG}$" | head -1)
+        if [ -n "${PREV_STABLE}" ]; then
+          echo "Generating changelog since ${PREV_STABLE}"
+          git log "${PREV_STABLE}..HEAD" --pretty=format:"- %s (%h)" --no-merges > /tmp/changelog.md
+          echo "PREV_STABLE_TAG=${PREV_STABLE}" >> $GITHUB_ENV
+        else
+          echo "No previous stable tag found; listing recent commits"
+          git log --pretty=format:"- %s (%h)" --no-merges --max-count=50 > /tmp/changelog.md
+          echo "PREV_STABLE_TAG=" >> $GITHUB_ENV
+        fi
+
     - name: Create stable release
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -116,16 +131,30 @@ jobs:
         FULL_SHA=$(git rev-parse HEAD)
 
         printf "Stable release %s.\n\n" "${TAG_NAME}" > /tmp/release-notes.md
-        printf "Commit: %s\n" "${FULL_SHA}" >> /tmp/release-notes.md
-        printf "Tag: %s\n\n" "${TAG_NAME}" >> /tmp/release-notes.md
-        printf "### Contents\n" >> /tmp/release-notes.md
+
+        if [ -s /tmp/changelog.md ]; then
+          if [ -n "${{ env.PREV_STABLE_TAG }}" ]; then
+            printf "## What's Changed since %s\n\n" "${{ env.PREV_STABLE_TAG }}" >> /tmp/release-notes.md
+            COMPARE_URL="https://github.com/${{ github.repository }}/compare/${{ env.PREV_STABLE_TAG }}...${TAG_NAME}"
+          else
+            printf "## What's Changed\n\n" >> /tmp/release-notes.md
+            COMPARE_URL=""
+          fi
+          cat /tmp/changelog.md >> /tmp/release-notes.md
+          printf "\n\n" >> /tmp/release-notes.md
+          if [ -n "${COMPARE_URL}" ]; then
+            printf "**Full Changelog**: %s\n\n" "${COMPARE_URL}" >> /tmp/release-notes.md
+          fi
+        fi
+
+        printf "## Contents\n" >> /tmp/release-notes.md
         printf "Each platform zip contains:\n" >> /tmp/release-notes.md
         printf "- \`firmware.bin\` — FluidNC firmware for ESP32-S3\n" >> /tmp/release-notes.md
         printf "- \`littlefs.bin\` — Filesystem image (includes the web UI)\n" >> /tmp/release-notes.md
         printf "- \`index.html.gz\` — ESP3D web interface (compressed)\n" >> /tmp/release-notes.md
         printf "- \`bootloader.bin\`, \`partitions.bin\` — Bootloader and partition table\n" >> /tmp/release-notes.md
         printf "- Platform-specific install scripts and esptool\n\n" >> /tmp/release-notes.md
-        printf "### Installation\n" >> /tmp/release-notes.md
+        printf "## Installation\n" >> /tmp/release-notes.md
         printf "Run the \`full-install\` script for your platform (Windows: \`.bat\`, macOS/Linux: \`.sh\`).\n" >> /tmp/release-notes.md
         printf "See \`HOWTO-INSTALL.txt\` inside the zip for detailed instructions.\n" >> /tmp/release-notes.md
 

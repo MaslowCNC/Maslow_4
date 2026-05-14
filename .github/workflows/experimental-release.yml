@@ -127,6 +127,21 @@ jobs:
         echo "PACKAGE_FILE=maslow4-${TAG_NAME}.zip" >> $GITHUB_ENV
         echo "FULL_SHA=${FULL_SHA}" >> $GITHUB_ENV
 
+    - name: Generate changelog
+      run: |
+        TAG_NAME="${{ github.ref_name }}"
+        # Find the most recent stable release tag (v* without -exp suffix)
+        LAST_STABLE=$(git tag --sort=-version:refname | grep '^v' | grep -v '\-exp' | head -1)
+        if [ -n "${LAST_STABLE}" ]; then
+          echo "Generating changelog since ${LAST_STABLE}"
+          git log "${LAST_STABLE}..HEAD" --pretty=format:"- %s (%h)" --no-merges > /tmp/changelog.md
+          echo "LAST_STABLE_TAG=${LAST_STABLE}" >> $GITHUB_ENV
+        else
+          echo "No previous stable tag found; listing recent commits"
+          git log --pretty=format:"- %s (%h)" --no-merges --max-count=50 > /tmp/changelog.md
+          echo "LAST_STABLE_TAG=" >> $GITHUB_ENV
+        fi
+
     - name: Create experimental pre-release
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -137,7 +152,18 @@ jobs:
         printf "Commit: %s\n" "${{ env.FULL_SHA }}" >> /tmp/release-notes.md
         printf "Tag: %s\n\n" "${TAG_NAME}" >> /tmp/release-notes.md
         printf "⚠️ **This is a pre-release intended for testing. It may contain bugs or unfinished features.**\n\n" >> /tmp/release-notes.md
-        printf "Contents:\n" >> /tmp/release-notes.md
+
+        if [ -s /tmp/changelog.md ]; then
+          if [ -n "${{ env.LAST_STABLE_TAG }}" ]; then
+            printf "## Changes since %s\n\n" "${{ env.LAST_STABLE_TAG }}" >> /tmp/release-notes.md
+          else
+            printf "## Recent Changes\n\n" >> /tmp/release-notes.md
+          fi
+          cat /tmp/changelog.md >> /tmp/release-notes.md
+          printf "\n\n" >> /tmp/release-notes.md
+        fi
+
+        printf "## Contents\n" >> /tmp/release-notes.md
         printf "- \`firmware.bin\` — FluidNC firmware for ESP32-S3\n" >> /tmp/release-notes.md
         printf "- \`index.html.gz\` — ESP3D web interface (compressed)\n" >> /tmp/release-notes.md
 
