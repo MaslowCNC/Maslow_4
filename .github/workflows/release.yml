@@ -1,0 +1,135 @@
+name: Stable Release
+
+# Triggered by pushing a stable version tag: v<major>.<minor>.<patch>
+# Examples: v1.2.3, v2.0.0
+#
+# Experimental tags (e.g. v1.2.3-exp.1) are excluded via the job condition below.
+#
+# To publish a stable release:
+#   git tag v1.2.3
+#   git push origin v1.2.3
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  stable-release:
+    # Skip tags that contain '-exp' — those are handled by experimental-release.yml
+    if: "!contains(github.ref, '-exp')"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0   # Full history for accurate version reporting
+        fetch-tags: true # Fetch all tags
+
+    - name: Verify tags are available
+      run: |
+        echo "Available tags:"
+        git tag -l | tail -10
+        echo "Git describe output:"
+        git describe --tags --always
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+
+    - name: Cache PlatformIO
+      uses: actions/cache@v4
+      with:
+        path: ~/.platformio
+        key: ${{ runner.os }}-platformio-${{ hashFiles('**/platformio.ini') }}
+        restore-keys: |
+          ${{ runner.os }}-platformio-
+
+    - name: Cache npm dependencies (embedded)
+      uses: actions/cache@v4
+      with:
+        path: firmware/embedded/node_modules
+        key: ${{ runner.os }}-npm-embedded-${{ hashFiles('firmware/embedded/package-lock.json') }}
+        restore-keys: |
+          ${{ runner.os }}-npm-embedded-
+
+    - name: Cache npm dependencies (ESP3D-WEBUI)
+      uses: actions/cache@v4
+      with:
+        path: ESP3D-WEBUI/node_modules
+        key: ${{ runner.os }}-npm-esp3d-${{ hashFiles('ESP3D-WEBUI/package-lock.json') }}
+        restore-keys: |
+          ${{ runner.os }}-npm-esp3d-
+
+    - name: Install PlatformIO
+      run: |
+        python -m pip install --upgrade pip
+        pip install --upgrade platformio
+
+    - name: Install npm dependencies (embedded)
+      run: |
+        cd firmware/embedded
+        npm install
+
+    - name: Build embedded web page
+      run: |
+        cd firmware/embedded
+        python3 build.py
+
+    - name: Install npm dependencies (ESP3D-WEBUI)
+      run: |
+        cd ESP3D-WEBUI
+        npm install
+
+    - name: Build ESP3D-WEBUI
+      run: |
+        cd ESP3D-WEBUI
+        npx gulp package --lang en
+
+    - name: Copy ESP3D-WEBUI into firmware data directory
+      # build-release.py reads index.html.gz from firmware/FluidNC/data/ and also
+      # includes it in the littlefs filesystem image, so we update it here first.
+      run: |
+        cp ESP3D-WEBUI/dist/index.html.gz firmware/FluidNC/data/index.html.gz
+
+    - name: Build full release packages
+      # build-release.py builds the filesystem image and firmware, then creates
+      # zip packages for win64 and posix platforms with install scripts included.
+      run: |
+        cd firmware
+        python3 build-release.py
+
+    - name: Create stable release
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        TAG_NAME="${{ github.ref_name }}"
+        FULL_SHA=$(git rev-parse HEAD)
+
+        printf "Stable release %s.\n\n" "${TAG_NAME}" > /tmp/release-notes.md
+        printf "Commit: %s\n" "${FULL_SHA}" >> /tmp/release-notes.md
+        printf "Tag: %s\n\n" "${TAG_NAME}" >> /tmp/release-notes.md
+        printf "### Contents\n" >> /tmp/release-notes.md
+        printf "Each platform zip contains:\n" >> /tmp/release-notes.md
+        printf "- \`firmware.bin\` — FluidNC firmware for ESP32-S3\n" >> /tmp/release-notes.md
+        printf "- \`littlefs.bin\` — Filesystem image (includes the web UI)\n" >> /tmp/release-notes.md
+        printf "- \`index.html.gz\` — ESP3D web interface (compressed)\n" >> /tmp/release-notes.md
+        printf "- \`bootloader.bin\`, \`partitions.bin\` — Bootloader and partition table\n" >> /tmp/release-notes.md
+        printf "- Platform-specific install scripts and esptool\n\n" >> /tmp/release-notes.md
+        printf "### Installation\n" >> /tmp/release-notes.md
+        printf "Run the \`full-install\` script for your platform (Windows: \`.bat\`, macOS/Linux: \`.sh\`).\n" >> /tmp/release-notes.md
+        printf "See \`HOWTO-INSTALL.txt\` inside the zip for detailed instructions.\n" >> /tmp/release-notes.md
+
+        gh release create "${TAG_NAME}" \
+          --title "Release ${TAG_NAME}" \
+          --notes-file /tmp/release-notes.md \
+          firmware/release/*.zip

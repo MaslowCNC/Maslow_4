@@ -1,0 +1,149 @@
+name: Nightly Build
+
+on:
+  schedule:
+    - cron: '0 5 * * *'  # 5 AM UTC daily (~midnight US Eastern)
+  workflow_dispatch:      # Allow manual trigger from the Actions tab
+
+jobs:
+  nightly-build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+    - name: Checkout Maslow-Main
+      uses: actions/checkout@v4
+      with:
+        ref: Maslow-Main
+        fetch-depth: 0   # Full history for accurate version reporting
+        fetch-tags: true # Fetch all tags
+
+    - name: Verify tags are available
+      run: |
+        echo "Available tags:"
+        git tag -l | tail -10
+        echo "Git describe output:"
+        git describe --tags --always
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+
+    - name: Cache PlatformIO
+      uses: actions/cache@v4
+      with:
+        path: ~/.platformio
+        key: ${{ runner.os }}-platformio-${{ hashFiles('**/platformio.ini') }}
+        restore-keys: |
+          ${{ runner.os }}-platformio-
+
+    - name: Cache npm dependencies (embedded)
+      uses: actions/cache@v4
+      with:
+        path: firmware/embedded/node_modules
+        key: ${{ runner.os }}-npm-embedded-${{ hashFiles('firmware/embedded/package-lock.json') }}
+        restore-keys: |
+          ${{ runner.os }}-npm-embedded-
+
+    - name: Cache npm dependencies (ESP3D-WEBUI)
+      uses: actions/cache@v4
+      with:
+        path: ESP3D-WEBUI/node_modules
+        key: ${{ runner.os }}-npm-esp3d-${{ hashFiles('ESP3D-WEBUI/package-lock.json') }}
+        restore-keys: |
+          ${{ runner.os }}-npm-esp3d-
+
+    - name: Install PlatformIO
+      run: |
+        python -m pip install --upgrade pip
+        pip install --upgrade platformio
+
+    - name: Install npm dependencies (embedded)
+      run: |
+        cd firmware/embedded
+        npm install
+
+    - name: Build embedded web page
+      run: |
+        cd firmware/embedded
+        python3 build.py
+
+    - name: Install npm dependencies (ESP3D-WEBUI)
+      run: |
+        cd ESP3D-WEBUI
+        npm install
+
+    - name: Build ESP3D-WEBUI
+      run: |
+        cd ESP3D-WEBUI
+        npx gulp package --lang en
+
+    - name: Build firmware
+      run: |
+        cd firmware
+        pio run -e wifi_s3
+
+    - name: Prepare release package
+      run: |
+        mkdir -p release-package
+        BUILD_DATE=$(date -u '+%Y-%m-%d')
+        COMMIT_SHA=$(git rev-parse --short HEAD)
+        FULL_SHA=$(git rev-parse HEAD)
+
+        cp firmware/.pio/build/wifi_s3/firmware.bin release-package/
+        cp ESP3D-WEBUI/dist/index.html.gz release-package/
+
+        cat > release-package/README.txt << EOF
+        Maslow4 Nightly Build
+        =====================
+        Date: ${BUILD_DATE}
+        Commit: ${FULL_SHA}
+
+        This is an automated nightly build from the Maslow-Main branch.
+        It may contain unstable or experimental features.
+
+        Contents:
+        - firmware.bin: The main FluidNC firmware for ESP32-S3
+        - index.html.gz: The ESP3D web interface (compressed)
+
+        Installation Instructions:
+        1. Upload firmware.bin to the machine as normal
+        2. Upload index.html.gz to the /littlefs partition (if web UI changes were made)
+        EOF
+
+        zip -j nightly-${BUILD_DATE}-${COMMIT_SHA}.zip release-package/firmware.bin release-package/index.html.gz release-package/README.txt
+        echo "PACKAGE_FILE=nightly-${BUILD_DATE}-${COMMIT_SHA}.zip" >> $GITHUB_ENV
+        echo "BUILD_DATE=${BUILD_DATE}" >> $GITHUB_ENV
+        echo "FULL_SHA=${FULL_SHA}" >> $GITHUB_ENV
+
+    - name: Delete old nightly release and tag
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        gh release delete nightly --yes --cleanup-tag 2>/dev/null || true
+
+    - name: Create nightly release
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        printf "Automated nightly build from the Maslow-Main branch.\n\n" > /tmp/release-notes.md
+        printf "Commit: %s\n" "${{ env.FULL_SHA }}" >> /tmp/release-notes.md
+        printf "Date: %s\n\n" "${{ env.BUILD_DATE }}" >> /tmp/release-notes.md
+        printf "⚠️ **This is an automated build and may be unstable. Use at your own risk.**\n\n" >> /tmp/release-notes.md
+        printf "Contents:\n" >> /tmp/release-notes.md
+        printf "- \`firmware.bin\` — FluidNC firmware for ESP32-S3\n" >> /tmp/release-notes.md
+        printf "- \`index.html.gz\` — ESP3D web interface (compressed)\n" >> /tmp/release-notes.md
+
+        gh release create nightly \
+          --title "Nightly Build - ${{ env.BUILD_DATE }}" \
+          --notes-file /tmp/release-notes.md \
+          --prerelease \
+          --target Maslow-Main \
+          "${{ env.PACKAGE_FILE }}"

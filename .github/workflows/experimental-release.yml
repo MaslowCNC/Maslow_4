@@ -1,0 +1,148 @@
+name: Experimental Release
+
+# Triggered by pushing a tag with the format: v<major>.<minor>.<patch>-exp.<n>
+# Examples: v1.2.3-exp.1, v2.0.0-exp.5
+#
+# To publish an experimental release:
+#   git tag v1.2.3-exp.1
+#   git push origin v1.2.3-exp.1
+
+on:
+  push:
+    tags:
+      - 'v*-exp*'
+
+jobs:
+  experimental-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0   # Full history for accurate version reporting
+        fetch-tags: true # Fetch all tags
+
+    - name: Verify tags are available
+      run: |
+        echo "Available tags:"
+        git tag -l | tail -10
+        echo "Git describe output:"
+        git describe --tags --always
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+
+    - name: Cache PlatformIO
+      uses: actions/cache@v4
+      with:
+        path: ~/.platformio
+        key: ${{ runner.os }}-platformio-${{ hashFiles('**/platformio.ini') }}
+        restore-keys: |
+          ${{ runner.os }}-platformio-
+
+    - name: Cache npm dependencies (embedded)
+      uses: actions/cache@v4
+      with:
+        path: firmware/embedded/node_modules
+        key: ${{ runner.os }}-npm-embedded-${{ hashFiles('firmware/embedded/package-lock.json') }}
+        restore-keys: |
+          ${{ runner.os }}-npm-embedded-
+
+    - name: Cache npm dependencies (ESP3D-WEBUI)
+      uses: actions/cache@v4
+      with:
+        path: ESP3D-WEBUI/node_modules
+        key: ${{ runner.os }}-npm-esp3d-${{ hashFiles('ESP3D-WEBUI/package-lock.json') }}
+        restore-keys: |
+          ${{ runner.os }}-npm-esp3d-
+
+    - name: Install PlatformIO
+      run: |
+        python -m pip install --upgrade pip
+        pip install --upgrade platformio
+
+    - name: Install npm dependencies (embedded)
+      run: |
+        cd firmware/embedded
+        npm install
+
+    - name: Build embedded web page
+      run: |
+        cd firmware/embedded
+        python3 build.py
+
+    - name: Install npm dependencies (ESP3D-WEBUI)
+      run: |
+        cd ESP3D-WEBUI
+        npm install
+
+    - name: Build ESP3D-WEBUI
+      run: |
+        cd ESP3D-WEBUI
+        npx gulp package --lang en
+
+    - name: Build firmware
+      run: |
+        cd firmware
+        pio run -e wifi_s3
+
+    - name: Prepare release package
+      run: |
+        mkdir -p release-package
+        TAG_NAME="${{ github.ref_name }}"
+        FULL_SHA=$(git rev-parse HEAD)
+
+        cp firmware/.pio/build/wifi_s3/firmware.bin release-package/
+        cp ESP3D-WEBUI/dist/index.html.gz release-package/
+
+        cat > release-package/README.txt << EOF
+        Maslow4 Experimental Release ${TAG_NAME}
+        =========================================
+        Tag: ${TAG_NAME}
+        Commit: ${FULL_SHA}
+
+        This is an experimental (pre-release) build intended for testing new features
+        before they are included in a stable release.
+
+        Contents:
+        - firmware.bin: The main FluidNC firmware for ESP32-S3
+        - index.html.gz: The ESP3D web interface (compressed)
+
+        Installation Instructions:
+        1. Upload firmware.bin to the machine as normal
+        2. Upload index.html.gz to the /littlefs partition (if web UI changes were made)
+        EOF
+
+        zip -j "maslow4-${TAG_NAME}.zip" release-package/firmware.bin release-package/index.html.gz release-package/README.txt
+        echo "PACKAGE_FILE=maslow4-${TAG_NAME}.zip" >> $GITHUB_ENV
+        echo "FULL_SHA=${FULL_SHA}" >> $GITHUB_ENV
+
+    - name: Create experimental pre-release
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        TAG_NAME="${{ github.ref_name }}"
+
+        printf "Experimental pre-release build for testing.\n\n" > /tmp/release-notes.md
+        printf "Commit: %s\n" "${{ env.FULL_SHA }}" >> /tmp/release-notes.md
+        printf "Tag: %s\n\n" "${TAG_NAME}" >> /tmp/release-notes.md
+        printf "⚠️ **This is a pre-release intended for testing. It may contain bugs or unfinished features.**\n\n" >> /tmp/release-notes.md
+        printf "Contents:\n" >> /tmp/release-notes.md
+        printf "- \`firmware.bin\` — FluidNC firmware for ESP32-S3\n" >> /tmp/release-notes.md
+        printf "- \`index.html.gz\` — ESP3D web interface (compressed)\n" >> /tmp/release-notes.md
+
+        gh release create "${TAG_NAME}" \
+          --title "Experimental Release ${TAG_NAME}" \
+          --notes-file /tmp/release-notes.md \
+          --prerelease \
+          "${{ env.PACKAGE_FILE }}"
