@@ -1298,6 +1298,22 @@ const tabletCalStop = () => {
   returnFocusToTablet();
 };
 const tabletCalSetZStop = () => {
+  // If MINFO data is available, check that Zm + Z home is not negative (unsafe).
+  // Fall back to proceeding if neither value has been populated from MINFO yet.
+  const zmAvail = maslowStatus && typeof maslowStatus.zm === "number";
+  const zhomeAvail = maslowStatus && typeof maslowStatus.zhome === "number";
+  if (zmAvail && zhomeAvail && maslowStatus.zm + maslowStatus.zhome < 0) {
+    confirmdlg(
+      translate_text_item("Z Home Outside Safe Bounds"),
+      translate_text_item("The Z home position is outside the safe operating range. Setting Z home here may cause the Z-axis to move below safe limits. Proceed anyway?"),
+      (answer) => {
+        if (answer !== "yes") return;
+        onCalibrationButtonsClick("$SETZSTOP", "Set Z-Stop");
+        returnFocusToTablet();
+      }
+    );
+    return;
+  }
   onCalibrationButtonsClick("$SETZSTOP", "Set Z-Stop");
   returnFocusToTablet();
 };
