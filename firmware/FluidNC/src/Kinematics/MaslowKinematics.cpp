@@ -451,23 +451,35 @@ namespace Kinematics {
         calculateCenter();
     }
 
-void MaslowKinematics::setSpoilboardThickness(float thickness) {
-    if (_spoilboardThickness != thickness) {
-        _spoilboardThickness = thickness;
-        log_info("Spoilboard thickness set to " << thickness << " mm");
+    void MaslowKinematics::setCalibrationAnchors(float tlX, float tlY, float trX, float trY, float brX) {
+        anchor_location[_TL][Coord_X] = tlX;
+        anchor_location[_TL][Coord_Y] = tlY;
+        anchor_location[_TR][Coord_X] = trX;
+        anchor_location[_TR][Coord_Y] = trY;
+        anchor_location[_BL][Coord_X] = 0.0f;
+        anchor_location[_BL][Coord_Y] = 0.0f;
+        anchor_location[_BR][Coord_X] = brX;
+        anchor_location[_BR][Coord_Y] = 0.0f;
+        calculateCenter();
     }
-}
 
-void MaslowKinematics::setWorkThickness(float thickness) {
-    if (_workThickness != thickness) {
-        _workThickness = thickness;
-        log_info("Work thickness set to " << thickness << " mm");
+    void MaslowKinematics::setSpoilboardThickness(float thickness) {
+        if (_spoilboardThickness != thickness) {
+            _spoilboardThickness = thickness;
+            log_info("Spoilboard thickness set to " << thickness << " mm");
+        }
     }
-}
 
-void MaslowKinematics::validate() {
-    validateAndCorrectAnchorCoordinates();
-}
+    void MaslowKinematics::setWorkThickness(float thickness) {
+        if (_workThickness != thickness) {
+            _workThickness = thickness;
+            log_info("Work thickness set to " << thickness << " mm");
+        }
+    }
+
+    void MaslowKinematics::validate() {
+        validateAndCorrectAnchorCoordinates();
+    }
 
 void MaslowKinematics::validateAndCorrectAnchorCoordinates() {
     const float TOLERANCE            = 0.1f;  // Allow small floating point differences

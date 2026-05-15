@@ -758,36 +758,12 @@ var collectHandler = undefined
 // the legacy protocol messages  $0= ... ok
 var collectedSettings = null
 
-async function handleCalibrationData(measurements) {
-  document.querySelector('#messages').textContent += '\nComputing... This may take several minutes'
-  sendCommand("$ACKCAL");
-  await sleep(500)
-  try {
-    calibrationResults = await findMaxFitness(measurements)
-  } catch (error) {
-    console.error('An error occurred:', error)
-  }
-}
-
 const grblHandleMessage = (msg) => {
   tabletShowMessage(msg, collecting);
 
   // We handle these two before collecting data because they can be
   // sent at any time, maybe requested by a timer.
 
-  if (valueStartsWith(msg, ["CLBM:"])) {
-    const validJsonMSG = msg
-      .replace(/(\b(?:bl|br|tr|tl)\b):/g, '"$1":')
-      .replace("CLBM:", "")
-      .replace(/,]$/, "]");
-    try {
-      const measurements = JSON.parse(validJsonMSG);
-      handleCalibrationData(measurements);
-    } catch (error) {
-      console.error("Parsing the GRBL `CLBM` message failed, the calibration data has not been 'handled'. This is probably a programmer error.");
-      return;
-    }
-  }
   if (valueStartsWith(msg, ["<"])) {
     grblProcessStatus(msg);
     return;

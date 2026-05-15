@@ -825,6 +825,10 @@ transform: translateY(2px);
 background-color: #cd654c!important;
 }
 
+.green-button {
+background-color: #4caf50!important;
+}
+
 .buttons-row {
   display: grid;
   grid-template-columns: repeat(3, 30%); /* three columns at 30% each */

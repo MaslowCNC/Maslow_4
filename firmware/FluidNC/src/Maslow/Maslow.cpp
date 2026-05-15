@@ -308,9 +308,6 @@ void Maslow_::update() {
             digitalWrite(coolingFanPin, LOW);  //Turn the cooling fan off
         }
 
-        //Check to see if we need to resend the calibration data
-        calibration.checkCalibrationData();
-
         //------------------------ End of Maslow State Machine
 
         print_motor_currents();

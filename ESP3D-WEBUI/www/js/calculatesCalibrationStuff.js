@@ -425,7 +425,7 @@ async function findBestRectangularStart(measurements) {
 
 /**
  * Main calibration optimization function
- * Uses the shared CalibrationComputer from calibration-computation.js
+ * Uses LevenbergMarquardtCalibrationComputer from calibration-computation.js
  */
 async function findMaxFitness(measurements) {
   const messagesBox = document.getElementById('messages');
@@ -463,169 +463,150 @@ async function findMaxFitness(measurements) {
     messagesBox.scrollTop = messagesBox.scrollHeight;
   }
 
-  // Main optimization loop using the shared computation library
-  let currentGuess = JSON.parse(JSON.stringify(startingGuess));
-  let stagnantCounter = 0;
-  let totalCounter = 0;
-  let bestGuess = JSON.parse(JSON.stringify(startingGuess));
-
   // Track retry attempts
   let lowFitnessRetryCount = 0;
   let bestGuessAcrossAllRetries = JSON.parse(JSON.stringify(startingGuess));
-  let bestFitnessAcrossAllRetries = 1 / bestGuess.fitness;
+  let bestFitnessAcrossAllRetries = 0;
 
   // Store optimal radius from rectangular optimization for retry point calculations
   let optimalRadiusForRetry = startingGuess.optimalRadius || null;
 
-  function iterate() {
-    if (stagnantCounter < 1000 && totalCounter < 200000) {
-
-      currentGuess = computeLinesFitness(projectedMeasurements, currentGuess);
-
-      if (1 / currentGuess.fitness > 1 / bestGuess.fitness) {
-        bestGuess = JSON.parse(JSON.stringify(currentGuess));
-        stagnantCounter = 0;
-      } else {
-        stagnantCounter++;
-      }
-
-      totalCounter++;
-      
-      sendCalibrationEvent({
-        final: false,
-        guess: currentGuess,
-        bestGuess: bestGuess,
-        totalCounter
-      });
-
-      // Every 100 iterations print out the fitness
-      if (totalCounter % 100 === 0) {
-        messagesBox.textContent += `Fitness: ${(1 / bestGuess.fitness).toFixed(7)} in ${totalCounter}\n`;
+  // Run one LM pass from the given guess; returns the result object
+  async function runLM(guess) {
+    const lm = new LevenbergMarquardtCalibrationComputer(guess, {
+      maxIterations: 500,
+      logFn: (msg) => {
+        messagesBox.textContent += msg + '\n';
         messagesBox.scrollTop = messagesBox.scrollHeight;
       }
-
-      // Schedule the next iteration
-      scheduleTask(iterate);
-
-    } else { // Calibration complete
-      const currentFitness = 1 / bestGuess.fitness;
-      
-      if (currentFitness > bestFitnessAcrossAllRetries) {
-        bestFitnessAcrossAllRetries = currentFitness;
-        bestGuessAcrossAllRetries = JSON.parse(JSON.stringify(bestGuess));
-      }
-
-      if (currentFitness < acceptableCalibrationThreshold) {
-        messagesBox.textContent += `\nCalculated Fitness Too Low (${currentFitness.toFixed(7)} < ${acceptableCalibrationThreshold}).`;
-
-        if (lowFitnessRetryCount >= MAX_LOW_FITNESS_RETRIES) {
-          messagesBox.textContent += `\n\n⚠️ Maximum retry attempts (${MAX_LOW_FITNESS_RETRIES}) reached.`;
-          messagesBox.textContent += `\nBest fitness achieved: ${bestFitnessAcrossAllRetries.toFixed(7)}`;
-          messagesBox.textContent += '\nUpdating initial frame size with best estimate from all attempts.';
-          messagesBox.scrollTop = messagesBox.scrollHeight;
-
-          initialGuess = JSON.parse(JSON.stringify(bestGuessAcrossAllRetries));
-          initialGuess.fitness = 100000000;
-
-          messagesBox.textContent += '\n\n❌ Find Anchors stopped due to low fitness after maximum retries.';
-          messagesBox.textContent += '\nOptions:';
-          messagesBox.textContent += '\n  1. Click "Find Anchors" to restart.';
-          messagesBox.textContent += '\n  2. Check to make sure that all four belts are fully tight with each measurement.';
-          messagesBox.textContent += '\n  3. Check to see if the frame could be flexing when the measurements are taken which will lead to inacruate measurements.';
-          messagesBox.scrollTop = messagesBox.scrollHeight;
-
-          sendCalibrationEvent({
-            good: false,
-            final: true,
-            maxRetriesReached: true,
-            retryCount: lowFitnessRetryCount,
-            bestGuess: bestGuessAcrossAllRetries,
-            bestFitness: bestFitnessAcrossAllRetries
-          }, true);
-
-          sendCommand('$CALRESET');
-          return;
-        }
-
-        lowFitnessRetryCount++;
-        messagesBox.textContent += ` Retry ${lowFitnessRetryCount}/${MAX_LOW_FITNESS_RETRIES}...`;
-      }
-
-      messagesBox.textContent += '\nFind Anchor Values:';
-      messagesBox.textContent += `\nFitness: ${currentFitness.toFixed(7)}`;
-
-      const tlxStr = bestGuess.tl.x.toFixed(1), tlyStr = bestGuess.tl.y.toFixed(1);
-      const trxStr = bestGuess.tr.x.toFixed(1), tryStr = bestGuess.tr.y.toFixed(1);
-      const blxStr = bestGuess.bl.x.toFixed(1), blyStr = bestGuess.bl.y.toFixed(1);
-      const brxStr = bestGuess.br.x.toFixed(1), bryStr = bestGuess.br.y.toFixed(1);
-
-      messagesBox.textContent += `\n${M}_tlX: ${tlxStr}`;
-      messagesBox.textContent += `\n${M}_tlY: ${tlyStr}`;
-      messagesBox.textContent += `\n${M}_trX: ${trxStr}`;
-      messagesBox.textContent += `\n${M}_trY: ${tryStr}`;
-      messagesBox.textContent += `\n${M}_blX: ${blxStr}`;
-      messagesBox.textContent += `\n${M}_blY: ${blyStr}`;
-      messagesBox.textContent += `\n${M}_brX: ${brxStr}`;
-      messagesBox.textContent += `\n${M}_brY: ${bryStr}`;
-      messagesBox.scrollTop = messagesBox.scrollHeight;
-
-      if (currentFitness > acceptableCalibrationThreshold) {
-        sendCommand(`$/kinematics/MaslowKinematics/tlX=${tlxStr}`);
-        sendCommand(`$/kinematics/MaslowKinematics/tlY=${tlyStr}`);
-        sendCommand(`$/kinematics/MaslowKinematics/trX=${trxStr}`);
-        sendCommand(`$/kinematics/MaslowKinematics/trY=${tryStr}`);
-        sendCommand(`$/kinematics/MaslowKinematics/blX=${blxStr}`);
-        sendCommand(`$/kinematics/MaslowKinematics/blY=${blyStr}`);
-        sendCommand(`$/kinematics/MaslowKinematics/brX=${brxStr}`);
-        sendCommand(`$/kinematics/MaslowKinematics/brY=${bryStr}`);
-
-        sendCalibrationEvent({
-          good: true,
-          final: true,
-          bestGuess: bestGuess
-        }, true);
-        
-        refreshSettings(current_setting_filter);
-        saveMaslowYaml();
-
-        messagesBox.textContent += '\nA command to save these values has been successfully sent for you. Please check for any error messages.';
-        messagesBox.scrollTop = messagesBox.scrollHeight;
-
-        initialGuess = bestGuess;
-        initialGuess.fitness = 100000000;
-
-        scheduleCallback(() => { onCalibrationButtonsClick('$CAL', 'Find Anchors'); }, 2000);
-      } else {
-        sendCalibrationEvent({
-          good: false,
-          final: true,
-          guess: bestGuess
-        }, true);
-
-        messagesBox.textContent += '\n Restarting';
-
-        const retryInfo = applyRetryStrategy(initialGuess, {
-          optimalRadiusForRetry,
-          lowFitnessRetryCount,
-          bestGuess,
-          startingGuess
-        });
-
-        messagesBox.textContent += ` ${retryInfo.description}`;
-
-        stagnantCounter = 0;
-        totalCounter = 0;
-
-        bestGuess = JSON.parse(JSON.stringify(initialGuess));
-        currentGuess = JSON.parse(JSON.stringify(initialGuess));
-
-        scheduleTask(iterate);
-      }
-    }
+    });
+    // The 3rd argument to progressCallback is the current best anchor guess,
+    // populated live inside the LM loop so the UI reflects real progress.
+    const result = await lm.processDataChunk(projectedMeasurements, (iters, fitness, currentBestGuess) => {
+      sendCalibrationEvent({ final: false, bestGuess: currentBestGuess || guess, totalCounter: iters });
+    });
+    const { totalIterations } = lm.getStatus();
+    messagesBox.textContent += `LM converged in ${totalIterations} iterations, fitness: ${(1 / result.fitness).toFixed(7)}\n`;
+    messagesBox.scrollTop = messagesBox.scrollHeight;
+    return result;
   }
 
-  // Start the iteration
-  iterate();
+  messagesBox.textContent += `Running Levenberg-Marquardt optimization (${projectedMeasurements.length} measurements)...\n`;
+  messagesBox.scrollTop = messagesBox.scrollHeight;
+
+  let bestGuess = await runLM(startingGuess);
+  let currentFitness = 1 / bestGuess.fitness;
+  messagesBox.textContent += `Result: tl=(${bestGuess.tl.x.toFixed(1)}, ${bestGuess.tl.y.toFixed(1)}) tr=(${bestGuess.tr.x.toFixed(1)}, ${bestGuess.tr.y.toFixed(1)}) br=(${bestGuess.br.x.toFixed(1)}, 0)\n`;
+  messagesBox.scrollTop = messagesBox.scrollHeight;
+
+  while (currentFitness < acceptableCalibrationThreshold) {
+    if (currentFitness > bestFitnessAcrossAllRetries) {
+      bestFitnessAcrossAllRetries = currentFitness;
+      bestGuessAcrossAllRetries = JSON.parse(JSON.stringify(bestGuess));
+    }
+
+    messagesBox.textContent += `\nCalculated Fitness Too Low (${currentFitness.toFixed(7)} < ${acceptableCalibrationThreshold}).`;
+
+    if (lowFitnessRetryCount >= MAX_LOW_FITNESS_RETRIES) {
+      messagesBox.textContent += `\n\n⚠️ Maximum retry attempts (${MAX_LOW_FITNESS_RETRIES}) reached.`;
+      messagesBox.textContent += `\nBest fitness achieved: ${bestFitnessAcrossAllRetries.toFixed(7)}`;
+      messagesBox.textContent += '\nUpdating initial frame size with best estimate from all attempts.';
+      messagesBox.scrollTop = messagesBox.scrollHeight;
+
+      initialGuess = JSON.parse(JSON.stringify(bestGuessAcrossAllRetries));
+      initialGuess.fitness = 100000000;
+
+      messagesBox.textContent += '\n\n❌ Find Anchors stopped due to low fitness after maximum retries.';
+      messagesBox.textContent += '\nOptions:';
+      messagesBox.textContent += '\n  1. Click "Find Anchors" to restart.';
+      messagesBox.textContent += '\n  2. Check to make sure that all four belts are fully tight with each measurement.';
+      messagesBox.textContent += '\n  3. Check to see if the frame could be flexing when the measurements are taken which will lead to inacruate measurements.';
+      messagesBox.scrollTop = messagesBox.scrollHeight;
+
+      sendCalibrationEvent({
+        good: false,
+        final: true,
+        maxRetriesReached: true,
+        retryCount: lowFitnessRetryCount,
+        bestGuess: bestGuessAcrossAllRetries,
+        bestFitness: bestFitnessAcrossAllRetries
+      }, true);
+
+      sendCommand('$CALRESET');
+      return;
+    }
+
+    lowFitnessRetryCount++;
+    messagesBox.textContent += ` Retry ${lowFitnessRetryCount}/${MAX_LOW_FITNESS_RETRIES}...`;
+
+    const retryGuess = JSON.parse(JSON.stringify(initialGuess));
+    const retryInfo = applyRetryStrategy(retryGuess, {
+      optimalRadiusForRetry,
+      lowFitnessRetryCount,
+      bestGuess,
+      startingGuess
+    });
+    messagesBox.textContent += ` ${retryInfo.description}\n`;
+    messagesBox.textContent += `Retry start: tl=(${retryGuess.tl.x.toFixed(1)}, ${retryGuess.tl.y.toFixed(1)}) tr=(${retryGuess.tr.x.toFixed(1)}, ${retryGuess.tr.y.toFixed(1)}) br=(${retryGuess.br.x.toFixed(1)}, 0)\n`;
+    messagesBox.scrollTop = messagesBox.scrollHeight;
+
+    messagesBox.textContent += "Running Levenberg-Marquardt optimization...\n";
+    messagesBox.scrollTop = messagesBox.scrollHeight;
+
+    bestGuess = await runLM(retryGuess);
+    currentFitness = 1 / bestGuess.fitness;
+    messagesBox.textContent += `Result: tl=(${bestGuess.tl.x.toFixed(1)}, ${bestGuess.tl.y.toFixed(1)}) tr=(${bestGuess.tr.x.toFixed(1)}, ${bestGuess.tr.y.toFixed(1)}) br=(${bestGuess.br.x.toFixed(1)}, 0)\n`;
+    messagesBox.scrollTop = messagesBox.scrollHeight;
+  }
+
+  if (currentFitness > bestFitnessAcrossAllRetries) {
+    bestFitnessAcrossAllRetries = currentFitness;
+    bestGuessAcrossAllRetries = JSON.parse(JSON.stringify(bestGuess));
+  }
+
+  messagesBox.textContent += '\nFind Anchor Values:';
+  messagesBox.textContent += `\nFitness: ${currentFitness.toFixed(7)}`;
+
+  const tlxStr = bestGuess.tl.x.toFixed(1), tlyStr = bestGuess.tl.y.toFixed(1);
+  const trxStr = bestGuess.tr.x.toFixed(1), tryStr = bestGuess.tr.y.toFixed(1);
+  const blxStr = bestGuess.bl.x.toFixed(1), blyStr = bestGuess.bl.y.toFixed(1);
+  const brxStr = bestGuess.br.x.toFixed(1), bryStr = bestGuess.br.y.toFixed(1);
+
+  messagesBox.textContent += `\n${M}_tlX: ${tlxStr}`;
+  messagesBox.textContent += `\n${M}_tlY: ${tlyStr}`;
+  messagesBox.textContent += `\n${M}_trX: ${trxStr}`;
+  messagesBox.textContent += `\n${M}_trY: ${tryStr}`;
+  messagesBox.textContent += `\n${M}_blX: ${blxStr}`;
+  messagesBox.textContent += `\n${M}_blY: ${blyStr}`;
+  messagesBox.textContent += `\n${M}_brX: ${brxStr}`;
+  messagesBox.textContent += `\n${M}_brY: ${bryStr}`;
+  messagesBox.scrollTop = messagesBox.scrollHeight;
+
+  sendCommand(`$/kinematics/MaslowKinematics/tlX=${tlxStr}`);
+  sendCommand(`$/kinematics/MaslowKinematics/tlY=${tlyStr}`);
+  sendCommand(`$/kinematics/MaslowKinematics/trX=${trxStr}`);
+  sendCommand(`$/kinematics/MaslowKinematics/trY=${tryStr}`);
+  sendCommand(`$/kinematics/MaslowKinematics/blX=${blxStr}`);
+  sendCommand(`$/kinematics/MaslowKinematics/blY=${blyStr}`);
+  sendCommand(`$/kinematics/MaslowKinematics/brX=${brxStr}`);
+  sendCommand(`$/kinematics/MaslowKinematics/brY=${bryStr}`);
+
+  sendCalibrationEvent({
+    good: true,
+    final: true,
+    bestGuess: bestGuess
+  }, true);
+
+  refreshSettings(current_setting_filter);
+  saveMaslowYaml();
+
+  messagesBox.textContent += '\nA command to save these values has been successfully sent for you. Please check for any error messages.';
+  messagesBox.scrollTop = messagesBox.scrollHeight;
+
+  initialGuess = bestGuess;
+  initialGuess.fitness = 100000000;
+
+  scheduleCallback(() => { onCalibrationButtonsClick('$CAL', 'Find Anchors'); }, 2000);
 }
 
 /**

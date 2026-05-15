@@ -206,11 +206,13 @@ const startSocket = () => {
 		// Reconnected successfully after a disconnection: cancel the auto-retry timer,
 		// restore communication flags, and close the disconnect dialog.
 		cancelReconnectTimer();
+		// Always arm the ping watchdog on every (re)connect,
+		// including the very first connection on page load.
+		handlePing();
 		const disabledModal = id("UIdisableddlg.html");
 		if (disabledModal && disabledModal.style.display !== "none") {
 			log_off = false;
 			http_communication_locked = false;
-			handlePing();
 			closeModal("Reconnected");
 		}
 		// Fire the open callback first so that critical commands (e.g. $STOP)

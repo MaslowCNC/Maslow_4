@@ -3,6 +3,7 @@
 
 // Constants
 const FILE_LIST_LOAD_DELAY_MS = 500; // Delay to ensure file list is loaded before restoration
+const workAreaDefaults = { x: 2440, y: 1220, offX: 0, offY: 0 };
 
 var gCodeLoaded = false;
 var gCodeDisplayable = false;
@@ -197,10 +198,10 @@ const getUnitInfo = () => {
 
 const getWorkAreaBounds = () => {
   const lv = globalThis.loadedValues || {};
-  const areaX = parseFloat(lv.workAreaX) || 2440;
-  const areaY = parseFloat(lv.workAreaY) || 1220;
-  const offX = parseFloat(lv.workAreaCenterOffsetX) || 0;
-  const offY = parseFloat(lv.workAreaCenterOffsetY) || 0;
+  const areaX = parseFloat(lv.workAreaX) || workAreaDefaults.x;
+  const areaY = parseFloat(lv.workAreaY) || workAreaDefaults.y;
+  const offX = parseFloat(lv.workAreaCenterOffsetX) || workAreaDefaults.offX;
+  const offY = parseFloat(lv.workAreaCenterOffsetY) || workAreaDefaults.offY;
   return {
     minX: offX - areaX / 2,
     maxX: offX + areaX / 2,
@@ -1343,8 +1344,207 @@ const handleMaslowActionButtonClick = () => {
   }
 };
 
+
 // Control event handlers - Configuration Popup
 const tabletConfigPopupHide = () => hideModal("configuration-popup");
+
+// Control event handlers - Optional Settings Popup
+const tabletOptionalSettingsPopupHide = () => hideModal("optional-settings-popup");
+const tabletCalOpenOptionalSettings = () => openModal("optional-settings-popup");
+
+// Control event handlers - Work Area Popup
+const getWorkAreaValues = () => {
+  const lv = globalThis.loadedValues || {};
+  return {
+    areaX: parseFloat(lv.workAreaX) || workAreaDefaults.x,
+    areaY: parseFloat(lv.workAreaY) || workAreaDefaults.y,
+    offX: parseFloat(lv.workAreaCenterOffsetX) || workAreaDefaults.offX,
+    offY: parseFloat(lv.workAreaCenterOffsetY) || workAreaDefaults.offY,
+  };
+};
+
+const tabletWorkAreaPopupHide = () => hideModal("work-area-popup");
+
+
+
+const tabletOpenWorkAreaPopup = () => {
+  const { areaX, areaY, offX, offY } = getWorkAreaValues();
+
+  const elX = id("workAreaX");
+  const elY = id("workAreaY");
+  const elOffX = id("workAreaCenterOffsetX");
+  const elOffY = id("workAreaCenterOffsetY");
+  const elCurrent = id("work-area-current-values");
+
+  if (elX) elX.value = areaX;
+  if (elY) elY.value = areaY;
+  if (elOffX) elOffX.value = offX;
+  if (elOffY) elOffY.value = offY;
+  if (elCurrent) elCurrent.textContent = `Current: ${areaX}, ${areaY}, ${offX}, ${offY}`;
+
+  openModal("work-area-popup");
+};
+
+const tabletSaveWorkArea = () => {
+  const elX = id("workAreaX");
+  const elY = id("workAreaY");
+  const elOffX = id("workAreaCenterOffsetX");
+  const elOffY = id("workAreaCenterOffsetY");
+
+  const newX = elX ? elX.value.trim() : "";
+  const newY = elY ? elY.value.trim() : "";
+  const newOffX = elOffX ? elOffX.value.trim() : "";
+  const newOffY = elOffY ? elOffY.value.trim() : "";
+
+  const lv = globalThis.loadedValues || {};
+  const keys = [
+    { field: "workAreaX", cmd: "Maslow_Work_Area_X", newVal: newX },
+    { field: "workAreaY", cmd: "Maslow_Work_Area_Y", newVal: newY },
+    { field: "workAreaCenterOffsetX", cmd: "Maslow_Work_Area_Center_Offset_X", newVal: newOffX },
+    { field: "workAreaCenterOffsetY", cmd: "Maslow_Work_Area_Center_Offset_Y", newVal: newOffY },
+  ];
+
+  for (const k of keys) {
+    if (k.newVal !== "" && k.newVal !== String(lv[k.field] || "")) {
+      SendPrinterCommand(`$/${k.cmd}=${k.newVal}`);
+      if (!globalThis.loadedValues) globalThis.loadedValues = {};
+      globalThis.loadedValues[k.field] = k.newVal;
+    }
+  }
+
+  saveMaslowYaml();
+  scheduleCallback(() => {
+    hideModal("work-area-popup");
+    hideModal("optional-settings-popup");
+  }, 1000);
+};
+
+const parkDefaults = { x: 0.0, y: 0.0, z: 2.0 };
+
+const getParkValues = () => {
+  const lv = globalThis.loadedValues || {};
+  return {
+    x: isNaN(parseFloat(lv.parkX)) ? parkDefaults.x : parseFloat(lv.parkX),
+    y: isNaN(parseFloat(lv.parkY)) ? parkDefaults.y : parseFloat(lv.parkY),
+    z: isNaN(parseFloat(lv.parkZ)) ? parkDefaults.z : parseFloat(lv.parkZ),
+  };
+};
+
+const tabletParkPopupHide = () => hideModal("park-popup");
+
+const tabletOpenParkPopup = () => {
+  const { x, y, z } = getParkValues();
+
+  const elX = id("parkX");
+  const elY = id("parkY");
+  const elZ = id("parkZ");
+  const elCurrent = id("park-current-values");
+
+  if (elX) elX.value = x;
+  if (elY) elY.value = y;
+  if (elZ) elZ.value = z;
+  if (elCurrent) elCurrent.textContent = `Current: X=${x}, Y=${y}, Z=${z}`;
+
+  openModal("park-popup");
+};
+
+const tabletSavePark = () => {
+  const elX = id("parkX");
+  const elY = id("parkY");
+  const elZ = id("parkZ");
+
+  const newX = elX ? elX.value.trim() : "";
+  const newY = elY ? elY.value.trim() : "";
+  const newZ = elZ ? elZ.value.trim() : "";
+
+  const lv = globalThis.loadedValues || {};
+  const keys = [
+    { field: "parkX", cmd: "Maslow_Park_X", newVal: newX },
+    { field: "parkY", cmd: "Maslow_Park_Y", newVal: newY },
+    { field: "parkZ", cmd: "Maslow_Park_Z", newVal: newZ },
+  ];
+
+  for (const k of keys) {
+    if (k.newVal !== "" && k.newVal !== String(lv[k.field] || "")) {
+      SendPrinterCommand(`$/${k.cmd}=${k.newVal}`);
+      if (!globalThis.loadedValues) globalThis.loadedValues = {};
+      globalThis.loadedValues[k.field] = k.newVal;
+    }
+  }
+
+  saveMaslowYaml();
+  scheduleCallback(() => {
+    hideModal("park-popup");
+    hideModal("optional-settings-popup");
+  }, 1000);
+};
+
+const scaleThicknessDefaults = { scaleX: 1.0, scaleY: 1.0, workThickness: 0.0, spoilboardThickness: 0.0 };
+
+const getScaleThicknessValues = () => {
+  const lv = globalThis.loadedValues || {};
+  return {
+    scaleX: isNaN(parseFloat(lv.scaleX)) ? scaleThicknessDefaults.scaleX : parseFloat(lv.scaleX),
+    scaleY: isNaN(parseFloat(lv.scaleY)) ? scaleThicknessDefaults.scaleY : parseFloat(lv.scaleY),
+    workThickness: isNaN(parseFloat(lv.workThickness)) ? scaleThicknessDefaults.workThickness : parseFloat(lv.workThickness),
+    spoilboardThickness: isNaN(parseFloat(lv.spoilboardThickness)) ? scaleThicknessDefaults.spoilboardThickness : parseFloat(lv.spoilboardThickness),
+  };
+};
+
+const tabletScaleThicknessPopupHide = () => hideModal("scale-thickness-popup");
+
+const tabletOpenScaleThicknessPopup = () => {
+  const { scaleX, scaleY, workThickness, spoilboardThickness } = getScaleThicknessValues();
+
+  const elScaleX = id("scaleX");
+  const elScaleY = id("scaleY");
+  const elWorkThickness = id("workThickness");
+  const elSpoilboardThickness = id("spoilboardThickness");
+  const elCurrent = id("scale-thickness-current-values");
+
+  if (elScaleX) elScaleX.value = scaleX;
+  if (elScaleY) elScaleY.value = scaleY;
+  if (elWorkThickness) elWorkThickness.value = workThickness;
+  if (elSpoilboardThickness) elSpoilboardThickness.value = spoilboardThickness;
+  if (elCurrent) elCurrent.textContent = `Current: Scale X=${scaleX}, Scale Y=${scaleY}, Work=${workThickness}mm, Spoilboard=${spoilboardThickness}mm`;
+
+  openModal("scale-thickness-popup");
+};
+
+const tabletSaveScaleThickness = () => {
+  const elScaleX = id("scaleX");
+  const elScaleY = id("scaleY");
+  const elWorkThickness = id("workThickness");
+  const elSpoilboardThickness = id("spoilboardThickness");
+
+  const newScaleX = elScaleX ? elScaleX.value.trim() : "";
+  const newScaleY = elScaleY ? elScaleY.value.trim() : "";
+  const newWorkThickness = elWorkThickness ? elWorkThickness.value.trim() : "";
+  const newSpoilboardThickness = elSpoilboardThickness ? elSpoilboardThickness.value.trim() : "";
+
+  const lv = globalThis.loadedValues || {};
+  const keys = [
+    { field: "scaleX", cmd: "Maslow_Scale_X", newVal: newScaleX },
+    { field: "scaleY", cmd: "Maslow_Scale_Y", newVal: newScaleY },
+    { field: "workThickness", cmd: "Maslow_workThickness", newVal: newWorkThickness },
+    { field: "spoilboardThickness", cmd: "Maslow_spoilboardThickness", newVal: newSpoilboardThickness },
+  ];
+
+  for (const k of keys) {
+    if (k.newVal !== "" && k.newVal !== String(lv[k.field] || "")) {
+      SendPrinterCommand(`$/${k.cmd}=${k.newVal}`);
+      if (!globalThis.loadedValues) globalThis.loadedValues = {};
+      globalThis.loadedValues[k.field] = k.newVal;
+    }
+  }
+
+  saveMaslowYaml();
+  scheduleCallback(() => {
+    hideModal("scale-thickness-popup");
+    hideModal("optional-settings-popup");
+  }, 1000);
+};
+
 // Control event handlers - Common
 const tabletPopupStopProp = (event) => event.stopPropagation();
 
@@ -1414,6 +1614,7 @@ function tabletInit() {
     // Buttons - Second Row
     id("tablettab_left").addEventListener("click", tabletMoveLeft);
     id("tablettab_right").addEventListener("click", tabletMoveRight);
+    id("tablettab_options_btn").addEventListener("click", tabletCalOpenOptionalSettings);
 
     // Buttons - Third Row
     id("tablettab_zDown").addEventListener("click", tabletMoveZDown);
@@ -1466,6 +1667,31 @@ function tabletInit() {
     id("tablettab_cal_zstop").addEventListener("click", tabletCalSetZStop);
     id("tablettab_cal_test").addEventListener("click", tabletCalTest);
     id("tablettab_cal_relax").addEventListener("click", tabletCalRelax);
+
+    // Buttons - Optional Settings Pop-up
+    id("optional-settings-popup").addEventListener("click", tabletOptionalSettingsPopupHide);
+    id("optional_settings_popup_content").addEventListener("click", tabletPopupStopProp);
+    id("tablettab_cal_work_area").addEventListener("click", tabletOpenWorkAreaPopup);
+    id("tablettab_cal_park").addEventListener("click", tabletOpenParkPopup);
+    id("tablettab_cal_scale_thickness").addEventListener("click", tabletOpenScaleThicknessPopup);
+
+    // Buttons - Work Area Pop-up
+    id("work-area-popup").addEventListener("click", tabletWorkAreaPopupHide);
+    id("work_area_popup_content").addEventListener("click", tabletPopupStopProp);
+    id("tablettab_work_area_cancel").addEventListener("click", tabletWorkAreaPopupHide);
+    id("tablettab_work_area_save").addEventListener("click", tabletSaveWorkArea);
+
+    // Buttons - Park Pop-up
+    id("park-popup").addEventListener("click", tabletParkPopupHide);
+    id("park_popup_content").addEventListener("click", tabletPopupStopProp);
+    id("tablettab_park_cancel").addEventListener("click", tabletParkPopupHide);
+    id("tablettab_park_save").addEventListener("click", tabletSavePark);
+
+    // Buttons - Scale and Thickness Pop-up
+    id("scale-thickness-popup").addEventListener("click", tabletScaleThicknessPopupHide);
+    id("scale_thickness_popup_content").addEventListener("click", tabletPopupStopProp);
+    id("tablettab_scale_thickness_cancel").addEventListener("click", tabletScaleThicknessPopupHide);
+    id("tablettab_scale_thickness_save").addEventListener("click", tabletSaveScaleThickness);
 
     // Buttons - Configuration Pop-up
     id("configuration-popup").addEventListener("click", tabletConfigPopupHide);
