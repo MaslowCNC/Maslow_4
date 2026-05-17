@@ -267,8 +267,20 @@ function get_index_from_eeprom_pos(pos) {
 
 /** Get the config filename from preferences, defaulting to maslow.yaml */
 const getConfigFileName = () => {
+  if (typeof GetPrefOrDefault === 'function') {
+    const configFileName = GetPrefOrDefault("config_filename");
+    if (typeof configFileName === "string") {
+      const trimmedConfigFileName = configFileName.trim();
+      if (trimmedConfigFileName.length > 0) {
+        return trimmedConfigFileName;
+      }
+    }
+  }
   if (typeof preferenceslist !== 'undefined' && preferenceslist.length > 0 && preferenceslist[0].config_filename) {
     return preferenceslist[0].config_filename;
+  }
+  if (typeof default_preferenceslist !== 'undefined' && default_preferenceslist.length > 0 && default_preferenceslist[0].config_filename) {
+    return default_preferenceslist[0].config_filename;
   }
   return "maslow.yaml";
 }

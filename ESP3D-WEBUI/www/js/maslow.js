@@ -4,6 +4,8 @@
 /** Maslow Status */
 let maslowStatus = { homed: false, extended: false, state: 0, zm: 0, zhome: 0 };
 const APPLY_TENSION_WARNING_PREFIX = "Maslow Apply Tension deviation warning:";
+const Z_HOME_RESET_WARNING_PREFIX = "Maslow Z home reset warning:";
+const ZM_INVALID_WARNING_PREFIX = "Maslow Zm invalid warning:";
 
 /** Maslow state constants (mirror firmware Maslow.h defines) */
 const MASLOW_STATE_FINDING_ANCHORS = 6;
@@ -354,6 +356,12 @@ const maslowInfoMsgHandling = (msg) => {
 		showApplyTensionWarningMessage(msg);
 	}
 
+	if (msg.startsWith(`[MSG:WARN: ${Z_HOME_RESET_WARNING_PREFIX}`)) {
+		showZHomeResetWarningMessage(msg);
+	} else if (msg.startsWith(`[MSG:WARN: ${ZM_INVALID_WARNING_PREFIX}`)) {
+		showZmInvalidWarningMessage(msg);
+	}
+
 	return false;
 };
 
@@ -441,6 +449,42 @@ function showApplyTensionWarningMessage(msg) {
 		"apply-tension-warning-modal",
 		"Apply Tension Warning",
 		warningText.substring(APPLY_TENSION_WARNING_PREFIX.length).trim()
+	);
+}
+
+function showZHomeResetWarningMessage(msg) {
+	const warningMatch = msg.match(/^\[MSG:WARN:\s*(.*)\]$/);
+	if (!warningMatch) {
+		return;
+	}
+
+	const warningText = warningMatch[1].trim();
+	if (!warningText.startsWith(Z_HOME_RESET_WARNING_PREFIX)) {
+		return;
+	}
+
+	showMaslowNoticeModal(
+		"z-home-reset-warning-modal",
+		"Z Home Reset",
+		warningText.substring(Z_HOME_RESET_WARNING_PREFIX.length).trim()
+	);
+}
+
+function showZmInvalidWarningMessage(msg) {
+	const warningMatch = msg.match(/^\[MSG:WARN:\s*(.*)\]$/);
+	if (!warningMatch) {
+		return;
+	}
+
+	const warningText = warningMatch[1].trim();
+	if (!warningText.startsWith(ZM_INVALID_WARNING_PREFIX)) {
+		return;
+	}
+
+	showMaslowNoticeModal(
+		"zm-invalid-warning-modal",
+		"Z Position Invalid",
+		warningText.substring(ZM_INVALID_WARNING_PREFIX.length).trim()
 	);
 }
 

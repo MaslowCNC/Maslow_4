@@ -513,6 +513,10 @@ void Maslow_::saveZPos() {
 // ("zG92") so that the Z home position is consistent with what was saved before
 // the last power cycle or restart.
 void Maslow_::loadZPos() {
+    static constexpr float MIN_VALID_ZM_PLUS_ZHOME_MM = 0.0f;
+    static constexpr float MAX_VALID_ZM_PLUS_ZHOME_MM = 73.0f;
+    static constexpr float MAX_VALID_ZM_MM            = 73.0f;
+
     nvs_handle_t nvsHandle;
     esp_err_t    ret = nvs_open("maslow", NVS_READWRITE, &nvsHandle);
     if (ret != ESP_OK) {
@@ -534,6 +538,43 @@ void Maslow_::loadZPos() {
         FloatInt32 fi;
         fi.i    = value2;
         targetZ = fi.f;
+
+        // gc_state is zero-initialized before gc_init() runs, so if coordinate
+        // offsets are not loaded yet, Z home safely defaults to 0 here.
+        float zHome = gc_state.coord_system[Z_AXIS] + gc_state.coord_offset[Z_AXIS];
+        if (Z_AXIS == TOOL_LENGTH_OFFSET_AXIS) {
+            zHome += gc_state.tool_length_offset;
+        }
+
+        float zmPlusZHome = targetZ + zHome;
+        bool invalidHighZmOnly = std::isfinite(targetZ) && targetZ > MAX_VALID_ZM_MM;
+        // When startup Zm is above the machine max, keep persisted Z (do not reset to 0)
+        // and only warn; this high-Zm case is intentionally excluded from reset logic.
+        bool invalidHighZmPlusZHome = std::isfinite(zmPlusZHome) && zmPlusZHome > MAX_VALID_ZM_PLUS_ZHOME_MM;
+        bool invalidPersistedZ = !std::isfinite(targetZ)
+                                 || !std::isfinite(zmPlusZHome)
+                                 || zmPlusZHome < MIN_VALID_ZM_PLUS_ZHOME_MM
+                                 || (invalidHighZmPlusZHome && !invalidHighZmOnly);
+
+        if (invalidHighZmOnly) {
+            log_warn("Maslow Zm invalid warning: Invalid startup Zm (" << targetZ
+                                                                       << "mm). Lower Z and reset Z stop from the menus.");
+        } else if (invalidPersistedZ) {
+            log_warn("Maslow Z home reset warning: Invalid startup Z values (Zm=" << targetZ << "mm, Z home=" << zHome
+                                                                                   << "mm, Zm+Z home=" << zmPlusZHome
+                                                                                   << "mm). Persisted Z has been reset to 0. Please set Z home.");
+            targetZ = 0;
+            fi.f    = targetZ;
+            ret     = nvs_set_i32(nvsHandle, "zPos", fi.i);
+            if (ret != ESP_OK) {
+                log_error("Error " + std::string(esp_err_to_name(ret)) + " writing corrected zPos to NVS!");
+            } else {
+                ret = nvs_commit(nvsHandle);
+                if (ret != ESP_OK) {
+                    log_error("Error " + std::string(esp_err_to_name(ret)) + " committing corrected zPos to NVS!");
+                }
+            }
+        }
 
         // Use Z_AXIS constant (2) for cartesian coordinate, not motor index (4)
         float* mpos  = get_mpos();
