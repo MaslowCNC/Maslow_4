@@ -42,13 +42,6 @@ const selectedMotorCode = () => {
     return select ? select.value : 'TL';
 };
 
-const selectedMotorMoveCommands = {
-    TL: { in: '$TLI', out: '$TLO' },
-    TR: { in: '$TRI', out: '$TRO' },
-    BL: { in: '$BLI', out: '$BLO' },
-    BR: { in: '$BRI', out: '$BRO' },
-};
-
 const requestSelectedMotorInfo = () => {
     if (typeof sendCommand !== 'function') {
         return;
@@ -61,11 +54,11 @@ const requestSelectedMotorInfo = () => {
 };
 
 const manualMotorMove = (direction) => {
-    const commandSet = selectedMotorMoveCommands[selectedMotorCode()];
-    if (!commandSet || typeof sendCommand !== 'function') {
+    if (typeof sendCommand !== 'function') {
         return;
     }
-    sendCommand(commandSet[direction]);
+    const moveDirection = direction === 'in' ? 'IN' : 'OUT';
+    sendCommand(`$MOTORTEST=${selectedMotorCode()},${moveDirection},200`);
     setTimeout(requestSelectedMotorInfo, MOTOR_INFO_REFRESH_DELAY_MS);
 };
 

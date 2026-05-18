@@ -1376,6 +1376,41 @@ void Maslow_::getMotorInfo(const char* motorLabel) {
     releaseLogBuffer();
 }
 
+bool Maslow_::runMotorTestMove(const char* motorLabel, bool moveIn, uint32_t durationMs) {
+    const int motorAxis = parse_motor_label(motorLabel);
+    if (motorAxis < 0 || motorAxis >= ARM_COUNT) {
+        log_error("MOTORTEST invalid motor '" << (motorLabel ? motorLabel : "") << "', expected TL, TR, BL, or BR");
+        return false;
+    }
+
+    if (durationMs == 0) {
+        durationMs = 200;
+    }
+    if (durationMs > 2000) {
+        durationMs = 2000;
+    }
+
+    axis[motorAxis].stop();
+    if (moveIn) {
+        axis[motorAxis].fullIn();
+    } else {
+        axis[motorAxis].fullOut();
+    }
+
+    const unsigned long startTime = millis();
+    while (millis() - startTime < durationMs) {
+        if (_sys_rt) {
+            _sys_rt();
+        } else {
+            delay(1);
+        }
+    }
+    axis[motorAxis].stop();
+
+    log_info("MOTORTEST " << motor_code_for_axis(motorAxis) << " " << (moveIn ? "IN" : "OUT") << " " << durationMs << "ms");
+    return true;
+}
+
 void Maslow_::set_telemetry(bool enabled) {
     if (enabled) {
         // Start off the file with the length of each struct in it.

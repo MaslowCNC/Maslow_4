@@ -29,6 +29,7 @@
 #include "FluidPath.h"
 
 #include <cstring>
+#include <cctype>
 #include <map>
 #include <filesystem>
 
@@ -1052,6 +1053,56 @@ static Error maslow_get_motor_info(const char* value, WebUI::AuthenticationLevel
     return Error::Ok;
 }
 
+static Error maslow_motor_test_move(const char* value, WebUI::AuthenticationLevel auth_level, Channel& out) {
+    if (!value || !*value) {
+        log_error("MOTORTEST requires value format MOTOR,DIRECTION[,DURATION_MS], e.g. TL,IN,200");
+        return Error::InvalidStatement;
+    }
+
+    char valueCopy[48];
+    strncpy(valueCopy, value, sizeof(valueCopy) - 1);
+    valueCopy[sizeof(valueCopy) - 1] = '\0';
+
+    char* motorToken    = strtok(valueCopy, ",");
+    char* directionToken = strtok(NULL, ",");
+    char* durationToken = strtok(NULL, ",");
+
+    if (!motorToken || !directionToken) {
+        log_error("MOTORTEST requires value format MOTOR,DIRECTION[,DURATION_MS], e.g. TL,IN,200");
+        return Error::InvalidStatement;
+    }
+
+    for (char* p = directionToken; *p; ++p) {
+        *p = toupper(static_cast<unsigned char>(*p));
+    }
+
+    bool moveIn;
+    if (!strcmp(directionToken, "IN")) {
+        moveIn = true;
+    } else if (!strcmp(directionToken, "OUT")) {
+        moveIn = false;
+    } else {
+        log_error("MOTORTEST direction must be IN or OUT");
+        return Error::InvalidStatement;
+    }
+
+    uint32_t durationMs = 200;
+    if (durationToken && *durationToken) {
+        char* endptr = nullptr;
+        long  parsed = strtol(durationToken, &endptr, 10);
+        if (endptr == durationToken || *endptr != '\0' || parsed < 0) {
+            log_error("MOTORTEST duration must be a non-negative integer");
+            return Error::BadNumberFormat;
+        }
+        durationMs = static_cast<uint32_t>(parsed);
+    }
+
+    if (!Maslow.runMotorTestMove(motorToken, moveIn, durationMs)) {
+        return Error::InvalidStatement;
+    }
+    return Error::Ok;
+}
+
 // Commands use the same syntax as Settings, but instead of setting or
 // displaying a persistent value, a command causes some action to occur.
 // That action could be anything, from displaying a run-time parameter
@@ -1145,6 +1196,7 @@ void make_user_commands() {
     new UserCommand("SETZSTOP", M + "/setZStop", maslow_set_zStop, anyState);
     new UserCommand("MINFO", M + "/getInfo", maslow_get_info, anyState);
     new UserCommand("MOTORINFO", M + "/getMotorInfo", maslow_get_motor_info, anyState);
+    new UserCommand("MOTORTEST", M + "/motorTestMove", maslow_motor_test_move, anyState);
     new UserCommand("GSTATE", M + "/gstate", maslow_get_state, anyState);
 };
 
