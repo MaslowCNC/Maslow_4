@@ -11,6 +11,8 @@ const ZM_INVALID_WARNING_PREFIX = "Maslow Zm invalid warning:";
 const MASLOW_STATE_FINDING_ANCHORS = 6;
 const MASLOW_STATE_READY_TO_CUT = 7;
 const MASLOW_STATE_FIND_ANCHORS_COMPUTING = 9;
+const FIND_ANCHORS_WAYPOINT_COORDINATE_REGEX = /^\[MSG:INFO:\s*Waypoint\s+\d+\s+coordinates:\s*X=([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\s+Y=([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\]$/;
+let wasFindingAnchors = false;
 
 /** This keeps track of when we saw the last heartbeat from the machine */
 //I think this is not used anymore and can be removed now
@@ -278,6 +280,21 @@ const updateDynamicButtons = () => {
 const updateFindAnchorsView = () => {
 	const isFindingAnchors = (maslowStatus.state === MASLOW_STATE_FINDING_ANCHORS || maslowStatus.state === MASLOW_STATE_FIND_ANCHORS_COMPUTING);
 
+	if (isFindingAnchors !== wasFindingAnchors) {
+		if (isFindingAnchors) {
+			if (typeof clearFindAnchorsTrace === 'function') {
+				clearFindAnchorsTrace();
+			}
+			if (typeof showGCode === 'function') {
+				showGCode("");
+			}
+			if (typeof setGcodeViewerPage === 'function') {
+				setGcodeViewerPage(0);
+			}
+		}
+		wasFindingAnchors = isFindingAnchors;
+	}
+
 	const elementsToHide = [
 		document.getElementById('tablettab-jog-controls'),
 		document.getElementById('tablettab-file-controls'),
@@ -344,6 +361,20 @@ const maslowInfoMsgHandling = (msg) => {
 			updateDynamicButtons();
 		}
 		return true;
+	}
+
+	if (msg.startsWith("[MSG:INFO: Waypoint ")) {
+		const waypointMatch = msg.match(FIND_ANCHORS_WAYPOINT_COORDINATE_REGEX);
+		if (waypointMatch) {
+			const x = Number(waypointMatch[1]);
+			const y = Number(waypointMatch[2]);
+			if (Number.isFinite(x) && Number.isFinite(y) && typeof addFindAnchorsTracePoint === 'function') {
+				addFindAnchorsTracePoint(x, y);
+				if (typeof refreshGcode === 'function') {
+					refreshGcode();
+				}
+			}
+		}
 	}
 
 	//Catch the calibration complete message and alert the user...this locks up the UI which is bad...should be handled better

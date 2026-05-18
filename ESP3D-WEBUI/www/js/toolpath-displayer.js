@@ -345,6 +345,39 @@ var jobEnvelopePoints = []; // Simplified convex hull points (up to 100)
 var bboxIsSet = false;
 var jobBboxIsSet = false;
 var initialMovesForBbox = true; // Track if we're still in initial positioning phase
+var findAnchorsTracePoints = [];
+
+var clearFindAnchorsTrace = function() {
+    findAnchorsTracePoints = [];
+}
+
+var addFindAnchorsTracePoint = function(x, y) {
+    if (!isFinite(x) || !isFinite(y)) {
+        return;
+    }
+
+    const lastPoint = findAnchorsTracePoints[findAnchorsTracePoints.length - 1];
+    if (lastPoint && lastPoint.x === x && lastPoint.y === y) {
+        return;
+    }
+
+    findAnchorsTracePoints.push({ x: x, y: y });
+}
+
+var includeFindAnchorsTraceInBbox = function() {
+    if (findAnchorsTracePoints.length === 0) {
+        return;
+    }
+
+    for (let i = 0; i < findAnchorsTracePoints.length; i++) {
+        const p = projection({ x: findAnchorsTracePoints[i].x, y: findAnchorsTracePoints[i].y, z: 0 });
+        tpBbox.min.x = Math.min(tpBbox.min.x, p.x);
+        tpBbox.min.y = Math.min(tpBbox.min.y, p.y);
+        tpBbox.max.x = Math.max(tpBbox.max.x, p.x);
+        tpBbox.max.y = Math.max(tpBbox.max.y, p.y);
+        bboxIsSet = true;
+    }
+}
 
 var resetBbox = function() {
     tpBbox.min.x = Infinity;
@@ -631,6 +664,35 @@ var drawOrigin = function(radius) {
     tp.moveTo(po.x, po.y - radius*1.5);
     tp.lineTo(po.x, po.y + radius*1.5);
     tp.stroke();
+}
+
+var drawFindAnchorsTrace = function() {
+    if (findAnchorsTracePoints.length === 0) {
+        return;
+    }
+
+    tp.beginPath();
+    tp.strokeStyle = '#ff7f0e';
+    tp.lineWidth = 2.0 / scaler;
+
+    const firstPoint = projection({ x: findAnchorsTracePoints[0].x, y: findAnchorsTracePoints[0].y, z: 0 });
+    tp.moveTo(firstPoint.x, firstPoint.y);
+
+    for (let i = 1; i < findAnchorsTracePoints.length; i++) {
+        const p = projection({ x: findAnchorsTracePoints[i].x, y: findAnchorsTracePoints[i].y, z: 0 });
+        tp.lineTo(p.x, p.y);
+    }
+    tp.stroke();
+
+    tp.fillStyle = '#ff7f0e';
+    for (let i = 0; i < findAnchorsTracePoints.length; i++) {
+        const p = projection({ x: findAnchorsTracePoints[i].x, y: findAnchorsTracePoints[i].y, z: 0 });
+        tp.beginPath();
+        tp.arc(p.x, p.y, 3.0 / scaler, 0, Math.PI * 2);
+        tp.fill();
+    }
+
+    tp.lineWidth = 0.5 / scaler;
 }
 
 var drawJobBoundingBox = function() {
@@ -1723,6 +1785,7 @@ ToolpathDisplayer.prototype.showToolpath = function(gcode, modal, initialPositio
     if(drawBelts){
         drawMachineBelts(); //Adds the belts to the bounding box...does not draw yet
     }
+    includeFindAnchorsTraceInBbox();
 
     var gcodeLines = gcode.split('\n');
     new Toolpath(bboxHandlers).loadFromLinesSync(gcodeLines);
@@ -1740,6 +1803,7 @@ ToolpathDisplayer.prototype.showToolpath = function(gcode, modal, initialPositio
     // This avoids huge crosshairs when transformCanvas() zoomed in on a small jobBbox
     // while tpBbox (which includes full machine bounds) is much larger.
     drawOrigin(canvas.width / scaler * 0.04);
+    drawFindAnchorsTrace();
 
     initialMoves = true;
     displayHandlers.position = initialPosition;
@@ -1809,6 +1873,7 @@ ToolpathDisplayer.prototype.showToolPosition = function(modal, position) {
     if(drawBelts){
         drawMachineBelts();
     }
+    includeFindAnchorsTraceInBbox();
 
     // Transform canvas to fit the bounds
     transformCanvas();
@@ -1827,6 +1892,7 @@ ToolpathDisplayer.prototype.showToolPosition = function(modal, position) {
         // Use canvas.width / scaler so the crosshair is proportional to the visible area,
         // not to tpBbox which may be much larger than the displayed jobBbox.
         drawOrigin(canvas.width / scaler * 0.04);
+        drawFindAnchorsTrace();
 
         // Draw job bounding box if available (updates with WCO changes)
         drawJobBoundingBox();
@@ -1974,6 +2040,16 @@ var refreshGcode = function() {
     const gcode = getValue("tablettab_gcode");
     tpDisplayer().showToolpath(gcode, gCodeModal, arrayToXYZ(WPOS));
     updateJobBoundsDisplay();
+}
+
+var setGcodeViewerPage = function(pageNumber) {
+    const parsed = Number(pageNumber);
+    if (!Number.isFinite(parsed)) {
+        return;
+    }
+
+    const pageIndex = Math.max(0, Math.min(4, Math.trunc(parsed) - 1));
+    cameraAngle = pageIndex;
 }
 
 // Function to update the job bounds display

@@ -1751,7 +1751,7 @@ bool Calibration::take_measurement_avg_with_check(int waypoint, int dir) {
                 criticalCounter               = 0;
             }
             log_info("Measured waypoint " << waypoint);
-            log_debug("Waypoint " << waypoint << " coordinates: X=" << calibrationGrid[waypoint][0] << " Y=" << calibrationGrid[waypoint][1]);
+            log_info("Waypoint " << waypoint << " coordinates: X=" << calibrationGrid[waypoint][0] << " Y=" << calibrationGrid[waypoint][1]);
 
             //A check to see if the results on the first point are within the expected range
             //This logic should only run during calibration, not during Apply Tension
