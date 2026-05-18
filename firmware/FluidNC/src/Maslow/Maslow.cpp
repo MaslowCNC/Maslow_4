@@ -24,7 +24,7 @@ static int parse_motor_label(const char* motorLabel) {
         return _TL;
     }
 
-    char normalized[16];
+    char normalized[32];
     size_t idx = 0;
     for (const char* p = motorLabel; *p && idx < sizeof(normalized) - 1; p++) {
         if (*p == ' ' || *p == '_' || *p == '-') {
@@ -1348,8 +1348,9 @@ void Maslow_::getMotorInfo(const char* motorLabel) {
     const String motorName    = axis_id_to_label(motorAxis);
     const int    currentState = calibration.getCurrentState();
 
+    constexpr size_t motorInfoBufferSize = 1400;
     snprintf(buffer,
-             700,
+             motorInfoBufferSize,
              "MOTORINFO: { \"motor\": \"%s\", \"label\": \"%s\", \"position\": %g, \"target\": %g, \"positionError\": %g, "
              "\"current\": %g, \"averageCurrent\": %g, \"power\": %g, \"speed\": %g, \"rawEncoderAngle\": %u, "
              "\"extended\": %s, \"axisHomed\": %s, \"allHomed\": %s, \"calibrationState\": %d, \"systemState\": %d, "

@@ -13,6 +13,7 @@ let selectedMotorInfo = null;
 let motorInfoPollingTimer = null;
 
 const MAX_CURRENT = 2200; // Maximum current value for gauge scaling in mA (at max ADC)
+const MOTOR_INFO_REFRESH_DELAY_MS = 250;
 
 /**
  * Convert ADC value (0-4095) to milliamps using the formula: I(mA) = 1000*((3.3*(ADC/4095))/1.5)
@@ -52,6 +53,10 @@ const requestSelectedMotorInfo = () => {
     if (typeof sendCommand !== 'function') {
         return;
     }
+    const debugTab = id('debuggingtab');
+    if (debugTab && debugTab.style.display === 'none') {
+        return;
+    }
     sendCommand(`$MOTORINFO=${selectedMotorCode()}`);
 };
 
@@ -61,7 +66,7 @@ const manualMotorMove = (direction) => {
         return;
     }
     sendCommand(commandSet[direction]);
-    setTimeout(requestSelectedMotorInfo, 250);
+    setTimeout(requestSelectedMotorInfo, MOTOR_INFO_REFRESH_DELAY_MS);
 };
 
 const manualMotorMoveIn = () => manualMotorMove('in');
@@ -237,3 +242,10 @@ if (document.readyState === 'loading') {
 } else {
     initDebuggingTab();
 }
+
+window.addEventListener('beforeunload', () => {
+    if (motorInfoPollingTimer) {
+        clearInterval(motorInfoPollingTimer);
+        motorInfoPollingTimer = null;
+    }
+});
