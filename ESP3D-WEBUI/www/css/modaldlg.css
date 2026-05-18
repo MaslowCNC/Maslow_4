@@ -83,6 +83,12 @@
     padding: 10px 16px;
 }
 
+.component-list-container {
+    max-height: 300px;
+    overflow-y: auto;
+    font-size: 0.9em;
+}
+
 .modal-footer {
     padding: 16px 16px;
     height: 4.5em;
