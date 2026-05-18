@@ -9,14 +9,17 @@
       <h3>Motor Test Control</h3>
       <div class="motor-test-controls">
         <label for="motor-test-select">Motor</label>
-        <select id="motor-test-select" onchange="requestSelectedMotorInfo()">
+        <select id="motor-test-select" onchange="onMotorSelectionChanged()">
           <option value="TL">Top Left</option>
           <option value="TR">Top Right</option>
           <option value="BL">Bottom Left</option>
           <option value="BR">Bottom Right</option>
         </select>
-        <button type="button" onclick="manualMotorMoveIn()">Move In</button>
-        <button type="button" onclick="manualMotorMoveOut()">Move Out</button>
+        <label for="motor-test-speed">Speed</label>
+        <input id="motor-test-speed" type="number" min="-1023" max="1023" value="0" onchange="onMotorSpeedNumberChange()">
+        <input id="motor-test-speed-range" type="range" min="-1023" max="1023" value="0" oninput="onMotorSpeedRangeChange()">
+        <button type="button" onclick="applyMotorSpeed()">Set Speed</button>
+        <button type="button" onclick="stopMotorTest()">Stop</button>
         <button type="button" onclick="requestSelectedMotorInfo()">Refresh</button>
       </div>
       <div id="motor-test-info" class="motor-test-info">No motor info received yet.</div>
@@ -141,8 +144,17 @@
 }
 
 .motor-test-controls select,
+.motor-test-controls input,
 .motor-test-controls button {
   height: 34px;
+}
+
+#motor-test-speed {
+  width: 90px;
+}
+
+#motor-test-speed-range {
+  width: 180px;
 }
 
 .motor-test-info {

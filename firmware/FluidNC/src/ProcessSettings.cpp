@@ -29,7 +29,6 @@
 #include "FluidPath.h"
 
 #include <cstring>
-#include <cctype>
 #include <map>
 #include <filesystem>
 
@@ -1055,7 +1054,7 @@ static Error maslow_get_motor_info(const char* value, WebUI::AuthenticationLevel
 
 static Error maslow_motor_test_move(const char* value, WebUI::AuthenticationLevel auth_level, Channel& out) {
     if (!value || !*value) {
-        log_error("MOTORTEST requires value format MOTOR,DIRECTION[,DURATION_MS], e.g. TL,IN,200");
+        log_error("MOTORTEST requires value format MOTOR,PWM_SPEED, e.g. TL,600 or TR,-400");
         return Error::InvalidStatement;
     }
 
@@ -1063,41 +1062,22 @@ static Error maslow_motor_test_move(const char* value, WebUI::AuthenticationLeve
     strncpy(valueCopy, value, sizeof(valueCopy) - 1);
     valueCopy[sizeof(valueCopy) - 1] = '\0';
 
-    char* motorToken    = strtok(valueCopy, ",");
-    char* directionToken = strtok(NULL, ",");
-    char* durationToken = strtok(NULL, ",");
+    char* motorToken = strtok(valueCopy, ",");
+    char* speedToken = strtok(NULL, ",");
 
-    if (!motorToken || !directionToken) {
-        log_error("MOTORTEST requires value format MOTOR,DIRECTION[,DURATION_MS], e.g. TL,IN,200");
+    if (!motorToken || !speedToken) {
+        log_error("MOTORTEST requires value format MOTOR,PWM_SPEED, e.g. TL,600 or TR,-400");
         return Error::InvalidStatement;
     }
 
-    for (char* p = directionToken; *p; ++p) {
-        *p = toupper(static_cast<unsigned char>(*p));
+    char* endptr = nullptr;
+    long  speed  = strtol(speedToken, &endptr, 10);
+    if (endptr == speedToken || *endptr != '\0') {
+        log_error("MOTORTEST PWM_SPEED must be an integer from -1023 to 1023");
+        return Error::BadNumberFormat;
     }
 
-    bool moveIn;
-    if (!strcmp(directionToken, "IN")) {
-        moveIn = true;
-    } else if (!strcmp(directionToken, "OUT")) {
-        moveIn = false;
-    } else {
-        log_error("MOTORTEST direction must be IN or OUT");
-        return Error::InvalidStatement;
-    }
-
-    uint32_t durationMs = 200;
-    if (durationToken && *durationToken) {
-        char* endptr = nullptr;
-        long  parsed = strtol(durationToken, &endptr, 10);
-        if (endptr == durationToken || *endptr != '\0' || parsed < 0) {
-            log_error("MOTORTEST duration must be a non-negative integer");
-            return Error::BadNumberFormat;
-        }
-        durationMs = static_cast<uint32_t>(parsed);
-    }
-
-    if (!Maslow.runMotorTestMove(motorToken, moveIn, durationMs)) {
+    if (!Maslow.setMotorTestSpeed(motorToken, static_cast<int>(speed))) {
         return Error::InvalidStatement;
     }
     return Error::Ok;

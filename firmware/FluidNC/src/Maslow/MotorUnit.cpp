@@ -298,6 +298,11 @@ void MotorUnit::stop() {
     _commandPWM = 0;
 }
 
+void MotorUnit::runAtSpeed(int signedSpeed) {
+    motor.runAtPWM(signedSpeed);
+    _commandPWM = signedSpeed;
+}
+
 // Returns the PWM values set to the motor
 double MotorUnit::getMotorPower() {
     return _commandPWM;

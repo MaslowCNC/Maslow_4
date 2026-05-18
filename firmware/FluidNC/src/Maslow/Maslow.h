@@ -131,7 +131,7 @@ public:
 
     void getInfo();
     void getMotorInfo(const char* motorLabel);
-    bool runMotorTestMove(const char* motorLabel, bool moveIn, uint32_t durationMs = 200);
+    bool setMotorTestSpeed(const char* motorLabel, int pwmSpeed);
     bool telemetry_enabled = false;
     // TODO: probably need to use this for all fields in telemetry, but we'll try without first
     // SemaphoreHandle_t telemetry_mutex = xSemaphoreCreateMutex();

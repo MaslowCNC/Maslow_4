@@ -25,6 +25,7 @@ public:
     double   getCurrent();
     double   getPositionError();
     void     stop();
+    void     runAtSpeed(int signedSpeed);  // Drive motor directly with signed PWM speed (-1023 to 1023)
     bool     updateEncoderPosition();
     double   recomputePID();
     void     decompressBelt();

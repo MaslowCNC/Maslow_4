@@ -53,17 +53,57 @@ const requestSelectedMotorInfo = () => {
     sendCommand(`$MOTORINFO=${selectedMotorCode()}`);
 };
 
-const manualMotorMove = (direction) => {
+const getRequestedMotorSpeed = () => {
+    const speedInput = id('motor-test-speed');
+    if (!speedInput) {
+        return 0;
+    }
+    const parsed = Number.parseInt(speedInput.value, 10);
+    if (!Number.isFinite(parsed)) {
+        return 0;
+    }
+    return Math.max(-1023, Math.min(1023, parsed));
+};
+
+const syncMotorSpeedInputs = (value) => {
+    const clampedValue = Math.max(-1023, Math.min(1023, Number.parseInt(value, 10) || 0));
+    const speedInput = id('motor-test-speed');
+    const speedRange = id('motor-test-speed-range');
+    if (speedInput) {
+        speedInput.value = clampedValue;
+    }
+    if (speedRange) {
+        speedRange.value = clampedValue;
+    }
+};
+
+const applyMotorSpeed = () => {
     if (typeof sendCommand !== 'function') {
         return;
     }
-    const moveDirection = direction === 'in' ? 'IN' : 'OUT';
-    sendCommand(`$MOTORTEST=${selectedMotorCode()},${moveDirection},200`);
-    setTimeout(requestSelectedMotorInfo, MOTOR_INFO_REFRESH_DELAY_MS);
+    const speed = getRequestedMotorSpeed();
+    sendCommand(`$MOTORTEST=${selectedMotorCode()},${speed}`);
+    requestSelectedMotorInfo();
 };
 
-const manualMotorMoveIn = () => manualMotorMove('in');
-const manualMotorMoveOut = () => manualMotorMove('out');
+const stopMotorTest = () => {
+    syncMotorSpeedInputs(0);
+    applyMotorSpeed();
+};
+
+const onMotorSpeedNumberChange = () => {
+    syncMotorSpeedInputs(getRequestedMotorSpeed());
+};
+
+const onMotorSpeedRangeChange = () => {
+    const speedRange = id('motor-test-speed-range');
+    syncMotorSpeedInputs(speedRange ? speedRange.value : 0);
+};
+
+const onMotorSelectionChanged = () => {
+    stopMotorTest();
+    setTimeout(requestSelectedMotorInfo, MOTOR_INFO_REFRESH_DELAY_MS);
+};
 
 const updateMotorTestDisplay = () => {
     const infoElement = id('motor-test-info');
@@ -190,7 +230,7 @@ const initDebuggingTab = () => {
     }
 
     if (!motorInfoPollingTimer) {
-        motorInfoPollingTimer = setInterval(requestSelectedMotorInfo, 1000);
+        motorInfoPollingTimer = setInterval(requestSelectedMotorInfo, MOTOR_INFO_REFRESH_DELAY_MS);
     }
 };
 
@@ -225,8 +265,11 @@ if (typeof module !== 'undefined' && module.exports) {
     };
 }
 
-globalThis.manualMotorMoveIn = manualMotorMoveIn;
-globalThis.manualMotorMoveOut = manualMotorMoveOut;
+globalThis.applyMotorSpeed = applyMotorSpeed;
+globalThis.stopMotorTest = stopMotorTest;
+globalThis.onMotorSpeedRangeChange = onMotorSpeedRangeChange;
+globalThis.onMotorSpeedNumberChange = onMotorSpeedNumberChange;
+globalThis.onMotorSelectionChanged = onMotorSelectionChanged;
 globalThis.requestSelectedMotorInfo = requestSelectedMotorInfo;
 globalThis.handleMotorInfoMessage = handleMotorInfoMessage;
 
