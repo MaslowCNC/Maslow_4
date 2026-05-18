@@ -130,6 +130,7 @@ public:
     Calibration calibration;
 
     void getInfo();
+    void getMotorInfo(const char* motorLabel);
     bool telemetry_enabled = false;
     // TODO: probably need to use this for all fields in telemetry, but we'll try without first
     // SemaphoreHandle_t telemetry_mutex = xSemaphoreCreateMutex();

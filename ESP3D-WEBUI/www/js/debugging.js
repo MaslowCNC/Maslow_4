@@ -9,6 +9,8 @@ let motorCurrentData = {
 };
 
 let debugTabVisible = false; // Track if debug tab has been shown
+let selectedMotorInfo = null;
+let motorInfoPollingTimer = null;
 
 const MAX_CURRENT = 2200; // Maximum current value for gauge scaling in mA (at max ADC)
 
@@ -32,6 +34,74 @@ const showDebugTab = () => {
             debugTabVisible = true;
         }
     }
+};
+
+const selectedMotorCode = () => {
+    const select = id('motor-test-select');
+    return select ? select.value : 'TL';
+};
+
+const selectedMotorMoveCommands = {
+    TL: { in: '$TLI', out: '$TLO' },
+    TR: { in: '$TRI', out: '$TRO' },
+    BL: { in: '$BLI', out: '$BLO' },
+    BR: { in: '$BRI', out: '$BRO' },
+};
+
+const requestSelectedMotorInfo = () => {
+    if (typeof sendCommand !== 'function') {
+        return;
+    }
+    sendCommand(`$MOTORINFO=${selectedMotorCode()}`);
+};
+
+const manualMotorMove = (direction) => {
+    const commandSet = selectedMotorMoveCommands[selectedMotorCode()];
+    if (!commandSet || typeof sendCommand !== 'function') {
+        return;
+    }
+    sendCommand(commandSet[direction]);
+    setTimeout(requestSelectedMotorInfo, 250);
+};
+
+const manualMotorMoveIn = () => manualMotorMove('in');
+const manualMotorMoveOut = () => manualMotorMove('out');
+
+const updateMotorTestDisplay = () => {
+    const infoElement = id('motor-test-info');
+    if (!infoElement) {
+        return;
+    }
+
+    if (!selectedMotorInfo) {
+        infoElement.textContent = 'No motor info received yet.';
+        return;
+    }
+
+    const infoLines = [
+        `Motor: ${selectedMotorInfo.label || selectedMotorInfo.motor || '-'}`,
+        `Position (mm): ${selectedMotorInfo.position}`,
+        `Target (mm): ${selectedMotorInfo.target}`,
+        `Position Error (mm): ${selectedMotorInfo.positionError}`,
+        `Raw Encoder Angle: ${selectedMotorInfo.rawEncoderAngle}`,
+        `Instant Current (ADC): ${selectedMotorInfo.current}`,
+        `Average Current (ADC): ${selectedMotorInfo.averageCurrent}`,
+        `Power (PWM): ${selectedMotorInfo.power}`,
+        `Speed (mm/s): ${selectedMotorInfo.speed}`,
+        `Extended: ${selectedMotorInfo.extended}`,
+        `Axis Homed: ${selectedMotorInfo.axisHomed}`,
+        `All Homed: ${selectedMotorInfo.allHomed}`,
+        `Calibration State: ${selectedMotorInfo.calibrationState}`,
+        `System State: ${selectedMotorInfo.systemState}`,
+        `Calibration In Progress: ${selectedMotorInfo.calibrationInProgress}`,
+        `Any Override Active: ${selectedMotorInfo.overrideActive}`,
+    ];
+    infoElement.textContent = infoLines.join('\n');
+};
+
+const handleMotorInfoMessage = (motorInfo) => {
+    selectedMotorInfo = motorInfo;
+    updateMotorTestDisplay();
 };
 
 /**
@@ -106,8 +176,10 @@ const updateMotorCurrentDisplay = () => {
  * Initialize the debugging tab functionality
  */
 const initDebuggingTab = () => {
+    showDebugTab();
     // Set initial gauge states
     updateMotorCurrentDisplay();
+    updateMotorTestDisplay();
     
     // Add event listener for tab activation to refresh display
     const debugTab = id('debuggingtab');
@@ -115,7 +187,12 @@ const initDebuggingTab = () => {
         debugTab.addEventListener('activate', () => {
             // Refresh display when tab becomes active
             updateMotorCurrentDisplay();
+            updateMotorTestDisplay();
         });
+    }
+
+    if (!motorInfoPollingTimer) {
+        motorInfoPollingTimer = setInterval(requestSelectedMotorInfo, 1000);
     }
 };
 
@@ -148,4 +225,15 @@ if (typeof module !== 'undefined' && module.exports) {
         convertAdcToMilliamps,
         motorCurrentData
     };
+}
+
+globalThis.manualMotorMoveIn = manualMotorMoveIn;
+globalThis.manualMotorMoveOut = manualMotorMoveOut;
+globalThis.requestSelectedMotorInfo = requestSelectedMotorInfo;
+globalThis.handleMotorInfoMessage = handleMotorInfoMessage;
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initDebuggingTab);
+} else {
+    initDebuggingTab();
 }

@@ -4,6 +4,23 @@
       <h2 translate>Motor Current Monitoring</h2>
       <p translate>Real-time current draw for each motor in milliamps (mA)</p>
     </div>
+
+    <div class="motor-test-panel">
+      <h3>Motor Test Control</h3>
+      <div class="motor-test-controls">
+        <label for="motor-test-select">Motor</label>
+        <select id="motor-test-select" onchange="requestSelectedMotorInfo()">
+          <option value="TL">Top Left</option>
+          <option value="TR">Top Right</option>
+          <option value="BL">Bottom Left</option>
+          <option value="BR">Bottom Right</option>
+        </select>
+        <button type="button" onclick="manualMotorMoveIn()">Move In</button>
+        <button type="button" onclick="manualMotorMoveOut()">Move Out</button>
+        <button type="button" onclick="requestSelectedMotorInfo()">Refresh</button>
+      </div>
+      <div id="motor-test-info" class="motor-test-info">No motor info received yet.</div>
+    </div>
     
     <div class="debugging-gauges">
       <!-- Top Left Corner Motor Gauge -->
@@ -107,6 +124,31 @@
   max-width: 600px;
   margin-left: auto;
   margin-right: auto;
+}
+
+.motor-test-panel {
+  background: #f9f9f9;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 24px;
+}
+
+.motor-test-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.motor-test-controls select,
+.motor-test-controls button {
+  height: 34px;
+}
+
+.motor-test-info {
+  margin-top: 14px;
+  font-family: monospace;
+  white-space: pre-wrap;
 }
 
 .gauge-container {

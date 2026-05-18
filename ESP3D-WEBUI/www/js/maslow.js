@@ -342,6 +342,18 @@ const maslowInfoMsgHandling = (msg) => {
 		return true;
 	}
 
+	if (msg.startsWith('MOTORINFO: ')) {
+		try {
+			const motorInfo = JSON.parse(msg.substring(11));
+			if (typeof handleMotorInfoMessage === 'function') {
+				handleMotorInfoMessage(motorInfo);
+			}
+		} catch (error) {
+			console.error("Parsing the 'MOTORINFO' message failed.");
+		}
+		return true;
+	}
+
 	if (msg.startsWith('[MSG:INFO: Heartbeat')) {
 		lastHeartBeatTime = new Date().getTime();
 		return true;

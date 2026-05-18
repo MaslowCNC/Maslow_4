@@ -1047,6 +1047,11 @@ static Error maslow_get_info(const char* value, WebUI::AuthenticationLevel auth_
     return Error::Ok;
 }
 
+static Error maslow_get_motor_info(const char* value, WebUI::AuthenticationLevel auth_level, Channel& out) {
+    Maslow.getMotorInfo(value);
+    return Error::Ok;
+}
+
 // Commands use the same syntax as Settings, but instead of setting or
 // displaying a persistent value, a command causes some action to occur.
 // That action could be anything, from displaying a run-time parameter
@@ -1139,6 +1144,7 @@ void make_user_commands() {
     new UserCommand("ESTOP", M + "/estop", maslow_estop, anyState);
     new UserCommand("SETZSTOP", M + "/setZStop", maslow_set_zStop, anyState);
     new UserCommand("MINFO", M + "/getInfo", maslow_get_info, anyState);
+    new UserCommand("MOTORINFO", M + "/getMotorInfo", maslow_get_motor_info, anyState);
     new UserCommand("GSTATE", M + "/gstate", maslow_get_state, anyState);
 };
 
