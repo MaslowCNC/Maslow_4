@@ -22,6 +22,37 @@ The interface may auto-open when you connect. If not, enter `192.168.0.1` in you
 
 ![Browser Access](images/guide-03.png)
 
+## USB Control Options
+
+Maslow firmware already exposes a USB CDC serial interface on ESP32-S3 builds (`ARDUINO_USB_CDC_ON_BOOT=1`), so direct USB control is available today through a serial terminal.
+
+### 1) Use the existing serial command channel (available now)
+
+- Connect the controller by USB-C.
+- Open a serial terminal at `115200` baud (or use `firmware/fluidterm/fluidterm.py`).
+- Send standard FluidNC/Maslow commands (`$` commands, G-code, realtime commands).
+
+This is the most reliable USB workflow currently in-tree.
+
+### 2) Browser UI over USB serial (future option)
+
+The web UI could add a transport layer using the browser Web Serial API (`navigator.serial`) and map UI command/status traffic onto the existing serial protocol.
+
+- **Pros:** Reuses USB CDC already in firmware.
+- **Cons:** Browser support is limited (primarily Chromium-based), and UI transport work is required.
+
+### 3) Emulate a USB network interface (future option)
+
+Another path is exposing Ethernet-over-USB (for example CDC-ECM/RNDIS) so the existing HTTP/WebSocket UI works unchanged over a virtual network link.
+
+- **Pros:** Keeps the current web UI architecture mostly unchanged.
+- **Cons:** Requires firmware USB networking support and host OS driver validation.
+
+### 4) Other practical alternatives
+
+- A desktop bridge app that talks serial over USB and serves a local WebSocket/HTTP proxy for the existing UI.
+- Existing CNC sender applications over USB serial for command-only workflows.
+
 ## Web Interface Overview
 
 The Maslow 4 web interface provides all the controls you need to operate your CNC machine without installing any additional software.
