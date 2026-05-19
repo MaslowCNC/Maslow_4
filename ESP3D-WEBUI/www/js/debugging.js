@@ -14,6 +14,7 @@ let motorInfoPollingTimer = null;
 
 const MAX_CURRENT = 2200; // Maximum current value for gauge scaling in mA (at max ADC)
 const MOTOR_INFO_REFRESH_DELAY_MS = 250;
+const clampMotorSpeed = (value) => Math.max(-1023, Math.min(1023, Number.parseInt(value, 10) || 0));
 
 /**
  * Convert ADC value (0-4095) to milliamps using the formula: I(mA) = 1000*((3.3*(ADC/4095))/1.5)
@@ -62,11 +63,11 @@ const getRequestedMotorSpeed = () => {
     if (!Number.isFinite(parsed)) {
         return 0;
     }
-    return Math.max(-1023, Math.min(1023, parsed));
+    return clampMotorSpeed(parsed);
 };
 
 const syncMotorSpeedInputs = (value) => {
-    const clampedValue = Math.max(-1023, Math.min(1023, Number.parseInt(value, 10) || 0));
+    const clampedValue = clampMotorSpeed(value);
     const speedInput = id('motor-test-speed');
     const speedRange = id('motor-test-speed-range');
     if (speedInput) {

@@ -298,6 +298,7 @@ void MotorUnit::stop() {
     _commandPWM = 0;
 }
 
+// Drives the motor directly using signed PWM (-1023 to 1023); negative values run inward.
 void MotorUnit::runAtSpeed(int signedSpeed) {
     motor.runAtPWM(signedSpeed);
     _commandPWM = signedSpeed;

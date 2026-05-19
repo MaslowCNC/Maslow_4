@@ -22,6 +22,7 @@
         <button type="button" onclick="stopMotorTest()">Stop</button>
         <button type="button" onclick="requestSelectedMotorInfo()">Refresh</button>
       </div>
+      <div class="motor-test-note">Changing the selected motor will stop active motor test output.</div>
       <div id="motor-test-info" class="motor-test-info">No motor info received yet.</div>
     </div>
     
@@ -161,6 +162,12 @@
   margin-top: 14px;
   font-family: monospace;
   white-space: pre-wrap;
+}
+
+.motor-test-note {
+  margin-top: 8px;
+  color: #666;
+  font-size: 12px;
 }
 
 .gauge-container {
