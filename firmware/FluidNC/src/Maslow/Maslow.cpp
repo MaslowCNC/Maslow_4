@@ -1343,35 +1343,24 @@ void Maslow_::getMotorInfo(const char* motorLabel) {
         return;
     }
 
-    char*        buffer       = getLogBuffer();
-    const char*  motorCode    = motor_code_for_axis(motorAxis);
-    const String motorName    = axis_id_to_label(motorAxis);
-    const int    currentState = calibration.getCurrentState();
+    char*       buffer    = getLogBuffer();
+    const char* motorCode = motor_code_for_axis(motorAxis);
+    const long  encCounts = static_cast<long>(axis[motorAxis].getEncoderCounts());
 
-    constexpr size_t motorInfoBufferSize = 1400;
+    constexpr size_t motorInfoBufferSize = 512;
     snprintf(buffer,
              motorInfoBufferSize,
-             "MOTORINFO: { \"motor\": \"%s\", \"label\": \"%s\", \"position\": %g, \"target\": %g, \"positionError\": %g, "
-             "\"current\": %g, \"averageCurrent\": %g, \"power\": %g, \"speed\": %g, \"rawEncoderAngle\": %u, "
-             "\"extended\": %s, \"axisHomed\": %s, \"allHomed\": %s, \"calibrationState\": %d, \"systemState\": %d, "
-             "\"calibrationInProgress\": %s, \"overrideActive\": %s }",
+             "MOTORINFO: { \"motor\": \"%s\", \"position\": %g, \"target\": %g, \"positionError\": %g, "
+             "\"encoderCounts\": %ld, \"rawEncoderAngle\": %u, \"current\": %g, \"power\": %g, \"speed\": %g }",
              motorCode,
-             motorName.c_str(),
              axis[motorAxis].getPosition(),
              axis[motorAxis].getTarget(),
              axis[motorAxis].getPositionError(),
+             encCounts,
+             axis[motorAxis].getCachedRawEncoderAngle(),
              axis[motorAxis].getCurrent(),
-             axis[motorAxis].getMotorCurrent(),
              axis[motorAxis].getMotorPower(),
-             axis[motorAxis].getBeltSpeed(),
-             axis[motorAxis].getRawEncoderAngle(),
-             extended[motorAxis] ? "true" : "false",
-             calibration.axisHomed[motorAxis] ? "true" : "false",
-             calibration.all_axis_homed() ? "true" : "false",
-             currentState,
-             static_cast<int>(sys.state()),
-             calibration.calibrationInProgress ? "true" : "false",
-             calibration.checkOverides() ? "true" : "false");
+             axis[motorAxis].getBeltSpeed());
     log_data(buffer);
     releaseLogBuffer();
 }

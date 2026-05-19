@@ -20,8 +20,10 @@ public:
     void     setTarget(double newTarget);
     double   getTarget();
     double   getPosition();
+    int32_t  getEncoderCounts();            // Get cached cumulative encoder counts
     void     setPosition(double position);  // Set encoder position from saved value
     uint16_t getRawEncoderAngle();          // Get current raw encoder angle (0-4095)
+    uint16_t getCachedRawEncoderAngle();    // Get cached raw encoder angle estimate (0-4095)
     double   getCurrent();
     double   getPositionError();
     void     stop();

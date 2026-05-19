@@ -13,7 +13,7 @@ let selectedMotorInfo = null;
 let motorInfoPollingTimer = null;
 
 const MAX_CURRENT = 2200; // Maximum current value for gauge scaling in mA (at max ADC)
-const MOTOR_INFO_REFRESH_DELAY_MS = 250;
+const MOTOR_INFO_REFRESH_DELAY_MS = 1000;
 const clampMotorSpeed = (value) => Math.max(-1023, Math.min(1023, Number.parseInt(value, 10) || 0));
 
 /**
@@ -84,7 +84,6 @@ const applyMotorSpeed = () => {
     }
     const speed = getRequestedMotorSpeed();
     sendCommand(`$MOTORTEST=${selectedMotorCode()},${speed}`);
-    requestSelectedMotorInfo();
 };
 
 const stopMotorTest = () => {
@@ -118,22 +117,15 @@ const updateMotorTestDisplay = () => {
     }
 
     const infoLines = [
-        `Motor: ${selectedMotorInfo.label || selectedMotorInfo.motor || '-'}`,
+        `Motor: ${selectedMotorInfo.motor || '-'}`,
         `Position (mm): ${selectedMotorInfo.position}`,
         `Target (mm): ${selectedMotorInfo.target}`,
         `Position Error (mm): ${selectedMotorInfo.positionError}`,
+        `Encoder Counts: ${selectedMotorInfo.encoderCounts}`,
         `Raw Encoder Angle: ${selectedMotorInfo.rawEncoderAngle}`,
-        `Instant Current (ADC): ${selectedMotorInfo.current}`,
-        `Average Current (ADC): ${selectedMotorInfo.averageCurrent}`,
+        `Current (ADC): ${selectedMotorInfo.current}`,
         `Power (PWM): ${selectedMotorInfo.power}`,
         `Speed (mm/s): ${selectedMotorInfo.speed}`,
-        `Extended: ${selectedMotorInfo.extended}`,
-        `Axis Homed: ${selectedMotorInfo.axisHomed}`,
-        `All Homed: ${selectedMotorInfo.allHomed}`,
-        `Calibration State: ${selectedMotorInfo.calibrationState}`,
-        `System State: ${selectedMotorInfo.systemState}`,
-        `Calibration In Progress: ${selectedMotorInfo.calibrationInProgress}`,
-        `Any Override Active: ${selectedMotorInfo.overrideActive}`,
     ];
     infoElement.textContent = infoLines.join('\n');
 };

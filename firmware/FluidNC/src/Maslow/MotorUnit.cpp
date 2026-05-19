@@ -287,6 +287,10 @@ double MotorUnit::getPosition() {
     return positionNow;
 }
 
+int32_t MotorUnit::getEncoderCounts() {
+    return static_cast<int32_t>(mostRecentCumulativeEncoderReading);
+}
+
 // Returns the current motor power draw
 double MotorUnit::getCurrent() {
     return motor.readCurrent();
@@ -397,4 +401,12 @@ void MotorUnit::setPosition(double position) {
 uint16_t MotorUnit::getRawEncoderAngle() {
     Maslow.I2CMux.setPort(_encoderAddress);
     return encoder.readAngle();
+}
+
+uint16_t MotorUnit::getCachedRawEncoderAngle() {
+    int32_t angle = getEncoderCounts() % 4096;
+    if (angle < 0) {
+        angle += 4096;
+    }
+    return static_cast<uint16_t>(angle);
 }
