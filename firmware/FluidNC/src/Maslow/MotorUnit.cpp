@@ -404,9 +404,6 @@ uint16_t MotorUnit::getRawEncoderAngle() {
 }
 
 uint16_t MotorUnit::getCachedRawEncoderAngle() {
-    int32_t angle = getEncoderCounts() % 4096;
-    if (angle < 0) {
-        angle += 4096;
-    }
+    int32_t angle = ((getEncoderCounts() % 4096) + 4096) % 4096;
     return static_cast<uint16_t>(angle);
 }

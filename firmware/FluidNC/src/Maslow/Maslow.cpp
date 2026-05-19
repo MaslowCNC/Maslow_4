@@ -1343,15 +1343,15 @@ void Maslow_::getMotorInfo(const char* motorLabel) {
         return;
     }
 
-    char*       buffer    = getLogBuffer();
-    const char* motorCode = motor_code_for_axis(motorAxis);
-    const long  encCounts = static_cast<long>(axis[motorAxis].getEncoderCounts());
+    char*         buffer    = getLogBuffer();
+    const char*   motorCode = motor_code_for_axis(motorAxis);
+    const int32_t encCounts = axis[motorAxis].getEncoderCounts();
 
     constexpr size_t motorInfoBufferSize = 512;
     snprintf(buffer,
              motorInfoBufferSize,
              "MOTORINFO: { \"motor\": \"%s\", \"position\": %g, \"target\": %g, \"positionError\": %g, "
-             "\"encoderCounts\": %ld, \"rawEncoderAngle\": %u, \"current\": %g, \"power\": %g, \"speed\": %g }",
+             "\"encoderCounts\": %d, \"rawEncoderAngle\": %u, \"current\": %g, \"power\": %g, \"speed\": %g }",
              motorCode,
              axis[motorAxis].getPosition(),
              axis[motorAxis].getTarget(),
