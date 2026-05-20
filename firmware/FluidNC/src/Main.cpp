@@ -24,6 +24,7 @@
 #    include "WebUI/InputBuffer.h"
 
 #    include "WebUI/WifiConfig.h"
+#    include "WebUI/USBNetwork.h"
 #    include "Driver/localfs.h"
 
 extern void make_user_commands();
@@ -164,6 +165,7 @@ void setup() {
         sys.set_state(State::ConfigAlarm);
     }
 
+    WebUI::usb_network.begin();
     const bool wifiStarted = WebUI::wifi_config.begin();
     const bool btStarted   = WebUI::bt_config.begin();
     (void)wifiStarted;

@@ -114,6 +114,15 @@ You can configure Maslow to join your home WiFi for networked access from any de
 
 ![WiFi Configuration](images/guide-10.png)
 
+## USB Network Access (Experimental)
+
+On ESP32-S3 builds, Maslow now also exposes a USB Ethernet (CDC-ECM) interface when connected by USB cable.
+
+- Device address: `192.168.7.1`
+- Intended use: opening the same web interface over USB when WiFi conditions are poor
+
+If your host does not get an address automatically, set the host to a static address in `192.168.7.x` (for example `192.168.7.2`) and browse to `http://192.168.7.1`.
+
 ## Uploading and Running G-code Files
 
 ### Uploading Files
