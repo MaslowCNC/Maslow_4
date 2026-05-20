@@ -169,7 +169,7 @@ namespace WebUI {
         netif_create_ip6_linklocal_address(&s_netif, 1);
 #    endif
         s_active = true;
-        char ipBuffer[16];
+        char ipBuffer[IP4ADDR_STRLEN_MAX];
         ip4addr_ntoa_r(&ip, ipBuffer, sizeof(ipBuffer));
         log_info("USB network active at " << ipBuffer);
         return true;
