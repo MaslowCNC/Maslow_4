@@ -22,6 +22,7 @@ namespace WebUI {
 }
 #else
 #    include "WifiConfig.h"
+#    include "USBNetwork.h"
 #    include "WebServer.h"
 #    include "TelnetServer.h"
 #    include "NotificationsService.h"
@@ -46,7 +47,7 @@ namespace WebUI {
     bool WiFiServices::begin() {
         bool no_error = true;
 
-        if (WiFi.getMode() == WIFI_OFF) {
+        if (WiFi.getMode() == WIFI_OFF && !usb_network.active()) {
             return false;
         }
 

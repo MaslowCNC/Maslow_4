@@ -15,6 +15,7 @@ WebUI::WiFiConfig wifi_config;
 #    include "../Main.h"
 #    include "Commands.h"      // COMMANDS
 #    include "WifiServices.h"  // wifi_services.start() etc.
+#    include "USBNetwork.h"
 #    include "WebSettings.h"   // split_params(), get_params()
 
 #    include "WebServer.h"             // webServer.port()
@@ -776,6 +777,9 @@ namespace WebUI {
         switch (wifi_mode->get()) {
             case WiFiOff:
                 log_info("WiFi is disabled");
+                if (usb_network.active()) {
+                    goto wifi_on;
+                }
                 return false;
             case WiFiSTA:
                 if (StartSTA()) {
@@ -808,12 +812,14 @@ namespace WebUI {
         _hostname = wifi_hostname->get();
 
         //setup events
-        if (!_events_registered) {
+        if (!_events_registered && WiFi.getMode() != WIFI_MODE_NULL) {
             //cumulative function and no remove so only do once
             WiFi.onEvent(WiFiConfig::WiFiEvent);
             _events_registered = true;
         }
-        esp_wifi_set_ps(WIFI_PS_NONE);
+        if (WiFi.getMode() != WIFI_MODE_NULL) {
+            esp_wifi_set_ps(WIFI_PS_NONE);
+        }
         log_info("WiFi on");
         wifi_services.begin();
         return true;
