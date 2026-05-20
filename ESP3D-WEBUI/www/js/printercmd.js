@@ -32,6 +32,17 @@ function SendPrinterCommand(prnCmd, echo_on, processfn, errorfn, cmd_code, max_c
         errFn = noop;
     }
 
+    if (typeof isBluetoothTransport === "function" && isBluetoothTransport()) {
+        if (prnCmd.startsWith("[ESP")) {
+            errFn(503, "Bluetooth mode does not support ESP3D HTTP settings commands.");
+            return;
+        }
+        if (!sendBluetoothCommand(prnCmd)) {
+            errFn(503, "Bluetooth is not connected.");
+        }
+        return;
+    }
+
 	let cmd = buildHttpCommandCmd(httpCmdType.commandText, prnCmd);
     if (extra_arg) {
         cmd += `&${extra_arg}`;

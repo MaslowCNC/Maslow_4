@@ -3,6 +3,28 @@
 // Connection state to prevent multiple concurrent connection attempts
 let connectionInProgress = false;
 
+const resetConnectMessages = () => {
+	if (id("connecting_msg_text")) {
+		id("connecting_msg_text").textContent = "Please wait...";
+	}
+	if (id("failed_connect_msg_text")) {
+		id("failed_connect_msg_text").textContent = "Connection failed! is your FW correct?";
+	}
+};
+
+const updateBluetoothConnectVisibility = () => {
+	const btBtn = id("connectbtbtn");
+	const btNote = id("connectbt_note");
+	if (!btBtn || !btNote) {
+		return;
+	}
+	const supported = typeof webBluetoothSupported === "function" && webBluetoothSupported();
+	btBtn.disabled = !supported;
+	btNote.textContent = supported
+		? "Bluetooth requires a Chromium-based browser running on HTTPS or localhost."
+		: "Bluetooth is unavailable here. Open the UI from HTTPS or localhost in Chrome or Edge.";
+};
+
 /** Connect Dialog */
 const connectdlg = (getFw = false) => {
 	// Prevent multiple concurrent connection attempts
@@ -17,6 +39,12 @@ const connectdlg = (getFw = false) => {
 	}
 
 	showModal();
+	resetConnectMessages();
+	updateBluetoothConnectVisibility();
+	if (id("connectbtbtn") && !id("connectbtbtn").dataset.bound) {
+		id("connectbtbtn").addEventListener("click", retryBluetoothConnect);
+		id("connectbtbtn").dataset.bound = "true";
+	}
 
 	if (getFw) {
 		connectionInProgress = true;
@@ -109,6 +137,7 @@ const getFWdata = (response) => {
 const connectfailed = (error_code, response) => {
 	connectionInProgress = false; // Clear connection state on failure
 	displayBlock("connectbtn");
+	displayBlock("connectbtbtn");
 	displayBlock("failed_connect_msg");
 	displayNone("connecting_msg");
 
@@ -138,13 +167,59 @@ const connectsuccess = (response) => {
 const retryconnect = () => {
 	connectionInProgress = true; // Set connection state when retrying
 	displayNone("connectbtn");
+	displayNone("connectbtbtn");
 	displayNone("failed_connect_msg");
 	displayBlock("connecting_msg");
+	resetConnectMessages();
 
 	id("connectbtn").removeEventListener("click", retryconnect);
 
 	const cmd = buildHttpCommandCmd(httpCmdType.plain, "[ESP800]");
 	SendGetHttp(cmd, connectsuccess, connectfailed);
+};
+
+const bluetoothConnectFailed = (error) => {
+	connectionInProgress = false;
+	displayBlock("connectbtn");
+	displayBlock("connectbtbtn");
+	displayBlock("failed_connect_msg");
+	displayNone("connecting_msg");
+	if (id("failed_connect_msg_text")) {
+		id("failed_connect_msg_text").textContent = error?.message || "Bluetooth connection failed.";
+	}
+	console.error("Bluetooth connection failed:", error);
+};
+
+const bluetoothConnectSuccess = () => {
+	connectionInProgress = false;
+	displayNone("menu_authentication");
+	fw_version = "Bluetooth LE";
+	target_firmware = "grbl-embedded";
+	direct_sd = false;
+	primary_sd = "/sd/";
+	secondary_sd = "/sd/";
+	ESP3D_authentication = false;
+	async_webcommunication = false;
+	esp_hostname = bt_device?.name || "Maslow Bluetooth";
+	initUI();
+};
+
+const retryBluetoothConnect = async () => {
+	connectionInProgress = true;
+	displayNone("connectbtn");
+	displayNone("connectbtbtn");
+	displayNone("failed_connect_msg");
+	displayBlock("connecting_msg");
+	if (id("connecting_msg_text")) {
+		id("connecting_msg_text").textContent = "Select your Maslow Bluetooth device...";
+	}
+
+	try {
+		await connectBluetoothTransport();
+		bluetoothConnectSuccess();
+	} catch (error) {
+		bluetoothConnectFailed(error);
+	}
 };
 
 // Helper function to force close connection dialog if it's stuck

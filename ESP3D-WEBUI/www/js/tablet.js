@@ -1145,16 +1145,11 @@ const tabletSetZHomeMDown = () => zeroAxis("Z");
 const tabletSetZHomeMUp = () => refreshGcode();
 // Button event handlers - Fifth Row - nothing special here, move on
 
-// Send a command directly via WebSocket to bypass PAGEID routing.
-// Returns true if the command was sent, false if the WebSocket is not open.
+// Send a command directly to the active transport to bypass PAGEID routing.
+// Returns true if the command was sent, false if the transport is not open.
 const sendViaWS = (cmd) => {
-  if (ws_source && ws_source.readyState === WebSocket.OPEN) {
-    try {
-      ws_source.send(cmd);
-      return true;
-    } catch (e) {
-      console.warn("WebSocket send failed:", e);
-    }
+  if (typeof sendTransportRaw === "function") {
+    return sendTransportRaw(cmd);
   }
   return false;
 };

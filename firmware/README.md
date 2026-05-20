@@ -25,6 +25,22 @@ The intent is to maintain as much Grbl compatibility as possible. It is 100% com
 
 FluidNC includes a built-in browser-based Web UI (Esp32_WebUI) so you control the machine from a PC, phone, or tablet on the same Wifi network.
 
+### Browser Bluetooth mode
+
+The Maslow Web UI can also connect over Bluetooth instead of WiFi when the firmware is built with Bluetooth enabled (`bt`, `wifibt`, `bt_s3`, or `wifibt_s3`) and the UI is opened from a **secure browser context** such as `https://` or `http://localhost`.
+
+**Pros**
+- Works without joining the machine to a WiFi network
+- Good for short-range setup, jogging, status, and console use
+- `wifibt*` builds can keep WiFi available for normal web access while also exposing Bluetooth
+
+**Cons**
+- Browser Bluetooth requires Chrome/Edge (or another Chromium-based browser)
+- The page served directly from the ESP32 over plain `http://` cannot start Web Bluetooth, so use a local or HTTPS-hosted copy of the UI
+- Bluetooth mode is lower bandwidth than WiFi and currently keeps WiFi-only features disabled in the UI (files, firmware update, ESP settings, camera)
+
+On ESP32-S3 targets the Bluetooth transport uses BLE so it works with browser Web Bluetooth. On classic ESP32 targets the existing Bluetooth serial support remains available.
+
 ## Wiki
 
 [Check out the wiki](http://wiki.fluidnc.com) if you want the learn more about the feature or how to use it.

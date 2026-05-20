@@ -9,15 +9,19 @@
         </div>
         <div class="modal-body center">
             <span id="connecting_msg">
-                <span translate>Please wait...</span>
+                <span id="connecting_msg_text" translate>Please wait...</span>
                 <progress id='load_prg' max='100'></progress>
             </span>
             <span id="failed_connect_msg" class="hide_it">
-                <span translate>Connection failed! is your FW correct?</span>
+                <span id="failed_connect_msg_text" translate>Connection failed! is your FW correct?</span>
             </span>
         </div>
         <div class="modal-footer">
             <button id="connectbtn" class="btn btn-primary center" translate>Retry</button>
+            <button id="connectbtbtn" class="btn btn-default center">Bluetooth</button>
+            <div id="connectbt_note" class="small" style="margin-top:0.75em;">
+                Bluetooth requires a Chromium-based browser running on HTTPS or localhost.
+            </div>
         </div>
     </div>
     <!-- /Connect content -->
