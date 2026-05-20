@@ -22,36 +22,56 @@ The interface may auto-open when you connect. If not, enter `192.168.0.1` in you
 
 ![Browser Access](images/guide-03.png)
 
-## USB Control Options
+## USB Control Options (Feasibility Analysis)
 
-Maslow firmware already exposes a USB CDC serial interface on ESP32-S3 builds (`ARDUINO_USB_CDC_ON_BOOT=1`), so direct USB control is available today through a serial terminal.
+Maslow firmware already exposes a USB CDC serial interface on ESP32-S3 builds (`ARDUINO_USB_CDC_ON_BOOT=1`), so USB command/control is possible today. The remaining question is how to provide a **full UI over USB** when WiFi is unreliable.
 
-### 1) Use the existing serial command channel (available now)
+### Summary of the three options
 
-- Connect the controller by USB-C.
-- Open a serial terminal at `115200` baud (or use `firmware/fluidterm/fluidterm.py`).
-- Send standard FluidNC/Maslow commands (`$` commands, G-code, realtime commands).
+| Option | Does it work? | Estimated effort | ESP32-S3 fit/risk | Platform coverage |
+| --- | --- | --- | --- | --- |
+| Browser UI over USB serial (Web Serial) | **Yes, feasible** for browsers with Web Serial support | **Medium** (UI transport layer + robust reconnect/state handling) | **Low firmware risk** (reuses existing USB CDC and serial protocol) | Best on desktop Chromium browsers; iOS is currently not viable for Web Serial |
+| USB network in firmware (ECM/RNDIS/NCM style) | **Technically feasible**, but most firmware/driver complexity | **High** (new USB networking class, IP routing/interface handling, cross-OS validation) | **Medium/High risk** (adds firmware complexity and USB stack surface area) | Potentially broad on desktop OSes, but mobile support is inconsistent/adapter-dependent |
+| Shim layer (desktop app bridging USB serial to local web UI) | **Yes, feasible now** | **Medium** (desktop app/service + packaging/signing + updater path) | **Very low firmware risk** (no major firmware changes required) | Strong for Windows/macOS/Linux desktops; mobile requires a separate app strategy |
 
-This is the most reliable USB workflow currently in-tree.
+### Option 1: Browser UI over USB serial (`navigator.serial`)
 
-### 2) Browser UI over USB serial (future option)
+This approach adds a serial transport path in ESP3D-WEBUI, mapping existing command/status traffic onto the current USB CDC serial channel.
 
-The web UI could add a transport layer using the browser Web Serial API (`navigator.serial`) and map UI command/status traffic onto the existing serial protocol.
+- **Why it is feasible:** firmware already starts USB CDC at `115200`, and command handling already exists over serial.
+- **Main work items:**
+  1. Add a transport abstraction in the web UI so HTTP/WebSocket and Web Serial can share logic.
+  2. Implement framing/parsing and command queueing over serial.
+  3. Handle reconnect, error recovery, and flow control for long jobs.
+- **Key limitation:** browser support (especially iOS/WebKit) is the blocker for universal device coverage.
 
-- **Pros:** Reuses USB CDC already in firmware.
-- **Cons:** Browser support is limited (primarily Chromium-based), and UI transport work is required.
+### Option 2: USB network interface in firmware
 
-### 3) Emulate a USB network interface (future option)
+This approach makes the board appear as a USB network adapter so the existing web UI (HTTP + WebSocket) can be used with minimal UI changes.
 
-Another path is exposing Ethernet-over-USB (for example CDC-ECM/RNDIS) so the existing HTTP/WebSocket UI works unchanged over a virtual network link.
+- **Why it is attractive:** preserves the current UI protocol model.
+- **Main work items:**
+  1. Add and validate a USB networking class in firmware.
+  2. Bind network services to the USB network interface and define addressing behavior.
+  3. Validate host drivers/routing behavior across Windows, Linux, macOS, Android, and iOS paths.
+- **Primary risk:** significantly more firmware/USB-stack integration and more cross-platform edge cases than the other options.
 
-- **Pros:** Keeps the current web UI architecture mostly unchanged.
-- **Cons:** Requires firmware USB networking support and host OS driver validation.
+### Option 3: Shim layer (desktop bridge)
 
-### 4) Other practical alternatives
+This approach uses a desktop utility that talks USB serial to Maslow and exposes a local HTTP/WebSocket endpoint for the existing UI.
 
-- A desktop bridge app that talks serial over USB and serves a local WebSocket/HTTP proxy for the existing UI.
-- Existing CNC sender applications over USB serial for command-only workflows.
+- **Why it is practical:** fastest path to a full UI-over-USB workflow on desktop platforms with minimal firmware impact.
+- **Main work items:**
+  1. Build a lightweight local bridge service/app.
+  2. Package/sign/distribute for Windows, Linux, and macOS.
+  3. Define connection UX and recovery for cable disconnect/reconnect.
+- **Tradeoff:** strongest on desktop; mobile would need separate app integration.
+
+### Recommendation
+
+1. **Near-term:** implement **Option 3 (shim)** for fastest reliable desktop UX where WiFi is problematic.
+2. **Parallel prototype:** evaluate **Option 1 (Web Serial)** for browser-only desktop workflows.
+3. **Long-term:** pursue **Option 2 (USB networking)** only if broad mobile/browser parity is required and higher firmware complexity is acceptable.
 
 ## Web Interface Overview
 
