@@ -15,7 +15,7 @@ let serialPendingCommand = null;
 const serialTextEncoder = new TextEncoder();
 const serialTextDecoder = new TextDecoder();
 const SERIAL_RESPONSE_TIMEOUT_MS = 250;
-const SERIAL_INITIAL_RESPONSE_TIMEOUT_MS = 1000;
+const USB_SERIAL_INITIAL_RESPONSE_TIMEOUT_MS = 1000;
 
 const TRANSPORT_WIFI = "wifi";
 const TRANSPORT_BLUETOOTH = "bluetooth";

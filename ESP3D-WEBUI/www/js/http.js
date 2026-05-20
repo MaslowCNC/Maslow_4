@@ -320,7 +320,7 @@ function processSerialGetHttp(cmd) {
     serialPendingCommand = {
         cmd: cmd,
         lines: [],
-        timeout: setTimeout(() => completeSerialPendingCommand(false), SERIAL_INITIAL_RESPONSE_TIMEOUT_MS)
+        timeout: setTimeout(() => completeSerialPendingCommand(false), USB_SERIAL_INITIAL_RESPONSE_TIMEOUT_MS)
     };
 
     writeToSerial(serialCmd).catch((error) => {

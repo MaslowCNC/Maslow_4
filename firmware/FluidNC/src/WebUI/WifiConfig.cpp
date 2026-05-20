@@ -777,10 +777,13 @@ namespace WebUI {
         switch (wifi_mode->get()) {
             case WiFiOff:
                 log_info("WiFi is disabled");
-                if (usb_network.active()) {
-                    goto wifi_on;
+                if (!usb_network.active()) {
+                    return false;
                 }
-                return false;
+                _hostname = wifi_hostname->get();
+                log_info("WiFi on");
+                wifi_services.begin();
+                return true;
             case WiFiSTA:
                 if (StartSTA()) {
                     goto wifi_on;

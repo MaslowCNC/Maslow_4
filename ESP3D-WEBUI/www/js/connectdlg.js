@@ -10,11 +10,13 @@ const BLUETOOTH_CONNECTION_DEFAULTS = {
 };
 
 const resetConnectMessages = () => {
-	if (id("connecting_msg_text")) {
-		id("connecting_msg_text").textContent = "Please wait...";
+	const connectingMsgText = id("connecting_msg_text");
+	if (connectingMsgText) {
+		connectingMsgText.textContent = "Please wait...";
 	}
-	if (id("failed_connect_msg_text")) {
-		id("failed_connect_msg_text").textContent = "Connection failed! is your FW correct?";
+	const failedMsgText = id("failed_connect_msg_text");
+	if (failedMsgText) {
+		failedMsgText.textContent = "Connection failed! is your FW correct?";
 	}
 };
 
