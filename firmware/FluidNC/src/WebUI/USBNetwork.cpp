@@ -1,6 +1,7 @@
 #include "USBNetwork.h"
 
 #include "../Config.h"
+#include "../Settings.h"
 
 #if ARDUINO_USB_MODE == 1 && ARDUINO_USB_CDC_ON_BOOT
 
@@ -22,6 +23,14 @@ extern "C" {
 namespace WebUI {
     USBNetwork usb_network;
 
+    static constexpr const char* DEFAULT_USB_IP      = "192.168.7.1";
+    static constexpr const char* DEFAULT_USB_NETMASK = "255.255.255.0";
+    static constexpr const char* DEFAULT_USB_GATEWAY = "0.0.0.0";
+
+    static IPaddrSetting* usb_network_ip;
+    static IPaddrSetting* usb_network_netmask;
+    static IPaddrSetting* usb_network_gateway;
+
     static bool         s_active           = false;
     static bool         s_interfaceEnabled = false;
     static struct netif s_netif;
@@ -35,6 +44,7 @@ namespace WebUI {
     static uint8_t s_ep_notif_num = 0;
 
     static uint16_t load_usb_net_descriptor(uint8_t* dst, uint8_t* itf);
+    static void     parseUsbIPSetting(IPaddrSetting* setting, ip4_addr_t* out, const char* fallback);
 
     struct USBNetInterfaceRegistrar {
         USBNetInterfaceRegistrar() {
@@ -106,6 +116,22 @@ namespace WebUI {
         return TUD_CDC_ECM_DESC_LEN;
     }
 
+    static void parseUsbIPSetting(IPaddrSetting* setting, ip4_addr_t* out, const char* fallback) {
+        std::string value = setting ? setting->getStringValue() : "";
+        if (!value.empty() && ip4addr_aton(value.c_str(), out)) {
+            return;
+        }
+        if (!ip4addr_aton(fallback, out)) {
+            IP4_ADDR(out, 0, 0, 0, 0);
+        }
+    }
+
+    USBNetwork::USBNetwork() {
+        usb_network_ip      = new IPaddrSetting("USB Static IP", WEBSET, WA, NULL, "USB/IP", DEFAULT_USB_IP, NULL);
+        usb_network_netmask = new IPaddrSetting("USB Static Mask", WEBSET, WA, NULL, "USB/Netmask", DEFAULT_USB_NETMASK, NULL);
+        usb_network_gateway = new IPaddrSetting("USB Static Gateway", WEBSET, WA, NULL, "USB/Gateway", DEFAULT_USB_GATEWAY, NULL);
+    }
+
     bool USBNetwork::begin() {
         if (s_active) {
             return true;
@@ -128,9 +154,9 @@ namespace WebUI {
         ip4_addr_t ip;
         ip4_addr_t netmask;
         ip4_addr_t gateway;
-        IP4_ADDR(&ip, 192, 168, 7, 1);
-        IP4_ADDR(&netmask, 255, 255, 255, 0);
-        IP4_ADDR(&gateway, 0, 0, 0, 0);
+        parseUsbIPSetting(usb_network_ip, &ip, DEFAULT_USB_IP);
+        parseUsbIPSetting(usb_network_netmask, &netmask, DEFAULT_USB_NETMASK);
+        parseUsbIPSetting(usb_network_gateway, &gateway, DEFAULT_USB_GATEWAY);
 
         if (netif_add(&s_netif, &ip, &netmask, &gateway, nullptr, usbnet_netif_init, ethernet_input) == nullptr) {
             log_error("USB network netif init failed");
@@ -143,7 +169,9 @@ namespace WebUI {
         netif_create_ip6_linklocal_address(&s_netif, 1);
 #    endif
         s_active = true;
-        log_info("USB network active at 192.168.7.1");
+        char ipBuffer[16];
+        ip4addr_ntoa_r(&ip, ipBuffer, sizeof(ipBuffer));
+        log_info("USB network active at " << ipBuffer);
         return true;
     }
 
@@ -397,6 +425,8 @@ namespace WebUI {
 #else
 namespace WebUI {
     USBNetwork usb_network;
+
+    USBNetwork::USBNetwork() {}
 
     bool USBNetwork::begin() {
         return false;

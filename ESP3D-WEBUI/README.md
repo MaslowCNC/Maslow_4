@@ -153,7 +153,10 @@ Use these steps to connect directly over USB from the WebUI:
 
 1. Connect the Maslow controller to your computer with a USB data cable and power it on.
 2. Open ESP3D WebUI in a browser that supports Web Serial (Chromium-based browsers).
-3. Open the connection dialog. If Web Serial is available, you will see **Connect over USB Serial**.
+3. Open the connection dialog:
+   - it appears automatically on first page load when the UI is not connected, or
+   - after a disconnect, use **Retry** in the connection/disconnected modal.
+   If Web Serial is available, you will see **Connect over USB Serial**.
 4. Click **Connect over USB Serial**, then select the FluidNC serial port in the browser port picker.
 5. Wait for the firmware identification handshake (`[ESP800]`) to complete; the UI will continue with the normal connected flow.
 

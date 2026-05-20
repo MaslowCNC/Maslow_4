@@ -39,6 +39,7 @@ Maslow firmware already exposes a USB CDC serial interface on ESP32-S3 builds (`
 This approach adds a serial transport path in ESP3D-WEBUI, mapping existing command/status traffic onto the current USB CDC serial channel.
 
 - **Why it is feasible:** firmware already starts USB CDC at `115200`, and command handling already exists over serial.
+- **Where the connection dialog is:** it opens automatically when the UI first loads and is not connected; after disconnects, use the **Retry** button in the reconnect dialog.
 - **Main work items:**
   1. Add a transport abstraction in the web UI so HTTP/WebSocket and Web Serial can share logic.
   2. Implement framing/parsing and command queueing over serial.
@@ -118,10 +119,16 @@ You can configure Maslow to join your home WiFi for networked access from any de
 
 On ESP32-S3 builds, Maslow now also exposes a USB Ethernet (CDC-ECM) interface when connected by USB cable.
 
-- Device address: `192.168.7.1`
+- Default device address: `192.168.7.1`
 - Intended use: opening the same web interface over USB when WiFi conditions are poor
 
-If your host does not get an address automatically, set the host to a static address in `192.168.7.x` (for example `192.168.7.2`) and browse to `http://192.168.7.1`.
+USB network addressing is configurable in WebUI settings (same style as AP settings):
+
+- `USB/IP`
+- `USB/Netmask`
+- `USB/Gateway`
+
+If your host does not get an address automatically, set the host to a static address in your configured USB subnet (for example, with defaults use `192.168.7.2`) and browse to your configured `USB/IP` (default `http://192.168.7.1`).
 
 ## Uploading and Running G-code Files
 
