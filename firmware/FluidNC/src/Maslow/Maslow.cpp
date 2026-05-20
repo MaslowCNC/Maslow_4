@@ -1005,7 +1005,15 @@ void Maslow_::blinkIPAddress() {
     int longMS  = 500;
     int pauseMS = 2000;
 
-    std::string IP_String = WebUI::wifi_config.getIP();
+    std::string IP_String;
+#ifdef ENABLE_WIFI
+    IP_String = WebUI::wifi_config.getIP();
+#endif
+
+    if (IP_String.empty()) {
+        digitalWrite(WIFILED, LOW);
+        return;
+    }
 
     if (currentChar >= IP_String.length()) {
         currentChar   = 0;

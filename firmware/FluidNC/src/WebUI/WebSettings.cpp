@@ -572,7 +572,12 @@ namespace WebUI {
         bt_config.end();
 
         //if On start proper service
-        if (on && (wifi_config.begin() || bt_config.begin())) {
+        bool started = false;
+        if (on) {
+            started = wifi_config.begin() || started;
+            started = bt_config.begin() || started;
+        }
+        if (on && started) {
             return Error::Ok;
         }
         log_msg_to(out, "Radio is Off");

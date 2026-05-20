@@ -6,6 +6,20 @@ let event_source;
 let wsmsg = "";
 let ws_source;
 
+const TRANSPORT_WIFI = "wifi";
+const TRANSPORT_BLUETOOTH = "bluetooth";
+const BLE_SERVICE_UUID = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
+const BLE_RX_UUID = "6e400002-b5a3-f393-e0a9-e50e24dcca9e";
+const BLE_TX_UUID = "6e400003-b5a3-f393-e0a9-e50e24dcca9e";
+const BLE_WRITE_CHUNK = 180;
+let active_transport = TRANSPORT_WIFI;
+let bt_device;
+let bt_server;
+let bt_rx_characteristic;
+let bt_tx_characteristic;
+let btmsg = "";
+let bt_write_chain = Promise.resolve();
+
 const CancelCurrentUpload = () => {
 	xmlhttpupload.abort();
 	//http_communication_locked = false;
@@ -13,6 +27,9 @@ const CancelCurrentUpload = () => {
 };
 
 const check_ping = () => {
+	if (active_transport === TRANSPORT_BLUETOOTH) {
+		return;
+	}
 	if (Date.now() - last_ping > 20000) {
 		Disable_interface(true);
 		console.log("No heart beat for more than 20s");
@@ -24,6 +41,11 @@ let ping_state_before_upload = null;
 
 /** Turn ping on or off based on its current value */
 const handlePing = () => {
+	if (active_transport === TRANSPORT_BLUETOOTH) {
+		clearInterval(interval_ping);
+		interval_ping = -1;
+		return;
+	}
 	if (enable_ping) {
 		// First clear any existing interval
 		if (interval_ping) {
@@ -74,8 +96,179 @@ const cancelReconnectTimer = () => {
 	}
 };
 
+const isBluetoothTransport = () => active_transport === TRANSPORT_BLUETOOTH;
+
+const transportSupportsHttp = () => !isBluetoothTransport();
+
+const webBluetoothSupported = () => typeof navigator !== "undefined" && !!navigator.bluetooth && window.isSecureContext;
+
+const closeStuckConnectDialog = () => {
+	const connectModal = id("connectdlg.html");
+	const activeModal = getactiveModal();
+	if (connectModal && connectModal.style.display !== "none" &&
+		activeModal && activeModal.name === "connectdlg.html") {
+		console.log("Connection established - closing stuck connection dialog");
+		closeModal("Machine connected");
+	}
+};
+
+const processTransportMessage = (message) => {
+	const trimmed = message.trim();
+	if (!trimmed) {
+		return;
+	}
+	Monitor_output_Update(trimmed);
+	process_socket_response(trimmed);
+	const noNeedToShowMsg = ["<", "ok T:", "X:", "FR:", "echo:E0 Flow"].some((msgStart) => trimmed.startsWith(msgStart));
+	if (!noNeedToShowMsg && trimmed !== "ok") {
+		console.log(trimmed);
+	}
+	closeStuckConnectDialog();
+};
+
+const handleTransportOpen = () => {
+	cancelReconnectTimer();
+	handlePing();
+	const disabledModal = id("UIdisableddlg.html");
+	if (disabledModal && disabledModal.style.display !== "none") {
+		log_off = false;
+		http_communication_locked = false;
+		closeModal("Reconnected");
+	}
+	if (typeof onWSOpenCallback === "function") {
+		onWSOpenCallback();
+	}
+	if (typeof restoreGCodeState === "function") {
+		restoreGCodeState();
+	}
+};
+
+const queueBluetoothWrite = (text) => {
+	if (!bt_rx_characteristic) {
+		return false;
+	}
+	const payload = new TextEncoder().encode(text);
+	const chunks = [];
+	for (let offset = 0; offset < payload.length; offset += BLE_WRITE_CHUNK) {
+		chunks.push(payload.slice(offset, offset + BLE_WRITE_CHUNK));
+	}
+	bt_write_chain = bt_write_chain
+		.then(async () => {
+			for (const chunk of chunks) {
+				if (typeof bt_rx_characteristic.writeValueWithoutResponse === "function") {
+					await bt_rx_characteristic.writeValueWithoutResponse(chunk);
+				} else {
+					await bt_rx_characteristic.writeValue(chunk);
+				}
+			}
+		})
+		.catch((error) => {
+			console.warn("Bluetooth write failed:", error);
+		});
+	return true;
+};
+
+const sendBluetoothCommand = (cmd) => queueBluetoothWrite(cmd.endsWith("\n") ? cmd : `${cmd}\n`);
+
+const sendTransportRaw = (cmd) => {
+	if (isBluetoothTransport()) {
+		return queueBluetoothWrite(cmd);
+	}
+	if (ws_source && ws_source.readyState === WebSocket.OPEN) {
+		try {
+			ws_source.send(cmd);
+			return true;
+		} catch (e) {
+			console.warn("WebSocket send failed:", e);
+		}
+	}
+	return false;
+};
+
+const handleBluetoothNotification = (event) => {
+	const chunk = new TextDecoder().decode(event.target.value);
+	btmsg += chunk;
+	const parts = btmsg.split(/\r?\n/);
+	btmsg = parts.pop() || "";
+	parts.forEach(processTransportMessage);
+};
+
+const handleBluetoothDisconnect = () => {
+	bt_server = undefined;
+	bt_rx_characteristic = undefined;
+	bt_tx_characteristic = undefined;
+	btmsg = "";
+	if (isBluetoothTransport() && !log_off) {
+		Disable_interface(true);
+	}
+};
+
+const disconnectBluetoothTransport = async () => {
+	if (bt_tx_characteristic) {
+		try {
+			bt_tx_characteristic.removeEventListener("characteristicvaluechanged", handleBluetoothNotification);
+			await bt_tx_characteristic.stopNotifications();
+		} catch (error) {
+			console.debug("Error stopping Bluetooth notifications:", error);
+		}
+	}
+	if (bt_device) {
+		try {
+			bt_device.removeEventListener("gattserverdisconnected", handleBluetoothDisconnect);
+		} catch (error) {
+			console.debug("Error removing Bluetooth disconnect handler:", error);
+		}
+		if (bt_device.gatt?.connected) {
+			bt_device.gatt.disconnect();
+		}
+	}
+	bt_device = undefined;
+	bt_server = undefined;
+	bt_rx_characteristic = undefined;
+	bt_tx_characteristic = undefined;
+	btmsg = "";
+};
+
+const connectBluetoothTransport = async () => {
+	if (!webBluetoothSupported()) {
+		throw new Error("Bluetooth requires a Chromium-based browser on HTTPS or localhost.");
+	}
+
+	cancelReconnectTimer();
+	log_off = false;
+	http_communication_locked = false;
+	clear_cmd_list();
+	await disconnectBluetoothTransport();
+
+	if (ws_source) {
+		ws_source.onopen = null;
+		ws_source.onclose = null;
+		ws_source.onerror = null;
+		ws_source.onmessage = null;
+		try { ws_source.close(); } catch (e) { console.debug("Error closing previous WebSocket:", e); }
+	}
+
+	bt_device = await navigator.bluetooth.requestDevice({
+		filters: [{ services: [BLE_SERVICE_UUID] }],
+		optionalServices: [BLE_SERVICE_UUID],
+	});
+	bt_device.addEventListener("gattserverdisconnected", handleBluetoothDisconnect);
+	bt_server = await bt_device.gatt.connect();
+	const service = await bt_server.getPrimaryService(BLE_SERVICE_UUID);
+	bt_rx_characteristic = await service.getCharacteristic(BLE_RX_UUID);
+	bt_tx_characteristic = await service.getCharacteristic(BLE_TX_UUID);
+	await bt_tx_characteristic.startNotifications();
+	bt_tx_characteristic.addEventListener("characteristicvaluechanged", handleBluetoothNotification);
+	active_transport = TRANSPORT_BLUETOOTH;
+	handleTransportOpen();
+	return bt_device;
+};
+
 /** Restore state and reconnect after a disconnection without a full page reload */
 const resetConnectionState = () => {
+	if (isBluetoothTransport()) {
+		return;
+	}
 	cancelReconnectTimer();
 	log_off = false;
 	http_communication_locked = false;
@@ -106,7 +299,9 @@ const Disable_interface = (lostconnection) => {
 		event_source.removeEventListener("InitID", Init_events, false);
 		event_source.removeEventListener("DHT", DHT_events, false);
 	}
-	ws_source.close();
+	if (ws_source) {
+		ws_source.close();
+	}
 	document.title += `('${HTMLDecode(translate_text_item("Disabled"))})`;
 	// Only show the dialog if it is not already visible (avoids duplicate listmodal entries)
 	const disabledModal = id("UIdisableddlg.html");
@@ -116,7 +311,9 @@ const Disable_interface = (lostconnection) => {
 	// Auto-reconnect: try once every 3 seconds (well under the 1/second limit).
 	// resetConnectionState() or a successful onopen will cancel this timer.
 	cancelReconnectTimer();
-	reconnect_timer = setInterval(startSocket, RECONNECT_INTERVAL_MS);
+	if (!isBluetoothTransport()) {
+		reconnect_timer = setInterval(startSocket, RECONNECT_INTERVAL_MS);
+	}
 };
 
 const EventListenerSetup = () => {
@@ -175,6 +372,10 @@ const Handle_DHT = (data) => {
 const process_socket_response = (msg) => msg.split("\n").forEach(grblHandleMessage);
 
 const startSocket = () => {
+	if (isBluetoothTransport()) {
+		return;
+	}
+	active_transport = TRANSPORT_WIFI;
 	// Nullify handlers on any existing socket before replacing it.
 	// This prevents stale onclose callbacks from scheduling extra reconnects
 	// and frees the firmware's WebSocket connection slot more quickly.
@@ -203,28 +404,7 @@ const startSocket = () => {
 	ws_source.binaryType = "arraybuffer";
 	ws_source.onopen = (e) => {
 		console.log("Connected");
-		// Reconnected successfully after a disconnection: cancel the auto-retry timer,
-		// restore communication flags, and close the disconnect dialog.
-		cancelReconnectTimer();
-		// Always arm the ping watchdog on every (re)connect,
-		// including the very first connection on page load.
-		handlePing();
-		const disabledModal = id("UIdisableddlg.html");
-		if (disabledModal && disabledModal.style.display !== "none") {
-			log_off = false;
-			http_communication_locked = false;
-			closeModal("Reconnected");
-		}
-		// Fire the open callback first so that critical commands (e.g. $STOP)
-		// are sent before any auto-reports start filling the TX buffer.
-		if (typeof onWSOpenCallback === 'function') {
-			onWSOpenCallback();
-		}
-		// Restore GCode state if any exists from previous session
-		// Use typeof check since this might be called before tablet.js is fully loaded
-		if (typeof restoreGCodeState === 'function') {
-			restoreGCodeState();
-		}
+		handleTransportOpen();
 	};
 	ws_source.onclose = (e) => {
 		console.log("Disconnected");
@@ -248,22 +428,7 @@ const startSocket = () => {
 					const thismsg = wsmsg.trim();
 					wsmsg = "";
 					msg = "";
-					Monitor_output_Update(thismsg);
-					process_socket_response(thismsg);
-					const noNeedToShowMsg = ["<", "ok T:", "X:", "FR:", "echo:E0 Flow"].some((msgStart) => thismsg.startsWith(msgStart));
-					if (!noNeedToShowMsg && thismsg !== "ok") {
-						console.log(thismsg);
-					}
-					
-					// Close stuck connection dialog if any message received from machine
-					// This indicates the machine is connected and communicating
-					const connectModal = id("connectdlg.html");
-					const activeOnMsg = getactiveModal();
-					if (connectModal && connectModal.style.display !== "none" &&
-						activeOnMsg && activeOnMsg.name === "connectdlg.html") {
-						console.log("SOCKET FIX: Machine message received - closing stuck connection dialog");
-						closeModal("Machine connected");
-					}
+					processTransportMessage(thismsg);
 				}
 			}
 			wsmsg += msg;
@@ -304,16 +469,7 @@ const startSocket = () => {
 					console.info(`MSG: ${tval[2]} code:${tval[1]}`);
 				}
 			}
-			
-			// Close stuck connection dialog if any message received from machine
-			// This indicates the machine is connected and communicating  
-			const connectModal = id("connectdlg.html");
-			const activeOnMsg2 = getactiveModal();
-			if (connectModal && connectModal.style.display !== "none" &&
-				activeOnMsg2 && activeOnMsg2.name === "connectdlg.html") {
-				console.log("SOCKET FIX: Machine message received - closing stuck connection dialog");
-				closeModal("Machine connected");
-			}
+			closeStuckConnectDialog();
 		}
 		//console.log(msg);
 	};

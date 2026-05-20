@@ -22,16 +22,23 @@ namespace WebUI {
 #    include "../Config.h"    // ENABLE_*
 #    include "../Settings.h"  // ENABLE_*
 #    include "../lineedit.h"
+#    include <soc/soc_caps.h>
 
-#    include <BluetoothSerial.h>
+#    if defined(SOC_CLASSIC_BT_SUPPORTED)
+#        include <BluetoothSerial.h>
+#    elif defined(CONFIG_BT_ENABLED) && defined(CONFIG_BLUEDROID_ENABLED)
+#        include <BLE2902.h>
+#        include <BLECharacteristic.h>
+#        include <BLEDevice.h>
+#        include <BLEServer.h>
+#        include <BLEService.h>
+#    endif
 
 const char* const DEFAULT_BT_NAME = "FluidNC";
 
 namespace WebUI {
     extern EnumSetting*   bt_enable;
     extern StringSetting* bt_name;
-
-    extern BluetoothSerial SerialBT;
 
     class BTChannel : public Channel {
     private:
@@ -45,10 +52,9 @@ namespace WebUI {
         int    available() override;
         int    read() override;
         int    peek() override;
-        void   flush() override { SerialBT.flush(); }
+        void   flush() override;
         size_t write(uint8_t data) override;
-        // 512 is RX_QUEUE_SIZE which is defined in BluetoothSerial.cpp but not in its .h
-        int rx_buffer_available() override { return 512 - SerialBT.available(); }
+        int    rx_buffer_available() override;
 
         bool realtimeOkay(char c) override;
         bool lineComplete(char* line, char c) override;
@@ -63,9 +69,12 @@ namespace WebUI {
 
         std::string _btclient = "";
         std::string _btname;
-        char        _deviceAddrBuffer[18];
+        char        _deviceAddrBuffer[18] = { 0 };
+        bool        _btStarted            = false;
 
+#        if defined(SOC_CLASSIC_BT_SUPPORTED)
         static void my_spp_cb(esp_spp_cb_event_t event, esp_spp_cb_param_t* param);
+#        endif
 
         //boundaries
     public:

@@ -164,9 +164,10 @@ void setup() {
         sys.set_state(State::ConfigAlarm);
     }
 
-    if (!WebUI::wifi_config.begin()) {
-        WebUI::bt_config.begin();
-    }
+    const bool wifiStarted = WebUI::wifi_config.begin();
+    const bool btStarted   = WebUI::bt_config.begin();
+    (void)wifiStarted;
+    (void)btStarted;
 
     // Send the init message to the startup log before entering main loop
     // This ensures the welcome message is captured in $SS output

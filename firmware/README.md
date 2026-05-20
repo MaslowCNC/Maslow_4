@@ -25,6 +25,38 @@ The intent is to maintain as much Grbl compatibility as possible. It is 100% com
 
 FluidNC includes a built-in browser-based Web UI (Esp32_WebUI) so you control the machine from a PC, phone, or tablet on the same Wifi network.
 
+### Browser Bluetooth mode
+
+The Maslow Web UI can also connect over Bluetooth instead of WiFi when the firmware is built with Bluetooth enabled (`bt`, `wifibt`, `bt_s3`, or `wifibt_s3`) and the UI is opened from a **secure browser context** such as `https://` or `http://localhost`.
+
+**Pros**
+- Works without joining the machine to a WiFi network
+- Good for short-range setup, jogging, status, and console use
+- `wifibt*` builds can keep WiFi available for normal web access while also exposing Bluetooth
+
+**Cons**
+- Browser Bluetooth requires Chrome/Edge (or another Chromium-based browser)
+- The page served directly from the ESP32 over plain `http://` cannot start Web Bluetooth, so use a local or HTTPS-hosted copy of the UI
+- Bluetooth mode is lower bandwidth than WiFi and currently keeps WiFi-only features disabled in the UI (files, firmware update, ESP settings, camera)
+
+On ESP32-S3 targets the Bluetooth transport uses BLE so it works with browser Web Bluetooth. On classic ESP32 targets the existing Bluetooth serial support remains available.
+
+#### Bluetooth transport options considered
+
+- **Serial over Bluetooth (classic SPP)**
+  - This is the traditional `SerialBT` model and it is still the right fit for native senders or an OS-level virtual COM port.
+  - It is already what the classic ESP32 Bluetooth path in FluidNC uses.
+  - It is **not** a good direct fit for the browser UI because browsers do not expose classic Bluetooth serial ports to JavaScript, and the ESP32-S3 browser-facing path in this PR needs to work from Web Bluetooth.
+
+- **Bluetooth TCP/IP connection**
+  - This would mean treating Bluetooth as a network bearer and then running HTTP/WebSocket or another IP protocol over it.
+  - The current repo does not implement Bluetooth PAN/BNEP or another Bluetooth IP bridge, and browsers do not offer a direct “open a TCP socket over Bluetooth” API for web pages.
+  - In practice that option would require a helper app or operating-system bridge outside the browser, so it would not satisfy the goal of letting the built-in browser UI talk directly to the ESP32 over Bluetooth.
+
+- **BLE + Web Bluetooth**
+  - This is the option implemented here for ESP32-S3.
+  - It lets a Chromium-based browser connect directly to the controller without WiFi, while keeping the protocol close to the existing line-oriented command/status flow.
+
 ## Wiki
 
 [Check out the wiki](http://wiki.fluidnc.com) if you want the learn more about the feature or how to use it.

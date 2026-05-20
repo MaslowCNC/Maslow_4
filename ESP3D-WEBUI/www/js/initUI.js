@@ -104,6 +104,15 @@ const update_UI_firmware_target = () => {
 	return fwName;
 }
 
+const applyTransportUiMode = () => {
+	if (typeof transportSupportsHttp !== "function" || transportSupportsHttp()) {
+		return;
+	}
+
+	displayNone(["camtablink", "settingtablink", "filesPanel", "settings_filters"]);
+	displayBlock("debuggingtablink");
+};
+
 const total_boot_steps = 5;
 var current_boot_steps = 0;
 
@@ -122,6 +131,7 @@ const initUI = () => {
 	display_boot_progress();
 	//check FW
 	update_UI_firmware_target();
+	applyTransportUiMode();
 	//set title using hostname
 	Set_page_title();
 	//update UI version
@@ -145,7 +155,9 @@ function initUI_2() {
 	console.log("Init UI - Step 2 - Get Settings");
 	display_boot_progress();
 	//query settings but do not update list in case wizard is showed
-	refreshSettings(true);
+	if (transportSupportsHttp()) {
+		refreshSettings(true);
+	}
 	initUI_3();
 }
 
@@ -170,7 +182,9 @@ function initUI_4() {
 	console.log("Init UI - Step 4 - Initialise the command and files panels, determine if the setup wizard needs to be run");
 	display_boot_progress();
 	init_command_panel();
-	init_files_panel(false);
+	if (transportSupportsHttp()) {
+		init_files_panel(false);
+	}
 	
 	// Ensure connection dialog is properly closed
 	if (typeof forceCloseConnectionDialog === "function") {
@@ -197,6 +211,12 @@ function initUI_4() {
 			closeModal();
 		}
 		show_main_UI();
+		if (!transportSupportsHttp()) {
+			alertdlg(
+				"Bluetooth mode",
+				"Bluetooth keeps jog, console, and status working, but WiFi-only features like files, firmware update, and ESP settings stay disabled."
+			);
+		}
 	}
 }
 
