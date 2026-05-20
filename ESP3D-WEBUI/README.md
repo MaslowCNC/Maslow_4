@@ -147,6 +147,20 @@ npm run serve        # Not recommended - test on actual hardware instead
 
 Upload `dist/index.html.gz` to your ESP32 device for proper testing. Local testing with the proxy server can introduce bugs and doesn't accurately represent how the UI behaves on the actual hardware.
 
+### USB Serial setup (Maslow / FluidNC)
+
+Use these steps to connect directly over USB from the WebUI:
+
+1. Connect the Maslow controller to your computer with a USB data cable and power it on.
+2. Open ESP3D WebUI in a browser that supports Web Serial (Chromium-based browsers).
+3. Open the connection dialog. If Web Serial is available, you will see **Connect over USB Serial**.
+4. Click **Connect over USB Serial**, then select the FluidNC serial port in the browser port picker.
+5. Wait for the firmware identification handshake (`[ESP800]`) to complete; the UI will continue with the normal connected flow.
+
+If the **Connect over USB Serial** button is not shown, Web Serial is not available in your current browser/context.
+
+<img src="./images/usb-serial-setup.png" alt="ESP3D WebUI setup screen" />
+
 ### Automated Builds via GitHub Actions
 🤖 **Get builds automatically compiled for you!**
 

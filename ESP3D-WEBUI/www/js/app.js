@@ -2,6 +2,7 @@ var ESP3D_authentication = false;
 var async_webcommunication = false;
 var websocket_port = 0;
 var websocket_ip = '';
+var use_serial_transport = false;
 var esp_hostname = 'ESP3D WebUI';
 var EP_HOSTNAME;
 var EP_STA_SSID;

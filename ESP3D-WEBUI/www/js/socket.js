@@ -5,6 +5,17 @@ let event_source;
 
 let wsmsg = "";
 let ws_source;
+let serialPort = null;
+let serialReader = null;
+let serialWriter = null;
+let serialReaderRunning = false;
+let serialReadBuffer = "";
+let serialPendingCommand = null;
+
+const serialTextEncoder = new TextEncoder();
+const serialTextDecoder = new TextDecoder();
+const SERIAL_RESPONSE_TIMEOUT_MS = 250;
+const SERIAL_INITIAL_RESPONSE_TIMEOUT_MS = 1000;
 
 const TRANSPORT_WIFI = "wifi";
 const TRANSPORT_BLUETOOTH = "bluetooth";
@@ -27,7 +38,7 @@ const CancelCurrentUpload = () => {
 };
 
 const check_ping = () => {
-	if (active_transport === TRANSPORT_BLUETOOTH) {
+	if (active_transport === TRANSPORT_BLUETOOTH || use_serial_transport) {
 		return;
 	}
 	if (Date.now() - last_ping > 20000) {
@@ -85,6 +96,16 @@ const restorePingAfterUpload = () => {
 let log_off = false;
 
 let reconnect_timer = null;
+
+const serialConnectionProxy = {
+	readyState: WebSocket.OPEN,
+	send: (message) => {
+		writeToSerial(message).catch((error) => console.warn("USB serial send failed:", error));
+	},
+	close: () => {
+		closeSerialTransport().catch((error) => console.warn("USB serial close failed:", error));
+	}
+};
 
 /** Interval (ms) between auto-reconnect attempts while the disconnect dialog is visible */
 const RECONNECT_INTERVAL_MS = 3000;
@@ -371,8 +392,179 @@ const Handle_DHT = (data) => {
 
 const process_socket_response = (msg) => msg.split("\n").forEach(grblHandleMessage);
 
+const serialStatusLinePrefixes = [
+	"<",
+	"[MSG:INFO: Heartbeat]",
+	"X:",
+	"FR:",
+];
+
+const isSerialStatusLine = (line) => serialStatusLinePrefixes.some((prefix) => line.startsWith(prefix));
+
+const completeSerialPendingCommand = (isError = false, line = "") => {
+	if (!serialPendingCommand) {
+		return;
+	}
+	const pending = serialPendingCommand;
+	serialPendingCommand = null;
+	clearTimeout(pending.timeout);
+
+	if (line && !isSerialStatusLine(line)) {
+		pending.lines.push(line);
+	}
+	const response = pending.lines.join("\n").trim() || "ok";
+	if (isError) {
+		http_errorfn(pending.cmd, 400, response);
+	} else {
+		http_resultfn(pending.cmd, response === "ok" ? "" : response);
+	}
+};
+
+const resetSerialPendingTimeout = () => {
+	if (!serialPendingCommand) {
+		return;
+	}
+	clearTimeout(serialPendingCommand.timeout);
+	serialPendingCommand.timeout = setTimeout(() => completeSerialPendingCommand(false), SERIAL_RESPONSE_TIMEOUT_MS);
+};
+
+const processSerialPendingCommandLine = (line) => {
+	if (!serialPendingCommand) {
+		return;
+	}
+
+	const trimmed = (line || "").trim();
+	if (!trimmed || isSerialStatusLine(trimmed)) {
+		return;
+	}
+
+	if (trimmed === "ok") {
+		completeSerialPendingCommand(false);
+		return;
+	}
+
+	if (trimmed.startsWith("error:") || trimmed.startsWith("ALARM:")) {
+		completeSerialPendingCommand(true, trimmed);
+		return;
+	}
+
+	serialPendingCommand.lines.push(trimmed);
+	resetSerialPendingTimeout();
+};
+
+const processIncomingLine = (thismsg) => {
+	last_ping = Date.now();
+	Monitor_output_Update(thismsg);
+	process_socket_response(thismsg);
+	processSerialPendingCommandLine(thismsg);
+	const noNeedToShowMsg = ["<", "ok T:", "X:", "FR:", "echo:E0 Flow"].some((msgStart) => thismsg.startsWith(msgStart));
+	if (!noNeedToShowMsg && thismsg !== "ok") {
+		console.log(thismsg);
+	}
+
+	// Close stuck connection dialog if any message received from machine
+	// This indicates the machine is connected and communicating
+	const connectModal = id("connectdlg.html");
+	const activeOnMsg = getactiveModal();
+	if (connectModal && connectModal.style.display !== "none" &&
+		activeOnMsg && activeOnMsg.name === "connectdlg.html") {
+		console.log("SOCKET FIX: Machine message received - closing stuck connection dialog");
+		closeModal("Machine connected");
+	}
+};
+
+const processIncomingData = (data) => {
+	serialReadBuffer += data.replace(/\r/g, "");
+	const lines = serialReadBuffer.split("\n");
+	serialReadBuffer = lines.pop();
+	lines.forEach((line) => processIncomingLine(line.trim()));
+};
+
+const writeToSerial = async (message) => {
+	if (!serialWriter || !serialPort) {
+		throw new Error("USB serial is not connected");
+	}
+	const payload = message.endsWith("\n") ? message : `${message}\n`;
+	await serialWriter.write(serialTextEncoder.encode(payload));
+};
+
+const closeSerialTransport = async () => {
+	try {
+		if (serialPendingCommand) {
+			completeSerialPendingCommand(true, "USB serial disconnected");
+		}
+		if (serialReader) {
+			await serialReader.cancel();
+			serialReader.releaseLock();
+		}
+		if (serialWriter) {
+			serialWriter.releaseLock();
+		}
+		if (serialPort) {
+			await serialPort.close();
+		}
+	} catch (error) {
+		console.warn("Error while closing USB serial transport:", error);
+	} finally {
+		serialReader = null;
+		serialWriter = null;
+		serialPort = null;
+		serialReaderRunning = false;
+		serialReadBuffer = "";
+	}
+};
+
+const readSerialLoop = async () => {
+	if (!serialReader || serialReaderRunning) {
+		return;
+	}
+	serialReaderRunning = true;
+	try {
+		while (serialPort && serialReader) {
+			const { value, done } = await serialReader.read();
+			if (done) {
+				break;
+			}
+			if (value) {
+				processIncomingData(serialTextDecoder.decode(value, { stream: true }));
+			}
+		}
+	} catch (error) {
+		console.warn("USB serial read loop ended:", error);
+	} finally {
+		serialReaderRunning = false;
+	}
+};
+
+const connectSerialTransport = async () => {
+	if (!("serial" in navigator)) {
+		return false;
+	}
+
+	if (!serialPort) {
+		serialPort = await navigator.serial.requestPort();
+	}
+
+	if (!serialPort.readable || !serialPort.writable) {
+		await serialPort.open({ baudRate: 115200 });
+	}
+
+	serialWriter = serialPort.writable.getWriter();
+	serialReader = serialPort.readable.getReader();
+	readSerialLoop();
+
+	return true;
+};
+
 const startSocket = () => {
 	if (isBluetoothTransport()) {
+		return;
+	}
+	if (use_serial_transport) {
+		active_transport = TRANSPORT_WIFI;
+		ws_source = serialConnectionProxy;
+		console.log("Connected over USB serial");
+		handleTransportOpen();
 		return;
 	}
 	active_transport = TRANSPORT_WIFI;
@@ -428,7 +620,7 @@ const startSocket = () => {
 					const thismsg = wsmsg.trim();
 					wsmsg = "";
 					msg = "";
-					processTransportMessage(thismsg);
+					processIncomingLine(thismsg);
 				}
 			}
 			wsmsg += msg;

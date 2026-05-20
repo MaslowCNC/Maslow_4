@@ -1,4 +1,4 @@
-// import conErr, displayBlock, displayInline, displayNone, id, closeModal, setactiveModal, showModal, SendGetHttp, logindlg, EventListenerSetup, startSocket,
+// import conErr, displayBlock, displayInline, displayNone, id, closeModal, setactiveModal, showModal, SendGetHttp, logindlg, EventListenerSetup, startSocket, alertdlg, translate_text_item
 
 // Connection state to prevent multiple concurrent connection attempts
 let connectionInProgress = false;
@@ -30,6 +30,7 @@ const updateBluetoothConnectVisibility = () => {
 		? "Bluetooth requires a Chromium-based browser running on HTTPS or localhost."
 		: "Bluetooth is unavailable here. Open the UI from HTTPS or localhost in Chrome or Edge.";
 };
+let usbConnectButtonReady = false;
 
 /** Connect Dialog */
 const connectdlg = (getFw = false) => {
@@ -51,10 +52,53 @@ const connectdlg = (getFw = false) => {
 		id("connectbtbtn").addEventListener("click", retryBluetoothConnect);
 		id("connectbtbtn").dataset.bound = "true";
 	}
+	setupUsbSerialConnectButton();
 
 	if (getFw) {
 		connectionInProgress = true;
 		retryconnect();
+	}
+};
+
+const setupUsbSerialConnectButton = () => {
+	const usbConnectBtn = id("connect_usb_serial_btn");
+	if (!usbConnectBtn) {
+		return;
+	}
+
+	if (!("serial" in navigator)) {
+		displayNone("connect_usb_serial_btn");
+		return;
+	}
+
+	displayInline("connect_usb_serial_btn");
+	if (!usbConnectButtonReady) {
+		usbConnectBtn.addEventListener("click", connectUsingUsbSerial);
+		usbConnectButtonReady = true;
+	}
+};
+
+const connectUsingUsbSerial = async () => {
+	if (!("serial" in navigator)) {
+		alertdlg(translate_text_item("USB serial is not available in this browser."));
+		return;
+	}
+
+	displayNone("connectbtn");
+	displayNone("failed_connect_msg");
+	displayBlock("connecting_msg");
+	connectionInProgress = true;
+
+	try {
+		const connected = await connectSerialTransport();
+		if (!connected) {
+			connectfailed(0, "Failed to open USB serial port");
+			return;
+		}
+		use_serial_transport = true;
+		retryconnect();
+	} catch (error) {
+		connectfailed(0, error?.message || "Failed to open USB serial port");
 	}
 };
 
