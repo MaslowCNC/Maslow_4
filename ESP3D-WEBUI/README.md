@@ -159,7 +159,7 @@ Use these steps to connect directly over USB from the WebUI:
 
 If the **Connect over USB Serial** button is not shown, Web Serial is not available in your current browser/context.
 
-<img src="https://github.com/user-attachments/assets/476a28f3-17c5-4de4-ae0b-209ee0141733" alt="ESP3D WebUI setup screen" />
+<img src="./images/usb-serial-setup.png" alt="ESP3D WebUI setup screen" />
 
 ### Automated Builds via GitHub Actions
 🤖 **Get builds automatically compiled for you!**
