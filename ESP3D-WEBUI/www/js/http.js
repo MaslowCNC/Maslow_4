@@ -267,7 +267,7 @@ function ProcessGetHttp(cmd) {
     }
 
     if (use_serial_transport) {
-        ProcessSerialGetHttp(cmd);
+        processSerialGetHttp(cmd);
         return;
     }
 
@@ -300,7 +300,7 @@ const getSerialCommandFromUrl = (url) => {
     return params.get(httpCmdType.commandText) || params.get(httpCmdType.plain) || "";
 };
 
-function ProcessSerialGetHttp(cmd) {
+function processSerialGetHttp(cmd) {
     const serialCmd = getSerialCommandFromUrl(cmd.cmd);
     if (!serialCmd) {
         scheduleTask(() => http_errorfn(cmd, 400, translate_text_item("Unsupported HTTP command for USB serial mode")));
@@ -320,7 +320,7 @@ function ProcessSerialGetHttp(cmd) {
     serialPendingCommand = {
         cmd: cmd,
         lines: [],
-        timeout: setTimeout(() => completeSerialPendingCommand(false), 1000)
+        timeout: setTimeout(() => completeSerialPendingCommand(false), SERIAL_INITIAL_RESPONSE_TIMEOUT_MS)
     };
 
     writeToSerial(serialCmd).catch((error) => {

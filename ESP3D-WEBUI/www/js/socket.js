@@ -14,6 +14,8 @@ let serialPendingCommand = null;
 
 const serialTextEncoder = new TextEncoder();
 const serialTextDecoder = new TextDecoder();
+const SERIAL_RESPONSE_TIMEOUT_MS = 250;
+const SERIAL_INITIAL_RESPONSE_TIMEOUT_MS = 1000;
 
 const CancelCurrentUpload = () => {
 	xmlhttpupload.abort();
@@ -78,8 +80,12 @@ let reconnect_timer = null;
 
 const serialConnectionProxy = {
 	readyState: WebSocket.OPEN,
-	send: (message) => writeToSerial(message),
-	close: () => closeSerialTransport()
+	send: (message) => {
+		writeToSerial(message).catch((error) => console.warn("USB serial send failed:", error));
+	},
+	close: () => {
+		closeSerialTransport().catch((error) => console.warn("USB serial close failed:", error));
+	}
 };
 
 /** Interval (ms) between auto-reconnect attempts while the disconnect dialog is visible */
@@ -225,7 +231,7 @@ const resetSerialPendingTimeout = () => {
 		return;
 	}
 	clearTimeout(serialPendingCommand.timeout);
-	serialPendingCommand.timeout = setTimeout(() => completeSerialPendingCommand(false), 250);
+	serialPendingCommand.timeout = setTimeout(() => completeSerialPendingCommand(false), SERIAL_RESPONSE_TIMEOUT_MS);
 };
 
 const processSerialPendingCommandLine = (line) => {
@@ -274,10 +280,10 @@ const processIncomingLine = (thismsg) => {
 };
 
 const processIncomingData = (data) => {
-	serialReadBuffer += data;
+	serialReadBuffer += data.replaceAll("\r", "");
 	const lines = serialReadBuffer.split("\n");
 	serialReadBuffer = lines.pop();
-	lines.forEach((line) => processIncomingLine(line.replace("\r", "").trim()));
+	lines.forEach((line) => processIncomingLine(line.trim()));
 };
 
 const writeToSerial = async (message) => {

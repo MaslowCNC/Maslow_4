@@ -2,6 +2,7 @@
 
 // Connection state to prevent multiple concurrent connection attempts
 let connectionInProgress = false;
+let usbConnectButtonReady = false;
 
 /** Connect Dialog */
 const connectdlg = (getFw = false) => {
@@ -37,8 +38,10 @@ const setupUsbSerialConnectButton = () => {
 	}
 
 	displayInline("connect_usb_serial_btn");
-	usbConnectBtn.removeEventListener("click", connectUsingUsbSerial);
-	usbConnectBtn.addEventListener("click", connectUsingUsbSerial);
+	if (!usbConnectButtonReady) {
+		usbConnectBtn.addEventListener("click", connectUsingUsbSerial);
+		usbConnectButtonReady = true;
+	}
 };
 
 const connectUsingUsbSerial = async () => {
