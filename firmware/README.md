@@ -41,6 +41,22 @@ The Maslow Web UI can also connect over Bluetooth instead of WiFi when the firmw
 
 On ESP32-S3 targets the Bluetooth transport uses BLE so it works with browser Web Bluetooth. On classic ESP32 targets the existing Bluetooth serial support remains available.
 
+#### Bluetooth transport options considered
+
+- **Serial over Bluetooth (classic SPP)**
+  - This is the traditional `SerialBT` model and it is still the right fit for native senders or an OS-level virtual COM port.
+  - It is already what the classic ESP32 Bluetooth path in FluidNC uses.
+  - It is **not** a good direct fit for the browser UI because browsers do not expose classic Bluetooth serial ports to JavaScript, and the ESP32-S3 browser-facing path in this PR needs to work from Web Bluetooth.
+
+- **Bluetooth TCP/IP connection**
+  - This would mean treating Bluetooth as a network bearer and then running HTTP/WebSocket or another IP protocol over it.
+  - The current repo does not implement Bluetooth PAN/BNEP or another Bluetooth IP bridge, and browsers do not offer a direct “open a TCP socket over Bluetooth” API for web pages.
+  - In practice that option would require a helper app or operating-system bridge outside the browser, so it would not satisfy the goal of letting the built-in browser UI talk directly to the ESP32 over Bluetooth.
+
+- **BLE + Web Bluetooth**
+  - This is the option implemented here for ESP32-S3.
+  - It lets a Chromium-based browser connect directly to the controller without WiFi, while keeping the protocol close to the existing line-oriented command/status flow.
+
 ## Wiki
 
 [Check out the wiki](http://wiki.fluidnc.com) if you want the learn more about the feature or how to use it.
