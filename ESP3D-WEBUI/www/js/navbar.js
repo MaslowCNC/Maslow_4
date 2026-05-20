@@ -1,4 +1,4 @@
-// import - disable_items, displayNone, getChecked, id, setChecked, setHTML, opentab, creditsdlg, cameratab, configtab, changepassworddlg, showpreferencesdlg, translate_text_item, DisconnectLogin, setupdlg, settingstab
+// import - disable_items, displayNone, getChecked, id, setChecked, setHTML, opentab, creditsdlg, cameratab, configtab, changepassworddlg, showpreferencesdlg, connectdlg, translate_text_item, DisconnectLogin, setupdlg, settingstab
 
 const navBarMainTabLink = (event) => opentab(event, "maintab", "mainuitabscontent", "mainuitablinks");
 const navBarCamTabLink = (event) => opentab(event, "cameratab", "mainuitabscontent", "mainuitablinks");
@@ -14,6 +14,7 @@ const navbar = () => {
 	id("toggleLockUI").addEventListener("click", ontoggleLock);
 
 	id("showPreferencesDlg").addEventListener("click", showpreferencesdlg);
+	id("showConnectDlg").addEventListener("click", () => connectdlg(false));
 	id("showSetupDlg").addEventListener("click", setupdlg);
 	id("showCreditsDlg").addEventListener("click", creditsdlg);
 
