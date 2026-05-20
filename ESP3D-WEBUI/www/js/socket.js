@@ -11,6 +11,7 @@ const TRANSPORT_BLUETOOTH = "bluetooth";
 const BLE_SERVICE_UUID = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
 const BLE_RX_UUID = "6e400002-b5a3-f393-e0a9-e50e24dcca9e";
 const BLE_TX_UUID = "6e400003-b5a3-f393-e0a9-e50e24dcca9e";
+const BLE_WRITE_CHUNK = 180;
 let active_transport = TRANSPORT_WIFI;
 let bt_device;
 let bt_server;
@@ -148,8 +149,8 @@ const queueBluetoothWrite = (text) => {
 	}
 	const payload = new TextEncoder().encode(text);
 	const chunks = [];
-	for (let offset = 0; offset < payload.length; offset += 180) {
-		chunks.push(payload.slice(offset, offset + 180));
+	for (let offset = 0; offset < payload.length; offset += BLE_WRITE_CHUNK) {
+		chunks.push(payload.slice(offset, offset + BLE_WRITE_CHUNK));
 	}
 	bt_write_chain = bt_write_chain
 		.then(async () => {

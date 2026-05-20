@@ -43,10 +43,11 @@ extern "C" {
     using WebUI::BTChannel;
     using WebUI::btChannel;
 
-    constexpr const char* BLE_SERVICE_UUID = "6E400001-B5A3-F393-E0A9-E50E24DCCA9E";
-    constexpr const char* BLE_RX_UUID      = "6E400002-B5A3-F393-E0A9-E50E24DCCA9E";
-    constexpr const char* BLE_TX_UUID      = "6E400003-B5A3-F393-E0A9-E50E24DCCA9E";
-    constexpr size_t      BLE_TX_CHUNK     = 180;
+    constexpr const char* BLE_SERVICE_UUID  = "6E400001-B5A3-F393-E0A9-E50E24DCCA9E";
+    constexpr const char* BLE_RX_UUID       = "6E400002-B5A3-F393-E0A9-E50E24DCCA9E";
+    constexpr const char* BLE_TX_UUID       = "6E400003-B5A3-F393-E0A9-E50E24DCCA9E";
+    constexpr size_t      BLE_TX_CHUNK      = 180;
+    constexpr size_t      BLE_ADDRESS_CHARS = 18;
 
     BLEServer*         bleServer           = nullptr;
     BLECharacteristic* bleTxCharacteristic = nullptr;
@@ -70,7 +71,8 @@ extern "C" {
         if (!bleTxCharacteristic || !bleClientConnected() || len == 0) {
             return;
         }
-        bleTxCharacteristic->setValue(reinterpret_cast<uint8_t*>(const_cast<char*>(data)), len);
+        std::string payload(data, len);
+        bleTxCharacteristic->setValue(reinterpret_cast<uint8_t*>(&payload[0]), payload.size());
         bleTxCharacteristic->notify();
     }
 
@@ -296,6 +298,7 @@ namespace WebUI {
         return str;
 #    elif defined(CONFIG_BT_ENABLED) && defined(CONFIG_BLUEDROID_ENABLED)
         const std::string address = BLEDevice::getInitialized() ? BLEDevice::getAddress().toString() : std::string();
+        static_assert(BLE_ADDRESS_CHARS == sizeof(_deviceAddrBuffer), "Unexpected BLE address buffer size");
         snprintf(_deviceAddrBuffer, sizeof(_deviceAddrBuffer), "%s", address.c_str());
         return _deviceAddrBuffer;
 #    else

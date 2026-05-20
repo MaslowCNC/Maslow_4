@@ -2,6 +2,12 @@
 
 // Connection state to prevent multiple concurrent connection attempts
 let connectionInProgress = false;
+const BLUETOOTH_CONNECTION_DEFAULTS = {
+	fwVersion: "Bluetooth LE",
+	targetFirmware: "grbl-embedded",
+	primarySd: "/sd/",
+	secondarySd: "/sd/",
+};
 
 const resetConnectMessages = () => {
 	if (id("connecting_msg_text")) {
@@ -193,11 +199,11 @@ const bluetoothConnectFailed = (error) => {
 const bluetoothConnectSuccess = () => {
 	connectionInProgress = false;
 	displayNone("menu_authentication");
-	fw_version = "Bluetooth LE";
-	target_firmware = "grbl-embedded";
+	fw_version = BLUETOOTH_CONNECTION_DEFAULTS.fwVersion;
+	target_firmware = BLUETOOTH_CONNECTION_DEFAULTS.targetFirmware;
 	direct_sd = false;
-	primary_sd = "/sd/";
-	secondary_sd = "/sd/";
+	primary_sd = BLUETOOTH_CONNECTION_DEFAULTS.primarySd;
+	secondary_sd = BLUETOOTH_CONNECTION_DEFAULTS.secondarySd;
 	ESP3D_authentication = false;
 	async_webcommunication = false;
 	esp_hostname = bt_device?.name || "Maslow Bluetooth";
