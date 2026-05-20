@@ -27,6 +27,7 @@ namespace WebUI {
     static struct netif s_netif;
 
     extern "C" {
+        // 0x02 in the first octet marks this as a locally administered unicast MAC.
         uint8_t tud_network_mac_address[6] = { 0x02, 0x00, 0x00, 0x00, 0x00, 0x01 };
     }
 
@@ -276,6 +277,7 @@ namespace WebUI {
         } else {
             s_notify.header.bRequest = 0x2A;
             s_notify.header.wLength  = 8;
+            // CDC-ECM speed notification is reported in bits-per-second.
             s_notify.downlink        = 9728000;
             s_notify.uplink          = 9728000;
             netd_report((uint8_t*)&s_notify, sizeof(s_notify));
