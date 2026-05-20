@@ -1,4 +1,4 @@
-// import conErr, displayBlock, displayInline, displayNone, id, closeModal, setactiveModal, showModal, SendGetHttp, logindlg, EventListenerSetup, startSocket,
+// import conErr, displayBlock, displayInline, displayNone, id, closeModal, setactiveModal, showModal, SendGetHttp, logindlg, EventListenerSetup, startSocket, alertdlg, translate_text_item
 
 // Connection state to prevent multiple concurrent connection attempts
 let connectionInProgress = false;
@@ -17,10 +17,51 @@ const connectdlg = (getFw = false) => {
 	}
 
 	showModal();
+	setupUsbSerialConnectButton();
 
 	if (getFw) {
 		connectionInProgress = true;
 		retryconnect();
+	}
+};
+
+const setupUsbSerialConnectButton = () => {
+	const usbConnectBtn = id("connect_usb_serial_btn");
+	if (!usbConnectBtn) {
+		return;
+	}
+
+	if (!("serial" in navigator)) {
+		displayNone("connect_usb_serial_btn");
+		return;
+	}
+
+	displayInline("connect_usb_serial_btn");
+	usbConnectBtn.removeEventListener("click", connectUsingUsbSerial);
+	usbConnectBtn.addEventListener("click", connectUsingUsbSerial);
+};
+
+const connectUsingUsbSerial = async () => {
+	if (!("serial" in navigator)) {
+		alertdlg(translate_text_item("USB serial is not available in this browser."));
+		return;
+	}
+
+	displayNone("connectbtn");
+	displayNone("failed_connect_msg");
+	displayBlock("connecting_msg");
+	connectionInProgress = true;
+
+	try {
+		const connected = await connectSerialTransport();
+		if (!connected) {
+			connectfailed(0, "Failed to open USB serial port");
+			return;
+		}
+		use_serial_transport = true;
+		retryconnect();
+	} catch (error) {
+		connectfailed(0, error?.message || "Failed to open USB serial port");
 	}
 };
 

@@ -266,6 +266,11 @@ function ProcessGetHttp(cmd) {
         return;
     }
 
+    if (use_serial_transport) {
+        ProcessSerialGetHttp(cmd);
+        return;
+    }
+
     const xmlhttp = new XMLHttpRequest();
     xmlhttp.onreadystatechange = () => {
         if (xmlhttp.readyState === 4) {
@@ -283,6 +288,44 @@ function ProcessGetHttp(cmd) {
 
     xmlhttp.open("GET", cmd.cmd, true);
     xmlhttp.send();
+}
+
+const getSerialCommandFromUrl = (url) => {
+    if (!url || !url.startsWith(`${httpCmd.command}?`)) {
+        return "";
+    }
+
+    const query = url.split("?")[1] || "";
+    const params = new URLSearchParams(query);
+    return params.get(httpCmdType.commandText) || params.get(httpCmdType.plain) || "";
+};
+
+function ProcessSerialGetHttp(cmd) {
+    const serialCmd = getSerialCommandFromUrl(cmd.cmd);
+    if (!serialCmd) {
+        scheduleTask(() => http_errorfn(cmd, 400, translate_text_item("Unsupported HTTP command for USB serial mode")));
+        return;
+    }
+
+    if (!serialPort || !serialWriter) {
+        scheduleTask(() => http_errorfn(cmd, 503, translate_text_item("USB serial is not connected")));
+        return;
+    }
+
+    if (serialPendingCommand) {
+        scheduleTask(() => http_errorfn(cmd, 503, translate_text_item("USB serial command already in progress")));
+        return;
+    }
+
+    serialPendingCommand = {
+        cmd: cmd,
+        lines: [],
+        timeout: setTimeout(() => completeSerialPendingCommand(false), 1000)
+    };
+
+    writeToSerial(serialCmd).catch((error) => {
+        completeSerialPendingCommand(true, error?.message || "USB serial write failed");
+    });
 }
 
 /** POST the file FormData */
