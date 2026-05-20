@@ -280,7 +280,7 @@ const processIncomingLine = (thismsg) => {
 };
 
 const processIncomingData = (data) => {
-	serialReadBuffer += data.replaceAll("\r", "");
+	serialReadBuffer += data.replace(/\r/g, "");
 	const lines = serialReadBuffer.split("\n");
 	serialReadBuffer = lines.pop();
 	lines.forEach((line) => processIncomingLine(line.trim()));
