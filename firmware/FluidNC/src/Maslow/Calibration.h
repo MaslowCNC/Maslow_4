@@ -146,6 +146,7 @@ private:
     bool safetyOn         = true;
 
     bool recomputeAnchorsWithLevenbergMarquardt(int measurementCount);
+    void logClbmMeasurements(int measurementCount) const;
 
     //A structure to hold the state names
     struct StateName {

@@ -285,11 +285,14 @@ const updateFindAnchorsView = () => {
 			if (typeof clearFindAnchorsTrace === 'function') {
 				clearFindAnchorsTrace();
 			}
+			if (typeof setGcodeViewerPage === 'function') {
+				setGcodeViewerPage(4);
+			}
 			if (typeof showGCode === 'function') {
 				showGCode("");
 			}
-			if (typeof setGcodeViewerPage === 'function') {
-				setGcodeViewerPage(0);
+			if (typeof refreshGcode === 'function') {
+				refreshGcode();
 			}
 		}
 		wasFindingAnchors = isFindingAnchors;

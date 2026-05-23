@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cmath>
 #include <new>
+#include <cstdio>
 #include <vector>
 
 namespace {
@@ -1094,6 +1095,33 @@ bool Calibration::recomputeAnchorsWithLevenbergMarquardt(int measurementCount) {
     }
 }
 
+void Calibration::logClbmMeasurements(int measurementCount) const {
+    if (measurementCount <= 0 || calibration_data == nullptr) {
+        return;
+    }
+
+    std::string clbm = "CLBM:[";
+    clbm.reserve(16 + static_cast<size_t>(measurementCount) * 48);
+
+    char item[64];
+    for (int i = 0; i < measurementCount; i++) {
+        snprintf(item,
+                 sizeof(item),
+                 "{bl:%g, br:%g, tr:%g, tl:%g}",
+                 calibration_data[i][_BL],
+                 calibration_data[i][_BR],
+                 calibration_data[i][_TR],
+                 calibration_data[i][_TL]);
+        clbm += item;
+        if (i + 1 < measurementCount) {
+            clbm += ",";
+        }
+    }
+    clbm += "]";
+
+    log_info(clbm.c_str());
+}
+
 // --Maslow calibration loop
 void Calibration::calibration_loop() {
     serviceCalibrationWatchdogs(false);
@@ -1136,6 +1164,7 @@ void Calibration::calibration_loop() {
             waypoint++;  //Increment the waypoint counter
 
             if (waypoint > recomputePoints[recomputeCountIndex]) {  //If we have reached the end of this stage of the calibration process
+                logClbmMeasurements(waypoint);
                 if (!recomputeAnchorsWithLevenbergMarquardt(waypoint)) {
                     log_error("Find Anchors recompute failed");
                     resetCalibrationState();
