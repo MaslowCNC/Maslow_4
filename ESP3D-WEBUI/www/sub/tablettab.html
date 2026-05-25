@@ -251,6 +251,36 @@
     </div>
   </div>
 
+  <div id="set-z-home-popup" class="calibration-modal-container">
+    <div id="set_z_home_popup_content" class="calibration-modal-content">
+      <div class="calibration-modal-button-container">
+        <div class="input-row">
+          <div style="display: flex; justify-content: center;">
+            <label style="text-align: center;">Set Z Home Position</label>
+          </div>
+          <div style="display: flex; justify-content: center;">
+            <label id="currentZHomeLabel" style="text-align: center; font-size: 0.85em; color: #888;"></label>
+          </div>
+        </div>
+        <hr style="border-top: 1px dashed;">
+        <div class="grid-container">
+          <div class="input-row">
+            <label for="setHomeZ" class="input-label">Z (mm)</label>
+          </div>
+          <div class="input-row">
+            <input id="setHomeZ" type="number" step="any" class="calibration-modal-input" placeholder="0">
+          </div>
+        </div>
+        <hr style="border-top: 1px dashed;">
+        <div class="buttons-row">
+          <button id="tablettab_set_z_home_cancel" class="calibration-modal-button stop-button">Cancel</button>
+          <button id="tablettab_set_z_home_confirm" class="calibration-modal-button">Set Z Home</button>
+          <button id="tablettab_move_to_z_home" class="calibration-modal-button green-button">Z Home</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div id="work-area-popup" class="calibration-modal-container">
     <div id="work_area_popup_content" class="calibration-modal-content">
       <div class="calibration-modal-button-container">
