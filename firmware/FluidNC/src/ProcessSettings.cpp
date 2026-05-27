@@ -1044,6 +1044,7 @@ static Error maslow_set_zStop(const char* value, WebUI::AuthenticationLevel auth
 
 static Error maslow_get_info(const char* value, WebUI::AuthenticationLevel auth_level, Channel& out) {
     Maslow.getInfo();
+    Maslow.logLoadZPosDebug();
     return Error::Ok;
 }
 

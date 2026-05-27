@@ -88,6 +88,7 @@ public:
     void   print_motor_currents();
     bool   updateEncoderPositions();
     void   setTargets(float xTarget, float yTarget, float zTarget, bool tl = true, bool tr = true, bool bl = true, bool br = true);
+    void   setEncoderGeometry(float beltToothSpacing, float encoderTeeth);
     double getTargetX();
     double getTargetY();
     double getTargetZ();
@@ -96,6 +97,7 @@ public:
     //Save and load z-axis position, set z-stop
     void saveZPos();
     void loadZPos();
+    void logLoadZPosDebug();
     /** Sets the 'bottom' Z position, this is a 'stop' beyond which travel cannot continue */
     void setZStop();
 
@@ -203,6 +205,7 @@ private:
     bool HeartBeatEnabled = true;
     void log_telem_hdr_csv();
     void log_telem_pt_csv(TelemetryData data);
+    float currentZHome() const;
 };
 
 extern Maslow_& Maslow;

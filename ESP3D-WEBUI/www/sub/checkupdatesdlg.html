@@ -1,0 +1,55 @@
+<!-- Check for Updates Modal -->
+<div id="checkupdatesdlg.html" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <span id="checkUpdatesDlgCancel" class="close"><b>&times;</b></span>
+            <h3>
+                <div class="modal-title" translate>Check for Updates</div>
+            </h3>
+        </div>
+        <div class="modal-body">
+            <div id="checkupdates_status" style="margin-bottom:10px;"></div>
+            <div id="checkupdates_info" style="display:none;">
+                <table style="width:100%; margin-bottom:10px;">
+                    <tr>
+                        <td><strong translate>Firmware version</strong>:</td>
+                        <td id="checkupdates_fw_version"></td>
+                    </tr>
+                    <tr>
+                        <td><strong translate>UI version</strong>:</td>
+                        <td id="checkupdates_ui_version"></td>
+                    </tr>
+                    <tr>
+                        <td><strong translate>Latest version</strong>:</td>
+                        <td id="checkupdates_latest_version"></td>
+                    </tr>
+                    <tr>
+                        <td><strong translate>Update stream</strong>:</td>
+                        <td id="checkupdates_stream"></td>
+                    </tr>
+                </table>
+                <div id="checkupdates_notes_section" style="display:none;">
+                    <strong translate>Release notes</strong>:
+                    <div id="checkupdates_notes" style="max-height:150px; overflow-y:auto; border:1px solid #ccc; padding:6px; margin-top:4px; white-space:pre-wrap; font-size:0.9em;"></div>
+                </div>
+            </div>
+            <div id="checkupdates_progress" style="display:none; margin-top:10px;">
+                <div id="checkupdates_step" style="margin-bottom:4px;"></div>
+                <progress id="checkupdates_prg" max="100" style="width:100%;"></progress>
+                <div id="checkupdates_pct" style="text-align:center;"></div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <span class="pull-left">
+                <button id="checkUpdatesDlgCheck" class="btn btn-info" translate>Check Now</button>
+            </span>
+            <span class="pull-right">
+                <button id="checkUpdatesDlgClose" class="btn btn-warning" translate>Close</button>
+            </span>
+            <span class="pull-right" style="margin-right:6px;">
+                <button id="checkUpdatesDlgInstall" class="btn btn-success" style="display:none;" translate>Install Update</button>
+            </span>
+        </div>
+    </div>
+</div>
+<!-- /Check for Updates Modal -->

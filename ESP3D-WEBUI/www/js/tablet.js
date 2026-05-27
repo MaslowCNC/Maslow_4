@@ -1141,8 +1141,53 @@ const tabletMoveBottomLeft = () => sendMove("X-Y-");
 const tabletMoveBottom = () => sendMove("Y-");
 const tabletMoveBottomRight = () => sendMove("X+Y-");
 // Button event handlers - Fourth Row
-const tabletSetZHomeMDown = () => zeroAxis("Z");
-const tabletSetZHomeMUp = () => refreshGcode();
+const openSetZHomePopup = () => {
+  tabletClick();
+  const zCurrent = MPOS && MPOS.length >= 3 ? MPOS[2].toFixed(3) : "0";
+  const zInput = id("setHomeZ");
+  if (zInput) {
+    // Pre-fill with current machine Z position so the user sees where Z is now.
+    zInput.value = zCurrent;
+    zInput.min = Z_HOME_MIN_SAFE_MM;
+    zInput.max = Z_HOME_MAX_SAFE_MM;
+    zInput.title = `Z: ${Z_HOME_MIN_SAFE_MM} to ${Z_HOME_MAX_SAFE_MM} mm`;
+  }
+  // Context label shows the previously defined Z home value (WCO[2]).
+  const zHomeLabel = id("currentZHomeLabel");
+  if (zHomeLabel) {
+    const zHome = WCO && WCO.length >= 3 ? WCO[2].toFixed(3) : "0";
+    zHomeLabel.textContent = `Z Home: ${zHome} mm`;
+  }
+  openModal("set-z-home-popup");
+}
+
+const moveToZHome = () => {
+  hideModal("set-z-home-popup");
+  const machineZ = MPOS && MPOS.length >= 3 ? MPOS[2] : null;
+  const workZeroZ = WCO && WCO.length >= 3 ? WCO[2] : null;
+  const zDelta = (machineZ !== null && workZeroZ !== null) ? workZeroZ - machineZ : 0;
+  checkZHomeAndProceed(() => {
+    sendCommand("G90 G0 Z0");
+    addMessage("Moving to Z Home position");
+  }, zDelta);
+}
+
+const confirmSetZHome = () => {
+  const zInput = id("setHomeZ");
+  const rawZ = zInput ? parseFloat(zInput.value) : NaN;
+  const zVal = isNaN(rawZ) ? 0 : Math.max(Z_HOME_MIN_SAFE_MM, Math.min(Z_HOME_MAX_SAFE_MM, rawZ));
+
+  if (!isNaN(rawZ) && zVal !== rawZ) {
+    addMessage(`Z Home value clamped to range: Z=${zVal}`);
+  }
+
+  hideModal("set-z-home-popup");
+
+  const mposZ = MPOS ? MPOS[2] : 0;
+  sendCommand(`G10 L20 P0 Z${mposZ - zVal}`);
+  addMessage(`Z Home pos set: Z=${zVal}mm`);
+  refreshGcode();
+}
 // Button event handlers - Fifth Row - nothing special here, move on
 
 // Send a command directly via WebSocket to bypass PAGEID routing.
@@ -1623,8 +1668,7 @@ function tabletInit() {
     id("tablettab_bottomRight").addEventListener("click", tabletMoveBottomRight);
 
     // Buttons - Fourth Row
-    id("tablettab_set_z_home").addEventListener("mousedown", tabletSetZHomeMDown);
-    id("tablettab_set_z_home").addEventListener("mouseup", tabletSetZHomeMUp);
+    id("tablettab_set_z_home").addEventListener("click", openSetZHomePopup);
     id("tablettab_move_to_xy_home").addEventListener("click", moveHome);
     id("tablettab_toggle_units").addEventListener("click", toggleUnits);
     id("tablettab_set_xy_home").addEventListener("click", openSetHomePopup);
@@ -1634,6 +1678,13 @@ function tabletInit() {
     id("set_home_popup_content").addEventListener("click", tabletPopupStopProp);
     id("tablettab_set_home_cancel").addEventListener("click", () => hideModal("set-home-popup"));
     id("tablettab_set_home_confirm").addEventListener("click", confirmSetHome);
+
+    // Buttons - Set Z Home Pop-up
+    id("set-z-home-popup").addEventListener("click", () => hideModal("set-z-home-popup"));
+    id("set_z_home_popup_content").addEventListener("click", tabletPopupStopProp);
+    id("tablettab_set_z_home_cancel").addEventListener("click", () => hideModal("set-z-home-popup"));
+    id("tablettab_move_to_z_home").addEventListener("click", moveToZHome);
+    id("tablettab_set_z_home_confirm").addEventListener("click", confirmSetZHome);
 
     // Controls - Fifth Row
     id("filelist").addEventListener("change", selectFile);

@@ -60,6 +60,8 @@ kinematics:
     brZ: 78.000000
     beltEndExtension: 30.000000
     armLength: 123.400002
+    beltToothSpacing: 1.998800
+    encoderTeeth: 22.000000
     maxSegmentLength: 5.000000
     fixedZ: false
 

@@ -5,6 +5,7 @@
 #include "MotorUnit.h"
 #include "../Report.h"
 #include "Maslow.h"
+#include <cmath>
 
 // PID controller tuning
 #define P 300
@@ -392,4 +393,16 @@ void MotorUnit::setPosition(double position) {
 uint16_t MotorUnit::getRawEncoderAngle() {
     Maslow.I2CMux.setPort(_encoderAddress);
     return encoder.readAngle();
+}
+
+void MotorUnit::setEncoderGeometry(double beltToothSpacing, double encoderTeeth) {
+    if (!std::isfinite(beltToothSpacing) || !std::isfinite(encoderTeeth) || beltToothSpacing <= 0.0 || encoderTeeth <= 0.0) {
+        log_warn("Ignoring invalid encoder geometry: beltToothSpacing=" << beltToothSpacing << ", encoderTeeth=" << encoderTeeth);
+        return;
+    }
+    _mmPerRevolution = beltToothSpacing * encoderTeeth;
+}
+
+double MotorUnit::getMmPerRevolution() const {
+    return _mmPerRevolution;
 }
