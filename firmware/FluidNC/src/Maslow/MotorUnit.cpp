@@ -26,6 +26,7 @@ void MotorUnit::begin(int forwardPin, int backwardPin, int readbackPin, int enco
         Maslow.error        = true;
         Maslow.errorMessage = "Encoder not found on " + encAddrLabel;
     } else {
+        encoder.setDirection(AS5600_COUNTERCLOCK_WISE);
         log_info("Encoder connected on " << encAddrLabel.c_str());
     }
     zero();
