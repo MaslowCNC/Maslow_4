@@ -88,6 +88,7 @@ public:
     void   print_motor_currents();
     bool   updateEncoderPositions();
     void   setTargets(float xTarget, float yTarget, float zTarget, bool tl = true, bool tr = true, bool bl = true, bool br = true);
+    void   setEncoderGeometry(float beltToothSpacing, float encoderTeeth);
     double getTargetX();
     double getTargetY();
     double getTargetZ();

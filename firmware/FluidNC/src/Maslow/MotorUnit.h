@@ -22,6 +22,10 @@ public:
     double   getPosition();
     void     setPosition(double position);  // Set encoder position from saved value
     uint16_t getRawEncoderAngle();          // Get current raw encoder angle (0-4095)
+    // Set belt geometry used for encoder counts <-> mm conversion.
+    void     setEncoderGeometry(double beltToothSpacing, double encoderTeeth);
+    // Returns the configured belt movement in mm per full encoder revolution.
+    double   getMmPerRevolution() const;
     double   getCurrent();
     double   getPositionError();
     void     stop();

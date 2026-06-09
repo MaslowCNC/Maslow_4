@@ -113,6 +113,7 @@ void Maslow_::begin(void (*sys_rt)()) {
         log_error(M + " failed to initialize - fix errors and restart");
     } else {
         log_info("Starting " + M + " Version " << VERSION_NUMBER);
+        log_info("Maslow_Retract_Current_Threshold: " << calibration.retractCurrentThreshold);
     }
 }
 
@@ -402,6 +403,12 @@ void Maslow_::setTargets(float xTarget, float yTarget, float zTarget, bool tl, b
     }
     if (br) {
         axis[_BR].setTarget(kinematics->computeBR(xTarget, yTarget, zTarget));
+    }
+}
+
+void Maslow_::setEncoderGeometry(float beltToothSpacing, float encoderTeeth) {
+    for (int arm = _TL; arm < ARM_COUNT; arm++) {
+        axis[arm].setEncoderGeometry(beltToothSpacing, encoderTeeth);
     }
 }
 
@@ -743,9 +750,7 @@ void Maslow_::loadBeltPositions() {
 
             // If angle difference is within 1/4 turn (1024 counts), adjust belt position for small movement
             if (abs(angleDiff) < 1024) {
-                // Convert angle difference to belt length change
-                // Using mmPerRevolution = 43.975
-                float movementMM = (angleDiff / 4096.0) * 43.975 * -1;
+                float movementMM = (angleDiff / 4096.0f) * axis[_TL].getMmPerRevolution() * -1.0f;
                 tlPos += movementMM;
             } else {
                 log_info("TL encoder angle difference too large (" << angleDiff << " counts), treating belt positions as stale");
@@ -786,7 +791,7 @@ void Maslow_::loadBeltPositions() {
                 angleDiff += 4096;
 
             if (abs(angleDiff) < 1024) {
-                float movementMM = (angleDiff / 4096.0) * 43.975 * -1;
+                float movementMM = (angleDiff / 4096.0f) * axis[_TR].getMmPerRevolution() * -1.0f;
                 trPos += movementMM;
             } else {
                 log_info("TR encoder angle difference too large (" << angleDiff << " counts), treating belt positions as stale");
@@ -826,7 +831,7 @@ void Maslow_::loadBeltPositions() {
                 angleDiff += 4096;
 
             if (abs(angleDiff) < 1024) {
-                float movementMM = (angleDiff / 4096.0) * 43.975 * -1;
+                float movementMM = (angleDiff / 4096.0f) * axis[_BL].getMmPerRevolution() * -1.0f;
                 blPos += movementMM;
             } else {
                 log_info("BL encoder angle difference too large (" << angleDiff << " counts), treating belt positions as stale");
@@ -866,7 +871,7 @@ void Maslow_::loadBeltPositions() {
                 angleDiff += 4096;
 
             if (abs(angleDiff) < 1024) {
-                float movementMM = (angleDiff / 4096.0) * 43.975 * -1;
+                float movementMM = (angleDiff / 4096.0f) * axis[_BR].getMmPerRevolution() * -1.0f;
                 brPos += movementMM;
             } else {
                 log_info("BR encoder angle difference too large (" << angleDiff << " counts), treating belt positions as stale");

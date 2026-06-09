@@ -7,6 +7,8 @@ Maslow_calibration_grid_height_mm_Y: 0.000000
 Maslow_calibration_grid_size: 9
 Maslow_Retract_Current_Threshold: 1300
 Maslow_Acceptable_Calibration_Threshold: 0.450000
+Maslow_Apply_Tension_Belt_Retraction_Limit: 300.000000
+Maslow_Apply_Tension_Allow_Limiting: true
 Maslow_Extend_Dist: 2600.000000
 Maslow_Scale_X: 1.000000
 Maslow_Scale_Y: 1.000000
@@ -60,6 +62,8 @@ kinematics:
     brZ: 78.000000
     beltEndExtension: 30.000000
     armLength: 123.400002
+    beltToothSpacing: 1.998800
+    encoderTeeth: 22.000000
     maxSegmentLength: 5.000000
     fixedZ: false
 

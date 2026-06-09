@@ -1122,6 +1122,54 @@ void Calibration::logClbmMeasurements(int measurementCount) const {
     log_info(clbm.c_str());
 }
 
+bool Calibration::updateExtendDistanceFromAnchors() {
+    auto kinematics = getKinematics();
+    if (!kinematics) {
+        log_error("Find Anchors completed, but MaslowKinematics is unavailable for updating " << M << "_Extend_Dist");
+        return false;
+    }
+
+    constexpr float safetyMargin = 100.0f;
+    const float     extension    = kinematics->getBeltEndExtension() + kinematics->getArmLength();
+    const float     xPos         = Maslow.x;
+    const float     yPos         = Maslow.y;
+    const float     zPos         = get_mpos()[2];
+
+    const float zTotal[ARM_COUNT] = { zPos + kinematics->getTlZ() + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness(),
+                                      zPos + kinematics->getTrZ() + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness(),
+                                      zPos + kinematics->getBlZ() + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness(),
+                                      zPos + kinematics->getBrZ() + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness() };
+
+    const float beltLength[ARM_COUNT] = { kinematics->computeTL(xPos, yPos, zPos),
+                                          kinematics->computeTR(xPos, yPos, zPos),
+                                          kinematics->computeBL(xPos, yPos, zPos),
+                                          kinematics->computeBR(xPos, yPos, zPos) };
+
+    float distanceToAnchor[ARM_COUNT] = {};
+    for (int arm = 0; arm < ARM_COUNT; arm++) {
+        distanceToAnchor[arm] = measurementToXYPlane(beltLength[arm], fabsf(zTotal[arm]));
+        if (!std::isfinite(distanceToAnchor[arm])) {
+            log_error("Find Anchors completed, but invalid anchor distance prevented updating " << M << "_Extend_Dist");
+            return false;
+        }
+    }
+
+    const float trBlDiagonalAverage   = 0.5f * (distanceToAnchor[_TR] + distanceToAnchor[_BL]);
+    const float tlBrDiagonalAverage   = 0.5f * (distanceToAnchor[_TL] + distanceToAnchor[_BR]);
+    const float longestDiagonalAverage = std::max(trBlDiagonalAverage, tlBrDiagonalAverage);
+
+    const float computedExtendDistance = longestDiagonalAverage + safetyMargin - extension;
+    if (!std::isfinite(computedExtendDistance)) {
+        log_error("Find Anchors completed, but computed " << M << "_Extend_Dist is invalid");
+        return false;
+    }
+
+    extendDist = std::max(0.0f, computedExtendDistance);
+    log_info("Find Anchors set " << M << "_Extend_Dist=" << extendDist << " (TR-BL avg=" << trBlDiagonalAverage
+                                 << ", TL-BR avg=" << tlBrDiagonalAverage << ", extension=" << extension << ")");
+    return true;
+}
+
 // --Maslow calibration loop
 void Calibration::calibration_loop() {
     serviceCalibrationWatchdogs(false);
@@ -1132,6 +1180,10 @@ void Calibration::calibration_loop() {
         // after all fitness gates pass; it is reset to false by resetCalibrationState().
         // Calibration always performs at least one recompute before reaching waypoint > pointCount.
         if (lastRecomputePassed) {
+            if (!updateExtendDistanceFromAnchors()) {
+                log_error("Find Anchors completed, but failed to update " << M << "_Extend_Dist");
+            }
+
             char saveCommand[] = "$CO";
             Error saveResult   = execute_line(saveCommand, allChannels, WebUI::AuthenticationLevel::LEVEL_ADMIN);
             if (saveResult != Error::Ok) {
@@ -1208,8 +1260,35 @@ void Calibration::calibration_loop() {
 bool Calibration::takeSlackFunc() {
     static int takeSlackState = 0;  //0 -> Starting, 1-> Moving to (0,0), 2-> Taking a measurement. Where should this be defined correctly?
     static unsigned long holdTimer = millis();
-    static float         startingX = 0;
-    static float         startingY = 0;
+    static bool          retractionMonitorInitialized = false;
+    static float         startBeltPosition[ARM_COUNT] = { 0 };
+
+    if (!retractionMonitorInitialized) {
+        for (int arm = _TL; arm < ARM_COUNT; arm++) {
+            startBeltPosition[arm] = Maslow.axis[arm].getPosition();
+        }
+        retractionMonitorInitialized = true;
+    }
+
+    for (int arm = _TL; arm < ARM_COUNT; arm++) {
+        const float retractedAmount = startBeltPosition[arm] - Maslow.axis[arm].getPosition();
+        if (applyTensionAllowLimiting && retractedAmount > applyTensionBeltRetractionLimitMm) {
+            for (int stopArm = _TL; stopArm < ARM_COUNT; stopArm++) {
+                Maslow.axis[stopArm].setTarget(Maslow.axis[stopArm].getPosition());
+                Maslow.axis[stopArm].stop();
+            }
+
+            log_warn("Maslow Apply Tension retraction warning: Belt "
+                     << Maslow.axis_id_to_label(arm).c_str() << " retracted " << retractedAmount
+                     << "mm while applying tension (limit " << applyTensionBeltRetractionLimitMm
+                     << "mm). A belt may not be anchored. Continue to keep retracting or Cancel to stop. Reduce Extend Dist or extend Belt Retraction Limit (Options) if Belts Attached to Anchors. Release Tension will allow Approx. 10mm of belt to be released.");
+
+            takeSlackState                = 0;
+            retractionMonitorInitialized  = false;
+            requestStateChange(EXTENDEDOUT);
+            return true;
+        }
+    }
 
     //Take a measurement
     if (takeSlackState == 0) {
@@ -1220,12 +1299,16 @@ bool Calibration::takeSlackFunc() {
             float y = 0;
             if (!computeXYfromLengths(calibration_data[0][0], calibration_data[0][1], x, y)) {
                 log_error("Failed to compute XY from lengths");
+                retractionMonitorInitialized = false;
                 return true;
             }
 
             auto kinematics = getKinematics();
             if (!kinematics)
+            {
+                retractionMonitorInitialized = false;
                 return true;
+            }
 
             // Get current Z position to accurately compute expected belt lengths
             float* mpos     = get_mpos();
@@ -1257,6 +1340,7 @@ bool Calibration::takeSlackFunc() {
 
                 //Reset
                 takeSlackState = 0;
+                retractionMonitorInitialized = false;
                 requestStateChange(EXTENDEDOUT);
                 return true;
             } else {
@@ -1269,6 +1353,7 @@ bool Calibration::takeSlackFunc() {
                 }
                 takeSlackState = 0;
                 holdTimer      = millis();
+                retractionMonitorInitialized = false;
 
                 // Instead of setting cartesian position and letting kinematics recalculate motor positions,
                 // we need to set the motor positions directly from the measured belt lengths to avoid
@@ -1316,6 +1401,7 @@ bool Calibration::takeSlackFunc() {
     if (takeSlackState == 1) {
         if (millis() - holdTimer > 2000) {
             takeSlackState = 0;
+            retractionMonitorInitialized = false;
             return true;
         }
     }

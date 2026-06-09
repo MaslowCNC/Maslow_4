@@ -285,6 +285,9 @@ function build_dlg_preferences_list() {
 
     //config filename - fetch yaml files and populate dropdown
     fetchYamlFiles();
+
+    //update stream
+    id('preferences_update_stream').value = GetPrefOrDefault("update_stream");
 }
 
 /** Fetch YAML files from filesystem and populate the config filename dropdown */
@@ -446,6 +449,7 @@ const getPreferencesForSave = () => {
     saveprefs.push(`"has_TFT_USB":"${getChecked('has_tft_usb')}"`);
     saveprefs.push(`"f_filters":"${getValue('preferences_filters') || ""}"`);
     saveprefs.push(`"config_filename":"${getValue('preferences_config_filename') || "maslow.yaml"}"`);
+    saveprefs.push(`"update_stream":"${getValue('preferences_update_stream') || "release"}"`);
 
     saveprefs.push(`"enable_commands_panel":"${getChecked('show_commands_panel')}"`);
     saveprefs.push(`"enable_autoscroll":"${getChecked('preferences_autoscroll')}"`);

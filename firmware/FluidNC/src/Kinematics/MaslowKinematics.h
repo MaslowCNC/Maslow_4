@@ -119,6 +119,10 @@ namespace Kinematics {
         // Segmentation parameters for belt length synchronization
         float _maxSegmentLength = 5.0f;  // Maximum segment length (mm) before breaking into smaller segments
 
+        // Belt-to-encoder geometry
+        float _beltToothSpacing = 1.9988f;
+        float _encoderTeeth     = 22.0f;
+
         // Flag to prevent recursion during segmentation
         bool _isSegmenting = false;
 

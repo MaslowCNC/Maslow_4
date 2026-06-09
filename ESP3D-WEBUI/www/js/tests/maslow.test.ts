@@ -15,6 +15,8 @@ describe('maslowMsgHandling', () => {
               <input id="retractionForce" value="" />
               <input id="spoilboardThickness" value="" />
               <input id="workThickness" value="" />
+              <input id="applyTensionBeltRetractionLimit" value="" />
+              <input id="applyTensionAllowLimiting" value="" />
               <input id="machineWidth" value="" />
               <input id="machineHeight" value="" />
           `;
@@ -44,6 +46,8 @@ describe('maslowMsgHandling', () => {
     ["Retract_Current_Threshold", "1500", "retractionForce"],
     ["spoilboardThickness", "5.5", "spoilboardThickness"],
     ["workThickness", "19.0", "workThickness"],
+    ["Apply_Tension_Belt_Retraction_Limit", "300", "applyTensionBeltRetractionLimit"],
+    ["Apply_Tension_Allow_Limiting", "true", "applyTensionAllowLimiting"],
   ];
 
   const noErrorResult = (key, value) => {

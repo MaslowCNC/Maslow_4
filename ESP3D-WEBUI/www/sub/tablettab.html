@@ -212,6 +212,10 @@
           <button id="tablettab_cal_scale_thickness" class="calibration-modal-button green-button"
             title="Set scale factors and material thickness">Set Scale and Thickness</button>
         </div>
+        <div class="buttons-row">
+          <button id="tablettab_cal_apply_tension_limit" class="calibration-modal-button green-button"
+            title="Configure Apply Tension belt retraction monitoring">Apply Tension Belt Limit</button>
+        </div>
       </div>
     </div>
   </div>
@@ -411,6 +415,41 @@
         <div class="buttons-row">
           <button id="tablettab_scale_thickness_cancel" class="calibration-modal-button stop-button">Cancel</button>
           <button id="tablettab_scale_thickness_save" class="calibration-modal-button">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="apply-tension-limit-popup" class="calibration-modal-container">
+    <div id="apply_tension_limit_popup_content" class="calibration-modal-content">
+      <div class="calibration-modal-button-container">
+        <div class="input-row">
+          <div style="display: flex; justify-content: center;">
+            <label style="text-align: center; font-weight: bold;">Apply Tension Belt Limit</label>
+          </div>
+        </div>
+        <div class="input-row">
+          <div id="apply-tension-limit-current-values" style="text-align: center; font-size: 0.85em; color: #555;"></div>
+        </div>
+        <hr style="border-top: 1px dashed;">
+        <div class="grid-container">
+          <div class="input-row">
+            <label for="applyTensionBeltRetractionLimit" class="input-label" title="Distance Retraction moves before Confirmation Request Generated">Belt Retraction Limit (mm)</label>
+          </div>
+          <div class="input-row">
+            <input id="applyTensionBeltRetractionLimit" type="number" min="0" max="4250" step="1" class="calibration-modal-input" placeholder="300">
+          </div>
+          <div class="input-row">
+            <label for="applyTensionExtendDist" class="input-label" title="Distance Belts Extend to connect to Anchors, Max 4250 mm. ">Extend Dist (mm)</label>
+          </div>
+          <div class="input-row" title="Max 4,250mm">
+            <input id="applyTensionExtendDist" type="text" class="calibration-modal-input">
+          </div>
+        </div>
+        <hr style="border-top: 1px dashed;">
+        <div class="buttons-row">
+          <button id="tablettab_apply_tension_limit_cancel" class="calibration-modal-button stop-button">Cancel</button>
+          <button id="tablettab_apply_tension_limit_save" class="calibration-modal-button">Save</button>
         </div>
       </div>
     </div>
