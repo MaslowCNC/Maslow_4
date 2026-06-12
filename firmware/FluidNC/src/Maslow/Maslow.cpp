@@ -1194,28 +1194,47 @@ void Maslow_::eStop(String message) {
 
 //This is the function that should prevent machine from damaging itself
 void Maslow_::safety_control() {
+    static const int MAX_MOTOR_CURRENT_MA     = 3000;  // Hard limit: warn when current exceeds this value
+    static const int MOTOR_CURRENT_WARNING_MA = 2700;  // Soft limit: warn when current approaches max
+
     //We need to keep track of average belt speeds and motor currents for every axis
     static bool          tick[4]                 = { false, false, false, false };
     static unsigned long spamTimer               = millis();
     static int           tresholdHitsBeforePanic = 150;
     static int           panicCounter[4]         = { 0 };
+    static int           warningCounter[4]        = { 0 };
 
     static int   positionErrorCounter[4]  = { 0 };
     static float previousPositionError[4] = { 0, 0, 0, 0 };
 
     for (int i = 0; i < 4; i++) {
-        //If the current exceeds some absolute value, we need to call panic() and stop the machine
-        if (axis[i].getMotorCurrent() > 4000 && !tick[i]) {
+        double current = axis[i].getMotorCurrent();
+
+        //If the current exceeds the maximum safe value, warn the user
+        if (current > MAX_MOTOR_CURRENT_MA && !tick[i]) {
             panicCounter[i]++;
             if (panicCounter[i] > tresholdHitsBeforePanic) {
                 if (sys.state() == State::Jog || sys.state() == State::Cycle) {
-                    log_warn("Motor current on " << axis_id_to_label(i).c_str() << " axis exceeded threshold of " << 4000);
+                    log_warn("Motor current on " << axis_id_to_label(i).c_str() << " axis exceeded maximum of "
+                                                 << MAX_MOTOR_CURRENT_MA << "mA");
                     //Maslow.panic();
                 }
                 tick[i] = true;
             }
         } else {
             panicCounter[i] = 0;
+        }
+
+        //If the current is approaching the maximum, warn the user
+        if (current > MOTOR_CURRENT_WARNING_MA && !tick[i]) {
+            warningCounter[i]++;
+            if (warningCounter[i] > tresholdHitsBeforePanic) {
+                log_warn("Motor current on " << axis_id_to_label(i).c_str() << " axis is approaching limit ("
+                                             << int(current) << "/" << MAX_MOTOR_CURRENT_MA << "mA)");
+                tick[i] = true;
+            }
+        } else {
+            warningCounter[i] = 0;
         }
 
         //If the motor torque is high, but the belt is not moving
