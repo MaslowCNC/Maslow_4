@@ -1217,11 +1217,15 @@ void Calibration::calibration_loop() {
 
             if (waypoint > recomputePoints[recomputeCountIndex]) {  //If we have reached the end of this stage of the calibration process
                 logClbmMeasurements(waypoint);
+                bool isFinalRecompute = (recomputeCountIndex == recomputeCount);
                 if (!recomputeAnchorsWithLevenbergMarquardt(waypoint)) {
-                    log_error("Find Anchors recompute failed");
-                    resetCalibrationState();
-                    requestStateChange(EXTENDEDOUT);
-                    return;
+                    if (isFinalRecompute) {
+                        log_error("Find Anchors final recompute failed");
+                        resetCalibrationState();
+                        requestStateChange(EXTENDEDOUT);
+                        return;
+                    }
+                    log_warn("Find Anchors intermediate recompute failed, continuing with prior anchor estimates");
                 }
                 recomputeCountIndex++;
             } else {

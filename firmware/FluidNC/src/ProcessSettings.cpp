@@ -1023,6 +1023,9 @@ static Error maslow_reset_calibration(const char* value, WebUI::AuthenticationLe
     if (Maslow.using_default_config) {
         return Error::ConfigurationInvalid;
     }
+    if (Maslow.calibration.getCurrentState() == CALIBRATION_IN_PROGRESS) {
+        log_warn("Calibration reset requested while Find Anchors is in progress; stopping calibration");
+    }
     Maslow.calibration.resetCalibrationState();
     Maslow.calibration.requestStateChange(EXTENDEDOUT);
     return Error::Ok;
