@@ -38,9 +38,34 @@ namespace {
     constexpr int    LM_MAX_REJECTIONS        = 20;
     constexpr double LM_CONVERGENCE_THRESHOLD = 1e-4;
 
+    // LM retry loop parameters
+    constexpr int    LM_MAX_RETRIES     = 10;
+    constexpr double LM_PERTURB_SMALL   = 25.0;  // mm — first pass of perturbations
+    constexpr double LM_PERTURB_LARGE   = 50.0;  // mm — second pass with larger offsets
+    constexpr double LM_LAMBDA_OVERFLOW = 1e12;  // lambda threshold above which LM is considered stalled
+    // clang-format off
+    const double LM_PERTURB_X[LM_MAX_RETRIES] = {
+         LM_PERTURB_SMALL, -LM_PERTURB_SMALL,  0.0,               0.0,
+         LM_PERTURB_SMALL, -LM_PERTURB_SMALL,
+         LM_PERTURB_LARGE, -LM_PERTURB_LARGE,  0.0,               0.0 };
+    const double LM_PERTURB_Y[LM_MAX_RETRIES] = {
+         0.0,               0.0,               LM_PERTURB_SMALL, -LM_PERTURB_SMALL,
+         LM_PERTURB_SMALL, -LM_PERTURB_SMALL,
+         0.0,               0.0,               LM_PERTURB_LARGE, -LM_PERTURB_LARGE };
+    // clang-format on
+
     // Fitness gate thresholds — tune against real-machine logs before tightening
     constexpr double FITNESS_RMS_FAIL_MM              = 5.0;   // average belt error too large
     constexpr double FITNESS_MAX_RES_FAIL_MM          = 15.0;  // single-waypoint outlier
+
+    // Outlier rejection threshold: measurements whose per-point RMS exceeds this value
+    // (in mm) are excluded before the final LM pass.  4.5 mm matches the reference
+    // implementation at http://lang.hm/maslow/maslow_levenberg_marquardt_calibrator.html
+    constexpr double OUTLIER_POINT_RMS_THRESHOLD_MM = 4.5;
+    // Minimum number of measurements that must remain after outlier removal for a
+    // filtered re-run to be attempted.  Five anchor parameters need at least 3 points
+    // (each contributing 4 - 2 = 2 independent constraints) to stay overdetermined.
+    constexpr int    MIN_MEASUREMENTS_AFTER_FILTER   = 3;
 
     struct CalibrationFitness {
         double rms;             // sqrt(SSR / 4N) — overall fitness analog, units: mm
@@ -791,45 +816,35 @@ bool Calibration::recomputeAnchorsWithLevenbergMarquardt(int measurementCount) {
         const double trY0 = kinematics->getTrY();
         const double brX0 = kinematics->getBrX();
 
-        // Perturbation offsets applied to anchor starting positions on each retry.
-        // tl and tr are perturbed symmetrically (opposite X) to preserve rough frame symmetry.
-        // There are LM_MAX_RETRIES entries — one per retry after the initial attempt (attempt 0).
-        // Each retry is cheap (LM converges in tens of iterations) and the watchdog is serviced
-        // inside the loop, so a larger retry count does not cause problems on the ESP32.
-        constexpr int    LM_MAX_RETRIES     = 10;
-        constexpr double LM_PERTURB_SMALL   = 25.0;  // mm — first pass of perturbations
-        constexpr double LM_PERTURB_LARGE   = 50.0;  // mm — second pass with larger offsets
-        constexpr double LM_LAMBDA_OVERFLOW = 1e12;  // lambda threshold above which LM is considered stalled
-        // clang-format off
-        const double perturbX[LM_MAX_RETRIES] = {
-             LM_PERTURB_SMALL, -LM_PERTURB_SMALL,  0.0,               0.0,
-             LM_PERTURB_SMALL, -LM_PERTURB_SMALL,
-             LM_PERTURB_LARGE, -LM_PERTURB_LARGE,  0.0,               0.0 };
-        const double perturbY[LM_MAX_RETRIES] = {
-             0.0,               0.0,               LM_PERTURB_SMALL, -LM_PERTURB_SMALL,
-             LM_PERTURB_SMALL, -LM_PERTURB_SMALL,
-             0.0,               0.0,               LM_PERTURB_LARGE, -LM_PERTURB_LARGE };
-        // clang-format on
-
         std::vector<double> globalBestParams;
         double              globalBestSSR = std::numeric_limits<double>::infinity();
         bool                anyConverged  = false;
+
+        // ── LM retry loop ─────────────────────────────────────────────────────
+        // Perturbation offsets applied to anchor starting positions on each retry.
+        // tl and tr are perturbed symmetrically (opposite X) to preserve rough frame symmetry.
+        // Each retry is cheap (LM converges in tens of iterations) and the watchdog is serviced
+        // inside the loop, so a larger retry count does not cause problems on the ESP32.
+        auto runLMRetries = [&](double aX0, double aY0, double bX0, double bY0, double cX0) -> bool {
+            globalBestParams.clear();
+            globalBestSSR   = std::numeric_limits<double>::infinity();
+            anyConverged    = false;
 
         for (int attempt = 0; attempt <= LM_MAX_RETRIES; attempt++) {
             if (attempt > 0) {
                 log_info("Find Anchors LM retry " << attempt << "/" << LM_MAX_RETRIES << " with perturbed anchors");
             }
 
-            const double px = (attempt > 0) ? perturbX[attempt - 1] : 0.0;
-            const double py = (attempt > 0) ? perturbY[attempt - 1] : 0.0;
+            const double px = (attempt > 0) ? LM_PERTURB_X[attempt - 1] : 0.0;
+            const double py = (attempt > 0) ? LM_PERTURB_Y[attempt - 1] : 0.0;
 
             std::vector<double> params;
-            params.reserve(5 + 2 * measurementCount);
-            params.push_back(tlX0 + px);
-            params.push_back(tlY0 + py);
-            params.push_back(trX0 - px);  // symmetric: tr perturbed opposite to tl in X
-            params.push_back(trY0 + py);
-            params.push_back(brX0);
+            params.reserve(5 + 2 * (int)measurements.size());
+            params.push_back(aX0 + px);
+            params.push_back(aY0 + py);
+            params.push_back(bX0 - px);  // symmetric: tr perturbed opposite to tl in X
+            params.push_back(bY0 + py);
+            params.push_back(cX0);
 
             for (const auto& measurement : measurements) {
                 serviceCalibrationWatchdogs(true);
@@ -1012,6 +1027,65 @@ bool Calibration::recomputeAnchorsWithLevenbergMarquardt(int measurementCount) {
             }
         }  // end retry loop
 
+            return true;
+        };  // end runLMRetries lambda
+
+        if (!runLMRetries(tlX0, tlY0, trX0, trY0, brX0)) {
+            return false;
+        }
+
+        serviceCalibrationWatchdogs(true);
+
+        // ── Outlier filtering ──────────────────────────────────────────────────
+        // After the initial LM pass, compute per-point RMS for each measurement and
+        // exclude any points that exceed OUTLIER_POINT_RMS_THRESHOLD_MM.  If outliers
+        // were found and enough measurements remain, re-run the LM from the current
+        // best anchor estimate so the final solution is free of bad measurements.
+        {
+            std::vector<double> preFilterRes;
+            bundleResiduals(measurements, globalBestParams, preFilterRes);
+
+            log_info("Find Anchors accuracy (all " << measurementCount << " measurements):");
+            std::vector<CalibrationMeasurement> filtered;
+            filtered.reserve(measurements.size());
+            int outlierCount = 0;
+
+            for (int i = 0; i < measurementCount; i++) {
+                double sumSq = 0.0;
+                for (int j = 0; j < 4; j++) {
+                    const double r = preFilterRes[4 * i + j];
+                    sumSq += r * r;
+                }
+                const double pointRms = std::sqrt(sumSq / 4.0);
+                if (pointRms > OUTLIER_POINT_RMS_THRESHOLD_MM) {
+                    log_info("  measurement " << i << ": rms=" << pointRms << "mm  *** OUTLIER (excluded, threshold=" << OUTLIER_POINT_RMS_THRESHOLD_MM << "mm)");
+                    outlierCount++;
+                } else {
+                    log_info("  measurement " << i << ": rms=" << pointRms << "mm");
+                    filtered.push_back(measurements[i]);
+                }
+            }
+
+            if (outlierCount > 0) {
+                log_info("Find Anchors: removed " << outlierCount << " outlier(s); "
+                                                  << filtered.size() << " of " << measurementCount << " measurements retained");
+                if ((int)filtered.size() >= MIN_MEASUREMENTS_AFTER_FILTER) {
+                    measurements     = std::move(filtered);
+                    measurementCount = (int)measurements.size();
+                    if (!runLMRetries(globalBestParams[0], globalBestParams[1],
+                                      globalBestParams[2], globalBestParams[3],
+                                      globalBestParams[4])) {
+                        return false;
+                    }
+                    serviceCalibrationWatchdogs(true);
+                } else {
+                    log_error("Find Anchors: only " << filtered.size() << " measurement(s) remain after outlier removal"
+                                                    << " (need >= " << MIN_MEASUREMENTS_AFTER_FILTER << "); keeping all "
+                                                    << measurementCount << " measurements");
+                }
+            }
+        }
+
         serviceCalibrationWatchdogs(true);
 
         // ── Fitness computation ────────────────────────────────────────────────
@@ -1077,6 +1151,17 @@ bool Calibration::recomputeAnchorsWithLevenbergMarquardt(int measurementCount) {
                                           << " perAnchor=[" << fit.rmsPerAnchor[0] << "," << fit.rmsPerAnchor[1] << ","
                                           << fit.rmsPerAnchor[2] << "," << fit.rmsPerAnchor[3] << "]mm"
                                           << " converged=" << fit.converged);
+
+        // Log per-point accuracy for the final (possibly filtered) measurement set
+        log_info("Find Anchors final accuracy (" << measurementCount << " measurements used):");
+        for (int i = 0; i < measurementCount; i++) {
+            double sumSq = 0.0;
+            for (int j = 0; j < 4; j++) {
+                const double r = finalRes[4 * i + j];
+                sumSq += r * r;
+            }
+            log_info("  measurement " << i << ": rms=" << std::sqrt(sumSq / 4.0) << "mm");
+        }
 
         previousFitnessRms  = fit.rms;
         lastRecomputePassed = true;
