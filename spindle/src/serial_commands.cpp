@@ -102,12 +102,19 @@ int active_motor = 0;  // 0 = motor 1, 1 = motor 2, 2 = both
 PhaseOffset phase_offset;
 volatile uint8_t g_fault_code = 0;  // 0 = OK, 1 = DRV8316 fault, 2 = overcurrent
 
+// Identity string returned to the XY board in response to a handshake ('H') request.
+static const char* LINK_IDENTITY = "I:Maslow-Spindle,proto=1";
+// Set true the first time a valid command arrives over the inter-board link, so we
+// announce first contact on the USB console exactly once.
+static bool g_link_seen = false;
+
 void printCommandHelp() {
     Serial.println(F("\nInter-board link protocol (also accepted on USB, newline terminated):"));
     Serial.println(F("  'S<rpm>' set spindle speed (0 = stop)"));
     Serial.println(F("  'Z<deg>' set absolute target phase offset in degrees (Z position)"));
     Serial.println(F("  'E'      emergency stop (disable both motors)"));
     Serial.println(F("  '?'      request a status report"));
+    Serial.println(F("  'H'      handshake: reply with identity string"));
     Serial.println(F("\nLegacy single-character commands (USB maintenance/calibration):"));
     Serial.println(F("  'q' select motor 1 (default)"));
     Serial.println(F("  'w' select motor 2 (spins opposite direction)"));
@@ -355,10 +362,19 @@ void sendStatus(Stream& out, MotorController& mc1, MotorController& mc2) {
 }
 
 // Process one complete command line from either the USB or the inter-board link.
+// allowLegacy is true only for the USB console: single-character maintenance /
+// calibration commands are NEVER honored on the inter-board link, so electrical
+// noise on the link cannot toggle the fan, start a calibration, or move a motor.
 static void processCommandLine(const char* line, size_t len,
                                MotorController& mc1, MotorController& mc2, Calibration& cal,
-                               Stream& reply) {
+                               Stream& reply, bool allowLegacy) {
     if (len == 0) return;
+
+    // Announce first contact over the link on the USB console (once).
+    if (!allowLegacy && !g_link_seen) {
+        g_link_seen = true;
+        Serial.printf("Link: first command received from XY board: '%s'\n", line);
+    }
 
     char cmd = line[0];
     switch (cmd) {
@@ -374,9 +390,16 @@ static void processCommandLine(const char* line, size_t len,
         case '?':  // status request
             sendStatus(reply, mc1, mc2);
             break;
+        case 'H':  // handshake / identity request
+            reply.print(LINK_IDENTITY);
+            reply.print('\n');
+            if (!allowLegacy) {
+                Serial.println(F("Link: handshake request received from XY board -> replied identity"));
+            }
+            break;
         default:
-            // Single-character legacy commands (USB maintenance / calibration).
-            if (len == 1) {
+            // Single-character legacy commands are honored ONLY on the USB console.
+            if (allowLegacy && len == 1) {
                 handleSerialCommand(cmd, mc1, mc2, cal);
             }
             break;
@@ -385,7 +408,8 @@ static void processCommandLine(const char* line, size_t len,
 
 // Accumulate bytes from a stream into a line buffer and dispatch on newline.
 static void feedStream(Stream& in, char* buf, size_t& len,
-                       MotorController& mc1, MotorController& mc2, Calibration& cal) {
+                       MotorController& mc1, MotorController& mc2, Calibration& cal,
+                       bool allowLegacy) {
     static constexpr size_t LINE_BUF_SIZE = 32;
     while (in.available()) {
         char c = (char)in.read();
@@ -394,7 +418,7 @@ static void feedStream(Stream& in, char* buf, size_t& len,
         }
         if (c == '\n') {
             buf[len] = '\0';
-            processCommandLine(buf, len, mc1, mc2, cal, in);
+            processCommandLine(buf, len, mc1, mc2, cal, in, allowLegacy);
             len = 0;
         } else if (len < LINE_BUF_SIZE - 1) {
             buf[len++] = c;
@@ -410,6 +434,6 @@ void handleSerialCommands(MotorController& mc1, MotorController& mc2, Calibratio
     static char   link_buf[32];
     static size_t link_len = 0;
 
-    feedStream(Serial, usb_buf, usb_len, mc1, mc2, cal);
-    feedStream(Serial1, link_buf, link_len, mc1, mc2, cal);
+    feedStream(Serial, usb_buf, usb_len, mc1, mc2, cal, /*allowLegacy=*/true);
+    feedStream(Serial1, link_buf, link_len, mc1, mc2, cal, /*allowLegacy=*/false);
 }

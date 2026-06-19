@@ -88,8 +88,15 @@ namespace Spindles {
         size_t  _rx_len     = 0;
         uint8_t _last_fault = 0;
 
+        // Set once the spindle board has answered (handshake reply or status line),
+        // so the runtime confirmation message is logged exactly once.
+        bool _link_confirmed = false;
+
         void sendSpeed(uint32_t rpm);
         void sendPhase(float deg);
         void serviceStatus();
+
+        // Boot-time handshake: ping the spindle board and log whether it answers.
+        void handshake();
     };
 }

@@ -260,7 +260,7 @@ user_outputs:
   digital7_pin: NO_PIN
 
 SpindleBoard:
-  phase_deg_per_mm: 1.000000
+  phase_deg_per_mm: 45.000000
   max_rpm: 10000
   tool_num: 0
   speed_map: 0=0.000% 10000=100.000%

@@ -313,11 +313,17 @@ static void motorControlTask(void* arg) {
 
 void setup() {
     Serial.begin(115200);
+
+    // Bring up the inter-board link to the FluidNC XY board first (RX=GPIO39, TX=GPIO38)
+    // so it is listening as early as possible, before the XY board finishes booting and
+    // sends its handshake.
+    Serial1.begin(LINK_BAUD, SERIAL_8N1, LINK_RX_PIN, LINK_TX_PIN);
+
     delay(3000);
     Serial.println(F("\n=== ESP32-S3 + DRV8316 (SPI + 6-PWM) + Hall + SimpleFOC ==="));
-
-    // Inter-board link to the FluidNC XY board (RX=GPIO39, TX=GPIO38)
-    Serial1.begin(LINK_BAUD, SERIAL_8N1, LINK_RX_PIN, LINK_TX_PIN);
+    Serial.printf("Inter-board link ready on Serial1 (RX=GPIO%d, TX=GPIO%d, %d baud, 8N1)\n",
+                  LINK_RX_PIN, LINK_TX_PIN, LINK_BAUD);
+    Serial.println(F("Waiting for handshake ('H') from XY board over the link..."));
 
     initFanControl();
 

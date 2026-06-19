@@ -216,11 +216,26 @@ void Maslow_::update() {
         // both CPU cores, so update() may not run for > UPDATE_WATCHDOG_MS through no fault
         // of the motion system.  lastCallToUpdate is still refreshed so the watchdog does not
         // trigger immediately after the upload finishes.
-        if (!uploadInProgress && now - lastCallToUpdate > UPDATE_WATCHDOG_MS) {
+        //
+        // Also skip the very first call after boot: lastCallToUpdate is set in begin(), but
+        // there can be a long gap (WiFi connect, etc.) before the update loop starts running.
+        // That startup gap must not be treated as a stalled motion loop.
+        static bool firstUpdateCall = true;
+        if (firstUpdateCall) {
+            firstUpdateCall = false;
+        } else if (!uploadInProgress && now - lastCallToUpdate > UPDATE_WATCHDOG_MS) {
             unsigned int elapsedTime = now - lastCallToUpdate;
+#if MASLOW_DISABLE_BOOT_SELFTEST
+            // Bench-test mode: the update loop can legitimately stall longer than
+            // UPDATE_WATCHDOG_MS (WiFi activity, jog parsing, etc.) when no motors are
+            // attached.  Warn instead of triggering an emergency stop so Z streaming and
+            // other update() work below this check still runs.
+            log_warn("Update loop slow: " << elapsedTime << "ms since last call (watchdog panic suppressed in bench-test mode)");
+#else
             log_error("Emergency stop. Update function not being called enough. " << elapsedTime << "ms since last call");
             watchdogFired = true;
             Maslow.panic();
+#endif
         }
         lastCallToUpdate = now;
 

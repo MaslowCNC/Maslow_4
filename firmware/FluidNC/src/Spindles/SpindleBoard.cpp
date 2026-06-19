@@ -8,6 +8,7 @@
 #include "../Protocol.h"               // rtAlarm, ExecAlarm
 
 #include <cstdlib>  // strtol
+#include <cstring>  // strncmp
 #include <cmath>    // fabsf
 
 namespace Spindles {
@@ -40,6 +41,62 @@ namespace Spindles {
         sendSpeed(0);
 
         config_message();
+
+        // Confirm the spindle/Z controller board is connected and talking.
+        handshake();
+    }
+
+    void SpindleBoard::handshake() {
+        if (!_uart) {
+            return;
+        }
+
+        log_info(name() << ": handshaking with spindle board over the inter-board link...");
+
+        _uart->flushRx();
+
+        char line[80];
+        // Try for ~2 seconds (10 x 200 ms).  The spindle board needs a moment after
+        // power-on before its control task starts answering, so a few misses are normal.
+        for (int attempt = 1; attempt <= 10; attempt++) {
+            _uart->write((const uint8_t*)"H\n", 2);
+
+            uint32_t start   = millis();
+            size_t   idx     = 0;
+            bool     gotLine = false;
+            while (millis() - start < 200) {
+                while (_uart->available()) {
+                    char c = (char)_uart->read();
+                    if (c == '\r') {
+                        continue;
+                    }
+                    if (c == '\n') {
+                        line[idx] = '\0';
+                        gotLine   = true;
+                        break;
+                    }
+                    if (idx < sizeof(line) - 1) {
+                        line[idx++] = c;
+                    }
+                }
+                if (gotLine) {
+                    break;
+                }
+                delay(5);
+            }
+
+            // An "I:" identity reply or a "T:" status line both prove the link is up.
+            if (gotLine && (strncmp(line, "I:", 2) == 0 || strncmp(line, "T:", 2) == 0)) {
+                _link_confirmed = true;
+                log_info(name() << ": link ESTABLISHED with spindle board on attempt " << attempt << " -> " << line);
+                return;
+            }
+        }
+
+        log_warn(name() << ": NO response from spindle board during boot. Check the link wiring "
+                           "(XY TX gpio.15 -> spindle RX gpio.39, XY RX gpio.16 <- spindle TX gpio.38), "
+                           "a shared ground between the boards, and 115200 baud. "
+                           "Will confirm automatically if the spindle board responds later.");
     }
 
     void SpindleBoard::config_message() {
@@ -110,6 +167,12 @@ namespace Spindles {
             }
             if (c == '\n') {
                 _rx_buf[_rx_len] = '\0';
+                // Any complete line from the board proves the link is alive.  Log the
+                // first confirmation if the boot-time handshake did not already do so.
+                if (!_link_confirmed && _rx_len > 0) {
+                    _link_confirmed = true;
+                    log_info(name() << ": link to spindle board confirmed -> " << _rx_buf);
+                }
                 // Expected: "T:<state>,P:<deg>,R:<rpm>,F:<code>"
                 const char* f = strstr(_rx_buf, "F:");
                 if (f) {
