@@ -98,9 +98,28 @@ void updateFanControl(float dt) {
     writeFanOutput(fan_current_pwm);
 }
 
+// Drive the fan automatically from the motor-enable state: full configured suction
+// power whenever either motor is enabled (spindle running or Z moving), off otherwise.
+// Called every control-loop iteration; updateFanControl() ramps toward the target.
+void applyFanForMotorState(bool motorsEnabled) {
+    if (motorsEnabled && g_suction_level > 0) {
+        // Map the 0-100 suction percentage onto the fan's level index (0..FAN_LEVEL_COUNT-1).
+        fan_speed_index = (uint8_t)((uint32_t)g_suction_level * (FAN_LEVEL_COUNT - 1) / 100u);
+        fan_enabled     = true;
+    } else {
+        fan_enabled = false;
+    }
+    updateFanTarget();
+}
+
 int active_motor = 0;  // 0 = motor 1, 1 = motor 2, 2 = both
 PhaseOffset phase_offset;
 volatile uint8_t g_fault_code = 0;  // 0 = OK, 1 = DRV8316 fault, 2 = overcurrent
+
+// Suction/cooling fan power (0-100), configured by the XY board over the link via
+// the 'C' command.  The fan runs at this level automatically whenever either motor
+// is enabled (spindle running or Z moving) and is off otherwise.
+volatile uint8_t g_suction_level = 100;
 
 // Identity string returned to the XY board in response to a handshake ('H') request.
 static const char* LINK_IDENTITY = "I:Maslow-Spindle,proto=1";
@@ -115,6 +134,7 @@ void printCommandHelp() {
     Serial.println(F("  'E'      emergency stop (disable both motors)"));
     Serial.println(F("  '?'      request a status report"));
     Serial.println(F("  'H'      handshake: reply with identity string"));
+    Serial.println(F("  'C<lvl>' set suction/cooling fan power (0-100); fan auto-runs while motors enabled"));
     Serial.println(F("\nLegacy single-character commands (USB maintenance/calibration):"));
     Serial.println(F("  'q' select motor 1 (default)"));
     Serial.println(F("  'w' select motor 2 (spins opposite direction)"));
@@ -390,6 +410,13 @@ static void processCommandLine(const char* line, size_t len,
         case '?':  // status request
             sendStatus(reply, mc1, mc2);
             break;
+        case 'C': {  // set suction/cooling fan power (0-100)
+            long lvl = strtol(line + 1, nullptr, 10);
+            if (lvl < 0) lvl = 0;
+            if (lvl > 100) lvl = 100;
+            g_suction_level = (uint8_t)lvl;
+            break;
+        }
         case 'H':  // handshake / identity request
             reply.print(LINK_IDENTITY);
             reply.print('\n');

@@ -17,8 +17,15 @@ extern PhaseOffset phase_offset;
 //   0 = OK, 1 = DRV8316 hardware fault, 2 = overcurrent
 extern volatile uint8_t g_fault_code;
 
+// Suction/cooling fan power (0-100), set by the XY board over the link ('C' command).
+extern volatile uint8_t g_suction_level;
+
 void initFanControl();
 void updateFanControl(float dt);
+
+// Drive the cooling fan from the motor-enable state: runs at g_suction_level whenever
+// either motor is enabled (spindle running or Z moving), off otherwise.
+void applyFanForMotorState(bool motorsEnabled);
 
 // Line-based command protocol (shared by USB Serial and the inter-board link).
 // Supported commands (newline terminated):

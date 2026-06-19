@@ -60,6 +60,7 @@ namespace Spindles {
             handler.item("uart_num", _uart_num);
             handler.item("phase_deg_per_mm", _phase_deg_per_mm, 0.0f, 100000.0f);
             handler.item("max_rpm", _max_rpm, 1, 100000);
+            handler.item("suction_power", _suction_power, 0, 100);
 
             Spindle::group(handler);
         }
@@ -73,11 +74,13 @@ namespace Spindles {
         Uart* _uart             = nullptr;
         float _phase_deg_per_mm = 1.0f;
         int   _max_rpm          = 10000;
+        int   _suction_power    = 100;  // cooling/suction fan power 0-100, sent to the board
 
         // Last values sent so we only transmit on change
         float    _last_sent_deg  = 0.0f;
         bool     _deg_sent       = false;
         uint32_t _last_sent_rpm  = 0xFFFFFFFF;  // sentinel forces the first send
+        int      _last_sent_fan  = -1;          // sentinel forces the first send
 
         // Speed update requested from the ISR, flushed in update()
         volatile uint32_t _pending_rpm = 0;
@@ -95,6 +98,9 @@ namespace Spindles {
         void sendSpeed(uint32_t rpm);
         void sendPhase(float deg);
         void serviceStatus();
+
+        // Send the configured suction/cooling fan power (0-100) to the spindle board.
+        void sendFan(int level);
 
         // Boot-time handshake: ping the spindle board and log whether it answers.
         void handshake();

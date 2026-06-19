@@ -44,6 +44,9 @@ namespace Spindles {
 
         // Confirm the spindle/Z controller board is connected and talking.
         handshake();
+
+        // Push the configured suction/cooling fan power down to the spindle board.
+        sendFan(_suction_power);
     }
 
     void SpindleBoard::handshake() {
@@ -101,7 +104,8 @@ namespace Spindles {
 
     void SpindleBoard::config_message() {
         log_info(name() << " Spindle on " << (_uart_num != -1 ? "uart" : "embedded uart")
-                        << " phase_deg_per_mm:" << _phase_deg_per_mm << " max_rpm:" << _max_rpm);
+                        << " phase_deg_per_mm:" << _phase_deg_per_mm << " max_rpm:" << _max_rpm
+                        << " suction_power:" << _suction_power);
     }
 
     void SpindleBoard::setState(SpindleState state, SpindleSpeed speed) {
@@ -156,6 +160,26 @@ namespace Spindles {
         }
     }
 
+    void SpindleBoard::sendFan(int level) {
+        if (!_uart) {
+            return;
+        }
+        if (level < 0) {
+            level = 0;
+        } else if (level > 100) {
+            level = 100;
+        }
+        if (level == _last_sent_fan) {
+            return;
+        }
+        _last_sent_fan = level;
+        char buf[16];
+        int  n = snprintf(buf, sizeof(buf), "C%d\n", level);
+        if (n > 0) {
+            _uart->write((const uint8_t*)buf, (size_t)n);
+        }
+    }
+
     void SpindleBoard::serviceStatus() {
         if (!_uart) {
             return;
@@ -172,6 +196,10 @@ namespace Spindles {
                 if (!_link_confirmed && _rx_len > 0) {
                     _link_confirmed = true;
                     log_info(name() << ": link to spindle board confirmed -> " << _rx_buf);
+                    // The board may have just (re)booted, so re-push the configured
+                    // suction power in case it came up with a different default.
+                    _last_sent_fan = -1;
+                    sendFan(_suction_power);
                 }
                 // Expected: "T:<state>,P:<deg>,R:<rpm>,F:<code>"
                 const char* f = strstr(_rx_buf, "F:");

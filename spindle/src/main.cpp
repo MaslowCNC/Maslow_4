@@ -281,6 +281,7 @@ static void motorControlTask(void* arg) {
 
         mc1.rampVelocity(dt);
         mc2.rampVelocity(dt);
+        applyFanForMotorState(mc1.enabled || mc2.enabled);
         updateFanControl(dt);
         updatePhaseOffset(dt);
 

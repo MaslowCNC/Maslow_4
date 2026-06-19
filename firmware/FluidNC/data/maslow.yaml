@@ -262,6 +262,7 @@ user_outputs:
 SpindleBoard:
   phase_deg_per_mm: 45.000000
   max_rpm: 10000
+  suction_power: 100
   tool_num: 0
   speed_map: 0=0.000% 10000=100.000%
   off_on_alarm: true
