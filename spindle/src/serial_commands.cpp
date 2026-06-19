@@ -100,9 +100,15 @@ void updateFanControl(float dt) {
 
 int active_motor = 0;  // 0 = motor 1, 1 = motor 2, 2 = both
 PhaseOffset phase_offset;
+volatile uint8_t g_fault_code = 0;  // 0 = OK, 1 = DRV8316 fault, 2 = overcurrent
 
 void printCommandHelp() {
-    Serial.println(F("\nCommands:"));
+    Serial.println(F("\nInter-board link protocol (also accepted on USB, newline terminated):"));
+    Serial.println(F("  'S<rpm>' set spindle speed (0 = stop)"));
+    Serial.println(F("  'Z<deg>' set absolute target phase offset in degrees (Z position)"));
+    Serial.println(F("  'E'      emergency stop (disable both motors)"));
+    Serial.println(F("  '?'      request a status report"));
+    Serial.println(F("\nLegacy single-character commands (USB maintenance/calibration):"));
     Serial.println(F("  'q' select motor 1 (default)"));
     Serial.println(F("  'w' select motor 2 (spins opposite direction)"));
     Serial.println(F("  'e' select both motors (motor 2 spins opposite to motor 1)"));
@@ -306,8 +312,104 @@ void handleSerialCommand(char cmd, MotorController& mc1, MotorController& mc2, C
     }
 }
 
-void handleSerialCommands(MotorController& mc1, MotorController& mc2, Calibration& cal) {
-    while (Serial.available()) {
-        handleSerialCommand(Serial.read(), mc1, mc2, cal);
+// ------------------- Line-based inter-board protocol -------------------
+
+// Set spindle speed on both motors (rpm; 0 = stop).
+static void setSpindleSpeed(float rpm, MotorController& mc1, MotorController& mc2) {
+    if (rpm < 0.0f) rpm = 0.0f;
+    if (rpm > MAX_COMMAND_RPM) rpm = MAX_COMMAND_RPM;
+
+    g_fault_code = 0;  // a fresh command clears any latched fault
+
+    MotorController* motors[] = { &mc1, &mc2 };
+    for (int i = 0; i < 2; i++) {
+        motors[i]->target_velocity = rpm * 2.0f * PI / 60.0f * motors[i]->direction;
+        motors[i]->velocity_mode   = true;
+        motors[i]->continuous_rotation = false;
     }
+}
+
+// Set the absolute target phase offset (Z position) in degrees.
+static void setPhaseTarget(float deg, MotorController& mc1, MotorController& mc2) {
+    g_fault_code = 0;  // a fresh command clears any latched fault
+
+    phase_offset.target = deg * PI / 180.0f;
+
+    // Re-enable motors if disabled so the ramp can take effect (matches 'p'/'l').
+    MotorController* motors[] = { &mc1, &mc2 };
+    for (int i = 0; i < 2; i++) {
+        if (!motors[i]->enabled) {
+            motors[i]->resetFilterState();
+            motors[i]->reached_speed = false;
+            motors[i]->motor.controller = MotionControlType::angle_openloop;
+            motors[i]->enable();
+        }
+    }
+}
+
+void sendStatus(Stream& out, MotorController& mc1, MotorController& mc2) {
+    const char* state = g_fault_code ? "FAULT" : ((mc1.enabled || mc2.enabled) ? "RUN" : "IDLE");
+    float phase_deg = phase_offset.current * 180.0f / PI;
+    float rpm = fabsf(mc1.enabled ? mc1.current_velocity : 0.0f) * 60.0f / (2.0f * PI);
+    out.printf("T:%s,P:%.1f,R:%.0f,F:%u\n", state, phase_deg, rpm, (unsigned)g_fault_code);
+}
+
+// Process one complete command line from either the USB or the inter-board link.
+static void processCommandLine(const char* line, size_t len,
+                               MotorController& mc1, MotorController& mc2, Calibration& cal,
+                               Stream& reply) {
+    if (len == 0) return;
+
+    char cmd = line[0];
+    switch (cmd) {
+        case 'S':  // set spindle speed
+            setSpindleSpeed(strtof(line + 1, nullptr), mc1, mc2);
+            break;
+        case 'Z':  // set absolute target phase offset (Z position)
+            setPhaseTarget(strtof(line + 1, nullptr), mc1, mc2);
+            break;
+        case 'E':  // emergency stop
+            handleSerialCommand('x', mc1, mc2, cal);
+            break;
+        case '?':  // status request
+            sendStatus(reply, mc1, mc2);
+            break;
+        default:
+            // Single-character legacy commands (USB maintenance / calibration).
+            if (len == 1) {
+                handleSerialCommand(cmd, mc1, mc2, cal);
+            }
+            break;
+    }
+}
+
+// Accumulate bytes from a stream into a line buffer and dispatch on newline.
+static void feedStream(Stream& in, char* buf, size_t& len,
+                       MotorController& mc1, MotorController& mc2, Calibration& cal) {
+    static constexpr size_t LINE_BUF_SIZE = 32;
+    while (in.available()) {
+        char c = (char)in.read();
+        if (c == '\r') {
+            continue;
+        }
+        if (c == '\n') {
+            buf[len] = '\0';
+            processCommandLine(buf, len, mc1, mc2, cal, in);
+            len = 0;
+        } else if (len < LINE_BUF_SIZE - 1) {
+            buf[len++] = c;
+        } else {
+            len = 0;  // overflow: drop the malformed line
+        }
+    }
+}
+
+void handleSerialCommands(MotorController& mc1, MotorController& mc2, Calibration& cal) {
+    static char   usb_buf[32];
+    static size_t usb_len = 0;
+    static char   link_buf[32];
+    static size_t link_len = 0;
+
+    feedStream(Serial, usb_buf, usb_len, mc1, mc2, cal);
+    feedStream(Serial1, link_buf, link_len, mc1, mc2, cal);
 }

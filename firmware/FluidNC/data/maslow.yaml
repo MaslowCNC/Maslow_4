@@ -191,24 +191,7 @@ axes:
       limit_all_pin: NO_PIN
       hard_limits: false
       pulloff_mm: 1.000000
-      tmc_2209: 
-        uart_num: 1
-        step_pin: gpio.15
-        direction_pin: gpio.16
-        disable_pin: NO_PIN
-        r_sense_ohms: 0.110000
-        run_amps: 1.000000
-        hold_amps: 0.500000
-        microsteps: 1
-        toff_disable: 0
-        toff_stealthchop: 5
-        use_enable: true
-        addr: 0
-        run_mode: StealthChop
-        homing_mode: StealthChop
-        stallguard: 0
-        stallguard_debug: false
-        toff_coolstep: 3
+      null_motor:
 
     motor1: 
       limit_neg_pin: NO_PIN
@@ -216,24 +199,7 @@ axes:
       limit_all_pin: NO_PIN
       hard_limits: false
       pulloff_mm: 1.000000
-      tmc_2209: 
-        uart_num: 1
-        step_pin: gpio.46
-        direction_pin: NO_PIN
-        disable_pin: NO_PIN
-        r_sense_ohms: 0.110000
-        run_amps: 1.000000
-        hold_amps: 0.500000
-        microsteps: 1
-        toff_disable: 0
-        toff_stealthchop: 5
-        use_enable: true
-        addr: 1
-        run_mode: StealthChop
-        homing_mode: StealthChop
-        stallguard: 0
-        stallguard_debug: false
-        toff_coolstep: 3
+      null_motor:
 
 control: 
   safety_door_pin: NO_PIN
@@ -293,7 +259,19 @@ user_outputs:
   digital6_pin: NO_PIN
   digital7_pin: NO_PIN
 
-NoSpindle: 
+SpindleBoard:
+  phase_deg_per_mm: 1.000000
+  max_rpm: 10000
+  tool_num: 0
+  speed_map: 0=0.000% 10000=100.000%
+  off_on_alarm: true
+  uart:
+    txd_pin: gpio.15
+    rxd_pin: gpio.16
+    rts_pin: NO_PIN
+    cts_pin: NO_PIN
+    baud: 115200
+    mode: 8N1
 
 arc_tolerance_mm: 0.002000
 junction_deviation_mm: 0.010000

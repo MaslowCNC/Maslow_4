@@ -11,6 +11,7 @@
 #include "../FileStream.h"
 #include "../Kinematics/MaslowKinematics.h"
 #include "../GCode.h"
+#include "../Spindles/SpindleBoard.h"
 #include <cmath>
 #include "esp_task_wdt.h"
 
@@ -225,6 +226,13 @@ void Maslow_::update() {
 
         Maslow.updateEncoderPositions();  //We always update encoder positions in any state,
 
+        // Stream the planned Z position to the spindle/Z controller board (if configured).
+        // The spindle board converts this into BLDC phase offset to move the Z axis.
+        if (Spindles::SpindleBoard::instance) {
+            float zPositionMM = steps_to_mpos(get_axis_motor_steps(4), 4);  // Z from Z axis (axis 4)
+            Spindles::SpindleBoard::instance->update(zPositionMM);
+        }
+
         for (int arm = _TL; arm < ARM_COUNT; arm++) {
             axis[arm].update();  //update motor currents and belt speeds like this for now
         }
@@ -360,6 +368,10 @@ bool Maslow_::updateEncoderPositions() {
         for (int i = 0; i < 4; i++) {
             //turn i into proper label
             String label = axis_id_to_label(i);
+#if MASLOW_DISABLE_BOOT_SELFTEST
+            // Bench-test mode: encoders may be absent, so don't warn or panic on read failures.
+            (void)label;
+#else
             if (encoderFailCounter[i] > 0.1 * ENCODER_READ_FREQUENCY_HZ) {
                 // log error statement with appropriate label
                 log_error("Failure on " << label.c_str() << " encoder, failed to read " << encoderFailCounter[i]
@@ -369,6 +381,7 @@ bool Maslow_::updateEncoderPositions() {
                 log_warn("Bad connection on " << label.c_str() << " encoder, failed to read " << encoderFailCounter[i]
                                               << " times in the last second");
             }
+#endif
             encoderFailCounter[i] = 0;
             encoderFailTimer      = millis();
         }

@@ -39,3 +39,9 @@
 
 // Vacuum / board cooling fan
 #define FAN_PWM_PIN 40
+
+// Inter-board link UART (to FluidNC XY board)
+// Spindle GPIO39 (RX) <-> XY GPIO15 (TX)
+// Spindle GPIO38 (TX) <-> XY GPIO16 (RX)
+#define LINK_RX_PIN 39
+#define LINK_TX_PIN 38

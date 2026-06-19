@@ -135,6 +135,7 @@ static void checkDRV8316Faults() {
     ocp_consec_count1 = 0;
     ocp_consec_count2 = 0;
 
+    g_fault_code = 1;  // DRV8316 hardware fault
     mc1.emergencyStop();
     mc2.emergencyStop();
     Serial.println(F("  -> Both motors disabled. Send a new velocity command to restart."));
@@ -185,6 +186,7 @@ static void checkOvercurrent() {
     Serial.printf("OVERCURRENT FAULT: M1=%.3f A  M2=%.3f A (phase RMS) -- both motors disabled.\n",
                   mc1.protection_current, mc2.protection_current);
 
+    g_fault_code = 2;  // overcurrent fault
     mc1.emergencyStop();
     mc2.emergencyStop();
 
@@ -296,6 +298,13 @@ static void motorControlTask(void* arg) {
 
         handleSerialCommands(mc1, mc2, calibration);
 
+        // Report status to the XY board over the inter-board link
+        static uint32_t last_status_time = 0;
+        if (current_time - last_status_time >= LINK_STATUS_INTERVAL_MS) {
+            last_status_time = current_time;
+            sendStatus(Serial1, mc1, mc2);
+        }
+
         taskYIELD();
     }
 }
@@ -306,6 +315,9 @@ void setup() {
     Serial.begin(115200);
     delay(3000);
     Serial.println(F("\n=== ESP32-S3 + DRV8316 (SPI + 6-PWM) + Hall + SimpleFOC ==="));
+
+    // Inter-board link to the FluidNC XY board (RX=GPIO39, TX=GPIO38)
+    Serial1.begin(LINK_BAUD, SERIAL_8N1, LINK_RX_PIN, LINK_TX_PIN);
 
     initFanControl();
 

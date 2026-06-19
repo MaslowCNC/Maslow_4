@@ -30,6 +30,11 @@ const float VELOCITY_RAMP_RATE = 20.0f;  // rad/s per second
 const float PHASE_OFFSET_STEP = 45.0f * PI / 180.0f;          // 45 deg per keypress
 const float PHASE_OFFSET_RAMP_RATE = 400.0f * PI / 180.0f;    // 400 deg/s ramp
 
+// Inter-board link (UART to FluidNC XY board)
+const long    LINK_BAUD = 115200;          // baud rate for the XY <-> spindle link
+const uint32_t LINK_STATUS_INTERVAL_MS = 50;  // how often to report status to the XY board
+const int     MAX_COMMAND_RPM = 10000;     // clamp for spindle speed commands
+
 // Current filtering
 const float CURRENT_FILTER_ALPHA = 0.001f;      // Slow filter for DC-equivalent telemetry
 const float PROTECTION_FILTER_ALPHA = 0.1f;     // Fast filter for stall detection

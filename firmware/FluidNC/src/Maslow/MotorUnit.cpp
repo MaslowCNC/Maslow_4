@@ -7,6 +7,10 @@
 #include "Maslow.h"
 #include <cmath>
 
+// MASLOW_DISABLE_BOOT_SELFTEST is defined in Maslow.h. When 1, missing hardware is
+// logged as a warning instead of latching Maslow.error and blocking startup, so the
+// controller can run without motors and encoders attached for bench testing.
+
 // PID controller tuning
 #define P 300
 #define I 0
@@ -23,9 +27,13 @@ void MotorUnit::begin(int forwardPin, int backwardPin, int readbackPin, int enco
 
     Maslow.I2CMux.setPort(_encoderAddress);
     if (!encoder.begin()) {
+#if MASLOW_DISABLE_BOOT_SELFTEST
+        log_warn("Encoder not found on " << encAddrLabel.c_str() << " (boot self-test disabled)");
+#else
         log_error("Encoder not found on " << encAddrLabel.c_str());
         Maslow.error        = true;
         Maslow.errorMessage = "Encoder not found on " + encAddrLabel;
+#endif
     } else {
         encoder.setDirection(AS5600_COUNTERCLOCK_WISE);
         log_info("Encoder connected on " << encAddrLabel.c_str());
@@ -37,6 +45,9 @@ void MotorUnit::begin(int forwardPin, int backwardPin, int readbackPin, int enco
     positionPID.setPID(P, I, D);
     positionPID.setOutputLimits(-1023, 1023);
 
+#if MASLOW_DISABLE_BOOT_SELFTEST
+    log_warn("Motor self-test skipped on " << encAddrLabel.c_str() << " (boot self-test disabled)");
+#else
     if (!motor_test()) {
         log_error("Motor not found on " << encAddrLabel.c_str());
         Maslow.error        = true;
@@ -44,6 +55,7 @@ void MotorUnit::begin(int forwardPin, int backwardPin, int readbackPin, int enco
     } else {
         log_info("Motor detected on " << encAddrLabel.c_str());
     }
+#endif
 }
 
 //Test the motor unit by testing the motor and checking the encoder
@@ -121,6 +133,9 @@ bool MotorUnit::updateEncoderPosition() {
         return false;
 
     String encAddrLabel = Maslow.axis_id_to_label(_encoderAddress);
+#if MASLOW_DISABLE_BOOT_SELFTEST
+    (void)encAddrLabel;  // unused when bench-test logging is suppressed
+#endif
 
     if (encoder.isConnected()) {                                               //this func has 50ms timeout (or worse?, hard to tell)
         mostRecentCumulativeEncoderReading = encoder.getCumulativePosition();  //This updates and returns the encoder value
@@ -128,16 +143,20 @@ bool MotorUnit::updateEncoderPosition() {
         // Check for I2C communication errors using new AS5600 error handling
         int error = encoder.lastError();
         if (error != 0) {  // AS5600_OK = 0
+#if !MASLOW_DISABLE_BOOT_SELFTEST
             if (millis() - encoderReadFailurePrintTime > 5000) {
                 encoderReadFailurePrintTime = millis();
                 log_warn("Encoder I2C error " << error << " on " << encAddrLabel.c_str());
             }
+#endif
             return false;
         }
         return true;
     } else if (millis() - encoderReadFailurePrintTime > 5000) {
         encoderReadFailurePrintTime = millis();
+#if !MASLOW_DISABLE_BOOT_SELFTEST
         log_warn("Encoder read failure on " << encAddrLabel.c_str());
+#endif
         //Maslow.panic();
     }
     return false;

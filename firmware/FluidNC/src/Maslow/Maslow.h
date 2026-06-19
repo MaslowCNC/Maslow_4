@@ -15,6 +15,14 @@
 
 #define TCAADDR 0x70
 
+// Set to 1 to bench-test the controller without motors and encoders attached.
+// When 1, the boot self-test does not latch an error for missing hardware, and
+// the runtime encoder-read watchdog is suppressed (no spammy failure warnings and
+// no panic when encoders cannot be read). Set back to 0 for normal operation.
+#ifndef MASLOW_DISABLE_BOOT_SELFTEST
+#    define MASLOW_DISABLE_BOOT_SELFTEST 1
+#endif
+
 #define CALIBRATION_GRID_SIZE_MAX (10 * 10) + 2
 
 #define MASLOW_TELEM_FILE "M4_telemetry.bin"
