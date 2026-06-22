@@ -2,6 +2,7 @@
 #include <SimpleFOC.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include "soc/rtc_cntl_reg.h"  // RTC_CNTL_BROWN_OUT_REG (disable brownout detector)
 #include "pins.h"
 #include "config.h"
 #include "motor_controller.h"
@@ -313,20 +314,41 @@ static void motorControlTask(void* arg) {
 // ------------------- Setup & Loop -------------------
 
 void setup() {
+    // Disable the hardware brownout detector as the very first thing the app does. If the
+    // board's 3.3V rail dips briefly when 24V is applied (inrush charging the 24V bulk caps
+    // and the DRV8316 drivers), a brownout reset can put the chip into a reset loop so the
+    // application never runs unless USB's stiff 5V holds the rail up. Clearing this register
+    // stops brownout-triggered resets. NOTE: this only helps if the chip actually reaches
+    // this line; a sag during the first few ms of power-on (before the app starts) is a
+    // pure hardware problem this cannot fix.
+    WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
+
+    // DIAGNOSTIC + safety: force the fan OFF as the very first action, before Serial, the
+    // boot delay, or any other init. The fan output is hardware-default ON, so this line
+    // is a visible "is setup() running?" indicator: if the board boots WITHOUT USB and the
+    // fan goes off immediately, setup() is executing (the fault is later); if it stays on,
+    // the chip never reaches setup().
+    pinMode(FAN_PWM_PIN, OUTPUT);
+    digitalWrite(FAN_PWM_PIN, LOW);
+
     Serial.begin(115200);
+    // Serial here is the USB Serial/JTAG CDC (ARDUINO_USB_MODE=1, ARDUINO_USB_CDC_ON_BOOT=1).
+    // With no USB host attached its TX FIFO never drains, so writing to it during boot can
+    // stall the board. We therefore (1) keep a 0 ms TX timeout as a backstop, (2) do ALL
+    // functional bring-up before producing any console output, and (3) gate every console
+    // write on (bool)Serial, which is true only when a host is actually connected. The result
+    // is that the board boots and runs identically whether or not USB is connected at boot.
+    Serial.setTxTimeoutMs(0);
 
     // Bring up the inter-board link to the FluidNC XY board first (RX=GPIO39, TX=GPIO38)
     // so it is listening as early as possible, before the XY board finishes booting and
     // sends its handshake.
     Serial1.begin(LINK_BAUD, SERIAL_8N1, LINK_RX_PIN, LINK_TX_PIN);
 
-    delay(3000);
-    Serial.println(F("\n=== ESP32-S3 + DRV8316 (SPI + 6-PWM) + Hall + SimpleFOC ==="));
-    Serial.printf("Inter-board link ready on Serial1 (RX=GPIO%d, TX=GPIO%d, %d baud, 8N1)\n",
-                  LINK_RX_PIN, LINK_TX_PIN, LINK_BAUD);
-    Serial.println(F("Waiting for handshake ('H') from XY board over the link..."));
+    // --- Functional bring-up: none of this depends on a USB host being present ---
+    delay(3000);   // let the 24V supply / gate drivers settle before enabling them
 
-    initFanControl();
+    initFanControl();   // drives the fan OFF (its hardware default is ON)
 
     // Initialize SPI bus
     drvSPI.begin(SPI_SCK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN, SPI_CS_PIN);
@@ -334,9 +356,6 @@ void setup() {
     // Initialize both motor drivers and motors
     mc1.initDriver(&drvSPI);
     mc2.initDriver(&drvSPI);
-
-    mc1.printFaultStatus();
-
     mc1.initMotor();
     mc2.initMotor();
 
@@ -344,15 +363,23 @@ void setup() {
     loadDefaultLUT(mc1, 0, MC1_DEFAULT_LUT, sizeof(MC1_DEFAULT_LUT) / sizeof(MC1_DEFAULT_LUT[0]));
     loadDefaultLUT(mc2, 1, MC2_DEFAULT_LUT, sizeof(MC2_DEFAULT_LUT) / sizeof(MC2_DEFAULT_LUT[0]));
 
+    // Start the real-time control task. Once created it runs independently on core 1, so
+    // nothing after this point can affect motor / Z / fan control.
     xTaskCreatePinnedToCore(motorControlTask, "motorControl", 8192, nullptr, 3, &motor_control_task_handle, 1);
 
-    Serial.println(F("Motor 1 initialized for open-loop control"));
-    Serial.println(F("Motor 2 initialized for open-loop control (opposite direction)"));
-
-    printCommandHelp();
-
-    Serial.println(F("Motors ready. Send a velocity command to start."));
-    Serial.println(F("Active motor: 1 (use 'q', 'w', or 'e' to switch)"));
+    // --- Console banner LAST, and only when a USB host is actually attached. ---
+    if (Serial) {
+        Serial.println(F("\n=== ESP32-S3 + DRV8316 (SPI + 6-PWM) + Hall + SimpleFOC ==="));
+        Serial.printf("Inter-board link ready on Serial1 (RX=GPIO%d, TX=GPIO%d, %d baud, 8N1)\n",
+                      LINK_RX_PIN, LINK_TX_PIN, LINK_BAUD);
+        Serial.println(F("Waiting for handshake ('H') from XY board over the link..."));
+        mc1.printFaultStatus();
+        Serial.println(F("Motor 1 initialized for open-loop control"));
+        Serial.println(F("Motor 2 initialized for open-loop control (opposite direction)"));
+        printCommandHelp();
+        Serial.println(F("Motors ready. Send a velocity command to start."));
+        Serial.println(F("Active motor: 1 (use 'q', 'w', or 'e' to switch)"));
+    }
 }
 
 void loop() {
