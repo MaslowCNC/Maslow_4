@@ -17,7 +17,7 @@ These notes summarize changes introduced after [`v1.21`](https://github.com/Masl
 
 - **Z-home and startup safety fixes**
   - Improved startup validation of persisted Z offsets and warnings for out-of-range conditions.
-  - Added/reset handling and clearer warning flows in the UI.
+  - Added reset handling and clearer warning flows in the UI.
   - Updated Z Home workflows and button labeling for clearer operation.
 
 - **UI and workflow quality improvements**
