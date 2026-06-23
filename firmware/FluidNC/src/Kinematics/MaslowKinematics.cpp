@@ -96,6 +96,14 @@ namespace Kinematics {
             return false;
         }
 
+        // In direct belt mode, bypass Cartesian XY work-area constraints, segmentation,
+        // and kinematics. The A/B/C/Y axis values are passed directly to the belt motors.
+        if (Maslow.directBeltMode) {
+            float motors[MAX_N_AXIS];
+            transform_cartesian_to_motors(motors, target);
+            return mc_move_motors(motors, pl_data);
+        }
+
         // Apply work area constraints to the target position
         // Calculate work area bounds
         float halfWidth  = Maslow.workAreaX / 2.0f;
@@ -283,6 +291,28 @@ namespace Kinematics {
     }
 
     void MaslowKinematics::transform_cartesian_to_motors(float* motors, float* cartesian) {
+        // In direct belt mode, bypass Cartesian XY-to-belt kinematics.
+        // Axis mapping for direct belt mode:
+        //   A (A_AXIS, index 3) -> motors[0] = TL belt length
+        //   B (B_AXIS, index 4) -> motors[1] = TR belt length
+        //   C (C_AXIS, index 5) -> motors[2] = BL belt length
+        //   Y (Y_AXIS, index 1) -> motors[3] = BR belt length (D motor; Y used because FluidNC has no D axis)
+        //   Z (Z_AXIS, index 2) -> motors[4] = Z axis (normal Z)
+        //   X axis not used (motors[5] = 0)
+        if (Maslow.directBeltMode) {
+            motors[0] = cartesian[A_AXIS];  // A -> TL belt
+            motors[1] = cartesian[B_AXIS];  // B -> TR belt
+            motors[2] = cartesian[C_AXIS];  // C -> BL belt
+            motors[3] = cartesian[Y_AXIS];  // Y -> BR belt (4th belt/D motor)
+            motors[4] = cartesian[Z_AXIS];  // Z -> Z axis (pass through)
+            motors[5] = 0.0f;               // X axis not used
+            auto n_axis = config->_axes->_numberAxis;
+            for (size_t axis = 6; axis < n_axis; axis++) {
+                motors[axis] = cartesian[axis];
+            }
+            return;
+        }
+
         // In this implementation, FluidNC axis order is ABCDZX:
         // motors[0] = A axis = Top Left belt length
         // motors[1] = B axis = Top Right belt length

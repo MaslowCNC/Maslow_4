@@ -18,6 +18,8 @@
 
 #include "Machine/MachineConfig.h"
 
+#include "Maslow/Maslow.h"  // Maslow direct belt mode flag
+
 #include <string.h>  // memset
 #include <math.h>    // sqrt etc.
 
@@ -589,6 +591,18 @@ Error gc_execute_line(char* line) {
                         gc_block.modal.io_control = IoControl::SetAnalogImmediate;
                         mg_word_bit               = ModalGroup::MM10;
                         break;
+                    case 700:
+                        // M700 - Enter direct belt mode (Maslow expert/debug feature)
+                        // WARNING: In direct belt mode, G1 A/B/C/Y moves bypass normal
+                        // Cartesian XY-to-belt kinematics. Use G93 inverse-time feed.
+                        gc_block.direct_belt_cmd = DirectBeltCmd::Enter;
+                        mg_word_bit              = ModalGroup::MM11;
+                        break;
+                    case 701:
+                        // M701 - Exit direct belt mode, resume normal Maslow kinematics
+                        gc_block.direct_belt_cmd = DirectBeltCmd::Exit;
+                        mg_word_bit              = ModalGroup::MM11;
+                        break;
                     default:
                         FAIL(Error::GcodeUnsupportedCommand);  // [Unsupported M command]
                 }
@@ -1099,6 +1113,29 @@ Error gc_execute_line(char* line) {
         // Check remaining motion modes, if axis word are implicit (exist and not used by G10/28/30/92), or
         // was explicitly commanded in the g-code block.
     } else if (axis_command == AxisCommand::MotionMode) {
+        // [Direct belt mode validation]: Enforce rules when Maslow direct belt mode is active.
+        // In direct belt mode, G1 A/B/C/Y commands bypass normal Cartesian XY kinematics.
+        if (Maslow.directBeltMode) {
+            // G2/G3 arcs are not supported in direct belt mode
+            if (gc_block.modal.motion == Motion::CwArc || gc_block.modal.motion == Motion::CcwArc) {
+                FAIL(Error::GcodeUnsupportedCommand);
+            }
+            // X axis words are rejected in direct belt mode
+            if (bitnum_is_true(axis_words, X_AXIS)) {
+                FAIL(Error::GcodeUnsupportedCommand);
+            }
+            // For direct belt G1 moves (with A, B, C, or Y belt words), require G93 inverse-time mode
+            bool hasDirectBeltWords = bitnum_is_true(axis_words, A_AXIS) || bitnum_is_true(axis_words, B_AXIS) ||
+                                      bitnum_is_true(axis_words, C_AXIS) || bitnum_is_true(axis_words, Y_AXIS);
+            if (hasDirectBeltWords && gc_block.modal.motion == Motion::Linear) {
+                if (gc_block.modal.feed_rate != FeedRate::InverseTime) {
+                    FAIL(Error::GcodeUndefinedFeedRate);  // G93 required for direct belt moves
+                }
+                if (bitnum_is_false(value_words, GCodeWord::F)) {
+                    FAIL(Error::GcodeUndefinedFeedRate);  // F word required for direct belt moves
+                }
+            }
+        }
         if (gc_block.modal.motion == Motion::Seek) {
             // [G0 Errors]: Axis letter not configured or without real value (done.)
             // Axis words are optional. If missing, set axis command flag to ignore execution.
@@ -1513,6 +1550,18 @@ Error gc_execute_line(char* line) {
             gc_state.modal.override = gc_block.modal.override;
             mc_override_ctrl_update(gc_state.modal.override);
         }
+    }
+
+    // [Maslow direct belt mode control]: M700/M701
+    // M700 enters direct belt mode; M701 exits it.
+    // WARNING: Direct belt mode bypasses normal Maslow Cartesian XY-to-belt kinematics.
+    // In this mode, G1 A/B/C/Y commands set belt lengths directly (mm), with G93 required.
+    if (gc_block.direct_belt_cmd == DirectBeltCmd::Enter) {
+        Maslow.directBeltMode = true;
+        log_info("Maslow: Direct belt mode ENABLED (M700). WARNING: bypasses normal XY kinematics. Use G93+F for G1 A/B/C/Y moves.");
+    } else if (gc_block.direct_belt_cmd == DirectBeltCmd::Exit) {
+        Maslow.directBeltMode = false;
+        log_info("Maslow: Direct belt mode DISABLED (M701). Normal Cartesian kinematics restored.");
     }
 
     // [10. Dwell ]:

@@ -178,6 +178,12 @@ public:
     bool test         = false;
     bool debugEnabled = false;
 
+    // Direct belt mode: when true, G1 A/B/C/Y moves bypass Cartesian XY kinematics
+    // and command the four belt lengths directly.
+    // WARNING: This mode bypasses normal Maslow Cartesian kinematics.
+    // Enabled by M700, disabled by M701. Not persisted across reboot.
+    bool directBeltMode = false;
+
 private:
     //Used to keep track of how often the PID controller is updated
     unsigned long lastCallToPID    = millis();

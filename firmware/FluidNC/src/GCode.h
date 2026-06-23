@@ -41,6 +41,7 @@ enum class ModalGroup : uint8_t {
     MM8  = 13,  // [M7,M8,M9] Coolant control
     MM9  = 14,  // [M56] Override control
     MM10 = 15,  // [M62, M63, M64, M65, M67, M68] User Defined http://linuxcnc.org/docs/html/gcode/overview.html#_modal_groups
+    MM11 = 16,  // [M700, M701] Maslow direct belt mode control
 };
 
 // Command actions for within execution-type modal groups (motion, stopping, non-modal). Used
@@ -286,11 +287,19 @@ struct parser_state_t {
 
 extern parser_state_t gc_state;
 
+// Maslow direct belt mode command (M700/M701)
+enum class DirectBeltCmd : uint8_t {
+    None  = 0,  // No command
+    Enter = 1,  // M700 - enter direct belt mode
+    Exit  = 2,  // M701 - exit direct belt mode
+};
+
 struct parser_block_t {
     NonModal     non_modal_command;
     gc_modal_t   modal;
     gc_values_t  values;
     GCodeCoolant coolant;
+    DirectBeltCmd direct_belt_cmd;  // M700/M701 direct belt mode command
 };
 
 enum class AxisCommand : uint8_t {
