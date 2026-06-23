@@ -17,7 +17,6 @@
 #include "InputFile.h"            // InputFile::_current_line_num
 
 #include "Machine/MachineConfig.h"
-
 #include "Maslow/Maslow.h"  // Maslow direct belt mode flag
 
 #include <string.h>  // memset
@@ -1558,7 +1557,8 @@ Error gc_execute_line(char* line) {
     // In this mode, G1 A/B/C/Y commands set belt lengths directly (mm), with G93 required.
     if (gc_block.direct_belt_cmd == DirectBeltCmd::Enter) {
         Maslow.directBeltMode = true;
-        log_info("Maslow: Direct belt mode ENABLED (M700). WARNING: bypasses normal XY kinematics. Use G93+F for G1 A/B/C/Y moves.");
+        log_info("Maslow: Direct belt mode ENABLED (M700). WARNING: bypasses normal XY kinematics.");
+        log_info("Maslow: Use G93 inverse-time mode and F on every G1 A/B/C/Y direct belt move.");
     } else if (gc_block.direct_belt_cmd == DirectBeltCmd::Exit) {
         Maslow.directBeltMode = false;
         log_info("Maslow: Direct belt mode DISABLED (M701). Normal Cartesian kinematics restored.");
