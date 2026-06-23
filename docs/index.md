@@ -28,6 +28,7 @@ Step-by-step instructions for building your Maslow 4:
 ## Reference Materials
 
 - [Maslow CNC Wisdom Manual](MaslowCNC_Wisdom_Manual.md) - Comprehensive manual with tips and best practices
+- [Release Notes v1.22](release-notes-v1.22.md) - Summary of firmware and UI changes since v1.21
 - [Bit Library](BitLibrary.md) - Information about router bits and tooling
 - [Frame Library](FrameLibrary.md) - Frame designs and specifications
 - [Materials Library](MaterialsLibrary.md) - Material cutting recommendations
