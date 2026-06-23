@@ -1,4 +1,4 @@
-# Maslow 1.22 Release Notes
+# Maslow 1.22.0 Release Notes
 
 This release includes all changes since `v1.21`.
 
