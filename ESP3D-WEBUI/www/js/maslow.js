@@ -339,7 +339,7 @@ const maslowInfoMsgHandling = (msg) => {
 			console.error("Parsing the 'MINFO' message failed, the maslow status has not been changed. This is probably a programmer error.");
 		}
 
-		// Update belt length display (A=TL, B=TR, C=BL, D=BR)
+		// Update belt length display: A=TL (top-left), B=TR (top-right), C=BL (bottom-left), D=BR (bottom-right)
 		const beltMap = { 'belt-a': maslowStatus.tl, 'belt-b': maslowStatus.tr, 'belt-c': maslowStatus.bl, 'belt-d': maslowStatus.br };
 		for (const [elemId, val] of Object.entries(beltMap)) {
 			const elem = document.getElementById(elemId);
