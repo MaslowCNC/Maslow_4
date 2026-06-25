@@ -200,7 +200,7 @@ Error gc_execute_line(char* line) {
     size_t     char_counter;
     char       letter;
     float      value;
-    uint8_t    int_value = 0;
+    uint16_t   int_value = 0;
     uint16_t   mantissa  = 0;
     char_counter         = jogMotion ? 3 : 0;  // Start parsing after `$J=` if jogging
     while (line[char_counter] != 0) {          // Loop until no more g-code words in line.
@@ -220,7 +220,7 @@ Error gc_execute_line(char* line) {
         // a good enough compromise and catch most all non-integer errors. To make it compliant,
         // we would simply need to change the mantissa to int16, but this add compiled flash space.
         // Maybe update this later.
-        int_value = int8_t(truncf(value));
+        int_value = uint16_t(truncf(value));
         mantissa  = lroundf(100 * (value - int_value));  // Compute mantissa for Gxx.x commands.
         // NOTE: Rounding must be used to catch small floating point errors.
         // Check if the g-code word is supported or errors due to modal group violations or has
@@ -482,7 +482,7 @@ Error gc_execute_line(char* line) {
                 break;
             case 'M':
                 // Determine 'M' command and its modal group
-                if (mantissa > 0 && !(int_value == 7 || int_value == 8)) {
+                if (mantissa > 0 && !(int_value == 7 || int_value == 8 || int_value == 700 || int_value == 701)) {
                     FAIL(Error::GcodeCommandValueNotInteger);  // [No Mxx.x commands]
                 }
                 switch (int_value) {
