@@ -2,7 +2,7 @@
 // import M from "constants";
 
 /** Maslow Status */
-let maslowStatus = { homed: false, extended: false, state: 0 };
+let maslowStatus = { homed: false, extended: false, state: 0, tl: null, tr: null, bl: null, br: null };
 const APPLY_TENSION_WARNING_PREFIX = "Maslow Apply Tension deviation warning:";
 const APPLY_TENSION_RETRACTION_WARNING_PREFIX = "Maslow Apply Tension retraction warning:";
 const Z_HOME_RESET_WARNING_PREFIX = "Maslow Z home reset warning:";
@@ -337,6 +337,15 @@ const maslowInfoMsgHandling = (msg) => {
 			}
 		} catch (error) {
 			console.error("Parsing the 'MINFO' message failed, the maslow status has not been changed. This is probably a programmer error.");
+		}
+
+		// Update belt length display (A=TL, B=TR, C=BL, D=BR)
+		const beltMap = { 'belt-a': maslowStatus.tl, 'belt-b': maslowStatus.tr, 'belt-c': maslowStatus.bl, 'belt-d': maslowStatus.br };
+		for (const [elemId, val] of Object.entries(beltMap)) {
+			const elem = document.getElementById(elemId);
+			if (elem) {
+				elem.textContent = (val !== null && val !== undefined) ? Number(val).toFixed(2) : '---';
+			}
 		}
 
 		// Reset stop button colors when firmware responds to our command
