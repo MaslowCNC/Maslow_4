@@ -280,7 +280,7 @@ void Maslow_::update() {
             //We used to call Maslow.setTargets() here, but now we use the axis system directly
 
             //This disables the belt motors until the user has completed calibration or apply tension and they have succeeded
-            if (calibration.currentState == READY_TO_CUT) {
+            if (calibration.currentState == READY_TO_CUT || directBeltMode) {
                 Maslow.recomputePID();
             }
         }
@@ -1249,7 +1249,7 @@ void Maslow_::safety_control() {
 
         //If the motor has a position error greater than 15mm and we are running a file or jogging
         previousPositionError[i] = axis[i].getPositionError();
-        if ((abs(axis[i].getPositionError()) > 15) && (sys.state() == State::Cycle)) {
+        if (!directBeltMode && (abs(axis[i].getPositionError()) > 15) && (sys.state() == State::Cycle)) {
             positionErrorCounter[i]++;
             log_warn("Position error on " << axis_id_to_label(i).c_str() << " axis exceeded 15mm while running. Error is "
                                           << axis[i].getPositionError() << "mm" << " Counter: " << positionErrorCounter[i]);

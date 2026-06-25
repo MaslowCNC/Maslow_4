@@ -621,7 +621,7 @@ Error gc_execute_line(char* line) {
                 GCodeWord axis_word_bit;
                 switch (letter) {
                     case 'A':
-                        if (n_axis > A_AXIS) {
+                        if (n_axis > A_AXIS || Maslow.directBeltMode) {
                             axis_word_bit               = GCodeWord::A;
                             gc_block.values.xyz[A_AXIS] = value;
                             set_bitnum(axis_words, A_AXIS);
@@ -630,7 +630,7 @@ Error gc_execute_line(char* line) {
                         }
                         break;
                     case 'B':
-                        if (n_axis > B_AXIS) {
+                        if (n_axis > B_AXIS || Maslow.directBeltMode) {
                             axis_word_bit               = GCodeWord::B;
                             gc_block.values.xyz[B_AXIS] = value;
                             set_bitnum(axis_words, B_AXIS);
@@ -639,7 +639,7 @@ Error gc_execute_line(char* line) {
                         }
                         break;
                     case 'C':
-                        if (n_axis > C_AXIS) {
+                        if (n_axis > C_AXIS || Maslow.directBeltMode) {
                             axis_word_bit               = GCodeWord::C;
                             gc_block.values.xyz[C_AXIS] = value;
                             set_bitnum(axis_words, C_AXIS);
@@ -1112,29 +1112,6 @@ Error gc_execute_line(char* line) {
         // Check remaining motion modes, if axis word are implicit (exist and not used by G10/28/30/92), or
         // was explicitly commanded in the g-code block.
     } else if (axis_command == AxisCommand::MotionMode) {
-        // [Direct belt mode validation]: Enforce rules when Maslow direct belt mode is active.
-        // In direct belt mode, G1 A/B/C/Y commands bypass normal Cartesian XY kinematics.
-        if (Maslow.directBeltMode) {
-            // G2/G3 arcs are not supported in direct belt mode
-            if (gc_block.modal.motion == Motion::CwArc || gc_block.modal.motion == Motion::CcwArc) {
-                FAIL(Error::GcodeUnsupportedCommand);
-            }
-            // X axis words are rejected in direct belt mode
-            if (bitnum_is_true(axis_words, X_AXIS)) {
-                FAIL(Error::GcodeUnsupportedCommand);
-            }
-            // For direct belt G1 moves (with A, B, C, or Y belt words), require G93 inverse-time mode
-            bool hasDirectBeltWords = bitnum_is_true(axis_words, A_AXIS) || bitnum_is_true(axis_words, B_AXIS) ||
-                                      bitnum_is_true(axis_words, C_AXIS) || bitnum_is_true(axis_words, Y_AXIS);
-            if (hasDirectBeltWords && gc_block.modal.motion == Motion::Linear) {
-                if (gc_block.modal.feed_rate != FeedRate::InverseTime) {
-                    FAIL(Error::GcodeUndefinedFeedRate);  // G93 required for direct belt moves
-                }
-                if (bitnum_is_false(value_words, GCodeWord::F)) {
-                    FAIL(Error::GcodeUndefinedFeedRate);  // F word required for direct belt moves
-                }
-            }
-        }
         if (gc_block.modal.motion == Motion::Seek) {
             // [G0 Errors]: Axis letter not configured or without real value (done.)
             // Axis words are optional. If missing, set axis command flag to ignore execution.
