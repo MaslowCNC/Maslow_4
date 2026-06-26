@@ -107,6 +107,7 @@ public:
     void markBeltPositionsStale();
 
     void stopMotors();
+    void setFan(bool on);
     /** Raises Z axis to Z home + 2mm to prevent workpiece damage after stop */
     void raiseZ();
 

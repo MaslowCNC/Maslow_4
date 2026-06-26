@@ -1109,6 +1109,11 @@ void Maslow_::stopMotors() {
     axis[_TL].stop();
 }
 
+// Turn the cooling fan on or off
+void Maslow_::setFan(bool on) {
+    digitalWrite(coolingFanPin, on ? HIGH : LOW);
+}
+
 // Safe Z height in mm above Z home to raise to after stop (prevents workpiece damage)
 static constexpr float Z_SAFE_HEIGHT_MM = 2.0f;
 

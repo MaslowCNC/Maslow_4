@@ -972,6 +972,11 @@ const onManualModeClick = () => {
 	onCalibrationButtonsClick('$MMANUAL', '');
 };
 
+/** Force the machine into READY_TO_CUT state without calibrating */
+const onReadyToCutClick = () => {
+	onCalibrationButtonsClick('$MREADYTOCUT', 'Setting state to ready to cut');
+};
+
 /** Toggle manual PID on/off */
 const onManualPidClick = () => {
 	onCalibrationButtonsClick('$MMPID', '');
