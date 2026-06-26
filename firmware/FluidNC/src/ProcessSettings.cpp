@@ -1133,7 +1133,9 @@ static Error maslow_set_belt_targets(const char* value, WebUI::AuthenticationLev
 }
 
 // Force the machine into READY_TO_CUT state, bypassing normal state preconditions.
-// Synchronises motor positions from encoder readings as done by the normal calibration path.
+// requestStateChange(READY_TO_CUT) performs the full initialisation including motor
+// position synchronisation from encoder readings; this function temporarily sets a
+// valid predecessor state so that check passes.
 static Error maslow_set_ready_to_cut(const char* value, WebUI::AuthenticationLevel auth_level, Channel& out) {
     // Temporarily promote current state to a valid predecessor so requestStateChange succeeds
     int prevState                       = Maslow.calibration.currentState;
