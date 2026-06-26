@@ -156,7 +156,7 @@ private:
         int         state;
         const char* name;
     };
-    StateName stateNames[11] = { { UNKNOWN, "Unknown" },
+    StateName stateNames[12] = { { UNKNOWN, "Unknown" },
                                  { RETRACTING, "Retracting Belts" },
                                  { RETRACTED, "Belts Retracted" },
                                  { EXTENDING, "Extending Belts" },
@@ -165,5 +165,6 @@ private:
                                  { CALIBRATION_IN_PROGRESS, "Finding Anchor" },
                                  { READY_TO_CUT, "Ready To Cut" },
                                  { RELEASE_TENSION, "Releasing Tension" },
-                                 { CALIBRATION_COMPUTING, "Find Anchors Computing" } };
+                                 { CALIBRATION_COMPUTING, "Find Anchors Computing" },
+                                 { MANUAL, "Manual" } };
 };

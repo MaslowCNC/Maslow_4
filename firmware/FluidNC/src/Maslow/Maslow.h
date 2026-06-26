@@ -107,6 +107,7 @@ public:
     void markBeltPositionsStale();
 
     void stopMotors();
+    void setFan(bool on);
     /** Raises Z axis to Z home + 2mm to prevent workpiece damage after stop */
     void raiseZ();
 
@@ -177,6 +178,17 @@ public:
 
     bool test         = false;
     bool debugEnabled = false;
+
+    // Direct belt mode: when true, G1 A/B/C/Y moves bypass Cartesian XY kinematics
+    // and command the four belt lengths directly.
+    // WARNING: This mode bypasses normal Maslow Cartesian kinematics.
+    // Enabled by M700, disabled by M701. Not persisted across reboot.
+    bool directBeltMode = false;
+
+    // Manual mode PID flag: when calibration.currentState == MANUAL,
+    // recomputePID() is called only when this is true.
+    // Toggled by the $MMPID command. Automatically cleared when leaving MANUAL state.
+    bool manualPIDEnabled = false;
 
 private:
     //Used to keep track of how often the PID controller is updated

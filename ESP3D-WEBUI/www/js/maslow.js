@@ -2,7 +2,7 @@
 // import M from "constants";
 
 /** Maslow Status */
-let maslowStatus = { homed: false, extended: false, state: 0 };
+let maslowStatus = { homed: false, extended: false, state: 0, tl: null, tr: null, bl: null, br: null, etl: null, etr: null, ebl: null, ebr: null, manualPID: false };
 const APPLY_TENSION_WARNING_PREFIX = "Maslow Apply Tension deviation warning:";
 const APPLY_TENSION_RETRACTION_WARNING_PREFIX = "Maslow Apply Tension retraction warning:";
 const Z_HOME_RESET_WARNING_PREFIX = "Maslow Z home reset warning:";
@@ -12,6 +12,7 @@ const ZM_INVALID_WARNING_PREFIX = "Maslow Zm invalid warning:";
 const MASLOW_STATE_FINDING_ANCHORS = 6;
 const MASLOW_STATE_READY_TO_CUT = 7;
 const MASLOW_STATE_FIND_ANCHORS_COMPUTING = 9;
+const MASLOW_STATE_MANUAL = 10;
 const FIND_ANCHORS_WAYPOINT_COORDINATE_REGEX = /^\[MSG:INFO:\s*Waypoint\s+\d+\s+coordinates:\s*X=([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\s+Y=([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\]$/;
 let wasFindingAnchors = false;
 
@@ -239,6 +240,18 @@ const updateDynamicButtons = () => {
 			relaxButton.style.backgroundColor = greenBackground;
 			calibrateButton.style.backgroundColor = greyBackground;
 			break;
+		case 10:
+			stateLabel.innerHTML = "State: Manual";
+			if (mainStateLabel) {
+				mainStateLabel.innerHTML = "State: Manual";
+				if (mainStateLabelContainer) mainStateLabelContainer.style.backgroundColor = yellowBackground;
+			}
+			retractButton.style.backgroundColor = greyBackground;
+			extendButton.style.backgroundColor = greyBackground;
+			tenseButton.style.backgroundColor = greyBackground;
+			relaxButton.style.backgroundColor = greenBackground;
+			calibrateButton.style.backgroundColor = greyBackground;
+			break;
 		default:
 			stateLabel.innerHTML = "State: Unknown";
 			if (mainStateLabel) {
@@ -258,6 +271,9 @@ const updateDynamicButtons = () => {
 	if (typeof updateMaslowActionButton === 'function') {
 		updateMaslowActionButton();
 	}
+
+	// Update manual mode button visuals to reflect new state
+	updateManualButtons();
 
 	// Update run controls so the Start button reflects whether Maslow is ready to cut
 	if (typeof setRunControls === 'function') {
@@ -339,10 +355,30 @@ const maslowInfoMsgHandling = (msg) => {
 			console.error("Parsing the 'MINFO' message failed, the maslow status has not been changed. This is probably a programmer error.");
 		}
 
+		// Update belt length display: A=TL (top-left), B=TR (top-right), C=BL (bottom-left), D=BR (bottom-right)
+		const beltMap = [
+			{ valId: 'belt-a', errId: 'belt-err-a', val: maslowStatus.tl, err: maslowStatus.etl },
+			{ valId: 'belt-b', errId: 'belt-err-b', val: maslowStatus.tr, err: maslowStatus.etr },
+			{ valId: 'belt-c', errId: 'belt-err-c', val: maslowStatus.bl, err: maslowStatus.ebl },
+			{ valId: 'belt-d', errId: 'belt-err-d', val: maslowStatus.br, err: maslowStatus.ebr },
+		];
+		for (const { valId, errId, val, err } of beltMap) {
+			const valElem = document.getElementById(valId);
+			if (valElem) {
+				valElem.textContent = (val !== null && val !== undefined) ? Number(val).toFixed(2) : '---';
+			}
+			const errElem = document.getElementById(errId);
+			if (errElem) {
+				errElem.textContent = (err !== null && err !== undefined) ? Number(err).toFixed(2) : '---';
+			}
+		}
+
 		// Reset stop button colors when firmware responds to our command
 		if (typeof resetStopButtonColors === 'function') {
 			resetStopButtonColors();
 		}
+		// Update manual mode buttons (manualPID field may have changed)
+		updateManualButtons();
 		return true;
 	}
 
@@ -356,8 +392,8 @@ const maslowInfoMsgHandling = (msg) => {
 		const m = msg.match(/Current state:\s*(\d+)/);
 		if (m) {
 			const state = Number(m[1]);
-			//If the state is in the range of 0-7, update the maslowStatus
-			if (state < 0 || state > 9) {
+			//If the state is in the range of 0-10, update the maslowStatus
+			if (state < 0 || state > 10) {
 				console.error("Invalid state received from machine: " + state);
 				return false;
 			}
@@ -901,4 +937,66 @@ const saveWiFiSettings = () => {
 		);
 		SendGetHttp(cmd);
 	}
+};
+
+// ── Manual mode controls ──────────────────────────────────────────────────────
+
+/** Update the visual state of the manual mode and PID buttons to reflect current maslowStatus */
+const updateManualButtons = () => {
+	const modeBtn = document.getElementById('tablettab_manual_mode_btn');
+	const pidBtn = document.getElementById('tablettab_manual_pid_btn');
+	if (!modeBtn || !pidBtn) return;
+
+	const isManual = (maslowStatus.state === MASLOW_STATE_MANUAL);
+
+	if (isManual) {
+		modeBtn.textContent = 'Manual mode activated';
+		modeBtn.style.backgroundColor = '#4aa85c';
+	} else {
+		modeBtn.textContent = 'Turn on manual mode';
+		modeBtn.style.backgroundColor = '#888888';
+	}
+
+	pidBtn.textContent = (isManual && maslowStatus.manualPID) ? 'PID ON' : 'PID OFF';
+	if (!isManual) {
+		pidBtn.style.backgroundColor = '#888888';
+	} else if (maslowStatus.manualPID) {
+		pidBtn.style.backgroundColor = '#4aa85c';
+	} else {
+		pidBtn.style.backgroundColor = '#ce654c';
+	}
+};
+
+/** Toggle manual mode on/off */
+const onManualModeClick = () => {
+	onCalibrationButtonsClick('$MMANUAL', '');
+};
+
+/** Force the machine into READY_TO_CUT state without calibrating */
+const onReadyToCutClick = () => {
+	onCalibrationButtonsClick('$MREADYTOCUT', 'Setting state to ready to cut');
+};
+
+/** Toggle manual PID on/off */
+const onManualPidClick = () => {
+	onCalibrationButtonsClick('$MMPID', '');
+};
+
+/** Synchronize motor targets to current encoder positions */
+const onSyncEncodersClick = () => {
+	onCalibrationButtonsClick('$MSYNC', 'Synchronizing motors to encoders');
+};
+
+/** Send user-specified belt length targets to the firmware */
+const onSendTargetsClick = () => {
+	const a = document.getElementById('manual-target-a')?.value;
+	const b = document.getElementById('manual-target-b')?.value;
+	const c = document.getElementById('manual-target-c')?.value;
+	const d = document.getElementById('manual-target-d')?.value;
+	if ([a, b, c, d].some(v => v === '' || v === undefined || isNaN(Number(v)))) {
+		addMessage('Error: all four target fields (A, B, C, D) must be filled in.');
+		return;
+	}
+	const cmd = `$MSETBELT=${Number(a)},${Number(b)},${Number(c)},${Number(d)}`;
+	onCalibrationButtonsClick(cmd, `Setting belt targets: A=${a} B=${b} C=${c} D=${d}`);
 };

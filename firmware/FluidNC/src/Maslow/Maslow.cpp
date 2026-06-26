@@ -280,13 +280,19 @@ void Maslow_::update() {
             //We used to call Maslow.setTargets() here, but now we use the axis system directly
 
             //This disables the belt motors until the user has completed calibration or apply tension and they have succeeded
-            if (calibration.currentState == READY_TO_CUT) {
+            if (calibration.currentState == READY_TO_CUT || directBeltMode) {
                 Maslow.recomputePID();
             }
         }
         //--------Homing routines
         else if (sys.state() == State::Homing) {
             calibration.home();
+        } else if (calibration.currentState == MANUAL) {
+            // Manual mode: motor targets are set explicitly by the user via $MSETBELT/$MSYNC.
+            // PID runs only when manualPIDEnabled; motors are NOT stopped.
+            if (manualPIDEnabled) {
+                Maslow.recomputePID();
+            }
         } else {  //This is confusing to understand. This is an else if so this is only run if we are not in jog, cycle, or homing
             // Clear any motor override flags to ensure motors stop
             calibration.clearMotorOverrides();
@@ -1103,6 +1109,11 @@ void Maslow_::stopMotors() {
     axis[_TL].stop();
 }
 
+// Turn the cooling fan on or off
+void Maslow_::setFan(bool on) {
+    digitalWrite(coolingFanPin, on ? HIGH : LOW);
+}
+
 // Safe Z height in mm above Z home to raise to after stop (prevents workpiece damage)
 static constexpr float Z_SAFE_HEIGHT_MM = 2.0f;
 
@@ -1249,7 +1260,7 @@ void Maslow_::safety_control() {
 
         //If the motor has a position error greater than 15mm and we are running a file or jogging
         previousPositionError[i] = axis[i].getPositionError();
-        if ((abs(axis[i].getPositionError()) > 15) && (sys.state() == State::Cycle)) {
+        if (!directBeltMode && (abs(axis[i].getPositionError()) > 15) && (sys.state() == State::Cycle)) {
             positionErrorCounter[i]++;
             log_warn("Position error on " << axis_id_to_label(i).c_str() << " axis exceeded 15mm while running. Error is "
                                           << axis[i].getPositionError() << "mm" << " Counter: " << positionErrorCounter[i]);
@@ -1281,7 +1292,7 @@ void Maslow_::getInfo() {
     snprintf(buffer,
              1400,
              "MINFO: { \"homed\": %s, \"calibrationInProgress\": %s, \"tl\": %g, \"tr\": %g, \"br\": %g, \"bl\": %g, "
-             "\"etl\": %g, \"etr\": %g, \"ebr\": %g, \"ebl\": %g, \"extended\": %s }",
+             "\"etl\": %g, \"etr\": %g, \"ebr\": %g, \"ebl\": %g, \"extended\": %s, \"manualPID\": %s }",
              calibration.all_axis_homed() ? "true" : "false",
              calibration.calibrationInProgress ? "true" : "false",
              axis[_TL].getPosition(),
@@ -1292,7 +1303,8 @@ void Maslow_::getInfo() {
              axis[_TR].getPositionError(),
              axis[_BR].getPositionError(),
              axis[_BL].getPositionError(),
-             calibration.allAxisExtended() ? "true" : "false");
+             calibration.allAxisExtended() ? "true" : "false",
+             manualPIDEnabled ? "true" : "false");
     log_data(buffer);
     releaseLogBuffer();
 }

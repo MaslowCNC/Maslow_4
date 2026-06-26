@@ -1048,6 +1048,108 @@ static Error maslow_get_info(const char* value, WebUI::AuthenticationLevel auth_
     return Error::Ok;
 }
 
+// Toggle manual mode (Maslow state MANUAL=10).
+// When entering manual mode, PID is disabled by default.
+// When leaving manual mode, PID is also disabled and state returns to UNKNOWN.
+static Error maslow_manual_mode(const char* value, WebUI::AuthenticationLevel auth_level, Channel& out) {
+    if (Maslow.calibration.currentState == MANUAL) {
+        Maslow.manualPIDEnabled         = false;
+        Maslow.calibration.currentState = UNKNOWN;
+        Maslow.calibration.printCurrentState();
+        log_info("Manual mode deactivated");
+    } else {
+        Maslow.manualPIDEnabled         = false;  // disable PID before entering manual state
+        Maslow.calibration.currentState = MANUAL;
+        Maslow.calibration.printCurrentState();
+        log_info("Manual mode activated");
+    }
+    return Error::Ok;
+}
+
+// Toggle the PID updating flag while in manual mode.
+static Error maslow_manual_pid(const char* value, WebUI::AuthenticationLevel auth_level, Channel& out) {
+    if (Maslow.calibration.currentState != MANUAL) {
+        log_info("$MMPID: not in manual mode (state " << Maslow.calibration.currentState << ")");
+        return Error::Ok;
+    }
+    if (Maslow.manualPIDEnabled) {
+        Maslow.manualPIDEnabled = false;
+        Maslow.stopMotors();
+        Maslow.setFan(false);
+        log_info("Manual PID: OFF");
+    } else {
+        Maslow.manualPIDEnabled = true;
+        Maslow.setFan(true);
+        log_info("Manual PID: ON");
+    }
+    return Error::Ok;
+}
+
+// Read current encoder positions and set them as motor targets.
+// Useful to initialise the PID with the current position before enabling it.
+static Error maslow_sync_encoders(const char* value, WebUI::AuthenticationLevel auth_level, Channel& out) {
+    for (int arm = 0; arm < ARM_COUNT; arm++) {
+        double pos = Maslow.axis[arm].getPosition();
+        Maslow.axis[arm].setTarget(pos);
+    }
+    log_info("Motors synchronised to encoder positions: TL="
+             << Maslow.axis[_TL].getPosition() << " TR=" << Maslow.axis[_TR].getPosition()
+             << " BL=" << Maslow.axis[_BL].getPosition() << " BR=" << Maslow.axis[_BR].getPosition());
+    return Error::Ok;
+}
+
+// Set belt length targets directly.  Value must be four comma-separated mm values: A,B,C,D
+// Mapping: A=TL, B=TR, C=BL, D=BR
+static Error maslow_set_belt_targets(const char* value, WebUI::AuthenticationLevel auth_level, Channel& out) {
+    if (!value || value[0] == '\0') {
+        log_error("Usage: $MSETBELT=A,B,C,D  (mm values)");
+        return Error::InvalidValue;
+    }
+    char buf[64];
+    strncpy(buf, value, sizeof(buf) - 1);
+    buf[sizeof(buf) - 1] = '\0';
+    float targets[ARM_COUNT] = { NAN, NAN, NAN, NAN };
+    char* ptr                = buf;
+    int   i                  = 0;
+    while (ptr && *ptr && i < ARM_COUNT) {
+        char* comma = strchr(ptr, ',');
+        if (comma) {
+            *comma = '\0';
+        }
+        targets[i] = strtof(ptr, nullptr);
+        ptr        = comma ? comma + 1 : nullptr;
+        i++;
+    }
+    if (i < ARM_COUNT) {
+        log_error("$MSETBELT: expected 4 comma-separated values (got " << i << ")");
+        return Error::InvalidValue;
+    }
+    Maslow.axis[_TL].setTarget(targets[0]);
+    Maslow.axis[_TR].setTarget(targets[1]);
+    Maslow.axis[_BL].setTarget(targets[2]);
+    Maslow.axis[_BR].setTarget(targets[3]);
+    log_info("Belt targets set: A=" << targets[0] << " B=" << targets[1] << " C=" << targets[2] << " D=" << targets[3]);
+    return Error::Ok;
+}
+
+// Force the machine into READY_TO_CUT state, bypassing normal state preconditions.
+// requestStateChange(READY_TO_CUT) performs the full initialisation including motor
+// position synchronisation from encoder readings; this function temporarily sets a
+// valid predecessor state so that check passes.
+static Error maslow_set_ready_to_cut(const char* value, WebUI::AuthenticationLevel auth_level, Channel& out) {
+    // Temporarily promote current state to a valid predecessor so requestStateChange succeeds
+    int prevState                       = Maslow.calibration.currentState;
+    Maslow.calibration.currentState     = TAKING_SLACK;
+    bool ok = Maslow.calibration.requestStateChange(READY_TO_CUT);
+    if (!ok) {
+        Maslow.calibration.currentState = prevState;
+        log_error("Failed to enter READY_TO_CUT state");
+    } else {
+        log_info("Forced entry into READY_TO_CUT state");
+    }
+    return Error::Ok;
+}
+
 // Commands use the same syntax as Settings, but instead of setting or
 // displaying a persistent value, a command causes some action to occur.
 // That action could be anything, from displaying a run-time parameter
@@ -1141,6 +1243,11 @@ void make_user_commands() {
     new UserCommand("SETZSTOP", M + "/setZStop", maslow_set_zStop, anyState);
     new UserCommand("MINFO", M + "/getInfo", maslow_get_info, anyState);
     new UserCommand("GSTATE", M + "/gstate", maslow_get_state, anyState);
+    new UserCommand("MMANUAL", M + "/manualMode", maslow_manual_mode, anyState);
+    new UserCommand("MMPID", M + "/manualPid", maslow_manual_pid, anyState);
+    new UserCommand("MSYNC", M + "/syncEncoders", maslow_sync_encoders, anyState);
+    new UserCommand("MSETBELT", M + "/setBeltTargets", maslow_set_belt_targets, anyState);
+    new UserCommand("MREADYTOCUT", M + "/setReadyToCut", maslow_set_ready_to_cut, anyState);
 };
 
 // normalize_key puts a key string into canonical form -

@@ -17,6 +17,7 @@
 #include "InputFile.h"            // InputFile::_current_line_num
 
 #include "Machine/MachineConfig.h"
+#include "Maslow/Maslow.h"  // Maslow direct belt mode flag
 
 #include <string.h>  // memset
 #include <math.h>    // sqrt etc.
@@ -199,7 +200,7 @@ Error gc_execute_line(char* line) {
     size_t     char_counter;
     char       letter;
     float      value;
-    uint8_t    int_value = 0;
+    uint16_t   int_value = 0;
     uint16_t   mantissa  = 0;
     char_counter         = jogMotion ? 3 : 0;  // Start parsing after `$J=` if jogging
     while (line[char_counter] != 0) {          // Loop until no more g-code words in line.
@@ -219,7 +220,7 @@ Error gc_execute_line(char* line) {
         // a good enough compromise and catch most all non-integer errors. To make it compliant,
         // we would simply need to change the mantissa to int16, but this add compiled flash space.
         // Maybe update this later.
-        int_value = int8_t(truncf(value));
+        int_value = uint16_t(truncf(value));
         mantissa  = lroundf(100 * (value - int_value));  // Compute mantissa for Gxx.x commands.
         // NOTE: Rounding must be used to catch small floating point errors.
         // Check if the g-code word is supported or errors due to modal group violations or has
@@ -481,7 +482,7 @@ Error gc_execute_line(char* line) {
                 break;
             case 'M':
                 // Determine 'M' command and its modal group
-                if (mantissa > 0 && !(int_value == 7 || int_value == 8)) {
+                if (mantissa > 0 && !(int_value == 7 || int_value == 8 || int_value == 700 || int_value == 701)) {
                     FAIL(Error::GcodeCommandValueNotInteger);  // [No Mxx.x commands]
                 }
                 switch (int_value) {
@@ -589,6 +590,18 @@ Error gc_execute_line(char* line) {
                         gc_block.modal.io_control = IoControl::SetAnalogImmediate;
                         mg_word_bit               = ModalGroup::MM10;
                         break;
+                    case 700:
+                        // M700 - Enter direct belt mode (Maslow expert/debug feature)
+                        // WARNING: In direct belt mode, G1 A/B/C/Y moves bypass normal
+                        // Cartesian XY-to-belt kinematics. Use G93 inverse-time feed.
+                        gc_block.direct_belt_cmd = DirectBeltCmd::Enter;
+                        mg_word_bit              = ModalGroup::MM11;
+                        break;
+                    case 701:
+                        // M701 - Exit direct belt mode, resume normal Maslow kinematics
+                        gc_block.direct_belt_cmd = DirectBeltCmd::Exit;
+                        mg_word_bit              = ModalGroup::MM11;
+                        break;
                     default:
                         FAIL(Error::GcodeUnsupportedCommand);  // [Unsupported M command]
                 }
@@ -608,7 +621,7 @@ Error gc_execute_line(char* line) {
                 GCodeWord axis_word_bit;
                 switch (letter) {
                     case 'A':
-                        if (n_axis > A_AXIS) {
+                        if (n_axis > A_AXIS || Maslow.directBeltMode) {
                             axis_word_bit               = GCodeWord::A;
                             gc_block.values.xyz[A_AXIS] = value;
                             set_bitnum(axis_words, A_AXIS);
@@ -617,7 +630,7 @@ Error gc_execute_line(char* line) {
                         }
                         break;
                     case 'B':
-                        if (n_axis > B_AXIS) {
+                        if (n_axis > B_AXIS || Maslow.directBeltMode) {
                             axis_word_bit               = GCodeWord::B;
                             gc_block.values.xyz[B_AXIS] = value;
                             set_bitnum(axis_words, B_AXIS);
@@ -626,7 +639,7 @@ Error gc_execute_line(char* line) {
                         }
                         break;
                     case 'C':
-                        if (n_axis > C_AXIS) {
+                        if (n_axis > C_AXIS || Maslow.directBeltMode) {
                             axis_word_bit               = GCodeWord::C;
                             gc_block.values.xyz[C_AXIS] = value;
                             set_bitnum(axis_words, C_AXIS);
@@ -1513,6 +1526,19 @@ Error gc_execute_line(char* line) {
             gc_state.modal.override = gc_block.modal.override;
             mc_override_ctrl_update(gc_state.modal.override);
         }
+    }
+
+    // [Maslow direct belt mode control]: M700/M701
+    // M700 enters direct belt mode; M701 exits it.
+    // WARNING: Direct belt mode bypasses normal Maslow Cartesian XY-to-belt kinematics.
+    // In this mode, G1 A/B/C/Y commands set belt lengths directly (mm), with G93 required.
+    if (gc_block.direct_belt_cmd == DirectBeltCmd::Enter) {
+        Maslow.directBeltMode = true;
+        log_info("Maslow: Direct belt mode ENABLED (M700). WARNING: bypasses normal XY kinematics.");
+        log_info("Maslow: Use G93 inverse-time mode and F on every G1 A/B/C/Y direct belt move.");
+    } else if (gc_block.direct_belt_cmd == DirectBeltCmd::Exit) {
+        Maslow.directBeltMode = false;
+        log_info("Maslow: Direct belt mode DISABLED (M701). Normal Cartesian kinematics restored.");
     }
 
     // [10. Dwell ]:
