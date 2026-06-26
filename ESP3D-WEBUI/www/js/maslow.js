@@ -943,57 +943,55 @@ const saveWiFiSettings = () => {
 
 /** Update the visual state of the manual mode and PID buttons to reflect current maslowStatus */
 const updateManualButtons = () => {
-const modeBtn = document.getElementById('tablettab_manual_mode_btn');
-const pidBtn  = document.getElementById('tablettab_manual_pid_btn');
-if (!modeBtn || !pidBtn) return;
+	const modeBtn = document.getElementById('tablettab_manual_mode_btn');
+	const pidBtn = document.getElementById('tablettab_manual_pid_btn');
+	if (!modeBtn || !pidBtn) return;
 
-const isManual = (maslowStatus.state === MASLOW_STATE_MANUAL);
+	const isManual = (maslowStatus.state === MASLOW_STATE_MANUAL);
 
-if (isManual) {
-modeBtn.textContent = 'Manual mode activated';
-modeBtn.style.backgroundColor = '#4aa85c';
-} else {
-modeBtn.textContent = 'Turn on manual mode';
-modeBtn.style.backgroundColor = '#888888';
-}
+	if (isManual) {
+		modeBtn.textContent = 'Manual mode activated';
+		modeBtn.style.backgroundColor = '#4aa85c';
+	} else {
+		modeBtn.textContent = 'Turn on manual mode';
+		modeBtn.style.backgroundColor = '#888888';
+	}
 
-if (!isManual) {
-pidBtn.textContent = 'PID OFF';
-pidBtn.style.backgroundColor = '#888888';
-} else if (maslowStatus.manualPID) {
-pidBtn.textContent = 'PID ON';
-pidBtn.style.backgroundColor = '#4aa85c';
-} else {
-pidBtn.textContent = 'PID OFF';
-pidBtn.style.backgroundColor = '#ce654c';
-}
+	pidBtn.textContent = (isManual && maslowStatus.manualPID) ? 'PID ON' : 'PID OFF';
+	if (!isManual) {
+		pidBtn.style.backgroundColor = '#888888';
+	} else if (maslowStatus.manualPID) {
+		pidBtn.style.backgroundColor = '#4aa85c';
+	} else {
+		pidBtn.style.backgroundColor = '#ce654c';
+	}
 };
 
 /** Toggle manual mode on/off */
 const onManualModeClick = () => {
-onCalibrationButtonsClick('$MMANUAL', '');
+	onCalibrationButtonsClick('$MMANUAL', '');
 };
 
 /** Toggle manual PID on/off */
 const onManualPidClick = () => {
-onCalibrationButtonsClick('$MMPID', '');
+	onCalibrationButtonsClick('$MMPID', '');
 };
 
 /** Synchronize motor targets to current encoder positions */
 const onSyncEncodersClick = () => {
-onCalibrationButtonsClick('$MSYNC', 'Synchronizing motors to encoders');
+	onCalibrationButtonsClick('$MSYNC', 'Synchronizing motors to encoders');
 };
 
 /** Send user-specified belt length targets to the firmware */
 const onSendTargetsClick = () => {
-const a = document.getElementById('manual-target-a')?.value;
-const b = document.getElementById('manual-target-b')?.value;
-const c = document.getElementById('manual-target-c')?.value;
-const d = document.getElementById('manual-target-d')?.value;
-if ([a, b, c, d].some(v => v === '' || v === undefined || isNaN(Number(v)))) {
-addMessage('Error: all four target fields (A, B, C, D) must be filled in.');
-return;
-}
-const cmd = `$MSETBELT=${Number(a)},${Number(b)},${Number(c)},${Number(d)}`;
-onCalibrationButtonsClick(cmd, `Setting belt targets: A=${a} B=${b} C=${c} D=${d}`);
+	const a = document.getElementById('manual-target-a')?.value;
+	const b = document.getElementById('manual-target-b')?.value;
+	const c = document.getElementById('manual-target-c')?.value;
+	const d = document.getElementById('manual-target-d')?.value;
+	if ([a, b, c, d].some(v => v === '' || v === undefined || isNaN(Number(v)))) {
+		addMessage('Error: all four target fields (A, B, C, D) must be filled in.');
+		return;
+	}
+	const cmd = `$MSETBELT=${Number(a)},${Number(b)},${Number(c)},${Number(d)}`;
+	onCalibrationButtonsClick(cmd, `Setting belt targets: A=${a} B=${b} C=${c} D=${d}`);
 };
