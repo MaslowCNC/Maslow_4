@@ -1757,6 +1757,12 @@ function tabletInit() {
     // New Maslow action button (below Setup)
     id("maslowActionButton").addEventListener("click", handleMaslowActionButtonClick);
 
+    // Buttons - Manual mode controls
+    id("tablettab_manual_mode_btn").addEventListener("click", onManualModeClick);
+    id("tablettab_manual_pid_btn").addEventListener("click", onManualPidClick);
+    id("tablettab_sync_encoders_btn").addEventListener("click", onSyncEncodersClick);
+    id("tablettab_send_targets_btn").addEventListener("click", onSendTargetsClick);
+
     id("tablettab_save_serial_msg").addEventListener("click", saveSerialMessages);
     
     // Trace boundary button

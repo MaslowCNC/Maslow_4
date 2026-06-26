@@ -287,6 +287,12 @@ void Maslow_::update() {
         //--------Homing routines
         else if (sys.state() == State::Homing) {
             calibration.home();
+        } else if (calibration.currentState == MANUAL) {
+            // Manual mode: motor targets are set explicitly by the user via $MSETBELT/$MSYNC.
+            // PID runs only when manualPIDEnabled; motors are NOT stopped.
+            if (manualPIDEnabled) {
+                Maslow.recomputePID();
+            }
         } else {  //This is confusing to understand. This is an else if so this is only run if we are not in jog, cycle, or homing
             // Clear any motor override flags to ensure motors stop
             calibration.clearMotorOverrides();
@@ -1281,7 +1287,7 @@ void Maslow_::getInfo() {
     snprintf(buffer,
              1400,
              "MINFO: { \"homed\": %s, \"calibrationInProgress\": %s, \"tl\": %g, \"tr\": %g, \"br\": %g, \"bl\": %g, "
-             "\"etl\": %g, \"etr\": %g, \"ebr\": %g, \"ebl\": %g, \"extended\": %s }",
+             "\"etl\": %g, \"etr\": %g, \"ebr\": %g, \"ebl\": %g, \"extended\": %s, \"manualPID\": %s }",
              calibration.all_axis_homed() ? "true" : "false",
              calibration.calibrationInProgress ? "true" : "false",
              axis[_TL].getPosition(),
@@ -1292,7 +1298,8 @@ void Maslow_::getInfo() {
              axis[_TR].getPositionError(),
              axis[_BR].getPositionError(),
              axis[_BL].getPositionError(),
-             calibration.allAxisExtended() ? "true" : "false");
+             calibration.allAxisExtended() ? "true" : "false",
+             manualPIDEnabled ? "true" : "false");
     log_data(buffer);
     releaseLogBuffer();
 }

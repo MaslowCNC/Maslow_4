@@ -126,6 +126,37 @@
             style="background-color: #ce654c;"><canvas id="stopBtn" style="width: 100%; height: 100%"></canvas></div>
           <div id="systemStatus" class="maslow-grid-item system-status">Idle</div>
         </div>
+        <!-- Manual mode controls -->
+        <div id="tablettab-manual-controls" class="maslow-grid-container tablettab-controls-item" style="grid-template-columns: 50% 50%;">
+          <div id="tablettab_manual_mode_btn" class="maslow-grid-item maslow-grid-item-btn" style="background-color: #888888; color: white; font-size: 0.85em;">Turn on manual mode</div>
+          <div id="tablettab_manual_pid_btn" class="maslow-grid-item maslow-grid-item-btn" style="background-color: #888888; color: white;">PID OFF</div>
+        </div>
+        <div id="tablettab-manual-sync" class="maslow-grid-container tablettab-controls-item" style="grid-template-columns: 100%;">
+          <div id="tablettab_sync_encoders_btn" class="maslow-grid-item maslow-grid-item-btn" style="background-color: #337ab7; color: white;">Synchronize motors to encoders</div>
+        </div>
+        <div id="tablettab-manual-targets" class="maslow-grid-container tablettab-controls-item" style="grid-template-columns: auto;">
+          <div class="maslow-grid-item" style="padding: 4px;">
+            <div id="tablettab_send_targets_btn" class="maslow-grid-item maslow-grid-item-btn" style="background-color: #337ab7; color: white; margin-bottom: 4px;">Send motor targets</div>
+            <table style="width: 100%">
+              <tr>
+                <td>A:</td>
+                <td><input id="manual-target-a" type="number" step="any" class="form-control" placeholder="mm" /></td>
+              </tr>
+              <tr>
+                <td>B:</td>
+                <td><input id="manual-target-b" type="number" step="any" class="form-control" placeholder="mm" /></td>
+              </tr>
+              <tr>
+                <td>C:</td>
+                <td><input id="manual-target-c" type="number" step="any" class="form-control" placeholder="mm" /></td>
+              </tr>
+              <tr>
+                <td>D:</td>
+                <td><input id="manual-target-d" type="number" step="any" class="form-control" placeholder="mm" /></td>
+              </tr>
+            </table>
+          </div>
+        </div>
         <div id="tablettab-position-display" class="maslow-grid-container tablettab-controls-item" style="grid-template-columns: auto;">
           <div class="maslow-grid-item">
             <table style="width:100%">
@@ -150,18 +181,22 @@
               <tr>
                 <td>A:</td>
                 <td id="belt-a">---</td>
+                <td id="belt-err-a" style="color: #888; font-size: 0.9em;">---</td>
               </tr>
               <tr>
                 <td>B:</td>
                 <td id="belt-b">---</td>
+                <td id="belt-err-b" style="color: #888; font-size: 0.9em;">---</td>
               </tr>
               <tr>
                 <td>C:</td>
                 <td id="belt-c">---</td>
+                <td id="belt-err-c" style="color: #888; font-size: 0.9em;">---</td>
               </tr>
               <tr>
                 <td>D:</td>
                 <td id="belt-d">---</td>
+                <td id="belt-err-d" style="color: #888; font-size: 0.9em;">---</td>
               </tr>
               <tr>
                 <td id="active-state"></td>

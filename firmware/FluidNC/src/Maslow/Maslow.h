@@ -184,6 +184,11 @@ public:
     // Enabled by M700, disabled by M701. Not persisted across reboot.
     bool directBeltMode = false;
 
+    // Manual mode PID flag: when calibration.currentState == MANUAL,
+    // recomputePID() is called only when this is true.
+    // Toggled by the $MMPID command. Automatically cleared when leaving MANUAL state.
+    bool manualPIDEnabled = false;
+
 private:
     //Used to keep track of how often the PID controller is updated
     unsigned long lastCallToPID    = millis();
