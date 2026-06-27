@@ -1121,6 +1121,13 @@ void Maslow_::updatePIDGains() {
     }
 }
 
+// Propagates pidDeadbandEnter/Exit to all four belt motor PID controllers.
+void Maslow_::updatePIDDeadband() {
+    for (int i = 0; i < ARM_COUNT; i++) {
+        axis[i].setDeadband(pidDeadbandEnter, pidDeadbandExit);
+    }
+}
+
 // Safe Z height in mm above Z home to raise to after stop (prevents workpiece damage)
 static constexpr float Z_SAFE_HEIGHT_MM = 2.0f;
 

@@ -129,6 +129,10 @@ namespace Machine {
         handler.item(M + "_PID_P_gain", Maslow.pidP, 0.0f, 10000.0f);
         handler.item(M + "_PID_I_gain", Maslow.pidI, 0.0f, 10000.0f);
         handler.item(M + "_PID_D_gain", Maslow.pidD, 0.0f, 10000.0f);
+
+        // PID deadband thresholds for the four belt motors
+        handler.item(M + "_PID_Deadband_Enter", Maslow.pidDeadbandEnter, 0.0f, 1000.0f);
+        handler.item(M + "_PID_Deadband_Exit", Maslow.pidDeadbandExit, 0.0f, 1000.0f);
     }
 
     void MachineConfig::afterParse() {
@@ -218,6 +222,7 @@ namespace Machine {
         // Propagate PID gains to all belt motor PID controllers.
         // Safe to call before Maslow.begin(): just pre-loads gain values into MiniPID objects.
         Maslow.updatePIDGains();
+        Maslow.updatePIDDeadband();
     }
 
     // Common Default Config partial strings
@@ -243,7 +248,8 @@ namespace Machine {
     const std::string dcM4Park = M + "_Park_Z: 2.0\n" + M + "_Park_X: 0.0\n" + M + "_Park_Y: 0.0\n";
 
     // Default PID gains — keep in sync with pidP/pidI/pidD initializers in Maslow.h
-    const std::string dcM4PID = M + "_PID_P_gain: 300.0\n" + M + "_PID_I_gain: 0.0\n" + M + "_PID_D_gain: 0.0\n";
+    const std::string dcM4PID = M + "_PID_P_gain: 300.0\n" + M + "_PID_I_gain: 0.0\n" + M + "_PID_D_gain: 0.0\n" +
+                                M + "_PID_Deadband_Enter: 0.0\n" + M + "_PID_Deadband_Exit: 0.0\n";
 
     const std::string dcSpi      = "spi:\n  miso_pin: gpio.13\n  mosi_pin: gpio.11\n  sck_pin: gpio.12\n";
     const std::string dcSDCard   = "sdcard:\n  card_detect_pin: NO_PIN\n  cs_pin: gpio.10\n";

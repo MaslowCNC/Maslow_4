@@ -49,6 +49,9 @@ void MiniPID::init() {
     lastOutput     = 0;
     outputFilter   = 0;
     setpointRange  = 0;
+    deadbandEnter  = 0;
+    deadbandExit   = 0;
+    inDeadband     = false;
 }
 
 //**********************************
@@ -214,6 +217,23 @@ double MiniPID::getOutput(double actual, double setpoint) {
     //Do the simple parts of the calculations
     double error = setpoint - actual;
 
+    //Deadband with hysteresis: suppress output when error is small to reduce oscillation
+    if (deadbandEnter > 0) {
+        double absError = (error >= 0) ? error : -error;
+        if (!inDeadband && absError <= deadbandEnter) {
+            inDeadband = true;
+            errorSum   = 0;
+        } else if (inDeadband && absError > deadbandExit) {
+            inDeadband = false;
+        }
+        if (inDeadband) {
+            lastActual = actual;
+            lastOutput = 0;
+            firstRun   = false;
+            return 0;
+        }
+    }
+
     //Calculate F output. Notice, this->depends only on the setpoint, and not the error.
     Foutput = F * setpoint;
 
@@ -332,6 +352,20 @@ void MiniPID::setOutputFilter(double strength) {
     if (strength == 0 || bounded(strength, 0, 1)) {
         outputFilter = strength;
     }
+}
+
+/**Set a deadband with hysteresis to suppress output when the error is small. <br>
+ * When the absolute position error falls below <em>enter</em>, the output is forced to zero
+ * and the integral accumulator is cleared. The output remains zero until the absolute error
+ * exceeds <em>exit</em>. Setting both values to zero (the default) disables the feature.
+ * @param enter Error threshold for entering the deadband (|error| <= enter → output = 0).
+ * @param exit  Error threshold for leaving the deadband (|error| >  exit  → resume PID).
+ *              Should be >= enter; if smaller it is treated as equal to enter (no hysteresis).
+ */
+void MiniPID::setDeadband(double enter, double exit) {
+    deadbandEnter = enter;
+    deadbandExit  = (exit >= enter) ? exit : enter;
+    inDeadband    = false;
 }
 
 //**************************************

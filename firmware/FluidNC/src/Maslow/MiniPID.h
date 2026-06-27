@@ -21,6 +21,7 @@ public:
     void   setOutputRampRate(double);
     void   setSetpointRange(double);
     void   setOutputFilter(double);
+    void   setDeadband(double enter, double exit);
     double getOutput();
     double getOutput(double);
     double getOutput(double, double);
@@ -55,5 +56,9 @@ private:
     double outputFilter;
 
     double setpointRange;
+
+    double deadbandEnter;
+    double deadbandExit;
+    bool   inDeadband;
 };
 #endif

@@ -196,9 +196,19 @@ public:
     float pidI = 0.0f;
     float pidD = 0.0f;
 
+    // PID deadband thresholds - configurable via FluidNC settings.
+    // Output is held at zero while |error| <= pidDeadbandEnter; normal PID resumes
+    // once |error| > pidDeadbandExit. Both zero (default) disables the feature.
+    float pidDeadbandEnter = 0.0f;
+    float pidDeadbandExit  = 0.0f;
+
     // Propagates current pidP/pidI/pidD values to all four motor unit PID controllers.
     // Called automatically when settings are saved (MachineConfig::afterParse).
     void updatePIDGains();
+
+    // Propagates current pidDeadbandEnter/Exit values to all four motor unit PID controllers.
+    // Called automatically when settings are saved (MachineConfig::afterParse).
+    void updatePIDDeadband();
 
 private:
     //Used to keep track of how often the PID controller is updated

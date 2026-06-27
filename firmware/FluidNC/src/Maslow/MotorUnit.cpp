@@ -29,6 +29,7 @@ void MotorUnit::begin(int forwardPin, int backwardPin, int readbackPin, int enco
     motor.begin(forwardPin, backwardPin, readbackPin, channel1, channel2);
 
     positionPID.setPID(Maslow.pidP, Maslow.pidI, Maslow.pidD);
+    positionPID.setDeadband(Maslow.pidDeadbandEnter, Maslow.pidDeadbandExit);
     positionPID.setOutputLimits(-1023, 1023);
 
     if (!motor_test()) {
@@ -365,6 +366,11 @@ void MotorUnit::resetPID() {
 // Updates the PID gains at runtime without requiring a restart.
 void MotorUnit::setPIDGains(double p, double i, double d) {
     positionPID.setPID(p, i, d);
+}
+
+// Updates the PID deadband thresholds at runtime without requiring a restart.
+void MotorUnit::setDeadband(double enter, double exit) {
+    positionPID.setDeadband(enter, exit);
 }
 
 //sets the encoder position to 0
