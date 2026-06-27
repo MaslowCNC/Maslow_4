@@ -7,11 +7,6 @@
 #include "Maslow.h"
 #include <cmath>
 
-// PID controller tuning
-#define P 300
-#define I 0
-#define D 0
-
 //------------------------------------------------------
 //------------------------------------------------------ Core utility functions
 //------------------------------------------------------
@@ -33,7 +28,7 @@ void MotorUnit::begin(int forwardPin, int backwardPin, int readbackPin, int enco
 
     motor.begin(forwardPin, backwardPin, readbackPin, channel1, channel2);
 
-    positionPID.setPID(P, I, D);
+    positionPID.setPID(Maslow.pidP, Maslow.pidI, Maslow.pidD);
     positionPID.setOutputLimits(-1023, 1023);
 
     if (!motor_test()) {
@@ -365,6 +360,11 @@ void MotorUnit::reset() {
 // Call this after a hard stop to prevent residual I-term motion.
 void MotorUnit::resetPID() {
     positionPID.reset();
+}
+
+// Updates the PID gains at runtime without requiring a restart.
+void MotorUnit::setPIDGains(double p, double i, double d) {
+    positionPID.setPID(p, i, d);
 }
 
 //sets the encoder position to 0

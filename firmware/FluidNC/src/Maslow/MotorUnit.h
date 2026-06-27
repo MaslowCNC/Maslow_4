@@ -43,6 +43,7 @@ public:
     bool     test();
     void     reset();     //resetting variables here, because of non-blocking, maybe there's a better way to do this
     void     resetPID();  // Reset PID state (clears integral accumulator) to prevent I-term residual motion after stop
+    void     setPIDGains(double p, double i, double d);  // Update PID gains at runtime
 
     double getMotorCurrent();  //averaged value of the last 10 measurements
     double getBeltSpeed();

@@ -190,6 +190,16 @@ public:
     // Toggled by the $MMPID command. Automatically cleared when leaving MANUAL state.
     bool manualPIDEnabled = false;
 
+    // PID controller gains - configurable via FluidNC settings (Maslow_PID_P/I/D_gain).
+    // Applied to all four belt motors. Default: P=300, I=0, D=0.
+    float pidP = 300.0f;
+    float pidI = 0.0f;
+    float pidD = 0.0f;
+
+    // Propagates current pidP/pidI/pidD values to all four motor unit PID controllers.
+    // Called automatically when settings are saved (MachineConfig::afterParse).
+    void updatePIDGains();
+
 private:
     //Used to keep track of how often the PID controller is updated
     unsigned long lastCallToPID    = millis();

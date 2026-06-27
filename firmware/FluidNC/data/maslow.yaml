@@ -20,6 +20,9 @@ Maslow_workThickness: 0.000000
 Maslow_Park_Z: 2.000000
 Maslow_Park_X: 0.000000
 Maslow_Park_Y: 0.000000
+Maslow_PID_P_gain: 300.000000
+Maslow_PID_I_gain: 0.000000
+Maslow_PID_D_gain: 0.000000
 stepping: 
   engine: Timed
   idle_ms: 240

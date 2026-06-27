@@ -124,6 +124,11 @@ namespace Machine {
         handler.item(M + "_Park_Z", Maslow.parkZ, -100.0, 100.0);
         handler.item(M + "_Park_X", Maslow.parkX, -10000.0, 10000.0);
         handler.item(M + "_Park_Y", Maslow.parkY, -10000.0, 10000.0);
+
+        // PID controller gains for the four belt motors
+        handler.item(M + "_PID_P_gain", Maslow.pidP, 0.0f, 10000.0f);
+        handler.item(M + "_PID_I_gain", Maslow.pidI, 0.0f, 10000.0f);
+        handler.item(M + "_PID_D_gain", Maslow.pidD, 0.0f, 10000.0f);
     }
 
     void MachineConfig::afterParse() {
@@ -209,6 +214,10 @@ namespace Machine {
         if (_macros == nullptr) {
             _macros = new Macros();
         }
+
+        // Propagate PID gains to all belt motor PID controllers.
+        // Safe to call before Maslow.begin(): just pre-loads gain values into MiniPID objects.
+        Maslow.updatePIDGains();
     }
 
     // Common Default Config partial strings
@@ -232,6 +241,8 @@ namespace Machine {
     const std::string dcM4Thickness = M + "_spoilboardThickness: 0.0\n" + M + "_workThickness: 0.0\n";
 
     const std::string dcM4Park = M + "_Park_Z: 2.0\n" + M + "_Park_X: 0.0\n" + M + "_Park_Y: 0.0\n";
+
+    const std::string dcM4PID = M + "_PID_P_gain: 300.0\n" + M + "_PID_I_gain: 0.0\n" + M + "_PID_D_gain: 0.0\n";
 
     const std::string dcSpi      = "spi:\n  miso_pin: gpio.13\n  mosi_pin: gpio.11\n  sck_pin: gpio.12\n";
     const std::string dcSDCard   = "sdcard:\n  card_detect_pin: NO_PIN\n  cs_pin: gpio.10\n";
@@ -268,7 +279,7 @@ namespace Machine {
     const std::string defaultConfig =
         dcBoard +
         // Maslow M4 default items
-        dcM4Vert + dcM4CalibrationGrid + dcM4CurrentThreshold + dcM4ApplyTensionLimit + dcM4Thickness + dcM4Park +
+        dcM4Vert + dcM4CalibrationGrid + dcM4CurrentThreshold + dcM4ApplyTensionLimit + dcM4Thickness + dcM4Park + dcM4PID +
         // Default sections
         dcSpi + dcSDCard + dcStepping + dcUart1 + dcKinematics +
         "axes:\n"

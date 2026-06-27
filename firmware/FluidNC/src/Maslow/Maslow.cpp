@@ -1114,6 +1114,13 @@ void Maslow_::setFan(bool on) {
     digitalWrite(coolingFanPin, on ? HIGH : LOW);
 }
 
+// Propagates pidP/pidI/pidD to all four belt motor PID controllers.
+void Maslow_::updatePIDGains() {
+    for (int i = 0; i < ARM_COUNT; i++) {
+        axis[i].setPIDGains(pidP, pidI, pidD);
+    }
+}
+
 // Safe Z height in mm above Z home to raise to after stop (prevents workpiece damage)
 static constexpr float Z_SAFE_HEIGHT_MM = 2.0f;
 
