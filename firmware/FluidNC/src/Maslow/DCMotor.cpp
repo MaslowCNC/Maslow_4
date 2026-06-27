@@ -83,6 +83,11 @@ void DCMotor::halfIn() {
  *  @param speed The speed the motor should spin (-1023 to 1023)
  */
 void DCMotor::runAtPWM(long signed_speed) {
+    if (signed_speed == 0) {
+        runAtSpeed(FORWARD, 0);
+        return;
+    }
+
     //Motor driver accepts -maxPWMvalue to maxPWMvalue but doesn't begin moving until motorStartsToMovePWM so we scale
 
     int  motorStartsToMovePWM = 75;
