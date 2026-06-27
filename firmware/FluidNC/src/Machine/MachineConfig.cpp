@@ -242,6 +242,7 @@ namespace Machine {
 
     const std::string dcM4Park = M + "_Park_Z: 2.0\n" + M + "_Park_X: 0.0\n" + M + "_Park_Y: 0.0\n";
 
+    // Default PID gains — keep in sync with pidP/pidI/pidD initializers in Maslow.h
     const std::string dcM4PID = M + "_PID_P_gain: 300.0\n" + M + "_PID_I_gain: 0.0\n" + M + "_PID_D_gain: 0.0\n";
 
     const std::string dcSpi      = "spi:\n  miso_pin: gpio.13\n  mosi_pin: gpio.11\n  sck_pin: gpio.12\n";
