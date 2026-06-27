@@ -10,6 +10,7 @@
 */
 
 #include "MiniPID.h"
+#include <cmath>
 
 //**********************************
 //Constructor functions
@@ -219,7 +220,7 @@ double MiniPID::getOutput(double actual, double setpoint) {
 
     //Deadband with hysteresis: suppress output when error is small to reduce oscillation
     if (deadbandEnter > 0) {
-        double absError = (error >= 0) ? error : -error;
+        double absError = fabs(error);
         if (!inDeadband && absError <= deadbandEnter) {
             inDeadband = true;
             errorSum   = 0;
