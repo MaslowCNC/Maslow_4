@@ -1075,11 +1075,11 @@ static Error maslow_manual_pid(const char* value, WebUI::AuthenticationLevel aut
     if (Maslow.manualPIDEnabled) {
         Maslow.manualPIDEnabled = false;
         Maslow.stopMotors();
-        Maslow.setFan(false);
+        digitalWrite(coolingFanPin, LOW);
         log_info("Manual PID: OFF");
     } else {
         Maslow.manualPIDEnabled = true;
-        Maslow.setFan(true);
+        digitalWrite(coolingFanPin, HIGH);
         log_info("Manual PID: ON");
     }
     return Error::Ok;

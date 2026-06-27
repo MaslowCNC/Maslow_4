@@ -15,6 +15,8 @@
 
 #define TCAADDR 0x70
 
+#define coolingFanPin 47
+
 #define CALIBRATION_GRID_SIZE_MAX (10 * 10) + 2
 
 #define MASLOW_TELEM_FILE "M4_telemetry.bin"
@@ -107,7 +109,6 @@ public:
     void markBeltPositionsStale();
 
     void stopMotors();
-    void setFan(bool on);
     /** Raises Z axis to Z home + 2mm to prevent workpiece damage after stop */
     void raiseZ();
 

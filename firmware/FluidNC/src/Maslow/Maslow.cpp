@@ -50,8 +50,6 @@ extern const char* VERSION_NUMBER;
 #define brIn2Channel 7
 #define brADCPin 7
 
-#define coolingFanPin 47
-
 #define SERVOFAULT 40
 
 #define ETHERNETLEDPIN 39
@@ -303,9 +301,10 @@ void Maslow_::update() {
         if (sys.state() != State::Idle && sys.state() != State::Alarm) {
             digitalWrite(coolingFanPin, HIGH);  //keep the cooling fan on
         }
-        //If we are doing calibration turn the cooling fan on
+        //If we are doing calibration or manual PID is active turn the cooling fan on
         else if (calibration.calibrationInProgress || calibration.getCurrentState() == EXTENDING ||
-                 calibration.getCurrentState() == RETRACTING || calibration.getCurrentState() == RELEASE_TENSION) {
+                 calibration.getCurrentState() == RETRACTING || calibration.getCurrentState() == RELEASE_TENSION ||
+                 manualPIDEnabled) {
             digitalWrite(coolingFanPin, HIGH);  //keep the cooling fan on
         } else {
             digitalWrite(coolingFanPin, LOW);  //Turn the cooling fan off
@@ -1107,11 +1106,6 @@ void Maslow_::stopMotors() {
     axis[_BR].stop();
     axis[_TR].stop();
     axis[_TL].stop();
-}
-
-// Turn the cooling fan on or off
-void Maslow_::setFan(bool on) {
-    digitalWrite(coolingFanPin, on ? HIGH : LOW);
 }
 
 // Propagates pidP/pidI/pidD to all four belt motor PID controllers.
