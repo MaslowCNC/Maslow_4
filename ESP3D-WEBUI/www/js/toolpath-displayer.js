@@ -2064,11 +2064,18 @@ var updateJobBoundsDisplay = function() {
 
     if (jobBboxExists()) {
         const bbox = getJobBoundingBox();
-        const width = (bbox.max.x - bbox.min.x).toFixed(1);
-        const height = (bbox.max.y - bbox.min.y).toFixed(1);
-        const zRange = (bbox.max.z - bbox.min.z).toFixed(1);
+        const isInch = (typeof gCodeModal !== 'undefined') && gCodeModal.units === 'G20';
+        const unit = isInch ? 'in' : 'mm';
+        const factor = isInch ? 1 / 25.4 : 1;
+        const decimals = isInch ? 3 : 1;
 
-        boundsText.innerHTML = `Size: ${width} × ${height} mm<br>Z: ${bbox.min.z.toFixed(1)} to ${bbox.max.z.toFixed(1)} mm (${zRange}mm range)`;
+        const width = ((bbox.max.x - bbox.min.x) * factor).toFixed(decimals);
+        const height = ((bbox.max.y - bbox.min.y) * factor).toFixed(decimals);
+        const zMin = (bbox.min.z * factor).toFixed(decimals);
+        const zMax = (bbox.max.z * factor).toFixed(decimals);
+        const zRange = ((bbox.max.z - bbox.min.z) * factor).toFixed(decimals);
+
+        boundsText.innerHTML = `Size: ${width} × ${height} ${unit}<br>Z: ${zMin} to ${zMax} ${unit} (${zRange} ${unit} range)`;
         boundsInfo.style.display = "block";
         traceButton.style.opacity = "1";
         traceButton.style.pointerEvents = "auto";

@@ -880,6 +880,9 @@ function tabletUpdateModal() {
   setJogSelector(gCodeModal.units);
   scaleUnits("disM");
   scaleUnits("disZ");
+  if (typeof updateJobBoundsDisplay === 'function') {
+    updateJobBoundsDisplay();
+  }
 }
 
 function tabletGrblState(grbl, response) {
