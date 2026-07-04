@@ -585,25 +585,27 @@ bool Calibration::requestStateChange(int newState) {
             } else {
                 break;
             }
-        case RELEASE_TENSION:  //We can enter release tension from any stable state (the machine is not currently performing an action)
-            if (currentState == READY_TO_CUT || currentState == UNKNOWN || currentState == EXTENDEDOUT ||
-                currentState == CALIBRATION_COMPUTING) {
-                previousState   = currentState;  // Store the previous state
-                currentState    = RELEASE_TENSION;
-                complyCallTimer = millis();
-                retracting[_TL] = false;
-                retracting[_TR] = false;
-                retracting[_BL] = false;
-                retracting[_BR] = false;
-                for (int arm = _TL; arm < ARM_COUNT; arm++) {
-                    Maslow.axis[arm].reset();  //This just resets the thresholds for pull tight
-                }
-                success = true;
-                break;
-            } else {
-                log_info("Cannot release tension from state " << stateNames[currentState].name);
-                break;
+        case RELEASE_TENSION:  //We can enter release tension from any state
+            previousState = currentState;  // Store the previous state
+            // Clean up any active process state before entering release tension
+            if (takeSlack) {
+                takeSlack = false;
             }
+            if (calibrationInProgress) {
+                calibrationInProgress = false;
+            }
+            deallocateCalibrationMemory();
+            currentState    = RELEASE_TENSION;
+            complyCallTimer = millis();
+            retracting[_TL] = false;
+            retracting[_TR] = false;
+            retracting[_BL] = false;
+            retracting[_BR] = false;
+            for (int arm = _TL; arm < ARM_COUNT; arm++) {
+                Maslow.axis[arm].reset();  //This just resets the thresholds for pull tight
+            }
+            success = true;
+            break;
         default:
             return false;
     }
@@ -2427,11 +2429,13 @@ void Calibration::allocateCalibrationMemory() {
 void Calibration::deallocateCalibrationMemory() {
     delete[] calibrationGrid;
     calibrationGrid = nullptr;
-    for (int i = 0; i < CALIBRATION_GRID_SIZE_MAX; ++i) {
-        delete[] calibration_data[i];
+    if (calibration_data != nullptr) {
+        for (int i = 0; i < CALIBRATION_GRID_SIZE_MAX; ++i) {
+            delete[] calibration_data[i];
+        }
+        delete[] calibration_data;
+        calibration_data = nullptr;
     }
-    delete[] calibration_data;
-    calibration_data = nullptr;
 }
 
 // Function to reset all calibration state variables to initial values
