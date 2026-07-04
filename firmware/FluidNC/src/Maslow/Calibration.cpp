@@ -475,10 +475,6 @@ bool Calibration::requestStateChange(int newState) {
                 }
                 Maslow.stop();
 
-                //Save the z-axis 'stop' position
-                Maslow.targetZ = 0;
-                Maslow.setZStop();
-
                 //Recalculate the center position because the machine dimensions may have been updated
                 updateCenterXY();
 
@@ -526,7 +522,7 @@ bool Calibration::requestStateChange(int newState) {
                     set_motor_steps(1, mpos_to_steps(beltLength[_TR], 1));  // B axis = TR belt
                     set_motor_steps(2, mpos_to_steps(beltLength[_BL], 2));  // C axis = BL belt
                     set_motor_steps(3, mpos_to_steps(beltLength[_BR], 3));  // D axis = BR belt
-                    set_motor_steps(4, mpos_to_steps(0.0, 4));              // Z axis = 0 (surface level) during calibration
+                    set_motor_steps(4, mpos_to_steps(Maslow.targetZ, 4));   // Z axis = preserve actual Z position (Z-home or Z-stop)
 
                     gc_sync_position();  //This updates the Gcode engine with the new position from the stepping engine that we set with set_motor_steps
                     plan_sync_position();
@@ -1883,10 +1879,16 @@ bool Calibration::take_measurement_avg_with_check(int waypoint, int dir) {
 
                 double threshold = 100;
                 float  diff[ARM_COUNT];
-                diff[_TL] = measurements[0][0] - measurementToXYPlane(kinematics->computeTL(x, y, 0), kinematics->getTlZ());
-                diff[_TR] = measurements[0][1] - measurementToXYPlane(kinematics->computeTR(x, y, 0), kinematics->getTrZ());
-                diff[_BL] = measurements[0][2] - measurementToXYPlane(kinematics->computeBL(x, y, 0), kinematics->getBlZ());
-                diff[_BR] = measurements[0][3] - measurementToXYPlane(kinematics->computeBR(x, y, 0), kinematics->getBrZ());
+                float* mpos      = get_mpos();
+                float  curZ      = mpos[2];
+                float  tlTotalZ  = curZ + kinematics->getTlZ() + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness();
+                float  trTotalZ  = curZ + kinematics->getTrZ() + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness();
+                float  blTotalZ  = curZ + kinematics->getBlZ() + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness();
+                float  brTotalZ  = curZ + kinematics->getBrZ() + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness();
+                diff[_TL] = measurements[0][0] - measurementToXYPlane(kinematics->computeTL(x, y, curZ), tlTotalZ);
+                diff[_TR] = measurements[0][1] - measurementToXYPlane(kinematics->computeTR(x, y, curZ), trTotalZ);
+                diff[_BL] = measurements[0][2] - measurementToXYPlane(kinematics->computeBL(x, y, curZ), blTotalZ);
+                diff[_BR] = measurements[0][3] - measurementToXYPlane(kinematics->computeBR(x, y, curZ), brTotalZ);
                 log_info("Center point off by: TL: " << diff[_TL] << " TR: " << diff[_TR] << " BL: " << diff[_BL] << " BR: " << diff[_BR]);
 
                 if (abs(diff[_TL]) > threshold || abs(diff[_TR]) > threshold || abs(diff[_BL]) > threshold || abs(diff[_BR]) > threshold) {

@@ -1315,7 +1315,7 @@ const tabletCalExtend = () => {
 const tabletCalCalibrate = () => {
   confirmdlg(
     "Find Anchors",
-    "Please confirm Z is fully lowered to continue",
+    "Please confirm Z is at Z-home position to continue",
     (response) => {
       if (response === "yes") {
         onCalibrationButtonsClick("$CAL", "Find Anchors");
