@@ -2064,11 +2064,9 @@ var updateJobBoundsDisplay = function() {
 
     if (jobBboxExists()) {
         const bbox = getJobBoundingBox();
-        const width = (bbox.max.x - bbox.min.x).toFixed(1);
-        const height = (bbox.max.y - bbox.min.y).toFixed(1);
         const zRange = (bbox.max.z - bbox.min.z).toFixed(1);
 
-        boundsText.innerHTML = `Size: ${width} × ${height} mm<br>Z: ${bbox.min.z.toFixed(1)} to ${bbox.max.z.toFixed(1)} mm (${zRange}mm range)`;
+        boundsText.innerHTML = `X: ${bbox.min.x.toFixed(1)} to ${bbox.max.x.toFixed(1)} mm<br>Y: ${bbox.min.y.toFixed(1)} to ${bbox.max.y.toFixed(1)} mm<br>Z: ${bbox.min.z.toFixed(1)} to ${bbox.max.z.toFixed(1)} mm (${zRange}mm range)`;
         boundsInfo.style.display = "block";
         traceButton.style.opacity = "1";
         traceButton.style.pointerEvents = "auto";
