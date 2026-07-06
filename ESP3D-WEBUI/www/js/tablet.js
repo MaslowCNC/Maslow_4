@@ -908,21 +908,13 @@ function scaleUnits(target) {
   const rawText = distanceElement.innerText;
   const isZAxis = target === 'disZ';
 
-  // Try to determine the current unit of the stored text.
-  // We use the *previous* mode (before the toggle) to interpret the text.
-  // The previous mode is 'mm' when gCodeModal.units just became G20 (switched away from mm),
-  // or an inch mode when gCodeModal.units just became G21 (switched to mm).
-  // When switching between the two inch sub-modes, gCodeModal.units stays G20.
   let currentMm;
-  const prevLabelText = distanceElement.innerText; // same as rawText
 
-  // If the stored text is a decimal number, try to figure out its unit from context.
-  // Heuristic: if gCodeModal.units === 'G20' and text has no "/" we might be coming from mm
-  // (just switched to inch) or from inch_dec (switching inch_dec → inch_frac or vice-versa).
-  // We use a threshold: values > 10 are almost certainly mm, values ≤ 10 are likely inches.
+  // If the stored text cannot be parsed, set a safe default and log a warning.
   const inchFracVal = parseInchFraction(rawText);
   if (inchFracVal === null) {
-    console.error(`Invalid value in ${target} element: "${rawText}"`);
+    console.error(`Invalid value in ${target} element: "${rawText}" — resetting to 0`);
+    distanceElement.innerText = mmToDisplay(0, unitDisplayMode, isZAxis ? 'Z' : 'X');
     return;
   }
 
@@ -931,7 +923,11 @@ function scaleUnits(target) {
     currentMm = inchFracVal * 25.4;
   } else {
     // Switching TO an inch mode.
-    // Check if this looks like a mm value (by magnitude heuristic)
+    // Heuristic: a decimal value > 10 is almost certainly mm (default jog
+    // distances are 1–1000 mm, whereas common inch values are 0.001–5).
+    // Values with a "/" are unambiguously fractional inches.
+    // This heuristic may mis-classify an ~10 mm jog, which is an acceptable
+    // edge case given the context (the display is approximate for this conversion).
     const numericVal = Number(rawText);
     const looksLikeMm = !rawText.includes('/') && !isNaN(numericVal) && Math.abs(numericVal) > 10;
     if (looksLikeMm) {
@@ -1678,6 +1674,10 @@ const tabletOpenScaleThicknessPopup = () => {
 
   const isInch = unitDisplayMode === 'inch_frac' || unitDisplayMode === 'inch_dec';
   const unitLabel = isInch ? 'in' : 'mm';
+  const isFrac = unitDisplayMode === 'inch_frac';
+
+  // Placeholder text for thickness fields in the current unit mode
+  const thicknessPlaceholder = isFrac ? '0 or 3/4' : (isInch ? '0.0' : '0');
 
   // Update labels to reflect current units
   if (elWorkLabel) elWorkLabel.textContent = `Work Thickness (${unitLabel})`;
@@ -1692,14 +1692,14 @@ const tabletOpenScaleThicknessPopup = () => {
   if (elScaleX) elScaleX.value = scaleX;
   if (elScaleY) elScaleY.value = scaleY;
   if (elWorkThickness) {
-    elWorkThickness.type = unitDisplayMode === 'inch_frac' ? 'text' : 'number';
+    elWorkThickness.type = isFrac ? 'text' : 'number';
     elWorkThickness.value = displayThickness(workThickness);
-    elWorkThickness.placeholder = isInch ? (unitDisplayMode === 'inch_frac' ? '0 or 3/4' : '0.0') : '0';
+    elWorkThickness.placeholder = thicknessPlaceholder;
   }
   if (elSpoilboardThickness) {
-    elSpoilboardThickness.type = unitDisplayMode === 'inch_frac' ? 'text' : 'number';
+    elSpoilboardThickness.type = isFrac ? 'text' : 'number';
     elSpoilboardThickness.value = displayThickness(spoilboardThickness);
-    elSpoilboardThickness.placeholder = isInch ? (unitDisplayMode === 'inch_frac' ? '0 or 3/4' : '0.0') : '0';
+    elSpoilboardThickness.placeholder = thicknessPlaceholder;
   }
   if (elCurrent) {
     const wStr = displayThickness(workThickness);
