@@ -618,8 +618,48 @@ const maslowErrorMsgHandling = (msg) => {
 
 const cfgDef = {
 	Retract_Current_Threshold: { name: "retractionForce", type: "A", cmd: "Maslow_Retract_Current_Threshold" },
-	spoilboardThickness: { name: "spoilboardThickness", type: "A", cmd: "Maslow_spoilboardThickness" },
-	workThickness: { name: "workThickness", type: "A", cmd: "Maslow_workThickness" },
+	spoilboardThickness: {
+		name: "config_spoilboardThickness",
+		type: "A",
+		cmd: "Maslow_spoilboardThickness",
+		// Display firmware mm value in current unit mode
+		fnDisp: (val) => {
+			const mode = (typeof unitDisplayMode !== 'undefined') ? unitDisplayMode : 'mm';
+			if (mode !== 'mm' && typeof mmToDisplay === 'function') {
+				return mmToDisplay(parseFloat(val), mode, 'X');
+			}
+			return val;
+		},
+		// Convert back to mm when saving
+		fnVal: (val) => {
+			const mode = (typeof unitDisplayMode !== 'undefined') ? unitDisplayMode : 'mm';
+			if (mode !== 'mm' && typeof parseToMm === 'function') {
+				const mm = parseToMm(val, mode, 'X');
+				return mm !== null ? mm.toFixed(3) : val;
+			}
+			return val;
+		},
+	},
+	workThickness: {
+		name: "config_workThickness",
+		type: "A",
+		cmd: "Maslow_workThickness",
+		fnDisp: (val) => {
+			const mode = (typeof unitDisplayMode !== 'undefined') ? unitDisplayMode : 'mm';
+			if (mode !== 'mm' && typeof mmToDisplay === 'function') {
+				return mmToDisplay(parseFloat(val), mode, 'X');
+			}
+			return val;
+		},
+		fnVal: (val) => {
+			const mode = (typeof unitDisplayMode !== 'undefined') ? unitDisplayMode : 'mm';
+			if (mode !== 'mm' && typeof parseToMm === 'function') {
+				const mm = parseToMm(val, mode, 'X');
+				return mm !== null ? mm.toFixed(3) : val;
+			}
+			return val;
+		},
+	},
 	Acceptable_Calibration_Threshold: { name: "acceptableCalibrationThreshold", type: "A", cmd: "Maslow_Acceptable_Calibration_Threshold" },
 	Apply_Tension_Belt_Retraction_Limit: { name: "applyTensionBeltRetractionLimit", type: "A", cmd: "Maslow_Apply_Tension_Belt_Retraction_Limit" },
 	Apply_Tension_Allow_Limiting: { name: "applyTensionAllowLimiting", type: "A", cmd: "Maslow_Apply_Tension_Allow_Limiting" },

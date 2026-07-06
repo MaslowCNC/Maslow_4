@@ -399,13 +399,13 @@
             <input id="scaleY" type="number" min="0.8" max="1.2" step="0.001" class="calibration-modal-input" placeholder="1.0">
           </div>
           <div class="input-row">
-            <label for="workThickness" class="input-label">Work Thickness (mm)</label>
+            <label for="workThickness" id="workThicknessLabel" class="input-label">Work Thickness (mm)</label>
           </div>
           <div class="input-row">
             <input id="workThickness" type="number" min="0" max="50" step="0.1" class="calibration-modal-input" placeholder="0">
           </div>
           <div class="input-row">
-            <label for="spoilboardThickness" class="input-label">Spoilboard Thickness (mm)</label>
+            <label for="spoilboardThickness" id="spoilboardThicknessLabel" class="input-label">Spoilboard Thickness (mm)</label>
           </div>
           <div class="input-row">
             <input id="spoilboardThickness" type="number" min="0" max="50" step="0.1" class="calibration-modal-input" placeholder="0">
@@ -498,16 +498,16 @@
         <hr style="border-top: 1px dashed;">
         <div class="grid-container" title="Valid Range is 0-50mm">
           <div class="input-row">
-            <label for="spoilboardThickness" class="input-label">Spoil Board Thickness (mm)</label>
+            <label for="config_spoilboardThickness" id="configSpoilboardThicknessLabel" class="input-label">Spoil Board Thickness (mm)</label>
           </div>
           <div class="input-row">
-            <input id="spoilboardThickness" type="number" min="0" max="50" step="0.1" class="calibration-modal-input">
+            <input id="config_spoilboardThickness" type="number" min="0" max="50" step="0.1" class="calibration-modal-input">
           </div>
           <div class="input-row">
-            <label for="workThickness" class="input-label">Work Thickness (mm)</label>
+            <label for="config_workThickness" id="configWorkThicknessLabel" class="input-label">Work Thickness (mm)</label>
           </div>
           <div class="input-row">
-            <input id="workThickness" type="number" min="0" max="50" step="0.1" class="calibration-modal-input">
+            <input id="config_workThickness" type="number" min="0" max="50" step="0.1" class="calibration-modal-input">
           </div>
         </div>
         <hr style="border-top: 1px dashed;">

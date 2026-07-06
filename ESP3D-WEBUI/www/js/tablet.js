@@ -5,6 +5,15 @@
 const FILE_LIST_LOAD_DELAY_MS = 500; // Delay to ensure file list is loaded before restoration
 const workAreaDefaults = { x: 2440, y: 1220, offX: 0, offY: 0 };
 
+/**
+ * Unit display mode for the UI.
+ *  'mm'        – millimetres (G21)
+ *  'inch_frac' – fractional inches (G20), e.g. "1 3/16"
+ *  'inch_dec'  – decimal inches (G20), e.g. "1.1875"
+ * This is a UI-only concept layered on top of the G20/G21 firmware mode.
+ */
+var unitDisplayMode = 'mm';
+
 var gCodeLoaded = false;
 var gCodeDisplayable = false;
 var _gcodeRaw = "";
@@ -193,6 +202,7 @@ const getUnitInfo = () => {
     unitLabel: isInchMode ? 'in' : 'mm',
     decimals: isInchMode ? 4 : 3,
     toDisplay: (mm) => isInchMode ? mm / mmPerInch : mm,
+    formatDisplay: (mm, axis) => mmToDisplay(mm, unitDisplayMode, axis),
   };
 }
 
@@ -216,24 +226,32 @@ const openSetHomePopup = () => {
   // Pre-fill with current machine position so jogging to a spot and opening
   // the popup defaults to "set home here" (confirming without changes sets
   // GCode origin at the current machine position)
-  const { unitLabel, decimals, toDisplay } = getUnitInfo();
+  const { unitLabel, formatDisplay, toDisplay } = getUnitInfo();
   const dispMinX = toDisplay(bounds.minX);
   const dispMaxX = toDisplay(bounds.maxX);
   const dispMinY = toDisplay(bounds.minY);
   const dispMaxY = toDisplay(bounds.maxY);
   const xInput = id("setHomeX");
   const yInput = id("setHomeY");
+  const isFrac = unitDisplayMode === 'inch_frac';
+  // Change input type to text in fractional mode so fractions can be typed
   if (xInput) {
-    xInput.value = MPOS ? toDisplay(MPOS[0]).toFixed(decimals) : "0";
-    xInput.min = dispMinX;
-    xInput.max = dispMaxX;
-    xInput.title = `X: ${dispMinX.toFixed(decimals)} to ${dispMaxX.toFixed(decimals)} ${unitLabel}`;
+    xInput.type = isFrac ? 'text' : 'number';
+    xInput.value = MPOS ? formatDisplay(MPOS[0], 'X') : "0";
+    if (!isFrac) {
+      xInput.min = dispMinX;
+      xInput.max = dispMaxX;
+    }
+    xInput.title = `X: ${formatDisplay(bounds.minX, 'X')} to ${formatDisplay(bounds.maxX, 'X')} ${unitLabel}`;
   }
   if (yInput) {
-    yInput.value = MPOS ? toDisplay(MPOS[1]).toFixed(decimals) : "0";
-    yInput.min = dispMinY;
-    yInput.max = dispMaxY;
-    yInput.title = `Y: ${dispMinY.toFixed(decimals)} to ${dispMaxY.toFixed(decimals)} ${unitLabel}`;
+    yInput.type = isFrac ? 'text' : 'number';
+    yInput.value = MPOS ? formatDisplay(MPOS[1], 'Y') : "0";
+    if (!isFrac) {
+      yInput.min = dispMinY;
+      yInput.max = dispMaxY;
+    }
+    yInput.title = `Y: ${formatDisplay(bounds.minY, 'Y')} to ${formatDisplay(bounds.maxY, 'Y')} ${unitLabel}`;
   }
   const xUnit = id("setHomeXUnit");
   if (xUnit) xUnit.textContent = `(${unitLabel})`;
@@ -241,8 +259,8 @@ const openSetHomePopup = () => {
   if (yUnit) yUnit.textContent = `(${unitLabel})`;
   const homeLabel = id("currentHomePositionLabel");
   if (homeLabel) {
-    const hx = (WCO && WCO.length >= 2) ? toDisplay(WCO[0]).toFixed(decimals) : "0";
-    const hy = (WCO && WCO.length >= 2) ? toDisplay(WCO[1]).toFixed(decimals) : "0";
+    const hx = (WCO && WCO.length >= 2) ? formatDisplay(WCO[0], 'X') : "0";
+    const hy = (WCO && WCO.length >= 2) ? formatDisplay(WCO[1], 'Y') : "0";
     homeLabel.textContent = `Current: (${hx}, ${hy}) ${unitLabel}`;
   }
   openModal("set-home-popup");
@@ -252,13 +270,23 @@ const confirmSetHome = () => {
   const bounds = getWorkAreaBounds();
   const { toDisplay } = getUnitInfo();
 
-  // Clamp entered values to work area boundary (values are in current display units)
-  const rawX = parseFloat(id("setHomeX").value);
-  const rawY = parseFloat(id("setHomeY").value);
+  // Parse entered values: support fractional inch strings
+  const parseHomeInput = (val) => {
+    if (unitDisplayMode === 'inch_frac') {
+      const parsed = parseInchFraction(val);
+      return parsed !== null ? parsed : NaN;
+    }
+    return parseFloat(val);
+  };
+
   const dispMinX = toDisplay(bounds.minX);
   const dispMaxX = toDisplay(bounds.maxX);
   const dispMinY = toDisplay(bounds.minY);
   const dispMaxY = toDisplay(bounds.maxY);
+
+  // Clamp entered values to work area boundary (values are in current display units)
+  const rawX = parseHomeInput(id("setHomeX").value);
+  const rawY = parseHomeInput(id("setHomeY").value);
   const xVal = isNaN(rawX) ? 0 : Math.max(dispMinX, Math.min(dispMaxX, rawX));
   const yVal = isNaN(rawY) ? 0 : Math.max(dispMinY, Math.min(dispMaxY, rawY));
 
@@ -302,10 +330,24 @@ const confirmSetHome = () => {
 }
 
 const toggleUnits = () => {
-  tabletClick()
-  sendCommand(gCodeModal.units === 'G21' ? 'G20' : 'G21');
-  // The button label will be fixed by the response to $G
+  tabletClick();
+  // Cycle: mm → inch_frac → inch_dec → mm
+  if (unitDisplayMode === 'mm') {
+    unitDisplayMode = 'inch_frac';
+    sendCommand('G20');
+  } else if (unitDisplayMode === 'inch_frac') {
+    unitDisplayMode = 'inch_dec';
+    // Stay in G20 (inch) firmware mode; only the display sub-mode changes
+  } else {
+    // inch_dec → mm
+    unitDisplayMode = 'mm';
+    sendCommand('G21');
+  }
+  saveUnitDisplayMode();
+  // Request updated modal state from firmware
   sendCommand('$G');
+  // Immediately refresh the display to reflect the new sub-mode label
+  tabletUpdateModal();
 }
 
 // const btnSetDistance = () => {
@@ -547,9 +589,18 @@ const moveTo = (location) => {
 const sendMove = (cmd) => {
   tabletClick();
 
+  // Parse jog distance: supports decimal numbers and fractional inch strings (e.g. "1 3/16")
+  const parseJogDist = (text) => {
+    if (unitDisplayMode === 'inch_frac') {
+      const inches = parseInchFraction(text);
+      return inches !== null ? inches : 0;
+    }
+    return Number(text) || 0;
+  };
+
   const distance = cmd.includes('Z')
-    ? Number(getText('disZ')) || 0
-    : Number(getText('disM')) || 0;
+    ? parseJogDist(getText('disZ'))
+    : parseJogDist(getText('disM'));
 
   // Convert a display-unit jog distance to mm for the safety threshold check.
   // MPOS is always in mm; jog distances match the current display unit (mm or inch).
@@ -850,36 +901,94 @@ function stopAndRecover() {
 var oldCannotClick = null
 
 function scaleUnits(target) {
-  //Scale the units to move when jogging down or up by 25.4 to keep them reasonable
+  // Convert the jog-distance value stored in the target element when the unit
+  // mode changes.  The element may hold a decimal mm value, decimal inches, or
+  // a fractional inch string (e.g. "1 3/16").
   const distanceElement = id(target);
-  const currentValue = Number(distanceElement.innerText);
+  const rawText = distanceElement.innerText;
+  const isZAxis = target === 'disZ';
 
-  if (!Number.isNaN(currentValue)) {
-    // When converting to inches, round to 3 decimal places for display
-    if (gCodeModal.units == 'G20') {
-      distanceElement.innerText = (currentValue / 25.4).toFixed(3);
-    } else {
-      // When converting to mm, round to 2 decimal places for display
-      distanceElement.innerText = (currentValue * 25.4).toFixed(2);
-    }
-  } else {
-    console.error('Invalid number in disM element');
-  }
-}
+  // Try to determine the current unit of the stored text.
+  // We use the *previous* mode (before the toggle) to interpret the text.
+  // The previous mode is 'mm' when gCodeModal.units just became G20 (switched away from mm),
+  // or an inch mode when gCodeModal.units just became G21 (switched to mm).
+  // When switching between the two inch sub-modes, gCodeModal.units stays G20.
+  let currentMm;
+  const prevLabelText = distanceElement.innerText; // same as rawText
 
-function tabletUpdateModal() {
-  const newUnits = gCodeModal.units === "G21" ? "mm" : "Inch";
-  const isInch = gCodeModal.units === "G20";
-  id("tablettab_toggle_units").style.backgroundColor = isInch ? "#e6c800" : "#f2f0e4";
-
-  if (getValue("tablettab_toggle_units") === newUnits) {
+  // If the stored text is a decimal number, try to figure out its unit from context.
+  // Heuristic: if gCodeModal.units === 'G20' and text has no "/" we might be coming from mm
+  // (just switched to inch) or from inch_dec (switching inch_dec → inch_frac or vice-versa).
+  // We use a threshold: values > 10 are almost certainly mm, values ≤ 10 are likely inches.
+  const inchFracVal = parseInchFraction(rawText);
+  if (inchFracVal === null) {
+    console.error(`Invalid value in ${target} element: "${rawText}"`);
     return;
   }
 
-  setText("tablettab_toggle_units", newUnits);
+  if (unitDisplayMode === 'mm') {
+    // Switching TO mm: stored value is in inches (decimal or fractional)
+    currentMm = inchFracVal * 25.4;
+  } else {
+    // Switching TO an inch mode.
+    // Check if this looks like a mm value (by magnitude heuristic)
+    const numericVal = Number(rawText);
+    const looksLikeMm = !rawText.includes('/') && !isNaN(numericVal) && Math.abs(numericVal) > 10;
+    if (looksLikeMm) {
+      currentMm = numericVal; // Was mm, now convert to inches
+    } else {
+      // Already in inches (was inch_dec or inch_frac), just reformat
+      currentMm = inchFracVal * 25.4;
+    }
+  }
+
+  // Now format in the new display mode
+  distanceElement.innerText = mmToDisplay(currentMm, unitDisplayMode, isZAxis ? 'Z' : 'X');
+}
+
+function tabletUpdateModal() {
+  // Derive the expected button label from the current unitDisplayMode.
+  // unitDisplayMode is the ground truth; gCodeModal.units drives the firmware
+  // (G20/G21) but does not distinguish between the two inch sub-modes.
+  let newLabel;
+  let bgColor;
+  switch (unitDisplayMode) {
+    case 'inch_frac':
+      newLabel = 'in ½';
+      bgColor = '#e6c800'; // yellow
+      break;
+    case 'inch_dec':
+      newLabel = 'in .';
+      bgColor = '#d4a000'; // darker amber
+      break;
+    default: // 'mm'
+      newLabel = 'mm';
+      bgColor = '#f2f0e4'; // grey
+      break;
+  }
+  id("tablettab_toggle_units").style.backgroundColor = bgColor;
+
+  if (getValue("tablettab_toggle_units") === newLabel) {
+    return;
+  }
+
+  setText("tablettab_toggle_units", newLabel);
   setJogSelector(gCodeModal.units);
   scaleUnits("disM");
   scaleUnits("disZ");
+
+  // Update configuration popup's thickness field types and labels
+  const isInch = unitDisplayMode !== 'mm';
+  const unitLabel = isInch ? 'in' : 'mm';
+  const isFrac = unitDisplayMode === 'inch_frac';
+  const configWorkLabel = id("configWorkThicknessLabel");
+  const configSpoilLabel = id("configSpoilboardThicknessLabel");
+  const configWorkInput = id("config_workThickness");
+  const configSpoilInput = id("config_spoilboardThickness");
+  if (configWorkLabel) configWorkLabel.textContent = `Work Thickness (${unitLabel})`;
+  if (configSpoilLabel) configSpoilLabel.textContent = `Spoilboard Thickness (${unitLabel})`;
+  if (configWorkInput) configWorkInput.type = isFrac ? 'text' : 'number';
+  if (configSpoilInput) configSpoilInput.type = isFrac ? 'text' : 'number';
 }
 
 function tabletGrblState(grbl, response) {
@@ -1021,17 +1130,34 @@ function tabletGrblState(grbl, response) {
 
   const digits = gCodeModal.units === 'G20' ? 4 : 2;
 
+  // Format a position value for display given the current unit display mode.
+  // factor already converts mm → display units (inches when G20, mm when G21).
+  const formatPos = (rawMm, axisIdx) => {
+    const isRotary = axisIdx > 2;
+    if (isRotary) {
+      return Number(rawMm * factor).toFixed(2);
+    }
+    const axisName = axisNames[axisIdx] ? axisNames[axisIdx].toUpperCase() : 'X';
+    if (unitDisplayMode === 'inch_frac') {
+      // rawMm is in mm (firmware reports mm regardless of G20/G21 in status)
+      // factor converts to the current display unit, but for fractions we need mm→inches directly
+      const inches = rawMm / 25.4;
+      return formatInchFraction(inches, maxFracDenomForAxis(axisName));
+    }
+    return Number(rawMm * factor).toFixed(digits);
+  };
+
   if (WPOS) {
     WPOS.forEach((pos, index) => {
-      setTextContent(`wpos-${axisNames[index]}`, Number(pos * factor).toFixed(index > 2 ? 2 : digits));
-    })
+      setTextContent(`wpos-${axisNames[index]}`, formatPos(pos, index));
+    });
   }
 
   if (MPOS) {
     MPOS.forEach((pos, index) => {
       const axisName = axisNames[index].toUpperCase();
-      setTextContent(`mpos-${axisNames[index]}`, `|${axisName}m: ${Number(pos * factor).toFixed(index > 2 ? 2 : digits)}|`);
-    })
+      setTextContent(`mpos-${axisNames[index]}`, `|${axisName}m: ${formatPos(pos, index)}|`);
+    });
   }
 
   // On the first status update that has both WCO and MPOS data, proactively
@@ -1547,12 +1673,39 @@ const tabletOpenScaleThicknessPopup = () => {
   const elWorkThickness = id("workThickness");
   const elSpoilboardThickness = id("spoilboardThickness");
   const elCurrent = id("scale-thickness-current-values");
+  const elWorkLabel = id("workThicknessLabel");
+  const elSpoilLabel = id("spoilboardThicknessLabel");
+
+  const isInch = unitDisplayMode === 'inch_frac' || unitDisplayMode === 'inch_dec';
+  const unitLabel = isInch ? 'in' : 'mm';
+
+  // Update labels to reflect current units
+  if (elWorkLabel) elWorkLabel.textContent = `Work Thickness (${unitLabel})`;
+  if (elSpoilLabel) elSpoilLabel.textContent = `Spoilboard Thickness (${unitLabel})`;
+
+  // Display thickness values in current units; change input type for fraction mode
+  const displayThickness = (mmVal) => {
+    if (!isInch) return String(mmVal);
+    return mmToDisplay(mmVal, unitDisplayMode, 'X');
+  };
 
   if (elScaleX) elScaleX.value = scaleX;
   if (elScaleY) elScaleY.value = scaleY;
-  if (elWorkThickness) elWorkThickness.value = workThickness;
-  if (elSpoilboardThickness) elSpoilboardThickness.value = spoilboardThickness;
-  if (elCurrent) elCurrent.textContent = `Current: Scale X=${scaleX}, Scale Y=${scaleY}, Work=${workThickness}mm, Spoilboard=${spoilboardThickness}mm`;
+  if (elWorkThickness) {
+    elWorkThickness.type = unitDisplayMode === 'inch_frac' ? 'text' : 'number';
+    elWorkThickness.value = displayThickness(workThickness);
+    elWorkThickness.placeholder = isInch ? (unitDisplayMode === 'inch_frac' ? '0 or 3/4' : '0.0') : '0';
+  }
+  if (elSpoilboardThickness) {
+    elSpoilboardThickness.type = unitDisplayMode === 'inch_frac' ? 'text' : 'number';
+    elSpoilboardThickness.value = displayThickness(spoilboardThickness);
+    elSpoilboardThickness.placeholder = isInch ? (unitDisplayMode === 'inch_frac' ? '0 or 3/4' : '0.0') : '0';
+  }
+  if (elCurrent) {
+    const wStr = displayThickness(workThickness);
+    const sStr = displayThickness(spoilboardThickness);
+    elCurrent.textContent = `Current: Scale X=${scaleX}, Scale Y=${scaleY}, Work=${wStr}${unitLabel}, Spoilboard=${sStr}${unitLabel}`;
+  }
 
   openModal("scale-thickness-popup");
 };
@@ -1565,8 +1718,32 @@ const tabletSaveScaleThickness = () => {
 
   const newScaleX = elScaleX ? elScaleX.value.trim() : "";
   const newScaleY = elScaleY ? elScaleY.value.trim() : "";
-  const newWorkThickness = elWorkThickness ? elWorkThickness.value.trim() : "";
-  const newSpoilboardThickness = elSpoilboardThickness ? elSpoilboardThickness.value.trim() : "";
+  const rawWorkThickness = elWorkThickness ? elWorkThickness.value.trim() : "";
+  const rawSpoilboardThickness = elSpoilboardThickness ? elSpoilboardThickness.value.trim() : "";
+
+  // Validate thickness inputs in inch_frac mode
+  if (unitDisplayMode === 'inch_frac') {
+    const workErr = rawWorkThickness ? validateInchFracInput(rawWorkThickness, 'X') : null;
+    const spoilErr = rawSpoilboardThickness ? validateInchFracInput(rawSpoilboardThickness, 'X') : null;
+    if (workErr) {
+      addMessage(`Work thickness error: ${workErr}`);
+      return;
+    }
+    if (spoilErr) {
+      addMessage(`Spoilboard thickness error: ${spoilErr}`);
+      return;
+    }
+  }
+
+  // Convert thickness values to mm if in inch mode
+  const thicknessToMm = (raw) => {
+    if (!raw) return "";
+    const mm = parseToMm(raw, unitDisplayMode, 'X');
+    return mm !== null ? String(mm.toFixed(3)) : "";
+  };
+
+  const newWorkThickness = (unitDisplayMode !== 'mm') ? thicknessToMm(rawWorkThickness) : rawWorkThickness;
+  const newSpoilboardThickness = (unitDisplayMode !== 'mm') ? thicknessToMm(rawSpoilboardThickness) : rawSpoilboardThickness;
 
   const lv = globalThis.loadedValues || {};
   const keys = [
@@ -1675,6 +1852,7 @@ function tabletInit() {
     //numpad.attach({target: "wpos-a", axis: "A"});
 
     setJogSelector('mm');
+    loadUnitDisplayMode();
     loadJogDists();
 
     // Set WiFi SSID pattern validation dynamically
@@ -2277,6 +2455,17 @@ function loadJogDists() {
   const disZ = localStorage.getItem("disZ");
   if (disZ != null) {
     setText("disZ", disZ);
+  }
+}
+
+function saveUnitDisplayMode() {
+  localStorage.setItem("unitDisplayMode", unitDisplayMode);
+}
+
+function loadUnitDisplayMode() {
+  const saved = localStorage.getItem("unitDisplayMode");
+  if (saved === 'mm' || saved === 'inch_frac' || saved === 'inch_dec') {
+    unitDisplayMode = saved;
   }
 }
 

@@ -72,3 +72,9 @@
 /* No decimal points allowed */
 #numBWrap.noDec .dot { display: none; }
 #numBWrap.noDec .zero { grid-column: span 3; }
+
+/* Fraction mode: show space and slash buttons, hide decimal point */
+#numBWrap .frac-space, #numBWrap .frac-slash { background: #e7f0ff; }
+#numBWrap:not(.fracMode) .frac-space,
+#numBWrap:not(.fracMode) .frac-slash { display: none; }
+#numBWrap.fracMode .dot { display: none; }
