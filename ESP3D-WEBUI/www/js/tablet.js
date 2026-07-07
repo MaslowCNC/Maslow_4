@@ -1378,12 +1378,18 @@ const handleMaslowActionButtonClick = () => {
       const parkZ = parseFloat(lv.parkZ);
       const parkX = parseFloat(lv.parkX);
       const parkY = parseFloat(lv.parkY);
-      const safeZ = isNaN(parkZ) ? 2.0 : parkZ;
-      const targetX = isNaN(parkX) ? 0.0 : parkX;
-      const targetY = isNaN(parkY) ? 0.0 : parkY;
+      // Stored values are always in mm; convert to current display units for G-code commands
+      const { unitLabel, decimals, toDisplay } = getUnitInfo();
+      const toFirmware = (mm) => toDisplay(mm);
+      const rawZ = isNaN(parkZ) ? 2.0 : parkZ;
+      const rawX = isNaN(parkX) ? 0.0 : parkX;
+      const rawY = isNaN(parkY) ? 0.0 : parkY;
+      const safeZ = toFirmware(rawZ);
+      const targetX = toFirmware(rawX);
+      const targetY = toFirmware(rawY);
       sendCommand(`G90 G0 Z${safeZ}`);
       sendCommand(`G53 G0 Y${targetY} X${targetX}`);
-      addMessage(`Parking: raising Z to ${safeZ}mm above Z home, then moving to machine X=${targetX}, Y=${targetY}`);
+      addMessage(`Parking: raising Z to ${safeZ.toFixed(decimals)}${unitLabel} above Z home, then moving to machine X=${targetX.toFixed(decimals)}, Y=${targetY.toFixed(decimals)} ${unitLabel}`);
       break;
     }
   }
@@ -1478,17 +1484,28 @@ const getParkValues = () => {
 const tabletParkPopupHide = () => hideModal("park-popup");
 
 const tabletOpenParkPopup = () => {
-  const { x, y, z } = getParkValues();
+  const { x, y, z } = getParkValues();  // stored values are always in mm
+  const { unitLabel, decimals, toDisplay } = getUnitInfo();
+
+  const dispX = toDisplay(x).toFixed(decimals);
+  const dispY = toDisplay(y).toFixed(decimals);
+  const dispZ = toDisplay(z).toFixed(decimals);
 
   const elX = id("parkX");
   const elY = id("parkY");
   const elZ = id("parkZ");
   const elCurrent = id("park-current-values");
+  const elXUnit = id("parkXUnit");
+  const elYUnit = id("parkYUnit");
+  const elZUnit = id("parkZUnit");
 
-  if (elX) elX.value = x;
-  if (elY) elY.value = y;
-  if (elZ) elZ.value = z;
-  if (elCurrent) elCurrent.textContent = `Current: X=${x}, Y=${y}, Z=${z}`;
+  if (elX) elX.value = dispX;
+  if (elY) elY.value = dispY;
+  if (elZ) elZ.value = dispZ;
+  if (elXUnit) elXUnit.textContent = `(${unitLabel})`;
+  if (elYUnit) elYUnit.textContent = `(${unitLabel})`;
+  if (elZUnit) elZUnit.textContent = `(${unitLabel})`;
+  if (elCurrent) elCurrent.textContent = `Current: X=${dispX}, Y=${dispY}, Z=${dispZ} ${unitLabel}`;
 
   openModal("park-popup");
 };
@@ -1498,9 +1515,21 @@ const tabletSavePark = () => {
   const elY = id("parkY");
   const elZ = id("parkZ");
 
-  const newX = elX ? elX.value.trim() : "";
-  const newY = elY ? elY.value.trim() : "";
-  const newZ = elZ ? elZ.value.trim() : "";
+  const enteredX = elX ? elX.value.trim() : "";
+  const enteredY = elY ? elY.value.trim() : "";
+  const enteredZ = elZ ? elZ.value.trim() : "";
+
+  // Convert entered values from current display units to mm for storage
+  const isInch = gCodeModal.units === 'G20';
+  const toMm = (v) => {
+    if (!isInch) return v;
+    const num = parseFloat(v);
+    return isNaN(num) ? v : String((num * 25.4).toFixed(3));
+  };
+
+  const newX = enteredX !== "" ? toMm(enteredX) : "";
+  const newY = enteredY !== "" ? toMm(enteredY) : "";
+  const newZ = enteredZ !== "" ? toMm(enteredZ) : "";
 
   const lv = globalThis.loadedValues || {};
   const keys = [
