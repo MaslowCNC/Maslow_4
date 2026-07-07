@@ -1380,16 +1380,15 @@ const handleMaslowActionButtonClick = () => {
       const parkY = parseFloat(lv.parkY);
       // Stored values are always in mm; convert to current display units for G-code commands
       const { unitLabel, decimals, toDisplay } = getUnitInfo();
-      const toFirmware = (mm) => toDisplay(mm);
       const rawZ = isNaN(parkZ) ? 2.0 : parkZ;
       const rawX = isNaN(parkX) ? 0.0 : parkX;
       const rawY = isNaN(parkY) ? 0.0 : parkY;
-      const safeZ = toFirmware(rawZ);
-      const targetX = toFirmware(rawX);
-      const targetY = toFirmware(rawY);
+      const safeZ = toDisplay(rawZ);
+      const targetX = toDisplay(rawX);
+      const targetY = toDisplay(rawY);
       sendCommand(`G90 G0 Z${safeZ}`);
       sendCommand(`G53 G0 Y${targetY} X${targetX}`);
-      addMessage(`Parking: raising Z to ${safeZ.toFixed(decimals)}${unitLabel} above Z home, then moving to machine X=${targetX.toFixed(decimals)}, Y=${targetY.toFixed(decimals)} ${unitLabel}`);
+      addMessage(`Parking: raising Z to ${safeZ.toFixed(decimals)} ${unitLabel} above Z home, then moving to machine X=${targetX.toFixed(decimals)} ${unitLabel}, Y=${targetY.toFixed(decimals)} ${unitLabel}`);
       break;
     }
   }
