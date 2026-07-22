@@ -15,6 +15,14 @@ jobs:
       - name: Assign issue to Copilot
         if: github.event.issue.user.login != 'BarbourSmith'
         run: |
-          gh issue edit ${{ github.event.issue.number }} --add-assignee "copilot-swe-agent"
+          for attempt in 1 2 3; do
+            if gh issue edit ${{ github.event.issue.number }} --add-assignee "copilot-swe-agent"; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              sleep 5
+            fi
+          done
+          exit 1
         env:
           GH_TOKEN: ${{ secrets.USER_GITHUB_TOKEN }}
