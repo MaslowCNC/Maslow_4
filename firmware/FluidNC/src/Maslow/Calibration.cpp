@@ -1545,10 +1545,13 @@ bool Calibration::take_measurement(float result[4], int dir, int run, int curren
             float brTotalZ = (currentZ + kinematics->getBrZ() + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
 
             //take measurement and record it to the calibration data array.
-            result[0] = measurementToXYPlane(Maslow.axis[_TL].getPosition(), tlTotalZ);
-            result[1] = measurementToXYPlane(Maslow.axis[_TR].getPosition(), trTotalZ);
-            result[2] = measurementToXYPlane(Maslow.axis[_BL].getPosition(), blTotalZ);
-            result[3] = measurementToXYPlane(Maslow.axis[_BR].getPosition(), brTotalZ);
+            //Correct the measured (paid-out) belt lengths for elastic stretch under the Find Anchors
+            //pull tension so the stored data reflects the true geometric span (no-op when disabled).
+            const float pullForce = kinematics->getCalibrationPullForce();
+            result[0] = measurementToXYPlane(kinematics->paidOutToGeometric(Maslow.axis[_TL].getPosition(), pullForce), tlTotalZ);
+            result[1] = measurementToXYPlane(kinematics->paidOutToGeometric(Maslow.axis[_TR].getPosition(), pullForce), trTotalZ);
+            result[2] = measurementToXYPlane(kinematics->paidOutToGeometric(Maslow.axis[_BL].getPosition(), pullForce), blTotalZ);
+            result[3] = measurementToXYPlane(kinematics->paidOutToGeometric(Maslow.axis[_BR].getPosition(), pullForce), brTotalZ);
             BR_tight  = false;
             BL_tight  = false;
             return true;
@@ -1643,10 +1646,12 @@ bool Calibration::take_measurement(float result[4], int dir, int run, int curren
                 float brTotalZ = (currentZ + kinematics->getBrZ() + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
 
                 //take measurement and record it to the calibration data array.
-                result[0] = measurementToXYPlane(Maslow.axis[_TL].getPosition(), tlTotalZ);
-                result[1] = measurementToXYPlane(Maslow.axis[_TR].getPosition(), trTotalZ);
-                result[2] = measurementToXYPlane(Maslow.axis[_BL].getPosition(), blTotalZ);
-                result[3] = measurementToXYPlane(Maslow.axis[_BR].getPosition(), brTotalZ);
+                //Correct measured (paid-out) belt lengths for elastic stretch under the pull tension.
+                const float pullForce = kinematics->getCalibrationPullForce();
+                result[0] = measurementToXYPlane(kinematics->paidOutToGeometric(Maslow.axis[_TL].getPosition(), pullForce), tlTotalZ);
+                result[1] = measurementToXYPlane(kinematics->paidOutToGeometric(Maslow.axis[_TR].getPosition(), pullForce), trTotalZ);
+                result[2] = measurementToXYPlane(kinematics->paidOutToGeometric(Maslow.axis[_BL].getPosition(), pullForce), blTotalZ);
+                result[3] = measurementToXYPlane(kinematics->paidOutToGeometric(Maslow.axis[_BR].getPosition(), pullForce), brTotalZ);
                 // Reset all flags for next measurement
                 tight[_TL]               = false;
                 tight[_TR]               = false;
@@ -1737,10 +1742,12 @@ bool Calibration::take_measurement(float result[4], int dir, int run, int curren
                 float brTotalZ = (currentZ + kinematics->getBrZ() + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
 
                 //take measurement and record it to the calibration data array.
-                result[0]   = measurementToXYPlane(Maslow.axis[_TL].getPosition(), tlTotalZ);
-                result[1]   = measurementToXYPlane(Maslow.axis[_TR].getPosition(), trTotalZ);
-                result[2]   = measurementToXYPlane(Maslow.axis[_BL].getPosition(), blTotalZ);
-                result[3]   = measurementToXYPlane(Maslow.axis[_BR].getPosition(), brTotalZ);
+                //Correct measured (paid-out) belt lengths for elastic stretch under the pull tension.
+                const float pullForce = kinematics->getCalibrationPullForce();
+                result[0]   = measurementToXYPlane(kinematics->paidOutToGeometric(Maslow.axis[_TL].getPosition(), pullForce), tlTotalZ);
+                result[1]   = measurementToXYPlane(kinematics->paidOutToGeometric(Maslow.axis[_TR].getPosition(), pullForce), trTotalZ);
+                result[2]   = measurementToXYPlane(kinematics->paidOutToGeometric(Maslow.axis[_BL].getPosition(), pullForce), blTotalZ);
+                result[3]   = measurementToXYPlane(kinematics->paidOutToGeometric(Maslow.axis[_BR].getPosition(), pullForce), brTotalZ);
                 pull1_tight = false;
                 pull2_tight = false;
                 return true;
