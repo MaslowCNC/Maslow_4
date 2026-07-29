@@ -95,9 +95,22 @@ namespace Spindles {
         // so the runtime confirmation message is logged exactly once.
         bool _link_confirmed = false;
 
+        // True once we have told the spindle board the machine is idle so it can power
+        // down the Z-axis drivers.  Reset as soon as the machine starts moving again so
+        // the release is re-sent on the next idle.
+        bool _hold_released = false;
+
         void sendSpeed(uint32_t rpm);
         void sendPhase(float deg);
         void serviceStatus();
+
+        // Tell the spindle board it may power down its Z-axis (phase-offset) drivers
+        // once their move settles, because the machine is idle and the spindle is off.
+        void sendHoldRelease();
+
+        // Send a Z-hold release when the machine is idle and the spindle is stopped, so
+        // the spindle board's BLDC drivers (and its cooling fan) do not stay energized.
+        void updateHoldState();
 
         // Send the configured suction/cooling fan power (0-100) to the spindle board.
         void sendFan(int level);

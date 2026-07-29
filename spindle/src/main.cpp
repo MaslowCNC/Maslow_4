@@ -260,6 +260,36 @@ static void checkMotorTimeouts() {
     }
 }
 
+// ------------------- Z Hold Power-Down -------------------
+
+// When the XY board reports the machine is idle (the 'D' command sets
+// g_hold_release_requested), power the Z-axis BLDC drivers down once their phase move
+// has actually settled.  Holding a Z position in angle mode keeps drawing current,
+// which heats the DRV8316s and keeps the cooling fan running even though nothing is
+// moving.  We wait for the phase ramp to reach its target here (rather than powering
+// down the instant the XY board goes idle) so the Z axis is not released before it has
+// finished its move.  A new spindle-speed or Z-target command clears the request.
+static void checkPhaseHoldPowerdown() {
+    if (!g_hold_release_requested) {
+        return;
+    }
+    // Never release while the spindle is spinning, free-running, or calibrating.
+    if (mc1.velocity_mode || mc2.velocity_mode || mc1.continuous_rotation || mc2.continuous_rotation ||
+        calibration.isActive()) {
+        return;
+    }
+    // Wait until the phase ramp has reached its target (the Z move is complete).
+    if (fabsf(phase_offset.target - phase_offset.current) >= PHASE_MOVE_COMPLETE_EPS_RAD) {
+        return;
+    }
+    if (mc1.enabled || mc2.enabled) {
+        mc1.disable();
+        mc2.disable();
+        Serial.println(F("Z move complete - motor drivers powered down"));
+    }
+    g_hold_release_requested = false;
+}
+
 static void motorControlTask(void* arg) {
     (void)arg;
     uint32_t last_ramp_time = millis();
@@ -270,6 +300,7 @@ static void motorControlTask(void* arg) {
         last_ramp_time = current_time;
 
         checkMotorTimeouts();
+        checkPhaseHoldPowerdown();
         checkDRV8316Faults();
         checkOvercurrent();
         calibration.update(mc1, mc2);

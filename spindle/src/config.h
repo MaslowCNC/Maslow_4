@@ -47,6 +47,13 @@ const int   OVERCURRENT_CONSECUTIVE_TRIPS = 100;
 // Motor run timeout
 const uint32_t MOTOR_RUN_DURATION = 6000000;     // 60 seconds in ms
 
+// Z-axis (phase-offset) hold power-down.  When the spindle is not spinning, the two
+// BLDC drivers only hold the Z position with current, which keeps them (and the
+// cooling fan) energized even though nothing is moving.  Once the XY board reports the
+// machine is idle (the 'D' command) and the phase ramp has settled to within this
+// tolerance of its target, the drivers are powered down.
+const float PHASE_MOVE_COMPLETE_EPS_RAD = 0.001f;   // within ~0.06 deg of target = move done
+
 // Calibration LUT
 const int   CAL_LUT_SIZE = 140;                                     // 100, 200, ... 14000 RPM
 const float CAL_TARGET_CURRENT = 3.5f;                              // Target phase-RMS current (A)

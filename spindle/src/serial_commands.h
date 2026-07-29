@@ -20,6 +20,10 @@ extern volatile uint8_t g_fault_code;
 // Suction/cooling fan power (0-100), set by the XY board over the link ('C' command).
 extern volatile uint8_t g_suction_level;
 
+// Set true by the XY board's 'D' (machine idle) command so the Z-axis BLDC drivers can
+// be powered down once their phase move has settled.  Cleared by any new motion command.
+extern volatile bool g_hold_release_requested;
+
 void initFanControl();
 void updateFanControl(float dt);
 
@@ -32,6 +36,7 @@ void applyFanForMotorState(bool motorsEnabled);
 //   S<rpm>  set spindle speed (0 = stop)
 //   Z<deg>  set absolute target phase offset in degrees (Z-axis position)
 //   E       emergency stop (disable both motors)
+//   D       machine idle: power down the Z-axis drivers once the move has settled
 //   ?       request a status report immediately
 void handleSerialCommands(MotorController& mc1, MotorController& mc2, Calibration& cal);
 

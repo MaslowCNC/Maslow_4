@@ -121,6 +121,11 @@ volatile uint8_t g_fault_code = 0;  // 0 = OK, 1 = DRV8316 fault, 2 = overcurren
 // is enabled (spindle running or Z moving) and is off otherwise.
 volatile uint8_t g_suction_level = 100;
 
+// Set true when the XY board reports the machine is idle (the 'D' command) so the
+// Z-axis BLDC drivers may be powered down once their phase move has settled.  Cleared
+// as soon as any new motion command (spindle speed or Z target) arrives.
+volatile bool g_hold_release_requested = false;
+
 // Identity string returned to the XY board in response to a handshake ('H') request.
 static const char* LINK_IDENTITY = "I:Maslow-Spindle,proto=1";
 // Set true the first time a valid command arrives over the inter-board link, so we
@@ -135,6 +140,7 @@ void printCommandHelp() {
     Serial.println(F("  '?'      request a status report"));
     Serial.println(F("  'H'      handshake: reply with identity string"));
     Serial.println(F("  'C<lvl>' set suction/cooling fan power (0-100); fan auto-runs while motors enabled"));
+    Serial.println(F("  'D'      machine idle: power down the Z-axis drivers once the move has settled"));
     Serial.println(F("\nLegacy single-character commands (USB maintenance/calibration):"));
     Serial.println(F("  'q' select motor 1 (default)"));
     Serial.println(F("  'w' select motor 2 (spins opposite direction)"));
@@ -347,6 +353,7 @@ static void setSpindleSpeed(float rpm, MotorController& mc1, MotorController& mc
     if (rpm > MAX_COMMAND_RPM) rpm = MAX_COMMAND_RPM;
 
     g_fault_code = 0;  // a fresh command clears any latched fault
+    g_hold_release_requested = false;  // motion commanded: cancel any pending Z-hold release
 
     MotorController* motors[] = { &mc1, &mc2 };
     for (int i = 0; i < 2; i++) {
@@ -359,6 +366,7 @@ static void setSpindleSpeed(float rpm, MotorController& mc1, MotorController& mc
 // Set the absolute target phase offset (Z position) in degrees.
 static void setPhaseTarget(float deg, MotorController& mc1, MotorController& mc2) {
     g_fault_code = 0;  // a fresh command clears any latched fault
+    g_hold_release_requested = false;  // a new Z move cancels any pending Z-hold release
 
     phase_offset.target = deg * PI / 180.0f;
 
@@ -417,6 +425,9 @@ static void processCommandLine(const char* line, size_t len,
             g_suction_level = (uint8_t)lvl;
             break;
         }
+        case 'D':  // machine idle: power the Z-axis drivers down once the move has settled
+            g_hold_release_requested = true;
+            break;
         case 'H':  // handshake / identity request
             reply.print(LINK_IDENTITY);
             reply.print('\n');

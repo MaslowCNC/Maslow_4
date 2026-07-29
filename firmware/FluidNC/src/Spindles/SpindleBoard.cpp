@@ -180,6 +180,44 @@ namespace Spindles {
         }
     }
 
+    void SpindleBoard::sendHoldRelease() {
+        if (!_uart) {
+            return;
+        }
+        _uart->write((const uint8_t*)"D\n", 2);
+    }
+
+    void SpindleBoard::updateHoldState() {
+        // The Z axis is driven by the spindle board's two BLDC motors.  While the
+        // machine is idle and the spindle is stopped, those drivers would otherwise sit
+        // energized just holding the Z position, keeping the drivers hot and the cooling
+        // fan running.  Tell the board it may power them down once its move has settled.
+        // As soon as the machine starts moving again, the streamed Z target re-energizes
+        // the drivers, so we simply re-arm and re-send the release on the next idle.
+        bool idle = (sys.state() == State::Idle || sys.state() == State::Sleep) && _current_state == SpindleState::Disable;
+
+        if (idle == _hold_released) {
+            return;  // already in the desired state; nothing to send
+        }
+        if (idle) {
+            sendHoldRelease();
+        }
+        _hold_released = idle;
+    }
+
+    void SpindleBoard::update(float zPositionMM) {
+        if (!_uart) {
+            return;
+        }
+        if (_rpm_dirty) {
+            _rpm_dirty = false;
+            sendSpeed(_pending_rpm);
+        }
+        sendPhase(zPositionMM * _phase_deg_per_mm);
+        updateHoldState();
+        serviceStatus();
+    }
+
     void SpindleBoard::serviceStatus() {
         if (!_uart) {
             return;
@@ -218,18 +256,6 @@ namespace Spindles {
                 _rx_len = 0;  // overflow: drop the malformed line
             }
         }
-    }
-
-    void SpindleBoard::update(float zPositionMM) {
-        if (!_uart) {
-            return;
-        }
-        if (_rpm_dirty) {
-            _rpm_dirty = false;
-            sendSpeed(_pending_rpm);
-        }
-        sendPhase(zPositionMM * _phase_deg_per_mm);
-        serviceStatus();
     }
 
     // Configuration registration
