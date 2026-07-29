@@ -308,8 +308,13 @@ static void motorControlTask(void* arg) {
         bool cal_active = calibration.isActive() &&
                           calibration.state != CAL_RAMP_DOWN &&
                           calibration.state != MCAL_RAMP_DOWN;
-        mc1.applyVoltageLimit(cal_active && calibration.active_motor_idx == 0, calibration.hunt_voltage);
-        mc2.applyVoltageLimit(cal_active && calibration.active_motor_idx == 1, calibration.hunt_voltage);
+        // While the relative phase is changing (Z axis moving), give the motors an extra
+        // volt of headroom to overcome the Z drive's mechanical resistance.
+        float z_move_boost = (fabsf(phase_offset.target - phase_offset.current) > PHASE_MOVE_COMPLETE_EPS_RAD)
+                                 ? Z_MOVE_VOLTAGE_BOOST
+                                 : 0.0f;
+        mc1.applyVoltageLimit(cal_active && calibration.active_motor_idx == 0, calibration.hunt_voltage, z_move_boost);
+        mc2.applyVoltageLimit(cal_active && calibration.active_motor_idx == 1, calibration.hunt_voltage, z_move_boost);
 
         mc1.rampVelocity(dt);
         mc2.rampVelocity(dt);

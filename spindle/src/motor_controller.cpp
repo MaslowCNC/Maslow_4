@@ -178,13 +178,13 @@ float MotorController::lutVoltageForSpeed(float speed_rad) const {
     return cal_lut_voltage[i] * (1.0f - frac) + cal_lut_voltage[i + 1] * frac;
 }
 
-void MotorController::applyVoltageLimit(bool in_calibration, float hunt_voltage) {
+void MotorController::applyVoltageLimit(bool in_calibration, float hunt_voltage, float extra_voltage) {
     if (!enabled) return;
     float v;
     if (in_calibration)
         v = hunt_voltage;
     else
-        v = lutVoltageForSpeed(fabsf(current_velocity));
+        v = lutVoltageForSpeed(fabsf(current_velocity)) + extra_voltage;
     motor.voltage_limit = constrain(v, BASE_VOLTAGE, MAX_VOLTAGE);
 }
 

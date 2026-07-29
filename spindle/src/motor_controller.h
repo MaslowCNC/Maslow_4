@@ -61,7 +61,7 @@ struct MotorController {
     float lutVoltageForSpeed(float speed_rad) const;
 
     // Apply voltage limit from LUT or calibration hunt voltage
-    void applyVoltageLimit(bool in_calibration, float hunt_voltage);
+    void applyVoltageLimit(bool in_calibration, float hunt_voltage, float extra_voltage = 0.0f);
 
     // DRV8316 status
     void printFaultStatus();

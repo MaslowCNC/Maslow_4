@@ -54,6 +54,11 @@ const uint32_t MOTOR_RUN_DURATION = 6000000;     // 60 seconds in ms
 // tolerance of its target, the drivers are powered down.
 const float PHASE_MOVE_COMPLETE_EPS_RAD = 0.001f;   // within ~0.06 deg of target = move done
 
+// Extra motor voltage applied while the relative phase between the two motors is
+// changing (i.e. the Z axis is moving).  Changing the phase fights extra mechanical
+// resistance in the Z drive, so give the drivers a little more headroom while moving.
+const float Z_MOVE_VOLTAGE_BOOST = 1.0f;            // volts added during phase (Z) moves
+
 // Calibration LUT
 const int   CAL_LUT_SIZE = 140;                                     // 100, 200, ... 14000 RPM
 const float CAL_TARGET_CURRENT = 3.5f;                              // Target phase-RMS current (A)
