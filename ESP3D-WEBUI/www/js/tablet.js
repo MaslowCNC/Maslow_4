@@ -1397,6 +1397,30 @@ const tabletConfigPopupHide = () => hideModal("configuration-popup");
 const tabletOptionalSettingsPopupHide = () => hideModal("optional-settings-popup");
 const tabletCalOpenOptionalSettings = () => openModal("optional-settings-popup");
 
+// Control event handlers - Spindle Toggle
+let tabletSpindleOn = false;
+const tabletToggleSpindle = () => {
+  tabletSpindleOn = !tabletSpindleOn;
+  const btn = id("tablettab_spindle_toggle");
+  if (tabletSpindleOn) {
+    sendCommand("M3 S10000");
+    addMessage("Spindle ON (10000 RPM)");
+    if (btn) {
+      btn.textContent = "Spindle Off";
+      btn.classList.remove("green-button");
+      btn.classList.add("stop-button");
+    }
+  } else {
+    sendCommand("M5");
+    addMessage("Spindle OFF");
+    if (btn) {
+      btn.textContent = "Spindle On";
+      btn.classList.remove("stop-button");
+      btn.classList.add("green-button");
+    }
+  }
+};
+
 // Control event handlers - Work Area Popup
 const getWorkAreaValues = () => {
   const lv = globalThis.loadedValues || {};
@@ -1725,6 +1749,7 @@ function tabletInit() {
     id("tablettab_cal_work_area").addEventListener("click", tabletOpenWorkAreaPopup);
     id("tablettab_cal_park").addEventListener("click", tabletOpenParkPopup);
     id("tablettab_cal_scale_thickness").addEventListener("click", tabletOpenScaleThicknessPopup);
+    id("tablettab_spindle_toggle").addEventListener("click", tabletToggleSpindle);
 
     // Buttons - Work Area Pop-up
     id("work-area-popup").addEventListener("click", tabletWorkAreaPopupHide);
