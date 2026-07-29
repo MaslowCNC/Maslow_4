@@ -316,8 +316,11 @@ static void motorControlTask(void* arg) {
         mc1.applyVoltageLimit(cal_active && calibration.active_motor_idx == 0, calibration.hunt_voltage, z_move_boost);
         mc2.applyVoltageLimit(cal_active && calibration.active_motor_idx == 1, calibration.hunt_voltage, z_move_boost);
 
-        mc1.rampVelocity(dt);
-        mc2.rampVelocity(dt);
+        // Spindle spin-up/down uses a fast ramp; calibration keeps its slower, settled
+        // ramp so per-checkpoint current measurements stay accurate.
+        float ramp_rate = calibration.isActive() ? VELOCITY_RAMP_RATE : SPINDLE_RAMP_RATE;
+        mc1.rampVelocity(dt, ramp_rate);
+        mc2.rampVelocity(dt, ramp_rate);
         applyFanForMotorState(mc1.enabled || mc2.enabled);
         updateFanControl(dt);
         updatePhaseOffset(dt);

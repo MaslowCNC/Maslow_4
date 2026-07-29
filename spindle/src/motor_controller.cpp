@@ -88,11 +88,11 @@ void MotorController::resetFilterState() {
     protection_current = 0.0f;
 }
 
-void MotorController::rampVelocity(float dt) {
+void MotorController::rampVelocity(float dt, float ramp_rate) {
     if (!velocity_mode || dt <= 0) return;
 
     float velocity_error = target_velocity - current_velocity;
-    float max_change = VELOCITY_RAMP_RATE * dt;
+    float max_change = ramp_rate * dt;
 
     if (fabsf(velocity_error) <= max_change) {
         current_velocity = target_velocity;

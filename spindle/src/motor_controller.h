@@ -52,7 +52,7 @@ struct MotorController {
     void resetFilterState();
 
     // Per-loop updates
-    void rampVelocity(float dt);
+    void rampVelocity(float dt, float ramp_rate);
     void updateControlMode();
     void updateCurrent();
     void runMotorLoop();

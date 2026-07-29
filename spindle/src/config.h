@@ -24,7 +24,8 @@ const int FAN_LEVEL_COUNT = 100;
 const float FAN_PWM_RAMP_UNITS_PER_SEC = 320.0f;
 
 // Velocity ramping
-const float VELOCITY_RAMP_RATE = 20.0f;  // rad/s per second
+const float VELOCITY_RAMP_RATE = 20.0f;   // rad/s per second, used during calibration
+const float SPINDLE_RAMP_RATE  = 200.0f;  // rad/s per second, spindle on/off spin-up/down rate
 
 // Phase offset ramping
 const float PHASE_OFFSET_STEP = 45.0f * PI / 180.0f;          // 45 deg per keypress
