@@ -42,6 +42,12 @@ namespace Spindles {
         // flushes any pending speed change, and services the status return link.
         void update(float zPositionMM);
 
+        // Push the XY board's own WiFi station credentials to the spindle board over the
+        // link so it can join WiFi and start its ArduinoOTA server.  Triggered by the
+        // $Spindle/EnableOTA command.  The spindle can then be reflashed wirelessly with
+        // `pio run -e esp32-s3-devkitc-1-ota -t upload`.
+        void sendEnableOTA();
+
         // The single active instance, so the Maslow loop can stream Z to it
         // without depending on the spindle factory internals.
         static SpindleBoard* instance;

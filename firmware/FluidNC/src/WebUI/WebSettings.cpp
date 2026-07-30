@@ -22,6 +22,8 @@
 #include "Commands.h"  // COMMANDS::restart_MCU();
 #include "WifiConfig.h"
 
+#include "../Spindles/SpindleBoard.h"  // Spindles::SpindleBoard (for $Spindle/EnableOTA)
+
 #include "../HashFS.h"
 
 #include <cstring>
@@ -190,6 +192,18 @@ namespace WebUI {
             return Error::InvalidValue;
         }
         return restart(parameter, auth_level, out);
+    }
+
+    // Tell the spindle/Z controller board to join WiFi and start its ArduinoOTA server so
+    // it can be reflashed wirelessly.  The XY board's own station credentials are pushed
+    // over the inter-board link; the spindle then reports its IP back.
+    static Error enableSpindleOTA(char* parameter, AuthenticationLevel auth_level, Channel& out) {
+        if (Spindles::SpindleBoard::instance == nullptr) {
+            log_to(out, "No SpindleBoard spindle is configured");
+            return Error::InvalidValue;
+        }
+        Spindles::SpindleBoard::instance->sendEnableOTA();
+        return Error::Ok;
     }
 
     // Used by js/statusdlg.js
@@ -643,6 +657,8 @@ namespace WebUI {
         new WebCommand(NULL, WEBCMD, WU, "ESP420", "System/Stats", showSysStats, anyState);
         new WebCommand("RESTART", WEBCMD, WA, "ESP444", "System/Control", setSystemMode);
         new WebCommand("RESTART", WEBCMD, WA, NULL, "Bye", restart);
+
+        new WebCommand(NULL, WEBCMD, WA, "ESP810", "Spindle/EnableOTA", enableSpindleOTA);
 
         new WebCommand(NULL, WEBCMD, WU, "ESP720", "LocalFS/Size", localFSSize);
         new WebCommand("FORMAT", WEBCMD, WA, "ESP710", "LocalFS/Format", formatLocalFS);

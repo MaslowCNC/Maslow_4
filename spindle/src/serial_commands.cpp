@@ -1,7 +1,9 @@
 #include "serial_commands.h"
 #include "pins.h"
 #include "config.h"
+#include "ota_service.h"
 #include <Preferences.h>
+#include <string.h>
 
 static Preferences fan_prefs;
 static const char* FAN_PREF_NAMESPACE = "fan_ctrl";
@@ -435,6 +437,33 @@ static void processCommandLine(const char* line, size_t len,
                 Serial.println(F("Link: handshake request received from XY board -> replied identity"));
             }
             break;
+        case 'W': {  // enable WiFi + OTA using credentials pushed by the XY board
+            // Payload is "<ssid>\t<password>" (tab-delimited, since neither field can
+            // contain a tab).  The XY board sends this in response to $Spindle/EnableOTA.
+            const char* rest = line + 1;
+            const char* tab  = strchr(rest, '\t');
+            char        ssid[33];
+            char        pass[65];
+            if (tab) {
+                size_t slen = (size_t)(tab - rest);
+                if (slen > sizeof(ssid) - 1) {
+                    slen = sizeof(ssid) - 1;
+                }
+                memcpy(ssid, rest, slen);
+                ssid[slen] = '\0';
+                strncpy(pass, tab + 1, sizeof(pass) - 1);
+                pass[sizeof(pass) - 1] = '\0';
+            } else {
+                strncpy(ssid, rest, sizeof(ssid) - 1);
+                ssid[sizeof(ssid) - 1] = '\0';
+                pass[0] = '\0';
+            }
+            requestSpindleOTA(ssid, pass);
+            if (!allowLegacy) {
+                Serial.println(F("Link: OTA enable request received from XY board"));
+            }
+            break;
+        }
         default:
             // Single-character legacy commands are honored ONLY on the USB console.
             if (allowLegacy && len == 1) {
@@ -444,11 +473,15 @@ static void processCommandLine(const char* line, size_t len,
     }
 }
 
+// Shared line-buffer size for the USB console and the inter-board link.  It must be
+// large enough for the longest command, which is the 'W' OTA request carrying the XY
+// board's WiFi SSID (<=32) and password (<=63) separated by a tab.
+static constexpr size_t CMD_LINE_BUF_SIZE = 160;
+
 // Accumulate bytes from a stream into a line buffer and dispatch on newline.
 static void feedStream(Stream& in, char* buf, size_t& len,
                        MotorController& mc1, MotorController& mc2, Calibration& cal,
                        bool allowLegacy) {
-    static constexpr size_t LINE_BUF_SIZE = 32;
     while (in.available()) {
         char c = (char)in.read();
         if (c == '\r') {
@@ -458,7 +491,7 @@ static void feedStream(Stream& in, char* buf, size_t& len,
             buf[len] = '\0';
             processCommandLine(buf, len, mc1, mc2, cal, in, allowLegacy);
             len = 0;
-        } else if (len < LINE_BUF_SIZE - 1) {
+        } else if (len < CMD_LINE_BUF_SIZE - 1) {
             buf[len++] = c;
         } else {
             len = 0;  // overflow: drop the malformed line
@@ -467,9 +500,9 @@ static void feedStream(Stream& in, char* buf, size_t& len,
 }
 
 void handleSerialCommands(MotorController& mc1, MotorController& mc2, Calibration& cal) {
-    static char   usb_buf[32];
+    static char   usb_buf[CMD_LINE_BUF_SIZE];
     static size_t usb_len = 0;
-    static char   link_buf[32];
+    static char   link_buf[CMD_LINE_BUF_SIZE];
     static size_t link_len = 0;
 
     feedStream(Serial, usb_buf, usb_len, mc1, mc2, cal, /*allowLegacy=*/true);

@@ -8,6 +8,7 @@
 #include "motor_controller.h"
 #include "calibration.h"
 #include "serial_commands.h"
+#include "ota_service.h"
 
 // ------------------- Hardware Objects -------------------
 
@@ -295,6 +296,17 @@ static void motorControlTask(void* arg) {
     uint32_t last_ramp_time = millis();
 
     for (;;) {
+        // While an OTA flash is actively in progress (WiFi/OTA runs on core 0), keep the
+        // motor drivers off and stand the control loop down.  The board reboots into the
+        // new firmware when the update completes, so we never resume from here.
+        if (g_ota_flashing) {
+            mc1.disable();
+            mc2.disable();
+            last_ramp_time = millis();
+            vTaskDelay(pdMS_TO_TICKS(10));
+            continue;
+        }
+
         uint32_t current_time = millis();
         float dt = (current_time - last_ramp_time) / 1000.0f;
         last_ramp_time = current_time;

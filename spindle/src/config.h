@@ -36,6 +36,14 @@ const long    LINK_BAUD = 115200;          // baud rate for the XY <-> spindle l
 const uint32_t LINK_STATUS_INTERVAL_MS = 50;  // how often to report status to the XY board
 const int     MAX_COMMAND_RPM = 10000;     // clamp for spindle speed commands
 
+// On-demand WiFi OTA.  The board normally keeps its radio off; when the XY board sends
+// the 'W' link command (in response to $Spindle/EnableOTA) it joins the XY board's WiFi
+// network and runs an ArduinoOTA server so it can be reflashed wirelessly with:
+//   pio run -e esp32-s3-devkitc-1-ota -t upload
+const char*    const OTA_HOSTNAME                = "maslow-spindle";  // mDNS -> maslow-spindle.local
+const uint32_t       OTA_WIFI_CONNECT_TIMEOUT_MS = 20000;   // give up joining WiFi after 20 s
+const uint32_t       OTA_IDLE_TIMEOUT_MS         = 300000;  // drop WiFi/OTA after 5 min idle
+
 // Current filtering
 const float CURRENT_FILTER_ALPHA = 0.001f;      // Slow filter for DC-equivalent telemetry
 const float PROTECTION_FILTER_ALPHA = 0.1f;     // Fast filter for stall detection

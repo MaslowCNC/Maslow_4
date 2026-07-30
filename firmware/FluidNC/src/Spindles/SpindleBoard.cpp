@@ -6,7 +6,9 @@
 #include "../Machine/MachineConfig.h"  // config->_uarts
 #include "../System.h"                 // sys
 #include "../Protocol.h"               // rtAlarm, ExecAlarm
+#include "../WebUI/WifiConfig.h"       // wifi_sta_ssid / wifi_sta_password (ENABLE_WIFI)
 
+#include <cstdio>   // snprintf
 #include <cstdlib>  // strtol
 #include <cstring>  // strncmp
 #include <cmath>    // fabsf
@@ -187,6 +189,34 @@ namespace Spindles {
         _uart->write((const uint8_t*)"D\n", 2);
     }
 
+    void SpindleBoard::sendEnableOTA() {
+        if (!_uart) {
+            log_error(name() << ": cannot enable spindle OTA - no link to the spindle board");
+            return;
+        }
+#ifdef ENABLE_WIFI
+        const char* ssid = WebUI::wifi_sta_ssid->get();
+        const char* pass = WebUI::wifi_sta_password->get();
+        if (!ssid || ssid[0] == '\0') {
+            log_error(name() << ": cannot enable spindle OTA - the XY board has no station SSID configured");
+            return;
+        }
+        // "W<ssid>\t<password>" - the spindle joins this network and starts ArduinoOTA.
+        char buf[128];
+        int  n = snprintf(buf, sizeof(buf), "W%s\t%s\n", ssid, pass ? pass : "");
+        if (n <= 0 || n >= (int)sizeof(buf)) {
+            log_error(name() << ": SSID/password too long to send to the spindle board");
+            return;
+        }
+        _uart->write((const uint8_t*)buf, (size_t)n);
+        log_info(name() << ": told spindle board to join '" << ssid
+                        << "' and start OTA. When it reports its IP, run: "
+                           "pio run -e esp32-s3-devkitc-1-ota -t upload");
+#else
+        log_error(name() << ": cannot enable spindle OTA - this XY firmware was built without WiFi");
+#endif
+    }
+
     void SpindleBoard::updateHoldState() {
         // The Z axis is driven by the spindle board's two BLDC motors.  While the
         // machine is idle and the spindle is stopped, those drivers would otherwise sit
@@ -238,6 +268,17 @@ namespace Spindles {
                     // suction power in case it came up with a different default.
                     _last_sent_fan = -1;
                     sendFan(_suction_power);
+                }
+                // OTA lifecycle messages from the spindle board (in response to
+                // $Spindle/EnableOTA).  Surface the address so the update can be pushed.
+                if (strncmp(_rx_buf, "OTA_IP:", 7) == 0) {
+                    log_info(name() << ": spindle board is on WiFi at " << (_rx_buf + 7)
+                                    << " (also maslow-spindle.local). Reflash it with: "
+                                       "pio run -e esp32-s3-devkitc-1-ota -t upload");
+                } else if (strncmp(_rx_buf, "OTA_ERR:", 8) == 0) {
+                    log_error(name() << ": spindle board could not start OTA (" << (_rx_buf + 8) << ")");
+                } else if (strncmp(_rx_buf, "OTA_END:", 8) == 0) {
+                    log_info(name() << ": spindle board left OTA mode (" << (_rx_buf + 8) << ")");
                 }
                 // Expected: "T:<state>,P:<deg>,R:<rpm>,F:<code>"
                 const char* f = strstr(_rx_buf, "F:");
