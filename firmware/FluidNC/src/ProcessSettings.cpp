@@ -1132,6 +1132,42 @@ static Error maslow_set_belt_targets(const char* value, WebUI::AuthenticationLev
     return Error::Ok;
 }
 
+// Set belt encoder positions directly.  Value must be four comma-separated mm values: A,B,C,D
+// Mapping: A=TL, B=TR, C=BL, D=BR
+// This sets the actual measured position (encoder reading), not the target.
+static Error maslow_set_belt_positions(const char* value, WebUI::AuthenticationLevel auth_level, Channel& out) {
+    if (!value || value[0] == '\0') {
+        log_error("Usage: $MSETBELTPOS=A,B,C,D  (mm values)");
+        return Error::InvalidValue;
+    }
+    char buf[64];
+    strncpy(buf, value, sizeof(buf) - 1);
+    buf[sizeof(buf) - 1] = '\0';
+    float positions[ARM_COUNT] = { NAN, NAN, NAN, NAN };
+    char* ptr                  = buf;
+    int   i                    = 0;
+    while (ptr && *ptr && i < ARM_COUNT) {
+        char* comma = strchr(ptr, ',');
+        if (comma) {
+            *comma = '\0';
+        }
+        positions[i] = strtof(ptr, nullptr);
+        ptr          = comma ? comma + 1 : nullptr;
+        i++;
+    }
+    if (i < ARM_COUNT) {
+        log_error("$MSETBELTPOS: expected 4 comma-separated values (got " << i << ")");
+        return Error::InvalidValue;
+    }
+    Maslow.axis[_TL].setPosition(positions[0]);
+    Maslow.axis[_TR].setPosition(positions[1]);
+    Maslow.axis[_BL].setPosition(positions[2]);
+    Maslow.axis[_BR].setPosition(positions[3]);
+    log_info("Belt encoder positions set: A=" << positions[0] << " B=" << positions[1]
+                                              << " C=" << positions[2] << " D=" << positions[3]);
+    return Error::Ok;
+}
+
 // Force the machine into READY_TO_CUT state, bypassing normal state preconditions.
 // requestStateChange(READY_TO_CUT) performs the full initialisation including motor
 // position synchronisation from encoder readings; this function temporarily sets a
@@ -1247,6 +1283,7 @@ void make_user_commands() {
     new UserCommand("MMPID", M + "/manualPid", maslow_manual_pid, anyState);
     new UserCommand("MSYNC", M + "/syncEncoders", maslow_sync_encoders, anyState);
     new UserCommand("MSETBELT", M + "/setBeltTargets", maslow_set_belt_targets, anyState);
+    new UserCommand("MSETBELTPOS", M + "/setBeltPositions", maslow_set_belt_positions, anyState);
     new UserCommand("MREADYTOCUT", M + "/setReadyToCut", maslow_set_ready_to_cut, anyState);
 };
 

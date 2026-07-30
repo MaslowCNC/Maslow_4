@@ -161,6 +161,10 @@
             </table>
           </div>
         </div>
+        <!-- Belt Control button -->
+        <div id="tablettab-belt-control" class="maslow-grid-container tablettab-controls-item" style="grid-template-columns: 100%;">
+          <div id="tablettab_belt_control_btn" class="maslow-grid-item maslow-grid-item-btn" style="background-color: #337ab7; color: white;">Belt Control</div>
+        </div>
         <div id="tablettab-position-display" class="maslow-grid-container tablettab-controls-item" style="grid-template-columns: auto;">
           <div class="maslow-grid-item">
             <table style="width:100%">
@@ -508,6 +512,91 @@
         <div class="buttons-row">
           <button id="tablettab_apply_tension_limit_cancel" class="calibration-modal-button stop-button">Cancel</button>
           <button id="tablettab_apply_tension_limit_save" class="calibration-modal-button">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="belt-control-popup" class="calibration-modal-container">
+    <div id="belt_control_popup_content" class="calibration-modal-content" style="min-width: 380px; max-width: 500px;">
+      <div class="calibration-modal-button-container">
+        <div class="input-row" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <label style="font-weight: bold; font-size: 1.1em;">Belt Control</label>
+          <button id="belt_control_close" style="background: none; border: none; font-size: 1.4em; cursor: pointer; line-height: 1; padding: 2px 6px;">&times;</button>
+        </div>
+        <!-- Tab buttons -->
+        <div style="display: flex; border-bottom: 2px solid #ccc; margin-bottom: 10px;">
+          <button id="belt-tab-btn-move" style="flex: 1; padding: 8px; border: none; cursor: pointer; font-size: 0.95em; background-color: #337ab7; color: white; border-radius: 4px 4px 0 0;">Belt Movement</button>
+          <button id="belt-tab-btn-pos" style="flex: 1; padding: 8px; border: none; cursor: pointer; font-size: 0.95em; background-color: #e0e0e0; color: #333; border-radius: 4px 4px 0 0; margin-left: 4px;">Belt Position</button>
+        </div>
+        <!-- Tab 1: Belt Movement -->
+        <div id="belt-tab-content-move">
+          <div style="display: flex; gap: 12px; margin-bottom: 10px; align-items: flex-end;">
+            <div style="flex: 1;">
+              <label style="display: block; font-size: 0.85em; margin-bottom: 2px;">Speed (mm/s)</label>
+              <input id="belt-move-speed" type="number" value="10" min="0" max="200" step="1" class="calibration-modal-input" style="width: 100%;">
+            </div>
+            <div style="flex: 1;">
+              <label style="display: block; font-size: 0.85em; margin-bottom: 2px;">Force limit</label>
+              <input id="belt-move-force" type="number" value="2000" min="0" max="4000" step="100" class="calibration-modal-input" style="width: 100%;">
+            </div>
+          </div>
+          <table style="width: 100%; border-collapse: separate; border-spacing: 0 4px;">
+            <tr>
+              <td style="width: 20px; font-weight: bold; padding-right: 4px;">A:</td>
+              <td><button class="calibration-modal-button belt-retract-btn" data-belt="a" style="min-width: 90px; height: 45px; padding: 6px;">&#9664; Retract</button></td>
+              <td style="text-align: center; min-width: 70px; font-size: 1em;" id="belt-ctrl-len-a">---</td>
+              <td><button class="calibration-modal-button belt-extend-btn" data-belt="a" style="min-width: 90px; height: 45px; padding: 6px;">Extend &#9654;</button></td>
+            </tr>
+            <tr>
+              <td style="font-weight: bold; padding-right: 4px;">B:</td>
+              <td><button class="calibration-modal-button belt-retract-btn" data-belt="b" style="min-width: 90px; height: 45px; padding: 6px;">&#9664; Retract</button></td>
+              <td style="text-align: center; min-width: 70px; font-size: 1em;" id="belt-ctrl-len-b">---</td>
+              <td><button class="calibration-modal-button belt-extend-btn" data-belt="b" style="min-width: 90px; height: 45px; padding: 6px;">Extend &#9654;</button></td>
+            </tr>
+            <tr>
+              <td style="font-weight: bold; padding-right: 4px;">C:</td>
+              <td><button class="calibration-modal-button belt-retract-btn" data-belt="c" style="min-width: 90px; height: 45px; padding: 6px;">&#9664; Retract</button></td>
+              <td style="text-align: center; min-width: 70px; font-size: 1em;" id="belt-ctrl-len-c">---</td>
+              <td><button class="calibration-modal-button belt-extend-btn" data-belt="c" style="min-width: 90px; height: 45px; padding: 6px;">Extend &#9654;</button></td>
+            </tr>
+            <tr>
+              <td style="font-weight: bold; padding-right: 4px;">D:</td>
+              <td><button class="calibration-modal-button belt-retract-btn" data-belt="d" style="min-width: 90px; height: 45px; padding: 6px;">&#9664; Retract</button></td>
+              <td style="text-align: center; min-width: 70px; font-size: 1em;" id="belt-ctrl-len-d">---</td>
+              <td><button class="calibration-modal-button belt-extend-btn" data-belt="d" style="min-width: 90px; height: 45px; padding: 6px;">Extend &#9654;</button></td>
+            </tr>
+          </table>
+          <button id="belt-stop-all" class="calibration-modal-button stop-button" style="width: 100%; margin-top: 10px; height: 50px;">STOP ALL MOTORS</button>
+        </div>
+        <!-- Tab 2: Belt Position -->
+        <div id="belt-tab-content-pos" style="display: none;">
+          <table style="width: 100%; border-collapse: separate; border-spacing: 0 6px;">
+            <tr>
+              <td style="width: 20px; font-weight: bold; padding-right: 4px;">A:</td>
+              <td style="text-align: center; min-width: 65px; font-size: 0.9em;" id="belt-pos-cur-a">---</td>
+              <td><input id="belt-setpos-a" type="number" step="any" class="calibration-modal-input" placeholder="mm" style="width: 90px;"></td>
+              <td><button class="calibration-modal-button belt-setpos-btn" data-belt="a" style="min-width: 120px; height: 45px; padding: 6px; font-size: 0.8em;">Set belt position</button></td>
+            </tr>
+            <tr>
+              <td style="font-weight: bold; padding-right: 4px;">B:</td>
+              <td style="text-align: center; min-width: 65px; font-size: 0.9em;" id="belt-pos-cur-b">---</td>
+              <td><input id="belt-setpos-b" type="number" step="any" class="calibration-modal-input" placeholder="mm" style="width: 90px;"></td>
+              <td><button class="calibration-modal-button belt-setpos-btn" data-belt="b" style="min-width: 120px; height: 45px; padding: 6px; font-size: 0.8em;">Set belt position</button></td>
+            </tr>
+            <tr>
+              <td style="font-weight: bold; padding-right: 4px;">C:</td>
+              <td style="text-align: center; min-width: 65px; font-size: 0.9em;" id="belt-pos-cur-c">---</td>
+              <td><input id="belt-setpos-c" type="number" step="any" class="calibration-modal-input" placeholder="mm" style="width: 90px;"></td>
+              <td><button class="calibration-modal-button belt-setpos-btn" data-belt="c" style="min-width: 120px; height: 45px; padding: 6px; font-size: 0.8em;">Set belt position</button></td>
+            </tr>
+            <tr>
+              <td style="font-weight: bold; padding-right: 4px;">D:</td>
+              <td style="text-align: center; min-width: 65px; font-size: 0.9em;" id="belt-pos-cur-d">---</td>
+              <td><input id="belt-setpos-d" type="number" step="any" class="calibration-modal-input" placeholder="mm" style="width: 90px;"></td>
+              <td><button class="calibration-modal-button belt-setpos-btn" data-belt="d" style="min-width: 120px; height: 45px; padding: 6px; font-size: 0.8em;">Set belt position</button></td>
+            </tr>
+          </table>
         </div>
       </div>
     </div>

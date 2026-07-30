@@ -2,7 +2,7 @@
 // import M from "constants";
 
 /** Maslow Status */
-let maslowStatus = { homed: false, extended: false, state: 0, tl: null, tr: null, bl: null, br: null, etl: null, etr: null, ebl: null, ebr: null, manualPID: false };
+let maslowStatus = { homed: false, extended: false, state: 0, tl: null, tr: null, bl: null, br: null, etl: null, etr: null, ebl: null, ebr: null, manualPID: false, ctl: null, ctr: null, cbl: null, cbr: null };
 const APPLY_TENSION_WARNING_PREFIX = "Maslow Apply Tension deviation warning:";
 const APPLY_TENSION_RETRACTION_WARNING_PREFIX = "Maslow Apply Tension retraction warning:";
 const Z_HOME_RESET_WARNING_PREFIX = "Maslow Z home reset warning:";
@@ -372,6 +372,9 @@ const maslowInfoMsgHandling = (msg) => {
 				errElem.textContent = (err !== null && err !== undefined) ? Number(err).toFixed(2) : '---';
 			}
 		}
+
+		// Update belt control modal displays
+		updateBeltControlDisplay();
 
 		// Reset stop button colors when firmware responds to our command
 		if (typeof resetStopButtonColors === 'function') {
@@ -999,4 +1002,116 @@ const onSendTargetsClick = () => {
 	}
 	const cmd = `$MSETBELT=${Number(a)},${Number(b)},${Number(c)},${Number(d)}`;
 	onCalibrationButtonsClick(cmd, `Setting belt targets: A=${a} B=${b} C=${c} D=${d}`);
+};
+
+// ── Belt Control Modal ────────────────────────────────────────────────────────
+
+/** Belt-to-maslowStatus key mapping: A=TL, B=TR, C=BL, D=BR */
+const BELT_STATUS_KEY = { a: 'tl', b: 'tr', c: 'bl', d: 'br' };
+/** Motor current key mapping */
+const BELT_CURRENT_KEY = { a: 'ctl', b: 'ctr', c: 'cbl', d: 'cbr' };
+
+/** Update belt control modal display cells with latest MINFO data */
+const updateBeltControlDisplay = () => {
+	const belts = ['a', 'b', 'c', 'd'];
+	for (const belt of belts) {
+		const val = maslowStatus[BELT_STATUS_KEY[belt]];
+		const formatted = (val !== null && val !== undefined) ? Number(val).toFixed(2) : '---';
+		const moveEl = document.getElementById(`belt-ctrl-len-${belt}`);
+		if (moveEl) moveEl.textContent = formatted;
+		const posEl = document.getElementById(`belt-pos-cur-${belt}`);
+		if (posEl) posEl.textContent = formatted;
+	}
+};
+
+/** Active belt move interval handle */
+let _beltMoveInterval = null;
+/** Current targets being tracked during a hold-to-move operation */
+let _beltMoveTargets = { a: 0, b: 0, c: 0, d: 0 };
+
+/** Start moving a single belt in the given direction (1=extend, -1=retract) */
+const startBeltMove = (belt, direction) => {
+	stopBeltMove();
+
+	// Initialise targets from latest MINFO readings
+	_beltMoveTargets = {
+		a: maslowStatus.tl || 0,
+		b: maslowStatus.tr || 0,
+		c: maslowStatus.bl || 0,
+		d: maslowStatus.br || 0,
+	};
+
+	const intervalMs = 50;
+	_beltMoveInterval = setInterval(() => {
+		const speed = parseFloat(document.getElementById('belt-move-speed')?.value) || 10;
+		const forceLimit = parseFloat(document.getElementById('belt-move-force')?.value) || 2000;
+
+		// Stop if motor current exceeds force limit
+		const current = maslowStatus[BELT_CURRENT_KEY[belt]];
+		if (current !== null && current !== undefined && current > forceLimit) {
+			stopBeltMove();
+			addMessage(`Belt ${belt.toUpperCase()} stopped: force limit ${forceLimit} exceeded (current=${Number(current).toFixed(0)})`);
+			return;
+		}
+
+		_beltMoveTargets[belt] += direction * speed * intervalMs / 1000;
+		const { a, b, c, d } = _beltMoveTargets;
+		sendCommand(`$MSETBELT=${a.toFixed(3)},${b.toFixed(3)},${c.toFixed(3)},${d.toFixed(3)}`);
+	}, intervalMs);
+};
+
+/** Stop belt movement and synchronise targets to current encoder positions */
+const stopBeltMove = () => {
+	if (_beltMoveInterval !== null) {
+		clearInterval(_beltMoveInterval);
+		_beltMoveInterval = null;
+		sendCommand('$MSYNC');
+	}
+};
+
+/** Open the belt control modal and switch to the first tab */
+const openBeltControlModal = () => {
+	openModal('belt-control-popup');
+	switchBeltTab('move');
+};
+
+/** Switch between belt control tabs ('move' or 'pos') */
+const switchBeltTab = (tab) => {
+	const moveContent = document.getElementById('belt-tab-content-move');
+	const posContent = document.getElementById('belt-tab-content-pos');
+	const moveBtn = document.getElementById('belt-tab-btn-move');
+	const posBtn = document.getElementById('belt-tab-btn-pos');
+	if (!moveContent || !posContent || !moveBtn || !posBtn) return;
+
+	const isMove = (tab === 'move');
+	moveContent.style.display = isMove ? '' : 'none';
+	posContent.style.display = isMove ? 'none' : '';
+	moveBtn.style.backgroundColor = isMove ? '#337ab7' : '#e0e0e0';
+	moveBtn.style.color = isMove ? 'white' : '#333';
+	posBtn.style.backgroundColor = isMove ? '#e0e0e0' : '#337ab7';
+	posBtn.style.color = isMove ? '#333' : 'white';
+};
+
+/** Set the encoder-measured position of a single belt to the value entered by the user */
+const onSetBeltPosition = (belt) => {
+	const inputEl = document.getElementById(`belt-setpos-${belt}`);
+	if (!inputEl) return;
+	const newPos = parseFloat(inputEl.value);
+	if (isNaN(newPos)) {
+		addMessage(`Error: enter a valid mm value for belt ${belt.toUpperCase()}.`);
+		return;
+	}
+
+	// Build four-value array, replacing only the target belt with the user value
+	const current = {
+		a: maslowStatus.tl || 0,
+		b: maslowStatus.tr || 0,
+		c: maslowStatus.bl || 0,
+		d: maslowStatus.br || 0,
+	};
+	current[belt] = newPos;
+
+	const cmd = `$MSETBELTPOS=${current.a.toFixed(3)},${current.b.toFixed(3)},${current.c.toFixed(3)},${current.d.toFixed(3)}`;
+	onCalibrationButtonsClick(cmd, `Set belt ${belt.toUpperCase()} encoder position to ${newPos.toFixed(3)} mm`);
+	inputEl.value = '';
 };

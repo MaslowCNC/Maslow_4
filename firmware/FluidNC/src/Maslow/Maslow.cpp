@@ -1300,7 +1300,8 @@ void Maslow_::getInfo() {
     snprintf(buffer,
              1400,
              "MINFO: { \"homed\": %s, \"calibrationInProgress\": %s, \"tl\": %g, \"tr\": %g, \"br\": %g, \"bl\": %g, "
-             "\"etl\": %g, \"etr\": %g, \"ebr\": %g, \"ebl\": %g, \"extended\": %s, \"manualPID\": %s }",
+             "\"etl\": %g, \"etr\": %g, \"ebr\": %g, \"ebl\": %g, \"extended\": %s, \"manualPID\": %s, "
+             "\"ctl\": %g, \"ctr\": %g, \"cbr\": %g, \"cbl\": %g }",
              calibration.all_axis_homed() ? "true" : "false",
              calibration.calibrationInProgress ? "true" : "false",
              axis[_TL].getPosition(),
@@ -1312,7 +1313,11 @@ void Maslow_::getInfo() {
              axis[_BR].getPositionError(),
              axis[_BL].getPositionError(),
              calibration.allAxisExtended() ? "true" : "false",
-             manualPIDEnabled ? "true" : "false");
+             manualPIDEnabled ? "true" : "false",
+             axis[_TL].getMotorCurrent(),
+             axis[_TR].getMotorCurrent(),
+             axis[_BR].getMotorCurrent(),
+             axis[_BL].getMotorCurrent());
     log_data(buffer);
     releaseLogBuffer();
 }

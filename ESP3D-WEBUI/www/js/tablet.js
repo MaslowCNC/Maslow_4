@@ -1764,6 +1764,47 @@ function tabletInit() {
     id("tablettab_sync_encoders_btn").addEventListener("click", onSyncEncodersClick);
     id("tablettab_send_targets_btn").addEventListener("click", onSendTargetsClick);
 
+    // Belt Control modal
+    id("tablettab_belt_control_btn").addEventListener("click", openBeltControlModal);
+    id("belt-control-popup").addEventListener("click", () => { stopBeltMove(); hideModal("belt-control-popup"); });
+    id("belt_control_popup_content").addEventListener("click", tabletPopupStopProp);
+    id("belt_control_close").addEventListener("click", () => { stopBeltMove(); hideModal("belt-control-popup"); });
+    id("belt-tab-btn-move").addEventListener("click", () => switchBeltTab("move"));
+    id("belt-tab-btn-pos").addEventListener("click", () => switchBeltTab("pos"));
+    id("belt-stop-all").addEventListener("click", () => {
+      stopBeltMove();
+      sendCommand("$MSYNC");
+    });
+
+    // Hold-to-move retract/extend buttons (mouse + touch)
+    document.querySelectorAll(".belt-retract-btn").forEach((btn) => {
+      const belt = btn.dataset.belt;
+      const start = (e) => { e.preventDefault(); startBeltMove(belt, -1); };
+      const stop = () => stopBeltMove();
+      btn.addEventListener("mousedown", start);
+      btn.addEventListener("touchstart", start, { passive: false });
+      btn.addEventListener("mouseup", stop);
+      btn.addEventListener("mouseleave", stop);
+      btn.addEventListener("touchend", stop);
+      btn.addEventListener("touchcancel", stop);
+    });
+    document.querySelectorAll(".belt-extend-btn").forEach((btn) => {
+      const belt = btn.dataset.belt;
+      const start = (e) => { e.preventDefault(); startBeltMove(belt, 1); };
+      const stop = () => stopBeltMove();
+      btn.addEventListener("mousedown", start);
+      btn.addEventListener("touchstart", start, { passive: false });
+      btn.addEventListener("mouseup", stop);
+      btn.addEventListener("mouseleave", stop);
+      btn.addEventListener("touchend", stop);
+      btn.addEventListener("touchcancel", stop);
+    });
+
+    // Set belt position buttons
+    document.querySelectorAll(".belt-setpos-btn").forEach((btn) => {
+      btn.addEventListener("click", () => onSetBeltPosition(btn.dataset.belt));
+    });
+
     id("tablettab_save_serial_msg").addEventListener("click", saveSerialMessages);
     
     // Trace boundary button
