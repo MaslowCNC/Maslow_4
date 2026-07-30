@@ -406,7 +406,37 @@ static void processCommandLine(const char* line, size_t len,
         Serial.printf("Link: first command received from XY board: '%s'\n", line);
     }
 
+    // USB-only maintenance word-commands.  These are multi-character so they do not
+    // collide with the single-letter inter-board protocol (e.g. auto-calibration 'C'
+    // would otherwise be shadowed by the 'C' fan-power command).  Never honored on the
+    // link so line noise cannot start a calibration.
+    if (allowLegacy) {
+        if (strcmp(line, "CAL") == 0) {
+            // Force the cooling/suction fan to full for the whole calibration run so the
+            // motors and drivers stay cool while sweeping to high RPM.
+            g_suction_level = 100;
+            Serial.println(F("Cooling/suction fan forced ON (100%) for calibration."));
+            cal.startAuto(mc1, mc2);
+            return;
+        }
+        if (strcmp(line, "DUMP") == 0) {
+            Serial.println(F("\n===== MOTOR 1 voltage LUT ====="));
+            cal.printResults(mc1);
+            Serial.println(F("\n===== MOTOR 2 voltage LUT ====="));
+            cal.printResults(mc2);
+            return;
+        }
+    }
+
     char cmd = line[0];
+
+    // While a calibration sweep is running, ignore motion setpoints arriving over the
+    // inter-board link so the XY board cannot disturb it.  Emergency stop ('E') is left
+    // working on purpose.
+    if (!allowLegacy && cal.isActive() && (cmd == 'S' || cmd == 'Z')) {
+        return;
+    }
+
     switch (cmd) {
         case 'S':  // set spindle speed
             setSpindleSpeed(strtof(line + 1, nullptr), mc1, mc2);
@@ -442,22 +472,25 @@ static void processCommandLine(const char* line, size_t len,
             // contain a tab).  The XY board sends this in response to $Spindle/EnableOTA.
             const char* rest = line + 1;
             const char* tab  = strchr(rest, '\t');
-            char        ssid[33];
-            char        pass[65];
-            if (tab) {
-                size_t slen = (size_t)(tab - rest);
-                if (slen > sizeof(ssid) - 1) {
-                    slen = sizeof(ssid) - 1;
+            if (!tab) {
+                // No "<ssid>\t<pass>" payload -> not an OTA request.  On the USB console a
+                // bare 'W' is the legacy manual-calibration (Motor 2) command; the link
+                // never triggers calibration, so ignore it there.
+                if (allowLegacy && len == 1) {
+                    handleSerialCommand('W', mc1, mc2, cal);
                 }
-                memcpy(ssid, rest, slen);
-                ssid[slen] = '\0';
-                strncpy(pass, tab + 1, sizeof(pass) - 1);
-                pass[sizeof(pass) - 1] = '\0';
-            } else {
-                strncpy(ssid, rest, sizeof(ssid) - 1);
-                ssid[sizeof(ssid) - 1] = '\0';
-                pass[0] = '\0';
+                break;
             }
+            char   ssid[33];
+            char   pass[65];
+            size_t slen = (size_t)(tab - rest);
+            if (slen > sizeof(ssid) - 1) {
+                slen = sizeof(ssid) - 1;
+            }
+            memcpy(ssid, rest, slen);
+            ssid[slen] = '\0';
+            strncpy(pass, tab + 1, sizeof(pass) - 1);
+            pass[sizeof(pass) - 1] = '\0';
             requestSpindleOTA(ssid, pass);
             if (!allowLegacy) {
                 Serial.println(F("Link: OTA enable request received from XY board"));

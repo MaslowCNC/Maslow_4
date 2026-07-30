@@ -49,6 +49,9 @@ struct Calibration {
 
     bool isActive() const { return state != CAL_IDLE; }
 
+    // Print a motor's full 140-entry voltage LUT as a copy-paste C array (USB "DUMP").
+    void printResults(MotorController& mc);
+
 private:
     MotorController& getActiveMotor(MotorController& mc1, MotorController& mc2);
     void stopAllMotors(MotorController& mc1, MotorController& mc2);

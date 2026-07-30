@@ -128,6 +128,10 @@ void Calibration::disableCalMotor(MotorController& mc) {
     Serial.printf("Motor (dir=%+d) disabled - coasting to stop.\n", mc.direction);
 }
 
+void Calibration::printResults(MotorController& mc) {
+    printFullResults(mc);
+}
+
 void Calibration::advanceToNextStep(MotorController& mc) {
     checkpoint = min(checkpoint + CAL_CHECKPOINT_STEP_RAD, CAL_MAX_RAD);
     mc.target_velocity = checkpoint * mc.direction;
