@@ -1,8 +1,10 @@
 #include <Arduino.h>
 #include <SimpleFOC.h>
+#include <stdarg.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include "soc/rtc_cntl_reg.h"  // RTC_CNTL_BROWN_OUT_REG (disable brownout detector)
+#include "driver/periph_ctrl.h"  // periph_module_reset (recover a wedged SAR-ADC)
 #include "pins.h"
 #include "config.h"
 #include "motor_controller.h"
@@ -101,6 +103,87 @@ static int ocp_consec_count2 = 0;
 static uint32_t last_drv_check = 0;
 static int overcurrent_count = 0;
 
+// --- Over-current auto-recovery state ---
+static bool     recovery_pending = false;
+static uint32_t recovery_resume_at = 0;
+static float    recovery_target_v1 = 0.0f;
+static float    recovery_target_v2 = 0.0f;
+static int      recovery_attempts = 0;
+static uint32_t recovery_window_start = 0;
+
+// Send a human-readable event to the XY board (which surfaces it in the ESP3D web console
+// via log_warn / log_error / log_info) and to the local USB console.  level is one of
+// "WARN", "ERR" or "MSG" - the XY board maps these to the matching log level.
+static void reportEvent(const char* level, const char* fmt, ...) {
+    char buf[100];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(buf, sizeof(buf), fmt, ap);
+    va_end(ap);
+    Serial1.printf("%s:%s\n", level, buf);
+    if (Serial) Serial.printf("[%s] %s\n", level, buf);
+}
+
+// Begin auto-recovery from a transient over-current: remember the commanded speed, stop the
+// motors for a brief cooldown, and schedule a resume.  Returns false (so the caller latches a
+// real fault and alarms the XY board) during calibration, or if over-currents keep recurring
+// too quickly within the window.
+static bool beginFaultRecovery(const char* what) {
+    // Calibration must abort cleanly rather than silently resume mid-sweep.
+    if (calibration.isActive()) return false;
+
+    uint32_t now = millis();
+    if (now - recovery_window_start > FAULT_RECOVERY_WINDOW_MS) {
+        recovery_attempts = 0;
+        recovery_window_start = now;
+    }
+    recovery_attempts++;
+    if (recovery_attempts > FAULT_RECOVERY_MAX_ATTEMPTS) {
+        return false;  // recurring fault -> let the caller latch and alarm the XY board
+    }
+
+    // Remember what was running so we can resume after the cooldown.
+    recovery_target_v1 = mc1.velocity_mode ? mc1.target_velocity : 0.0f;
+    recovery_target_v2 = mc2.velocity_mode ? mc2.target_velocity : 0.0f;
+
+    mc1.emergencyStop();
+    mc2.emergencyStop();
+
+    recovery_pending = true;
+    recovery_resume_at = now + FAULT_RECOVERY_COOLDOWN_MS;
+    g_speed_command_flag = false;  // ignore our own resume; watch for a NEW operator command
+
+    reportEvent("WARN", "%s - pausing %lums to recover (%d/%d)", what,
+                (unsigned long)FAULT_RECOVERY_COOLDOWN_MS, recovery_attempts, FAULT_RECOVERY_MAX_ATTEMPTS);
+    return true;
+}
+
+// Complete a pending auto-recovery once the cooldown has elapsed.
+static void updateFaultRecovery() {
+    if (!recovery_pending) return;
+
+    // A fresh operator/XY speed command during the cooldown wins - drop the recovery so we do
+    // not override it (e.g. the operator commanded a stop).
+    if (g_speed_command_flag) {
+        recovery_pending = false;
+        return;
+    }
+    if ((int32_t)(millis() - recovery_resume_at) < 0) return;
+
+    recovery_pending = false;
+
+    bool resumed = false;
+    if (fabsf(recovery_target_v1) > 0.1f) { mc1.target_velocity = recovery_target_v1; mc1.velocity_mode = true; resumed = true; }
+    if (fabsf(recovery_target_v2) > 0.1f) { mc2.target_velocity = recovery_target_v2; mc2.velocity_mode = true; resumed = true; }
+
+    if (resumed) {
+        float v = (fabsf(recovery_target_v1) > 0.1f) ? recovery_target_v1 : recovery_target_v2;
+        reportEvent("MSG", "recovered - resuming %.0f RPM", fabsf(v) * 60.0f / (2.0f * PI));
+    } else {
+        reportEvent("MSG", "recovered - motors idle");
+    }
+}
+
 static void checkDRV8316Faults() {
     if (!mc1.enabled && !mc2.enabled) return;
     if (millis() - last_drv_check < 100) return;
@@ -150,10 +233,20 @@ static void checkDRV8316Faults() {
     ocp_consec_count1 = 0;
     ocp_consec_count2 = 0;
 
+    // Over-current only (no over-temperature / over-voltage): try to auto-recover instead of
+    // latching.  Over-temp and over-voltage are genuinely dangerous, so those still latch.
+    if (!serious1 && !serious2 && persistent_ocp) {
+        if (beginFaultRecovery("DRV8316 over-current (persistent OCP)")) {
+            return;
+        }
+    }
+
+    const char* cause = (serious1 || serious2) ? "over-temp/over-voltage" : "persistent over-current";
+    reportEvent("ERR", "DRV8316 hardware fault (%s) - motors stopped, send a new speed to restart", cause);
+
     g_fault_code = 1;  // DRV8316 hardware fault
     mc1.emergencyStop();
     mc2.emergencyStop();
-    Serial.println(F("  -> Both motors disabled. Send a new velocity command to restart."));
 
     calibration.abort(mc1, mc2, "DRV8316 hardware fault");
 }
@@ -198,8 +291,25 @@ static void checkOvercurrent() {
     if (overcurrent_count < OVERCURRENT_CONSECUTIVE_TRIPS) return;
     overcurrent_count = 0;
 
-    Serial.printf("OVERCURRENT FAULT: M1=%.3f A  M2=%.3f A (phase RMS) -- both motors disabled.\n",
-                  mc1.protection_current, mc2.protection_current);
+    // Describe which motor(s) tripped and at what current for the console.
+    char detail[80];
+    if (m1_trip && m2_trip)
+        snprintf(detail, sizeof(detail), "over-current on M1 (%.1fA) & M2 (%.1fA)",
+                 mc1.protection_current, mc2.protection_current);
+    else if (m1_trip)
+        snprintf(detail, sizeof(detail), "over-current on M1 (%.1fA)", mc1.protection_current);
+    else
+        snprintf(detail, sizeof(detail), "over-current on M2 (%.1fA)", mc2.protection_current);
+
+    Serial.printf("OVERCURRENT: %s\n", detail);
+
+    // Transient over-current: pause and auto-resume without latching or alarming the XY board.
+    if (beginFaultRecovery(detail)) {
+        return;
+    }
+
+    // Over-current kept recurring -> latch and alarm the XY board.
+    reportEvent("ERR", "%s persists - motors stopped, send a new speed to restart", detail);
 
     g_fault_code = 2;  // overcurrent fault
     mc1.emergencyStop();
@@ -309,16 +419,22 @@ static void motorControlTask(void* arg) {
     uint32_t last_ramp_time = millis();
 
     for (;;) {
-        // While an OTA flash is actively in progress (WiFi/OTA runs on core 0), keep the
-        // motor drivers off and stand the control loop down.  The board reboots into the
-        // new firmware when the update completes, so we never resume from here.
-        if (g_ota_flashing) {
+        // While OTA is active (WiFi/OTA runs on core 0), keep the motor drivers off and
+        // stand the control loop down.  This starts as soon as OTA is requested - before the
+        // WiFi radio powers up - so the drivers' current draw can't sag the rail during the
+        // radio's start-up surge.  The board reboots into the new firmware when an update
+        // completes, so we never resume from here in that case.
+        if (g_ota_active) {
             mc1.disable();
             mc2.disable();
-            last_ramp_time = millis();
+            // Signal otaTask that we are parked here and no longer touching the ADC, so it
+            // is now safe to bring the WiFi radio up (see the handshake in ota_service.cpp).
+            g_motor_in_ota_standby = true;
+            last_ramp_time         = millis();
             vTaskDelay(pdMS_TO_TICKS(10));
             continue;
         }
+        g_motor_in_ota_standby = false;
 
         uint32_t current_time = millis();
         float dt = (current_time - last_ramp_time) / 1000.0f;
@@ -326,6 +442,7 @@ static void motorControlTask(void* arg) {
 
         checkMotorTimeouts();
         checkPhaseHoldPowerdown();
+        updateFaultRecovery();
         checkDRV8316Faults();
         checkOvercurrent();
         calibration.update(mc1, mc2);
@@ -386,6 +503,14 @@ void setup() {
     // this line; a sag during the first few ms of power-on (before the app starts) is a
     // pure hardware problem this cannot fix.
     WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
+
+    // Reset the SAR-ADC peripheral before anything reads it, as boot hygiene.  If a
+    // WiFi/OTA session was interrupted it can leave the ADC controller mid-conversion;
+    // because adc1_get_raw() polls for a "done" flag inside a critical section, a wedged
+    // controller makes the first analogRead() spin forever with interrupts disabled and
+    // trips the interrupt watchdog.  This resets the digital ADC controller (the RTC-domain
+    // portion only fully clears on a physical power cycle, so a deep wedge still needs one).
+    periph_module_reset(PERIPH_SARADC_MODULE);
 
     // DIAGNOSTIC + safety: force the fan OFF as the very first action, before Serial, the
     // boot delay, or any other init. The fan output is hardware-default ON, so this line

@@ -24,6 +24,11 @@ extern volatile uint8_t g_suction_level;
 // be powered down once their phase move has settled.  Cleared by any new motion command.
 extern volatile bool g_hold_release_requested;
 
+// Set true by setSpindleSpeed() whenever a fresh speed command arrives, so the over-current
+// auto-recovery logic can tell an operator command apart from its own resume and cancel a
+// pending recovery if the operator (or XY board) commands a new/zero speed during cooldown.
+extern volatile bool g_speed_command_flag;
+
 void initFanControl();
 void updateFanControl(float dt);
 

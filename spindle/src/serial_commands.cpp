@@ -127,6 +127,7 @@ volatile uint8_t g_suction_level = 100;
 // Z-axis BLDC drivers may be powered down once their phase move has settled.  Cleared
 // as soon as any new motion command (spindle speed or Z target) arrives.
 volatile bool g_hold_release_requested = false;
+volatile bool g_speed_command_flag = false;
 
 // Identity string returned to the XY board in response to a handshake ('H') request.
 static const char* LINK_IDENTITY = "I:Maslow-Spindle,proto=1";
@@ -355,6 +356,7 @@ static void setSpindleSpeed(float rpm, MotorController& mc1, MotorController& mc
     if (rpm > MAX_COMMAND_RPM) rpm = MAX_COMMAND_RPM;
 
     g_fault_code = 0;  // a fresh command clears any latched fault
+    g_speed_command_flag = true;  // let auto-recovery know an operator speed command arrived
     g_hold_release_requested = false;  // motion commanded: cancel any pending Z-hold release
 
     MotorController* motors[] = { &mc1, &mc2 };

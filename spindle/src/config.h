@@ -43,6 +43,7 @@ const int     MAX_COMMAND_RPM = 10000;     // clamp for spindle speed commands
 const char*    const OTA_HOSTNAME                = "maslow-spindle";  // mDNS -> maslow-spindle.local
 const uint32_t       OTA_WIFI_CONNECT_TIMEOUT_MS = 20000;   // give up joining WiFi after 20 s
 const uint32_t       OTA_IDLE_TIMEOUT_MS         = 300000;  // drop WiFi/OTA after 5 min idle
+const int            OTA_RECEIVE_TIMEOUT_MS      = 15000;   // tolerate 15 s data gaps mid-flash
 
 // Current filtering
 const float CURRENT_FILTER_ALPHA = 0.001f;      // Slow filter for DC-equivalent telemetry
@@ -82,3 +83,12 @@ const float CAL_RAMP_VOLT_PER_RAD = 0.0025f;                        // Open-loop
 
 // DRV8316 fault detection
 const int OCP_CONSEC_LIMIT = 5;  // 5 x 100ms = 500ms persistent OCP -> disable
+
+// Over-current auto-recovery.  Rather than latching a fault (which halts the machine and
+// forces a power cycle), a transient over-current briefly stops the motors, lets the
+// current settle, then automatically resumes the last commanded speed.  Only if faults
+// keep recurring within the window do we give up and latch a real fault, so a genuinely
+// stuck/broken condition is still protected.
+const uint32_t FAULT_RECOVERY_COOLDOWN_MS  = 600;    // motors held off this long before resuming
+const uint32_t FAULT_RECOVERY_WINDOW_MS    = 8000;   // sliding window for counting recoveries
+const int      FAULT_RECOVERY_MAX_ATTEMPTS = 8;      // recoveries allowed in the window before latching

@@ -279,6 +279,15 @@ namespace Spindles {
                     log_error(name() << ": spindle board could not start OTA (" << (_rx_buf + 8) << ")");
                 } else if (strncmp(_rx_buf, "OTA_END:", 8) == 0) {
                     log_info(name() << ": spindle board left OTA mode (" << (_rx_buf + 8) << ")");
+                } else if (strncmp(_rx_buf, "ERR:", 4) == 0) {
+                    // Latched spindle fault detail (the F: field below raises the alarm).
+                    log_error(name() << ": " << (_rx_buf + 4));
+                } else if (strncmp(_rx_buf, "WARN:", 5) == 0) {
+                    // Recoverable event, e.g. a transient over-current the board is auto-recovering.
+                    log_warn(name() << ": " << (_rx_buf + 5));
+                } else if (strncmp(_rx_buf, "MSG:", 4) == 0) {
+                    // Informational event, e.g. the board has recovered and resumed.
+                    log_info(name() << ": " << (_rx_buf + 4));
                 }
                 // Expected: "T:<state>,P:<deg>,R:<rpm>,F:<code>"
                 const char* f = strstr(_rx_buf, "F:");
