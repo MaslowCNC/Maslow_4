@@ -1421,6 +1421,12 @@ const tabletToggleSpindle = () => {
   }
 };
 
+// Control event handler - Spindle Z Homing (test button next to Spindle On/Off)
+const tabletSpindleHome = () => {
+  sendCommand("$Spindle/Home");
+  addMessage("Spindle Z homing triggered");
+};
+
 // Control event handlers - Work Area Popup
 const getWorkAreaValues = () => {
   const lv = globalThis.loadedValues || {};
@@ -1750,6 +1756,7 @@ function tabletInit() {
     id("tablettab_cal_park").addEventListener("click", tabletOpenParkPopup);
     id("tablettab_cal_scale_thickness").addEventListener("click", tabletOpenScaleThicknessPopup);
     id("tablettab_spindle_toggle").addEventListener("click", tabletToggleSpindle);
+    id("tablettab_spindle_home").addEventListener("click", tabletSpindleHome);
 
     // Buttons - Work Area Pop-up
     id("work-area-popup").addEventListener("click", tabletWorkAreaPopupHide);

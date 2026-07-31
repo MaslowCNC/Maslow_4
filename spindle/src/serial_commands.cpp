@@ -128,6 +128,7 @@ volatile uint8_t g_suction_level = 100;
 // as soon as any new motion command (spindle speed or Z target) arrives.
 volatile bool g_hold_release_requested = false;
 volatile bool g_speed_command_flag = false;
+volatile bool g_home_requested = false;
 
 // Identity string returned to the XY board in response to a handshake ('H') request.
 static const char* LINK_IDENTITY = "I:Maslow-Spindle,proto=1";
@@ -144,6 +145,7 @@ void printCommandHelp() {
     Serial.println(F("  'H'      handshake: reply with identity string"));
     Serial.println(F("  'C<lvl>' set suction/cooling fan power (0-100); fan auto-runs while motors enabled"));
     Serial.println(F("  'D'      machine idle: power down the Z-axis drivers once the move has settled"));
+    Serial.println(F("  'G'      run the Z homing cycle (raise until the top-of-travel beam breaks)"));
     Serial.println(F("\nLegacy single-character commands (USB maintenance/calibration):"));
     Serial.println(F("  'q' select motor 1 (default)"));
     Serial.println(F("  'w' select motor 2 (spins opposite direction)"));
@@ -369,10 +371,22 @@ static void setSpindleSpeed(float rpm, MotorController& mc1, MotorController& mc
 
 // Set the absolute target phase offset (Z position) in degrees.
 static void setPhaseTarget(float deg, MotorController& mc1, MotorController& mc2) {
-    g_fault_code = 0;  // a fresh command clears any latched fault
+    float new_target = deg * PI / 180.0f;
+
+    // Ignore a redundant target equal to where the Z already is (e.g. the XY board
+    // re-sending its Z on connect, or its home matching the post-homing zero).  Acting on
+    // it would clear the idle hold-release and needlessly energize the motors, leaving them
+    // locked in position with the fan running until the next idle release - which never
+    // arrives while the XY board sits in its boot alarm.
+    if (fabsf(new_target - phase_offset.current) <= PHASE_MOVE_COMPLETE_EPS_RAD) {
+        phase_offset.target = new_target;
+        return;
+    }
+
+    g_fault_code = 0;  // a fresh move clears any latched fault
     g_hold_release_requested = false;  // a new Z move cancels any pending Z-hold release
 
-    phase_offset.target = deg * PI / 180.0f;
+    phase_offset.target = new_target;
 
     // Re-enable motors if disabled so the ramp can take effect (matches 'p'/'l').
     MotorController* motors[] = { &mc1, &mc2 };
@@ -461,6 +475,9 @@ static void processCommandLine(const char* line, size_t len,
         }
         case 'D':  // machine idle: power the Z-axis drivers down once the move has settled
             g_hold_release_requested = true;
+            break;
+        case 'G':  // (re-)run the Z homing cycle (raise until the top-of-travel beam breaks)
+            g_home_requested = true;
             break;
         case 'H':  // handshake / identity request
             reply.print(LINK_IDENTITY);

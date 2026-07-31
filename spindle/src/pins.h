@@ -45,3 +45,8 @@
 // Spindle GPIO38 (TX) <-> XY GPIO16 (RX)
 #define LINK_RX_PIN 39
 #define LINK_TX_PIN 38
+
+// Z-axis homing beam break (top-of-travel detector)
+// IR LED emitter driven by GPIO1, phototransistor/detector read on GPIO45.
+#define BEAM_LED_PIN      1
+#define BEAM_DETECT_PIN   45

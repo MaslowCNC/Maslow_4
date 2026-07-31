@@ -414,6 +414,109 @@ static void checkPhaseHoldPowerdown() {
     g_hold_release_requested = false;
 }
 
+// ------------------- Z-axis Power-Up Homing -------------------
+
+// On power-up the Z axis raises until the top-of-travel beam is interrupted.  Breaking the
+// beam within Z_HOMING_MAX_MM establishes the home position and confirms a tool is loaded;
+// travelling the full limit without breaking the beam means no tool is loaded.  The Z is
+// moved by advancing the inter-motor phase offset (the same mechanism the XY board's 'Z'
+// command uses), and the beam detector is only sampled while this homing move is running.
+enum ZHomingState { ZHOME_PENDING, ZHOME_RAISING, ZHOME_DONE };
+static ZHomingState g_z_homing_state    = ZHOME_PENDING;
+static float        g_z_homing_start_phase = 0.0f;
+static bool         g_tool_loaded       = false;  // set by homing: true once the beam confirms a tool
+static bool         g_z_homed           = false;  // true once power-up homing has completed
+
+// The detector output is active-low for a clear path: it reads 1 when the beam is
+// interrupted (BLOCKED) and 0 when the beam reaches the detector (CLEAR).
+static inline bool beamBlocked() {
+    return digitalRead(BEAM_DETECT_PIN) != 0;
+}
+
+static void updateZHoming() {
+    // A re-home request (the XY board's 'G' command, e.g. from the web UI test button)
+    // restarts the cycle from the top.
+    if (g_home_requested) {
+        g_home_requested = false;
+        g_z_homing_state = ZHOME_PENDING;
+        reportEvent("MSG", "Z home requested (ota=%d cal=%d fault=%d beam=%d)",
+                    (int)g_ota_active, (int)calibration.isActive(), (int)g_fault_code, (int)beamBlocked());
+    }
+
+    // Only home once (unless re-requested), and never while OTA, calibration, or a latched
+    // fault is in progress.
+    if (g_z_homing_state == ZHOME_DONE || g_ota_active || calibration.isActive() || g_fault_code != 0) {
+        return;
+    }
+
+    switch (g_z_homing_state) {
+        case ZHOME_PENDING: {
+            // Already at the top of travel (beam interrupted): we are home and a tool is
+            // loaded, so complete without moving.
+            if (beamBlocked()) {
+                g_tool_loaded    = true;
+                g_z_homed        = true;
+                g_z_homing_state = ZHOME_DONE;
+                reportEvent("MSG", "Z homed: top-of-travel beam already interrupted, tool loaded");
+                break;
+            }
+
+            // Begin raising: enable both motors in open-loop angle mode and command the
+            // phase offset all the way to the travel limit.  The global phase ramp moves us
+            // there at PHASE_OFFSET_RAMP_RATE; we freeze the instant the beam breaks.
+            g_z_homing_start_phase = phase_offset.current;
+            phase_offset.target    = phase_offset.current + Z_HOMING_PHASE_DIR * Z_HOMING_MAX_RAD;
+
+            MotorController* motors[] = { &mc1, &mc2 };
+            for (int i = 0; i < 2; i++) {
+                if (!motors[i]->enabled) {
+                    motors[i]->resetFilterState();
+                    motors[i]->reached_speed = false;
+                    motors[i]->motor.controller = MotionControlType::angle_openloop;
+                    motors[i]->enable();
+                }
+            }
+            reportEvent("MSG", "Z homing: raising to find the top-of-travel beam");
+            g_z_homing_state = ZHOME_RAISING;
+            break;
+        }
+        case ZHOME_RAISING: {
+            if (beamBlocked()) {
+                // Reached the top: stop here.  This is home and a tool is loaded.
+                phase_offset.target = phase_offset.current;
+                g_tool_loaded       = true;
+                g_z_homed           = true;
+                g_z_homing_state    = ZHOME_DONE;
+                reportEvent("MSG", "Z homed: top-of-travel beam interrupted, tool loaded");
+            } else if (fabsf(phase_offset.current - g_z_homing_start_phase) >= Z_HOMING_MAX_RAD) {
+                // Travelled the full limit without breaking the beam: no tool is loaded.
+                phase_offset.target = phase_offset.current;
+                g_tool_loaded       = false;
+                g_z_homed           = true;
+                g_z_homing_state    = ZHOME_DONE;
+                reportEvent("WARN", "Z homing: no beam within %.0fmm - no tool loaded", Z_HOMING_MAX_MM);
+            }
+            // Once homing has finished, power the Z drivers down so the motors are not left
+            // energized (locked in position with the cooling fan running) waiting for the XY
+            // board to report idle - which does not happen while it sits in its boot alarm.
+            // Also redefine the homed position as the phase-offset zero so it matches the XY
+            // board's Z home; otherwise the XY board's first Z target (based on its own Z)
+            // would differ from where homing left us and drive the Z straight back off home.
+            // Setting current and target together applies no motor delta (see updatePhaseOffset).
+            if (g_z_homing_state == ZHOME_DONE) {
+                phase_offset.current = 0.0f;
+                phase_offset.target  = 0.0f;
+                mc1.disable();
+                mc2.disable();
+            }
+            break;
+        }
+        case ZHOME_DONE:
+        default:
+            break;
+    }
+}
+
 static void motorControlTask(void* arg) {
     (void)arg;
     uint32_t last_ramp_time = millis();
@@ -446,6 +549,11 @@ static void motorControlTask(void* arg) {
         checkDRV8316Faults();
         checkOvercurrent();
         calibration.update(mc1, mc2);
+
+        // Power-up Z homing: raise the Z until the top-of-travel beam breaks (or give up
+        // past the travel limit -> no tool loaded).  Runs before the phase ramp so its
+        // commanded phase target is applied this iteration.
+        updateZHoming();
 
         bool cal_active = calibration.isActive() &&
                           calibration.state != CAL_RAMP_DOWN &&
@@ -520,6 +628,14 @@ void setup() {
     pinMode(FAN_PWM_PIN, OUTPUT);
     digitalWrite(FAN_PWM_PIN, LOW);
 
+    // Z-axis homing beam break: drive the IR LED emitter on and read the detector.
+    // The LED is held on continuously so the beam is active; the power-up homing routine
+    // in motorControlTask (updateZHoming) samples the detector while it raises the Z to
+    // find the top-of-travel beam.
+    pinMode(BEAM_LED_PIN, OUTPUT);
+    digitalWrite(BEAM_LED_PIN, HIGH);
+    pinMode(BEAM_DETECT_PIN, INPUT);
+
     Serial.begin(115200);
     // Serial here is the USB Serial/JTAG CDC (ARDUINO_USB_MODE=1, ARDUINO_USB_CDC_ON_BOOT=1).
     // With no USB host attached its TX FIFO never drains, so writing to it during boot can
@@ -529,10 +645,35 @@ void setup() {
     // is that the board boots and runs identically whether or not USB is connected at boot.
     Serial.setTxTimeoutMs(0);
 
+    // Record why we last reset, so unexpected reboots (e.g. a supply sag when the motors
+    // surge against mechanical resistance) can be distinguished from panics/watchdogs.
+    // NOTE: the hardware brownout detector was disabled above (RTC_CNTL_BROWN_OUT_REG=0),
+    // so a genuine rail sag on THIS board shows up as "power-on" rather than "brownout";
+    // the XY board (detector still enabled) is the one that will report a true brownout.
+    // Printed unconditionally (like the SimpleFOC MOT lines) so it is captured over USB.
+    esp_reset_reason_t reset_reason = esp_reset_reason();
+    const char*        reset_str;
+    switch (reset_reason) {
+        case ESP_RST_POWERON:   reset_str = "power-on"; break;
+        case ESP_RST_EXT:       reset_str = "external pin"; break;
+        case ESP_RST_SW:        reset_str = "software"; break;
+        case ESP_RST_PANIC:     reset_str = "panic/exception"; break;
+        case ESP_RST_INT_WDT:   reset_str = "interrupt watchdog"; break;
+        case ESP_RST_TASK_WDT:  reset_str = "task watchdog"; break;
+        case ESP_RST_WDT:       reset_str = "other watchdog"; break;
+        case ESP_RST_BROWNOUT:  reset_str = "brownout (supply sag)"; break;
+        case ESP_RST_DEEPSLEEP: reset_str = "deep-sleep wake"; break;
+        default:                reset_str = "unknown"; break;
+    }
+    Serial.printf("RESET REASON: %s (%d)\n", reset_str, (int)reset_reason);
+
     // Bring up the inter-board link to the FluidNC XY board first (RX=GPIO39, TX=GPIO38)
     // so it is listening as early as possible, before the XY board finishes booting and
     // sends its handshake.
     Serial1.begin(LINK_BAUD, SERIAL_8N1, LINK_RX_PIN, LINK_TX_PIN);
+
+    // Report the reset reason to the XY board so it appears in the ESP3D web console too.
+    reportEvent("MSG", "spindle reset reason: %s", reset_str);
 
     // --- Functional bring-up: none of this depends on a USB host being present ---
     delay(3000);   // let the 24V supply / gate drivers settle before enabling them
@@ -574,3 +715,4 @@ void setup() {
 void loop() {
     vTaskDelay(pdMS_TO_TICKS(1000));
 }
+

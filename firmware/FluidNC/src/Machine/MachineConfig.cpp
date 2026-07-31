@@ -280,6 +280,25 @@ namespace Machine {
         // builtin config.  This helps prevent reset loops on bad config files.
         esp_reset_reason_t reason = esp_reset_reason();
 
+        // Log why the previous boot ended, so unexpected resets (e.g. a brownout when the
+        // motors surge against mechanical resistance) can be told apart from panics and
+        // watchdog timeouts.
+        const char* reasonStr;
+        switch (reason) {
+            case ESP_RST_POWERON:  reasonStr = "power-on"; break;
+            case ESP_RST_EXT:      reasonStr = "external pin"; break;
+            case ESP_RST_SW:       reasonStr = "software"; break;
+            case ESP_RST_PANIC:    reasonStr = "panic/exception"; break;
+            case ESP_RST_INT_WDT:  reasonStr = "interrupt watchdog"; break;
+            case ESP_RST_TASK_WDT: reasonStr = "task watchdog"; break;
+            case ESP_RST_WDT:      reasonStr = "other watchdog"; break;
+            case ESP_RST_BROWNOUT: reasonStr = "brownout (supply sag)"; break;
+            case ESP_RST_SDIO:     reasonStr = "SDIO"; break;
+            case ESP_RST_DEEPSLEEP: reasonStr = "deep-sleep wake"; break;
+            default:               reasonStr = "unknown"; break;
+        }
+        log_info("Reset reason: " << reasonStr << " (" << (int)reason << ")");
+
         // TEST: Uncomment the following to mock an ESP panic reset
         //reason = ESP_RST_PANIC;
 

@@ -29,6 +29,10 @@ extern volatile bool g_hold_release_requested;
 // pending recovery if the operator (or XY board) commands a new/zero speed during cooldown.
 extern volatile bool g_speed_command_flag;
 
+// Set true by the XY board's 'G' (home) command so the power-up Z homing cycle is re-run
+// on demand (e.g. from the web UI test button).  Cleared once homing restarts.
+extern volatile bool g_home_requested;
+
 void initFanControl();
 void updateFanControl(float dt);
 

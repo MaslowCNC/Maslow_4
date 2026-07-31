@@ -206,6 +206,17 @@ namespace WebUI {
         return Error::Ok;
     }
 
+    // Tell the spindle/Z controller board to run its Z homing cycle (raise the Z until the
+    // top-of-travel beam breaks).  Exposed as $Spindle/Home for the web UI test button.
+    static Error homeSpindle(char* parameter, AuthenticationLevel auth_level, Channel& out) {
+        if (Spindles::SpindleBoard::instance == nullptr) {
+            log_to(out, "No SpindleBoard spindle is configured");
+            return Error::InvalidValue;
+        }
+        Spindles::SpindleBoard::instance->sendHome();
+        return Error::Ok;
+    }
+
     // Used by js/statusdlg.js
     static Error showSysStats(char* parameter, AuthenticationLevel auth_level, Channel& out) {  // ESP420
         log_to(out, "Chip ID: ", (uint16_t)(ESP.getEfuseMac() >> 32));
@@ -659,6 +670,7 @@ namespace WebUI {
         new WebCommand("RESTART", WEBCMD, WA, NULL, "Bye", restart);
 
         new WebCommand(NULL, WEBCMD, WA, "ESP810", "Spindle/EnableOTA", enableSpindleOTA);
+        new WebCommand(NULL, WEBCMD, WU, "ESP811", "Spindle/Home", homeSpindle);
 
         new WebCommand(NULL, WEBCMD, WU, "ESP720", "LocalFS/Size", localFSSize);
         new WebCommand("FORMAT", WEBCMD, WA, "ESP710", "LocalFS/Format", formatLocalFS);

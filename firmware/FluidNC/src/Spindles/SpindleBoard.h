@@ -48,6 +48,10 @@ namespace Spindles {
         // `pio run -e esp32-s3-devkitc-1-ota -t upload`.
         void sendEnableOTA();
 
+        // Tell the spindle board to run its Z homing cycle (raise the Z until the
+        // top-of-travel beam breaks).  Triggered by the $Spindle/Home command / web UI button.
+        void sendHome();
+
         // The single active instance, so the Maslow loop can stream Z to it
         // without depending on the spindle factory internals.
         static SpindleBoard* instance;

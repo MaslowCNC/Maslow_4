@@ -189,6 +189,15 @@ namespace Spindles {
         _uart->write((const uint8_t*)"D\n", 2);
     }
 
+    void SpindleBoard::sendHome() {
+        if (!_uart) {
+            log_error(name() << ": cannot home spindle Z - no link to the spindle board");
+            return;
+        }
+        _uart->write((const uint8_t*)"G\n", 2);
+        log_info(name() << ": sent Z homing request to the spindle board");
+    }
+
     void SpindleBoard::sendEnableOTA() {
         if (!_uart) {
             log_error(name() << ": cannot enable spindle OTA - no link to the spindle board");
