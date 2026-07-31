@@ -52,6 +52,10 @@ namespace Spindles {
         // top-of-travel beam breaks).  Triggered by the $Spindle/Home command / web UI button.
         void sendHome();
 
+        // Tell the spindle board to remove the loaded tool (raise the Z until the tool clears
+        // the top-of-travel beam).  Triggered by the $Spindle/RemoveTool command / web UI button.
+        void sendRemoveTool();
+
         // The single active instance, so the Maslow loop can stream Z to it
         // without depending on the spindle factory internals.
         static SpindleBoard* instance;

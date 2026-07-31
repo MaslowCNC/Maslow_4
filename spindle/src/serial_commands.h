@@ -33,6 +33,11 @@ extern volatile bool g_speed_command_flag;
 // on demand (e.g. from the web UI test button).  Cleared once homing restarts.
 extern volatile bool g_home_requested;
 
+// Set true by the XY board's 'R' (remove tool) command so the Z axis raises until the
+// loaded tool clears the top-of-travel beam, then returns to the "no tool loaded" state.
+// Cleared once the removal cycle starts.
+extern volatile bool g_remove_tool_requested;
+
 void initFanControl();
 void updateFanControl(float dt);
 

@@ -198,6 +198,15 @@ namespace Spindles {
         log_info(name() << ": sent Z homing request to the spindle board");
     }
 
+    void SpindleBoard::sendRemoveTool() {
+        if (!_uart) {
+            log_error(name() << ": cannot remove tool - no link to the spindle board");
+            return;
+        }
+        _uart->write((const uint8_t*)"R\n", 2);
+        log_info(name() << ": sent tool removal request to the spindle board");
+    }
+
     void SpindleBoard::sendEnableOTA() {
         if (!_uart) {
             log_error(name() << ": cannot enable spindle OTA - no link to the spindle board");
