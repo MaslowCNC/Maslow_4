@@ -82,6 +82,16 @@ const float Z_HOMING_PHASE_DIR = +1.0f;   // +1 raises the Z; flip to -1 if homi
 const float Z_HOMING_MAX_RAD =
     Z_HOMING_MAX_MM * PHASE_DEG_PER_MM * PI / 180.0f;  // travel limit as a phase offset (rad)
 
+// --- Z-axis tool loading (reverse of homing) ---
+// While homing has left the board in the "no tool loaded" state, the top-of-travel beam
+// is monitored.  When the operator inserts a tool it interrupts the beam, which starts a
+// tool-loading move: the Z is lowered (opposite the homing direction) until the beam is no
+// longer broken, at which point a tool is considered loaded.  The lowering move gives up
+// (leaving the tool not loaded) once it travels this far without the beam clearing.
+const float Z_TOOL_LOAD_MAX_MM = 200.0f;  // give up lowering past this much travel
+const float Z_TOOL_LOAD_MAX_RAD =
+    Z_TOOL_LOAD_MAX_MM * PHASE_DEG_PER_MM * PI / 180.0f;  // travel limit as a phase offset (rad)
+
 // Calibration LUT
 const int   CAL_LUT_SIZE = 140;                                     // 100, 200, ... 14000 RPM
 const float CAL_TARGET_CURRENT = 3.5f;                              // Target phase-RMS current (A)

@@ -421,9 +421,16 @@ static void checkPhaseHoldPowerdown() {
 // travelling the full limit without breaking the beam means no tool is loaded.  The Z is
 // moved by advancing the inter-motor phase offset (the same mechanism the XY board's 'Z'
 // command uses), and the beam detector is only sampled while this homing move is running.
-enum ZHomingState { ZHOME_PENDING, ZHOME_RAISING, ZHOME_DONE };
+//
+// When homing finishes with no tool loaded, the state machine drops into ZLOAD_MONITOR
+// instead of ZHOME_DONE: it watches the same beam and, when the operator inserts a tool
+// (interrupting the beam), runs the reverse of homing - lowering the Z until the beam is no
+// longer broken - to seat and load the tool.
+enum ZHomingState { ZHOME_PENDING, ZHOME_RAISING, ZHOME_DONE, ZLOAD_MONITOR, ZLOAD_LOWERING };
 static ZHomingState g_z_homing_state    = ZHOME_PENDING;
 static float        g_z_homing_start_phase = 0.0f;
+static float        g_z_load_start_phase   = 0.0f;  // phase at the start of a tool-loading move
+static bool         g_beam_prev_blocked    = false; // previous beam state, for edge detection
 static bool         g_tool_loaded       = false;  // set by homing: true once the beam confirms a tool
 static bool         g_z_homed           = false;  // true once power-up homing has completed
 
@@ -443,9 +450,12 @@ static void updateZHoming() {
                     (int)g_ota_active, (int)calibration.isActive(), (int)g_fault_code, (int)beamBlocked());
     }
 
-    // Only home once (unless re-requested), and never while OTA, calibration, or a latched
-    // fault is in progress.
-    if (g_z_homing_state == ZHOME_DONE || g_ota_active || calibration.isActive() || g_fault_code != 0) {
+    // Never home or load a tool while OTA, calibration, or a latched fault is in progress.
+    if (g_ota_active || calibration.isActive() || g_fault_code != 0) {
+        return;
+    }
+    // Once a tool is confirmed loaded there is nothing left to do.
+    if (g_z_homing_state == ZHOME_DONE) {
         return;
     }
 
@@ -490,22 +500,81 @@ static void updateZHoming() {
                 reportEvent("MSG", "Z homed: top-of-travel beam interrupted, tool loaded");
             } else if (fabsf(phase_offset.current - g_z_homing_start_phase) >= Z_HOMING_MAX_RAD) {
                 // Travelled the full limit without breaking the beam: no tool is loaded.
+                // Drop into beam monitoring so a tool can be loaded on demand.
                 phase_offset.target = phase_offset.current;
                 g_tool_loaded       = false;
                 g_z_homed           = true;
-                g_z_homing_state    = ZHOME_DONE;
+                g_z_homing_state    = ZLOAD_MONITOR;
                 reportEvent("WARN", "Z homing: no beam within %.0fmm - no tool loaded", Z_HOMING_MAX_MM);
             }
-            // Once homing has finished, power the Z drivers down so the motors are not left
-            // energized (locked in position with the cooling fan running) waiting for the XY
-            // board to report idle - which does not happen while it sits in its boot alarm.
-            // Also redefine the homed position as the phase-offset zero so it matches the XY
-            // board's Z home; otherwise the XY board's first Z target (based on its own Z)
-            // would differ from where homing left us and drive the Z straight back off home.
-            // Setting current and target together applies no motor delta (see updatePhaseOffset).
-            if (g_z_homing_state == ZHOME_DONE) {
-                phase_offset.current = 0.0f;
-                phase_offset.target  = 0.0f;
+            // Once the raising move has finished, power the Z drivers down so the motors are
+            // not left energized (locked in position with the cooling fan running) waiting
+            // for the XY board to report idle - which does not happen while it sits in its
+            // boot alarm.  Also redefine the stopping position as the phase-offset zero so it
+            // matches the XY board's Z home; otherwise the XY board's first Z target (based on
+            // its own Z) would differ from where homing left us and drive the Z straight back
+            // off home.  Setting current and target together applies no motor delta (see
+            // updatePhaseOffset).
+            if (g_z_homing_state == ZHOME_DONE || g_z_homing_state == ZLOAD_MONITOR) {
+                phase_offset.current   = 0.0f;
+                phase_offset.target    = 0.0f;
+                g_beam_prev_blocked    = beamBlocked();  // arm edge detection at the current level
+                mc1.disable();
+                mc2.disable();
+            }
+            break;
+        }
+        case ZLOAD_MONITOR: {
+            // No tool is loaded.  Watch the top-of-travel beam; when the operator inserts a
+            // tool it interrupts the beam.  Trigger the loading move only on a clear->blocked
+            // edge so a beam that is still blocked after an aborted attempt does not drive the
+            // Z down again on its own.
+            bool blocked = beamBlocked();
+            if (blocked && !g_beam_prev_blocked) {
+                // Begin lowering (the reverse of homing): enable both motors in open-loop
+                // angle mode and command the phase offset toward the travel limit in the
+                // opposite direction.  The global phase ramp moves us there; we freeze the
+                // instant the beam clears.
+                g_z_load_start_phase = phase_offset.current;
+                phase_offset.target  = phase_offset.current - Z_HOMING_PHASE_DIR * Z_TOOL_LOAD_MAX_RAD;
+
+                MotorController* motors[] = { &mc1, &mc2 };
+                for (int i = 0; i < 2; i++) {
+                    if (!motors[i]->enabled) {
+                        motors[i]->resetFilterState();
+                        motors[i]->reached_speed = false;
+                        motors[i]->motor.controller = MotionControlType::angle_openloop;
+                        motors[i]->enable();
+                    }
+                }
+                reportEvent("MSG", "Tool loading: beam interrupted, lowering Z until the beam clears");
+                g_z_homing_state = ZLOAD_LOWERING;
+            }
+            g_beam_prev_blocked = blocked;
+            break;
+        }
+        case ZLOAD_LOWERING: {
+            if (!beamBlocked()) {
+                // Beam clear: the tool has seated.  Stop here; a tool is now loaded.
+                phase_offset.target = phase_offset.current;
+                g_tool_loaded       = true;
+                g_z_homing_state    = ZHOME_DONE;
+                reportEvent("MSG", "Tool loaded: beam cleared");
+            } else if (fabsf(phase_offset.current - g_z_load_start_phase) >= Z_TOOL_LOAD_MAX_RAD) {
+                // Lowered the full limit without the beam clearing: abort and go back to
+                // monitoring.  No tool is loaded.  Edge detection (armed below) keeps the Z
+                // from immediately lowering again while the beam stays blocked.
+                phase_offset.target = phase_offset.current;
+                g_tool_loaded       = false;
+                g_z_homing_state    = ZLOAD_MONITOR;
+                reportEvent("WARN", "Tool loading: beam still blocked after %.0fmm - aborting", Z_TOOL_LOAD_MAX_MM);
+            }
+            // Once the lowering move has finished, power the Z drivers down and redefine the
+            // stopping point as the phase-offset zero, just as homing does.
+            if (g_z_homing_state == ZHOME_DONE || g_z_homing_state == ZLOAD_MONITOR) {
+                phase_offset.current   = 0.0f;
+                phase_offset.target    = 0.0f;
+                g_beam_prev_blocked    = beamBlocked();  // arm edge detection at the current level
                 mc1.disable();
                 mc2.disable();
             }
