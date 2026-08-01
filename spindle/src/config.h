@@ -101,6 +101,10 @@ const float Z_TOOL_LOAD_MAX_RAD =
 const float Z_TOOL_REMOVE_MAX_MM = 150.0f;  // give up raising past this much travel
 const float Z_TOOL_REMOVE_MAX_RAD =
     Z_TOOL_REMOVE_MAX_MM * PHASE_DEG_PER_MM * PI / 180.0f;  // travel limit as a phase offset (rad)
+// After the beam first clears the Z keeps raising for this long to confirm a clean removal;
+// if the beam is interrupted again at any point during the window the timer restarts, so a
+// tool flickering right on the edge of the beam is not mistaken for a completed removal.
+const uint32_t Z_TOOL_REMOVE_CONFIRM_MS = 500;  // beam must stay clear this long to finish
 
 // Calibration LUT
 const int   CAL_LUT_SIZE = 140;                                     // 100, 200, ... 14000 RPM

@@ -435,6 +435,8 @@ static ZHomingState g_z_homing_state    = ZHOME_PENDING;
 static float        g_z_homing_start_phase = 0.0f;
 static float        g_z_load_start_phase   = 0.0f;  // phase at the start of a tool-load/remove move
 static bool         g_beam_prev_blocked    = false; // previous beam state, for edge detection
+static bool         g_tool_remove_confirming = false; // beam has cleared; timing the confirm window
+static uint32_t     g_tool_remove_clear_since = 0;  // millis() when the beam last became clear
 static bool         g_tool_loaded       = false;  // set by homing: true once the beam confirms a tool
 static bool         g_z_homed           = false;  // true once power-up homing has completed
 
@@ -469,6 +471,7 @@ static void updateZHoming() {
             g_z_load_start_phase = phase_offset.current;
             phase_offset.target  = phase_offset.current + Z_HOMING_PHASE_DIR * Z_TOOL_REMOVE_MAX_RAD;
             g_beam_prev_blocked  = true;  // a tool is present; watch for the blocked->clear edge
+            g_tool_remove_confirming = false;  // no clearance confirmation window open yet
 
             MotorController* motors[] = { &mc1, &mc2 };
             for (int i = 0; i < 2; i++) {
@@ -616,24 +619,39 @@ static void updateZHoming() {
             break;
         }
         case ZUNLOAD_RAISING: {
-            // Raising to eject the loaded tool.  We only care about the beam transitioning
-            // from blocked (tool present) to clear (tool removed); a tool entering the beam
-            // (a clear->blocked edge) is ignored because completion keys off the falling edge.
-            bool blocked = beamBlocked();
-            if (g_beam_prev_blocked && !blocked) {
-                // Beam cleared: the tool has been removed.  Stop and return to monitoring.
-                phase_offset.target = phase_offset.current;
-                g_tool_loaded       = false;
-                g_z_homing_state    = ZLOAD_MONITOR;
-                reportEvent("MSG", "Tool removed: beam cleared");
-            } else if (fabsf(phase_offset.current - g_z_load_start_phase) >= Z_TOOL_REMOVE_MAX_RAD) {
-                // Raised the full limit without the beam clearing: give up and stop.  The tool
-                // is still considered loaded since it never cleared the beam.
-                phase_offset.target = phase_offset.current;
-                g_z_homing_state    = ZHOME_DONE;
-                reportEvent("WARN", "Tool removal: beam still blocked after %.0fmm - stopping", Z_TOOL_REMOVE_MAX_MM);
+            // Raising to eject the loaded tool.  We keep raising until the beam has stayed
+            // clear for Z_TOOL_REMOVE_CONFIRM_MS; a tool sitting right on the edge of the beam
+            // can flicker, so any re-break of the beam restarts that confirmation window.  A
+            // tool entering the beam is therefore naturally ignored (it just restarts timing).
+            bool blocked   = beamBlocked();
+            bool hit_limit = fabsf(phase_offset.current - g_z_load_start_phase) >= Z_TOOL_REMOVE_MAX_RAD;
+
+            if (blocked) {
+                // Tool still interrupting the beam (or flickering on its edge): keep raising
+                // and reset the clearance-confirmation window.
+                g_tool_remove_confirming = false;
+                if (hit_limit) {
+                    // Raised the full limit with the beam still blocked: give up and stop.
+                    // The tool is still considered loaded since it never cleared the beam.
+                    phase_offset.target = phase_offset.current;
+                    g_z_homing_state    = ZHOME_DONE;
+                    reportEvent("WARN", "Tool removal: beam still blocked after %.0fmm - stopping", Z_TOOL_REMOVE_MAX_MM);
+                }
+            } else {
+                // Beam clear: open (or continue) the confirmation window while still raising.
+                if (!g_tool_remove_confirming) {
+                    g_tool_remove_confirming  = true;
+                    g_tool_remove_clear_since = millis();
+                }
+                if ((millis() - g_tool_remove_clear_since) >= Z_TOOL_REMOVE_CONFIRM_MS || hit_limit) {
+                    // Beam stayed clear for the full window (or we ran out of travel while
+                    // clear): the tool has been removed.  Stop and return to monitoring.
+                    phase_offset.target = phase_offset.current;
+                    g_tool_loaded       = false;
+                    g_z_homing_state    = ZLOAD_MONITOR;
+                    reportEvent("MSG", "Tool removed: beam clear for %ums", (unsigned)Z_TOOL_REMOVE_CONFIRM_MS);
+                }
             }
-            g_beam_prev_blocked = blocked;
             // Once the removal move has finished, power the Z drivers down and redefine the
             // stopping point as the phase-offset zero, just as homing does.
             if (g_z_homing_state == ZHOME_DONE || g_z_homing_state == ZLOAD_MONITOR) {
