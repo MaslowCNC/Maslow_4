@@ -129,6 +129,7 @@ volatile uint8_t g_suction_level = 100;
 volatile bool g_hold_release_requested = false;
 volatile bool g_speed_command_flag = false;
 volatile bool g_home_requested = false;
+volatile bool g_remove_tool_requested = false;
 
 // Identity string returned to the XY board in response to a handshake ('H') request.
 static const char* LINK_IDENTITY = "I:Maslow-Spindle,proto=1";
@@ -146,6 +147,7 @@ void printCommandHelp() {
     Serial.println(F("  'C<lvl>' set suction/cooling fan power (0-100); fan auto-runs while motors enabled"));
     Serial.println(F("  'D'      machine idle: power down the Z-axis drivers once the move has settled"));
     Serial.println(F("  'G'      run the Z homing cycle (raise until the top-of-travel beam breaks)"));
+    Serial.println(F("  'R'      remove tool: raise the Z until the loaded tool clears the beam"));
     Serial.println(F("\nLegacy single-character commands (USB maintenance/calibration):"));
     Serial.println(F("  'q' select motor 1 (default)"));
     Serial.println(F("  'w' select motor 2 (spins opposite direction)"));
@@ -478,6 +480,9 @@ static void processCommandLine(const char* line, size_t len,
             break;
         case 'G':  // (re-)run the Z homing cycle (raise until the top-of-travel beam breaks)
             g_home_requested = true;
+            break;
+        case 'R':  // remove tool: raise the Z until the loaded tool clears the beam
+            g_remove_tool_requested = true;
             break;
         case 'H':  // handshake / identity request
             reply.print(LINK_IDENTITY);

@@ -217,6 +217,17 @@ namespace WebUI {
         return Error::Ok;
     }
 
+    // Tell the spindle/Z controller board to remove the loaded tool (raise the Z until the
+    // tool clears the top-of-travel beam).  Exposed as $Spindle/RemoveTool for the web UI.
+    static Error removeSpindleTool(char* parameter, AuthenticationLevel auth_level, Channel& out) {
+        if (Spindles::SpindleBoard::instance == nullptr) {
+            log_to(out, "No SpindleBoard spindle is configured");
+            return Error::InvalidValue;
+        }
+        Spindles::SpindleBoard::instance->sendRemoveTool();
+        return Error::Ok;
+    }
+
     // Used by js/statusdlg.js
     static Error showSysStats(char* parameter, AuthenticationLevel auth_level, Channel& out) {  // ESP420
         log_to(out, "Chip ID: ", (uint16_t)(ESP.getEfuseMac() >> 32));
@@ -671,6 +682,7 @@ namespace WebUI {
 
         new WebCommand(NULL, WEBCMD, WA, "ESP810", "Spindle/EnableOTA", enableSpindleOTA);
         new WebCommand(NULL, WEBCMD, WU, "ESP811", "Spindle/Home", homeSpindle);
+        new WebCommand(NULL, WEBCMD, WU, "ESP812", "Spindle/RemoveTool", removeSpindleTool);
 
         new WebCommand(NULL, WEBCMD, WU, "ESP720", "LocalFS/Size", localFSSize);
         new WebCommand("FORMAT", WEBCMD, WA, "ESP710", "LocalFS/Format", formatLocalFS);

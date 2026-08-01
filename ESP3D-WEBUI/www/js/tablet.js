@@ -1427,6 +1427,12 @@ const tabletSpindleHome = () => {
   addMessage("Spindle Z homing triggered");
 };
 
+// Control event handler - Remove Tool (raise the Z until the tool clears the beam)
+const tabletSpindleRemoveTool = () => {
+  sendCommand("$Spindle/RemoveTool");
+  addMessage("Tool removal triggered");
+};
+
 // Control event handlers - Work Area Popup
 const getWorkAreaValues = () => {
   const lv = globalThis.loadedValues || {};
@@ -1757,6 +1763,7 @@ function tabletInit() {
     id("tablettab_cal_scale_thickness").addEventListener("click", tabletOpenScaleThicknessPopup);
     id("tablettab_spindle_toggle").addEventListener("click", tabletToggleSpindle);
     id("tablettab_spindle_home").addEventListener("click", tabletSpindleHome);
+    id("tablettab_spindle_remove_tool").addEventListener("click", tabletSpindleRemoveTool);
 
     // Buttons - Work Area Pop-up
     id("work-area-popup").addEventListener("click", tabletWorkAreaPopupHide);
