@@ -124,6 +124,14 @@ static void reportEvent(const char* level, const char* fmt, ...) {
     if (Serial) Serial.printf("[%s] %s\n", level, buf);
 }
 
+// Tell the XY board that the spindle has (re)established its Z zero (phase offset 0) so it
+// can reset its own Z-axis machine position to 0 and keep the two boards' Z origins aligned.
+// Sent whenever homing, tool loading, or tool removal redefines the phase-offset zero.
+static void notifyZHomed() {
+    Serial1.println(F("ZHOMED"));
+    if (Serial) Serial.println(F("[MSG] Z zero re-established -> notified XY board (ZHOMED)"));
+}
+
 // Begin auto-recovery from a transient over-current: remember the commanded speed, stop the
 // motors for a brief cooldown, and schedule a resume.  Returns false (so the caller latches a
 // real fault and alarms the XY board) during calibration, or if over-currents keep recurring
@@ -346,6 +354,24 @@ static void updatePhaseOffset(float dt) {
     }
 }
 
+// Redefine the current resting position as the phase-offset zero.  It is NOT enough to
+// zero phase_offset alone: while raising/lowering to home the motors' open-loop angle
+// target (target_angle / motor.target) accumulates the whole travel, and that is what the
+// FOC actually drives to.  If we leave it stale, the next streamed Z target reconciles the
+// motors against that large angle and the Z lurches far past the commanded move.  Zeroing
+// the phase offset AND the motor angles together (with the drivers already powered down so
+// there is no live jerk) keeps the logical Z zero and the motors' target phase in sync.
+static void zeroPhaseReference() {
+    phase_offset.current = 0.0f;
+    phase_offset.target  = 0.0f;
+    MotorController* motors[] = { &mc1, &mc2 };
+    for (int i = 0; i < 2; i++) {
+        motors[i]->target_angle      = 0.0f;
+        motors[i]->motor.target      = 0.0f;
+        motors[i]->motor.shaft_angle = 0.0f;
+    }
+}
+
 // ------------------- Telemetry -------------------
 
 static void printTelemetry() {
@@ -505,7 +531,13 @@ static void updateZHoming() {
                 g_tool_loaded    = true;
                 g_z_homed        = true;
                 g_z_homing_state = ZHOME_DONE;
+                // Redefine this resting point as the phase-offset zero (drivers powered down,
+                // phase offset AND motor angles zeroed together) and tell the XY board to match.
+                mc1.disable();
+                mc2.disable();
+                zeroPhaseReference();
                 reportEvent("MSG", "Z homed: top-of-travel beam already interrupted, tool loaded");
+                notifyZHomed();
                 break;
             }
 
@@ -554,11 +586,11 @@ static void updateZHoming() {
             // off home.  Setting current and target together applies no motor delta (see
             // updatePhaseOffset).
             if (g_z_homing_state == ZHOME_DONE || g_z_homing_state == ZLOAD_MONITOR) {
-                phase_offset.current   = 0.0f;
-                phase_offset.target    = 0.0f;
-                g_beam_prev_blocked    = beamBlocked();  // arm edge detection at the current level
                 mc1.disable();
                 mc2.disable();
+                zeroPhaseReference();                    // coherent phase + motor-angle zero
+                g_beam_prev_blocked    = beamBlocked();  // arm edge detection at the current level
+                notifyZHomed();  // XY board resets its Z machine position to match this new zero
             }
             break;
         }
@@ -610,11 +642,11 @@ static void updateZHoming() {
             // Once the lowering move has finished, power the Z drivers down and redefine the
             // stopping point as the phase-offset zero, just as homing does.
             if (g_z_homing_state == ZHOME_DONE || g_z_homing_state == ZLOAD_MONITOR) {
-                phase_offset.current   = 0.0f;
-                phase_offset.target    = 0.0f;
-                g_beam_prev_blocked    = beamBlocked();  // arm edge detection at the current level
                 mc1.disable();
                 mc2.disable();
+                zeroPhaseReference();                    // coherent phase + motor-angle zero
+                g_beam_prev_blocked    = beamBlocked();  // arm edge detection at the current level
+                notifyZHomed();  // XY board resets its Z machine position to match this new zero
             }
             break;
         }
@@ -655,11 +687,11 @@ static void updateZHoming() {
             // Once the removal move has finished, power the Z drivers down and redefine the
             // stopping point as the phase-offset zero, just as homing does.
             if (g_z_homing_state == ZHOME_DONE || g_z_homing_state == ZLOAD_MONITOR) {
-                phase_offset.current   = 0.0f;
-                phase_offset.target    = 0.0f;
-                g_beam_prev_blocked    = beamBlocked();  // arm edge detection at the current level
                 mc1.disable();
                 mc2.disable();
+                zeroPhaseReference();                    // coherent phase + motor-angle zero
+                g_beam_prev_blocked    = beamBlocked();  // arm edge detection at the current level
+                notifyZHomed();  // XY board resets its Z machine position to match this new zero
             }
             break;
         }

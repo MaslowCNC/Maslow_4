@@ -1143,20 +1143,21 @@ const tabletMoveBottomRight = () => sendMove("X+Y-");
 // Button event handlers - Fourth Row
 const openSetZHomePopup = () => {
   tabletClick();
-  const zCurrent = MPOS && MPOS.length >= 3 ? MPOS[2].toFixed(3) : "0";
   const zInput = id("setHomeZ");
   if (zInput) {
-    // Pre-fill with current machine Z position so the user sees where Z is now.
-    zInput.value = zCurrent;
-    zInput.min = Z_HOME_MIN_SAFE_MM;
-    zInput.max = Z_HOME_MAX_SAFE_MM;
-    zInput.title = `Z: ${Z_HOME_MIN_SAFE_MM} to ${Z_HOME_MAX_SAFE_MM} mm`;
+    // The field is the work-Z value to assign to the CURRENT position.
+    // Default 0 => confirming sets the current position as work-Z zero
+    // (a pure coordinate offset, no motion).
+    zInput.value = "0";
+    zInput.removeAttribute("min");
+    zInput.removeAttribute("max");
+    zInput.title = "Work Z value to assign to the current position (0 = set Z zero here)";
   }
-  // Context label shows the previously defined Z home value (WCO[2]).
+  // Context label shows the current work Z position for reference.
   const zHomeLabel = id("currentZHomeLabel");
   if (zHomeLabel) {
-    const zHome = WCO && WCO.length >= 3 ? WCO[2].toFixed(3) : "0";
-    zHomeLabel.textContent = `Z Home: ${zHome} mm`;
+    const zWork = WPOS && WPOS.length >= 3 ? WPOS[2].toFixed(3) : "0";
+    zHomeLabel.textContent = `Current work Z: ${zWork} mm`;
   }
   openModal("set-z-home-popup");
 }
@@ -1175,17 +1176,15 @@ const moveToZHome = () => {
 const confirmSetZHome = () => {
   const zInput = id("setHomeZ");
   const rawZ = zInput ? parseFloat(zInput.value) : NaN;
-  const zVal = isNaN(rawZ) ? 0 : Math.max(Z_HOME_MIN_SAFE_MM, Math.min(Z_HOME_MAX_SAFE_MM, rawZ));
-
-  if (!isNaN(rawZ) && zVal !== rawZ) {
-    addMessage(`Z Home value clamped to range: Z=${zVal}`);
-  }
+  const zVal = isNaN(rawZ) ? 0 : rawZ;
 
   hideModal("set-z-home-popup");
 
-  const mposZ = MPOS ? MPOS[2] : 0;
-  sendCommand(`G10 L20 P0 Z${mposZ - zVal}`);
-  addMessage(`Z Home pos set: Z=${zVal}mm`);
+  // G10 L20 P0 Z<v> assigns the current machine position the work value <v>,
+  // so the work offset becomes (MPos - v). With v=0 this zeroes Z at the
+  // current position. This only relabels coordinates - it never moves the axis.
+  sendCommand(`G10 L20 P0 Z${zVal}`);
+  addMessage(`Z zero set: current position is now work Z=${zVal}mm`);
   refreshGcode();
 }
 // Button event handlers - Fifth Row - nothing special here, move on

@@ -6,6 +6,8 @@
 #include "../Machine/MachineConfig.h"  // config->_uarts
 #include "../System.h"                 // sys
 #include "../Protocol.h"               // rtAlarm, ExecAlarm
+#include "../GCode.h"                  // gc_sync_position
+#include "../Planner.h"                // plan_sync_position
 #include "../WebUI/WifiConfig.h"       // wifi_sta_ssid / wifi_sta_password (ENABLE_WIFI)
 
 #include <cstdio>   // snprintf
@@ -306,6 +308,35 @@ namespace Spindles {
                 } else if (strncmp(_rx_buf, "MSG:", 4) == 0) {
                     // Informational event, e.g. the board has recovered and resumed.
                     log_info(name() << ": " << (_rx_buf + 4));
+                }
+                // The spindle board redefined its Z zero (homing / tool load / tool removal
+                // finished).  Reset the XY board's Z-axis machine position to 0 so the two
+                // boards' Z origins stay aligned; otherwise the next streamed Z target (based
+                // on the XY board's own Z) would differ from where the spindle parked and
+                // drive the Z straight back off home.  Only accept this while the machine is
+                // idle/alarm/asleep so it can never disturb an active move.
+                if (strncmp(_rx_buf, "ZHOMED", 6) == 0) {
+                    State st = sys.state();
+                    if (st == State::Idle || st == State::Alarm || st == State::Sleep) {
+                        set_motor_steps(4, mpos_to_steps(0.0f, 4));  // Z is axis 4
+                        gc_sync_position();                          // push into the gcode engine
+                        plan_sync_position();                        // sync the planner so the first Z move plans from 0
+                        // Also clear any lingering Z work offset so both machine and work Z read 0
+                        // after homing; otherwise a prior "Set Z Home" (G10 L20) offset persists and
+                        // the work Z keeps reporting the old value instead of 0.
+                        char clear_g92[] = "G92.1";
+                        if (gc_execute_line(clear_g92) != Error::Ok) {
+                            log_warn(name() << ": could not clear G92 offset after Z home");
+                        }
+                        char zero_wcs[] = "G10 L20 P0 Z0";
+                        if (gc_execute_line(zero_wcs) != Error::Ok) {
+                            log_warn(name() << ": could not zero Z work coordinate after Z home");
+                        }
+                        _deg_sent = false;                           // re-send the next phase from the new zero
+                        log_info(name() << ": spindle re-homed Z - reset XY Z position to 0");
+                    } else {
+                        log_warn(name() << ": ignoring spindle ZHOMED while machine is busy (state " << (int)st << ")");
+                    }
                 }
                 // Expected: "T:<state>,P:<deg>,R:<rpm>,F:<code>"
                 const char* f = strstr(_rx_buf, "F:");
