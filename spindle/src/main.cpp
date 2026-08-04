@@ -110,6 +110,7 @@ static float    recovery_target_v1 = 0.0f;
 static float    recovery_target_v2 = 0.0f;
 static int      recovery_attempts = 0;
 static uint32_t recovery_window_start = 0;
+static char     recovery_cause[80] = "";  // the fault that triggered the pending recovery
 
 // Send a human-readable event to the XY board (which surfaces it in the ESP3D web console
 // via log_warn / log_error / log_info) and to the local USB console.  level is one of
@@ -133,11 +134,12 @@ static void notifyZHomed() {
 }
 
 // Begin auto-recovery from a transient over-current: remember the commanded speed, stop the
-// motors for a brief cooldown, and schedule a resume.  Returns false (so the caller latches a
-// real fault and alarms the XY board) during calibration, or if over-currents keep recurring
-// too quickly within the window.
+// motors for a brief cooldown, and schedule a resume.  Returns false (so the caller fails out)
+// during calibration, or once over-currents keep recurring past FAULT_RECOVERY_MAX_ATTEMPTS
+// within the window.
 static bool beginFaultRecovery(const char* what) {
-    // Calibration must abort cleanly rather than silently resume mid-sweep.
+    // A calibration sweep drives the motors open-loop; retrying velocity mode would corrupt it,
+    // so the caller aborts the sweep instead.
     if (calibration.isActive()) return false;
 
     uint32_t now = millis();
@@ -147,7 +149,7 @@ static bool beginFaultRecovery(const char* what) {
     }
     recovery_attempts++;
     if (recovery_attempts > FAULT_RECOVERY_MAX_ATTEMPTS) {
-        return false;  // recurring fault -> let the caller latch and alarm the XY board
+        return false;  // kept over-currenting -> let the caller fail out to 0 RPM
     }
 
     // Remember what was running so we can resume after the cooldown.
@@ -161,12 +163,17 @@ static bool beginFaultRecovery(const char* what) {
     recovery_resume_at = now + FAULT_RECOVERY_COOLDOWN_MS;
     g_speed_command_flag = false;  // ignore our own resume; watch for a NEW operator command
 
-    reportEvent("WARN", "%s - pausing %lums to recover (%d/%d)", what,
+    // Remember the cause so the later "retried" message can name what tripped it.
+    strncpy(recovery_cause, what, sizeof(recovery_cause) - 1);
+    recovery_cause[sizeof(recovery_cause) - 1] = '\0';
+
+    reportEvent("WARN", "%s - pausing %lums to retry (%d/%d)", what,
                 (unsigned long)FAULT_RECOVERY_COOLDOWN_MS, recovery_attempts, FAULT_RECOVERY_MAX_ATTEMPTS);
     return true;
 }
 
-// Complete a pending auto-recovery once the cooldown has elapsed.
+// Complete a pending auto-recovery once the cooldown has elapsed, resuming the last commanded
+// speed so a transient overload does not stop the job.
 static void updateFaultRecovery() {
     if (!recovery_pending) return;
 
@@ -186,9 +193,10 @@ static void updateFaultRecovery() {
 
     if (resumed) {
         float v = (fabsf(recovery_target_v1) > 0.1f) ? recovery_target_v1 : recovery_target_v2;
-        reportEvent("MSG", "recovered - resuming %.0f RPM", fabsf(v) * 60.0f / (2.0f * PI));
+        reportEvent("MSG", "retried %s - resuming %.0f RPM", recovery_cause,
+                    fabsf(v) * 60.0f / (2.0f * PI));
     } else {
-        reportEvent("MSG", "recovered - motors idle");
+        reportEvent("MSG", "retried %s - motors idle", recovery_cause);
     }
 }
 
@@ -241,16 +249,27 @@ static void checkDRV8316Faults() {
     ocp_consec_count1 = 0;
     ocp_consec_count2 = 0;
 
-    // Over-current only (no over-temperature / over-voltage): try to auto-recover instead of
-    // latching.  Over-temp and over-voltage are genuinely dangerous, so those still latch.
+    // Over-current only (no over-temperature / over-voltage): pause and retry like the software
+    // monitor.  Over-temp and over-voltage are genuinely dangerous, so those still latch.
     if (!serious1 && !serious2 && persistent_ocp) {
         if (beginFaultRecovery("DRV8316 over-current (persistent OCP)")) {
             return;
         }
+        // Retries exhausted (or a calibration sweep is running) -> fail out without latching.
+        mc1.emergencyStop();
+        mc2.emergencyStop();
+        if (calibration.isActive()) {
+            reportEvent("ERR", "DRV8316 over-current during calibration - aborting");
+            calibration.abort(mc1, mc2, "DRV8316 over-current");
+        } else {
+            reportEvent("WARN", "DRV8316 over-current persisted after %d tries - spindle stopped (0 RPM); send a new speed to restart",
+                        FAULT_RECOVERY_MAX_ATTEMPTS);
+        }
+        return;
     }
 
-    const char* cause = (serious1 || serious2) ? "over-temp/over-voltage" : "persistent over-current";
-    reportEvent("ERR", "DRV8316 hardware fault (%s) - motors stopped, send a new speed to restart", cause);
+    // Serious fault (over-temp / over-voltage): latch and alarm the XY board.
+    reportEvent("ERR", "DRV8316 hardware fault (over-temp/over-voltage) - motors stopped, send a new speed to restart");
 
     g_fault_code = 1;  // DRV8316 hardware fault
     mc1.emergencyStop();
@@ -276,7 +295,7 @@ static void checkOvercurrent() {
         last_cal_motor_idx = -1;
     }
 
-    float oc_threshold = calibration.isActive() ? OVERCURRENT_THRESHOLD_CAL : OVERCURRENT_THRESHOLD;
+    float oc_threshold = OVERCURRENT_THRESHOLD;
 
     bool m1_trip = mc1.enabled && mc1.reached_speed && (mc1.protection_current > oc_threshold);
     bool m2_trip = mc2.enabled && mc2.reached_speed && (mc2.protection_current > oc_threshold);
@@ -311,19 +330,22 @@ static void checkOvercurrent() {
 
     Serial.printf("OVERCURRENT: %s\n", detail);
 
-    // Transient over-current: pause and auto-resume without latching or alarming the XY board.
+    // Transient over-current: pause and retry the commanded speed without latching.
     if (beginFaultRecovery(detail)) {
         return;
     }
 
-    // Over-current kept recurring -> latch and alarm the XY board.
-    reportEvent("ERR", "%s persists - motors stopped, send a new speed to restart", detail);
-
-    g_fault_code = 2;  // overcurrent fault
+    // Retries exhausted (or a calibration sweep is running).
     mc1.emergencyStop();
     mc2.emergencyStop();
-
-    calibration.abort(mc1, mc2, "overcurrent fault");
+    if (calibration.isActive()) {
+        reportEvent("ERR", "%s during calibration - aborting", detail);
+        calibration.abort(mc1, mc2, "overcurrent fault");
+    } else {
+        // Fail out: come to rest at 0 RPM and wait for a fresh speed command (no fault/alarm).
+        reportEvent("WARN", "%s persisted after %d tries - spindle stopped (0 RPM); send a new speed to restart",
+                    detail, FAULT_RECOVERY_MAX_ATTEMPTS);
+    }
 }
 
 // ------------------- Phase Offset -------------------
@@ -440,29 +462,83 @@ static void checkPhaseHoldPowerdown() {
     g_hold_release_requested = false;
 }
 
-// ------------------- Z-axis Power-Up Homing -------------------
+// ------------------- Machine State Machine -------------------
 
-// On power-up the Z axis raises until the top-of-travel beam is interrupted.  Breaking the
-// beam within Z_HOMING_MAX_MM establishes the home position and confirms a tool is loaded;
-// travelling the full limit without breaking the beam means no tool is loaded.  The Z is
-// moved by advancing the inter-motor phase offset (the same mechanism the XY board's 'Z'
-// command uses), and the beam detector is only sampled while this homing move is running.
+// The spindle board runs a single, explicit state machine.  Every transition is printed to
+// the ESP3D web console (and the local USB console) by setMachineState(), so the operator can
+// always see what the board is doing and why a move started or stopped.
 //
-// When homing finishes with no tool loaded, the state machine drops into ZLOAD_MONITOR
-// instead of ZHOME_DONE: it watches the same beam and, when the operator inserts a tool
-// (interrupting the beam), runs the reverse of homing - lowering the Z until the beam is no
-// longer broken - to seat and load the tool.
+// The Z axis is moved by advancing the inter-motor phase offset (the same mechanism the XY
+// board's 'Z' command uses); the top-of-travel beam detector tells us where a tool is.
 //
-// The XY board's 'R' command (web UI "Remove Tool" button) starts ZUNLOAD_RAISING: with a
-// tool loaded the beam is interrupted, so the Z raises until the beam transitions from
-// blocked (tool present) to clear (tool removed), then returns to the "no tool loaded" state.
-enum ZHomingState { ZHOME_PENDING, ZHOME_RAISING, ZHOME_DONE, ZLOAD_MONITOR, ZLOAD_LOWERING, ZUNLOAD_RAISING };
-static ZHomingState g_z_homing_state    = ZHOME_PENDING;
+//   Booting            - just powered up (or a re-home was requested); decide the next state
+//   Homing             - raising the Z to find the top-of-travel beam
+//   IdleToolLoaded     - homed with a tool; the Z follows the XY board, spindle off
+//   IdleToolUnloaded   - homed with no tool; watching the beam for the operator to insert one
+//   LoadingTool        - a tool broke the beam; lowering the Z until the beam clears (seated)
+//   UnloadingTool      - raising the Z to lift the tool up and out through the beam (ejected)
+//   SpindleRunning     - the spindle is spinning
+//   Calibrating        - the auto-calibration sweep is running
+//   Fault              - a latched fault stopped the motors
+//   OtaUpdate          - a WiFi/OTA firmware update is in progress
+//
+// The Homing / Idle* / Loading / Unloading states are the "tool" sub-machine driven by
+// updateToolStateMachine() and tracked in g_tool_state.  SpindleRunning / Calibrating /
+// Fault / OtaUpdate are overlays: updateReportedState() layers them on top each loop so the
+// single reported state (g_machine_state) always reflects the board's real activity.
+enum class MachineState : uint8_t {
+    Booting,
+    Homing,
+    IdleToolLoaded,
+    IdleToolUnloaded,
+    LoadingTool,
+    UnloadingTool,
+    SpindleRunning,
+    Calibrating,
+    Fault,
+    OtaUpdate,
+};
+
+static MachineState g_tool_state    = MachineState::Booting;  // Z/tool sub-machine state
+static MachineState g_machine_state = MachineState::Booting;  // reported state (logged on change)
+
+// Human-readable name for the console.  Kept close to the operator's mental model
+// ("Loading Tool", "Idle - Tool Loaded", "Spindle On", ...).
+static const char* machineStateName(MachineState s) {
+    switch (s) {
+        case MachineState::Booting:          return "Booting";
+        case MachineState::Homing:           return "Homing";
+        case MachineState::IdleToolLoaded:   return "Idle - Tool Loaded";
+        case MachineState::IdleToolUnloaded: return "Idle - Tool Unloaded";
+        case MachineState::LoadingTool:      return "Loading Tool";
+        case MachineState::UnloadingTool:    return "Unloading Tool";
+        case MachineState::SpindleRunning:   return "Spindle On";
+        case MachineState::Calibrating:      return "Calibrating";
+        case MachineState::Fault:            return "Fault";
+        case MachineState::OtaUpdate:        return "OTA Update";
+    }
+    return "?";
+}
+
+// Change the reported state, printing "state: <old> -> <new>" to the ESP3D console (and USB)
+// on every transition.  A no-op when the state is unchanged, so it is safe to call each loop.
+static void setMachineState(MachineState s) {
+    if (s == g_machine_state) {
+        return;
+    }
+    MachineState prev = g_machine_state;
+    g_machine_state = s;
+    reportEvent("MSG", "state: %s -> %s", machineStateName(prev), machineStateName(s));
+}
+
 static float        g_z_homing_start_phase = 0.0f;
 static float        g_z_load_start_phase   = 0.0f;  // phase at the start of a tool-load/remove move
 static bool         g_beam_prev_blocked    = false; // previous beam state, for edge detection
+static bool         g_tool_load_confirming = false; // beam has cleared; timing the load confirm window
+static uint32_t     g_tool_load_clear_since = 0;  // millis() when the beam last became clear (loading)
 static bool         g_tool_remove_confirming = false; // beam has cleared; timing the confirm window
 static uint32_t     g_tool_remove_clear_since = 0;  // millis() when the beam last became clear
+static bool         g_tool_remove_seen_blocked = false; // beam has been interrupted during this removal
 static bool         g_tool_loaded       = false;  // set by homing: true once the beam confirms a tool
 static bool         g_z_homed           = false;  // true once power-up homing has completed
 
@@ -472,233 +548,278 @@ static inline bool beamBlocked() {
     return digitalRead(BEAM_DETECT_PIN) != 0;
 }
 
-static void updateZHoming() {
+// Enable both Z motors in open-loop angle mode (if not already enabled) so a phase-offset
+// move can drive them.  Used by every state that starts a Z move.
+static void enableZMotors() {
+    MotorController* motors[] = { &mc1, &mc2 };
+    for (int i = 0; i < 2; i++) {
+        if (!motors[i]->enabled) {
+            motors[i]->resetFilterState();
+            motors[i]->reached_speed = false;
+            motors[i]->motor.controller = MotionControlType::angle_openloop;
+            motors[i]->enable();
+        }
+    }
+}
+
+// Finish a Z move: power the drivers down so the motors are not left energized (locked in
+// position with the cooling fan running) waiting for the XY board to report idle - which does
+// not happen while it sits in its boot alarm.  Redefine the stopping point as the phase-offset
+// zero so it matches the XY board's Z home (setting current and target together applies no
+// motor delta - see updatePhaseOffset), arm beam edge detection at the current level, and tell
+// the XY board to reset its Z machine position to match this new zero.
+static void finishZMove() {
+    mc1.disable();
+    mc2.disable();
+    zeroPhaseReference();                    // coherent phase + motor-angle zero
+    g_beam_prev_blocked = beamBlocked();     // arm edge detection at the current level
+    notifyZHomed();                          // XY board resets its Z position to match this zero
+}
+
+// Begin the power-up / re-home decision.  Entered from the Booting state once OTA,
+// calibration and faults are all clear.
+static void beginHoming() {
+    // Already at the top of travel (beam interrupted): we are home and a tool is loaded, so
+    // complete without moving.
+    if (beamBlocked()) {
+        g_tool_loaded = true;
+        g_z_homed     = true;
+        g_tool_state  = MachineState::IdleToolLoaded;
+        reportEvent("MSG", "Z homed: top-of-travel beam already interrupted, tool loaded");
+        finishZMove();
+        return;
+    }
+    // Begin raising: command the phase offset all the way to the travel limit.  The global
+    // phase ramp moves us there at PHASE_OFFSET_RAMP_RATE; we freeze the instant the beam
+    // breaks.
+    g_z_homing_start_phase = phase_offset.current;
+    phase_offset.target    = phase_offset.current + Z_HOMING_PHASE_DIR * Z_HOMING_MAX_RAD;
+    enableZMotors();
+    g_tool_state = MachineState::Homing;
+    reportEvent("MSG", "Z homing: raising to find the top-of-travel beam");
+}
+
+// Begin a tool removal (the XY board's 'R' command / web UI "Remove Tool" button): raise the
+// Z to eject the tool.  A loaded tool usually sits at the top interrupting the beam, but it
+// may have been left below the beam (undetected), so the beam state alone cannot tell us
+// whether a tool is present.  Always raise: if the beam is interrupted and then clears, the
+// tool has been ejected; if the full travel passes without the beam ever breaking, there was
+// no tool to remove.
+static void beginToolRemoval() {
+    g_z_load_start_phase       = phase_offset.current;
+    phase_offset.target        = phase_offset.current + Z_HOMING_PHASE_DIR * Z_TOOL_REMOVE_MAX_RAD;
+    g_beam_prev_blocked        = beamBlocked();
+    g_tool_remove_confirming   = false;          // no clearance confirmation window open yet
+    g_tool_remove_seen_blocked = beamBlocked();  // has the tool interrupted the beam yet?
+    enableZMotors();
+    g_tool_state = MachineState::UnloadingTool;
+    reportEvent("MSG", "Tool removal: raising Z to eject any loaded tool");
+}
+
+// The tool sub-machine: Homing, Idle (loaded / unloaded), Loading and Unloading.  Runs once
+// per control loop.  Each transition here changes g_tool_state; updateReportedState() (called
+// later in the loop) turns that into the single reported state and logs it to the console.
+static void updateToolStateMachine() {
     // A re-home request (the XY board's 'G' command, e.g. from the web UI test button)
     // restarts the cycle from the top.
     if (g_home_requested) {
         g_home_requested = false;
-        g_z_homing_state = ZHOME_PENDING;
+        g_tool_state = MachineState::Booting;  // the homing decision runs below, after the guards
         reportEvent("MSG", "Z home requested (ota=%d cal=%d fault=%d beam=%d)",
                     (int)g_ota_active, (int)calibration.isActive(), (int)g_fault_code, (int)beamBlocked());
     }
 
-    // Never home or load a tool while OTA, calibration, or a latched fault is in progress.
+    // Never home or move a tool while OTA, calibration, or a latched fault is in progress.
     if (g_ota_active || calibration.isActive() || g_fault_code != 0) {
         return;
     }
 
-    // Tool removal request (the XY board's 'R' command / web UI "Remove Tool" button): with a
-    // tool loaded the beam is interrupted, so raise the Z (the homing direction) until the
-    // beam clears.  If the beam is already clear there is no tool to remove, so drop straight
-    // into the "no tool loaded" monitoring state.
+    // A tool removal request preempts whatever idle/homing state we are in.
     if (g_remove_tool_requested) {
         g_remove_tool_requested = false;
-        if (beamBlocked()) {
-            g_z_load_start_phase = phase_offset.current;
-            phase_offset.target  = phase_offset.current + Z_HOMING_PHASE_DIR * Z_TOOL_REMOVE_MAX_RAD;
-            g_beam_prev_blocked  = true;  // a tool is present; watch for the blocked->clear edge
-            g_tool_remove_confirming = false;  // no clearance confirmation window open yet
-
-            MotorController* motors[] = { &mc1, &mc2 };
-            for (int i = 0; i < 2; i++) {
-                if (!motors[i]->enabled) {
-                    motors[i]->resetFilterState();
-                    motors[i]->reached_speed = false;
-                    motors[i]->motor.controller = MotionControlType::angle_openloop;
-                    motors[i]->enable();
-                }
-            }
-            reportEvent("MSG", "Tool removal: raising Z until the tool clears the beam");
-            g_z_homing_state = ZUNLOAD_RAISING;
-        } else {
-            g_tool_loaded       = false;
-            g_beam_prev_blocked = false;
-            g_z_homing_state    = ZLOAD_MONITOR;
-            reportEvent("MSG", "Tool removal: no tool detected - already unloaded");
-        }
-    }
-
-    // Once a tool is confirmed loaded there is nothing left to do.
-    if (g_z_homing_state == ZHOME_DONE) {
+        beginToolRemoval();
         return;
     }
 
-    switch (g_z_homing_state) {
-        case ZHOME_PENDING: {
-            // Already at the top of travel (beam interrupted): we are home and a tool is
-            // loaded, so complete without moving.
-            if (beamBlocked()) {
-                g_tool_loaded    = true;
-                g_z_homed        = true;
-                g_z_homing_state = ZHOME_DONE;
-                // Redefine this resting point as the phase-offset zero (drivers powered down,
-                // phase offset AND motor angles zeroed together) and tell the XY board to match.
-                mc1.disable();
-                mc2.disable();
-                zeroPhaseReference();
-                reportEvent("MSG", "Z homed: top-of-travel beam already interrupted, tool loaded");
-                notifyZHomed();
+    switch (g_tool_state) {
+        case MachineState::Booting:
+            // Give the shared 24V rail and the other boards time to come up before the homing
+            // raise energizes the motors.  Only the initial boot homing is delayed; an operator
+            // re-home happens long after boot so millis() is already past the threshold.
+            if (millis() < BOOT_HOMING_DELAY_MS) {
                 break;
             }
-
-            // Begin raising: enable both motors in open-loop angle mode and command the
-            // phase offset all the way to the travel limit.  The global phase ramp moves us
-            // there at PHASE_OFFSET_RAMP_RATE; we freeze the instant the beam breaks.
-            g_z_homing_start_phase = phase_offset.current;
-            phase_offset.target    = phase_offset.current + Z_HOMING_PHASE_DIR * Z_HOMING_MAX_RAD;
-
-            MotorController* motors[] = { &mc1, &mc2 };
-            for (int i = 0; i < 2; i++) {
-                if (!motors[i]->enabled) {
-                    motors[i]->resetFilterState();
-                    motors[i]->reached_speed = false;
-                    motors[i]->motor.controller = MotionControlType::angle_openloop;
-                    motors[i]->enable();
-                }
-            }
-            reportEvent("MSG", "Z homing: raising to find the top-of-travel beam");
-            g_z_homing_state = ZHOME_RAISING;
+            beginHoming();
             break;
-        }
-        case ZHOME_RAISING: {
+
+        case MachineState::Homing: {
             if (beamBlocked()) {
                 // Reached the top: stop here.  This is home and a tool is loaded.
                 phase_offset.target = phase_offset.current;
-                g_tool_loaded       = true;
-                g_z_homed           = true;
-                g_z_homing_state    = ZHOME_DONE;
+                g_tool_loaded = true;
+                g_z_homed     = true;
+                g_tool_state  = MachineState::IdleToolLoaded;
                 reportEvent("MSG", "Z homed: top-of-travel beam interrupted, tool loaded");
+                finishZMove();
             } else if (fabsf(phase_offset.current - g_z_homing_start_phase) >= Z_HOMING_MAX_RAD) {
-                // Travelled the full limit without breaking the beam: no tool is loaded.
-                // Drop into beam monitoring so a tool can be loaded on demand.
+                // Travelled the full limit without breaking the beam: no tool is loaded.  Drop
+                // into beam monitoring (Idle - Tool Unloaded) so a tool can be loaded on demand.
                 phase_offset.target = phase_offset.current;
-                g_tool_loaded       = false;
-                g_z_homed           = true;
-                g_z_homing_state    = ZLOAD_MONITOR;
+                g_tool_loaded = false;
+                g_z_homed     = true;
+                g_tool_state  = MachineState::IdleToolUnloaded;
                 reportEvent("WARN", "Z homing: no beam within %.0fmm - no tool loaded", Z_HOMING_MAX_MM);
-            }
-            // Once the raising move has finished, power the Z drivers down so the motors are
-            // not left energized (locked in position with the cooling fan running) waiting
-            // for the XY board to report idle - which does not happen while it sits in its
-            // boot alarm.  Also redefine the stopping position as the phase-offset zero so it
-            // matches the XY board's Z home; otherwise the XY board's first Z target (based on
-            // its own Z) would differ from where homing left us and drive the Z straight back
-            // off home.  Setting current and target together applies no motor delta (see
-            // updatePhaseOffset).
-            if (g_z_homing_state == ZHOME_DONE || g_z_homing_state == ZLOAD_MONITOR) {
-                mc1.disable();
-                mc2.disable();
-                zeroPhaseReference();                    // coherent phase + motor-angle zero
-                g_beam_prev_blocked    = beamBlocked();  // arm edge detection at the current level
-                notifyZHomed();  // XY board resets its Z machine position to match this new zero
+                finishZMove();
             }
             break;
         }
-        case ZLOAD_MONITOR: {
+
+        case MachineState::IdleToolUnloaded: {
             // No tool is loaded.  Watch the top-of-travel beam; when the operator inserts a
             // tool it interrupts the beam.  Trigger the loading move only on a clear->blocked
             // edge so a beam that is still blocked after an aborted attempt does not drive the
             // Z down again on its own.
             bool blocked = beamBlocked();
             if (blocked && !g_beam_prev_blocked) {
-                // Begin lowering (the reverse of homing): enable both motors in open-loop
-                // angle mode and command the phase offset toward the travel limit in the
-                // opposite direction.  The global phase ramp moves us there; we freeze the
-                // instant the beam clears.
+                // Begin lowering (the reverse of homing): command the phase offset toward the
+                // travel limit in the opposite direction, and freeze when the beam clears.
                 g_z_load_start_phase = phase_offset.current;
                 phase_offset.target  = phase_offset.current - Z_HOMING_PHASE_DIR * Z_TOOL_LOAD_MAX_RAD;
-
-                MotorController* motors[] = { &mc1, &mc2 };
-                for (int i = 0; i < 2; i++) {
-                    if (!motors[i]->enabled) {
-                        motors[i]->resetFilterState();
-                        motors[i]->reached_speed = false;
-                        motors[i]->motor.controller = MotionControlType::angle_openloop;
-                        motors[i]->enable();
-                    }
-                }
+                g_tool_load_confirming = false;  // no clearance confirmation window open yet
+                enableZMotors();
+                g_tool_state = MachineState::LoadingTool;
                 reportEvent("MSG", "Tool loading: beam interrupted, lowering Z until the beam clears");
-                g_z_homing_state = ZLOAD_LOWERING;
             }
             g_beam_prev_blocked = blocked;
             break;
         }
-        case ZLOAD_LOWERING: {
-            if (!beamBlocked()) {
-                // Beam clear: the tool has seated.  Stop here; a tool is now loaded.
-                phase_offset.target = phase_offset.current;
-                g_tool_loaded       = true;
-                g_z_homing_state    = ZHOME_DONE;
-                reportEvent("MSG", "Tool loaded: beam cleared");
-            } else if (fabsf(phase_offset.current - g_z_load_start_phase) >= Z_TOOL_LOAD_MAX_RAD) {
-                // Lowered the full limit without the beam clearing: abort and go back to
-                // monitoring.  No tool is loaded.  Edge detection (armed below) keeps the Z
-                // from immediately lowering again while the beam stays blocked.
-                phase_offset.target = phase_offset.current;
-                g_tool_loaded       = false;
-                g_z_homing_state    = ZLOAD_MONITOR;
-                reportEvent("WARN", "Tool loading: beam still blocked after %.0fmm - aborting", Z_TOOL_LOAD_MAX_MM);
-            }
-            // Once the lowering move has finished, power the Z drivers down and redefine the
-            // stopping point as the phase-offset zero, just as homing does.
-            if (g_z_homing_state == ZHOME_DONE || g_z_homing_state == ZLOAD_MONITOR) {
-                mc1.disable();
-                mc2.disable();
-                zeroPhaseReference();                    // coherent phase + motor-angle zero
-                g_beam_prev_blocked    = beamBlocked();  // arm edge detection at the current level
-                notifyZHomed();  // XY board resets its Z machine position to match this new zero
+
+        case MachineState::LoadingTool: {
+            // Keep lowering until the beam has stayed clear for Z_TOOL_LOAD_CONFIRM_MS.  As the
+            // operator inserts the tool the beam can flicker; completing on the first momentary
+            // clear would report the tool loaded before the motors have actually pulled it down
+            // and seated it, so any re-interruption of the beam restarts the confirm window.
+            bool blocked   = beamBlocked();
+            bool hit_limit = fabsf(phase_offset.current - g_z_load_start_phase) >= Z_TOOL_LOAD_MAX_RAD;
+
+            if (blocked) {
+                // Tool still interrupting the beam (or flickering as it is inserted): keep
+                // lowering and cancel any pending clearance-confirmation window.
+                g_tool_load_confirming = false;
+                if (hit_limit) {
+                    // Lowered the full limit without the beam clearing: abort and go back to
+                    // monitoring.  Edge detection (armed by finishZMove) keeps the Z from
+                    // immediately lowering again while the beam stays blocked.
+                    phase_offset.target = phase_offset.current;
+                    g_tool_loaded = false;
+                    g_tool_state  = MachineState::IdleToolUnloaded;
+                    reportEvent("WARN", "Tool loading: beam still blocked after %.0fmm - aborting", Z_TOOL_LOAD_MAX_MM);
+                    finishZMove();
+                }
+            } else {
+                // Beam clear: the tool may have seated.  Keep lowering while we confirm the
+                // beam stays clear for the full window before declaring the tool loaded.
+                if (!g_tool_load_confirming) {
+                    g_tool_load_confirming  = true;
+                    g_tool_load_clear_since = millis();
+                }
+                if ((millis() - g_tool_load_clear_since) >= Z_TOOL_LOAD_CONFIRM_MS || hit_limit) {
+                    // Beam stayed clear for the full window (or we ran out of travel while
+                    // clear): the tool has seated.  Stop here; a tool is now loaded.
+                    phase_offset.target = phase_offset.current;
+                    g_tool_loaded = true;
+                    g_tool_state  = MachineState::IdleToolLoaded;
+                    reportEvent("MSG", "Tool loaded: beam clear for %ums", (unsigned)Z_TOOL_LOAD_CONFIRM_MS);
+                    finishZMove();
+                }
             }
             break;
         }
-        case ZUNLOAD_RAISING: {
+
+        case MachineState::UnloadingTool: {
             // Raising to eject the loaded tool.  We keep raising until the beam has stayed
             // clear for Z_TOOL_REMOVE_CONFIRM_MS; a tool sitting right on the edge of the beam
-            // can flicker, so any re-break of the beam restarts that confirmation window.  A
-            // tool entering the beam is therefore naturally ignored (it just restarts timing).
+            // can flicker, so any re-break of the beam restarts that confirmation window.
             bool blocked   = beamBlocked();
             bool hit_limit = fabsf(phase_offset.current - g_z_load_start_phase) >= Z_TOOL_REMOVE_MAX_RAD;
 
             if (blocked) {
                 // Tool still interrupting the beam (or flickering on its edge): keep raising
                 // and reset the clearance-confirmation window.
-                g_tool_remove_confirming = false;
+                g_tool_remove_seen_blocked = true;   // a tool has entered the beam
+                g_tool_remove_confirming   = false;
                 if (hit_limit) {
                     // Raised the full limit with the beam still blocked: give up and stop.
                     // The tool is still considered loaded since it never cleared the beam.
                     phase_offset.target = phase_offset.current;
-                    g_z_homing_state    = ZHOME_DONE;
+                    g_tool_state = MachineState::IdleToolLoaded;
                     reportEvent("WARN", "Tool removal: beam still blocked after %.0fmm - stopping", Z_TOOL_REMOVE_MAX_MM);
+                    finishZMove();
                 }
+            } else if (!g_tool_remove_seen_blocked) {
+                // Beam still clear and never interrupted during this removal.  Either the tool
+                // is below the beam (keep raising it up and out) or there is no tool at all.
+                // Only conclude "no tool" once the full travel is exhausted.
+                if (hit_limit) {
+                    phase_offset.target = phase_offset.current;
+                    g_tool_loaded = false;
+                    g_tool_state  = MachineState::IdleToolUnloaded;
+                    reportEvent("MSG", "Tool removal: no tool detected within %.0fmm - already unloaded", Z_TOOL_REMOVE_MAX_MM);
+                    finishZMove();
+                }
+                // else keep raising, still searching for the tool
             } else {
-                // Beam clear: open (or continue) the confirmation window while still raising.
+                // The tool has already interrupted the beam and the beam is now clear: open
+                // (or continue) the confirmation window while still raising.
                 if (!g_tool_remove_confirming) {
                     g_tool_remove_confirming  = true;
                     g_tool_remove_clear_since = millis();
                 }
                 if ((millis() - g_tool_remove_clear_since) >= Z_TOOL_REMOVE_CONFIRM_MS || hit_limit) {
                     // Beam stayed clear for the full window (or we ran out of travel while
-                    // clear): the tool has been removed.  Stop and return to monitoring.
+                    // clear): the tool has been removed.  Return to monitoring.
                     phase_offset.target = phase_offset.current;
-                    g_tool_loaded       = false;
-                    g_z_homing_state    = ZLOAD_MONITOR;
+                    g_tool_loaded = false;
+                    g_tool_state  = MachineState::IdleToolUnloaded;
                     reportEvent("MSG", "Tool removed: beam clear for %ums", (unsigned)Z_TOOL_REMOVE_CONFIRM_MS);
+                    finishZMove();
                 }
-            }
-            // Once the removal move has finished, power the Z drivers down and redefine the
-            // stopping point as the phase-offset zero, just as homing does.
-            if (g_z_homing_state == ZHOME_DONE || g_z_homing_state == ZLOAD_MONITOR) {
-                mc1.disable();
-                mc2.disable();
-                zeroPhaseReference();                    // coherent phase + motor-angle zero
-                g_beam_prev_blocked    = beamBlocked();  // arm edge detection at the current level
-                notifyZHomed();  // XY board resets its Z machine position to match this new zero
             }
             break;
         }
-        case ZHOME_DONE:
+
+        case MachineState::IdleToolLoaded:
         default:
+            // Homed with a tool loaded: nothing to do.  The Z follows the XY board.
             break;
     }
+}
+
+// True while the spindle motors are spinning (or spinning down).  velocity_mode /
+// continuous_rotation stay set until the ramp reaches 0 rpm, so this reliably tracks
+// "Spindle On" for the reported state.
+static inline bool spindleSpinning() {
+    return mc1.velocity_mode || mc2.velocity_mode ||
+           mc1.continuous_rotation || mc2.continuous_rotation;
+}
+
+// Reconcile the single reported state each loop.  The tool sub-machine (g_tool_state) is the
+// baseline; the higher-priority overlays (OTA > Fault > Calibrating > Spindle On) are layered
+// on top.  setMachineState() logs "state: <old> -> <new>" whenever the reported state changes.
+static void updateReportedState() {
+    MachineState reported;
+    if (g_ota_active) {
+        reported = MachineState::OtaUpdate;
+    } else if (g_fault_code != 0) {
+        reported = MachineState::Fault;
+    } else if (calibration.isActive()) {
+        reported = MachineState::Calibrating;
+    } else if (spindleSpinning()) {
+        reported = MachineState::SpindleRunning;
+    } else {
+        reported = g_tool_state;
+    }
+    setMachineState(reported);
 }
 
 static void motorControlTask(void* arg) {
@@ -712,6 +833,7 @@ static void motorControlTask(void* arg) {
         // radio's start-up surge.  The board reboots into the new firmware when an update
         // completes, so we never resume from here in that case.
         if (g_ota_active) {
+            setMachineState(MachineState::OtaUpdate);  // announce the transition before we park
             mc1.disable();
             mc2.disable();
             // Signal otaTask that we are parked here and no longer touching the ADC, so it
@@ -734,10 +856,11 @@ static void motorControlTask(void* arg) {
         checkOvercurrent();
         calibration.update(mc1, mc2);
 
-        // Power-up Z homing: raise the Z until the top-of-travel beam breaks (or give up
-        // past the travel limit -> no tool loaded).  Runs before the phase ramp so its
-        // commanded phase target is applied this iteration.
-        updateZHoming();
+        // Tool state machine: power-up homing, tool loading/unloading via the top-of-travel
+        // beam.  Runs before the phase ramp so its commanded phase target is applied this
+        // iteration.  The reported state (with the spindle/fault/cal/OTA overlays) is
+        // reconciled and logged at the end of the loop by updateReportedState().
+        updateToolStateMachine();
 
         bool cal_active = calibration.isActive() &&
                           calibration.state != CAL_RAMP_DOWN &&
@@ -772,6 +895,10 @@ static void motorControlTask(void* arg) {
         calibration.accumulateCurrentSample(mc2.last_instantaneous_current, 1);
 
         handleSerialCommands(mc1, mc2, calibration);
+
+        // Reconcile the single reported state now that this iteration's tool state, faults,
+        // calibration and spindle commands have all been applied, logging any transition.
+        updateReportedState();
 
         // Report status to the XY board over the inter-board link
         static uint32_t last_status_time = 0;
@@ -814,8 +941,8 @@ void setup() {
 
     // Z-axis homing beam break: drive the IR LED emitter on and read the detector.
     // The LED is held on continuously so the beam is active; the power-up homing routine
-    // in motorControlTask (updateZHoming) samples the detector while it raises the Z to
-    // find the top-of-travel beam.
+    // in motorControlTask (updateToolStateMachine) samples the detector while it raises the
+    // Z to find the top-of-travel beam.
     pinMode(BEAM_LED_PIN, OUTPUT);
     digitalWrite(BEAM_LED_PIN, HIGH);
     pinMode(BEAM_DETECT_PIN, INPUT);

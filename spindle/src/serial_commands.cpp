@@ -360,7 +360,7 @@ static void setSpindleSpeed(float rpm, MotorController& mc1, MotorController& mc
     if (rpm > MAX_COMMAND_RPM) rpm = MAX_COMMAND_RPM;
 
     g_fault_code = 0;  // a fresh command clears any latched fault
-    g_speed_command_flag = true;  // let auto-recovery know an operator speed command arrived
+    g_speed_command_flag = true;  // let the over-current retry logic see a fresh operator command
     g_hold_release_requested = false;  // motion commanded: cancel any pending Z-hold release
 
     MotorController* motors[] = { &mc1, &mc2 };

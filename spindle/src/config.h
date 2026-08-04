@@ -50,8 +50,7 @@ const float CURRENT_FILTER_ALPHA = 0.001f;      // Slow filter for DC-equivalent
 const float PROTECTION_FILTER_ALPHA = 0.1f;     // Fast filter for stall detection
 
 // Overcurrent protection
-const float OVERCURRENT_THRESHOLD = 5.0f;       // Phase-RMS trip point (A)
-const float OVERCURRENT_THRESHOLD_CAL = 6.0f;   // Relaxed phase-RMS trip point during calibration
+const float OVERCURRENT_THRESHOLD = 6.0f;       // Phase-RMS trip point (A), same during calibration
 const int   OVERCURRENT_CONSECUTIVE_TRIPS = 100;
 
 // Motor run timeout
@@ -82,6 +81,12 @@ const float Z_HOMING_PHASE_DIR = +1.0f;   // +1 raises the Z; flip to -1 if homi
 const float Z_HOMING_MAX_RAD =
     Z_HOMING_MAX_MM * PHASE_DEG_PER_MM * PI / 180.0f;  // travel limit as a phase offset (rad)
 
+// Delay the power-up Z-homing raise so the shared 24V rail and the other boards have time to
+// come up first.  The homing raise energizes both BLDC motors (a heavy current surge); doing
+// it the instant the app starts can sag a marginal supply.  Only the initial boot homing is
+// delayed - an operator re-home ('G') happens long after boot so it is unaffected.
+const uint32_t BOOT_HOMING_DELAY_MS = 1000;  // wait this long after boot before homing
+
 // --- Z-axis tool loading (reverse of homing) ---
 // While homing has left the board in the "no tool loaded" state, the top-of-travel beam
 // is monitored.  When the operator inserts a tool it interrupts the beam, which starts a
@@ -91,6 +96,11 @@ const float Z_HOMING_MAX_RAD =
 const float Z_TOOL_LOAD_MAX_MM = 200.0f;  // give up lowering past this much travel
 const float Z_TOOL_LOAD_MAX_RAD =
     Z_TOOL_LOAD_MAX_MM * PHASE_DEG_PER_MM * PI / 180.0f;  // travel limit as a phase offset (rad)
+// As the operator inserts a tool the beam can flicker (blocked, briefly clear, blocked) before
+// the tool is pulled fully down and seated.  The lowering move keeps going until the beam has
+// stayed clear for this long; any re-interruption during the window restarts the timer, so a
+// momentary clear while the tool is still entering the beam is not mistaken for a seated tool.
+const uint32_t Z_TOOL_LOAD_CONFIRM_MS = 400;  // beam must stay clear this long to finish loading
 
 // --- Z-axis tool removal (raise to eject) ---
 // Triggered on demand by the XY board's 'R' command (web UI "Remove Tool" button).  With a
@@ -121,11 +131,11 @@ const float CAL_RAMP_VOLT_PER_RAD = 0.0025f;                        // Open-loop
 // DRV8316 fault detection
 const int OCP_CONSEC_LIMIT = 5;  // 5 x 100ms = 500ms persistent OCP -> disable
 
-// Over-current auto-recovery.  Rather than latching a fault (which halts the machine and
-// forces a power cycle), a transient over-current briefly stops the motors, lets the
-// current settle, then automatically resumes the last commanded speed.  Only if faults
-// keep recurring within the window do we give up and latch a real fault, so a genuinely
-// stuck/broken condition is still protected.
-const uint32_t FAULT_RECOVERY_COOLDOWN_MS  = 600;    // motors held off this long before resuming
-const uint32_t FAULT_RECOVERY_WINDOW_MS    = 8000;   // sliding window for counting recoveries
-const int      FAULT_RECOVERY_MAX_ATTEMPTS = 8;      // recoveries allowed in the window before latching
+// Over-current response.  A transient over-current briefly stops the motors, lets the current
+// settle, then resumes the last commanded speed - retrying up to FAULT_RECOVERY_MAX_ATTEMPTS
+// times within FAULT_RECOVERY_WINDOW_MS.  Only if it keeps over-currenting past that do we
+// "fail out": the spindle comes to rest at 0 RPM and waits for a fresh speed command (it does
+// NOT latch a fault/alarm).  Over-temperature / over-voltage still latch immediately.
+const uint32_t FAULT_RECOVERY_COOLDOWN_MS  = 600;    // motors held off this long before retrying
+const uint32_t FAULT_RECOVERY_WINDOW_MS    = 8000;   // sliding window for counting retries
+const int      FAULT_RECOVERY_MAX_ATTEMPTS = 8;      // retries allowed before failing out to 0 RPM
