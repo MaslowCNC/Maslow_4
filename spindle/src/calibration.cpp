@@ -336,27 +336,34 @@ void Calibration::update(MotorController& mc1, MotorController& mc2) {
                                        MAX_VOLTAGE);
 
         // Thermal guard: the DRV8316 asserts an over-temperature WARNING (OTW)
-        // before it hard-faults with an over-temperature SHUTDOWN. At very low
-        // RPM the target current can be thermally unreachable (little rotation,
-        // current concentrated in a few FETs), so the part heats until it trips.
-        // When the warning is active, stop climbing, record the best value so
-        // far, and advance instead of letting it escalate to an OT shutdown that
-        // aborts the whole calibration.
+        // before it hard-faults with an over-temperature SHUTDOWN. At low RPM the
+        // open-loop current sits on one or two FETs for a long dwell (the rotor
+        // barely turns), heating the die past the warning threshold even though the
+        // package/heatsink still feels cool.  Cool it before continuing.
         DRV8316Status thermal_st = mc.driver.getStatus();
         if (thermal_st.isOverTemperatureWarning() || thermal_st.isOverTemperatureShutdown()) {
-            hunt_voltage = fmaxf(hunt_voltage - 0.10f, v_floor);
+            // Record the last voltage the die actually sustained at this speed as the
+            // checkpoint's (thermally-limited) value.  Then COOL the die by coasting:
+            // above the lowest RPM the motor needs well over the spin-floor voltage to
+            // stay in sync, so we CANNOT cool it while holding this speed - lowering the
+            // voltage would pull the rotor out of sync and the slip would spike the
+            // current, heating the die further.  Instead de-energize the motor (zero
+            // phase current) and let it coast down; the die then sheds its heat with no
+            // risk of stalling, and we ramp back up afterwards to finish the sweep.
             if (idx >= 0 && idx < CAL_LUT_SIZE) {
                 mc.cal_lut_voltage[idx] = hunt_voltage;
                 mc.cal_lut_recorded[idx] = true;
             }
-            Serial.printf("[CAL] %.0f RPM -> %.3f V  (thermal warning, backing off)\n",
-                          checkpoint * 60.0f / (2.0f * PI), hunt_voltage);
-            if (checkpoint >= CAL_MAX_RAD - 0.5f) {
-                state = CAL_DONE;
-            } else {
-                advanceToNextStep(mc);
-                state = CAL_RAMP;
-            }
+            Serial.printf("[CAL] %.0f RPM -> %.3f V  (over-temp - coasting to cool die)\n",
+                          checkpoint * 60.0f / (2.0f * PI),
+                          (idx >= 0 && idx < CAL_LUT_SIZE) ? mc.cal_lut_voltage[idx] : hunt_voltage);
+            mc.disable();
+            mc.velocity_mode = false;
+            mc.target_velocity = 0.0f;
+            mc.current_velocity = 0.0f;
+            cooldown_start = millis();
+            timer = millis();
+            state = CAL_COOLDOWN;
             break;
         }
 
@@ -394,6 +401,45 @@ void Calibration::update(MotorController& mc1, MotorController& mc2) {
                 state = CAL_DONE;
             } else {
                 advanceToNextStep(mc);
+                state = CAL_RAMP;
+            }
+        }
+        break;
+    }
+
+    case CAL_COOLDOWN: {
+        // Motor is de-energized and coasting so the DRV8316 die can shed its localized
+        // low-RPM heat with zero phase current (no stall risk - it is not being driven).
+        // Poll the over-temp status every 500 ms; once it clears (or a safety timeout
+        // elapses so a genuinely thermally-limited point can't stall the sweep forever)
+        // re-energize and ramp back up to the next checkpoint.  Higher RPM spreads the
+        // current across all six FETs, so the warning stops and the important high-speed
+        // points calibrate normally.
+        if (millis() - timer < 500UL) break;
+        timer = millis();
+
+        DRV8316Status cd_st = mc.driver.getStatus();
+        bool still_hot = cd_st.isOverTemperatureWarning() || cd_st.isOverTemperatureShutdown();
+        uint32_t elapsed = millis() - cooldown_start;
+
+        if (!still_hot || elapsed >= CAL_COOLDOWN_TIMEOUT_MS) {
+            Serial.printf("[CAL] %.0f RPM: die %s (%lu ms) - resuming\n",
+                          checkpoint * 60.0f / (2.0f * PI),
+                          still_hot ? "cooldown timed out" : "cooled",
+                          (unsigned long)elapsed);
+            if (checkpoint >= CAL_MAX_RAD - 0.5f) {
+                // Last checkpoint already recorded; let CAL_DONE ramp down (the motor is
+                // already stopped, so its ramp-down completes immediately).
+                state = CAL_DONE;
+            } else {
+                // Advance to the next checkpoint and re-energize.  advanceToNextStep
+                // carries the last sustained voltage forward, which is adequate to spin
+                // the (only slightly faster) next checkpoint up from rest without stalling.
+                advanceToNextStep(mc);
+                mc.velocity_mode = true;
+                mc.current_velocity = 0.0f;
+                mc.enable();
+                timer = millis();
                 state = CAL_RAMP;
             }
         }

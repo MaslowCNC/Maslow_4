@@ -100,7 +100,10 @@ static void loadDefaultLUT(MotorController& mc, int motor_idx,
 
 static int ocp_consec_count1 = 0;
 static int ocp_consec_count2 = 0;
+static int serious_consec_count1 = 0;
+static int serious_consec_count2 = 0;
 static uint32_t last_drv_check = 0;
+static uint32_t last_spinup_telem = 0;
 static int overcurrent_count = 0;
 
 // --- Over-current auto-recovery state ---
@@ -109,7 +112,7 @@ static uint32_t recovery_resume_at = 0;
 static float    recovery_target_v1 = 0.0f;
 static float    recovery_target_v2 = 0.0f;
 static int      recovery_attempts = 0;
-static uint32_t recovery_window_start = 0;
+static uint32_t recovery_last_fault_at = 0;  // millis() of the most recent over-current retry
 static char     recovery_cause[80] = "";  // the fault that triggered the pending recovery
 
 // Send a human-readable event to the XY board (which surfaces it in the ESP3D web console
@@ -121,8 +124,25 @@ static void reportEvent(const char* level, const char* fmt, ...) {
     va_start(ap, fmt);
     vsnprintf(buf, sizeof(buf), fmt, ap);
     va_end(ap);
-    Serial1.printf("%s:%s\n", level, buf);
-    if (Serial) Serial.printf("[%s] %s\n", level, buf);
+
+    // The motor FOC loop runs in THIS SAME task.  A blocking serial write (the UART TX buffer
+    // filling, or the USB CDC host not draining fast enough) would stall the loop; at high RPM
+    // even a few ms stall makes the open-loop electrical angle jump between FOC updates, which
+    // applies a coarse voltage step that spikes phase current and trips the DRV8316 OCP (all six
+    // phase comparators at once).  So write only when the whole line already fits in the TX
+    // buffer; otherwise drop it - these link/USB messages are advisory and a fresh status or
+    // telemetry line follows shortly.  This keeps inter-board serial traffic from disturbing FOC.
+    char line[128];
+    int n = snprintf(line, sizeof(line), "%s:%s\n", level, buf);
+    if (n <= 0) return;
+    if (n > (int)sizeof(line)) n = (int)sizeof(line);
+
+    if (Serial1.availableForWrite() >= n) {
+        Serial1.write(reinterpret_cast<const uint8_t*>(line), n);
+    }
+    if (Serial && Serial.availableForWrite() >= n) {
+        Serial.write(reinterpret_cast<const uint8_t*>(line), n);
+    }
 }
 
 // Tell the XY board that the spindle has (re)established its Z zero (phase offset 0) so it
@@ -143,10 +163,16 @@ static bool beginFaultRecovery(const char* what) {
     if (calibration.isActive()) return false;
 
     uint32_t now = millis();
-    if (now - recovery_window_start > FAULT_RECOVERY_WINDOW_MS) {
+    // Reset the retry counter only after a sustained CLEAN run since the last over-current.
+    // Each failed spin-up retry recurs quickly (cooldown + OCP re-detect ~1 s), which is far
+    // shorter than the window, so consecutive fast retries must keep accumulating - otherwise
+    // a wall-clock window that expires mid-chain would reset the count and loop forever instead
+    // of failing out.  A genuine one-off transient during a long job clears the count because
+    // the motor then runs fault-free for longer than FAULT_RECOVERY_WINDOW_MS.
+    if (recovery_attempts > 0 && now - recovery_last_fault_at > FAULT_RECOVERY_WINDOW_MS) {
         recovery_attempts = 0;
-        recovery_window_start = now;
     }
+    recovery_last_fault_at = now;
     recovery_attempts++;
     if (recovery_attempts > FAULT_RECOVERY_MAX_ATTEMPTS) {
         return false;  // kept over-currenting -> let the caller fail out to 0 RPM
@@ -200,6 +226,27 @@ static void updateFaultRecovery() {
     }
 }
 
+// Periodic spin-up telemetry to the web console so the exact RPM / applied voltage / measured
+// phase current at which a fault occurs can be seen.  Throttled, and only active while actually
+// ramping a spindle spin command (not during calibration or steady running).
+static void reportSpinupTelemetry() {
+    if (calibration.isActive()) return;
+    if (!mc1.velocity_mode && !mc2.velocity_mode) return;
+    bool ramping = (fabsf(mc1.target_velocity - mc1.current_velocity) > 1.0f) ||
+                   (fabsf(mc2.target_velocity - mc2.current_velocity) > 1.0f);
+    if (!ramping) return;
+
+    uint32_t now = millis();
+    if (now - last_spinup_telem < 200) return;
+    last_spinup_telem = now;
+
+    const float k = 60.0f / (2.0f * PI);  // rad/s -> RPM
+    reportEvent("MSG", "spinup v=%.0f/%.0f Uq=%.2f/%.2f I=%.2f/%.2f",
+                mc1.current_velocity * k, mc2.current_velocity * k,
+                mc1.motor.voltage_limit, mc2.motor.voltage_limit,
+                mc1.protection_current, mc2.protection_current);
+}
+
 static void checkDRV8316Faults() {
     if (!mc1.enabled && !mc2.enabled) return;
     if (millis() - last_drv_check < 100) return;
@@ -216,21 +263,33 @@ static void checkDRV8316Faults() {
     ocp_consec_count1 = ocp1 ? (ocp_consec_count1 + 1) : 0;
     ocp_consec_count2 = ocp2 ? (ocp_consec_count2 + 1) : 0;
 
+    // Debounce over-temp / over-voltage: real thermal/voltage faults are sustained, so require
+    // the OT/OVP bit to persist across SERIOUS_CONSEC_LIMIT reads before treating it as a
+    // genuine (latching) serious fault.  A hard over-current burst (e.g. the open-loop spin-up
+    // current transient) can momentarily co-assert OT/OVP for a single read; without this
+    // debounce that single co-assertion latches a hard fault and alarms the XY board even
+    // though the real event is an over-current.  The DRV8316 hardware OTP/OVP still protects
+    // instantly regardless of this debounce.
+    serious_consec_count1 = serious1 ? (serious_consec_count1 + 1) : 0;
+    serious_consec_count2 = serious2 ? (serious_consec_count2 + 1) : 0;
+
     bool persistent_ocp = (ocp_consec_count1 >= OCP_CONSEC_LIMIT) ||
                           (ocp_consec_count2 >= OCP_CONSEC_LIMIT);
+    bool serious = (serious_consec_count1 >= SERIOUS_CONSEC_LIMIT) ||
+                   (serious_consec_count2 >= SERIOUS_CONSEC_LIMIT);
 
-    // Transient OCP: just clear and log
-    if ((ocp1 || ocp2) && !serious1 && !serious2 && !persistent_ocp) {
-        if (ocp1) { mc1.driver.clearFault(); delayMicroseconds(1); }
-        if (ocp2) { mc2.driver.clearFault(); delayMicroseconds(1); }
-        if (ocp_consec_count1 == 1 || ocp_consec_count2 == 1) {
+    // Ride through any not-yet-confirmed fault (a transient OCP, or an OT/OVP flicker that has
+    // not persisted long enough): clear the driver latch so the next read reflects reality and
+    // a one-shot glitch resets its counter.  The consecutive counters above keep accumulating
+    // across reads, so a genuinely persistent OCP or sustained OT/OVP still escalates below.
+    if (!serious && !persistent_ocp) {
+        if (st1.isFault()) { mc1.driver.clearFault(); delayMicroseconds(1); }
+        if (st2.isFault()) { mc2.driver.clearFault(); delayMicroseconds(1); }
+        if ((ocp1 || ocp2) && (ocp_consec_count1 == 1 || ocp_consec_count2 == 1)) {
             Serial.printf("DRV8316 OCP transient (CBC auto-clear): M1=%d M2=%d\n", ocp1, ocp2);
         }
         return;
     }
-
-    // Serious fault or persistent OCP -> full shutdown
-    if (!serious1 && !serious2 && !persistent_ocp) return;
 
     if (st1.isFault()) {
         Serial.printf("DRV8316 HARDWARE FAULT (Motor 1): OCP=%d OT=%d OVP=%d\n",
@@ -249,9 +308,9 @@ static void checkDRV8316Faults() {
     ocp_consec_count1 = 0;
     ocp_consec_count2 = 0;
 
-    // Over-current only (no over-temperature / over-voltage): pause and retry like the software
-    // monitor.  Over-temp and over-voltage are genuinely dangerous, so those still latch.
-    if (!serious1 && !serious2 && persistent_ocp) {
+    // Over-current only (no CONFIRMED over-temperature / over-voltage): pause and retry like the
+    // software monitor.  Sustained over-temp / over-voltage is genuinely dangerous, so it latches.
+    if (!serious && persistent_ocp) {
         if (beginFaultRecovery("DRV8316 over-current (persistent OCP)")) {
             return;
         }
@@ -268,8 +327,34 @@ static void checkDRV8316Faults() {
         return;
     }
 
-    // Serious fault (over-temp / over-voltage): latch and alarm the XY board.
-    reportEvent("ERR", "DRV8316 hardware fault (over-temp/over-voltage) - motors stopped, send a new speed to restart");
+    // Confirmed serious fault (sustained over-temp / over-voltage): latch and alarm the XY board.
+    // Include the exact status bits so the operator can see which one tripped in the ESP3D web
+    // console.  Kept compact so the whole line fits the XY board's link receive buffer.
+    serious_consec_count1 = 0;
+    serious_consec_count2 = 0;
+
+    // Diagnostic dump: the summary OT bit is set by EITHER an over-temp WARNING (OTW, ~20C
+    // below shutdown) OR an over-temp SHUTDOWN (OTS); distinguish them, and also surface the
+    // per-phase OCP bits and SPI/charge-pump errors, plus the raw register bytes for off-line
+    // decoding.  This tells us whether "OT" is a real thermal shutdown, a mere warning, or a
+    // glitched SPI read (which would also set the SPI/parity bits).
+    reportEvent("MSG", "DRVraw M1[IC%02X S1%02X S2%02X] M2[IC%02X S1%02X S2%02X]",
+                st1.status.reg, st1.status1.reg, st1.status2.reg,
+                st2.status.reg, st2.status1.reg, st2.status2.reg);
+    reportEvent("MSG", "M1 OTS%d OTW%d OVP%d SPI%d VCPuv%d OCP[HA%d LA%d HB%d LB%d HC%d LC%d]",
+                st1.isOverTemperatureShutdown(), st1.isOverTemperatureWarning(), st1.isOverVoltage(),
+                st1.isSPIError(), st1.isChargePumpUnderVoltage(),
+                st1.isOverCurrent_Ah(), st1.isOverCurrent_Al(), st1.isOverCurrent_Bh(),
+                st1.isOverCurrent_Bl(), st1.isOverCurrent_Ch(), st1.isOverCurrent_Cl());
+    reportEvent("MSG", "M2 OTS%d OTW%d OVP%d SPI%d VCPuv%d OCP[HA%d LA%d HB%d LB%d HC%d LC%d]",
+                st2.isOverTemperatureShutdown(), st2.isOverTemperatureWarning(), st2.isOverVoltage(),
+                st2.isSPIError(), st2.isChargePumpUnderVoltage(),
+                st2.isOverCurrent_Ah(), st2.isOverCurrent_Al(), st2.isOverCurrent_Bh(),
+                st2.isOverCurrent_Bl(), st2.isOverCurrent_Ch(), st2.isOverCurrent_Cl());
+
+    reportEvent("ERR", "DRV8316 fault M1[OC%d OT%d OV%d] M2[OC%d OT%d OV%d]",
+                st1.isOverCurrent(), st1.isOverTemperature(), st1.isOverVoltage(),
+                st2.isOverCurrent(), st2.isOverTemperature(), st2.isOverVoltage());
 
     g_fault_code = 1;  // DRV8316 hardware fault
     mc1.emergencyStop();
@@ -854,6 +939,7 @@ static void motorControlTask(void* arg) {
         updateFaultRecovery();
         checkDRV8316Faults();
         checkOvercurrent();
+        reportSpinupTelemetry();
         calibration.update(mc1, mc2);
 
         // Tool state machine: power-up homing, tool loading/unloading via the top-of-travel
@@ -874,10 +960,18 @@ static void motorControlTask(void* arg) {
         mc2.applyVoltageLimit(cal_active && calibration.active_motor_idx == 1, calibration.hunt_voltage, z_move_boost);
 
         // Spindle spin-up/down uses a fast ramp; calibration keeps its slower, settled
-        // ramp so per-checkpoint current measurements stay accurate.
-        float ramp_rate = calibration.isActive() ? VELOCITY_RAMP_RATE : SPINDLE_RAMP_RATE;
-        mc1.rampVelocity(dt, ramp_rate);
-        mc2.rampVelocity(dt, ramp_rate);
+        // ramp so per-checkpoint current measurements stay accurate.  Outside calibration the
+        // low-speed region is accelerated gently (SPINDLE_RAMP_LOWSPEED_RATE) so the open-loop
+        // rotor stays synchronized and does not spike phase current into the DRV8316 OCP; once
+        // above SPINDLE_RAMP_LOWSPEED_RAD back-EMF holds it in sync and the faster rate is used.
+        bool cal = calibration.isActive();
+        float ramp_fast = cal ? VELOCITY_RAMP_RATE : SPINDLE_RAMP_RATE;
+        float rr1 = (!cal && fabsf(mc1.current_velocity) < SPINDLE_RAMP_LOWSPEED_RAD)
+                        ? SPINDLE_RAMP_LOWSPEED_RATE : ramp_fast;
+        float rr2 = (!cal && fabsf(mc2.current_velocity) < SPINDLE_RAMP_LOWSPEED_RAD)
+                        ? SPINDLE_RAMP_LOWSPEED_RATE : ramp_fast;
+        mc1.rampVelocity(dt, rr1);
+        mc2.rampVelocity(dt, rr2);
         applyFanForMotorState(mc1.enabled || mc2.enabled);
         updateFanControl(dt);
         updatePhaseOffset(dt);
@@ -902,7 +996,11 @@ static void motorControlTask(void* arg) {
 
         // Report status to the XY board over the inter-board link
         static uint32_t last_status_time = 0;
-        if (current_time - last_status_time >= LINK_STATUS_INTERVAL_MS) {
+        // Only send when the whole status line already fits the TX buffer, so this write (which
+        // shares the task with loopFOC) can never block and stall the FOC loop.  If the buffer is
+        // momentarily full we skip and retry next iteration - status is periodic and advisory.
+        if (current_time - last_status_time >= LINK_STATUS_INTERVAL_MS &&
+            Serial1.availableForWrite() >= 40) {
             last_status_time = current_time;
             sendStatus(Serial1, mc1, mc2);
         }
@@ -981,6 +1079,10 @@ void setup() {
     // Bring up the inter-board link to the FluidNC XY board first (RX=GPIO39, TX=GPIO38)
     // so it is listening as early as possible, before the XY board finishes booting and
     // sends its handshake.
+    // Enlarge the TX ring buffer so status/telemetry lines are always accepted without the
+    // write blocking (the FOC loop shares this task, see reportEvent/sendStatus).  Must be
+    // called before begin().
+    Serial1.setTxBufferSize(512);
     Serial1.begin(LINK_BAUD, SERIAL_8N1, LINK_RX_PIN, LINK_TX_PIN);
 
     // Report the reset reason to the XY board so it appears in the ESP3D web console too.

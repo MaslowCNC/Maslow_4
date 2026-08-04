@@ -8,7 +8,12 @@ const float SUPPLY_VOLTAGE = 24.0f;
 
 // Voltage limits
 const float BASE_VOLTAGE = 1.3f;
-const float MAX_VOLTAGE = 16.0f;
+// Open-loop ceiling.  At 16V the motors saturate around 13,300 (M1) / 13,900 (M2) RPM and pull
+// out (over-current) before reaching the 14,000 RPM command.  The DRV8316 driver limit is
+// SUPPLY_VOLTAGE*0.8 = 19.2V (motor_controller.cpp), so raise the ceiling to 18V to give enough
+// headroom to stay synchronized at 14,000 RPM.  The calibration LUT must be rebuilt (run "CAL")
+// after changing this so the top-of-range entries are no longer clamped at 16V.
+const float MAX_VOLTAGE = 18.0f;
 
 // PWM configuration
 const long  PWM_FREQUENCY = 60000;   // 60 kHz
@@ -25,7 +30,18 @@ const float FAN_PWM_RAMP_UNITS_PER_SEC = 320.0f;
 
 // Velocity ramping
 const float VELOCITY_RAMP_RATE = 20.0f;   // rad/s per second, used during calibration
-const float SPINDLE_RAMP_RATE  = 200.0f;  // rad/s per second, spindle on/off spin-up/down rate
+const float SPINDLE_RAMP_RATE  = 50.0f;   // rad/s per second, spindle on/off spin-up/down rate
+
+// Open-loop spin-up over-current guard.  At low speed there is almost no back-EMF, so the
+// open-loop rotor is most prone to pulling out of sync with the commanded field; when it
+// pulls out the load angle swings wide and the phase current spikes toward Uq/R, tripping
+// the DRV8316's 24 A hardware OCP on both motors.  Accelerate GENTLY until the speed is high
+// enough that back-EMF keeps the rotor synchronized, then switch to the faster
+// SPINDLE_RAMP_RATE for the rest of the spin-up.  (A uniformly slow ramp works but is
+// impractically slow to full speed; the current spike only happens in the low-speed region.)
+const float SPINDLE_RAMP_LOWSPEED_RATE = 20.0f;    // rad/s^2 gentle accel below the threshold
+const float SPINDLE_RAMP_LOWSPEED_RPM  = 2000.0f;  // ramp gently below this RPM, then speed up
+const float SPINDLE_RAMP_LOWSPEED_RAD  = SPINDLE_RAMP_LOWSPEED_RPM * 2.0f * PI / 60.0f;
 
 // Phase offset ramping
 const float PHASE_OFFSET_STEP = 45.0f * PI / 180.0f;          // 45 deg per keypress
@@ -34,7 +50,7 @@ const float PHASE_OFFSET_RAMP_RATE = 400.0f * PI / 180.0f;    // 400 deg/s ramp
 // Inter-board link (UART to FluidNC XY board)
 const long    LINK_BAUD = 115200;          // baud rate for the XY <-> spindle link
 const uint32_t LINK_STATUS_INTERVAL_MS = 50;  // how often to report status to the XY board
-const int     MAX_COMMAND_RPM = 10000;     // clamp for spindle speed commands
+const int     MAX_COMMAND_RPM = 14000;     // clamp for spindle speed commands
 
 // On-demand WiFi OTA.  The board normally keeps its radio off; when the XY board sends
 // the 'W' link command (in response to $Spindle/EnableOTA) it joins the XY board's WiFi
@@ -127,9 +143,21 @@ const float CAL_RAMP_VOLT_PER_RAD = 0.0025f;                        // Open-loop
                                                                     // Kept BELOW the real current-limited curve so the hunt
                                                                     // can converge; spin-up between steps relies on the
                                                                     // previous step's voltage carried forward, not this floor.
+const uint32_t CAL_COOLDOWN_TIMEOUT_MS = 8000;                      // Max time to wait for a DRV8316 over-temp WARNING to
+                                                                    // clear (motor de-energized/coasting) before continuing
+                                                                    // the sweep.  At low RPM the open-loop current sits on one
+                                                                    // or two FETs long enough to heat the die (package can
+                                                                    // still feel cool); coasting to cool before advancing
+                                                                    // stops the heat cascading up through the rest of the sweep.
 
 // DRV8316 fault detection
 const int OCP_CONSEC_LIMIT = 5;  // 5 x 100ms = 500ms persistent OCP -> disable
+// Over-temp / over-voltage must persist across this many 100ms reads before it is treated
+// as a genuine (latching) serious fault.  A hard over-current burst (e.g. the open-loop
+// spin-up current transient) can momentarily co-assert the OT/OVP status bit for a single
+// read; that must NOT be mistaken for a real thermal/voltage fault (which is sustained).
+// The DRV8316's own hardware OTP/OVP still protects instantly regardless of this debounce.
+const int SERIOUS_CONSEC_LIMIT = 3;  // 3 x 100ms = 300ms sustained OT/OVP -> latch
 
 // Over-current response.  A transient over-current briefly stops the motors, lets the current
 // settle, then resumes the last commanded speed - retrying up to FAULT_RECOVERY_MAX_ATTEMPTS

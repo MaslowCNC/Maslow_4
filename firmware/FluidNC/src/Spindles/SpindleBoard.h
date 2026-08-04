@@ -101,7 +101,7 @@ namespace Spindles {
         volatile bool     _rpm_dirty   = false;
 
         // Status return-link parsing
-        char    _rx_buf[64];
+        char    _rx_buf[160];
         size_t  _rx_len     = 0;
         uint8_t _last_fault = 0;
 

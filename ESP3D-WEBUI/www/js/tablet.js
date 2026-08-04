@@ -1402,8 +1402,8 @@ const tabletToggleSpindle = () => {
   tabletSpindleOn = !tabletSpindleOn;
   const btn = id("tablettab_spindle_toggle");
   if (tabletSpindleOn) {
-    sendCommand("M3 S10000");
-    addMessage("Spindle ON (10000 RPM)");
+    sendCommand("M3 S14000");
+    addMessage("Spindle ON (14000 RPM)");
     if (btn) {
       btn.textContent = "Spindle Off";
       btn.classList.remove("green-button");

@@ -7,6 +7,7 @@ enum CalState {
     CAL_RAMP,
     CAL_SETTLE,
     CAL_HUNT,
+    CAL_COOLDOWN,
     CAL_RAMP_DOWN,
     CAL_DONE,
     MCAL_RAMP,
@@ -25,6 +26,7 @@ struct Calibration {
     int active_motor_idx = 0;       // Which motor is being calibrated (0 or 1)
     float current_sum = 0.0f;       // Accumulator for averaged phase-RMS current
     int current_count = 0;          // Number of samples accumulated
+    uint32_t cooldown_start = 0;    // millis() when a CAL_COOLDOWN began
 
     // Run the calibration state machine. Call each loop iteration.
     void update(MotorController& mc1, MotorController& mc2);
