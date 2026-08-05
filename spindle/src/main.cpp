@@ -32,6 +32,13 @@ MotorController mc2(motor2_hw, driver2_hw, CURA2, CURB2, CURC2, -1);
 
 Calibration calibration;
 static TaskHandle_t motor_control_task_handle = nullptr;
+static TaskHandle_t housekeeping_task_handle  = nullptr;
+
+// FOC loop-rate instrumentation.  The FOC task (core 1) updates these every iteration; the
+// housekeeping task (core 0) reads and resets them for the periodic FOCrate report.  Plain
+// 32-bit counters are read/written atomically enough on the ESP32 for this diagnostic use.
+static volatile uint32_t g_foc_loop_count = 0;
+static volatile uint32_t g_foc_worst_us   = 0;
 
 // ------------------- Calibration LUT Default Data -------------------
 // Full auto-calibration sweep (100-14000 RPM in 100 RPM steps, tuned to I_phase_rms = 3.5 A).
@@ -912,42 +919,27 @@ static void motorControlTask(void* arg) {
     uint32_t last_ramp_time = millis();
 
     for (;;) {
-        // While OTA is active (WiFi/OTA runs on core 0), keep the motor drivers off and
-        // stand the control loop down.  This starts as soon as OTA is requested - before the
-        // WiFi radio powers up - so the drivers' current draw can't sag the rail during the
-        // radio's start-up surge.  The board reboots into the new firmware when an update
-        // completes, so we never resume from here in that case.
+        // During OTA keep the drivers off and stand down.  The housekeeping task (which owns the
+        // ADC) performs the WiFi-safe standby handshake; here we only need to stop driving so the
+        // drivers' current draw can't sag the rail during the radio's start-up surge.  The board
+        // reboots into the new firmware when an update completes, so we never resume from here.
         if (g_ota_active) {
-            setMachineState(MachineState::OtaUpdate);  // announce the transition before we park
             mc1.disable();
             mc2.disable();
-            // Signal otaTask that we are parked here and no longer touching the ADC, so it
-            // is now safe to bring the WiFi radio up (see the handshake in ota_service.cpp).
-            g_motor_in_ota_standby = true;
-            last_ramp_time         = millis();
+            last_ramp_time = millis();
             vTaskDelay(pdMS_TO_TICKS(10));
             continue;
         }
-        g_motor_in_ota_standby = false;
 
-        uint32_t current_time = millis();
-        float dt = (current_time - last_ramp_time) / 1000.0f;
-        last_ramp_time = current_time;
+        uint32_t loop_start_us = micros();
+        uint32_t current_time  = millis();
+        float    dt            = (current_time - last_ramp_time) / 1000.0f;
+        last_ramp_time         = current_time;
 
-        checkMotorTimeouts();
-        checkPhaseHoldPowerdown();
-        updateFaultRecovery();
-        checkDRV8316Faults();
-        checkOvercurrent();
-        reportSpinupTelemetry();
-        calibration.update(mc1, mc2);
-
-        // Tool state machine: power-up homing, tool loading/unloading via the top-of-travel
-        // beam.  Runs before the phase ramp so its commanded phase target is applied this
-        // iteration.  The reported state (with the spindle/fault/cal/OTA overlays) is
-        // reconciled and logged at the end of the loop by updateReportedState().
-        updateToolStateMachine();
-
+        // ---- FOC hot path: the ONLY work on core 1, run every iteration for the smoothest,
+        // most uniform open-loop commutation.  Current sensing, housekeeping, calibration and all
+        // serial I/O live on the core-0 housekeeping task so nothing here can ever lengthen a
+        // commutation step. ----
         bool cal_active = calibration.isActive() &&
                           calibration.state != CAL_RAMP_DOWN &&
                           calibration.state != MCAL_RAMP_DOWN;
@@ -959,21 +951,11 @@ static void motorControlTask(void* arg) {
         mc1.applyVoltageLimit(cal_active && calibration.active_motor_idx == 0, calibration.hunt_voltage, z_move_boost);
         mc2.applyVoltageLimit(cal_active && calibration.active_motor_idx == 1, calibration.hunt_voltage, z_move_boost);
 
-        // Spindle spin-up/down uses a fast ramp; calibration keeps its slower, settled
-        // ramp so per-checkpoint current measurements stay accurate.  Outside calibration the
-        // low-speed region is accelerated gently (SPINDLE_RAMP_LOWSPEED_RATE) so the open-loop
-        // rotor stays synchronized and does not spike phase current into the DRV8316 OCP; once
-        // above SPINDLE_RAMP_LOWSPEED_RAD back-EMF holds it in sync and the faster rate is used.
-        bool cal = calibration.isActive();
-        float ramp_fast = cal ? VELOCITY_RAMP_RATE : SPINDLE_RAMP_RATE;
-        float rr1 = (!cal && fabsf(mc1.current_velocity) < SPINDLE_RAMP_LOWSPEED_RAD)
-                        ? SPINDLE_RAMP_LOWSPEED_RATE : ramp_fast;
-        float rr2 = (!cal && fabsf(mc2.current_velocity) < SPINDLE_RAMP_LOWSPEED_RAD)
-                        ? SPINDLE_RAMP_LOWSPEED_RATE : ramp_fast;
-        mc1.rampVelocity(dt, rr1);
-        mc2.rampVelocity(dt, rr2);
-        applyFanForMotorState(mc1.enabled || mc2.enabled);
-        updateFanControl(dt);
+        // Spindle spin-up/down uses a single uniform ramp rate; calibration keeps its slower,
+        // settled rate so per-checkpoint current measurements stay accurate.
+        float spin_rate = calibration.isActive() ? VELOCITY_RAMP_RATE : SPINDLE_RAMP_RATE;
+        mc1.rampVelocity(dt, spin_rate);
+        mc2.rampVelocity(dt, spin_rate);
         updatePhaseOffset(dt);
 
         mc1.updateControlMode();
@@ -982,30 +964,97 @@ static void motorControlTask(void* arg) {
         mc1.runMotorLoop();
         mc2.runMotorLoop();
 
+        // Record this iteration's duration; the housekeeping task turns these into the FOCrate
+        // report (achieved commutation frequency, average and worst-case iteration time).
+        uint32_t loop_us = micros() - loop_start_us;
+        if (loop_us > g_foc_worst_us) g_foc_worst_us = loop_us;
+        g_foc_loop_count++;
+
+        taskYIELD();
+    }
+}
+
+// Housekeeping task (core 0).  Owns everything that is not time-critical for commutation:
+// current sensing (the six analogReads), the calibration sweep, serial command dispatch, fault
+// monitoring, the Z tool state machine, fan control, telemetry and status reporting.  Keeping all
+// of this off core 1 lets the FOC loop run at a steady, high rate with no periodic hiccups.
+// Because this task performs the ADC reads, it also owns the OTA standby handshake.
+static void housekeepingTask(void* arg) {
+    (void)arg;
+    uint32_t last_status_time = 0;
+    uint32_t last_rate_report = millis();
+    uint32_t last_hk_time     = millis();
+
+    for (;;) {
+        // OTA: stop touching the ADC and signal otaTask that it is now safe to bring the WiFi
+        // radio up (see the handshake in ota_service.cpp).  The FOC task independently disables
+        // the drivers.  The board reboots into the new firmware when an update completes.
+        if (g_ota_active) {
+            setMachineState(MachineState::OtaUpdate);  // announce the transition before we park
+            g_motor_in_ota_standby = true;
+            last_hk_time           = millis();
+            vTaskDelay(pdMS_TO_TICKS(10));
+            continue;
+        }
+        g_motor_in_ota_standby = false;
+
+        uint32_t now_ms = millis();
+        float    hk_dt  = (now_ms - last_hk_time) / 1000.0f;
+        last_hk_time    = now_ms;
+
+        // Current sensing (six analogReads, ~0.5 ms) - feeds protection, telemetry and cal.
         mc1.updateCurrent();
         mc2.updateCurrent();
-
         calibration.accumulateCurrentSample(mc1.last_instantaneous_current, 0);
         calibration.accumulateCurrentSample(mc2.last_instantaneous_current, 1);
 
+        // Calibration sweep and serial command handling (both set targets the FOC task actuates).
+        calibration.update(mc1, mc2);
         handleSerialCommands(mc1, mc2, calibration);
 
-        // Reconcile the single reported state now that this iteration's tool state, faults,
+        checkMotorTimeouts();
+        checkPhaseHoldPowerdown();
+        updateFaultRecovery();
+        checkDRV8316Faults();
+        checkOvercurrent();
+        reportSpinupTelemetry();
+        // Tool state machine (power-up homing, tool load/unload via the top-of-travel beam).
+        // Its commanded phase target is picked up by updatePhaseOffset in the FOC task.
+        updateToolStateMachine();
+        applyFanForMotorState(mc1.enabled || mc2.enabled);
+        updateFanControl(hk_dt);
+        // Reconcile the single reported state now that this pass's tool state, faults,
         // calibration and spindle commands have all been applied, logging any transition.
         updateReportedState();
 
-        // Report status to the XY board over the inter-board link
-        static uint32_t last_status_time = 0;
-        // Only send when the whole status line already fits the TX buffer, so this write (which
-        // shares the task with loopFOC) can never block and stall the FOC loop.  If the buffer is
-        // momentarily full we skip and retry next iteration - status is periodic and advisory.
-        if (current_time - last_status_time >= LINK_STATUS_INTERVAL_MS &&
+        // Report status to the XY board over the inter-board link.  Only send when the whole
+        // line already fits the TX buffer so this write can never block; if the buffer is
+        // momentarily full we skip and retry next pass.
+        if (now_ms - last_status_time >= LINK_STATUS_INTERVAL_MS &&
             Serial1.availableForWrite() >= 40) {
-            last_status_time = current_time;
+            last_status_time = now_ms;
             sendStatus(Serial1, mc1, mc2);
         }
 
-        taskYIELD();
+        // ---- Periodic FOC loop-rate report (counters maintained by the FOC task on core 1). ----
+        if (now_ms - last_rate_report >= FOC_RATE_REPORT_MS) {
+            uint32_t elapsed = now_ms - last_rate_report;
+            uint32_t cnt     = g_foc_loop_count;
+            uint32_t worst   = g_foc_worst_us;
+            g_foc_loop_count = 0;
+            g_foc_worst_us   = 0;
+            if (elapsed > 0 && cnt > 0 && (mc1.enabled || mc2.enabled)) {
+                float    rate_khz = (float)cnt / (float)elapsed;   // loops per ms == kHz
+                uint32_t avg_us   = (uint32_t)((elapsed * 1000.0f) / (float)cnt);
+                reportEvent("MSG", "FOCrate %.1fkHz avg=%luus worst=%luus", rate_khz,
+                            (unsigned long)avg_us, (unsigned long)worst);
+            }
+            last_rate_report = now_ms;
+        }
+
+        // Fixed housekeeping period.  All the sub-tasks above have their own longer internal
+        // throttles; this base period sets the current-sampling and command-handling cadence.
+        vTaskDelay(pdMS_TO_TICKS(FOC_HOUSEKEEPING_INTERVAL_MS));
     }
 }
 
@@ -1106,8 +1155,16 @@ void setup() {
     loadDefaultLUT(mc1, 0, MC1_DEFAULT_LUT, sizeof(MC1_DEFAULT_LUT) / sizeof(MC1_DEFAULT_LUT[0]));
     loadDefaultLUT(mc2, 1, MC2_DEFAULT_LUT, sizeof(MC2_DEFAULT_LUT) / sizeof(MC2_DEFAULT_LUT[0]));
 
-    // Start the real-time control task. Once created it runs independently on core 1, so
-    // nothing after this point can affect motor / Z / fan control.
+    // Start the housekeeping task on core 0: current sensing, calibration, serial commands, fault
+    // monitoring, the Z tool state machine, fan, telemetry and status reporting - everything that
+    // is not time-critical for commutation, kept off the FOC core.  Created FIRST: the FOC task
+    // below runs at a higher priority on core 1 and never blocks, so once it exists it starves
+    // this setup context (loopTask, core 1) and no later line here would execute.
+    xTaskCreatePinnedToCore(housekeepingTask, "housekeeping", 8192, nullptr, 2, &housekeeping_task_handle, 0);
+
+    // Start the real-time FOC control task on core 1.  It runs ONLY the open-loop commutation
+    // hot path, so nothing else can lengthen a commutation step.  Created LAST because it
+    // preempts this context permanently.
     xTaskCreatePinnedToCore(motorControlTask, "motorControl", 8192, nullptr, 3, &motor_control_task_handle, 1);
 
     // --- Console banner LAST, and only when a USB host is actually attached. ---

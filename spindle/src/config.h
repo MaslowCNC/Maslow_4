@@ -30,18 +30,24 @@ const float FAN_PWM_RAMP_UNITS_PER_SEC = 320.0f;
 
 // Velocity ramping
 const float VELOCITY_RAMP_RATE = 20.0f;   // rad/s per second, used during calibration
+// Spindle spin-up/down uses a single uniform ramp rate (matching the reference firmware, which
+// reaches 14,000 RPM cleanly with one rate), applied by rampVelocity() every FOC iteration.
+// The earlier speed-dependent dual-rate ramp was removed: it added complexity without being the
+// cause of the high-speed fault.
 const float SPINDLE_RAMP_RATE  = 50.0f;   // rad/s per second, spindle on/off spin-up/down rate
 
-// Open-loop spin-up over-current guard.  At low speed there is almost no back-EMF, so the
-// open-loop rotor is most prone to pulling out of sync with the commanded field; when it
-// pulls out the load angle swings wide and the phase current spikes toward Uq/R, tripping
-// the DRV8316's 24 A hardware OCP on both motors.  Accelerate GENTLY until the speed is high
-// enough that back-EMF keeps the rotor synchronized, then switch to the faster
-// SPINDLE_RAMP_RATE for the rest of the spin-up.  (A uniformly slow ramp works but is
-// impractically slow to full speed; the current spike only happens in the low-speed region.)
-const float SPINDLE_RAMP_LOWSPEED_RATE = 20.0f;    // rad/s^2 gentle accel below the threshold
-const float SPINDLE_RAMP_LOWSPEED_RPM  = 2000.0f;  // ramp gently below this RPM, then speed up
-const float SPINDLE_RAMP_LOWSPEED_RAD  = SPINDLE_RAMP_LOWSPEED_RPM * 2.0f * PI / 60.0f;
+// --- FOC loop scheduling ---
+// The FOC update (loopFOC + move) runs on its OWN task pinned to core 1 with nothing else in the
+// loop body, so open-loop commutation runs at the highest, most uniform rate possible.  Everything
+// that is not time-critical for commutation - current sensing (six analogReads, ~0.5 ms), the
+// calibration sweep, serial command dispatch, fault checks, the tool state machine, fan, telemetry
+// and status reporting - runs on a SEPARATE housekeeping task pinned to core 0, ticking every
+// FOC_HOUSEKEEPING_INTERVAL_MS.  This keeps the expensive/slow work entirely off the FOC core so it
+// can never lengthen a commutation step (the ~1.8 kHz-with-hiccups single-task design pulled the
+// open-loop rotor out of sync at high RPM and tripped the DRV8316 per-phase OCP even with voltage
+// headroom).  A loop-rate report is emitted every FOC_RATE_REPORT_MS to verify the achieved rate.
+const uint32_t FOC_HOUSEKEEPING_INTERVAL_MS = 2;     // core-0 housekeeping task period
+const uint32_t FOC_RATE_REPORT_MS           = 1000;  // report achieved FOC loop rate this often
 
 // Phase offset ramping
 const float PHASE_OFFSET_STEP = 45.0f * PI / 180.0f;          // 45 deg per keypress
