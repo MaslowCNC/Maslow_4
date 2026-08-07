@@ -71,7 +71,15 @@ namespace Spindles {
             // Hardware UART engine 2: UART0 is the console and UART1 drives the TMC
             // stepper drivers, so the inter-board link uses UART2.
             handler.section("uart", _uart, 2);
-            handler.item("uart_num", _uart_num);
+            // The UART can be configured either with the embedded "uart:" section above
+            // (_uart set, _uart_num == -1) or an external "uart_num:" reference.  When
+            // generating (saving) the config, only emit "uart_num" if it is actually in
+            // use; otherwise the generator would write "uart_num: -1" alongside the
+            // embedded "uart:" section, and reloading that file fails validation with
+            // "conflicting UART configuration".
+            if (handler.handlerType() != Configuration::HandlerType::Generator || _uart_num != -1) {
+                handler.item("uart_num", _uart_num);
+            }
             handler.item("phase_deg_per_mm", _phase_deg_per_mm, 0.0f, 100000.0f);
             handler.item("max_rpm", _max_rpm, 1, 100000);
             handler.item("suction_power", _suction_power, 0, 100);
