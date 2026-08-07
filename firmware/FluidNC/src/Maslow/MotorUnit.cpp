@@ -40,7 +40,10 @@ void MotorUnit::begin(int forwardPin, int backwardPin, int readbackPin, int enco
     }
     zero();
 
-    motor.begin(forwardPin, backwardPin, readbackPin, channel1, channel2);
+    // Wiring/PWM direction is swapped here (forward/backward pins and their PWM
+    // channels reversed) so that commanded FORWARD/BACKWARD drive the motor the
+    // opposite way relative to the previous wiring, without touching DCMotor itself.
+    motor.begin(backwardPin, forwardPin, readbackPin, channel2, channel1);
 
     positionPID.setPID(P, I, D);
     positionPID.setOutputLimits(-1023, 1023);
