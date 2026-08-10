@@ -34,7 +34,7 @@ const float VELOCITY_RAMP_RATE = 20.0f;   // rad/s per second, used during calib
 // reaches 14,000 RPM cleanly with one rate), applied by rampVelocity() every FOC iteration.
 // The earlier speed-dependent dual-rate ramp was removed: it added complexity without being the
 // cause of the high-speed fault.
-const float SPINDLE_RAMP_RATE  = 50.0f;   // rad/s per second, spindle on/off spin-up/down rate
+const float SPINDLE_RAMP_RATE  = 500.0f;  // rad/s per second, spindle on/off spin-up/down rate
 
 // --- FOC loop scheduling ---
 // The FOC update (loopFOC + move) runs on its OWN task pinned to core 1 with nothing else in the

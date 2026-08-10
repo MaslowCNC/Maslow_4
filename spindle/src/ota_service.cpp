@@ -5,6 +5,7 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <ArduinoOTA.h>
+#include <esp_wifi.h>
 
 // The two BLDC motor controllers live in main.cpp.  They are disabled before an OTA
 // image is written so the machine cannot move while the firmware is being replaced.
@@ -42,12 +43,29 @@ static void otaTask(void* arg) {
         vTaskDelay(pdMS_TO_TICKS(5));
     }
 
+    // Give the drivers a beat to actually stop sinking current after the FOC task has
+    // disabled them, so the rail is at its quietest before the radio's surge hits.
+    vTaskDelay(pdMS_TO_TICKS(50));
+
+    // Drop to a low CPU clock for the duration of the radio bring-up.  Powering the WiFi
+    // PHY up and running its RF calibration draws a large current pulse; on this
+    // power-marginal board that pulse (on top of a 240 MHz core) sags the 3.3V rail far
+    // enough to reset the chip the instant WiFi.mode(WIFI_STA) starts the radio - the exact
+    // failure that made on-demand OTA unusable.  Running the core at 80 MHz through the
+    // bring-up cuts the baseline draw so the surge has headroom; it is restored to full
+    // speed once associated (the machine is parked during OTA, so a slow core is harmless).
+    setCpuFrequencyMhz(80);
+
     // Join the XY board's WiFi network.  Don't persist credentials to NVS - they are
     // supplied fresh over the link each time OTA is requested.
     Serial.println("[OTA] starting WiFi");
     Serial.flush();
     WiFi.persistent(false);
     WiFi.mode(WIFI_STA);
+    // Cap transmit power immediately, before association keys the PA for the first time, to
+    // hold the radio's peak current down on this power-marginal board.  The access point is
+    // physically close so the reduced range costs nothing.
+    WiFi.setTxPower(WIFI_POWER_8_5dBm);
     WiFi.setHostname(OTA_HOSTNAME);
     WiFi.begin(s_ota_ssid, s_ota_pass);
 
@@ -58,6 +76,7 @@ static void otaTask(void* arg) {
 
     if (WiFi.status() != WL_CONNECTED) {
         // Report the failure to the XY board and return to normal radio-off operation.
+        setCpuFrequencyMhz(240);
         Serial.println("[OTA] WiFi connect failed");
         Serial.flush();
         Serial1.print("OTA_ERR:wifi\n");
@@ -69,17 +88,30 @@ static void otaTask(void* arg) {
         return;
     }
 
+    // Association survived the surge - restore full CPU speed for a brisk OTA transfer.
+    setCpuFrequencyMhz(240);
+
     Serial.printf("[OTA] WiFi connected ip=%s\n", WiFi.localIP().toString().c_str());
     Serial.flush();
 
-    // Disable WiFi modem power-save.  With the default WIFI_PS_MIN_MODEM the radio sleeps
-    // between beacons, which adds latency and drops packets during the OTA TCP transfer and
-    // makes espota fail with "Error Uploading" at 0%.  The XY board (FluidNC) does the same.
-    WiFi.setSleep(false);
+    // Report the IP to the XY board as the very first thing after associating, before any
+    // further radio configuration, so the operator always learns where to send the update
+    // even if a later step misbehaves.  The board is also discoverable via mDNS as
+    // OTA_HOSTNAME ".local".
+    Serial1.printf("OTA_IP:%s\n", WiFi.localIP().toString().c_str());
 
-    // Use a moderate transmit power.  The access point is physically close, so full power
-    // buys no range but does add to the current draw this power-marginal board must sustain
-    // while it is also erasing/writing flash during the transfer.
+    // Disable WiFi modem power-save.  With the default WIFI_PS_MIN_MODEM the radio sleeps
+    // between beacons, which adds hundreds of milliseconds of latency and drops packets during
+    // the OTA TCP transfer, making espota fail with "Error Uploading" partway through.  The
+    // Arduino WiFi.setSleep(false) wrapper does not reliably stick on this build, so also pin
+    // WIFI_PS_NONE directly through the IDF API.  (The XY board does the equivalent.)
+    WiFi.setSleep(false);
+    esp_wifi_set_ps(WIFI_PS_NONE);
+
+    // Keep transmit power moderate for the transfer.  Full power (19.5 dBm) draws a current
+    // surge that resets this power-marginal board the instant it is applied, so 13 dBm is the
+    // ceiling that both associates reliably and survives here.  The access point is physically
+    // close, so the reduced power costs no usable range.
     WiFi.setTxPower(WIFI_POWER_13dBm);
 
     ArduinoOTA.setHostname(OTA_HOSTNAME);
@@ -98,10 +130,6 @@ static void otaTask(void* arg) {
             g_ota_flashing = false;
         });
     ArduinoOTA.begin();
-
-    // Tell the XY board where to send the update.  The board is also discoverable via
-    // mDNS as OTA_HOSTNAME ".local".
-    Serial1.printf("OTA_IP:%s\n", WiFi.localIP().toString().c_str());
 
     uint32_t idle_start = millis();
     for (;;) {
@@ -134,6 +162,9 @@ void requestSpindleOTA(const char* ssid, const char* pass) {
     strncpy(s_ota_pass, pass ? pass : "", sizeof(s_ota_pass) - 1);
     s_ota_pass[sizeof(s_ota_pass) - 1] = '\0';
 
-    // Run WiFi + OTA on core 0, clear of the real-time motor control task (core 1).
-    xTaskCreatePinnedToCore(otaTask, "otaService", 8192, nullptr, 1, &s_ota_task, 0);
+    // Run WiFi + OTA on core 0, clear of the real-time motor control task (core 1).  The
+    // stack must be generous: bringing the WiFi stack and ArduinoOTA up from within this task
+    // uses far more stack than steady-state, and an overflow here would look exactly like the
+    // power-up crash we are guarding against.
+    xTaskCreatePinnedToCore(otaTask, "otaService", 16384, nullptr, 1, &s_ota_task, 0);
 }
