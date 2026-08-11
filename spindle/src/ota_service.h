@@ -33,3 +33,9 @@ extern volatile bool g_motor_in_ota_standby;
 // from the motor-control task (it just captures the credentials and starts a core-0
 // task); a no-op if OTA is already active.
 void requestSpindleOTA(const char* ssid, const char* pass);
+
+// Called once from setup() on every boot.  If a previous requestSpindleOTA() persisted an
+// OTA request to NVS, this brings WiFi + ArduinoOTA up immediately from the clean, freshly
+// booted state (retrying across reboots if the radio's power-up surge reset the board).  A
+// no-op when no OTA is pending.
+void resumePendingOTA();

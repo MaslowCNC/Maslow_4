@@ -45,9 +45,8 @@ const float SPINDLE_RAMP_RATE  = 500.0f;  // rad/s per second, spindle on/off sp
 // FOC_HOUSEKEEPING_INTERVAL_MS.  This keeps the expensive/slow work entirely off the FOC core so it
 // can never lengthen a commutation step (the ~1.8 kHz-with-hiccups single-task design pulled the
 // open-loop rotor out of sync at high RPM and tripped the DRV8316 per-phase OCP even with voltage
-// headroom).  A loop-rate report is emitted every FOC_RATE_REPORT_MS to verify the achieved rate.
+// headroom).
 const uint32_t FOC_HOUSEKEEPING_INTERVAL_MS = 2;     // core-0 housekeeping task period
-const uint32_t FOC_RATE_REPORT_MS           = 1000;  // report achieved FOC loop rate this often
 
 // Phase offset ramping
 const float PHASE_OFFSET_STEP = 45.0f * PI / 180.0f;          // 45 deg per keypress
@@ -66,6 +65,13 @@ const char*    const OTA_HOSTNAME                = "maslow-spindle";  // mDNS ->
 const uint32_t       OTA_WIFI_CONNECT_TIMEOUT_MS = 20000;   // give up joining WiFi after 20 s
 const uint32_t       OTA_IDLE_TIMEOUT_MS         = 300000;  // drop WiFi/OTA after 5 min idle
 const int            OTA_RECEIVE_TIMEOUT_MS      = 15000;   // tolerate 15 s data gaps mid-flash
+// The OTA request is persisted to NVS and the board reboots to service it from a clean,
+// freshly booted state (the only state that reliably survives the WiFi radio's power-up
+// current surge on 24 V-only power).  Each boot is one attempt: a bring-up that resets mid-surge
+// OR a transfer that fails (which also reboots, since ArduinoOTA won't cleanly retry on the same
+// boot) consumes one.  The flag survives across reboots so setup() resumes automatically, up to
+// this many attempts before giving up so a truly unreachable network can't boot-loop forever.
+const uint8_t        OTA_BOOT_MAX_ATTEMPTS       = 10;
 
 // Current filtering
 const float CURRENT_FILTER_ALPHA = 0.001f;      // Slow filter for DC-equivalent telemetry

@@ -34,12 +34,6 @@ Calibration calibration;
 static TaskHandle_t motor_control_task_handle = nullptr;
 static TaskHandle_t housekeeping_task_handle  = nullptr;
 
-// FOC loop-rate instrumentation.  The FOC task (core 1) updates these every iteration; the
-// housekeeping task (core 0) reads and resets them for the periodic FOCrate report.  Plain
-// 32-bit counters are read/written atomically enough on the ESP32 for this diagnostic use.
-static volatile uint32_t g_foc_loop_count = 0;
-static volatile uint32_t g_foc_worst_us   = 0;
-
 // ------------------- Calibration LUT Default Data -------------------
 // Full auto-calibration sweep (100-14000 RPM in 100 RPM steps, tuned to I_phase_rms = 3.5 A).
 // These are the per-motor open-loop voltages measured on the bench; the drive reaches its
@@ -110,7 +104,6 @@ static int ocp_consec_count2 = 0;
 static int serious_consec_count1 = 0;
 static int serious_consec_count2 = 0;
 static uint32_t last_drv_check = 0;
-static uint32_t last_spinup_telem = 0;
 static int overcurrent_count = 0;
 
 // --- Over-current auto-recovery state ---
@@ -231,27 +224,6 @@ static void updateFaultRecovery() {
     } else {
         reportEvent("MSG", "retried %s - motors idle", recovery_cause);
     }
-}
-
-// Periodic spin-up telemetry to the web console so the exact RPM / applied voltage / measured
-// phase current at which a fault occurs can be seen.  Throttled, and only active while actually
-// ramping a spindle spin command (not during calibration or steady running).
-static void reportSpinupTelemetry() {
-    if (calibration.isActive()) return;
-    if (!mc1.velocity_mode && !mc2.velocity_mode) return;
-    bool ramping = (fabsf(mc1.target_velocity - mc1.current_velocity) > 1.0f) ||
-                   (fabsf(mc2.target_velocity - mc2.current_velocity) > 1.0f);
-    if (!ramping) return;
-
-    uint32_t now = millis();
-    if (now - last_spinup_telem < 200) return;
-    last_spinup_telem = now;
-
-    const float k = 60.0f / (2.0f * PI);  // rad/s -> RPM
-    reportEvent("MSG", "spinup v=%.0f/%.0f Uq=%.2f/%.2f I=%.2f/%.2f",
-                mc1.current_velocity * k, mc2.current_velocity * k,
-                mc1.motor.voltage_limit, mc2.motor.voltage_limit,
-                mc1.protection_current, mc2.protection_current);
 }
 
 static void checkDRV8316Faults() {
@@ -931,7 +903,6 @@ static void motorControlTask(void* arg) {
             continue;
         }
 
-        uint32_t loop_start_us = micros();
         uint32_t current_time  = millis();
         float    dt            = (current_time - last_ramp_time) / 1000.0f;
         last_ramp_time         = current_time;
@@ -964,12 +935,6 @@ static void motorControlTask(void* arg) {
         mc1.runMotorLoop();
         mc2.runMotorLoop();
 
-        // Record this iteration's duration; the housekeeping task turns these into the FOCrate
-        // report (achieved commutation frequency, average and worst-case iteration time).
-        uint32_t loop_us = micros() - loop_start_us;
-        if (loop_us > g_foc_worst_us) g_foc_worst_us = loop_us;
-        g_foc_loop_count++;
-
         taskYIELD();
     }
 }
@@ -982,7 +947,6 @@ static void motorControlTask(void* arg) {
 static void housekeepingTask(void* arg) {
     (void)arg;
     uint32_t last_status_time = 0;
-    uint32_t last_rate_report = millis();
     uint32_t last_hk_time     = millis();
 
     for (;;) {
@@ -1017,7 +981,6 @@ static void housekeepingTask(void* arg) {
         updateFaultRecovery();
         checkDRV8316Faults();
         checkOvercurrent();
-        reportSpinupTelemetry();
         // Tool state machine (power-up homing, tool load/unload via the top-of-travel beam).
         // Its commanded phase target is picked up by updatePhaseOffset in the FOC task.
         updateToolStateMachine();
@@ -1034,22 +997,6 @@ static void housekeepingTask(void* arg) {
             Serial1.availableForWrite() >= 40) {
             last_status_time = now_ms;
             sendStatus(Serial1, mc1, mc2);
-        }
-
-        // ---- Periodic FOC loop-rate report (counters maintained by the FOC task on core 1). ----
-        if (now_ms - last_rate_report >= FOC_RATE_REPORT_MS) {
-            uint32_t elapsed = now_ms - last_rate_report;
-            uint32_t cnt     = g_foc_loop_count;
-            uint32_t worst   = g_foc_worst_us;
-            g_foc_loop_count = 0;
-            g_foc_worst_us   = 0;
-            if (elapsed > 0 && cnt > 0 && (mc1.enabled || mc2.enabled)) {
-                float    rate_khz = (float)cnt / (float)elapsed;   // loops per ms == kHz
-                uint32_t avg_us   = (uint32_t)((elapsed * 1000.0f) / (float)cnt);
-                reportEvent("MSG", "FOCrate %.1fkHz avg=%luus worst=%luus", rate_khz,
-                            (unsigned long)avg_us, (unsigned long)worst);
-            }
-            last_rate_report = now_ms;
         }
 
         // Fixed housekeeping period.  All the sub-tasks above have their own longer internal
@@ -1161,6 +1108,13 @@ void setup() {
     // below runs at a higher priority on core 1 and never blocks, so once it exists it starves
     // this setup context (loopTask, core 1) and no later line here would execute.
     xTaskCreatePinnedToCore(housekeepingTask, "housekeeping", 8192, nullptr, 2, &housekeeping_task_handle, 0);
+
+    // If an OTA update was requested before the last reboot, resume it now - from this clean,
+    // freshly booted state (the one that reliably survives the WiFi radio's power-up surge on
+    // 24 V-only power).  Done AFTER the housekeeping task exists (it owns the ADC standby
+    // handshake the OTA task waits on) and BEFORE the FOC task below (which permanently
+    // preempts this context).  A no-op on a normal boot.
+    resumePendingOTA();
 
     // Start the real-time FOC control task on core 1.  It runs ONLY the open-loop commutation
     // hot path, so nothing else can lengthen a commutation step.  Created LAST because it
