@@ -83,9 +83,30 @@ bool MotorUnit::test() {
         allTestsPassed      = false;
     }
 
-    //Check for the presence of the magnet
+    //Check for the presence of the magnet and report magnet health (placement diagnostics)
+    Maslow.I2CMux.setPort(_encoderAddress);
     if (!encoder.detectMagnet()) {
         log_warn("Magnet not detected on " << encAddrLabel.c_str());
+        allTestsPassed = false;
+    }
+
+    // AGC auto-adjusts gain for field strength (3.3V range 0-128; should sit mid-range).
+    // A railed AGC or a too-weak/too-strong flag indicates poor magnet placement/air-gap,
+    // which yields noisy angle readings and can cause lost encoder revolutions.
+    uint8_t  agc       = encoder.readAGC();
+    uint16_t magnitude = encoder.readMagnitude();
+    bool     tooStrong = encoder.magnetTooStrong();
+    bool     tooWeak   = encoder.magnetTooWeak();
+
+    log_info("Magnet health on " << encAddrLabel.c_str() << ": AGC=" << (int)agc << " magnitude=" << magnitude
+                                  << " tooStrong=" << (tooStrong ? "YES" : "no") << " tooWeak=" << (tooWeak ? "YES" : "no"));
+
+    if (tooStrong) {
+        log_warn("Magnet too strong on " << encAddrLabel.c_str() << " (air gap too small) - AGC=" << (int)agc);
+        allTestsPassed = false;
+    }
+    if (tooWeak) {
+        log_warn("Magnet too weak on " << encAddrLabel.c_str() << " (air gap too large/off-center) - AGC=" << (int)agc);
         allTestsPassed = false;
     }
 
