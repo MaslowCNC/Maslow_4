@@ -119,7 +119,9 @@ public:
     // Flash write operations stall both CPU cores; without this flag the 100 ms
     // watchdog fires spuriously and latches the red LED until a power cycle.
     volatile bool uploadInProgress = false;
-    String axis_id_to_label(int axis_id);
+    // Returns a string literal, not a String.  This is called on every encoder
+    // read, and an Arduino String would heap-allocate and free each time.
+    const char* axis_id_to_label(int axis_id);
     void   safety_control();
     bool   axis_homed[4] = { false, false, false, false };
 

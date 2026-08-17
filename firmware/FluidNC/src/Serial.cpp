@@ -191,7 +191,13 @@ void AllChannels::init() {
 }
 
 void AllChannels::kill(Channel* channel) {
-    xQueueSend(_killQueue, &channel, 0);
+    // The kill queue is drained in pollLine().  If it is full the send fails
+    // silently and the channel is never deregistered nor deleted - it stays
+    // registered forever, holding its ~2KB of buffers.  Report it rather than
+    // losing the memory without a trace.
+    if (!xQueueSend(_killQueue, &channel, 0)) {
+        log_warn("Kill queue full; channel " << channel->name() << " not reclaimed");
+    }
 }
 
 void AllChannels::registration(Channel* channel) {
@@ -219,6 +225,18 @@ void AllChannels::listChannels(Channel& out) {
     for (auto channel : _channelq) {
         log_to(out, channel->name());
     }
+    _mutex.unlock();
+}
+
+void AllChannels::listChannelStats() {
+    _mutex.lock();
+    size_t total = 0;
+    for (auto channel : _channelq) {
+        const size_t queued = channel->queuedBytes();
+        total += queued;
+        log_info("  channel " << channel->name() << " queued=" << queued);
+    }
+    log_info("Channels: " << _channelq.size() << " totalQueued=" << total);
     _mutex.unlock();
 }
 

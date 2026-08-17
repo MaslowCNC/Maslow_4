@@ -59,6 +59,12 @@ public:
     virtual void     ack(Error status);
     const char*      name() { return _name; }
 
+    // Bytes buffered in this channel's pending-input queue.  pollLine() pushes
+    // input here whenever the primary loop is too busy to accept a line, and
+    // nothing bounds it, so a steadily rising value means the machine is being
+    // fed faster than it can consume.  Reported by $Heap.
+    size_t queuedBytes() const { return _queue.size(); }
+
     // rx_buffer_available() is the number of bytes that can be sent without overflowing
     // a reception buffer, even if the system is busy.  Channels that can handle external
     // input via an interrupt or other background mechanism should override it to return

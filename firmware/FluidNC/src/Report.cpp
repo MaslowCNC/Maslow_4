@@ -636,8 +636,8 @@ void report_realtime_status(Channel& channel) {
             }
         }
     }
-    if (InputFile::_progress.length()) {
-        msg << "|" + InputFile::_progress;
+    if (InputFile::_progress[0] != '\0') {
+        msg << "|" << InputFile::_progress;
         plan_block_t* cur_block = plan_get_current_block();
         if (cur_block != NULL && cur_block->file_line_number > 0) {
             msg << "," << cur_block->file_line_number;

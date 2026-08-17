@@ -98,6 +98,11 @@ public:
 
     void listChannels(Channel& out);
 
+    // Logs how many channels are registered and how much input each has buffered.
+    // A channel count that climbs over a session means channels are being created
+    // and not reclaimed; a climbing queue means input is outrunning the machine.
+    void listChannelStats();
+
     Channel* pollLine(char* line) override;
 
     void stopJob() override;

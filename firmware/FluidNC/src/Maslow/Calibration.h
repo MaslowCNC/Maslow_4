@@ -105,7 +105,10 @@ private:
     bool takeSlack = false;
 
     //Variables used by calibration
-    float** calibration_data      = nullptr;
+    // One contiguous [point][TL,TR,BL,BR] block rather than a row-pointer array.
+    // Indexing is unchanged; the single allocation avoids CALIBRATION_GRID_SIZE_MAX
+    // tiny heap blocks and their per-block allocator overhead.
+    float (*calibration_data)[4]  = nullptr;
     int     pointCount            = 0;     //number of actual points in the grid,  < GRID_SIZE_MAX
     int     waypoint              = 0;     //The current waypoint in the calibration process
     int     calibrationDirection  = 0;     //Direction for calibration measurements (replaces static variable)
