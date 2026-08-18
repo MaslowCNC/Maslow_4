@@ -128,15 +128,14 @@ firmware routine `Calibration::recomputeAnchorsWithLevenbergMarquardt()`
 the same initial anchor guess, the parser produces the **same anchor positions** the
 machine computes.
 
-> **Maintainer note:** `calibration-computation.js` in this folder is a **copy** of the
-> canonical source at `ESP3D-WEBUI/www/js/calibration-computation.js`. The copy is
-> required because GitHub Pages only serves files under `docs/`, so the published tool
-> cannot reach files outside that root. **If you edit the ESP3D-WEBUI source, re-copy it
-> here** to keep them in sync:
->
-> ```sh
-> cp ESP3D-WEBUI/www/js/calibration-computation.js docs/calibration-simulation/calibration-computation.js
-> ```
+> **Maintainer note:** `calibration-computation.js` in this folder is now the **only**
+> copy of this math in JavaScript, and it exists for development and simulation only.
+> It used to be mirrored at `ESP3D-WEBUI/www/js/calibration-computation.js` and shipped
+> inside `index.html.gz`, but the web UI stopped calling it once calibration moved into
+> the firmware, so that copy was deleted to shrink the bundle. The authority for how
+> calibration actually behaves is `Calibration::recomputeAnchorsWithLevenbergMarquardt()`
+> in `firmware/FluidNC/src/Maslow/Calibration.cpp` — **if you change the firmware routine,
+> update this file to match**, or the parser will quietly disagree with the machine.
 
 The port reproduces the firmware exactly, including:
 - **Sparse bundle adjustment**: anchor parameters `[tlX, tlY, trX, trY, brX]` and a sled

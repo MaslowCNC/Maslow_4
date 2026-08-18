@@ -1,5 +1,14 @@
 # Implementation Summary: Calibration Simulator
 
+> **Superseded (see [docs/calibration-simulation/README.md](docs/calibration-simulation/README.md)).** This document records a refactor that is no
+> longer the current arrangement. Calibration now runs in the firmware
+> (`Calibration::recomputeAnchorsWithLevenbergMarquardt()` in
+> `firmware/FluidNC/src/Maslow/Calibration.cpp`), the web UI no longer computes anchor
+> positions, and `ESP3D-WEBUI/www/js/calibration-computation.js` has been deleted to shrink
+> `index.html.gz`. The only remaining JavaScript copy is
+> `docs/calibration-simulation/calibration-computation.js`, kept for development and
+> simulation. Read the below as history.
+
 ## Issue Resolution
 
 **Original Issue**: "Implement calibration simulator"
