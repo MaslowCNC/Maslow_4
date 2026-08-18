@@ -20,7 +20,7 @@
 // the runtime encoder-read watchdog is suppressed (no spammy failure warnings and
 // no panic when encoders cannot be read). Set back to 0 for normal operation.
 #ifndef MASLOW_DISABLE_BOOT_SELFTEST
-#    define MASLOW_DISABLE_BOOT_SELFTEST 1
+#    define MASLOW_DISABLE_BOOT_SELFTEST 0
 #endif
 
 #define CALIBRATION_GRID_SIZE_MAX (10 * 10) + 2

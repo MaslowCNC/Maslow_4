@@ -16,7 +16,7 @@
 class MotorUnit {
 public:
     void     begin(int forwardPin, int backwardPin, int readbackPin, int encoderAddress, int channel1, int channel2);
-    void     zero();
+    bool     zero();
     void     setTarget(double newTarget);
     double   getTarget();
     double   getPosition();
@@ -35,6 +35,7 @@ public:
     void     driveOut(int speed);  // Drive motor outward at specified PWM speed (0-1023)
     bool     comply();
     bool     retract();
+    double   getLastRetractOffset() const;
     bool     extend(double targetLength);
     bool     pull_tight(int currentThreshold);
     bool     motor_test();
@@ -81,6 +82,8 @@ private:
     float    alpha                    = .2;
     uint16_t retract_speed            = 0;
     float    retract_baseline         = 700;
+    bool     retractPendingZero       = false;
+    double   lastRetractOffset        = 0.0;
 
     //comply variables
     unsigned long lastCallToComply  = millis();

@@ -358,6 +358,11 @@ bool Calibration::requestStateChange(int newState) {
         case RETRACTED:  //We can enter retracted from retracting only
             if (currentState == RETRACTING) {
                 currentState = RETRACTED;
+                for (int axis = 0; axis < ARM_COUNT; axis++) {
+                    set_motor_steps(axis, mpos_to_steps(0.0f, axis));
+                }
+                gc_sync_position();
+                plan_sync_position();
                 sys.set_state(State::Idle);
                 // Explicitly save belt positions now that belts are retracted and tight
                 Maslow.saveBeltPositions();
@@ -653,6 +658,10 @@ void Calibration::home() {
 
             //Once the limits are hit switch to the next state
             if (!retracting[_TL] && !retracting[_BL] && !retracting[_BR] && !retracting[_TR]) {
+                log_info("Belts pulled tight with offsets TL:" << Maslow.axis[_TL].getLastRetractOffset()
+                                                               << " TR:" << Maslow.axis[_TR].getLastRetractOffset()
+                                                               << " BL:" << Maslow.axis[_BL].getLastRetractOffset()
+                                                               << " BR:" << Maslow.axis[_BR].getLastRetractOffset());
                 requestStateChange(RETRACTED);
             }
 

@@ -223,14 +223,28 @@ bool MotorUnit::comply() {
 
 // Pulls_tight and zeros axis; returns true when done
 bool MotorUnit::retract() {
-    if (!pull_tight(Maslow.calibration.retractCurrentThreshold))
+    if (!retractPendingZero) {
+        if (!pull_tight(Maslow.calibration.retractCurrentThreshold))
+            return false;
+        retractPendingZero = true;
+    }
+
+    stop();
+    if (!updateEncoderPosition()) {
         return false;
+    }
 
-    String encAddrLabel = Maslow.axis_id_to_label(_encoderAddress);
-    log_info(encAddrLabel.c_str() << " pulled tight with offset " << getPosition());
-    zero();
+    lastRetractOffset = getPosition();
+    if (!zero()) {
+        return false;
+    }
 
+    retractPendingZero = false;
     return true;
+}
+
+double MotorUnit::getLastRetractOffset() const {
+    return lastRetractOffset;
 }
 
 // Pulls the belt until we hit a current treshold; returns true when done
@@ -379,6 +393,7 @@ void MotorUnit::reset() {
     retract_speed            = 0;
     retract_baseline         = 700;
     incrementalThresholdHits = 0;
+    retractPendingZero       = false;
     amtToMove                = 0;
     lastPosition             = getPosition();
     beltSpeedTimer           = millis();
@@ -391,11 +406,17 @@ void MotorUnit::resetPID() {
 }
 
 //sets the encoder position to 0
-void MotorUnit::zero() {
-    Maslow.I2CMux.setPort(_encoderAddress);
+bool MotorUnit::zero() {
+    if (!Maslow.I2CMux.setPort(_encoderAddress)) {
+        return false;
+    }
     encoder.resetCumulativePosition();
+    if (encoder.lastError() != 0) {
+        return false;
+    }
     // Update our cached value to match the reset position
     mostRecentCumulativeEncoderReading = 0;
+    return true;
 }
 
 //sets the encoder position to a specific value (for restoring from NVS)

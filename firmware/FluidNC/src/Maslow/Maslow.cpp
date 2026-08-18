@@ -59,8 +59,10 @@ extern const char* VERSION_NUMBER;
 #define WIFILED 35
 #define REDLED 14
 
-// Maximum allowed interval between Maslow.update() calls before triggering emergency stop
-#define UPDATE_WATCHDOG_MS 100
+// Maximum interval between Maslow.update() calls. Reporting and network startup can
+// briefly block the protocol task while belts are idle, but belt motion must remain strict.
+#define ACTIVE_UPDATE_WATCHDOG_MS 100
+#define IDLE_UPDATE_WATCHDOG_MS 500
 
 int ENCODER_READ_FREQUENCY_HZ = 1000;  //max frequency for polling the encoders
 
@@ -213,7 +215,7 @@ void Maslow_::update() {
         unsigned long now = millis();
         //if the update function is not being called enough, stop everything to prevent damage
         // Skip the watchdog check during file/firmware uploads: flash write operations stall
-        // both CPU cores, so update() may not run for > UPDATE_WATCHDOG_MS through no fault
+        // both CPU cores, so update() may not run for longer than the watchdog limit through no fault
         // of the motion system.  lastCallToUpdate is still refreshed so the watchdog does not
         // trigger immediately after the upload finishes.
         //
@@ -221,9 +223,17 @@ void Maslow_::update() {
         // there can be a long gap (WiFi connect, etc.) before the update loop starts running.
         // That startup gap must not be treated as a stalled motion loop.
         static bool firstUpdateCall = true;
+        bool        skipWatchdog    = firstUpdateCall;
         if (firstUpdateCall) {
             firstUpdateCall = false;
-        } else if (!uploadInProgress && now - lastCallToUpdate > UPDATE_WATCHDOG_MS) {
+        }
+        int  calibrationState = calibration.getCurrentState();
+        bool beltMotionActive = sys.state() == State::Cycle || sys.state() == State::Jog || sys.state() == State::Hold ||
+                                sys.state() == State::Homing || calibrationState == RETRACTING || calibrationState == EXTENDING ||
+                                calibrationState == TAKING_SLACK || calibrationState == CALIBRATION_IN_PROGRESS ||
+                                calibrationState == RELEASE_TENSION;
+        unsigned int watchdogLimit = beltMotionActive ? ACTIVE_UPDATE_WATCHDOG_MS : IDLE_UPDATE_WATCHDOG_MS;
+        if (!skipWatchdog && !uploadInProgress && now - lastCallToUpdate > watchdogLimit) {
             unsigned int elapsedTime = now - lastCallToUpdate;
 #if MASLOW_DISABLE_BOOT_SELFTEST
             // Bench-test mode: the update loop can legitimately stall longer than
@@ -232,7 +242,8 @@ void Maslow_::update() {
             // other update() work below this check still runs.
             log_warn("Update loop slow: " << elapsedTime << "ms since last call (watchdog panic suppressed in bench-test mode)");
 #else
-            log_error("Emergency stop. Update function not being called enough. " << elapsedTime << "ms since last call");
+            log_error("Emergency stop. Update loop stalled for " << elapsedTime << "ms (limit " << watchdogLimit
+                                                                  << "ms, belt motion " << (beltMotionActive ? "active" : "idle") << ")");
             watchdogFired = true;
             Maslow.panic();
 #endif
