@@ -363,6 +363,17 @@ let zLowLastAcknowledgedResultZ = null;
 // Reset on every WebSocket reconnect so the warning re-fires after a firmware restart.
 let startupZCheckDone = false;
 
+// fixedZ makes the reported Z position irrelevant to Maslow kinematics.  Keep safety checks
+// enabled until the firmware setting has been received on this connection.
+let fixedZSettingLoaded = false;
+let fixedZEnabled = false;
+
+const maslowFixedZEnabled = () => fixedZSettingLoaded && fixedZEnabled;
+
+const loadFixedZSetting = () => {
+  SendPrinterCommand("$/kinematics/MaslowKinematics/fixedZ");
+};
+
 /**
  * If a movement would cause the machine Z position to exceed Z_HOME_MAX_SAFE_MM,
  * go below Z_HOME_MIN_SAFE_MM, or exceed the defined Z home position (WCO[2]),
@@ -383,6 +394,11 @@ let startupZCheckDone = false;
  *                               For moves to a fixed target, pass targetMachineZ - MPOS[2].
  */
 const checkZHomeAndProceed = (callback, zDeltaMm = 0) => {
+  if (maslowFixedZEnabled()) {
+    callback();
+    return;
+  }
+
   const machineZMm = MPOS && MPOS.length >= 3 ? MPOS[2] : null;
   if (machineZMm === null) {
     // Position data unavailable - cannot evaluate safety; proceed without check
@@ -661,8 +677,18 @@ function tabletShowMessage(msg, collecting) {
 
   let errMsg = "";
 
-  //Hide kinematics commands from being displayed in the user log
+  // Hide kinematics commands from the user log.  Capture fixedZ first because it controls
+  // whether reported Z positions are meaningful enough to warrant safety warnings.
   if (valueStartsWith(msg, ["$/kinematics"])) {
+    const fixedZPrefix = "$/kinematics/MaslowKinematics/fixedZ=";
+    if (msg.startsWith(fixedZPrefix)) {
+      fixedZEnabled = ["true", "1"].includes(msg.substring(fixedZPrefix.length).trim().toLowerCase());
+      fixedZSettingLoaded = true;
+      if (!fixedZEnabled && !startupZCheckDone && WCO && MPOS && MPOS.length >= 3) {
+        startupZCheckDone = true;
+        checkZHomeAndProceed(() => {}, 0);
+      }
+    }
     return; //We don't want to display these messages
   }
 
@@ -1038,7 +1064,7 @@ function tabletGrblState(grbl, response) {
   // show the Z safety popup if machine Z is already above the safe threshold.
   // This catches a corrupted Z position before the user touches any button.
   // WCO availability is used as the signal that full position data has arrived.
-  if (!startupZCheckDone && WCO && MPOS && MPOS.length >= 3) {
+  if (!startupZCheckDone && fixedZSettingLoaded && WCO && MPOS && MPOS.length >= 3) {
     startupZCheckDone = true;
     checkZHomeAndProceed(() => {}, 0);
   }
@@ -1216,6 +1242,8 @@ const onWSOpenCallback = () => {
   // Reset startup Z check so the safety popup re-fires if machine Z is unsafe
   // after a reconnect or firmware restart.
   startupZCheckDone = false;
+  fixedZSettingLoaded = false;
+  fixedZEnabled = false;
   // Reset Z safety acknowledgment state so warnings re-fire after reconnect.
   zHomeWarningAcknowledged = false;
   zHomeLastAcknowledgedResultZ = null;
@@ -1231,6 +1259,7 @@ const onWSOpenCallback = () => {
   // Refresh park settings after reconnect (e.g. after firmware restart with new maslow.yaml).
   // A short delay lets the firmware send CURRENT_ID so PAGEID is established before querying.
   scheduleCallback(() => {
+    loadFixedZSetting();
     if (typeof loadParkSettings === 'function') {
       loadParkSettings();
     }
