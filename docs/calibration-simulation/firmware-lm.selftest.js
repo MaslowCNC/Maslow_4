@@ -9,9 +9,9 @@
  *  4. recomputeAnchorsLM is deterministic and self-consistent
  *     (reported rms == sqrt(SSR / (4N))).
  *
- * Run with: node ESP3D-WEBUI/www/js/tests/firmware-lm.selftest.js
+ * Run with: node docs/calibration-simulation/firmware-lm.selftest.js
  */
-const lib = require('../calibration-computation.js');
+const lib = require('./calibration-computation.js');
 const {
     recomputeAnchorsLM,
     fwMeasurementJacobiansAndResiduals,
