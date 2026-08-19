@@ -643,14 +643,16 @@ static void finishZMove() {
 // Begin the power-up / re-home decision.  Entered from the Booting state once OTA,
 // calibration and faults are all clear.
 static void beginHoming() {
-    // Already at the top of travel (beam interrupted): we are home and a tool is loaded, so
-    // complete without moving.
+    // If the beam starts interrupted, lower until it clears instead of driving farther up.
+    // Reuse the loading state's clearance-confirmation window so beam flicker cannot stop the
+    // move before the tool has moved fully below the detector.
     if (beamBlocked()) {
-        g_tool_loaded = true;
-        g_z_homed     = true;
-        g_tool_state  = MachineState::IdleToolLoaded;
-        reportEvent("MSG", "Z homed: top-of-travel beam already interrupted, tool loaded");
-        finishZMove();
+        g_z_load_start_phase   = phase_offset.current;
+        phase_offset.target    = phase_offset.current - Z_HOMING_PHASE_DIR * Z_TOOL_LOAD_MAX_RAD;
+        g_tool_load_confirming = false;
+        enableZMotors();
+        g_tool_state = MachineState::LoadingTool;
+        reportEvent("MSG", "Z homing: beam already interrupted, lowering Z until the beam clears");
         return;
     }
     // Begin raising: command the phase offset all the way to the travel limit.  The global

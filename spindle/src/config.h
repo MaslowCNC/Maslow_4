@@ -97,12 +97,12 @@ const float PHASE_MOVE_COMPLETE_EPS_RAD = 0.001f;   // within ~0.06 deg of targe
 const float Z_MOVE_VOLTAGE_BOOST = 1.0f;            // volts added during phase (Z) moves
 
 // --- Z-axis power-up homing (top-of-travel beam break) ---
-// On power-up the Z axis raises until the top-of-travel beam is interrupted, which
-// establishes the home position and confirms a tool is loaded.  The Z is driven by the
-// relative phase between the two BLDC motors; the XY board uses 45 deg of phase per mm
-// of Z travel (its phase_deg_per_mm), so the mm limit below is converted with the same
-// constant.  If the Z raises further than Z_HOMING_MAX_MM without the beam breaking,
-// no tool is loaded.
+// On power-up, an already-blocked beam makes the Z lower until the beam clears.  Otherwise,
+// the Z raises until the top-of-travel beam is interrupted, which establishes the home
+// position and confirms a tool is loaded.  The Z is driven by the relative phase between
+// the two BLDC motors; the XY board uses 45 deg of phase per mm of Z travel (its
+// phase_deg_per_mm), so the mm limit below is converted with the same constant.  If the Z
+// raises further than Z_HOMING_MAX_MM without the beam breaking, no tool is loaded.
 const float PHASE_DEG_PER_MM   = 45.0f;   // must match the XY board's phase_deg_per_mm
 const float Z_HOMING_MAX_MM    = 70.0f;   // give up (no tool loaded) past this much travel
 const float Z_HOMING_PHASE_DIR = +1.0f;   // +1 raises the Z; flip to -1 if homing drives it down
