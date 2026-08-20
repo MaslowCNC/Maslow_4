@@ -48,22 +48,23 @@ npm run start               # Build English + start test server
 ## Split Build (Reduced index.html.gz Size)
 
 When `index.html.gz` grows too large for the ESP32 flash, use the split build to
-produce a smaller HTML file alongside a separately-uploadable JavaScript bundle:
+produce a smaller HTML file alongside separately-uploadable CSS and JavaScript bundles:
 
 ```bash
 gulp package:split --lang en   # Recommended
 npm run build:split:en         # Same via npm
 ```
 
-**Output files** (both must be uploaded to the ESP32 filesystem):
+**Output files** (all three must be uploaded to the ESP32 filesystem):
 
 | File | Contents | ~Size |
 |------|----------|-------|
-| `dist/index.html.gz` | HTML + CSS inlined (no JS) | ~44 KB |
-| `dist/app.js.gz`     | All JavaScript             | ~110 KB |
+| `dist/index.html.gz` | HTML only (no inlined CSS or JS) | ~25 KB |
+| `dist/style.css.gz`  | All CSS                          | ~19 KB |
+| `dist/app.js.gz`     | All JavaScript                   | ~98 KB |
 
-The firmware automatically serves `app.js.gz` when the browser requests `app.js`,
-so no firmware changes are required.
+The firmware automatically serves `style.css.gz` when the browser requests `style.css`,
+and `app.js.gz` when the browser requests `app.js`, so no firmware changes are required.
 
 ## Testing Your Build
 
@@ -119,13 +120,13 @@ JSHint ES6/ES8 warnings are **normal** and don't break the build.
 Use single language: `gulp package --lang en`
 
 If it is still too large, use the split build which keeps `index.html.gz` small
-and moves all JavaScript to a separate `app.js.gz`:
+and moves CSS to a separate `style.css.gz` and JavaScript to a separate `app.js.gz`:
 
 ```bash
 gulp package:split --lang en
 ```
 
-Both `dist/index.html.gz` and `dist/app.js.gz` must be uploaded to the ESP32.
+`dist/index.html.gz`, `dist/style.css.gz`, and `dist/app.js.gz` must all be uploaded to the ESP32.
 
 ## Language Availability
 
