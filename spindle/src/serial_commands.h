@@ -20,6 +20,9 @@ extern volatile uint8_t g_fault_code;
 // Suction/cooling fan power (0-100), set by the XY board over the link ('C' command).
 extern volatile uint8_t g_suction_level;
 
+// Set by the XY board's B<0|1> command while its belt motors need vacuum cooling.
+extern volatile bool g_belt_cooling_requested;
+
 // Set true by the XY board's 'D' (machine idle) command so the Z-axis BLDC drivers can
 // be powered down once their phase move has settled.  Cleared by any new motion command.
 extern volatile bool g_hold_release_requested;
@@ -41,14 +44,14 @@ extern volatile bool g_remove_tool_requested;
 void initFanControl();
 void updateFanControl(float dt);
 
-// Drive the cooling fan from the motor-enable state: runs at g_suction_level whenever
-// either motor is enabled (spindle running or Z moving), off otherwise.
-void applyFanForMotorState(bool motorsEnabled);
+// Run cooling at g_suction_level while either local motors or XY belt motors are active.
+void applyFanForMotorState(bool localMotorsEnabled);
 
 // Line-based command protocol (shared by USB Serial and the inter-board link).
 // Supported commands (newline terminated):
 //   S<rpm>  set spindle speed (0 = stop)
 //   Z<deg>  set absolute target phase offset in degrees (Z-axis position)
+//   B<0|1>  XY belt motors idle/active (vacuum cooling request)
 //   E       emergency stop (disable both motors)
 //   D       machine idle: power down the Z-axis drivers once the move has settled
 //   ?       request a status report immediately

@@ -184,6 +184,15 @@ namespace Spindles {
         }
     }
 
+    void SpindleBoard::sendBeltCooling(bool active) {
+        if (!_uart || (int)active == _last_sent_belt) {
+            return;
+        }
+        _last_sent_belt = (int)active;
+        const char* command = active ? "B1\n" : "B0\n";
+        _uart->write((const uint8_t*)command, 3);
+    }
+
     void SpindleBoard::sendHoldRelease() {
         if (!_uart) {
             return;
@@ -255,7 +264,7 @@ namespace Spindles {
         _hold_released = idle;
     }
 
-    void SpindleBoard::update(float zPositionMM) {
+    void SpindleBoard::update(float zPositionMM, bool beltMotionActive) {
         if (!_uart) {
             return;
         }
@@ -264,6 +273,7 @@ namespace Spindles {
             sendSpeed(_pending_rpm);
         }
         sendPhase(zPositionMM * _phase_deg_per_mm);
+        sendBeltCooling(beltMotionActive);
         updateHoldState();
         serviceStatus();
     }
@@ -285,8 +295,9 @@ namespace Spindles {
                     _link_confirmed = true;
                     log_info(name() << ": link to spindle board confirmed -> " << _rx_buf);
                     // The board may have just (re)booted, so re-push the configured
-                    // suction power in case it came up with a different default.
+                    // suction power and belt-cooling state.
                     _last_sent_fan = -1;
+                    _last_sent_belt = -1;
                     sendFan(_suction_power);
                 }
                 // OTA lifecycle messages from the spindle board (in response to

@@ -100,11 +100,10 @@ void updateFanControl(float dt) {
     writeFanOutput(fan_current_pwm);
 }
 
-// Drive the fan automatically from the motor-enable state: full configured suction
-// power whenever either motor is enabled (spindle running or Z moving), off otherwise.
-// Called every control-loop iteration; updateFanControl() ramps toward the target.
-void applyFanForMotorState(bool motorsEnabled) {
-    if (motorsEnabled && g_suction_level > 0) {
+// Drive the fan automatically whenever local spindle/Z motors or the XY belt motors need
+// cooling.  Called every control-loop iteration; updateFanControl() ramps toward the target.
+void applyFanForMotorState(bool localMotorsEnabled) {
+    if ((localMotorsEnabled || g_belt_cooling_requested) && g_suction_level > 0) {
         // Map the 0-100 suction percentage onto the fan's level index (0..FAN_LEVEL_COUNT-1).
         fan_speed_index = (uint8_t)((uint32_t)g_suction_level * (FAN_LEVEL_COUNT - 1) / 100u);
         fan_enabled     = true;
@@ -119,9 +118,10 @@ PhaseOffset phase_offset;
 volatile uint8_t g_fault_code = 0;  // 0 = OK, 1 = DRV8316 fault, 2 = overcurrent
 
 // Suction/cooling fan power (0-100), configured by the XY board over the link via
-// the 'C' command.  The fan runs at this level automatically whenever either motor
-// is enabled (spindle running or Z moving) and is off otherwise.
+// the 'C' command.  The fan runs at this level whenever local motors are enabled or
+// the XY board reports active belt motors.
 volatile uint8_t g_suction_level = 100;
+volatile bool    g_belt_cooling_requested = false;
 
 // Set true when the XY board reports the machine is idle (the 'D' command) so the
 // Z-axis BLDC drivers may be powered down once their phase move has settled.  Cleared
@@ -475,6 +475,9 @@ static void processCommandLine(const char* line, size_t len,
             g_suction_level = (uint8_t)lvl;
             break;
         }
+        case 'B':  // XY belt motors active: request vacuum cooling
+            g_belt_cooling_requested = line[1] == '1';
+            break;
         case 'D':  // machine idle: power the Z-axis drivers down once the move has settled
             g_hold_release_requested = true;
             break;

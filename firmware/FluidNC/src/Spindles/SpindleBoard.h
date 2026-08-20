@@ -11,6 +11,7 @@
     Protocol (newline terminated ASCII):
       XY  -> board:  "S<rpm>"  set spindle speed (0 = stop)
                      "Z<deg>"  set absolute target phase offset (Z position)
+                     "B<0|1>"  XY belt motors idle/active (vacuum cooling request)
                      "E"       emergency stop
                      "?"       request status
       board -> XY:   "T:<state>,P:<phase_deg>,R:<rpm>,F:<fault>"
@@ -38,9 +39,9 @@ namespace Spindles {
         void config_message() override;
 
         // Called periodically by the Maslow update loop with the latest planned
-        // Z position (mm).  Streams Z (as a phase offset) to the spindle board,
-        // flushes any pending speed change, and services the status return link.
-        void update(float zPositionMM);
+        // Z position (mm) and whether the XY belt motors need vacuum cooling.  Streams Z
+        // (as a phase offset), flushes pending state changes, and services the return link.
+        void update(float zPositionMM, bool beltMotionActive);
 
         // Push the XY board's own WiFi station credentials to the spindle board over the
         // link so it can join WiFi and start its ArduinoOTA server.  Triggered by the
@@ -103,6 +104,7 @@ namespace Spindles {
         bool     _deg_sent       = false;
         uint32_t _last_sent_rpm  = 0xFFFFFFFF;  // sentinel forces the first send
         int      _last_sent_fan  = -1;          // sentinel forces the first send
+        int      _last_sent_belt = -1;          // sentinel forces the first send
 
         // Speed update requested from the ISR, flushed in update()
         volatile uint32_t _pending_rpm = 0;
@@ -124,6 +126,7 @@ namespace Spindles {
 
         void sendSpeed(uint32_t rpm);
         void sendPhase(float deg);
+        void sendBeltCooling(bool active);
         void serviceStatus();
 
         // Tell the spindle board it may power down its Z-axis (phase-offset) drivers

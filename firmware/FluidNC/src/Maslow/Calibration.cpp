@@ -1228,7 +1228,6 @@ bool Calibration::takeSlackFunc() {
             float x = 0;
             float y = 0;
             if (!computeXYfromLengths(calibration_data[0][0], calibration_data[0][1], x, y)) {
-                log_error("Failed to compute XY from lengths");
                 return true;
             }
 
@@ -1351,7 +1350,6 @@ bool Calibration::computeXYfromLengths(double TL, double TR, float& x, float& y)
 
     double d = sqrt((tlX - trX) * (tlX - trX) + (tlY - trY) * (tlY - trY));
     if (d > tlLength + trLength || d < abs(tlLength - trLength)) {
-        log_info("Unable to determine machine position");
         return false;
     }
 

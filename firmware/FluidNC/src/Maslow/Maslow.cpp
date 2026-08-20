@@ -256,7 +256,7 @@ void Maslow_::update() {
         // The spindle board converts this into BLDC phase offset to move the Z axis.
         if (Spindles::SpindleBoard::instance) {
             float zPositionMM = steps_to_mpos(get_axis_motor_steps(4), 4);  // Z from Z axis (axis 4)
-            Spindles::SpindleBoard::instance->update(zPositionMM);
+            Spindles::SpindleBoard::instance->update(zPositionMM, beltMotionActive);
         }
 
         for (int arm = _TL; arm < ARM_COUNT; arm++) {
