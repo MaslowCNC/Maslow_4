@@ -192,6 +192,10 @@ void Maslow_::update() {
         if (currentMaslowState == READY_TO_CUT || currentMaslowState == RETRACTED || currentMaslowState == EXTENDEDOUT) {
             saveBeltPositions();
         }
+        // Both saves commit to NVS, and the flash write stalls both cores.  That time is
+        // spent inside this call to update(), so it would otherwise be charged against the
+        // watchdog budget checked below and trip the emergency stop.
+        resetUpdateWatchdog();
     }
 
     // Track state changes and mark belt positions as stale when leaving valid states
@@ -219,10 +223,15 @@ void Maslow_::update() {
         if (!uploadInProgress && now - lastCallToUpdate > UPDATE_WATCHDOG_MS) {
             unsigned int elapsedTime = now - lastCallToUpdate;
             log_error("Emergency stop. Update function not being called enough. " << elapsedTime << "ms since last call");
+            log_error("  longest phase: " << worstActivity << " (" << (uint32_t)worstActivityMs << "ms), now in: "
+                                          << (const char*)lastActivity << " (" << (uint32_t)(now - lastActivityStart)
+                                          << "ms), sys.state=" << state_name()
+                                          << ", maslowState=" << calibration.getCurrentState());
             watchdogFired = true;
             Maslow.panic();
         }
         lastCallToUpdate = now;
+        clearWorstActivity();
 
         Maslow.updateEncoderPositions();  //We always update encoder positions in any state,
 

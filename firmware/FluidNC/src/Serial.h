@@ -85,7 +85,9 @@ public:
 
     void registration(Channel* channel);
     void registrationFront(Channel* channel);
-    void deregistration(Channel* channel);
+    // Returns true if the channel was registered and has now been removed.
+    // Callers that own the channel use this to decide whether to delete it.
+    bool deregistration(Channel* channel);
     void init();
 
     size_t write(uint8_t data) override;

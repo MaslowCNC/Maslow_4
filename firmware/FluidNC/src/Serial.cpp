@@ -210,13 +210,16 @@ void AllChannels::registrationFront(Channel* channel) {
     _channelq.insert(_channelq.begin(), channel);
     _mutex.unlock();
 }
-void AllChannels::deregistration(Channel* channel) {
+bool AllChannels::deregistration(Channel* channel) {
     _mutex.lock();
     if (channel == _lastChannel) {
         _lastChannel = nullptr;
     }
-    _channelq.erase(std::remove(_channelq.begin(), _channelq.end(), channel), _channelq.end());
+    auto it      = std::remove(_channelq.begin(), _channelq.end(), channel);
+    bool removed = it != _channelq.end();
+    _channelq.erase(it, _channelq.end());
     _mutex.unlock();
+    return removed;
 }
 
 void AllChannels::listChannels(Channel& out) {
@@ -296,10 +299,24 @@ size_t AllChannels::write(const uint8_t* buffer, size_t length) {
     return length;
 }
 Channel* AllChannels::pollLine(char* line) {
-    Channel* deadChannel;
+    // A channel can legitimately be killed more than once before the queue is
+    // drained.  A file job stopped by an alarm kills itself from stopJob(), and
+    // then the line that was already in flight acks with an error and kills it
+    // again from ack().  Deleting the same channel twice corrupts the heap; the
+    // fault surfaces later as a call through a clobbered vtable in a surviving
+    // channel.  Dedup the batch, and delete only what deregistration actually
+    // removed, so a stale pointer from an earlier drain is ignored.
+    Channel*              deadChannel;
+    std::vector<Channel*> deadChannels;
     while (xQueueReceive(_killQueue, &deadChannel, 0)) {
-        deregistration(deadChannel);
-        delete deadChannel;
+        if (std::find(deadChannels.begin(), deadChannels.end(), deadChannel) == deadChannels.end()) {
+            deadChannels.push_back(deadChannel);
+        }
+    }
+    for (auto channel : deadChannels) {
+        if (deregistration(channel)) {
+            delete channel;
+        }
     }
 
     // To avoid starving other channels when one has a lot

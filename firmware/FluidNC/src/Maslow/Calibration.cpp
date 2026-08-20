@@ -603,6 +603,10 @@ bool Calibration::requestStateChange(int newState) {
                 sys.set_state(State::Idle);
                 // Explicitly save belt positions now that calibration/take-slack is complete and belts are tight
                 Maslow.saveBeltPositions();
+                // saveBeltPositions() commits to NVS.  A flash erase/write stalls both cores with
+                // the cache disabled, which can hold off Maslow.update() for longer than
+                // UPDATE_WATCHDOG_MS and trip the emergency stop right as a job is starting.
+                serviceCalibrationWatchdogs();
                 success = true;
                 break;
             } else {

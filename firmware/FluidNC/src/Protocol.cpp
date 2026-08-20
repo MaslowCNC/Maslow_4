@@ -369,10 +369,13 @@ void     protocol_main_loop() {
             report_echo_line_received(activeLine, allChannels);
 #endif
 
+            Maslow.markActivity(activeLine);
             Error status_code = execute_line(activeLine, *activeChannel, WebUI::AuthenticationLevel::LEVEL_GUEST);
 
             // Tell the channel that the line has been processed.
+            Maslow.markActivity("ack");
             activeChannel->ack(status_code);
+            Maslow.markActivity("main loop");
 
             // Tell the input polling task that the line has been processed,
             // so it can give us another one when available
@@ -382,7 +385,9 @@ void     protocol_main_loop() {
         protocol_execute_realtime();  // Runtime command check point.
         // Auto-cycle start any queued moves.
         protocol_auto_cycle_start();
+        Maslow.markActivity("sys.process_changes");
         sys.process_changes();
+        Maslow.markActivity("stepper disable check");
 
         if (sys.abort()) {
             stop_polling();
