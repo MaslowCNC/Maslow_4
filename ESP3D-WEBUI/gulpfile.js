@@ -389,29 +389,24 @@ function updateAppScriptRef() {
     .pipe(gulp.dest('dist'))
 }
 
-// Split build: rewrite the CSS smoosh block to reference style.css at the
-// filesystem root, matching the location of the separately gzipped style.css.gz.
-// The firmware serves style.css.gz transparently when the browser requests style.css
-// via the existing .gz content-encoding fallback.
-function externalCss() {
+// Split build: inline the CSS from the smoosh block so that index.html.gz is
+// self-contained for styling without needing a separate css/style.css file on
+// the ESP32 filesystem.
+// Note: the <!-- smoosh -->...<!-- endsmoosh --> markers survive minifyApp because
+// htmlmin only collapses whitespace and does not process those comment markers.
+function inlineCss() {
   return gulp
     .src('dist/index.html')
     .pipe(
       replace(
-        /<!-- smoosh -->\s*<link[^>]+href="css\/[^"]+"[^>]*\/?>\s*<!-- endsmoosh -->/g,
-        '<link href="style.css" rel="stylesheet" />'
+        /<!-- smoosh -->\s*<link[^>]+href="(css\/[^"]+)"[^>]*\/?>\s*<!-- endsmoosh -->/g,
+        function (match, cssPath) {
+          var cssContent = fs.readFileSync('dist/' + cssPath, 'utf8')
+          return '<style>' + cssContent + '</style>'
+        }
       )
     )
     .pipe(gulp.dest('dist'))
-}
-
-// Gzip the minified style.css as a separately-deployable file.
-function compressCss() {
-  return gulp
-    .src('dist/css/style.css')
-    .pipe(gzip({ gzipOptions: { level: 9 } }))
-    .pipe(gulp.dest('dist'))
-    .pipe(size())
 }
 
 // Gzip the HTML for the split build (no smoosh step, so JS stays external).
@@ -475,11 +470,9 @@ var package2Series = gulp.series(
 )
 var package2testSeries = gulp.series(clean, lint, Copytest, concatApptest, includehtml, includehtml, replaceSVG, smoosh)
 
-// Split build: produces index.html.gz (HTML only, no inlined CSS or JS),
-// style.css.gz (all CSS), and app.js.gz (all JavaScript).
-// Upload all three files to the ESP32 filesystem root.  The HTML references
-// style.css and app.js at the root level so the firmware serves them
-// transparently from style.css.gz and app.js.gz.
+// Split build: produces index.html.gz (HTML + CSS inlined, no JS) and app.js.gz (all JavaScript).
+// Upload both files to the ESP32 filesystem.  The HTML references app.js at the
+// root level so the firmware serves it transparently from app.js.gz.
 var packageSplitSeries = gulp.series(
   clean,
   lint,
@@ -491,11 +484,10 @@ var packageSplitSeries = gulp.series(
   replaceSVG,
   clearlang,
   minifyApp,
-  externalCss,
+  inlineCss,
   updateAppScriptRef,
   compressHtml,
   compressApp,
-  compressCss,
   clean2
 )
 
