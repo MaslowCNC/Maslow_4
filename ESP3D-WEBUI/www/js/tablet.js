@@ -1292,10 +1292,10 @@ const moveToZHome = () => {
 
 const moveToZStop = () => {
   const machineZ = getMachineZPosition();
-  const targetMachineZ = Z_HOME_MIN_SAFE_MM;
-  const zDelta = machineZ !== null ? targetMachineZ - machineZ : 0;
+  const zStopMachineZ = Z_HOME_MIN_SAFE_MM;
+  const zDelta = machineZ !== null ? zStopMachineZ - machineZ : 0;
   checkZHomeAndProceed(() => {
-    sendCommand(`G21 G53 G0 Z${targetMachineZ}`);
+    sendCommand(`G21 G53 G0 Z${zStopMachineZ}`);
     addMessage("Moving to Z-Stop position");
   }, zDelta);
 }
