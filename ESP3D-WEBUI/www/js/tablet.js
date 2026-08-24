@@ -1290,6 +1290,16 @@ const moveToZHome = () => {
   }, zDelta);
 }
 
+const moveToZStop = () => {
+  const machineZ = getMachineZPosition();
+  const targetMachineZ = Z_HOME_MIN_SAFE_MM;
+  const zDelta = machineZ !== null ? targetMachineZ - machineZ : 0;
+  checkZHomeAndProceed(() => {
+    sendCommand(`G21 G53 G0 Z${targetMachineZ}`);
+    addMessage("Moving to Z-Stop position");
+  }, zDelta);
+}
+
 const confirmSetZHome = () => {
   const zInput = id("setHomeZ");
   const rawZ = zInput ? parseFloat(zInput.value) : NaN;
@@ -1867,6 +1877,8 @@ function tabletInit() {
     id("tablettab_set_z_home_down").addEventListener("click", () => moveSetZHomePopupZ(Z_JOG_DOWN));
     id("tablettab_set_z_home_cancel").addEventListener("click", () => closeSetZHomePopup());
     id("tablettab_move_to_z_home").addEventListener("click", moveToZHome);
+    id("tablettab_define_z_stop").addEventListener("click", tabletCalSetZStop);
+    id("tablettab_move_to_z_stop").addEventListener("click", moveToZStop);
     id("tablettab_set_z_home_confirm").addEventListener("click", confirmSetZHome);
 
     // Controls - Fifth Row

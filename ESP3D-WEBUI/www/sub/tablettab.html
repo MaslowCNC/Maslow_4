@@ -260,7 +260,7 @@
       <div class="calibration-modal-button-container">
         <div class="input-row">
           <div style="display: flex; justify-content: center;">
-            <label style="text-align: center;">Set Z Home Position</label>
+            <label style="text-align: center;">Set Z values</label>
           </div>
           <div style="display: flex; justify-content: center;">
             <label id="currentZHomeLabel" style="text-align: center; font-size: 0.85em; color: #888;"></label>
@@ -314,6 +314,11 @@
           <button id="tablettab_set_z_home_cancel" class="calibration-modal-button stop-button">Cancel</button>
           <button id="tablettab_set_z_home_confirm" class="calibration-modal-button">Define Z Home</button>
           <button id="tablettab_move_to_z_home" class="calibration-modal-button green-button">Go to Z Home</button>
+        </div>
+        <div class="buttons-row">
+          <button id="tablettab_define_z_stop" class="calibration-modal-button"
+            title="Should be Zero when Maslow is lowered right down (negative value not supported)">Define Z-Stop</button>
+          <button id="tablettab_move_to_z_stop" class="calibration-modal-button green-button">Go To Z-Stop</button>
         </div>
       </div>
     </div>
