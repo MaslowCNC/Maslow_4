@@ -105,6 +105,9 @@ namespace Machine {
         handler.item(M + "_Apply_Tension_Belt_Retraction_Limit", Maslow.calibration.applyTensionBeltRetractionLimitMm, 0.0, 4250.0);
         handler.item(M + "_Apply_Tension_Allow_Limiting", Maslow.calibration.applyTensionAllowLimiting);
         handler.item(M + "_Extend_Dist", Maslow.calibration.extendDist, 0, 4250);
+        handler.item((M + "_Measurement_Pair").c_str(), Maslow.measurementPair);
+        handler.item(M + "_Measurement_Extend_Dist", Maslow.measurementExtendDistanceMm, 0.0, 4250.0);
+        handler.item(M + "_Measurement_Retraction_Force", Maslow.measurementRetractionForceMa, 0, 3500);
 
         handler.item(M + "_Scale_X", Maslow.scaleX, .8, 1.2);
         handler.item(M + "_Scale_Y", Maslow.scaleY, .8, 1.2);
@@ -228,6 +231,8 @@ namespace Machine {
     const std::string dcM4CurrentThreshold = M + "_Retract_Current_Threshold: 1300\n" + M + "_Acceptable_Calibration_Threshold: 0.5\n";
     const std::string dcM4ApplyTensionLimit =
         M + "_Apply_Tension_Belt_Retraction_Limit: 300.0\n" + M + "_Apply_Tension_Allow_Limiting: true\n";
+    const std::string dcM4Measurement =
+        M + "_Measurement_Pair: BL_TR\n" + M + "_Measurement_Extend_Dist: 2000\n" + M + "_Measurement_Retraction_Force: 1300\n";
 
     const std::string dcM4Thickness = M + "_spoilboardThickness: 0.0\n" + M + "_workThickness: 0.0\n";
 
@@ -268,7 +273,7 @@ namespace Machine {
     const std::string defaultConfig =
         dcBoard +
         // Maslow M4 default items
-        dcM4Vert + dcM4CalibrationGrid + dcM4CurrentThreshold + dcM4ApplyTensionLimit + dcM4Thickness + dcM4Park +
+        dcM4Vert + dcM4CalibrationGrid + dcM4CurrentThreshold + dcM4ApplyTensionLimit + dcM4Measurement + dcM4Thickness + dcM4Park +
         // Default sections
         dcSpi + dcSDCard + dcStepping + dcUart1 + dcKinematics +
         "axes:\n"

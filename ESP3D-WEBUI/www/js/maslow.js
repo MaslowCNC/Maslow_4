@@ -381,6 +381,13 @@ const maslowInfoMsgHandling = (msg) => {
 		}
 	}
 
+	if (msg.startsWith("[MSG:INFO: BeltDistance:")) {
+		if (typeof globalThis.handleBeltDistanceMessage === "function") {
+			globalThis.handleBeltDistanceMessage(msg);
+		}
+		return true;
+	}
+
 	//Catch the calibration complete message and alert the user...this locks up the UI which is bad...should be handled better
 	if (msg.startsWith("[MSG:INFO: Calibration complete")) {
 		showCalibrationCompleteMessage();
@@ -624,6 +631,9 @@ const cfgDef = {
 	Apply_Tension_Belt_Retraction_Limit: { name: "applyTensionBeltRetractionLimit", type: "A", cmd: "Maslow_Apply_Tension_Belt_Retraction_Limit" },
 	Apply_Tension_Allow_Limiting: { name: "applyTensionAllowLimiting", type: "A", cmd: "Maslow_Apply_Tension_Allow_Limiting" },
 	Extend_Dist: { name: "extendDist", type: "A", cmd: "Maslow_Extend_Dist" },
+	Measurement_Pair: { name: "measurementPair", type: "A", cmd: "Maslow_Measurement_Pair" },
+	Measurement_Extend_Dist: { name: "measurementExtendDist", type: "A", cmd: "Maslow_Measurement_Extend_Dist" },
+	Measurement_Retraction_Force: { name: "measurementRetractionForce", type: "A", cmd: "Maslow_Measurement_Retraction_Force" },
 	Scale_X: { name: "scaleX", type: "A", cmd: "Maslow_Scale_X" },
 	Scale_Y: { name: "scaleY", type: "A", cmd: "Maslow_Scale_Y" },
 	beltEndExtension: { name: "beltEndExtension", type: "A", cmd: "kinematics/MaslowKinematics/beltEndExtension" },

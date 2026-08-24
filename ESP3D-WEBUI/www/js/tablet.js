@@ -1772,6 +1772,166 @@ const tabletSaveApplyTensionLimit = () => {
   }, 1000);
 };
 
+const distanceMeasurementDefaults = { pair: "BL_TR", extendDist: 2000, retractionForce: 1300 };
+let distanceMeasurementLogEntries = [];
+
+const tabletDistanceMeasurementPopupHide = () => hideModal("distance-measurement-popup");
+
+const getDistanceMeasurementValues = () => {
+  const lv = globalThis.loadedValues || {};
+  return {
+    pair: (lv.measurementPair === "BR_TL") ? "BR_TL" : distanceMeasurementDefaults.pair,
+    extendDist: isNaN(parseFloat(lv.measurementExtendDist))
+      ? distanceMeasurementDefaults.extendDist
+      : parseFloat(lv.measurementExtendDist),
+    retractionForce: isNaN(parseFloat(lv.measurementRetractionForce))
+      ? distanceMeasurementDefaults.retractionForce
+      : parseFloat(lv.measurementRetractionForce),
+  };
+};
+
+const setDistanceMeasurementResults = (measurement) => {
+  const results = id("distance-measurement-results");
+  if (!results || !measurement) {
+    return;
+  }
+  const fmt = (v) => (Number.isFinite(v) ? Number(v).toFixed(3) : "n/a");
+  results.innerHTML =
+    `<div><b>Pair:</b> ${measurement.pair} | <b>Timestamp:</b> ${measurement.timestamp}</div>` +
+    `<div><b>${measurement.beltA}</b> Spool=${fmt(measurement.spoolA)}mm, Z=${fmt(measurement.zA)}mm, XY=${fmt(measurement.xyA)}mm, Belt End=${fmt(measurement.beltEndA)}mm, Arm=${fmt(measurement.armA)}mm, <b>Total=${fmt(measurement.totalA)}mm</b>, Tension=${fmt(measurement.tensionA)}mA</div>` +
+    `<div><b>${measurement.beltB}</b> Spool=${fmt(measurement.spoolB)}mm, Z=${fmt(measurement.zB)}mm, XY=${fmt(measurement.xyB)}mm, Belt End=${fmt(measurement.beltEndB)}mm, Arm=${fmt(measurement.armB)}mm, <b>Total=${fmt(measurement.totalB)}mm</b>, Tension=${fmt(measurement.tensionB)}mA</div>` +
+    `<div><b>Applied Tension:</b> ${fmt(measurement.appliedTensionMa)}mA</div>`;
+};
+
+const renderDistanceMeasurementLog = () => {
+  const logEl = id("distance-measurement-log");
+  if (!logEl) {
+    return;
+  }
+  logEl.innerHTML = distanceMeasurementLogEntries
+    .map((entry) => `<div>${entry.timestamp} | ${entry.pair} | ${entry.beltA}:${entry.totalA.toFixed(3)}mm | ${entry.beltB}:${entry.totalB.toFixed(3)}mm</div>`)
+    .join("");
+};
+
+const parseBeltDistanceMessage = (msg) => {
+  const payload = msg.replace(/^\[MSG:INFO:\s*BeltDistance:/, "").replace(/\]$/, "");
+  const result = {};
+  payload.split(",").forEach((part) => {
+    const idx = part.indexOf("=");
+    if (idx > 0) {
+      const key = part.substring(0, idx).trim();
+      const value = part.substring(idx + 1).trim();
+      result[key] = value;
+    }
+  });
+  return {
+    pair: result.pair || "BL_TR",
+    timestamp: result.timestamp || "",
+    beltA: result.beltA || "A",
+    spoolA: parseFloat(result.spoolA),
+    zA: parseFloat(result.zA),
+    xyA: parseFloat(result.xyA),
+    beltEndA: parseFloat(result.beltEndA),
+    armA: parseFloat(result.armA),
+    totalA: parseFloat(result.totalA),
+    tensionA: parseFloat(result.tensionA),
+    beltB: result.beltB || "B",
+    spoolB: parseFloat(result.spoolB),
+    zB: parseFloat(result.zB),
+    xyB: parseFloat(result.xyB),
+    beltEndB: parseFloat(result.beltEndB),
+    armB: parseFloat(result.armB),
+    totalB: parseFloat(result.totalB),
+    tensionB: parseFloat(result.tensionB),
+    appliedTensionMa: parseFloat(result.appliedTensionMa),
+  };
+};
+
+const getDistanceMeasurementInputState = () => {
+  const pair = id("measurementPairBRTL")?.checked ? "BR_TL" : "BL_TR";
+  const extendDist = parseFloat(id("measurementExtendDist")?.value || "");
+  const retractionForce = parseInt(id("measurementRetractionForce")?.value || "", 10);
+  return {
+    pair,
+    pairIndex: pair === "BR_TL" ? 1 : 0,
+    extendDist: Number.isFinite(extendDist) ? Math.max(0, Math.min(4250, extendDist)) : distanceMeasurementDefaults.extendDist,
+    retractionForce: Number.isFinite(retractionForce) ? Math.max(0, Math.min(3500, retractionForce)) : distanceMeasurementDefaults.retractionForce,
+  };
+};
+
+const persistDistanceMeasurementSettings = (state) => {
+  SendPrinterCommand(`$/Maslow_Measurement_Pair=${state.pair}`);
+  SendPrinterCommand(`$/Maslow_Measurement_Extend_Dist=${state.extendDist}`);
+  SendPrinterCommand(`$/Maslow_Measurement_Retraction_Force=${state.retractionForce}`);
+  if (!globalThis.loadedValues) globalThis.loadedValues = {};
+  globalThis.loadedValues.measurementPair = state.pair;
+  globalThis.loadedValues.measurementExtendDist = String(state.extendDist);
+  globalThis.loadedValues.measurementRetractionForce = String(state.retractionForce);
+};
+
+const tabletOpenDistanceMeasurementPopup = () => {
+  const { pair, extendDist, retractionForce } = getDistanceMeasurementValues();
+  const pairBLTR = id("measurementPairBLTR");
+  const pairBRTL = id("measurementPairBRTL");
+  if (pairBLTR && pairBRTL) {
+    pairBLTR.checked = pair !== "BR_TL";
+    pairBRTL.checked = pair === "BR_TL";
+  }
+  if (id("measurementExtendDist")) id("measurementExtendDist").value = extendDist;
+  if (id("measurementRetractionForce")) id("measurementRetractionForce").value = retractionForce;
+  openModal("distance-measurement-popup");
+};
+
+const tabletDistanceMeasurementRetract = () => onCalibrationButtonsClick("$ALL", "Distance Measurement Retract");
+const tabletDistanceMeasurementExtend = () => {
+  const state = getDistanceMeasurementInputState();
+  SendPrinterCommand(`$/Maslow_Extend_Dist=${state.extendDist}`);
+  onCalibrationButtonsClick("$EXT", "Distance Measurement Extend");
+};
+const tabletDistanceMeasurementTension = () => {
+  const state = getDistanceMeasurementInputState();
+  SendPrinterCommand(`$/Maslow_Retract_Current_Threshold=${state.retractionForce}`);
+  onCalibrationButtonsClick("$TKSLK", "Distance Measurement Apply Tension");
+};
+const tabletDistanceMeasurementGet = () => {
+  const state = getDistanceMeasurementInputState();
+  persistDistanceMeasurementSettings(state);
+  saveMaslowYaml();
+  SendPrinterCommand(`$MBD=${state.pairIndex},${state.extendDist},${state.retractionForce}`);
+};
+const tabletDistanceMeasurementClearLog = () => {
+  distanceMeasurementLogEntries = [];
+  renderDistanceMeasurementLog();
+  const results = id("distance-measurement-results");
+  if (results) results.innerHTML = "";
+};
+const tabletDistanceMeasurementExportCsv = () => {
+  if (!distanceMeasurementLogEntries.length) {
+    return;
+  }
+  const header = "timestamp,pair,beltA,totalA,beltB,totalB\n";
+  const rows = distanceMeasurementLogEntries.map((entry) =>
+    `${entry.timestamp},${entry.pair},${entry.beltA},${entry.totalA},${entry.beltB},${entry.totalB}`
+  ).join("\n");
+  const blob = new Blob([header + rows], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "distance_measurements.csv";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+};
+
+globalThis.handleBeltDistanceMessage = (msg) => {
+  const measurement = parseBeltDistanceMessage(msg);
+  setDistanceMeasurementResults(measurement);
+  distanceMeasurementLogEntries.unshift(measurement);
+  distanceMeasurementLogEntries = distanceMeasurementLogEntries.slice(0, 10);
+  renderDistanceMeasurementLog();
+};
+
 // Control event handlers - Common
 const tabletPopupStopProp = (event) => event.stopPropagation();
 
@@ -1913,6 +2073,7 @@ function tabletInit() {
     id("tablettab_cal_park").addEventListener("click", tabletOpenParkPopup);
     id("tablettab_cal_scale_thickness").addEventListener("click", tabletOpenScaleThicknessPopup);
     id("tablettab_cal_apply_tension_limit").addEventListener("click", tabletOpenApplyTensionLimitPopup);
+    id("tablettab_cal_distance_measurement").addEventListener("click", tabletOpenDistanceMeasurementPopup);
 
     // Buttons - Work Area Pop-up
     id("work-area-popup").addEventListener("click", tabletWorkAreaPopupHide);
@@ -1937,6 +2098,16 @@ function tabletInit() {
     id("apply_tension_limit_popup_content").addEventListener("click", tabletPopupStopProp);
     id("tablettab_apply_tension_limit_cancel").addEventListener("click", tabletApplyTensionLimitPopupHide);
     id("tablettab_apply_tension_limit_save").addEventListener("click", tabletSaveApplyTensionLimit);
+
+    // Buttons - Distance Measurement Pop-up
+    id("distance-measurement-popup").addEventListener("click", tabletDistanceMeasurementPopupHide);
+    id("distance_measurement_popup_content").addEventListener("click", tabletPopupStopProp);
+    id("tablettab_measure_retract").addEventListener("click", tabletDistanceMeasurementRetract);
+    id("tablettab_measure_extend").addEventListener("click", tabletDistanceMeasurementExtend);
+    id("tablettab_measure_tension").addEventListener("click", tabletDistanceMeasurementTension);
+    id("tablettab_measure_get_distance").addEventListener("click", tabletDistanceMeasurementGet);
+    id("tablettab_measure_clear_log").addEventListener("click", tabletDistanceMeasurementClearLog);
+    id("tablettab_measure_export_csv").addEventListener("click", tabletDistanceMeasurementExportCsv);
 
     // Buttons - Configuration Pop-up
     id("configuration-popup").addEventListener("click", tabletConfigPopupHide);

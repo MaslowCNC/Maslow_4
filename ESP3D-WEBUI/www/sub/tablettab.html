@@ -215,6 +215,8 @@
         <div class="buttons-row">
           <button id="tablettab_cal_apply_tension_limit" class="calibration-modal-button green-button"
             title="Configure Apply Tension belt retraction monitoring">Apply Tension Belt Limit</button>
+          <button id="tablettab_cal_distance_measurement" class="calibration-modal-button green-button"
+            title="Measure diagonal belt pair distance">Distance Measurement</button>
         </div>
       </div>
     </div>
@@ -548,6 +550,44 @@
         <div class="input-row">
           <button id="tablettab_config_save" type="button" class="calibration-modal-button">Save</button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="distance-measurement-popup" class="calibration-modal-container">
+    <div id="distance_measurement_popup_content" class="calibration-modal-content">
+      <div class="calibration-modal-button-container">
+        <div class="input-row">
+          <div style="display: flex; justify-content: center;">
+            <label style="text-align: center; font-weight: bold;">Distance Measurement</label>
+          </div>
+        </div>
+        <hr style="border-top: 1px dashed;">
+        <div class="grid-container">
+          <div class="input-row"><label class="input-label">Pair</label></div>
+          <div class="input-row">
+            <label><input type="radio" name="measurementPair" id="measurementPairBLTR" value="BL_TR" checked> BL↔TR</label>
+            <label style="margin-left: 10px;"><input type="radio" name="measurementPair" id="measurementPairBRTL" value="BR_TL"> BR↔TL</label>
+          </div>
+          <div class="input-row"><label for="measurementExtendDist" class="input-label">Extend Distance (mm)</label></div>
+          <div class="input-row"><input id="measurementExtendDist" type="number" min="0" max="4250" step="1" class="calibration-modal-input"></div>
+          <div class="input-row"><label for="measurementRetractionForce" class="input-label">Retraction Force (mA)</label></div>
+          <div class="input-row"><input id="measurementRetractionForce" type="number" min="0" max="3500" step="1" class="calibration-modal-input"></div>
+        </div>
+        <hr style="border-top: 1px dashed;">
+        <div class="buttons-row">
+          <button id="tablettab_measure_retract" class="calibration-modal-button">Retract</button>
+          <button id="tablettab_measure_extend" class="calibration-modal-button">Extend</button>
+          <button id="tablettab_measure_tension" class="calibration-modal-button">Apply Tension</button>
+        </div>
+        <div class="buttons-row">
+          <button id="tablettab_measure_get_distance" class="calibration-modal-button">Get Distance</button>
+          <button id="tablettab_measure_clear_log" class="calibration-modal-button stop-button">Clear Log</button>
+          <button id="tablettab_measure_export_csv" class="calibration-modal-button green-button">Export CSV</button>
+        </div>
+        <hr style="border-top: 1px dashed;">
+        <div id="distance-measurement-results" style="font-size: 0.9em; text-align: left;"></div>
+        <div id="distance-measurement-log" style="margin-top: 8px; max-height: 150px; overflow-y: auto; font-size: 0.85em;"></div>
       </div>
     </div>
   </div>
