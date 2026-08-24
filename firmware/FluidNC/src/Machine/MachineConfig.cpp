@@ -105,7 +105,8 @@ namespace Machine {
         handler.item(M + "_Apply_Tension_Belt_Retraction_Limit", Maslow.calibration.applyTensionBeltRetractionLimitMm, 0.0, 4250.0);
         handler.item(M + "_Apply_Tension_Allow_Limiting", Maslow.calibration.applyTensionAllowLimiting);
         handler.item(M + "_Extend_Dist", Maslow.calibration.extendDist, 0, 4250);
-        handler.item((M + "_Measurement_Pair").c_str(), Maslow.measurementPair);
+        const std::string measurementPairKey = M + "_Measurement_Pair";
+        handler.item(measurementPairKey.c_str(), Maslow.measurementPair);
         handler.item(M + "_Measurement_Extend_Dist", Maslow.measurementExtendDistanceMm, 0.0, 4250.0);
         handler.item(M + "_Measurement_Retraction_Force", Maslow.measurementRetractionForceMa, 0, 3500);
 
