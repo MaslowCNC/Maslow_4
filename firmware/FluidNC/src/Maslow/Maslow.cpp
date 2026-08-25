@@ -1343,6 +1343,8 @@ bool Maslow_::startBeltDistanceMeasurement(int pairIndex, float extendDistanceMm
     beltMeasurementRequest.retractionForceMa = retractionForceMa;
     beltMeasurementRequest.stage             = BELT_MEASUREMENT_RETRACTING;
     beltMeasurementRequest.stageStartMs      = millis();
+    beltMeasurementRequest.armADone          = false;
+    beltMeasurementRequest.armBDone          = false;
 
     measurementPair              = (beltMeasurementRequest.pair == BELT_PAIR_BR_TL) ? "BR_TL" : "BL_TR";
     measurementExtendDistanceMm  = extendDistanceMm;
@@ -1363,7 +1365,10 @@ void Maslow_::processBeltDistanceMeasurement() {
     static constexpr unsigned long stageTimeoutMs = 180000;
     if (millis() - beltMeasurementRequest.stageStartMs > stageTimeoutMs) {
         log_error("BeltDistance failed: timeout waiting for stage " << static_cast<int>(beltMeasurementRequest.stage));
-        beltMeasurementRequest.active = false;
+        beltMeasurementRequest.active   = false;
+        beltMeasurementRequest.stage    = BELT_MEASUREMENT_IDLE;
+        beltMeasurementRequest.armADone = false;
+        beltMeasurementRequest.armBDone = false;
         return;
     }
 
@@ -1372,30 +1377,48 @@ void Maslow_::processBeltDistanceMeasurement() {
 
     switch (beltMeasurementRequest.stage) {
         case BELT_MEASUREMENT_RETRACTING: {
-            bool doneA = axis[armA].retract();
-            bool doneB = axis[armB].retract();
-            if (doneA && doneB) {
+            if (!beltMeasurementRequest.armADone) {
+                beltMeasurementRequest.armADone = axis[armA].retract();
+            }
+            if (!beltMeasurementRequest.armBDone) {
+                beltMeasurementRequest.armBDone = axis[armB].retract();
+            }
+            if (beltMeasurementRequest.armADone && beltMeasurementRequest.armBDone) {
                 beltMeasurementRequest.stage       = BELT_MEASUREMENT_EXTENDING;
                 beltMeasurementRequest.stageStartMs = millis();
+                beltMeasurementRequest.armADone    = false;
+                beltMeasurementRequest.armBDone    = false;
             }
             break;
         }
         case BELT_MEASUREMENT_EXTENDING: {
-            bool doneA = axis[armA].extend(beltMeasurementRequest.extendDistanceMm);
-            bool doneB = axis[armB].extend(beltMeasurementRequest.extendDistanceMm);
-            if (doneA && doneB) {
+            if (!beltMeasurementRequest.armADone) {
+                beltMeasurementRequest.armADone = axis[armA].extend(beltMeasurementRequest.extendDistanceMm);
+            }
+            if (!beltMeasurementRequest.armBDone) {
+                beltMeasurementRequest.armBDone = axis[armB].extend(beltMeasurementRequest.extendDistanceMm);
+            }
+            if (beltMeasurementRequest.armADone && beltMeasurementRequest.armBDone) {
                 beltMeasurementRequest.stage       = BELT_MEASUREMENT_APPLYING_TENSION;
                 beltMeasurementRequest.stageStartMs = millis();
+                beltMeasurementRequest.armADone    = false;
+                beltMeasurementRequest.armBDone    = false;
             }
             break;
         }
         case BELT_MEASUREMENT_APPLYING_TENSION: {
-            bool doneA = axis[armA].pull_tight(beltMeasurementRequest.retractionForceMa);
-            bool doneB = axis[armB].pull_tight(beltMeasurementRequest.retractionForceMa);
-            if (doneA && doneB) {
+            if (!beltMeasurementRequest.armADone) {
+                beltMeasurementRequest.armADone = axis[armA].pull_tight(beltMeasurementRequest.retractionForceMa);
+            }
+            if (!beltMeasurementRequest.armBDone) {
+                beltMeasurementRequest.armBDone = axis[armB].pull_tight(beltMeasurementRequest.retractionForceMa);
+            }
+            if (beltMeasurementRequest.armADone && beltMeasurementRequest.armBDone) {
                 reportBeltDistanceMeasurement();
                 beltMeasurementRequest.active = false;
                 beltMeasurementRequest.stage  = BELT_MEASUREMENT_IDLE;
+                beltMeasurementRequest.armADone = false;
+                beltMeasurementRequest.armBDone = false;
             }
             break;
         }

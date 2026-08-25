@@ -91,6 +91,8 @@ public:
         int                 retractionForceMa = 1300;
         BeltMeasurementStage stage            = BELT_MEASUREMENT_IDLE;
         unsigned long       stageStartMs      = 0;
+        bool                armADone          = false;
+        bool                armBDone          = false;
     };
 
     static Maslow_& getInstance();  // Accessor for singleton instance
