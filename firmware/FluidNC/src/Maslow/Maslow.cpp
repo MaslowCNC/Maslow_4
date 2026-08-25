@@ -1351,13 +1351,6 @@ bool Maslow_::startBeltDistanceMeasurement(int pairIndex, float extendDistanceMm
     calibration.extendDist              = extendDistanceMm;
     calibration.retractCurrentThreshold = retractionForceMa;
 
-    sys.set_state(State::Homing);
-    if (!calibration.requestStateChange(RETRACTING)) {
-        beltMeasurementRequest.active = false;
-        log_error("Failed to start belt distance measurement retraction");
-        return false;
-    }
-
     log_info("BeltDistance started pair=" << measurementPair << " extend=" << extendDistanceMm << "mm retractionForce=" << retractionForceMa << "mA");
     return true;
 }
@@ -1374,41 +1367,38 @@ void Maslow_::processBeltDistanceMeasurement() {
         return;
     }
 
+    const int armA = (beltMeasurementRequest.pair == BELT_PAIR_BR_TL) ? _BR : _BL;
+    const int armB = (beltMeasurementRequest.pair == BELT_PAIR_BR_TL) ? _TL : _TR;
+
     switch (beltMeasurementRequest.stage) {
-        case BELT_MEASUREMENT_RETRACTING:
-            if (calibration.getCurrentState() == RETRACTED) {
-                sys.set_state(State::Homing);
-                if (calibration.requestStateChange(EXTENDING)) {
-                    beltMeasurementRequest.stage       = BELT_MEASUREMENT_EXTENDING;
-                    beltMeasurementRequest.stageStartMs = millis();
-                } else {
-                    log_error("BeltDistance failed: unable to enter extending state");
-                    beltMeasurementRequest.active = false;
-                }
+        case BELT_MEASUREMENT_RETRACTING: {
+            bool doneA = axis[armA].retract();
+            bool doneB = axis[armB].retract();
+            if (doneA && doneB) {
+                beltMeasurementRequest.stage       = BELT_MEASUREMENT_EXTENDING;
+                beltMeasurementRequest.stageStartMs = millis();
             }
             break;
-        case BELT_MEASUREMENT_EXTENDING:
-            if (calibration.getCurrentState() == EXTENDEDOUT) {
-                sys.set_state(State::Homing);
-                if (calibration.requestStateChange(TAKING_SLACK)) {
-                    beltMeasurementRequest.stage       = BELT_MEASUREMENT_APPLYING_TENSION;
-                    beltMeasurementRequest.stageStartMs = millis();
-                } else {
-                    log_error("BeltDistance failed: unable to enter apply tension state");
-                    beltMeasurementRequest.active = false;
-                }
+        }
+        case BELT_MEASUREMENT_EXTENDING: {
+            bool doneA = axis[armA].extend(beltMeasurementRequest.extendDistanceMm);
+            bool doneB = axis[armB].extend(beltMeasurementRequest.extendDistanceMm);
+            if (doneA && doneB) {
+                beltMeasurementRequest.stage       = BELT_MEASUREMENT_APPLYING_TENSION;
+                beltMeasurementRequest.stageStartMs = millis();
             }
             break;
-        case BELT_MEASUREMENT_APPLYING_TENSION:
-            if (calibration.getCurrentState() == READY_TO_CUT) {
+        }
+        case BELT_MEASUREMENT_APPLYING_TENSION: {
+            bool doneA = axis[armA].pull_tight(beltMeasurementRequest.retractionForceMa);
+            bool doneB = axis[armB].pull_tight(beltMeasurementRequest.retractionForceMa);
+            if (doneA && doneB) {
                 reportBeltDistanceMeasurement();
                 beltMeasurementRequest.active = false;
                 beltMeasurementRequest.stage  = BELT_MEASUREMENT_IDLE;
-            } else if (calibration.getCurrentState() == EXTENDEDOUT) {
-                log_error("BeltDistance failed: apply tension did not reach READY_TO_CUT");
-                beltMeasurementRequest.active = false;
             }
             break;
+        }
         case BELT_MEASUREMENT_IDLE:
         default:
             break;
