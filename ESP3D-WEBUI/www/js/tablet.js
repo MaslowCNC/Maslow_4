@@ -1774,8 +1774,18 @@ const tabletSaveApplyTensionLimit = () => {
 
 const distanceMeasurementDefaults = { pair: "BL_TR", extendDist: 2000, retractionForce: 1300 };
 let distanceMeasurementLogEntries = [];
+let distanceMeasurementInProgress = false;
 
 const tabletDistanceMeasurementPopupHide = () => hideModal("distance-measurement-popup");
+
+const setDistanceMeasurementButtonState = (isMeasuring) => {
+  const button = id("tablettab_measure_get_distance");
+  if (!button) {
+    return;
+  }
+  button.disabled = isMeasuring;
+  button.textContent = isMeasuring ? "Measuring..." : "Get Distance";
+};
 
 const getDistanceMeasurementValues = () => {
   const lv = globalThis.loadedValues || {};
@@ -1879,6 +1889,7 @@ const tabletOpenDistanceMeasurementPopup = () => {
   }
   if (id("measurementExtendDist")) id("measurementExtendDist").value = extendDist;
   if (id("measurementRetractionForce")) id("measurementRetractionForce").value = retractionForce;
+  setDistanceMeasurementButtonState(distanceMeasurementInProgress);
   openModal("distance-measurement-popup");
 };
 
@@ -1894,7 +1905,12 @@ const tabletDistanceMeasurementTension = () => {
   onCalibrationButtonsClick("$TKSLK", "Distance Measurement Apply Tension");
 };
 const tabletDistanceMeasurementGet = () => {
+  if (distanceMeasurementInProgress) {
+    return;
+  }
   const state = getDistanceMeasurementInputState();
+  distanceMeasurementInProgress = true;
+  setDistanceMeasurementButtonState(true);
   persistDistanceMeasurementSettings(state);
   saveMaslowYaml();
   SendPrinterCommand(`$MBD=${state.pairIndex},${state.extendDist},${state.retractionForce}`);
@@ -1930,6 +1946,16 @@ globalThis.handleBeltDistanceMessage = (msg) => {
   distanceMeasurementLogEntries.unshift(measurement);
   distanceMeasurementLogEntries = distanceMeasurementLogEntries.slice(0, 10);
   renderDistanceMeasurementLog();
+  distanceMeasurementInProgress = false;
+  setDistanceMeasurementButtonState(false);
+};
+
+globalThis.handleBeltDistanceError = (msg) => {
+  if (msg) {
+    console.warn(msg);
+  }
+  distanceMeasurementInProgress = false;
+  setDistanceMeasurementButtonState(false);
 };
 
 // Control event handlers - Common

@@ -1350,9 +1350,6 @@ bool Maslow_::startBeltDistanceMeasurement(int pairIndex, float extendDistanceMm
     measurementExtendDistanceMm  = extendDistanceMm;
     measurementRetractionForceMa = retractionForceMa;
 
-    calibration.extendDist              = extendDistanceMm;
-    calibration.retractCurrentThreshold = retractionForceMa;
-
     log_info("BeltDistance started pair=" << measurementPair << " extend=" << extendDistanceMm << "mm retractionForce=" << retractionForceMa << "mA");
     return true;
 }
@@ -1415,11 +1412,19 @@ void Maslow_::processBeltDistanceMeasurement() {
             }
             if (beltMeasurementRequest.armADone && beltMeasurementRequest.armBDone) {
                 reportBeltDistanceMeasurement();
-                beltMeasurementRequest.active = false;
-                beltMeasurementRequest.stage  = BELT_MEASUREMENT_IDLE;
+                beltMeasurementRequest.stage    = BELT_MEASUREMENT_COMPLETE;
                 beltMeasurementRequest.armADone = false;
                 beltMeasurementRequest.armBDone = false;
             }
+            break;
+        }
+        case BELT_MEASUREMENT_COMPLETE: {
+            axis[armA].stop();
+            axis[armB].stop();
+            beltMeasurementRequest.active   = false;
+            beltMeasurementRequest.stage    = BELT_MEASUREMENT_IDLE;
+            beltMeasurementRequest.armADone = false;
+            beltMeasurementRequest.armBDone = false;
             break;
         }
         case BELT_MEASUREMENT_IDLE:

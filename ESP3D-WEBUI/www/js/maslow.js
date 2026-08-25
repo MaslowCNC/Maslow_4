@@ -388,6 +388,13 @@ const maslowInfoMsgHandling = (msg) => {
 		return true;
 	}
 
+	if (msg.startsWith("[MSG:ERR: BeltDistance")) {
+		if (typeof globalThis.handleBeltDistanceError === "function") {
+			globalThis.handleBeltDistanceError(msg);
+		}
+		return true;
+	}
+
 	//Catch the calibration complete message and alert the user...this locks up the UI which is bad...should be handled better
 	if (msg.startsWith("[MSG:INFO: Calibration complete")) {
 		showCalibrationCompleteMessage();
