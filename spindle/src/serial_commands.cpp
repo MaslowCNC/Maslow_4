@@ -100,10 +100,12 @@ void updateFanControl(float dt) {
     writeFanOutput(fan_current_pwm);
 }
 
-// Drive the fan automatically whenever local spindle/Z motors or the XY belt motors need
-// cooling.  Called every control-loop iteration; updateFanControl() ramps toward the target.
-void applyFanForMotorState(bool localMotorsEnabled) {
-    if ((localMotorsEnabled || g_belt_cooling_requested) && g_suction_level > 0) {
+// Drive the fan automatically whenever local work (spindle spinning, a Z move, calibration)
+// or the XY belt motors need cooling.  Called every control-loop iteration; updateFanControl()
+// ramps toward the target.  Note that merely having the drivers energized is NOT enough - see
+// coolingNeeded() in main.cpp.
+void applyFanForMotorState(bool localCoolingNeeded) {
+    if ((localCoolingNeeded || g_belt_cooling_requested) && g_suction_level > 0) {
         // Map the 0-100 suction percentage onto the fan's level index (0..FAN_LEVEL_COUNT-1).
         fan_speed_index = (uint8_t)((uint32_t)g_suction_level * (FAN_LEVEL_COUNT - 1) / 100u);
         fan_enabled     = true;

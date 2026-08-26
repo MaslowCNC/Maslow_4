@@ -247,21 +247,39 @@ namespace Spindles {
     }
 
     void SpindleBoard::updateHoldState() {
-        // The Z axis is driven by the spindle board's two BLDC motors.  While the
-        // machine is idle and the spindle is stopped, those drivers would otherwise sit
-        // energized just holding the Z position, keeping the drivers hot and the cooling
-        // fan running.  Tell the board it may power them down once its move has settled.
-        // As soon as the machine starts moving again, the streamed Z target re-energizes
-        // the drivers, so we simply re-arm and re-send the release on the next idle.
-        bool idle = (sys.state() == State::Idle || sys.state() == State::Sleep) && _current_state == SpindleState::Disable;
+        // The Z axis is driven by the spindle board's two BLDC motors.  While the machine is
+        // at rest and the spindle is stopped, those drivers would otherwise sit energized just
+        // holding the Z position, keeping the drivers hot and the vacuum/cooling fan running.
+        // Tell the board it may power them down once its move has settled.
+        //
+        // "At rest" is every state that is not actively producing motion - deliberately
+        // including Alarm and ConfigAlarm.  Gating this on State::Idle alone meant that a board
+        // that booted into its alarm (the normal power-up state, before the machine is unlocked)
+        // never sent the release at all, so the Z drivers stayed energized and the vacuum ran
+        // continuously from power-up until the operator cleared the alarm.
+        State st     = sys.state();
+        bool  moving = st == State::Cycle || st == State::Jog || st == State::Homing || st == State::Hold ||
+                      st == State::SafetyDoor;
+        bool atRest = !moving && _current_state == SpindleState::Disable;
 
-        if (idle == _hold_released) {
-            return;  // already in the desired state; nothing to send
+        if (!atRest) {
+            // Motion (or the spindle) has resumed; re-arm so the release is sent again as soon
+            // as the machine comes back to rest.
+            _hold_released = false;
+            return;
         }
-        if (idle) {
-            sendHoldRelease();
+
+        // Repeat the release slowly while at rest rather than sending it exactly once.  The
+        // spindle board clears its pending release as soon as any Z target or speed command
+        // arrives (and forgets it entirely across one of its own reboots), so a single 'D' can
+        // be silently dropped and leave the drivers - and the fan - energized indefinitely.
+        uint32_t now = millis();
+        if (_hold_released && (now - _last_hold_release_ms) < HOLD_RELEASE_REPEAT_MS) {
+            return;
         }
-        _hold_released = idle;
+        sendHoldRelease();
+        _hold_released        = true;
+        _last_hold_release_ms = now;
     }
 
     void SpindleBoard::update(float zPositionMM, bool beltMotionActive) {

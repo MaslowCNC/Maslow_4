@@ -119,10 +119,15 @@ namespace Spindles {
         // so the runtime confirmation message is logged exactly once.
         bool _link_confirmed = false;
 
-        // True once we have told the spindle board the machine is idle so it can power
+        // True once we have told the spindle board the machine is at rest so it can power
         // down the Z-axis drivers.  Reset as soon as the machine starts moving again so
-        // the release is re-sent on the next idle.
-        bool _hold_released = false;
+        // the release is re-sent on the next rest, and refreshed every
+        // HOLD_RELEASE_REPEAT_MS while at rest so a dropped or forgotten 'D' cannot leave
+        // the drivers (and the vacuum fan) energized indefinitely.
+        bool     _hold_released        = false;
+        uint32_t _last_hold_release_ms = 0;
+
+        static const uint32_t HOLD_RELEASE_REPEAT_MS = 2000;
 
         void sendSpeed(uint32_t rpm);
         void sendPhase(float deg);

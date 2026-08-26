@@ -44,8 +44,9 @@ extern volatile bool g_remove_tool_requested;
 void initFanControl();
 void updateFanControl(float dt);
 
-// Run cooling at g_suction_level while either local motors or XY belt motors are active.
-void applyFanForMotorState(bool localMotorsEnabled);
+// Run cooling at g_suction_level while local work is under way (see coolingNeeded() in
+// main.cpp) or the XY belt motors are active.
+void applyFanForMotorState(bool localCoolingNeeded);
 
 // Line-based command protocol (shared by USB Serial and the inter-board link).
 // Supported commands (newline terminated):
