@@ -496,39 +496,6 @@ static void checkMotorTimeouts() {
     }
 }
 
-// ------------------- Vacuum / Cooling Fan Demand -------------------
-
-// The single fan output is both the dust vacuum and the board cooling fan, so it must only run
-// when something is actually happening: the spindle spinning, a Z move in progress, or a
-// calibration sweep.  (The XY board's belt motion is handled separately, via the 'B' command.)
-//
-// Having the drivers merely energized deliberately does NOT count.  On power-up the Z homes and
-// then holds position, while the XY board sits in its boot alarm, so gating the fan on
-// "drivers enabled" left the (loud) vacuum running continuously from boot until the operator
-// cleared the alarm and the XY board finally sent its idle 'D'.
-static bool coolingNeeded() {
-    MotorController* motors[] = { &mc1, &mc2 };
-    for (int i = 0; i < 2; i++) {
-        if (!motors[i]->enabled) {
-            continue;
-        }
-        if (motors[i]->continuous_rotation) {
-            return true;
-        }
-        // Spinning, or still ramping down from a spin: the vacuum belongs on for both.
-        if (motors[i]->velocity_mode &&
-            (fabsf(motors[i]->target_velocity) > 0.01f || fabsf(motors[i]->current_velocity) > 0.01f)) {
-            return true;
-        }
-    }
-    if (calibration.isActive()) {
-        return true;
-    }
-    // A Z move in progress: the drivers are energized and the phase ramp has not settled yet.
-    return (mc1.enabled || mc2.enabled) &&
-           fabsf(phase_offset.target - phase_offset.current) >= PHASE_MOVE_COMPLETE_EPS_RAD;
-}
-
 // ------------------- Z Hold Power-Down -------------------
 
 // When the XY board reports the machine is idle (the 'D' command sets
@@ -1019,7 +986,7 @@ static void housekeepingTask(void* arg) {
         // Tool state machine (power-up homing, tool load/unload via the top-of-travel beam).
         // Its commanded phase target is picked up by updatePhaseOffset in the FOC task.
         updateToolStateMachine();
-        applyFanForMotorState(coolingNeeded());
+        applyFanForMotorState(mc1.enabled || mc2.enabled);
         updateFanControl(hk_dt);
         // Reconcile the single reported state now that this pass's tool state, faults,
         // calibration and spindle commands have all been applied, logging any transition.
