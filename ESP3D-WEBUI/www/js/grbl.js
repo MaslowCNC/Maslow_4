@@ -555,7 +555,7 @@ const updateMaslowActionButton = () => {
 
 const show_grbl_status = (stateName = "", message = "", hasSD = false) => {
   setHTML("grbl_status_text", translate_text_item(message))
-  setClickability("clear_status_btn", stateName === "Alarm");
+  setClickability("clear_status_btn", stateName === "Alarm" && probe_progress_status === 0);
 
   if (!stateName) {
     return;
@@ -565,7 +565,7 @@ const show_grbl_status = (stateName = "", message = "", hasSD = false) => {
   // Set systemStatus for tablet view (will be updated with progress by show_grbl_SD if file is running)
   setHTML("systemStatus", stateName);
 
-  if (stateName === "Alarm") {
+  if (stateName === "Alarm" && probe_progress_status === 0) {
     id("systemStatus").classList.add("system-status-alarm");
   } else {
     id("systemStatus").classList.remove("system-status-alarm");
