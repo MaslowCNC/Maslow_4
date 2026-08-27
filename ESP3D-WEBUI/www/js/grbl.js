@@ -3,6 +3,7 @@
 
 var interval_status = -1
 var probe_progress_status = 0
+var probe_alarm_suppress = false
 var grbl_error_msg = ''
 var WCO = undefined
 var OVR = { feed: undefined, rapid: undefined, spindle: undefined }
@@ -555,7 +556,7 @@ const updateMaslowActionButton = () => {
 
 const show_grbl_status = (stateName = "", message = "", hasSD = false) => {
   setHTML("grbl_status_text", translate_text_item(message))
-  setClickability("clear_status_btn", stateName === "Alarm" && probe_progress_status === 0);
+  setClickability("clear_status_btn", stateName === "Alarm" && !probe_alarm_suppress);
 
   if (!stateName) {
     return;
@@ -565,10 +566,13 @@ const show_grbl_status = (stateName = "", message = "", hasSD = false) => {
   // Set systemStatus for tablet view (will be updated with progress by show_grbl_SD if file is running)
   setHTML("systemStatus", stateName);
 
-  if (stateName === "Alarm" && probe_progress_status === 0) {
+  if (stateName === "Alarm" && !probe_alarm_suppress) {
     id("systemStatus").classList.add("system-status-alarm");
   } else {
     id("systemStatus").classList.remove("system-status-alarm");
+    if (stateName !== "Alarm") {
+      probe_alarm_suppress = false;
+    }
   }
 
   const clickable = clickableFromStateName(stateName, hasSD);
@@ -857,6 +861,7 @@ const grblHandleMessage = (msg) => {
   if (valueStartsWith(msg, ["error:", "ALARM:", "Hold:", "Door:"])) {
     if (probe_progress_status !== 0) {
       if (valueStartsWith(msg, ["ALARM:"])) {
+        probe_alarm_suppress = true;
         probe_failed_notification("Probe connection failed");
         SendPrinterCommand("$X", true, null, null, 114, 1);
         return;
