@@ -694,7 +694,9 @@ function grblGetProbeResult(response) {
         finalize_probing()
       }
     } else {
-      probe_failed_notification()
+      probe_alarm_suppress = true;
+      probe_failed_notification("Probe connection failed");
+      SendPrinterCommand("$X", true, null, null, 114, 1);
     }
   }
 }
@@ -867,6 +869,10 @@ const grblHandleMessage = (msg) => {
         return;
       }
       probe_failed_notification();
+    }
+    if (valueStartsWith(msg, ["ALARM:"]) && probe_alarm_suppress) {
+      SendPrinterCommand("$X", true, null, null, 114, 1);
+      return;
     }
     if (grbl_error_msg.length === 0) {
       grbl_error_msg = translate_text_item(msg.trim());
