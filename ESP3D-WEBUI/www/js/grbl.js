@@ -693,7 +693,7 @@ function grblGetProbeResult(response) {
         SendPrinterCommand(cmd, true, null, null, 0, 1)
         finalize_probing()
       }
-    } else {
+    } else if (!probe_alarm_suppress) {
       probe_alarm_suppress = true;
       probe_failed_notification("Probe connection failed");
       SendPrinterCommand("$X", true, null, null, 114, 1);
