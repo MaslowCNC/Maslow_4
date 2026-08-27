@@ -856,6 +856,11 @@ const grblHandleMessage = (msg) => {
   }
   if (valueStartsWith(msg, ["error:", "ALARM:", "Hold:", "Door:"])) {
     if (probe_progress_status !== 0) {
+      if (valueStartsWith(msg, ["ALARM:"])) {
+        probe_failed_notification("Probe connection failed");
+        SendPrinterCommand("$X", true, null, null, 114, 1);
+        return;
+      }
       probe_failed_notification();
     }
     if (grbl_error_msg.length === 0) {
