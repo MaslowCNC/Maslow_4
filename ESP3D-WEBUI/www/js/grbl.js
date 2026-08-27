@@ -685,7 +685,7 @@ function grblGetProbeResult(response) {
     if (Number.parseInt(status.trim()) === 1) {
       if (probe_progress_status !== 0) {
         const cmd =
-          `$J=G90 G21 F1000 Z${getValueFloat("probetouchplatethickness") + getValueFloat("grblpanel_proberetract")}`
+          `$J=G90 G21 F1000 Z${getValueFloat("grblpanel_probetouchplatethickness") + getValueFloat("grblpanel_proberetract")}`
         SendPrinterCommand(cmd, true, null, null, 0, 1)
         finalize_probing()
       }
