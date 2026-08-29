@@ -1208,6 +1208,13 @@ void Maslow_::eStop(String message) {
     stopEverything();
 }
 
+//Clear error state and turn off the RED LED
+void Maslow_::clearError() {
+    error = false;
+    errorMessage = "";
+    digitalWrite(REDLED, LOW);
+}
+
 //This is the function that should prevent machine from damaging itself
 void Maslow_::safety_control() {
     //We need to keep track of average belt speeds and motor currents for every axis
