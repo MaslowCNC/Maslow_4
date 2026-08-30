@@ -1050,20 +1050,43 @@ static Error maslow_get_info(const char* value, WebUI::AuthenticationLevel auth_
 }
 
 static Error maslow_belt_distance(const char* value, WebUI::AuthenticationLevel auth_level, Channel& out) {
+    if (!value || !*value) {
+        log_error("BeltDistance usage: $MBD=R,<pair>,<force_ma> | E,<pair>,<extend_mm> | T,<pair>,<force_ma> | G | L,<pair> | S (pair: 0=BL_TR, 1=BR_TL)");
+        return Error::InvalidValue;
+    }
+
+    char action = value[0];
+    if (action >= 'a' && action <= 'z') {
+        action = action - 'a' + 'A';
+    }
+
     int   pairIndex         = (Maslow.measurementPair == "BR_TL") ? 1 : 0;
     float extendDistanceMm  = Maslow.measurementExtendDistanceMm;
     int   retractionForceMa = Maslow.measurementRetractionForceMa;
 
-    if (value && *value) {
+    const char* args = strchr(value, ',');
+    if (args) {
+        args++;
         char trailing = '\0';
-        int  fields   = sscanf(value, "%d,%f,%d%c", &pairIndex, &extendDistanceMm, &retractionForceMa, &trailing);
-        if (fields < 3 || trailing != '\0') {
-            log_error("BeltDistance command format: $MBD=<pair>,<extend_mm>,<retraction_force_ma>");
-            return Error::BadNumberFormat;
+        if (action == 'E') {
+            if (sscanf(args, "%d,%f%c", &pairIndex, &extendDistanceMm, &trailing) < 2 || trailing != '\0') {
+                log_error("BeltDistance format: $MBD=E,<pair>,<extend_mm>");
+                return Error::BadNumberFormat;
+            }
+        } else if (action == 'R' || action == 'T') {
+            if (sscanf(args, "%d,%d%c", &pairIndex, &retractionForceMa, &trailing) < 2 || trailing != '\0') {
+                log_error("BeltDistance format: $MBD=R|T,<pair>,<force_ma>");
+                return Error::BadNumberFormat;
+            }
+        } else if (action == 'L') {
+            if (sscanf(args, "%d%c", &pairIndex, &trailing) < 1 || trailing != '\0') {
+                log_error("BeltDistance format: $MBD=L,<pair>");
+                return Error::BadNumberFormat;
+            }
         }
     }
 
-    if (!Maslow.startBeltDistanceMeasurement(pairIndex, extendDistanceMm, retractionForceMa)) {
+    if (!Maslow.startBeltMeasurementAction(action, pairIndex, extendDistanceMm, retractionForceMa)) {
         return Error::InvalidValue;
     }
     return Error::Ok;
