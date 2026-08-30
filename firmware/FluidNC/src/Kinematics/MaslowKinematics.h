@@ -76,6 +76,7 @@ namespace Kinematics {
         float getBrZ() const { return getAnchorCoord(_BR, Coord_Z); }
         float getBeltEndExtension() const { return _beltEndExtension; }
         float getArmLength() const { return _armLength; }
+        float getBeltToothSpacing() const { return _beltToothSpacing; }
         float getSpoilboardThickness() const { return _spoilboardThickness; }
         float getWorkThickness() const { return _workThickness; }
         float getCenterX() const { return _centerX; }

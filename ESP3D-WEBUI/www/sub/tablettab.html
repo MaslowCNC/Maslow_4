@@ -559,7 +559,7 @@
       <div class="calibration-modal-button-container">
         <div class="input-row">
           <div style="display: flex; justify-content: center;">
-            <label style="text-align: center; font-weight: bold;">Distance Measurement</label>
+            <label style="text-align: center; font-weight: bold;">Belt Pair Distance Measurement</label>
           </div>
         </div>
         <hr style="border-top: 1px dashed;">
@@ -569,22 +569,55 @@
             <label><input type="radio" name="measurementPair" id="measurementPairBLTR" value="BL_TR" checked> BL↔TR</label>
             <label style="margin-left: 10px;"><input type="radio" name="measurementPair" id="measurementPairBRTL" value="BR_TL"> BR↔TL</label>
           </div>
-          <div class="input-row"><label for="measurementExtendDist" class="input-label">Extend Distance (mm)</label></div>
-          <div class="input-row"><input id="measurementExtendDist" type="number" min="0" max="4250" step="1" class="calibration-modal-input"></div>
-          <div class="input-row"><label for="measurementRetractionForce" class="input-label">Retraction Force (mA)</label></div>
-          <div class="input-row"><input id="measurementRetractionForce" type="number" min="0" max="3500" step="1" class="calibration-modal-input"></div>
+          <div class="input-row"><label for="measurementExtendDist" class="input-label">Belt Extend Distance (mm)</label></div>
+          <div class="input-row"><input id="measurementExtendDist" type="number" min="100" max="4250" step="1" class="calibration-modal-input"></div>
+          <div class="input-row"><label for="measurementRetractionForce" class="input-label">Retraction / Tension Force (mA)</label></div>
+          <div class="input-row"><input id="measurementRetractionForce" type="number" min="100" max="3500" step="10" class="calibration-modal-input"></div>
+        </div>
+        <hr style="border-top: 1px dashed;">
+        <div class="input-row"><label style="font-weight: bold;">Calculation Variables (edit + Recalculate — no machine motion)</label></div>
+        <div class="grid-container">
+          <div class="input-row"><label for="dm_zoffTL" class="input-label">Z Offset TL (mm)</label></div>
+          <div class="input-row"><input id="dm_zoffTL" type="number" step="0.1" class="calibration-modal-input"></div>
+          <div class="input-row"><label for="dm_zoffTR" class="input-label">Z Offset TR (mm)</label></div>
+          <div class="input-row"><input id="dm_zoffTR" type="number" step="0.1" class="calibration-modal-input"></div>
+          <div class="input-row"><label for="dm_zoffBL" class="input-label">Z Offset BL (mm)</label></div>
+          <div class="input-row"><input id="dm_zoffBL" type="number" step="0.1" class="calibration-modal-input"></div>
+          <div class="input-row"><label for="dm_zoffBR" class="input-label">Z Offset BR (mm)</label></div>
+          <div class="input-row"><input id="dm_zoffBR" type="number" step="0.1" class="calibration-modal-input"></div>
+          <div class="input-row"><label for="dm_toothSpacing" class="input-label">Belt Tooth Spacing (mm)</label></div>
+          <div class="input-row"><input id="dm_toothSpacing" type="number" step="0.0001" class="calibration-modal-input"></div>
+          <div class="input-row"><label for="dm_beltEnd" class="input-label">Belt End Extension (mm)</label></div>
+          <div class="input-row"><input id="dm_beltEnd" type="number" step="0.1" class="calibration-modal-input"></div>
+          <div class="input-row"><label for="dm_armLength" class="input-label">Arm Length (mm)</label></div>
+          <div class="input-row"><input id="dm_armLength" type="number" step="0.1" class="calibration-modal-input"></div>
+          <div class="input-row"><label for="dm_spoil" class="input-label">Spoilboard Thickness (mm)</label></div>
+          <div class="input-row"><input id="dm_spoil" type="number" step="0.1" class="calibration-modal-input"></div>
+          <div class="input-row"><label for="dm_work" class="input-label">Workpiece Thickness (mm)</label></div>
+          <div class="input-row"><input id="dm_work" type="number" step="0.1" class="calibration-modal-input"></div>
+          <div class="input-row"><label for="dm_stretch" class="input-label">Belt Stretch (mm per m)</label></div>
+          <div class="input-row"><input id="dm_stretch" type="number" step="0.01" class="calibration-modal-input"></div>
+          <div class="input-row"><label for="dm_coupling" class="input-label">Coupling Offset (mm)</label></div>
+          <div class="input-row"><input id="dm_coupling" type="number" step="0.1" class="calibration-modal-input"></div>
         </div>
         <hr style="border-top: 1px dashed;">
         <div class="buttons-row">
-          <button id="tablettab_measure_retract" class="calibration-modal-button">Retract</button>
-          <button id="tablettab_measure_extend" class="calibration-modal-button">Extend</button>
-          <button id="tablettab_measure_tension" class="calibration-modal-button">Apply Tension</button>
+          <button id="dm_retract" class="calibration-modal-button">1. Retract Pair</button>
+          <button id="dm_extend" class="calibration-modal-button">2. Extend</button>
+          <button id="dm_tension" class="calibration-modal-button">3. Apply Tension + Measure</button>
         </div>
         <div class="buttons-row">
-          <button id="tablettab_measure_get_distance" class="calibration-modal-button">Get Distance</button>
-          <button id="tablettab_measure_clear_log" class="calibration-modal-button stop-button">Clear Log</button>
-          <button id="tablettab_measure_export_csv" class="calibration-modal-button green-button">Export CSV</button>
+          <button id="dm_recalc" class="calibration-modal-button">Recalculate</button>
+          <button id="dm_reread" class="calibration-modal-button">Re-Read</button>
+          <button id="dm_release" class="calibration-modal-button">Release Tension</button>
+          <button id="dm_stop" class="calibration-modal-button stop-button">STOP</button>
         </div>
+        <div class="buttons-row">
+          <button id="dm_save_defaults" class="calibration-modal-button">Save Defaults</button>
+          <button id="dm_clear_log" class="calibration-modal-button">Clear Log</button>
+          <button id="dm_export_csv" class="calibration-modal-button green-button">Export CSV</button>
+        </div>
+        <div id="distance-measurement-status" style="margin-top: 6px; font-size: 0.9em; min-height: 1.2em;"></div>
         <hr style="border-top: 1px dashed;">
         <div id="distance-measurement-results" style="font-size: 0.9em; text-align: left;"></div>
         <div id="distance-measurement-log" style="margin-top: 8px; max-height: 150px; overflow-y: auto; font-size: 0.85em;"></div>
