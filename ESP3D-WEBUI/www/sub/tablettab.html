@@ -1,594 +1,303 @@
-<div id="tablettab" class="tabcontent tablettab">
-  <div id="tablet-listener" tabindex="0">
-    <div class="maslow">
-      <div class="display tablettab-canvas-wrapper">
-        <canvas id="small-toolpath" class="previewer" style="width: 100%; height: 100%"></canvas>
-        <textarea id="tablettab_gcode" style="border: none" class="gcode" rows="8" placeholder="GCode File Display"
-          spellcheck="false" readonly>
-        </textarea>
-      </div>
-      <div class="tablettab-controls-wrapper">
-        <div id="main-state-label-container" style="text-align: center;">
-          <label id="main-state-label" style="font-weight: bold;">State: </label>
-        </div>
-        <div id="tablettab-jog-controls" style="grid-template-columns: 20% 20% 20% 20% 20%;" class="maslow-grid-container tablettab-controls-item">
-          <!-- Buttons row 1 -->
-          <div id="tablettab_zUp" class="maslow-grid-item maslow-grid-item-btn"
-            style="background-color: #f2f0e4;; color: #337ab7; border-right: 2px solid grey;">
-            <svg width="32" height="32" viewBox="0 0 38 38">
-              <polygon fill="currentColor" points="10.319 5.525 17.833 13.039 2.805 13.039 10.319 5.525" />
-              <rect fill="currentColor" height="2.5" transform="translate(31.899 11.262) rotate(90)" width="21.79"
-                x="-0.576" y="20.33" />
-            </svg>
-            Z
-          </div>
-          <div id="tablettab_topLeft" class="maslow-grid-item maslow-grid-item-btn" style="background-color: #b69fcb;">
-            <canvas id="tlBtn" style="width: 100%; height: 100%"></canvas>
-          </div>
-          <div id="tablettab_top" class="maslow-grid-item maslow-grid-item-btn" style="background-color: #9d88c0;">
-            <canvas id="upBtn" style="width: 100%; height: 100%"></canvas>
-          </div>
-          <div id="tablettab_topRight" class="maslow-grid-item maslow-grid-item-btn" style="background-color: #b69fcb;">
-            <canvas id="trBtn" style="width: 100%; height: 100%"></canvas>
-          </div>
-          <div id="calibrationBTN" class="maslow-grid-item maslow-grid-item-btn"
-            style="background-color: #f2f0e4; font-size: 1vw; color: #337ab7; display: flex;flex-direction: column;">
-            <svg height="32" width="32" viewBox="0 0 48 48" fill="currentColor">
-              <g>
-                <path
-                  d="M24,11c-7.2,0-13,5.8-13,13c0,7.2,5.8,13,13,13c7.2,0,13-5.8,13-13C37,16.8,31.2,11,24,11z M24,35c-6.1,0-11-4.9-11-11   s4.9-11,11-11s11,4.9,11,11S30.1,35,24,35z" />
-                <path
-                  d="M44,20h-2.4c-0.5-2.1-1.3-4-2.3-5.6l1.6-1.8c1.2-1.2,1.2-3,0-4.2L39.5,7c-1.2-1.2-3.1-1.2-4.2,0l-1.8,1.8   c-1.8-1.2-3.6-1.9-5.6-2.3V4c0-1.7-1.3-3-3-3h-2c-1.7,0-3,1.3-3,3v2.5c-1.9,0.4-3.8,1.2-5.6,2.3l-1.7-1.7c-1.2-1.2-3-1.2-4.2,0   L7,8.5c-0.6,0.6-0.9,1.3-0.9,2.1s0.3,1.5,0.9,2.1l1.8,1.7c-1.1,1.8-1.9,3.6-2.3,5.6H4c-1.7,0-3,1.3-3,3v2c0,1.7,1.3,3,3,3h2.5   c0.4,1.9,1.2,3.8,2.4,5.6l-1.7,1.8c-1.2,1.2-1.2,3,0,4.2L8.5,41c1.2,1.2,3,1.2,4.2,0l1.7-1.8c1.8,1.1,3.6,1.9,5.6,2.3V44   c0,1.7,1.3,3,3,3h2c1.7,0,3-1.3,3-3v-2.4c2.1-0.5,3.9-1.3,5.6-2.3l1.7,1.6c1.2,1.2,3,1.2,4.2,0l1.4-1.4c1.2-1.2,1.2-3,0-4.2   l-1.7-1.7c1.2-1.8,1.9-3.6,2.3-5.6H44c1.7,0,3-1.3,3-3v-2C47,21.3,45.7,20,44,20z M45,25c0,0.6-0.4,1-1,1h-4.2l-0.1,0.8   c-0.4,2.2-1.2,4.3-2.6,6.3l-0.5,0.7l2.9,2.9c0.2,0.2,0.3,0.4,0.3,0.7c0,0.3-0.1,0.5-0.3,0.7l-1.4,1.4c-0.4,0.4-1,0.4-1.4,0   l-2.9-2.8l-0.7,0.5c-1.8,1.3-3.9,2.2-6.3,2.6L26,40v4c0,0.6-0.4,1-1,1h-2c-0.6,0-1-0.4-1-1v-4.2l-0.8-0.1c-2.2-0.4-4.3-1.2-6.3-2.6   l-0.7-0.5l-2.9,3c-0.4,0.4-1,0.4-1.4,0l-1.4-1.4c-0.4-0.4-0.4-1,0-1.4l2.9-3l-0.5-0.7c-1.4-2-2.3-4.1-2.6-6.3L8.2,26H4   c-0.6,0-1-0.4-1-1v-2c0-0.6,0.4-1,1-1h4.2l0.1-0.8c0.4-2.2,1.2-4.3,2.6-6.3l0.5-0.7l-3-2.9c-0.2-0.2-0.3-0.4-0.3-0.7   s0.1-0.5,0.3-0.7l1.4-1.4c0.4-0.4,1-0.4,1.4,0l2.9,2.9l0.7-0.5c1.9-1.4,4.1-2.3,6.3-2.6l0.8-0.1V4c0-0.6,0.4-1,1-1h2   c0.6,0,1,0.4,1,1v4.2l0.8,0.1c2.2,0.4,4.3,1.2,6.3,2.6l0.7,0.5l3-3c0.4-0.4,1-0.4,1.4,0l1.4,1.4c0.4,0.4,0.4,1,0,1.4l-2.7,3   l0.5,0.7c1.2,1.8,2.1,3.9,2.6,6.3L40,22h4c0.6,0,1,0.4,1,1V25z" />
-              </g>
-            </svg>
-            <span>Setup</span>
-          </div>
-          <!-- Buttons row 2 -->
-          <div id="disZ" class="maslow-grid-item maslow-grid-item-btn"
-            style="background-color: #f2f0e4; border-right: 2px solid grey;">5</div>
-          <div id="tablettab_left" class="maslow-grid-item maslow-grid-item-btn" style="background-color: #9d88c0;">
-            <canvas id="lBtn" style="width: 100%; height: 100%"></canvas>
-          </div>
-          <div id="disM" class="maslow-grid-item maslow-grid-item-btn" style="background-color: #f2f0e4;">100</div>
-          <div id="tablettab_right" class="maslow-grid-item maslow-grid-item-btn" style="background-color: #9d88c0;">
-            <canvas id="rBtn" style="width: 100%; height: 100%"></canvas>
-          </div>
-          <div id="tablettab_options_btn" class="maslow-grid-item maslow-grid-item-btn green-button"
-            style="color: white; font-size: 1vw; display: flex; flex-direction: column;"
-            title="Set work area, park position, scale factors and material thickness">Options</div>
-          <!-- Buttons row 3 -->
-          <div id="tablettab_zDown" class="maslow-grid-item maslow-grid-item-btn"
-            style="background-color: #f2f0e4; color: #337ab7; border-right: 2px solid grey;">
-            <svg width="32" height="32" viewBox="0 0 38 38">
-              <polygon transform="rotate(180) translate(-21 -44)" fill="currentColor"
-                points="10.319 5.525 17.833 13.039 2.805 13.039 10.319 5.525"></polygon>
-              <rect fill="currentColor" height="2.5" transform="translate(32 10) rotate(90)" width="21.79" x="-0.576"
-                y="20.33">
-              </rect>
-            </svg>
-            Z
-          </div>
-          <div id="tablettab_bottomLeft" class="maslow-grid-item maslow-grid-item-btn"
-            style="background-color: #b69fcb;"><canvas id="blBtn" style="width: 100%; height: 100%"></canvas> </div>
-          <div id="tablettab_bottom" class="maslow-grid-item maslow-grid-item-btn" style="background-color: #9d88c0;">
-            <canvas id="dnBtn" style="width: 100%; height: 100%"></canvas>
-          </div>
-          <div id="tablettab_bottomRight" class="maslow-grid-item maslow-grid-item-btn"
-            style="background-color: #b69fcb;"><canvas id="brBtn" style="width: 100%; height: 100%"></canvas> </div>
-          <div id="maslowActionButton" class="maslow-grid-item maslow-grid-item-btn maslow-action-button" 
-               style="background-color: #4aa85c; font-size: 1.2vw; color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; font-weight: bold; visibility: hidden;"
-               title="State-dependent action button">
-            <span id="maslowActionText">Idle</span>
-          </div>
-          <!-- Buttons row 4 -->
-          <div id="tablettab_set_z_home" class="maslow-grid-item maslow-grid-item-btn"
-            style="background-color: #f2f0e4; border-right: 2px solid grey;">Define Z Home</div>
-          <div id="tablettab_move_to_xy_home" class="maslow-grid-item maslow-grid-item-btn"
-            style="background-color: #f2f0e4;"><canvas id="hBtn" style="width: 100%; height: 100%"></canvas></div>
-          <div id="tablettab_toggle_units" class="maslow-grid-item maslow-grid-item-btn"
-            style="background-color: #f2f0e4;" title="Toggle Units">mm</div>
-          <div id="tablettab_set_xy_home" class="maslow-grid-item maslow-grid-item-btn"
-            style="background-color: #f2f0e4;" title="Set XY home position">Define XY Home</div>
-          <div id="dynamic_button_3" class="maslow-grid-item maslow-grid-item-btn" style="background-color: #f2f0e4;">
-            <div id="tablettab_trace_boundary" class="maslow-grid-item maslow-grid-item-btn"
-                 style="background-color: #f2f0e4; cursor: pointer;"
-                 title="Move around the job boundary to check positioning">
-              Trace Boundary
-            </div>
-          </div>
-        </div>
-        <!-- Controls row 5 -->
-        <div id="tablettab-file-controls" style="grid-template-columns: 60% 20% 20%;" class="maslow-grid-container tablettab-controls-item"
-          style="height: 60px;">
-          <select id="filelist" class="form-control">
-            <option>Load File...</option>
-          </select>
-          <div id="tablettab_gcode_upload" class="maslow-grid-item maslow-grid-item-btn"
-            style="background-color: #337ab7; color: white; height: 50px;display: flex;flex-direction: column; padding: 2px;">
-            <svg width="1.3em" height="1.2em" viewBox="0 0 1792 1792" fill="currentColor">
-              <g>
-                <path
-                  d="M1344 1472q0-26-19-45t-45-19-45 19-19 45 19 45 45 19 45-19 19-45zm256 0q0-26-19-45t-45-19-45 19-19 45 19 45 45 19 45-19 19-45zm128-224v320q0 40-28 68t-68 28h-1472q-40 0-68-28t-28-68v-320q0-40 28-68t68-28h427q21 56 70.5 92t110.5 36h256q61 0 110.5-36t70.5-92h427q40 0 68 28t28 68zm-325-648q-17 40-59 40h-256v448q0 26-19 45t-45 19h-256q-26 0-45-19t-19-45v-448h-256q-42 0-59-40-17-39 14-69l448-448q18-19 45-19t45 19l448 448q31 30 14 69z" />
-              </g>
-            </svg>
-            <span>Upload GCode</span>
-          </div>
-          <div id="tablettab_gcode_delete" class="maslow-grid-item maslow-grid-item-btn"
-            style="background-color: #ce654c; color: white; height: 50px;display: flex;flex-direction: column; opacity: 0.5; pointer-events: none; padding: 2px;" disabled>
-            <span>Delete GCode</span>
-          </div>
-        </div>
-        <!-- Buttons row 6 -->
-        <div id="tablettab-playback-controls" class="maslow-grid-container tablettab-controls-item" style="grid-template-columns: 33% 33% 33%;">
-          <div id="tablettab_gcode_play" class="maslow-grid-item maslow-grid-item-btn"
-            style="background-color: #4aa85c;"><canvas id="playBtn" style="width: 100%; height: 100%"></canvas></div>
-          <div id="tablettab_gcode_stop" class="maslow-grid-item maslow-grid-item-btn"
-            style="background-color: #ce654c;"><canvas id="stopBtn" style="width: 100%; height: 100%"></canvas></div>
-          <div id="systemStatus" class="maslow-grid-item system-status">Idle</div>
-        </div>
-        <div id="tablettab-position-display" class="maslow-grid-container tablettab-controls-item" style="grid-template-columns: auto;">
-          <div class="maslow-grid-item">
-            <table style="width:100%">
-              <tr>
-                <td>X:</td>
-                <td id="wpos-x">0.000</td>
-                <td id="mpos-x">|Xm: 0.000|</td>
-              </tr>
-              <tr>
-                <td>Y:</td>
-                <td id="wpos-y">0.000</td>
-                <td id="mpos-y">|Ym: 0.000|</td>
-              </tr>
-              <tr>
-                <td>Z:</td>
-                <td id="wpos-z">0.000</td>
-                <td id="mpos-z">|Zm: 0.000|</td>
-              </tr>
-              <tr>
-                <td id="active-state"></td>
-              </tr>
-            </table>
-          </div>
-        </div>
-        <div id="tablettab-job-bounds-container" class="maslow-grid-container tablettab-controls-item" style="grid-template-columns: auto;">
-          <div class="maslow-grid-item">
-            <div id="job-bounds-info" style="padding: 5px; background-color: #f8f9fa; border: 1px solid #ddd; border-radius: 3px; font-size: 12px; display: none;">
-              <strong>Job Bounds:</strong><br>
-              <span id="job-bounds-text">No file loaded</span>
-            </div>
-          </div>
-        </div>
-        <textarea style="border: none" class="messages tablettab-controls-item" id="messages" rows="14"
-          spellcheck="false" readonly>Serial Messages</textarea>
-        <button id="tablettab_save_serial_msg" class="btn btn-primary">Save Serial</button>
-      </div>
-    </div>
-  </div>
+board: Maslow
+name: Maslow S3 Board
+meta: 
+Maslow_vertical: false
+Maslow_calibration_grid_width_mm_X: 0.000000
+Maslow_calibration_grid_height_mm_Y: 0.000000
+Maslow_calibration_grid_size: 9
+Maslow_Retract_Current_Threshold: 650
+Maslow_Acceptable_Calibration_Threshold: 0.450000
+Maslow_Extend_Dist: 2708.000000
+Maslow_Scale_X: 1.000000
+Maslow_Scale_Y: 1.000000
+Maslow_debugEnabled: false
+Maslow_Work_Area_X: 2400.000000
+Maslow_Work_Area_Y: 1200.000000
+Maslow_Work_Area_Center_Offset_X: 0.000000
+Maslow_Work_Area_Center_Offset_Y: 0.000000
+MaslowAutoUpdate: false
+MaslowUpdateURL: https://api.github.com/repos/BarbourSmith/FluidNC/releases/latest
+Maslow_spoilboardThickness: 0.000000
+Maslow_workThickness: 0.000000
+stepping: 
+  engine: Timed
+  idle_ms: 240
+  pulse_us: 4
+  dir_delay_us: 0
+  disable_delay_us: 0
+  segments: 12
 
-  <div id="calibration-popup" class="calibration-modal-container">
-    <div id="calibration_popup_content" class="calibration-modal-content">
-      <div class="calibration-modal-button-container">
-        <div class="input-row">
-          <div style="display: flex; justify-content: center;">
-            <label id="state-label" style="text-align: center;">State: </label>
-          </div>
-        </div>
-        <hr style="border-top: 1px dashed;">
-        <div class="buttons-row">
-          <button id="tablettab_cal_retract" class="calibration-modal-button">Retract All</button>
-          <button id="tablettab_cal_extend" class="calibration-modal-button">Extend All</button>
-          <button id="tablettab_cal_tense" class="calibration-modal-button">Apply Tension</button>
-        </div>
-        <div class="buttons-row">
-          <button id="tablettab_cal_calibrate" class="calibration-modal-button">Find Anchor Locations</button>
-          <button id="tablettab_cal_stop" class="calibration-modal-button stop-button">Stop</button>
-          <button id="tablettab_cal_relax" class="calibration-modal-button">Release Tension</button>
-        </div>
-        <hr style="border-top: 1px dashed;">
-        <div class="buttons-row">
-          <button id="tablettab_cal_config" class="calibration-modal-button">Config</button>
-          <button id="tablettab_cal_test" class="calibration-modal-button">Test</button>
-          <button id="tablettab_cal_zstop" class="calibration-modal-button"
-            title="Record the 'bottom' limit for Z-axis movement">Set Z-Stop</button>
-        </div>
-      </div>
-    </div>
-  </div>
+uart1: 
+  txd_pin: gpio.1
+  rxd_pin: gpio.2
+  rts_pin: NO_PIN
+  cts_pin: NO_PIN
+  baud: 115200
+  mode: 8N1
 
-  <div id="optional-settings-popup" class="calibration-modal-container">
-    <div id="optional_settings_popup_content" class="calibration-modal-content">
-      <div class="calibration-modal-button-container">
-        <div class="input-row">
-          <div style="display: flex; justify-content: center;">
-            <label style="text-align: center;">Optional Settings</label>
-          </div>
-        </div>
-        <hr style="border-top: 1px dashed;">
-        <div class="buttons-row">
-          <button id="tablettab_cal_work_area" class="calibration-modal-button green-button"
-            title="Edit work area limits, restricting Maslow's boundaries.&#10;Maslow will be unable to travel beyond limits.">Set Work Area</button>
-          <button id="tablettab_cal_park" class="calibration-modal-button green-button"
-            title="Enter location to Park Maslow">Set Park</button>
-          <button id="tablettab_cal_scale_thickness" class="calibration-modal-button green-button"
-            title="Set scale factors and material thickness">Set Scale and Thickness</button>
-        </div>
-        <div class="buttons-row">
-          <button id="tablettab_cal_apply_tension_limit" class="calibration-modal-button green-button"
-            title="Configure Apply Tension belt retraction monitoring">Apply Tension Belt Limit</button>
-          <button id="tablettab_cal_distance_measurement" class="calibration-modal-button green-button"
-            title="Measure diagonal belt pair distance">Distance Measurement</button>
-        </div>
-      </div>
-    </div>
-  </div>
+spi: 
+  miso_pin: gpio.13
+  mosi_pin: gpio.11
+  sck_pin: gpio.12
 
-  <div id="set-home-popup" class="calibration-modal-container">
-    <div id="set_home_popup_content" class="calibration-modal-content">
-      <div class="calibration-modal-button-container">
-        <div class="input-row">
-          <div style="display: flex; justify-content: center;">
-            <label style="text-align: center;">Set Home Position</label>
-          </div>
-          <div style="display: flex; justify-content: center;">
-            <label id="currentHomePositionLabel" style="text-align: center; font-size: 0.85em; color: #888;"></label>
-          </div>
-        </div>
-        <hr style="border-top: 1px dashed;">
-        <div class="grid-container">
-          <div class="input-row">
-            <label for="setHomeX" class="input-label">X <span id="setHomeXUnit" style="font-size: 0.85em; color: #666;"></span></label>
-          </div>
-          <div class="input-row">
-            <input id="setHomeX" type="number" step="any" class="calibration-modal-input" placeholder="0">
-          </div>
-          <div class="input-row">
-            <label for="setHomeY" class="input-label">Y <span id="setHomeYUnit" style="font-size: 0.85em; color: #666;"></span></label>
-          </div>
-          <div class="input-row">
-            <input id="setHomeY" type="number" step="any" class="calibration-modal-input" placeholder="0">
-          </div>
-        </div>
-        <hr style="border-top: 1px dashed;">
-        <div class="buttons-row">
-          <button id="tablettab_set_home_cancel" class="calibration-modal-button stop-button">Cancel</button>
-          <button id="tablettab_set_home_confirm" class="calibration-modal-button">Set Home</button>
-        </div>
-      </div>
-    </div>
-  </div>
+sdcard: 
+  cs_pin: gpio.10
+  card_detect_pin: NO_PIN
+  frequency_hz: 8000000
 
-  <div id="set-z-home-popup" class="calibration-modal-container">
-    <div id="set_z_home_popup_content" class="calibration-modal-content" tabindex="-1">
-      <div class="calibration-modal-button-container">
-        <div class="input-row">
-          <div style="display: flex; justify-content: center;">
-            <label style="text-align: center;">Set Z Home Position</label>
-          </div>
-          <div style="display: flex; justify-content: center;">
-            <label id="currentZHomeLabel" style="text-align: center; font-size: 0.85em; color: #888;"></label>
-          </div>
-        </div>
-        <hr style="border-top: 1px dashed;">
-        <div class="grid-container">
-          <div class="input-row">
-            <label for="setHomeZ" class="input-label">Z (mm)</label>
-          </div>
-          <div class="input-row">
-            <input id="setHomeZ" type="number" step="any" class="calibration-modal-input" placeholder="0">
-          </div>
-          <div class="input-row">
-            <label for="setHomeZStep" class="input-label">Z Step Value <span id="setHomeZStepUnit" style="font-size: 0.85em; color: #666;"></span></label>
-          </div>
-          <div class="input-row">
-            <input id="setHomeZStep" type="number" min="0.0001" step="any" class="calibration-modal-input" placeholder="5">
-          </div>
-        </div>
-        <svg aria-hidden="true" style="display: none; position: absolute; width: 0; height: 0;">
-          <symbol id="set-z-home-jog-up-icon" viewBox="0 0 38 38">
-            <polygon fill="currentColor" points="10.319 5.525 17.833 13.039 2.805 13.039 10.319 5.525" />
-            <rect fill="currentColor" height="2.5" transform="translate(31.899 11.262) rotate(90)" width="21.79"
-              x="-0.576" y="20.33" />
-          </symbol>
-          <symbol id="set-z-home-jog-down-icon" viewBox="0 0 38 38">
-            <polygon transform="rotate(180) translate(-21 -44)" fill="currentColor"
-              points="10.319 5.525 17.833 13.039 2.805 13.039 10.319 5.525"></polygon>
-            <rect fill="currentColor" height="2.5" transform="translate(32 10) rotate(90)" width="21.79" x="-0.576"
-              y="20.33">
-            </rect>
-          </symbol>
-        </svg>
-        <div class="buttons-row set-z-home-jog-row">
-          <button id="tablettab_set_z_home_up" class="calibration-modal-button set-z-home-jog-button" aria-label="Jog Z up">
-            <svg class="set-z-home-jog-icon" viewBox="0 0 38 38" aria-hidden="true">
-              <use href="#set-z-home-jog-up-icon"></use>
-            </svg>
-            Z Up
-          </button>
-          <button id="tablettab_set_z_home_down" class="calibration-modal-button set-z-home-jog-button" aria-label="Jog Z down">
-            <svg class="set-z-home-jog-icon" viewBox="0 0 38 38" aria-hidden="true">
-              <use href="#set-z-home-jog-down-icon"></use>
-            </svg>
-            Z Down
-          </button>
-        </div>
-        <hr style="border-top: 1px dashed;">
-        <div class="buttons-row">
-          <button id="tablettab_set_z_home_cancel" class="calibration-modal-button stop-button">Cancel</button>
-          <button id="tablettab_set_z_home_confirm" class="calibration-modal-button">Define Z Home</button>
-          <button id="tablettab_move_to_z_home" class="calibration-modal-button green-button">Go to Z Home</button>
-        </div>
-      </div>
-    </div>
-  </div>
+kinematics: 
+  MaslowKinematics: 
+    tlX: 27.900000
+    tlY: 3772.399902
+    tlZ: 96.500000
+    trX: 4377.700195
+    trY: 3774.399902
+    trZ: 54.500000
+    blX: 0.000000
+    blY: 0.000000
+    blZ: 33.500000
+    brX: 4389.299805
+    brY: 0.000000
+    brZ: 75.500000
+    beltEndExtension: 48.000000
+    armLength: 123.400002
+    maxSegmentLength: 5.000000
+    fixedZ: false
 
-  <div id="work-area-popup" class="calibration-modal-container">
-    <div id="work_area_popup_content" class="calibration-modal-content">
-      <div class="calibration-modal-button-container">
-        <div class="input-row">
-          <div style="display: flex; justify-content: center;">
-            <label style="text-align: center; font-weight: bold;">Work Area</label>
-          </div>
-        </div>
-        <div class="input-row">
-          <div id="work-area-current-values" style="text-align: center; font-size: 0.85em; color: #555;"></div>
-        </div>
-        <hr style="border-top: 1px dashed;">
-        <div class="grid-container">
-          <div class="input-row">
-            <label for="workAreaX" class="input-label">Work Area X (mm)</label>
-          </div>
-          <div class="input-row">
-            <input id="workAreaX" type="number" min="1" max="10000" step="1" class="calibration-modal-input" placeholder="2440">
-          </div>
-          <div class="input-row">
-            <label for="workAreaY" class="input-label">Work Area Y (mm)</label>
-          </div>
-          <div class="input-row">
-            <input id="workAreaY" type="number" min="1" max="10000" step="1" class="calibration-modal-input" placeholder="1220">
-          </div>
-          <div class="input-row">
-            <label for="workAreaCenterOffsetX" class="input-label">Center Offset X (mm)</label>
-          </div>
-          <div class="input-row">
-            <input id="workAreaCenterOffsetX" type="number" min="-5000" max="5000" step="1" class="calibration-modal-input" placeholder="0">
-          </div>
-          <div class="input-row">
-            <label for="workAreaCenterOffsetY" class="input-label">Center Offset Y (mm)</label>
-          </div>
-          <div class="input-row">
-            <input id="workAreaCenterOffsetY" type="number" min="-5000" max="5000" step="1" class="calibration-modal-input" placeholder="0">
-          </div>
-        </div>
-        <hr style="border-top: 1px dashed;">
-        <div class="buttons-row">
-          <button id="tablettab_work_area_cancel" class="calibration-modal-button stop-button">Cancel</button>
-          <button id="tablettab_work_area_save" class="calibration-modal-button">Save</button>
-        </div>
-      </div>
-    </div>
-  </div>
+axes: 
+  shared_stepper_disable_pin: NO_PIN
+  shared_stepper_reset_pin: NO_PIN
+  a: 
+    steps_per_mm: 80.000000
+    max_rate_mm_per_min: 2000.000000
+    acceleration_mm_per_sec2: 50.000000
+    max_travel_mm: 4000.000000
+    soft_limits: false
+    homing: 
+      cycle: -1
+      allow_single_axis: true
+      positive_direction: true
+      mpos_mm: 0.000000
+      feed_mm_per_min: 50.000000
+      seek_mm_per_min: 200.000000
+      settle_ms: 250
+      seek_scaler: 1.100000
+      feed_scaler: 1.100000
 
-  <div id="park-popup" class="calibration-modal-container">
-    <div id="park_popup_content" class="calibration-modal-content">
-      <div class="calibration-modal-button-container">
-        <div class="input-row">
-          <div style="display: flex; justify-content: center;">
-            <label style="text-align: center; font-weight: bold;">Park</label>
-          </div>
-        </div>
-        <div class="input-row">
-          <div id="park-current-values" style="text-align: center; font-size: 0.85em; color: #555;"></div>
-        </div>
-        <hr style="border-top: 1px dashed;">
-        <div class="grid-container">
-          <div class="input-row">
-            <label for="parkX" class="input-label">Park X (mm)</label>
-          </div>
-          <div class="input-row">
-            <input id="parkX" type="number" min="-10000" max="10000" step="any" class="calibration-modal-input" placeholder="0" title="Park X absolute position (Centre 0)">
-          </div>
-          <div class="input-row">
-            <label for="parkY" class="input-label">Park Y (mm)</label>
-          </div>
-          <div class="input-row">
-            <input id="parkY" type="number" min="-10000" max="10000" step="any" class="calibration-modal-input" placeholder="0" title="Park Y absolute position (Centre 0)">
-          </div>
-          <div class="input-row">
-            <label for="parkZ" class="input-label">Park Z (mm)</label>
-          </div>
-          <div class="input-row">
-            <input id="parkZ" type="number" min="-100" max="100" step="any" class="calibration-modal-input" placeholder="2" title="Adds to Home Z">
-          </div>
-        </div>
-        <hr style="border-top: 1px dashed;">
-        <div class="buttons-row">
-          <button id="tablettab_park_cancel" class="calibration-modal-button stop-button">Cancel</button>
-          <button id="tablettab_park_save" class="calibration-modal-button">Save</button>
-        </div>
-      </div>
-    </div>
-  </div>
+    motor0: 
+      limit_neg_pin: NO_PIN
+      limit_pos_pin: NO_PIN
+      limit_all_pin: NO_PIN
+      hard_limits: false
+      pulloff_mm: 1.000000
+      null_motor: 
 
-  <div id="scale-thickness-popup" class="calibration-modal-container">
-    <div id="scale_thickness_popup_content" class="calibration-modal-content">
-      <div class="calibration-modal-button-container">
-        <div class="input-row">
-          <div style="display: flex; justify-content: center;">
-            <label style="text-align: center; font-weight: bold;">Scale and Thickness</label>
-          </div>
-        </div>
-        <div class="input-row">
-          <div id="scale-thickness-current-values" style="text-align: center; font-size: 0.85em; color: #555;"></div>
-        </div>
-        <hr style="border-top: 1px dashed;">
-        <div class="grid-container">
-          <div class="input-row">
-            <label for="scaleX" class="input-label">Scale X</label>
-          </div>
-          <div class="input-row">
-            <input id="scaleX" type="number" min="0.8" max="1.2" step="0.001" class="calibration-modal-input" placeholder="1.0">
-          </div>
-          <div class="input-row">
-            <label for="scaleY" class="input-label">Scale Y</label>
-          </div>
-          <div class="input-row">
-            <input id="scaleY" type="number" min="0.8" max="1.2" step="0.001" class="calibration-modal-input" placeholder="1.0">
-          </div>
-          <div class="input-row">
-            <label for="workThickness" class="input-label">Work Thickness (mm)</label>
-          </div>
-          <div class="input-row">
-            <input id="workThickness" type="number" min="0" max="50" step="0.1" class="calibration-modal-input" placeholder="0">
-          </div>
-          <div class="input-row">
-            <label for="spoilboardThickness" class="input-label">Spoilboard Thickness (mm)</label>
-          </div>
-          <div class="input-row">
-            <input id="spoilboardThickness" type="number" min="0" max="50" step="0.1" class="calibration-modal-input" placeholder="0">
-          </div>
-        </div>
-        <hr style="border-top: 1px dashed;">
-        <div class="buttons-row">
-          <button id="tablettab_scale_thickness_cancel" class="calibration-modal-button stop-button">Cancel</button>
-          <button id="tablettab_scale_thickness_save" class="calibration-modal-button">Save</button>
-        </div>
-      </div>
-    </div>
-  </div>
+  b: 
+    steps_per_mm: 80.000000
+    max_rate_mm_per_min: 2000.000000
+    acceleration_mm_per_sec2: 50.000000
+    max_travel_mm: 4000.000000
+    soft_limits: false
+    homing: 
+      cycle: -1
+      allow_single_axis: true
+      positive_direction: true
+      mpos_mm: 0.000000
+      feed_mm_per_min: 50.000000
+      seek_mm_per_min: 200.000000
+      settle_ms: 250
+      seek_scaler: 1.100000
+      feed_scaler: 1.100000
 
-  <div id="apply-tension-limit-popup" class="calibration-modal-container">
-    <div id="apply_tension_limit_popup_content" class="calibration-modal-content">
-      <div class="calibration-modal-button-container">
-        <div class="input-row">
-          <div style="display: flex; justify-content: center;">
-            <label style="text-align: center; font-weight: bold;">Apply Tension Belt Limit</label>
-          </div>
-        </div>
-        <div class="input-row">
-          <div id="apply-tension-limit-current-values" style="text-align: center; font-size: 0.85em; color: #555;"></div>
-        </div>
-        <hr style="border-top: 1px dashed;">
-        <div class="grid-container">
-          <div class="input-row">
-            <label for="applyTensionBeltRetractionLimit" class="input-label" title="Distance Retraction moves before Confirmation Request Generated">Belt Retraction Limit (mm)</label>
-          </div>
-          <div class="input-row">
-            <input id="applyTensionBeltRetractionLimit" type="number" min="0" max="4250" step="1" class="calibration-modal-input" placeholder="300">
-          </div>
-          <div class="input-row">
-            <label for="applyTensionExtendDist" class="input-label" title="Distance Belts Extend to connect to Anchors, Max 4250 mm. ">Extend Dist (mm)</label>
-          </div>
-          <div class="input-row" title="Max 4,250mm">
-            <input id="applyTensionExtendDist" type="text" class="calibration-modal-input">
-          </div>
-        </div>
-        <hr style="border-top: 1px dashed;">
-        <div class="buttons-row">
-          <button id="tablettab_apply_tension_limit_cancel" class="calibration-modal-button stop-button">Cancel</button>
-          <button id="tablettab_apply_tension_limit_save" class="calibration-modal-button">Save</button>
-        </div>
-      </div>
-    </div>
-  </div>
+    motor0: 
+      limit_neg_pin: NO_PIN
+      limit_pos_pin: NO_PIN
+      limit_all_pin: NO_PIN
+      hard_limits: false
+      pulloff_mm: 1.000000
+      null_motor: 
 
-  <div id="configuration-popup" class="calibration-modal-container">
-    <div id="configuration_popup_content" class="calibration-modal-content">
-      <div class="calibration-modal-button-container">
-        <div class="input-row">
-          <div style="display: flex; justify-content: center;">
-            <label style="text-align: center;">Configuration</label>
-          </div>
-        </div>
-        <hr style="border-top: 1px dashed;">
-        <div class="grid-container" title="WiFi Station Settings">
-          <div class="input-row">
-            <label for="wifiSSID" class="input-label">WiFi SSID</label>
-          </div>
-          <div class="input-row">
-            <input id="wifiSSID" type="text" class="calibration-modal-input" placeholder="Enter WiFi network name">
-          </div>
-          <div class="input-row">
-            <label for="wifiPassword" class="input-label">WiFi Password</label>
-          </div>
-          <div class="input-row">
-            <input id="wifiPassword" type="password" class="calibration-modal-input" placeholder="Enter WiFi password">
-          </div>
-        </div>
-        <hr style="border-top: 1px dashed;">
-        <div class="grid-container">
-          <div class="input-row" title="Max 4,250mm">
-            <label for="extendDist" class="input-label">Extend Dist (mm)</label>
-          </div>
-          <div class="input-row" title="Max 4,250mm">
-            <input id="extendDist" type="text" class="calibration-modal-input">
-          </div>
-        </div>
-        <div class="grid-container" title="Valid Range is 0-2500">
-          <div class="input-row">
-            <label for="retractionForce" class="input-label">Retraction Force</label>
-          </div>
-          <div class="input-row">
-            <input id="retractionForce" type="text" class="calibration-modal-input">
-          </div>
-        </div>
-        <hr style="border-top: 1px dashed;">
-        <div class="grid-container" title="Valid Range is 0-50mm">
-          <div class="input-row">
-            <label for="spoilboardThickness" class="input-label">Spoil Board Thickness (mm)</label>
-          </div>
-          <div class="input-row">
-            <input id="spoilboardThickness" type="number" min="0" max="50" step="0.1" class="calibration-modal-input">
-          </div>
-          <div class="input-row">
-            <label for="workThickness" class="input-label">Work Thickness (mm)</label>
-          </div>
-          <div class="input-row">
-            <input id="workThickness" type="number" min="0" max="50" step="0.1" class="calibration-modal-input">
-          </div>
-        </div>
-        <hr style="border-top: 1px dashed;">
-        <div class="input-row">
-          <button id="tablettab_config_save" type="button" class="calibration-modal-button">Save</button>
-        </div>
-      </div>
-    </div>
-  </div>
+  c: 
+    steps_per_mm: 80.000000
+    max_rate_mm_per_min: 2000.000000
+    acceleration_mm_per_sec2: 50.000000
+    max_travel_mm: 4000.000000
+    soft_limits: false
+    homing: 
+      cycle: -1
+      allow_single_axis: true
+      positive_direction: true
+      mpos_mm: 0.000000
+      feed_mm_per_min: 50.000000
+      seek_mm_per_min: 200.000000
+      settle_ms: 250
+      seek_scaler: 1.100000
+      feed_scaler: 1.100000
 
-  <div id="distance-measurement-popup" class="calibration-modal-container">
-    <div id="distance_measurement_popup_content" class="calibration-modal-content">
-      <div class="calibration-modal-button-container">
-        <div class="input-row">
-          <div style="display: flex; justify-content: center;">
-            <label style="text-align: center; font-weight: bold;">Distance Measurement</label>
-          </div>
-        </div>
-        <hr style="border-top: 1px dashed;">
-        <div class="grid-container">
-          <div class="input-row"><label class="input-label">Pair</label></div>
-          <div class="input-row">
-            <label><input type="radio" name="measurementPair" id="measurementPairBLTR" value="BL_TR" checked> BL↔TR</label>
-            <label style="margin-left: 10px;"><input type="radio" name="measurementPair" id="measurementPairBRTL" value="BR_TL"> BR↔TL</label>
-          </div>
-          <div class="input-row"><label for="measurementExtendDist" class="input-label">Extend Distance (mm)</label></div>
-          <div class="input-row"><input id="measurementExtendDist" type="number" min="0" max="4250" step="1" class="calibration-modal-input"></div>
-          <div class="input-row"><label for="measurementRetractionForce" class="input-label">Retraction Force (mA)</label></div>
-          <div class="input-row"><input id="measurementRetractionForce" type="number" min="0" max="3500" step="1" class="calibration-modal-input"></div>
-        </div>
-        <hr style="border-top: 1px dashed;">
-        <div class="buttons-row">
-          <button id="tablettab_measure_retract" class="calibration-modal-button">Retract</button>
-          <button id="tablettab_measure_extend" class="calibration-modal-button">Extend</button>
-          <button id="tablettab_measure_tension" class="calibration-modal-button">Apply Tension</button>
-        </div>
-        <div class="buttons-row">
-          <button id="tablettab_measure_get_distance" class="calibration-modal-button">Get Distance</button>
-          <button id="tablettab_measure_clear_log" class="calibration-modal-button stop-button">Clear Log</button>
-          <button id="tablettab_measure_export_csv" class="calibration-modal-button green-button">Export CSV</button>
-        </div>
-        <hr style="border-top: 1px dashed;">
-        <div id="distance-measurement-results" style="font-size: 0.9em; text-align: left;"></div>
-        <div id="distance-measurement-log" style="margin-top: 8px; max-height: 150px; overflow-y: auto; font-size: 0.85em;"></div>
-      </div>
-    </div>
-  </div>
-</div>
+    motor0: 
+      limit_neg_pin: NO_PIN
+      limit_pos_pin: NO_PIN
+      limit_all_pin: NO_PIN
+      hard_limits: false
+      pulloff_mm: 1.000000
+      null_motor: 
+
+  d: 
+    steps_per_mm: 80.000000
+    max_rate_mm_per_min: 2000.000000
+    acceleration_mm_per_sec2: 50.000000
+    max_travel_mm: 4000.000000
+    soft_limits: false
+    homing: 
+      cycle: -1
+      allow_single_axis: true
+      positive_direction: true
+      mpos_mm: 0.000000
+      feed_mm_per_min: 50.000000
+      seek_mm_per_min: 200.000000
+      settle_ms: 250
+      seek_scaler: 1.100000
+      feed_scaler: 1.100000
+
+    motor0: 
+      limit_neg_pin: NO_PIN
+      limit_pos_pin: NO_PIN
+      limit_all_pin: NO_PIN
+      hard_limits: false
+      pulloff_mm: 1.000000
+      null_motor: 
+
+  z: 
+    steps_per_mm: 100.000000
+    max_rate_mm_per_min: 400.000000
+    acceleration_mm_per_sec2: 10.000000
+    max_travel_mm: 100.000000
+    soft_limits: false
+    homing: 
+      cycle: -1
+      allow_single_axis: true
+      positive_direction: true
+      mpos_mm: 0.000000
+      feed_mm_per_min: 50.000000
+      seek_mm_per_min: 200.000000
+      settle_ms: 250
+      seek_scaler: 1.100000
+      feed_scaler: 1.100000
+
+    motor0: 
+      limit_neg_pin: NO_PIN
+      limit_pos_pin: NO_PIN
+      limit_all_pin: NO_PIN
+      hard_limits: false
+      pulloff_mm: 1.000000
+      tmc_2209: 
+        uart_num: 1
+        step_pin: gpio.15
+        direction_pin: gpio.16
+        disable_pin: NO_PIN
+        r_sense_ohms: 0.110000
+        run_amps: 1.000000
+        hold_amps: 0.500000
+        microsteps: 1
+        toff_disable: 0
+        toff_stealthchop: 5
+        use_enable: true
+        addr: 0
+        run_mode: StealthChop
+        homing_mode: StealthChop
+        stallguard: 0
+        stallguard_debug: false
+        toff_coolstep: 3
+
+    motor1: 
+      limit_neg_pin: NO_PIN
+      limit_pos_pin: NO_PIN
+      limit_all_pin: NO_PIN
+      hard_limits: false
+      pulloff_mm: 1.000000
+      tmc_2209: 
+        uart_num: 1
+        step_pin: gpio.46
+        direction_pin: NO_PIN
+        disable_pin: NO_PIN
+        r_sense_ohms: 0.110000
+        run_amps: 1.000000
+        hold_amps: 0.500000
+        microsteps: 1
+        toff_disable: 0
+        toff_stealthchop: 5
+        use_enable: true
+        addr: 1
+        run_mode: StealthChop
+        homing_mode: StealthChop
+        stallguard: 0
+        stallguard_debug: false
+        toff_coolstep: 3
+
+control: 
+  safety_door_pin: NO_PIN
+  reset_pin: NO_PIN
+  feed_hold_pin: NO_PIN
+  cycle_start_pin: NO_PIN
+  macro0_pin: NO_PIN
+  macro1_pin: NO_PIN
+  macro2_pin: NO_PIN
+  macro3_pin: NO_PIN
+
+coolant: 
+  flood_pin: NO_PIN
+  mist_pin: NO_PIN
+  delay_ms: 0
+
+probe: 
+  pin: NO_PIN
+  check_mode_start: true
+
+macros: 
+  startup_line0: 
+  startup_line1: 
+  macro0: 
+  macro1: 
+  macro2: 
+  macro3: 
+
+start: 
+  must_home: true
+  deactivate_parking: false
+  check_limits: false
+
+parking: 
+  enable: false
+  axis: Z
+  target_mpos_mm: -5.000000
+  rate_mm_per_min: 800.000000
+  pullout_distance_mm: 5.000000
+  pullout_rate_mm_per_min: 250.000000
+
+user_outputs: 
+  analog0_pin: NO_PIN
+  analog1_pin: NO_PIN
+  analog2_pin: NO_PIN
+  analog3_pin: NO_PIN
+  analog0_hz: 5000
+  analog1_hz: 5000
+  analog2_hz: 5000
+  analog3_hz: 5000
+  digital0_pin: NO_PIN
+  digital1_pin: NO_PIN
+  digital2_pin: NO_PIN
+  digital3_pin: NO_PIN
+  digital4_pin: NO_PIN
+  digital5_pin: NO_PIN
+  digital6_pin: NO_PIN
+  digital7_pin: NO_PIN
+
+NoSpindle: 
+
+arc_tolerance_mm: 0.002000
+junction_deviation_mm: 0.010000
+verbose_errors: false
+report_inches: false
+enable_parking_override_control: false
+use_line_numbers: false
+planner_blocks: 16
