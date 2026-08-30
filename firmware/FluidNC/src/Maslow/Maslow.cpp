@@ -287,7 +287,7 @@ void Maslow_::update() {
         //--------Homing routines
         else if (sys.state() == State::Homing) {
             calibration.home();
-        } else {  //This is confusing to understand. This is an else if so this is only run if we are not in jog, cycle, or homing
+        } else if (!beltMeasurementRequest.active) {  //Only run if we are not in jog, cycle, or homing AND not driving a belt measurement
             // Clear any motor override flags to ensure motors stop
             calibration.clearMotorOverrides();
             Maslow.stopMotors();
@@ -299,7 +299,8 @@ void Maslow_::update() {
         }
         //If we are doing calibration turn the cooling fan on
         else if (calibration.calibrationInProgress || calibration.getCurrentState() == EXTENDING ||
-                 calibration.getCurrentState() == RETRACTING || calibration.getCurrentState() == RELEASE_TENSION) {
+                 calibration.getCurrentState() == RETRACTING || calibration.getCurrentState() == RELEASE_TENSION ||
+                 beltMeasurementRequest.active) {
             digitalWrite(coolingFanPin, HIGH);  //keep the cooling fan on
         } else {
             digitalWrite(coolingFanPin, LOW);  //Turn the cooling fan off
@@ -1314,43 +1315,136 @@ void Maslow_::getInfo() {
     releaseLogBuffer();
 }
 
-bool Maslow_::startBeltDistanceMeasurement(int pairIndex, float extendDistanceMm, int retractionForceMa) {
-    if (using_default_config) {
-        log_error("Cannot run belt distance measurement while using default configuration");
-        return false;
+static const char* beltMeasPairLabel(Maslow_::BeltMeasurementPair p) {
+    return (p == Maslow_::BELT_PAIR_BR_TL) ? "BR_TL" : "BL_TR";
+}
+
+void Maslow_::stopBeltMeasurement(const char* reason, bool isError) {
+    const int armA = (beltMeasurementRequest.pair == BELT_PAIR_BR_TL) ? _BR : _BL;
+    const int armB = (beltMeasurementRequest.pair == BELT_PAIR_BR_TL) ? _TL : _TR;
+    axis[armA].stop();
+    axis[armB].stop();
+    axis[armA].reset();  // clear pull-tight ramp state so a restart doesn't jerk
+    axis[armB].reset();
+    beltMeasurementRequest.active   = false;
+    beltMeasurementRequest.stage    = BELT_MEASUREMENT_IDLE;
+    beltMeasurementRequest.armADone = false;
+    beltMeasurementRequest.armBDone = false;
+    if (isError) {
+        log_error("BeltDistance " << reason);
+    } else {
+        log_info("BeltDistance:type=status,stage=idle,detail=" << reason);
+    }
+}
+
+bool Maslow_::startBeltMeasurementAction(char action, int pairIndex, float extendDistanceMm, int retractionForceMa) {
+    if (action >= 'a' && action <= 'z') {
+        action = action - 'a' + 'A';
     }
 
-    if (pairIndex < BELT_PAIR_BL_TR || pairIndex > BELT_PAIR_BR_TL) {
-        log_error("Invalid belt measurement pair " << pairIndex << " (expected 0=BL_TR or 1=BR_TL)");
-        return false;
+    // Stop/abort works from any state, any time
+    if (action == 'S') {
+        stopBeltMeasurement("stopped by user", false);
+        return true;
     }
-    if (extendDistanceMm < 0.0f || extendDistanceMm > 4250.0f) {
-        log_error("Invalid belt measurement extend distance " << extendDistanceMm << "mm (expected 0-4250)");
-        return false;
+
+    // Report-only: no motion. Allowed while tension is held (or any time, with a warning).
+    if (action == 'G') {
+        if (beltMeasurementRequest.active) {
+            log_error("BeltDistance: busy, wait for the current stage or send $MBD=S first");
+            return false;
+        }
+        if (beltMeasurementRequest.stage != BELT_MEASUREMENT_TENSIONED) {
+            log_warn("BeltDistance: reporting without tension applied - values may not be meaningful");
+        }
+        reportBeltDistanceMeasurement();
+        return true;
     }
-    if (retractionForceMa < 0 || retractionForceMa > 3500) {
-        log_error("Invalid belt measurement retraction force " << retractionForceMa << "mA (expected 0-3500)");
+
+    // Everything below moves the machine
+    if (using_default_config) {
+        log_error("BeltDistance: cannot run while using default configuration");
         return false;
     }
     if (beltMeasurementRequest.active) {
-        log_error("Belt distance measurement already in progress");
+        log_error("BeltDistance: an action is already in progress, send $MBD=S to stop it first");
+        return false;
+    }
+    if (calibration.calibrationInProgress) {
+        log_error("BeltDistance: cannot run during calibration");
+        return false;
+    }
+    if (sys.state() == State::Cycle || sys.state() == State::Jog || sys.state() == State::Homing || sys.state() == State::Hold) {
+        log_error("BeltDistance: machine is busy, stop the current operation first");
+        return false;
+    }
+    if (pairIndex < BELT_PAIR_BL_TR || pairIndex > BELT_PAIR_BR_TL) {
+        log_error("BeltDistance: invalid pair " << pairIndex << " (expected 0=BL_TR or 1=BR_TL)");
         return false;
     }
 
-    beltMeasurementRequest.active            = true;
-    beltMeasurementRequest.pair              = static_cast<BeltMeasurementPair>(pairIndex);
-    beltMeasurementRequest.extendDistanceMm  = extendDistanceMm;
-    beltMeasurementRequest.retractionForceMa = retractionForceMa;
-    beltMeasurementRequest.stage             = BELT_MEASUREMENT_RETRACTING;
-    beltMeasurementRequest.stageStartMs      = millis();
-    beltMeasurementRequest.armADone          = false;
-    beltMeasurementRequest.armBDone          = false;
+    beltMeasurementRequest.pair = static_cast<BeltMeasurementPair>(pairIndex);
+    const int   armA            = (beltMeasurementRequest.pair == BELT_PAIR_BR_TL) ? _BR : _BL;
+    const int   armB            = (beltMeasurementRequest.pair == BELT_PAIR_BR_TL) ? _TL : _TR;
+    const char* pairLabel       = beltMeasPairLabel(beltMeasurementRequest.pair);
 
-    measurementPair              = (beltMeasurementRequest.pair == BELT_PAIR_BR_TL) ? "BR_TL" : "BL_TR";
-    measurementExtendDistanceMm  = extendDistanceMm;
-    measurementRetractionForceMa = retractionForceMa;
+    axis[armA].reset();
+    axis[armB].reset();
+    beltMeasurementRequest.armADone     = false;
+    beltMeasurementRequest.armBDone     = false;
+    beltMeasurementRequest.stageStartMs = millis();
 
-    log_info("BeltDistance started pair=" << measurementPair << " extend=" << extendDistanceMm << "mm retractionForce=" << retractionForceMa << "mA");
+    switch (action) {
+        case 'R':
+            if (retractionForceMa < 100 || retractionForceMa > 3500) {
+                log_error("BeltDistance: invalid force " << retractionForceMa << "mA (expected 100-3500)");
+                return false;
+            }
+            beltMeasurementRequest.retractionForceMa = retractionForceMa;
+            beltMeasurementRequest.stage             = BELT_MEASUREMENT_RETRACTING;
+            beltMeasurementRequest.stageTimeoutMs    = 180000;  // 3 min
+            beltMeasurementRequest.active            = true;
+            measurementRetractionForceMa             = retractionForceMa;
+            measurementPair                          = pairLabel;
+            log_info("BeltDistance:type=status,stage=retracting,pair=" << pairLabel << ",force=" << retractionForceMa);
+            break;
+        case 'E':
+            if (extendDistanceMm < 100.0f || extendDistanceMm > 4250.0f) {
+                log_error("BeltDistance: invalid extend distance " << extendDistanceMm << "mm (expected 100-4250)");
+                return false;
+            }
+            beltMeasurementRequest.extendDistanceMm = extendDistanceMm;
+            beltMeasurementRequest.stage            = BELT_MEASUREMENT_EXTENDING;
+            beltMeasurementRequest.stageTimeoutMs   = 600000;  // 10 min - the user pulls the belts out by hand
+            beltMeasurementRequest.active           = true;
+            measurementExtendDistanceMm             = extendDistanceMm;
+            measurementPair                         = pairLabel;
+            log_info("BeltDistance:type=status,stage=extending,pair=" << pairLabel << ",target=" << extendDistanceMm
+                                                                      << ",detail=Pull the two belts out to length");
+            break;
+        case 'T':
+            if (retractionForceMa < 100 || retractionForceMa > 3500) {
+                log_error("BeltDistance: invalid force " << retractionForceMa << "mA (expected 100-3500)");
+                return false;
+            }
+            beltMeasurementRequest.retractionForceMa = retractionForceMa;
+            beltMeasurementRequest.stage             = BELT_MEASUREMENT_TENSIONING;
+            beltMeasurementRequest.stageTimeoutMs    = 120000;  // 2 min
+            beltMeasurementRequest.active            = true;
+            measurementRetractionForceMa             = retractionForceMa;
+            measurementPair                          = pairLabel;
+            log_info("BeltDistance:type=status,stage=tensioning,pair=" << pairLabel << ",force=" << retractionForceMa);
+            break;
+        case 'L':
+            beltMeasurementRequest.stage          = BELT_MEASUREMENT_RELEASING;
+            beltMeasurementRequest.stageTimeoutMs = 10000;
+            beltMeasurementRequest.active         = true;
+            log_info("BeltDistance:type=status,stage=releasing,pair=" << pairLabel);
+            break;
+        default:
+            log_error("BeltDistance: unknown action (expected R, E, T, G, L, or S)");
+            return false;
+    }
     return true;
 }
 
@@ -1359,13 +1453,8 @@ void Maslow_::processBeltDistanceMeasurement() {
         return;
     }
 
-    static constexpr unsigned long stageTimeoutMs = 180000;
-    if (millis() - beltMeasurementRequest.stageStartMs > stageTimeoutMs) {
-        log_error("BeltDistance failed: timeout waiting for stage " << static_cast<int>(beltMeasurementRequest.stage));
-        beltMeasurementRequest.active   = false;
-        beltMeasurementRequest.stage    = BELT_MEASUREMENT_IDLE;
-        beltMeasurementRequest.armADone = false;
-        beltMeasurementRequest.armBDone = false;
+    if (millis() - beltMeasurementRequest.stageStartMs > beltMeasurementRequest.stageTimeoutMs) {
+        stopBeltMeasurement("failed: stage timed out - motors stopped", true);
         return;
     }
 
@@ -1374,17 +1463,23 @@ void Maslow_::processBeltDistanceMeasurement() {
 
     switch (beltMeasurementRequest.stage) {
         case BELT_MEASUREMENT_RETRACTING: {
-            if (!beltMeasurementRequest.armADone) {
-                beltMeasurementRequest.armADone = axis[armA].retract();
+            // pull_tight to the USER's force setting, then zero - same force as tensioning for a repeatable baseline
+            if (!beltMeasurementRequest.armADone && axis[armA].pull_tight(beltMeasurementRequest.retractionForceMa)) {
+                String label = axis_id_to_label(armA);
+                log_info("BeltDistance:type=status,stage=retracting,belt=" << label.c_str() << ",detail=retracted and zeroed");
+                axis[armA].zero();
+                beltMeasurementRequest.armADone = true;
             }
-            if (!beltMeasurementRequest.armBDone) {
-                beltMeasurementRequest.armBDone = axis[armB].retract();
+            if (!beltMeasurementRequest.armBDone && axis[armB].pull_tight(beltMeasurementRequest.retractionForceMa)) {
+                String label = axis_id_to_label(armB);
+                log_info("BeltDistance:type=status,stage=retracting,belt=" << label.c_str() << ",detail=retracted and zeroed");
+                axis[armB].zero();
+                beltMeasurementRequest.armBDone = true;
             }
             if (beltMeasurementRequest.armADone && beltMeasurementRequest.armBDone) {
-                beltMeasurementRequest.stage       = BELT_MEASUREMENT_EXTENDING;
-                beltMeasurementRequest.stageStartMs = millis();
-                beltMeasurementRequest.armADone    = false;
-                beltMeasurementRequest.armBDone    = false;
+                beltMeasurementRequest.active = false;
+                beltMeasurementRequest.stage  = BELT_MEASUREMENT_IDLE;
+                log_info("BeltDistance:type=status,stage=retracted,detail=Both belts retracted and zeroed");
             }
             break;
         }
@@ -1396,14 +1491,15 @@ void Maslow_::processBeltDistanceMeasurement() {
                 beltMeasurementRequest.armBDone = axis[armB].extend(beltMeasurementRequest.extendDistanceMm);
             }
             if (beltMeasurementRequest.armADone && beltMeasurementRequest.armBDone) {
-                beltMeasurementRequest.stage       = BELT_MEASUREMENT_APPLYING_TENSION;
-                beltMeasurementRequest.stageStartMs = millis();
-                beltMeasurementRequest.armADone    = false;
-                beltMeasurementRequest.armBDone    = false;
+                axis[armA].stop();
+                axis[armB].stop();
+                beltMeasurementRequest.active = false;
+                beltMeasurementRequest.stage  = BELT_MEASUREMENT_EXTENDED;
+                log_info("BeltDistance:type=status,stage=extended,detail=Attach the belt ends then apply tension");
             }
             break;
         }
-        case BELT_MEASUREMENT_APPLYING_TENSION: {
+        case BELT_MEASUREMENT_TENSIONING: {
             if (!beltMeasurementRequest.armADone) {
                 beltMeasurementRequest.armADone = axis[armA].pull_tight(beltMeasurementRequest.retractionForceMa);
             }
@@ -1411,24 +1507,40 @@ void Maslow_::processBeltDistanceMeasurement() {
                 beltMeasurementRequest.armBDone = axis[armB].pull_tight(beltMeasurementRequest.retractionForceMa);
             }
             if (beltMeasurementRequest.armADone && beltMeasurementRequest.armBDone) {
+                beltMeasurementRequest.active = false;
+                beltMeasurementRequest.stage  = BELT_MEASUREMENT_TENSIONED;
+                log_info("BeltDistance:type=status,stage=tensioned,detail=Tension applied and holding");
                 reportBeltDistanceMeasurement();
-                beltMeasurementRequest.stage    = BELT_MEASUREMENT_COMPLETE;
-                beltMeasurementRequest.armADone = false;
-                beltMeasurementRequest.armBDone = false;
             }
             break;
         }
-        case BELT_MEASUREMENT_COMPLETE: {
-            axis[armA].stop();
-            axis[armB].stop();
-            beltMeasurementRequest.active   = false;
-            beltMeasurementRequest.stage    = BELT_MEASUREMENT_IDLE;
-            beltMeasurementRequest.armADone = false;
-            beltMeasurementRequest.armBDone = false;
+        case BELT_MEASUREMENT_RELEASING: {
+            unsigned long elapsed = millis() - beltMeasurementRequest.stageStartMs;
+            if (elapsed < 40) {
+                axis[armA].decompressBelt();
+                axis[armB].decompressBelt();
+            } else if (elapsed < 800) {
+                axis[armA].comply();
+                axis[armB].comply();
+            } else if (elapsed < 1300) {
+                axis[armA].stop();
+                axis[armB].stop();
+            } else {
+                axis[armA].stop();
+                axis[armB].stop();
+                axis[armA].reset();
+                axis[armB].reset();
+                beltMeasurementRequest.active = false;
+                beltMeasurementRequest.stage  = BELT_MEASUREMENT_IDLE;
+                log_info("BeltDistance:type=status,stage=released,detail=Tension released");
+            }
             break;
         }
         case BELT_MEASUREMENT_IDLE:
+        case BELT_MEASUREMENT_EXTENDED:
+        case BELT_MEASUREMENT_TENSIONED:
         default:
+            beltMeasurementRequest.active = false;
             break;
     }
 }
@@ -1441,44 +1553,48 @@ void Maslow_::reportBeltDistanceMeasurement() {
         return;
     }
 
-    const int armA = (beltMeasurementRequest.pair == BELT_PAIR_BR_TL) ? _BR : _BL;
-    const int armB = (beltMeasurementRequest.pair == BELT_PAIR_BR_TL) ? _TL : _TR;
-    const char* pairLabel = (beltMeasurementRequest.pair == BELT_PAIR_BR_TL) ? "BR_TL" : "BL_TR";
+    const int   armA      = (beltMeasurementRequest.pair == BELT_PAIR_BR_TL) ? _BR : _BL;
+    const int   armB      = (beltMeasurementRequest.pair == BELT_PAIR_BR_TL) ? _TL : _TR;
+    const char* pairLabel = beltMeasPairLabel(beltMeasurementRequest.pair);
 
-    const float zPosition = steps_to_mpos(get_axis_motor_steps(4), 4);
+    const float zPosition           = steps_to_mpos(get_axis_motor_steps(4), 4);
     const float spoilboardThickness = kinematics->getSpoilboardThickness();
     const float workThickness       = kinematics->getWorkThickness();
     const float beltEndExtension    = kinematics->getBeltEndExtension();
     const float armLength           = kinematics->getArmLength();
+    const float toothSpacing        = kinematics->getBeltToothSpacing();
 
-    auto computeDistance = [&](int arm, float& spool, float& zComponent, float& xyDistance, float& totalDistance, float& tension) {
+    auto computeDistance = [&](int arm, float& spool, float& anchorZ, float& zComponent, float& xyDistance, float& totalDistance) {
         spool      = axis[arm].getPosition();
-        zComponent = 0.0f - (zPosition + kinematics->getAnchorCoord(arm, Coord_Z) + spoilboardThickness + workThickness);
-        const float zAbs      = fabsf(zComponent);
-        const float squaredXY = (spool * spool) - (zAbs * zAbs);
+        anchorZ    = kinematics->getAnchorCoord(arm, Coord_Z);
+        zComponent = zPosition + anchorZ + spoilboardThickness + workThickness;
+        const float squaredXY = (spool * spool) - (zComponent * zComponent);
         if (squaredXY < 0.0f) {
-            xyDistance = 0.0f;
-            const String armLabel = axis_id_to_label(arm);
-            log_warn("BeltDistance warning: invalid XY geometry for arm " << armLabel.c_str() << " spool=" << spool << " zAbs=" << zAbs);
+            xyDistance   = 0.0f;
+            String label = axis_id_to_label(arm);
+            log_warn("BeltDistance: invalid XY geometry for arm " << label.c_str() << " spool=" << spool << " z=" << zComponent);
         } else {
             xyDistance = sqrtf(squaredXY);
         }
         totalDistance = xyDistance + beltEndExtension + armLength;
-        tension       = axis[arm].getMotorCurrent();
     };
 
-    float spoolA, zA, xyA, totalA, tensionA;
-    float spoolB, zB, xyB, totalB, tensionB;
-    computeDistance(armA, spoolA, zA, xyA, totalA, tensionA);
-    computeDistance(armB, spoolB, zB, xyB, totalB, tensionB);
+    float spoolA, anchorZA, zA, xyA, totalA;
+    float spoolB, anchorZB, zB, xyB, totalB;
+    computeDistance(armA, spoolA, anchorZA, zA, xyA, totalA);
+    computeDistance(armB, spoolB, anchorZB, zB, xyB, totalB);
 
     const String armALabel = axis_id_to_label(armA);
     const String armBLabel = axis_id_to_label(armB);
-    log_info("BeltDistance:pair=" << pairLabel << ",timestamp=" << static_cast<uint64_t>(millis()) << ",beltA=" << armALabel.c_str() << ",spoolA=" << spoolA << ",zA=" << zA
-                                  << ",xyA=" << xyA << ",beltEndA=" << beltEndExtension << ",armA=" << armLength << ",totalA=" << totalA
-                                  << ",tensionA=" << tensionA << ",beltB=" << armBLabel.c_str() << ",spoolB=" << spoolB << ",zB=" << zB << ",xyB=" << xyB
-                                  << ",beltEndB=" << beltEndExtension << ",armB=" << armLength << ",totalB=" << totalB << ",tensionB=" << tensionB
-                                  << ",appliedTensionMa=" << beltMeasurementRequest.retractionForceMa);
+    log_info("BeltDistance:type=result,pair=" << pairLabel << ",timestamp=" << static_cast<uint64_t>(millis())
+             << ",zPos=" << zPosition << ",spoil=" << spoilboardThickness << ",work=" << workThickness
+             << ",tooth=" << toothSpacing << ",beltEnd=" << beltEndExtension << ",armLen=" << armLength
+             << ",beltA=" << armALabel.c_str() << ",spoolA=" << spoolA << ",anchorZA=" << anchorZA << ",zA=" << zA
+             << ",xyA=" << xyA << ",totalA=" << totalA
+             << ",beltB=" << armBLabel.c_str() << ",spoolB=" << spoolB << ",anchorZB=" << anchorZB << ",zB=" << zB
+             << ",xyB=" << xyB << ",totalB=" << totalB
+             << ",anchorToAnchor=" << (totalA + totalB)
+             << ",appliedTensionMa=" << beltMeasurementRequest.retractionForceMa);
 }
 
 void Maslow_::set_telemetry(bool enabled) {
