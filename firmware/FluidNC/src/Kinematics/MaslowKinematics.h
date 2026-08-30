@@ -1,303 +1,139 @@
-board: Maslow
-name: Maslow S3 Board
-meta: 
-Maslow_vertical: false
-Maslow_calibration_grid_width_mm_X: 0.000000
-Maslow_calibration_grid_height_mm_Y: 0.000000
-Maslow_calibration_grid_size: 9
-Maslow_Retract_Current_Threshold: 650
-Maslow_Acceptable_Calibration_Threshold: 0.450000
-Maslow_Extend_Dist: 2708.000000
-Maslow_Scale_X: 1.000000
-Maslow_Scale_Y: 1.000000
-Maslow_debugEnabled: false
-Maslow_Work_Area_X: 2400.000000
-Maslow_Work_Area_Y: 1200.000000
-Maslow_Work_Area_Center_Offset_X: 0.000000
-Maslow_Work_Area_Center_Offset_Y: 0.000000
-MaslowAutoUpdate: false
-MaslowUpdateURL: https://api.github.com/repos/BarbourSmith/FluidNC/releases/latest
-Maslow_spoilboardThickness: 0.000000
-Maslow_workThickness: 0.000000
-stepping: 
-  engine: Timed
-  idle_ms: 240
-  pulse_us: 4
-  dir_delay_us: 0
-  disable_delay_us: 0
-  segments: 12
+// Copyright (c) 2024 - Maslow CNC. All rights reserved.
+// Use of this source code is governed by a GPLv3 license that can be found in the LICENSE file.
 
-uart1: 
-  txd_pin: gpio.1
-  rxd_pin: gpio.2
-  rts_pin: NO_PIN
-  cts_pin: NO_PIN
-  baud: 115200
-  mode: 8N1
+#pragma once
 
-spi: 
-  miso_pin: gpio.13
-  mosi_pin: gpio.11
-  sck_pin: gpio.12
+/*
+    MaslowKinematics.h
 
-sdcard: 
-  cs_pin: gpio.10
-  card_detect_pin: NO_PIN
-  frequency_hz: 8000000
+    This implements Maslow CNC Kinematics for a cable-driven router system.
+    
+    The Maslow CNC has four anchor points (TL, TR, BL, BR) connected by cables/belts
+    to a router sled. The kinematics transforms X,Y,Z coordinates into the four
+    belt lengths needed to position the sled.
+    
+    This replaces the custom coordinate transformation logic previously handled
+    in Maslow.cpp, allowing FluidNC to handle acceleration planning and feed rate
+    limiting on a per-belt basis.
+*/
 
-kinematics: 
-  MaslowKinematics: 
-    tlX: 27.900000
-    tlY: 3772.399902
-    tlZ: 96.500000
-    trX: 4377.700195
-    trY: 3774.399902
-    trZ: 54.500000
-    blX: 0.000000
-    blY: 0.000000
-    blZ: 33.500000
-    brX: 4389.299805
-    brY: 0.000000
-    brZ: 75.500000
-    beltEndExtension: 48.000000
-    armLength: 123.400002
-    maxSegmentLength: 5.000000
-    fixedZ: false
+#include "Kinematics.h"
+#include "../Maslow/MaslowEnums.h"
 
-axes: 
-  shared_stepper_disable_pin: NO_PIN
-  shared_stepper_reset_pin: NO_PIN
-  a: 
-    steps_per_mm: 80.000000
-    max_rate_mm_per_min: 2000.000000
-    acceleration_mm_per_sec2: 50.000000
-    max_travel_mm: 4000.000000
-    soft_limits: false
-    homing: 
-      cycle: -1
-      allow_single_axis: true
-      positive_direction: true
-      mpos_mm: 0.000000
-      feed_mm_per_min: 50.000000
-      seek_mm_per_min: 200.000000
-      settle_ms: 250
-      seek_scaler: 1.100000
-      feed_scaler: 1.100000
+namespace Kinematics {
+    class MaslowKinematics : public KinematicSystem {
+    public:
+        MaslowKinematics() = default;
 
-    motor0: 
-      limit_neg_pin: NO_PIN
-      limit_pos_pin: NO_PIN
-      limit_all_pin: NO_PIN
-      hard_limits: false
-      pulloff_mm: 1.000000
-      null_motor: 
+        MaslowKinematics(const MaslowKinematics&)            = delete;
+        MaslowKinematics(MaslowKinematics&&)                 = delete;
+        MaslowKinematics& operator=(const MaslowKinematics&) = delete;
+        MaslowKinematics& operator=(MaslowKinematics&&)      = delete;
 
-  b: 
-    steps_per_mm: 80.000000
-    max_rate_mm_per_min: 2000.000000
-    acceleration_mm_per_sec2: 50.000000
-    max_travel_mm: 4000.000000
-    soft_limits: false
-    homing: 
-      cycle: -1
-      allow_single_axis: true
-      positive_direction: true
-      mpos_mm: 0.000000
-      feed_mm_per_min: 50.000000
-      seek_mm_per_min: 200.000000
-      settle_ms: 250
-      seek_scaler: 1.100000
-      feed_scaler: 1.100000
+        // Kinematic Interface
+        void init() override;
+        void init_position() override;
+        bool cartesian_to_motors(float* target, plan_line_data_t* pl_data, float* position) override;
+        void motors_to_cartesian(float* cartesian, float* motors, int n_axis) override;
+        void transform_cartesian_to_motors(float* motors, float* cartesian) override;
 
-    motor0: 
-      limit_neg_pin: NO_PIN
-      limit_pos_pin: NO_PIN
-      limit_all_pin: NO_PIN
-      hard_limits: false
-      pulloff_mm: 1.000000
-      null_motor: 
+        bool canHome(AxisMask axisMask) override;
+        void releaseMotors(AxisMask axisMask, MotorMask motors) override;
+        bool limitReached(AxisMask& axisMask, MotorMask& motors, MotorMask limited) override;
 
-  c: 
-    steps_per_mm: 80.000000
-    max_rate_mm_per_min: 2000.000000
-    acceleration_mm_per_sec2: 50.000000
-    max_travel_mm: 4000.000000
-    soft_limits: false
-    homing: 
-      cycle: -1
-      allow_single_axis: true
-      positive_direction: true
-      mpos_mm: 0.000000
-      feed_mm_per_min: 50.000000
-      seek_mm_per_min: 200.000000
-      settle_ms: 250
-      seek_scaler: 1.100000
-      feed_scaler: 1.100000
+        // Configuration handlers:
+        void validate() override;
+        void group(Configuration::HandlerBase& handler) override;
+        void afterParse() override;
 
-    motor0: 
-      limit_neg_pin: NO_PIN
-      limit_pos_pin: NO_PIN
-      limit_all_pin: NO_PIN
-      hard_limits: false
-      pulloff_mm: 1.000000
-      null_motor: 
+        // Name of the configurable. Must match the name registered in the cpp file.
+        const char* name() const override { return "MaslowKinematics"; }
 
-  d: 
-    steps_per_mm: 80.000000
-    max_rate_mm_per_min: 2000.000000
-    acceleration_mm_per_sec2: 50.000000
-    max_travel_mm: 4000.000000
-    soft_limits: false
-    homing: 
-      cycle: -1
-      allow_single_axis: true
-      positive_direction: true
-      mpos_mm: 0.000000
-      feed_mm_per_min: 50.000000
-      seek_mm_per_min: 200.000000
-      settle_ms: 250
-      seek_scaler: 1.100000
-      feed_scaler: 1.100000
+        ~MaslowKinematics();
 
-    motor0: 
-      limit_neg_pin: NO_PIN
-      limit_pos_pin: NO_PIN
-      limit_all_pin: NO_PIN
-      hard_limits: false
-      pulloff_mm: 1.000000
-      null_motor: 
+        // Public access to compute functions for calibration system
+        float compute(int arm, float x, float y, float z);
+        // Deprecated: Use compute(arm, x, y, z) instead
+        float computeTL(float x, float y, float z) { return compute(_TL, x, y, z); }
+        float computeTR(float x, float y, float z) { return compute(_TR, x, y, z); }
+        float computeBL(float x, float y, float z) { return compute(_BL, x, y, z); }
+        float computeBR(float x, float y, float z) { return compute(_BR, x, y, z); }
 
-  z: 
-    steps_per_mm: 100.000000
-    max_rate_mm_per_min: 400.000000
-    acceleration_mm_per_sec2: 10.000000
-    max_travel_mm: 100.000000
-    soft_limits: false
-    homing: 
-      cycle: -1
-      allow_single_axis: true
-      positive_direction: true
-      mpos_mm: 0.000000
-      feed_mm_per_min: 50.000000
-      seek_mm_per_min: 200.000000
-      settle_ms: 250
-      seek_scaler: 1.100000
-      feed_scaler: 1.100000
+        // Getters for parameters used by calibration system
+        float getAnchorCoord(int arm, int axis) const { return anchor_location[arm][axis]; }
+        // Deprecated: Use getAnchorCoord(arm, axis) instead
+        float getTlX() const { return getAnchorCoord(_TL, Coord_X); }
+        float getTlY() const { return getAnchorCoord(_TL, Coord_Y); }
+        float getTlZ() const { return getAnchorCoord(_TL, Coord_Z); }
+        float getTrX() const { return getAnchorCoord(_TR, Coord_X); }
+        float getTrY() const { return getAnchorCoord(_TR, Coord_Y); }
+        float getTrZ() const { return getAnchorCoord(_TR, Coord_Z); }
+        float getBlX() const { return getAnchorCoord(_BL, Coord_X); }
+        float getBlY() const { return getAnchorCoord(_BL, Coord_Y); }
+        float getBlZ() const { return getAnchorCoord(_BL, Coord_Z); }
+        float getBrX() const { return getAnchorCoord(_BR, Coord_X); }
+        float getBrY() const { return getAnchorCoord(_BR, Coord_Y); }
+        float getBrZ() const { return getAnchorCoord(_BR, Coord_Z); }
+        float getBeltEndExtension() const { return _beltEndExtension; }
+        float getArmLength() const { return _armLength; }
+        float getBeltToothSpacing() const { return _beltToothSpacing; }
+        float getSpoilboardThickness() const { return _spoilboardThickness; }
+        float getWorkThickness() const { return _workThickness; }
+        float getCenterX() const { return _centerX; }
+        float getCenterY() const { return _centerY; }
 
-    motor0: 
-      limit_neg_pin: NO_PIN
-      limit_pos_pin: NO_PIN
-      limit_all_pin: NO_PIN
-      hard_limits: false
-      pulloff_mm: 1.000000
-      tmc_2209: 
-        uart_num: 1
-        step_pin: gpio.15
-        direction_pin: gpio.16
-        disable_pin: NO_PIN
-        r_sense_ohms: 0.110000
-        run_amps: 1.000000
-        hold_amps: 0.500000
-        microsteps: 1
-        toff_disable: 0
-        toff_stealthchop: 5
-        use_enable: true
-        addr: 0
-        run_mode: StealthChop
-        homing_mode: StealthChop
-        stallguard: 0
-        stallguard_debug: false
-        toff_coolstep: 3
+        // Forward kinematics methods for position synchronization
+        bool  computeXYfromBeltLengths(float tlLength, float trLength, float& x, float& y) const;
+        float measurementToXYPlane(float measurement, float zHeight) const;
 
-    motor1: 
-      limit_neg_pin: NO_PIN
-      limit_pos_pin: NO_PIN
-      limit_all_pin: NO_PIN
-      hard_limits: false
-      pulloff_mm: 1.000000
-      tmc_2209: 
-        uart_num: 1
-        step_pin: gpio.46
-        direction_pin: NO_PIN
-        disable_pin: NO_PIN
-        r_sense_ohms: 0.110000
-        run_amps: 1.000000
-        hold_amps: 0.500000
-        microsteps: 1
-        toff_disable: 0
-        toff_stealthchop: 5
-        use_enable: true
-        addr: 1
-        run_mode: StealthChop
-        homing_mode: StealthChop
-        stallguard: 0
-        stallguard_debug: false
-        toff_coolstep: 3
+        // Setter methods for calibration system to update frame parameters
+        void setFrameSize(float frameSize);
+        void setCalibrationAnchors(float tlX, float tlY, float trX, float trY, float brX);
+        void setSpoilboardThickness(float thickness);
+        void setWorkThickness(float thickness);
 
-control: 
-  safety_door_pin: NO_PIN
-  reset_pin: NO_PIN
-  feed_hold_pin: NO_PIN
-  cycle_start_pin: NO_PIN
-  macro0_pin: NO_PIN
-  macro1_pin: NO_PIN
-  macro2_pin: NO_PIN
-  macro3_pin: NO_PIN
+    private:
+        // Validation and correction helper method
+        void validateAndCorrectAnchorCoordinates();
 
-coolant: 
-  flood_pin: NO_PIN
-  mist_pin: NO_PIN
-  delay_ms: 0
+        // Anchor point coordinates (in mm) - [ARM_COUNT][Coord_COUNT]
+        // Access as: anchor_location[arm][coord] where arm is _TL/_TR/_BL/_BR and coord is Coord_X/Coord_Y/Coord_Z
+        float anchor_location[ARM_COUNT][Coord_COUNT] = {
+            { -27.6f, 2064.9f, 100.0f },  // _TL: Top Left (X, Y, Z)
+            { 2924.3f, 2066.5f, 56.0f },  // _TR: Top Right (X, Y, Z)
+            { 0.0f, 0.0f, 34.0f },        // _BL: Bottom Left (X, Y, Z)
+            { 2953.2f, 0.0f, 78.0f }      // _BR: Bottom Right (X, Y, Z)
+        };
 
-probe: 
-  pin: NO_PIN
-  check_mode_start: true
+        // Belt and arm parameters (in mm)
+        float _beltEndExtension = 30.0f;   // Belt end extension
+        float _armLength        = 123.4f;  // Arm length
 
-macros: 
-  startup_line0: 
-  startup_line1: 
-  macro0: 
-  macro1: 
-  macro2: 
-  macro3: 
+        // Material thickness offsets (in mm) - accounts for spoil board and work piece thickness
+        float _spoilboardThickness = 0.0f;  // Spoil board thickness added to all anchor heights
+        float _workThickness       = 0.0f;  // Work piece thickness added to all anchor heights
 
-start: 
-  must_home: true
-  deactivate_parking: false
-  check_limits: false
+        // Center offset for coordinate system transformation
+        float _centerX = 0.0f;  // Will be calculated from frame dimensions
+        float _centerY = 0.0f;  // Will be calculated from frame dimensions
 
-parking: 
-  enable: false
-  axis: Z
-  target_mpos_mm: -5.000000
-  rate_mm_per_min: 800.000000
-  pullout_distance_mm: 5.000000
-  pullout_rate_mm_per_min: 250.000000
+        // Segmentation parameters for belt length synchronization
+        float _maxSegmentLength = 5.0f;  // Maximum segment length (mm) before breaking into smaller segments
 
-user_outputs: 
-  analog0_pin: NO_PIN
-  analog1_pin: NO_PIN
-  analog2_pin: NO_PIN
-  analog3_pin: NO_PIN
-  analog0_hz: 5000
-  analog1_hz: 5000
-  analog2_hz: 5000
-  analog3_hz: 5000
-  digital0_pin: NO_PIN
-  digital1_pin: NO_PIN
-  digital2_pin: NO_PIN
-  digital3_pin: NO_PIN
-  digital4_pin: NO_PIN
-  digital5_pin: NO_PIN
-  digital6_pin: NO_PIN
-  digital7_pin: NO_PIN
+        // Belt-to-encoder geometry
+        float _beltToothSpacing = 1.9988f;
+        float _encoderTeeth     = 22.0f;
 
-NoSpindle: 
+        // Flag to prevent recursion during segmentation
+        bool _isSegmenting = false;
 
-arc_tolerance_mm: 0.002000
-junction_deviation_mm: 0.010000
-verbose_errors: false
-report_inches: false
-enable_parking_override_control: false
-use_line_numbers: false
-planner_blocks: 16
+        // Flag to determine if arms move with Z changes
+        bool _fixedZ = false;  // When true, belt lengths ignore current Z position (use only fixed anchor Z values)
+
+        // Initialize center coordinates
+        void calculateCenter();
+    };
+
+    // Global accessor function to get the current MaslowKinematics instance
+    MaslowKinematics* getMaslowKinematics();
+}  //  namespace Kinematics
