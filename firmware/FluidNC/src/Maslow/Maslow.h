@@ -81,19 +81,22 @@ public:
         BELT_MEASUREMENT_IDLE = 0,
         BELT_MEASUREMENT_RETRACTING,
         BELT_MEASUREMENT_EXTENDING,
-        BELT_MEASUREMENT_APPLYING_TENSION,
-        BELT_MEASUREMENT_COMPLETE
+        BELT_MEASUREMENT_EXTENDED,   // belts out, motors stopped, waiting for user to attach ends
+        BELT_MEASUREMENT_TENSIONING,
+        BELT_MEASUREMENT_TENSIONED,  // holding tension, motors stopped, reports allowed
+        BELT_MEASUREMENT_RELEASING
     };
 
     struct BeltMeasurementRequest {
-        bool                active            = false;
-        BeltMeasurementPair pair              = BELT_PAIR_BL_TR;
-        float               extendDistanceMm  = 2000.0f;
-        int                 retractionForceMa = 1300;
-        BeltMeasurementStage stage            = BELT_MEASUREMENT_IDLE;
-        unsigned long       stageStartMs      = 0;
-        bool                armADone          = false;
-        bool                armBDone          = false;
+        bool                 active            = false;  // true ONLY while motors are being driven
+        BeltMeasurementPair  pair              = BELT_PAIR_BL_TR;
+        float                extendDistanceMm  = 2000.0f;
+        int                  retractionForceMa = 1300;
+        BeltMeasurementStage stage             = BELT_MEASUREMENT_IDLE;
+        unsigned long        stageStartMs      = 0;
+        unsigned long        stageTimeoutMs    = 0;
+        bool                 armADone          = false;
+        bool                 armBDone          = false;
     };
 
     static Maslow_& getInstance();  // Accessor for singleton instance
@@ -162,8 +165,9 @@ public:
     void dump_telemetry(const char* filename);
     // writes whatever is in teh telemetry buffer to SD card
     void write_telemetry_buffer(uint8_t* buffer, size_t length);
-    bool startBeltDistanceMeasurement(int pairIndex, float extendDistanceMm, int retractionForceMa);
+    bool startBeltMeasurementAction(char action, int pairIndex, float extendDistanceMm, int retractionForceMa);
     void processBeltDistanceMeasurement();
+    void stopBeltMeasurement(const char* reason, bool isError);
 
     //These are the current targets set by the setTargets function used for moving the machine during normal operations
     double targetX = 0;
