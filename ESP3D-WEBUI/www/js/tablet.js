@@ -1865,20 +1865,24 @@ const dmComputeFromRaw = (raw) => {
     const zPos     = parseFloat(raw.zPos) || 0;
     const toothScale = Number.isFinite(rawTooth) && rawTooth > 0 ? tooth / rawTooth : 1;
 
-    const computeBelt = (spoolStr, beltLabel, rawAnchorZ) => {
+    // Firmware belt labels are long names ("Bottom Left"); Z-offset fields use corner
+    // codes (dm_zoffBL). Derive the codes from the pair name, which is always BL_TR or BR_TL.
+    const pairKeys = (raw.pair === "BR_TL") ? ["BR", "TL"] : ["BL", "TR"];
+
+    const computeBelt = (spoolStr, cornerKey, rawAnchorZ) => {
         const spoolRaw = parseFloat(spoolStr) || 0;
         const spool    = spoolRaw * toothScale * (1 + stretch / 1000);
-        const zOff     = dmNum("dm_zoff" + beltLabel, parseFloat(rawAnchorZ) || 0);
+        const zOff     = dmNum("dm_zoff" + cornerKey, parseFloat(rawAnchorZ) || 0);
         const zComp    = zPos + zOff + spoil + work;
         const sq       = spool * spool - zComp * zComp;
         const xy       = sq > 0 ? Math.sqrt(sq) : 0;
         return { spool, zComp, xy, total: xy + beltEnd + armLen, geomOk: sq > 0 };
     };
 
-    const a = computeBelt(raw.spoolA, raw.beltA, raw.anchorZA);
-    const b = computeBelt(raw.spoolB, raw.beltB, raw.anchorZB);
+    const a = computeBelt(raw.spoolA, pairKeys[0], raw.anchorZA);
+    const b = computeBelt(raw.spoolB, pairKeys[1], raw.anchorZB);
     return {
-        pair: raw.pair, timestamp: raw.timestamp, beltA: raw.beltA, beltB: raw.beltB,
+        pair: raw.pair, timestamp: raw.timestamp, beltA: pairKeys[0], beltB: pairKeys[1],
         a, b, anchorToAnchor: a.total + b.total + coupling,
         force: parseFloat(raw.appliedTensionMa) || dmForce(),
     };
@@ -1896,8 +1900,9 @@ const dmSeedFields = (raw) => {
     seed("dm_armLength", raw.armLen);
     seed("dm_spoil", raw.spoil);
     seed("dm_work", raw.work);
-    if (raw.beltA) seed("dm_zoff" + raw.beltA, raw.anchorZA);
-    if (raw.beltB) seed("dm_zoff" + raw.beltB, raw.anchorZB);
+    const seedKeys = (raw.pair === "BR_TL") ? ["BR", "TL"] : ["BL", "TR"];
+    seed("dm_zoff" + seedKeys[0], raw.anchorZA);
+    seed("dm_zoff" + seedKeys[1], raw.anchorZB);
 };
 
 const dmRender = (c) => {
