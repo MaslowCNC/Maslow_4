@@ -3,7 +3,6 @@
 
 var interval_status = -1
 var probe_progress_status = 0
-var probe_alarm_suppress = false
 var grbl_error_msg = ''
 var WCO = undefined
 var OVR = { feed: undefined, rapid: undefined, spindle: undefined }
@@ -556,7 +555,7 @@ const updateMaslowActionButton = () => {
 
 const show_grbl_status = (stateName = "", message = "", hasSD = false) => {
   setHTML("grbl_status_text", translate_text_item(message))
-  setClickability("clear_status_btn", stateName === "Alarm" && !probe_alarm_suppress);
+  setClickability("clear_status_btn", stateName === "Alarm");
 
   if (!stateName) {
     return;
@@ -566,13 +565,10 @@ const show_grbl_status = (stateName = "", message = "", hasSD = false) => {
   // Set systemStatus for tablet view (will be updated with progress by show_grbl_SD if file is running)
   setHTML("systemStatus", stateName);
 
-  if (stateName === "Alarm" && !probe_alarm_suppress) {
+  if (stateName === "Alarm") {
     id("systemStatus").classList.add("system-status-alarm");
   } else {
     id("systemStatus").classList.remove("system-status-alarm");
-    if (stateName !== "Alarm") {
-      probe_alarm_suppress = false;
-    }
   }
 
   const clickable = clickableFromStateName(stateName, hasSD);
@@ -688,15 +684,20 @@ function grblGetProbeResult(response) {
     const status = tab1[2].replace(']', '')
     if (Number.parseInt(status.trim()) === 1) {
       if (probe_progress_status !== 0) {
-        const cmd =
-          `$J=G90 G21 F1000 Z${getValueFloat("grblpanel_probetouchplatethickness") + getValueFloat("grblpanel_proberetract")}`
-        SendPrinterCommand(cmd, true, null, null, 0, 1)
+        // The probe was sent as G38.2 ... P<plate thickness>, so the firmware has already
+        // offset the work coordinate system: work Z at the contact point is the plate
+        // thickness.  Retracting to thickness + retract distance therefore lifts the bit
+        // exactly `retract` mm above the top of the plate.
+        // Use the values StartProbeProcess() validated and sent rather than re-reading the
+        // input fields, so the retract always matches the P word that was probed with.
+        const retractZ = probeValues.plateThickness.value + probeValues.retract.value
+        if (Number.isFinite(retractZ)) {
+          SendPrinterCommand(`$J=G90 G21 F1000 Z${retractZ}`, true, null, null, 0, 1)
+        }
         finalize_probing()
       }
-    } else if (!probe_alarm_suppress) {
-      probe_alarm_suppress = true;
-      probe_failed_notification("Probe connection failed");
-      SendPrinterCommand("$X", true, null, null, 114, 1);
+    } else {
+      probe_failed_notification()
     }
   }
 }
@@ -862,17 +863,7 @@ const grblHandleMessage = (msg) => {
   }
   if (valueStartsWith(msg, ["error:", "ALARM:", "Hold:", "Door:"])) {
     if (probe_progress_status !== 0) {
-      if (valueStartsWith(msg, ["ALARM:"])) {
-        probe_alarm_suppress = true;
-        probe_failed_notification("Probe connection failed");
-        SendPrinterCommand("$X", true, null, null, 114, 1);
-        return;
-      }
       probe_failed_notification();
-    }
-    if (valueStartsWith(msg, ["ALARM:"]) && probe_alarm_suppress) {
-      SendPrinterCommand("$X", true, null, null, 114, 1);
-      return;
     }
     if (grbl_error_msg.length === 0) {
       grbl_error_msg = translate_text_item(msg.trim());
@@ -886,14 +877,14 @@ const grblHandleMessage = (msg) => {
 };
 
 const checkProbeValue = (pv) => {
-  if (!("value" in pv)) {
-    if (pv.valType === "int" && typeof getValueInt === "function") {
-      pv.value = getValueInt(pv.fldId);
-    } else if (pv.valType === "float" && typeof getValueFloat === "function") {
-      pv.value = getValueFloat(pv.fldId);
-    } else {
-      return;
-    }
+  // Always re-read the field: the value is edited between probes, and a previously
+  // rejected (NaN) value must not stick around and block every later probe.
+  if (pv.valType === "int" && typeof getValueInt === "function") {
+    pv.value = getValueInt(pv.fldId);
+  } else if (pv.valType === "float" && typeof getValueFloat === "function") {
+    pv.value = getValueFloat(pv.fldId);
+  } else {
+    return;
   }
   if (Number.isNaN(pv.value) || pv.value > pv.maxVal || pv.value < pv.minVal) {
     alertdlgOOR(pv.valTitle, pv.minVal, pv.maxVal, pv.units);
