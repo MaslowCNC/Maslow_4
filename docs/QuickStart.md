@@ -61,15 +61,15 @@ Connecting to the network will automatically open the user interface on most dev
 
   To connect Maslow to your wifi press on "Setup" in the top right corner.
 
-<img src="quick-start/images/Screenshot%202025-12-15%20at%203.11.49%E2%80%AFPM.png" alt="Press setup" width="600">
+<img src="user-guide/images/guide-28.png" alt="Press setup" width="600">
 
   Then press "Config"
 
-<img src="quick-start/images/Screenshot%202025-12-15%20at%203.12.30%E2%80%AFPM.png" alt="Press config" width="600">
+<img src="user-guide/images/guide-29.png" alt="Press config" width="600">
 
   Then enter your wifi network information and press save.
 
-<img src="quick-start/images/Screenshot%202025-12-15%20at%203.13.02%E2%80%AFPM.png" alt="Enter wifi name" width="600">
+<img src="user-guide/images/guide-10.png" alt="Enter wifi name" width="600">
 
   Maslow will try to connect to this wifi network every time it powers up. If it can't find that network or cant connect for some reason it will create the Maslow wifi network for you to connect to it. Turn your Maslow off and back on to let it connect to your wifi network.
 
@@ -189,6 +189,38 @@ You can switch between mm and inches by clicking on the units.
 
 Use these controls to position the machine where you want to start your cut or to test that the machine is moving correctly.
 
+In the current firmware, this panel also includes:
+
+- **Options**: Opens the Optional Settings dialog
+- **Define XY Home**: Sets the XY home position at the current machine location
+- **Define Z Home**: Opens a dedicated dialog to set Z home
+- **Trace Boundary**: Moves around the selected file's boundary so you can confirm placement before cutting
+
+<img src="user-guide/images/guide-33.png" alt="Current controls with new buttons" width="600">
+
+## Optional settings dialog
+
+Press **Options** to open the Optional Settings dialog. This dialog gives quick access to:
+
+- **Set Work Area**
+- **Set Park**
+- **Set Scale and Thickness**
+- **Apply Tension Belt Limit**
+
+These are optional setup tools, but they are useful when dialing in a machine, material setup, or parking behavior.
+
+<img src="user-guide/images/guide-31.png" alt="Optional settings dialog" width="600">
+
+## Work area limits
+
+The **Set Work Area** screen defines the X and Y travel limits for the machine. Think of the work area as a software fence:
+
+- Maslow will not move outside this area
+- XY home values are clamped to stay inside these limits
+- You should size it to match the safe, reachable part of your frame
+
+<img src="user-guide/images/guide-30.png" alt="Set work area dialog" width="600">
+
 
 ## Define home position
 
@@ -196,16 +228,25 @@ When you create a gcode file it will have a "home" position. The home position i
 
 <img src="user-guide/images/guide-34.png" alt="Home position" width="600">
 
-If you want to move where the file will be cut on the sheet of plywood you can press the **Define Home** button which will move the file's home position to the machine's current position. This lets you move the shape you want to cut anywhere on the sheet.
+If you want to move where the file will be cut on the sheet of plywood you can press the **Define XY Home** button which will move the file's home position to the machine's current XY position. This lets you move the shape you want to cut anywhere on the sheet.
 
 Similarly you can set where the home position is for the z-axis. This will set where the router will start cutting which is typically on the top surface of the plywood. To set the home position for the z-axis:
 
 1. Move the z-axis up or down with the **Up** and **Down** buttons until the router bit is just touching the surface of your material
-2. Press **Define Home** to set the z-axis home position
+2. Press **Define Z Home**, then confirm the value in the popup
 
 <img src="user-guide/images/guide-15.png" alt="Z-axis home" width="600">
 
 This ensures that your cuts will be at the correct depth.
+
+## Z-Stop vs Z Home
+
+These are different settings and both are important:
+
+- **Z-Stop** (from Setup): Records the bottom safety limit for Z travel. The machine should not move below this point.
+- **Z Home** (Define Z Home): Sets the work zero for your current job, usually at the top of your material.
+
+In short: **Z-Stop is a machine safety boundary**, while **Z Home is your job reference zero**.
 
 
 ## Running a file
@@ -230,4 +271,3 @@ The machine will begin following the toolpath in your gcode file. You can:
 Stay nearby while the machine is cutting, especially for your first few cuts. This will help you identify any issues early and ensure everything is working correctly.
 
 If you encounter any problems or error messages, check the [error messages documentation](https://www.maslowcnc.com/error-messages) or ask for help in the [Maslow forums](https://forums.maslowcnc.com/).
-
