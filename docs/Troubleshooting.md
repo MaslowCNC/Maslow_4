@@ -16,7 +16,7 @@ The Red LED signals error conditions that require attention. There are two disti
 
 #### Slow Blink (300 ms on / 300 ms off) — Error / Emergency Stop
 
-The Red LED blinks slowly when `Maslow.error` is set to `true`. This state persists until the machine is power-cycled. The machine will not respond to movement commands while in this state.
+The Red LED blinks slowly when `Maslow.error` is set to `true`. The machine will not respond to movement commands while in this state, and it persists until the alarm is cleared with `$X`.
 
 Possible causes:
 
@@ -27,7 +27,9 @@ Possible causes:
 | **Emergency stop command** | The `$ESTOP` command was sent (e.g. via the web interface E-Stop button). |
 | **Position error > 15 mm** | While running a G-code job, an axis drifted more than 15 mm from its target position for more than 5 consecutive checks. This usually indicates a belt that has gone slack, a broken or disconnected belt, or a mechanical obstruction. |
 
-**Recovery:** Power the machine off and back on. Investigate the error message that was printed in the console/log when the LED started blinking—it will name the specific axis and cause.
+**Recovery:** Fix the underlying cause, then clear the alarm with `$X` (the **Clear** button in the web interface). Investigate the error message that was printed in the console/log when the LED started blinking—it will name the specific axis and cause.
+
+`$X` turns the LED off and re-enables motion, so only use it once you have dealt with the cause. After clearing a position error, re-check belt tension and confirm the machine position before cutting.
 
 #### Rapid Double-Blink (100 ms on / 100 ms off / 100 ms on / 800 ms pause) — Watchdog Fired
 
@@ -35,7 +37,7 @@ Both the **Red LED and the WiFi LED** blink together in a rapid double-blink pat
 
 All motors are stopped immediately when this occurs.
 
-**Recovery:** Power the machine off and back on. If this happens repeatedly, check for heavy WiFi traffic, large file uploads, or other operations that may be blocking the motion-control task.
+**Recovery:** Clear the alarm with `$X` (the **Clear** button in the web interface). If this happens repeatedly, check for heavy WiFi traffic, large file uploads, or other operations that may be blocking the motion-control task.
 
 ### WiFi LED
 

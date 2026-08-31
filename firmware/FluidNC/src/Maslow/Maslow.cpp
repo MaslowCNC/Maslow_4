@@ -91,6 +91,7 @@ void Maslow_::begin(void (*sys_rt)()) {
     pinMode(REDLED, OUTPUT);
 
     digitalWrite(ETHERNETLEDPIN, LOW);
+    digitalWrite(REDLED, LOW);
 
     pinMode(SERVOFAULT, INPUT);
 
@@ -1196,6 +1197,42 @@ void Maslow_::panic() {
 // intentional blocking operations (e.g. writing config to LittleFS).
 void Maslow_::resetUpdateWatchdog() {
     lastCallToUpdate = millis();
+}
+
+// Clears a latched error or watchdog condition so the machine can be used again
+// without a power cycle.  Both latches make update() return early forever, so the
+// red LED blinks and all motion is refused until something clears them; $X is the
+// command the user already reaches for to acknowledge an alarm, so it clears them
+// here.  Returns true if a latched condition was actually cleared.
+bool Maslow_::clearError() {
+    // The LED is driven low unconditionally: if nothing is latched it is already off,
+    // and this also picks up the case where a blink left it mid-cycle.
+    digitalWrite(REDLED, LOW);
+
+    if (!error && !watchdogFired) {
+        return false;
+    }
+
+    if (watchdogFired) {
+        log_warn("Clearing update watchdog. Motion is enabled again - if this repeats, find what is blocking the "
+                 "processor before running a job");
+        digitalWrite(WIFILED, LOW);  // the watchdog pattern blinks this one too
+    }
+    if (error) {
+        log_warn("Clearing error state. Motion is enabled again - make sure the cause was fixed, then re-check belt "
+                 "tension and machine position before cutting");
+    }
+
+    error         = false;
+    watchdogFired = false;
+    errorMessage  = "";
+
+    // Both early returns skip the point where lastCallToUpdate is refreshed, so by now it
+    // is far in the past.  Without this the update watchdog re-fires on the very next call
+    // and the LED comes straight back on.
+    resetUpdateWatchdog();
+
+    return true;
 }
 
 //Emergency Stop

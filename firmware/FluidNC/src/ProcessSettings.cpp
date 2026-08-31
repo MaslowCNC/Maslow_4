@@ -293,6 +293,13 @@ static Error disable_alarm_lock(const char* value, WebUI::AuthenticationLevel au
 
         // Don't run startup script. Prevents stored moves in startup from causing accidents.
     }  // Otherwise, no effect.
+
+    // Clear any latched Maslow error or update-watchdog condition and turn the red LED off.
+    // Those latches outlive the alarm state that raised them, so this runs regardless of the
+    // state above; it is deliberately after the isStuck() check, so a genuinely stuck control
+    // pin still refuses to unlock.
+    Maslow.clearError();
+
     return Error::Ok;
 }
 static Error report_ngc(const char* value, WebUI::AuthenticationLevel auth_level, Channel& out) {

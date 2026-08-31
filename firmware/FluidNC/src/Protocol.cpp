@@ -446,6 +446,12 @@ void protocol_execute_realtime() {
 static void alarm_msg(ExecAlarm alarm_code) {
     log_to(allChannels, "ALARM:", static_cast<int>(alarm_code));
     delay_ms(500);  // Force delay to ensure message clears serial write buffer.
+
+    // That delay blocks this task, and this task is the one that calls Maslow.update().  The
+    // Maslow update watchdog trips after 100 ms, so without this every alarm - however
+    // harmless, including a probe that simply never touched off - latched the watchdog and
+    // left the red LED blinking with the machine unusable until a power cycle.
+    Maslow.resetUpdateWatchdog();
 }
 
 // Executes run-time commands, when required. This function is the primary state
@@ -466,6 +472,9 @@ static void protocol_do_alarm() {
         rtReset = false;  // Disable any existing reset
         do {
             protocol_handle_events();
+            // This loop does not call Maslow.update() either, so keep its watchdog fed for the
+            // same reason as above - the wait here is intentional and must not latch the LED.
+            Maslow.resetUpdateWatchdog();
             // Block everything except reset and status reports until user issues reset or power
             // cycles. Hard limits typically occur while unattended or not paying attention. Gives
             // the user and a GUI time to do what is needed before resetting, like killing the
