@@ -71,7 +71,7 @@ Connecting to the network will automatically open the user interface on most dev
 
 <img src="user-guide/images/guide-10.png" alt="Enter wifi name" width="600">
 
-  Maslow will try to connect to this wifi network every time it powers up. If it can't find that network or cant connect for some reason it will create the Maslow wifi network for you to connect to it. Turn your Maslow off and back on to let it connect to your wifi network.
+  Maslow will try to connect to this wifi network every time it powers up. If it can't find that network or can't connect for some reason it will create the Maslow wifi network for you to connect to it. Turn your Maslow off and back on to let it connect to your wifi network.
 
   Once Maslow is connected to your wifi network you you can access it by navigating to the address **maslow.local** from any browser. If you are having trouble finding it try a different device or browser.
 
