@@ -4,7 +4,7 @@
 #pragma once
 
 #include <vector>
-#include "../Config.h"
+#include "Config.h"
 
 namespace Configuration {
     class LegacySettingHandler;
@@ -23,7 +23,7 @@ namespace Configuration {
         std::vector<LegacySettingHandler*> handlers_;
 
         static bool isLegacySetting(const char* str);
-        static void tryLegacy(int index, const char* value);
+        static void tryLegacy(uint32_t index, const char* value);
 
     public:
         static void registerHandler(LegacySettingHandler* handler);

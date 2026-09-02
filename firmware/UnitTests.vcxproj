@@ -21,9 +21,9 @@
   <PropertyGroup Label="Globals">
     <ProjectGuid>{33ece513-60d1-4949-a4a9-c95d353c2cf0}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
-    <WindowsTargetPlatformVersion>10.0.18362.0</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
     <ConfigurationType>Application</ConfigurationType>
-    <PlatformToolset>v142</PlatformToolset>
+    <PlatformToolset>v143</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -60,8 +60,8 @@
     <ClInclude Include="FluidNC\src\Spindles\10vSpindle.h" />
     <ClInclude Include="FluidNC\src\Machine\WifiSTAConfig.h" />
     <ClInclude Include="FluidNC\src\Channel.h" />
-    <ClInclude Include="FluidNC\src\WebUI\WebServer.h" />
-    <ClInclude Include="FluidNC\src\Assert.h" />
+    <ClInclude Include="FluidNC\src\WebUI\WebUIServer.h" />
+    <ClInclude Include="FluidNC\src\Assertion.h" />
     <ClInclude Include="FluidNC\src\Spindles\RelaySpindle.h" />
     <ClInclude Include="FluidNC\src\Kinematics\WallPlotter.h" />
     <ClInclude Include="FluidNC\src\Kinematics\Midtbot.h" />
@@ -339,6 +339,7 @@
     <ClCompile Include="FluidNC\src\Custom\oled_tiny.cpp" />
     <ClCompile Include="FluidNC\src\Custom\oled_io.cpp" />
     <ClCompile Include="FluidNC\src\Configuration\AfterParse.cpp" />
+    <ClCompile Include="FluidNC\tests\CommandCompletionTest.cpp" />
     <ClCompile Include="FluidNC\src\Configuration\Completer.cpp" />
     <ClCompile Include="FluidNC\src\Motors\MotorDriver.cpp" />
     <ClCompile Include="FluidNC\src\Pins\DebugPinDetail.cpp" />

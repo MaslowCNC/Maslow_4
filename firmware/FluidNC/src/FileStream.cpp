@@ -3,11 +3,10 @@
 
 #include "FileStream.h"
 #include "Machine/MachineConfig.h"  // config->
-#include "Driver/localfs.h"
-#include "./Maslow/Maslow.h"
+#include "Maslow/Maslow.h"  // Maslow.readingFromSD
 
 std::string FileStream::path() {
-    return _fpath.c_str();
+    return _fpath.string();
 }
 
 std::string FileStream::name() {
@@ -32,9 +31,9 @@ int FileStream::peek() {
 
 void FileStream::flush() {}
 
-size_t FileStream::read(char* buffer, size_t length) {
+int FileStream::read(char* buffer, size_t length) {
     Maslow.readingFromSD = true;
-    size_t res           = fread(buffer, 1, length, _fd);
+    int res              = fread(buffer, 1, length, _fd);
     Maslow.readingFromSD = false;
     return res;
 }
@@ -62,25 +61,45 @@ size_t FileStream::position() {
 }
 
 void FileStream::setup(const char* mode) {
-    _fd = fopen(_fpath.c_str(), mode);
+    _fd = fopen(_fpath.string().c_str(), mode);
 
     if (!_fd) {
         bool opening = strcmp(mode, "w");
-        log_verbose("Cannot " << (opening ? "open" : "create") << " file " << _fpath.c_str());
-        throw opening ? Error::FsFailedOpenFile : Error::FsFailedCreateFile;
+        throw ErrorException(opening ? Error::FsFailedOpenFile : Error::FsFailedCreateFile);
     }
     _size = stdfs::file_size(_fpath);
 }
 
-FileStream::FileStream(const char* filename, const char* mode, const char* fs) : Channel("file"), _fpath(filename, fs) {
+FileStream::FileStream(const char* filename, const char* mode, const Volume& fs) : Channel(filename), _fpath(filename, fs), _mode(mode) {
     setup(mode);
 }
 
-FileStream::FileStream(FluidPath fpath, const char* mode) : Channel("file") {
+FileStream::FileStream(FluidPath fpath, const char* mode) : Channel("file"), _mode(mode) {
     std::swap(_fpath, fpath);
     setup(mode);
 }
 
-FileStream::~FileStream() {
+void FileStream::set_position(size_t pos) {
+    fseek(_fd, pos, SEEK_SET);
+}
+
+void FileStream::save() {
+    _saved_position = position();
     fclose(_fd);
+    _fd = nullptr;
+}
+
+void FileStream::restore() {
+    _fd = fopen(_fpath.string().c_str(), _mode);
+    if (_fd) {
+        fseek(_fd, _saved_position, SEEK_SET);
+    } else {
+        // XXX need to unwind the job stack somehow
+    }
+}
+
+FileStream::~FileStream() {
+    if (_fd) {
+        fclose(_fd);
+    }
 }

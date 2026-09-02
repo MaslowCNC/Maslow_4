@@ -29,7 +29,7 @@ void plan_init() {
 
 // Define planner variables
 typedef struct {
-    int32_t position[MAX_N_AXIS];  // The planner position of the tool in absolute steps. Kept separate
+    steps_t position[MAX_N_AXIS];  // The planner position of the tool in absolute steps. Kept separate
     // from g-code position for movements requiring multiple line motions,
     // i.e. arcs, canned cycles, and backlash compensation.
     float previous_unit_vec[MAX_N_AXIS];  // Unit vector of previous path line segment
@@ -121,6 +121,10 @@ static uint8_t plan_prev_block_index(uint8_t block_index) {
 
 */
 static void planner_recalculate() {
+    if (block_buffer_head == block_buffer_tail) {
+        // Nothing to do; planner buffer is empty.
+        return;
+    }
     // Initialize block index to the last block in the planner buffer.
     uint8_t block_index = plan_prev_block_index(block_buffer_head);
     // Bail. Can't do anything with one only one plan-able block.
@@ -289,6 +293,9 @@ void plan_update_velocity_profile_parameters() {
         block_index        = plan_next_block_index(block_index);
     }
     pl.previous_nominal_speed = prev_nominal_speed;  // Update prev nominal speed for next incoming block.
+    if (block_buffer_tail != block_buffer_head) {
+        plan_cycle_reinitialize();
+    }
 }
 
 bool plan_buffer_line(float* target, plan_line_data_t* pl_data) {
@@ -304,24 +311,33 @@ bool plan_buffer_line(float* target, plan_line_data_t* pl_data) {
     block->is_jog             = pl_data->is_jog;
 
     // Compute and store initial move distance data.
-    int32_t target_steps[MAX_N_AXIS], position_steps[MAX_N_AXIS];
-    float   unit_vec[MAX_N_AXIS], delta_mm;
     // Copy position data based on type of motion being planned.
-    copyAxes(position_steps, block->motion.systemMotion ? get_motor_steps() : pl.position);
-
-    auto n_axis = config->_axes->_numberAxis;
-    for (size_t idx = 0; idx < n_axis; idx++) {
+    steps_t position_steps[MAX_N_AXIS];
+    if (block->motion.systemMotion) {
+        get_steps(position_steps);
+    } else {
+        if (!block->is_jog && Homing::unhomed_axes()) {
+            log_info("Unhomed axes: " << Axes::maskToNames(Homing::unhomed_axes()));
+            send_alarm(ExecAlarm::Unhomed);
+            return false;
+        }
+        copyAxes(position_steps, pl.position);
+    }
+    steps_t target_steps[MAX_N_AXIS];
+    float   unit_vec[MAX_N_AXIS];
+    auto    n_axis = Axes::_numberAxis;
+    for (axis_t axis = X_AXIS; axis < n_axis; axis++) {
         // Calculate target position in absolute steps, number of steps for each axis, and determine max step events.
         // Also, compute individual axes distance for move and prep unit vector calculations.
         // NOTE: Computes true distance from converted step values.
-        target_steps[idx]       = mpos_to_steps(target[idx], idx);
-        block->steps[idx]       = labs(target_steps[idx] - position_steps[idx]);
-        block->step_event_count = MAX(block->step_event_count, block->steps[idx]);
-        delta_mm                = steps_to_mpos((target_steps[idx] - position_steps[idx]), idx);
-        unit_vec[idx]           = delta_mm;  // Store unit vector numerator
+        target_steps[axis]      = motor_pos_to_steps(target[axis], axis);
+        block->steps[axis]      = labs(target_steps[axis] - position_steps[axis]);
+        block->step_event_count = MAX(block->step_event_count, block->steps[axis]);
+        float delta_mm          = steps_to_motor_pos((target_steps[axis] - position_steps[axis]), axis);
+        unit_vec[axis]          = delta_mm;  // Store unit vector numerator
         // Set direction bits. Bit enabled always means direction is negative.
         if (delta_mm < 0.0) {
-            block->direction_bits |= bitnum_to_mask(idx);
+            block->direction_bits |= bitnum_to_mask(axis);
         }
     }
     // Bail if this is a zero-length block. Highly unlikely to occur.
@@ -375,9 +391,9 @@ bool plan_buffer_line(float* target, plan_line_data_t* pl_data) {
         // change the overall maximum entry speed conditions of all blocks.
         float junction_unit_vec[MAX_N_AXIS];
         float junction_cos_theta = 0.0;
-        for (size_t idx = 0; idx < n_axis; idx++) {
-            junction_cos_theta -= pl.previous_unit_vec[idx] * unit_vec[idx];
-            junction_unit_vec[idx] = unit_vec[idx] - pl.previous_unit_vec[idx];
+        for (axis_t axis = X_AXIS; axis < n_axis; axis++) {
+            junction_cos_theta -= pl.previous_unit_vec[axis] * unit_vec[axis];
+            junction_unit_vec[axis] = unit_vec[axis] - pl.previous_unit_vec[axis];
         }
         // NOTE: Computed without any expensive trig, sin() or acos(), by trig half angle identity of cos(theta).
         if (junction_cos_theta > 0.999999) {
@@ -417,9 +433,9 @@ bool plan_buffer_line(float* target, plan_line_data_t* pl_data) {
 // Reset the planner position vectors. Called by the system abort/initialization routine.
 void plan_sync_position() {
     // TODO: For motor configurations not in the same coordinate frame as the machine position,
-    // this function needs to be updated to accomodate the difference.
+    // this function needs to be updated to accommodate the difference.
     if (config->_axes) {
-        copyAxes(pl.position, get_motor_steps());
+        get_steps(pl.position);
     }
 }
 

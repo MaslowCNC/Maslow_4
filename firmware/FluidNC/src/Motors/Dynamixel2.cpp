@@ -15,10 +15,10 @@
 
 #include "Dynamixel2.h"
 
-#include "../Machine/MachineConfig.h"
-#include "../System.h"   // mpos_to_steps() etc
-#include "../Limits.h"   // limitsMinPosition
-#include "../Planner.h"  // plan_sync_position()
+#include "Machine/MachineConfig.h"
+#include "System.h"   // motor_pos_to_steps() etc
+#include "Limit.h"    // limitsMinPosition
+#include "Planner.h"  // plan_sync_position()
 
 #include <cstdarg>
 #include <cmath>
@@ -29,7 +29,7 @@ namespace MotorDrivers {
     std::vector<Dynamixel2*> Dynamixel2::_instances;
     bool                     Dynamixel2::_has_errors = false;
 
-    int Dynamixel2::_timer_ms = 75;
+    int32_t Dynamixel2::_timer_ms = 75;
 
     uint8_t Dynamixel2::_tx_message[100];  // send to dynamixel
     uint8_t Dynamixel2::_rx_message[50];   // received from dynamixel
@@ -38,10 +38,20 @@ namespace MotorDrivers {
     bool Dynamixel2::_uart_started = false;
 
     void Dynamixel2::init() {
-        _axis_index = axis_index();
+        _axis = axis_index();
 
         if (!_uart_started) {
             _uart = config->_uarts[_uart_num];
+            if (!_uart) {
+                log_error("Dynamixel: Missing uart" << _uart_num << " section.");
+                _has_errors = true;
+                return;
+            }
+            if (!_uart->configured()) {
+                log_error("Dynamixel: uart" << _uart_num << " failed configuration.");
+                _has_errors = true;
+                return;
+            }
             if (_uart->_rts_pin.undefined()) {
                 log_error("Dynamixel: UART RTS pin must be configured.");
                 _has_errors = true;
@@ -56,9 +66,13 @@ namespace MotorDrivers {
             schedule_update(this, _timer_ms);
         }
 
-        config_message();  // print the config
+        _min_steps = motor_pos_to_steps(config->_kinematics->min_motor_pos(_axis), _axis);
+        _max_steps = motor_pos_to_steps(config->_kinematics->max_motor_pos(_axis), _axis);
 
-        // for bulk updating
+        config_message();
+
+        // We update all of the Dynamixel motors on one uart with a single message,
+        // so we need a list of Dynamixel instances.
         _instances.push_back(this);
     }
 
@@ -73,16 +87,12 @@ namespace MotorDrivers {
 
         // servos will blink in axis order for reference
         LED_on(true);
-        vTaskDelay(100);
+        dwell_ms(100, DwellMode::SysSuspend);
         LED_on(false);
     }
 
     void Dynamixel2::config_message() {
-        char* buffer = getLogBuffer();
-        snprintf(buffer, 1400, "    %s UART%d id:%d Count(%d,%d)",
-                name(), _uart_num, _id, _countMin, _countMax);
-        log_info(buffer);
-        releaseLogBuffer();
+        log_info("    " << name() << " UART" << _uart_num << " id:" << _id << " Count(" << _countMin << "," << _countMax << ")");
     }
 
     bool Dynamixel2::test() {
@@ -94,23 +104,21 @@ namespace MotorDrivers {
         if (len == PING_RSP_LEN) {
             uint16_t    model_num = _rx_message[10] << 8 | _rx_message[9];
             uint8_t     fw_rev    = _rx_message[11];
-            std::string msg("Axis ping reply ");
+            std::string msg(" ");
             msg += axisName().c_str();
             if (model_num == 1060) {
-                msg += " Model XL430-W250";
+                msg += "reply: Model XL430-W250";
             } else {
                 msg += " M/N " + std::to_string(model_num);
             }
             log_info(msg << " F/W Rev " << to_hex(fw_rev));
         } else {
-            log_warn(" Ping failed");
+            log_warn(axisName() << " Ping failed");
             return false;
         }
 
         return true;
     }
-
-    void Dynamixel2::read_settings() {}
 
     // sets the PWM to zero. This allows most servos to be manually moved
     void IRAM_ATTR Dynamixel2::set_disable(bool disable) {
@@ -131,6 +139,15 @@ namespace MotorDrivers {
         finish_write();
     }
 
+    void Dynamixel2::add_position_to_message() {
+        add_uint8(_id);  // ID of the servo
+
+        // map motor steps to the servo range
+        steps_t  steps    = get_axis_steps(_axis);
+        uint32_t position = mapConstrain(steps, _min_steps, _max_steps, _countMin, _countMax);
+        add_uint32(position);
+    }
+
     // This is static; it updates the positions of all the Dynamixels on the UART bus
     void Dynamixel2::update_all() {
         if (_has_errors) {
@@ -141,27 +158,13 @@ namespace MotorDrivers {
         add_uint16(DXL_GOAL_POSITION);
         add_uint16(4);  // data length
 
-        float* mpos = get_mpos();
-        float  motors[MAX_N_AXIS];
-        config->_kinematics->transform_cartesian_to_motors(motors, mpos);
-
         for (const auto& instance : _instances) {
-            float    dxl_count_min, dxl_count_max;
-            uint32_t dxl_position;
-
-            dxl_count_min = float(instance->_countMin);
-            dxl_count_max = float(instance->_countMax);
-
-            // map the mm range to the servo range
-            auto axis_index = instance->_axis_index;
-            dxl_position    = static_cast<uint32_t>(mapConstrain(
-                motors[axis_index], limitsMinPosition(axis_index), limitsMaxPosition(axis_index), dxl_count_min, dxl_count_max));
-
-            add_uint8(instance->_id);  // ID of the servo
-            add_uint32(dxl_position);
+            instance->add_position_to_message();
         }
         finish_message();
     }
+    // This is called from the update timer that is created by schedule_update()
+    // It is only called from the one Dynamixel instance that starts the uart.
     void Dynamixel2::update() {
         update_all();
     }
@@ -175,8 +178,10 @@ namespace MotorDrivers {
             return false;
         }
 
-        auto axis = config->_axes->_axis[_axis_index];
-        set_motor_steps(_axis_index, mpos_to_steps(axis->_homing->_mpos, _axis_index));
+        auto    axisConfig = Axes::_axis[_axis];
+        auto    homing     = axisConfig->_homing;
+        steps_t steps      = homing ? _max_steps : 0;
+        set_steps(_axis, steps);
 
         set_disable(false);
         set_location();  // force the PWM to update now
@@ -223,37 +228,10 @@ namespace MotorDrivers {
         //hex_msg(_tx_message, "0x", _msg_index);
     }
 
-    void Dynamixel2::dxl_goal_position(int32_t position) {
+    void Dynamixel2::dxl_goal_position(uint32_t position) {
         start_write(DXL_GOAL_POSITION);
         add_uint32(position);
         finish_write();
-    }
-
-    uint32_t Dynamixel2::dxl_read_position() {
-        uint16_t data_len = 4;
-
-        dxl_read(DXL_PRESENT_POSITION, data_len);
-
-        data_len = dxl_get_response(15);
-
-        if (data_len == 15) {
-            uint32_t dxl_position = _rx_message[9] | (_rx_message[10] << 8) | (_rx_message[11] << 16) | (_rx_message[12] << 24);
-
-            auto axis = config->_axes->_axis[_axis_index];
-
-            uint32_t pos_min_steps = mpos_to_steps(limitsMinPosition(_axis_index), _axis_index);
-            uint32_t pos_max_steps = mpos_to_steps(limitsMaxPosition(_axis_index), _axis_index);
-
-            uint32_t temp = myMap(dxl_position, _countMin, _countMax, pos_min_steps, pos_max_steps);
-
-            set_motor_steps(_axis_index, temp);
-
-            plan_sync_position();
-
-            return dxl_position;
-        } else {
-            return 0;
-        }
     }
 
     void Dynamixel2::dxl_read(uint16_t address, uint16_t data_len) {

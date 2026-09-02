@@ -34,273 +34,254 @@
   To allow the realtime commands to be randomly mixed in the stream of data, we
   read all channels as fast as possible. The realtime commands are acted upon and
   the other characters are placed into a per-channel buffer.  When a complete line
-  is received, pollChannel returns the associated channel spec.
+  is received, pollChannels returns the associated channel spec.
 */
 
 #include "Serial.h"
-#include "UartChannel.h"
 #include "Machine/MachineConfig.h"
-#include "WebUI/InputBuffer.h"
-#include "WebUI/Commands.h"
-#include "WebUI/WifiServices.h"
 #include "MotionControl.h"
 #include "Report.h"
 #include "System.h"
 #include "Protocol.h"  // *Event
 #include "InputFile.h"
-#include "WebUI/InputBuffer.h"  // XXX could this be a StringStream ?
-#include "Main.h"               // display()
-#include "StartupLog.h"         // startupLog
+#include "Main.h"        // display()
+#include "StartupLog.h"  // startupLog
 
+#include "Driver/Console.h"
 #include "Driver/fluidnc_gpio.h"
 
 #include <atomic>
 #include <cstring>
 #include <vector>
 #include <algorithm>
+#include <string_view>
 #include <freertos/task.h>  // portMUX_TYPE, TaskHandle_T
 
-std::mutex AllChannels::_mutex;
+SemaphoreHandle_t AllChannels::_mutex_general = xSemaphoreCreateMutex();
+SemaphoreHandle_t AllChannels::_mutex_pollLine = xSemaphoreCreateMutex();
 
-static TaskHandle_t channelCheckTaskHandle = 0;
+std::vector<Channel*> AllChannels::snapshot_channels() {
+    std::vector<Channel*> channels;
+
+    xSemaphoreTake(_mutex_general, portMAX_DELAY);
+    channels.reserve(_channelq.size());
+    for (auto channel : _channelq) {
+        if (channel->try_acquire_processing_ref()) {
+            channels.push_back(channel);
+        }
+    }
+    xSemaphoreGive(_mutex_general);
+
+    return channels;
+}
+
+void AllChannels::reap_channels() {
+    for (auto it = _zombies.begin(); it != _zombies.end();) {
+        auto channel = *it;
+        if (channel->pending_log_refs() || channel->pending_processing_refs()) {
+            ++it;
+            continue;
+        }
+        delete channel;
+        it = _zombies.erase(it);
+    }
+}
 
 void heapCheckTask(void* pvParameters) {
     static uint32_t heapSize = 0;
     while (true) {
-        std::atomic_thread_fence(std::memory_order::memory_order_seq_cst);  // read fence for settings and whatnot
+        std::atomic_thread_fence(std::memory_order_seq_cst);  // read fence for settings and whatnot
         uint32_t newHeapSize = xPortGetFreeHeapSize();
         if (newHeapSize != heapSize) {
             heapSize = newHeapSize;
             log_info("heap " << heapSize);
         }
-        vTaskDelay(3000 / portTICK_RATE_MS);  // Yield to other tasks
+        vTaskDelay(3000 / portTICK_PERIOD_MS);  // Yield to other tasks
 
-        static UBaseType_t uxHighWaterMark = 0;
 #ifdef DEBUG_TASK_STACK
+        static UBaseType_t uxHighWaterMark = 0;
         reportTaskStackSize(uxHighWaterMark);
 #endif
     }
 }
 
-// Act upon a realtime character
-void execute_realtime_command(Cmd command, Channel& channel) {
-    switch (command) {
-        case Cmd::Reset:
-            log_debug("Cmd::Reset");
-            protocol_send_event(&resetEvent);
-            break;
-        case Cmd::StatusReport:
-            report_realtime_status(channel);  // direct call instead of setting flag
-            // protocol_send_event(&reportStatusEvent, int(&channel));
-            break;
-        case Cmd::CycleStart:
-            protocol_send_event(&cycleStartEvent);
-            break;
-        case Cmd::FeedHold:
-            protocol_send_event(&feedHoldEvent);
-            break;
-        case Cmd::SafetyDoor:
-            protocol_send_event(&safetyDoorEvent);
-            break;
-        case Cmd::JogCancel:
-            if (sys.state() == State::Jog) {  // Block all other states from invoking motion cancel.
-                protocol_send_event(&motionCancelEvent);
-            }
-            break;
-        case Cmd::DebugReport:
-            protocol_send_event(&debugEvent);
-            break;
-        case Cmd::SpindleOvrStop:
-            protocol_send_event(&accessoryOverrideEvent, AccessoryOverride::SpindleStopOvr);
-            break;
-        case Cmd::FeedOvrReset:
-            protocol_send_event(&feedOverrideEvent, FeedOverride::Default);
-            break;
-        case Cmd::FeedOvrCoarsePlus:
-            protocol_send_event(&feedOverrideEvent, FeedOverride::CoarseIncrement);
-            break;
-        case Cmd::FeedOvrCoarseMinus:
-            protocol_send_event(&feedOverrideEvent, -FeedOverride::CoarseIncrement);
-            break;
-        case Cmd::FeedOvrFinePlus:
-            protocol_send_event(&feedOverrideEvent, FeedOverride::FineIncrement);
-            break;
-        case Cmd::FeedOvrFineMinus:
-            protocol_send_event(&feedOverrideEvent, -FeedOverride::FineIncrement);
-            break;
-        case Cmd::RapidOvrReset:
-            protocol_send_event(&rapidOverrideEvent, RapidOverride::Default);
-            break;
-        case Cmd::RapidOvrMedium:
-            protocol_send_event(&rapidOverrideEvent, RapidOverride::Medium);
-            break;
-        case Cmd::RapidOvrLow:
-            protocol_send_event(&rapidOverrideEvent, RapidOverride::Low);
-            break;
-        case Cmd::RapidOvrExtraLow:
-            protocol_send_event(&rapidOverrideEvent, RapidOverride::ExtraLow);
-            break;
-        case Cmd::SpindleOvrReset:
-            protocol_send_event(&spindleOverrideEvent, SpindleSpeedOverride::Default);
-            break;
-        case Cmd::SpindleOvrCoarsePlus:
-            protocol_send_event(&spindleOverrideEvent, SpindleSpeedOverride::CoarseIncrement);
-            break;
-        case Cmd::SpindleOvrCoarseMinus:
-            protocol_send_event(&spindleOverrideEvent, -SpindleSpeedOverride::CoarseIncrement);
-            break;
-        case Cmd::SpindleOvrFinePlus:
-            protocol_send_event(&spindleOverrideEvent, SpindleSpeedOverride::FineIncrement);
-            break;
-        case Cmd::SpindleOvrFineMinus:
-            protocol_send_event(&spindleOverrideEvent, -SpindleSpeedOverride::FineIncrement);
-            break;
-        case Cmd::CoolantFloodOvrToggle:
-            protocol_send_event(&accessoryOverrideEvent, AccessoryOverride::FloodToggle);
-            break;
-        case Cmd::CoolantMistOvrToggle:
-            protocol_send_event(&accessoryOverrideEvent, AccessoryOverride::MistToggle);
-            break;
-        case Cmd::Macro0:
-            protocol_send_event(&macro0Event);
-            break;
-        case Cmd::Macro1:
-            protocol_send_event(&macro1Event);
-            break;
-        case Cmd::Macro2:
-            protocol_send_event(&macro2Event);
-            break;
-        case Cmd::Macro3:
-            protocol_send_event(&macro3Event);
-            break;
-    }
-}
-
-// checks to see if a character is a realtime character
-bool is_realtime_command(uint8_t data) {
-    if (data >= 0x80) {
-        return true;
-    }
-    auto cmd = static_cast<Cmd>(data);
-    return cmd == Cmd::Reset || cmd == Cmd::StatusReport || cmd == Cmd::CycleStart || cmd == Cmd::FeedHold;
-}
-
 void AllChannels::init() {
-    registration(&WebUI::inputBuffer);  // Macros
-    registration(&startupLog);          // Early startup messages for $SS
+    registration(&startupLog);  // Early startup messages for $SS
 }
 
-void AllChannels::kill(Channel* channel) {
-    xQueueSend(_killQueue, &channel, 0);
+void AllChannels::ready() {
+    auto channels = snapshot_channels();
+    for (auto channel : channels) {
+        channel->ready();
+        channel->release_processing_ref();
+    }
+}
+
+bool AllChannels::kill(Channel* channel) {
+    return _killQueue && xQueueSend(_killQueue, &channel, pdMS_TO_TICKS(10)) == pdTRUE;
 }
 
 void AllChannels::registration(Channel* channel) {
-    _mutex.lock();
+    xSemaphoreTake(_mutex_general, portMAX_DELAY);
+    xSemaphoreTake(_mutex_pollLine, portMAX_DELAY);
     _channelq.push_back(channel);
-    _mutex.unlock();
+    xSemaphoreGive(_mutex_pollLine);
+    xSemaphoreGive(_mutex_general);
 }
 void AllChannels::registrationFront(Channel* channel) {
-    _mutex.lock();
+    xSemaphoreTake(_mutex_general, portMAX_DELAY);
+    xSemaphoreTake(_mutex_pollLine, portMAX_DELAY);
     _channelq.insert(_channelq.begin(), channel);
-    _mutex.unlock();
+    xSemaphoreGive(_mutex_pollLine);
+    xSemaphoreGive(_mutex_general);
 }
 void AllChannels::deregistration(Channel* channel) {
-    _mutex.lock();
+    xSemaphoreTake(_mutex_general, portMAX_DELAY);
+    xSemaphoreTake(_mutex_pollLine, portMAX_DELAY);
     if (channel == _lastChannel) {
         _lastChannel = nullptr;
     }
     _channelq.erase(std::remove(_channelq.begin(), _channelq.end(), channel), _channelq.end());
-    _mutex.unlock();
+    xSemaphoreGive(_mutex_pollLine);
+    xSemaphoreGive(_mutex_general);
 }
 
 void AllChannels::listChannels(Channel& out) {
-    _mutex.lock();
-    std::string retval;
-    for (auto channel : _channelq) {
-        log_to(out, channel->name());
+    auto channels = snapshot_channels();
+    for (auto channel : channels) {
+        log_stream(out, channel->name());
+        channel->release_processing_ref();
     }
-    _mutex.unlock();
 }
 
 void AllChannels::flushRx() {
-    _mutex.lock();
-    for (auto channel : _channelq) {
+    auto channels = snapshot_channels();
+    for (auto channel : channels) {
         channel->flushRx();
+        channel->release_processing_ref();
     }
-    _mutex.unlock();
 }
 
 size_t AllChannels::write(uint8_t data) {
-    _mutex.lock();
-    for (auto channel : _channelq) {
+    auto channels = snapshot_channels();
+    for (auto channel : channels) {
         channel->write(data);
+        channel->release_processing_ref();
     }
-    _mutex.unlock();
     return 1;
 }
-void AllChannels::notifyWco(void) {
-    _mutex.lock();
-    for (auto channel : _channelq) {
-        channel->notifyWco();
+void AllChannels::notifyState(void) {
+    auto channels = snapshot_channels();
+    for (auto channel : channels) {
+        channel->notifyState();
+        channel->release_processing_ref();
     }
-    _mutex.unlock();
+}
+
+void AllChannels::notifyOvr(void) {
+    auto channels = snapshot_channels();
+    for (auto channel : channels) {
+        channel->notifyOvr();
+        channel->release_processing_ref();
+    }
+}
+
+void AllChannels::notifyWco(void) {
+    auto channels = snapshot_channels();
+    for (auto channel : channels) {
+        channel->notifyWco();
+        channel->release_processing_ref();
+    }
 }
 void AllChannels::notifyNgc(CoordIndex coord) {
-    _mutex.lock();
-    for (auto channel : _channelq) {
+    auto channels = snapshot_channels();
+    for (auto channel : channels) {
         channel->notifyNgc(coord);
+        channel->release_processing_ref();
     }
-    _mutex.unlock();
-}
-
-void AllChannels::stopJob() {
-    _mutex.lock();
-    for (auto channel : _channelq) {
-        channel->stopJob();
-    }
-    _mutex.unlock();
-}
-
-void AllChannels::pauseJob() {
-    _mutex.lock();
-    for (auto channel : _channelq) {
-        channel->pauseJob();
-    }
-    _mutex.unlock();
 }
 
 size_t AllChannels::write(const uint8_t* buffer, size_t length) {
-    _mutex.lock();
-    for (auto channel : _channelq) {
+    auto channels = snapshot_channels();
+    for (auto channel : channels) {
         channel->write(buffer, length);
+        channel->release_processing_ref();
     }
-    _mutex.unlock();
     return length;
 }
-Channel* AllChannels::pollLine(char* line) {
-    Channel* deadChannel;
-    while (xQueueReceive(_killQueue, &deadChannel, 0)) {
-        deregistration(deadChannel);
-        delete deadChannel;
+void AllChannels::print_msg(MsgLevel level, const char* msg) {
+    auto channels = snapshot_channels();
+    for (auto channel : channels) {
+        channel->print_msg(level, msg);
+        channel->release_processing_ref();
     }
+}
+
+void AllChannels::pauseJob() {
+    auto channels = snapshot_channels();
+    for (auto channel : channels) {
+        channel->pauseJob();
+        channel->release_processing_ref();
+    }
+}
+
+Channel* AllChannels::find(const std::string_view name) {
+    xSemaphoreTake(_mutex_general, portMAX_DELAY);
+    for (auto channel : _channelq) {
+        if (channel->name() == name) {
+            xSemaphoreGive(_mutex_general);
+            return channel;
+        }
+    }
+    xSemaphoreGive(_mutex_general);
+    return nullptr;
+}
+Channel* AllChannels::poll(char* line) {
+    reap_channels();
+
+    Channel* deadChannel;
+    while (_killQueue && xQueueReceive(_killQueue, &deadChannel, 0)) {
+        deadChannel->begin_closing();
+        deregistration(deadChannel);
+        _zombies.push_back(deadChannel);
+    }
+
+    reap_channels();
 
     // To avoid starving other channels when one has a lot
     // of traffic, we poll the other channels before the last
     // one that returned a line.
-    _mutex.lock();
+    xSemaphoreTake(_mutex_pollLine, portMAX_DELAY);
 
     for (auto channel : _channelq) {
         // Skip the last channel in the loop
-        if (channel != _lastChannel && channel->pollLine(line)) {
+
+        if (channel == _lastChannel) {
+            continue;
+        }
+
+        auto status = channel->pollLine(line);
+
+        if (status == Error::Ok) {
+            if (!channel->try_acquire_processing_ref()) {
+                continue;
+            }
             _lastChannel = channel;
-            _mutex.unlock();
+            xSemaphoreGive(_mutex_pollLine);
             return _lastChannel;
         }
     }
-    _mutex.unlock();
+    xSemaphoreGive(_mutex_pollLine);
     // If no other channel returned a line, try the last one
-    if (_lastChannel && _lastChannel->pollLine(line)) {
-        return _lastChannel;
+    if (_lastChannel) {
+        auto status = _lastChannel->pollLine(line);
+        if (status == Error::Ok) {
+            if (!_lastChannel->try_acquire_processing_ref()) {
+                _lastChannel = nullptr;
+                return _lastChannel;
+            }
+            return _lastChannel;
+        }
     }
     _lastChannel = nullptr;
     return _lastChannel;
@@ -314,20 +295,17 @@ Channel* pollChannels(char* line) {
     // planner buffer starvation due to not calling Stepper::prep_buffer()
     // frequently enough, which is normally called periodically at the end
     // of protocol_exec_rt_system() via protocol_execute_realtime().
-    static int counter = 0;
+    static uint_fast8_t counter = 0;
     if (line) {
         counter = 0;
     }
-    if (counter > 0) {
+    if (counter) {
         --counter;
         return nullptr;
     }
     counter = 50;
 
-    Channel* retval = allChannels.pollLine(line);
-
-    WebUI::COMMANDS::handle();      // Handles ESP restart
-    WebUI::wifi_services.handle();  // OTA, webServer, telnetServer polling
+    Channel* retval = allChannels.poll(line);
 
     return retval;
 }

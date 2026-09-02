@@ -3,38 +3,20 @@
 
 #pragma once
 
+#include "Config.h"
 #include "Pins/PinDetail.h"
-#include "Pins/PinCapabilities.h"
-#include "Pins/PinAttributes.h"
-#include "StringRange.h"
+#include "Pins/VoidPinDetail.h"
+#include "Pins/ErrorPinDetail.h"
 
-#include "Platform.h"
 #include <cstdint>
 #include <string>
 #include <cstring>
 #include <utility>
-#include "Assert.h"
+#include <string_view>
 
 // #define DEBUG_PIN_DUMP  // Pin debugging. WILL spam you with a lot of data!
 
-// Yuck, yuck, yuck... apparently we can't create a template with an IRAM_ATTR, because GCC refuses to obide
-// by the attributes. In other words, _all_ templates are out when using an ISR! This define makes an anonymous
-// method in the class, which can be used to wrap a single function. It can then be used by running the attachInterrupt
-// with ISRHandler.
-//
-// Usage:
-// - In header file (private / protected members) or in cpp file in anonymous namespace (public members)
-//   CreateISRHandlerFor(LimitPin, handleISR);
-// - When attaching an ISR: _pin.attachInterrupt(ISRHandler, EITHER_EDGE, this);
-//
-// I'd rather not use any defines, but templates... but apparently there's no choice here. Let's just make it as safe
-// as possible...
-#define CreateISRHandlerFor(className, methodName)                                                                                         \
-    static void IRAM_ATTR ISRHandler(void* data) {                                                                                         \
-        static_cast<className*>(data)->methodName();                                                                                       \
-    }
-
-// Pin class. A pin is basically a thing that can 'output', 'input' or do both. GPIO on an ESP32 comes to mind,
+// Pin class. A pin is basically a thing that can 'output', 'input' or do both.
 // but there are way more possible pins. Think about I2S/I2C/SPI extenders, RS485 driven pin devices and even
 // WiFi wall sockets.
 //
@@ -51,12 +33,12 @@
 // Pins internally use PinDetail classes. PinDetail's are just implementation details for a certain type of pin.
 // PinDetail is not exposed to developers, because they should never be used directly. Pin class is your
 // one-stop-go-to-shop for an pin.
+
 class Pin {
     // Helper for handling callbacks and mapping them to the proper class:
     //
     // Take note: this is placing the code in FLASH instead of IRAM, like it should. Use the #define's above
     // until this is fixed!
-
     // template <typename ThisType, void (ThisType::*Callback)()>
     // struct InterruptCallbackHelper {
     //     static void IRAM_ATTR callback(void* ptr) { (static_cast<ThisType*>(ptr)->*Callback)(); }
@@ -73,22 +55,19 @@ class Pin {
     // These are useful for unit testing, and for initializing pins that _always_ have to be defined by a user
     // (or else). Undefined pins are basically pins with no functionality. They don't have to be defined, but also
     // have no functionality when they are used.
-    static Pins::PinDetail* undefinedPin;
-    static Pins::PinDetail* errorPin;
-
     // Implementation details of this pin.
     Pins::PinDetail* _detail;
 
-    static const char* parse(StringRange str, Pins::PinDetail*& detail);
+    static const char* parse(std::string_view str, Pins::PinDetail*& detail);
 
-    inline Pin(Pins::PinDetail* detail) : _detail(detail) {}
+    explicit inline Pin(Pins::PinDetail* detail) : _detail(detail) {}
 
 public:
     using Capabilities = Pins::PinCapabilities;
     using Attr         = Pins::PinAttributes;
 
     // A default pin is an undefined pin.
-    inline Pin() : _detail(undefinedPin) {}
+    inline Pin() : _detail(&Pins::undefinedPin) {}
 
     static const bool On  = true;
     static const bool Off = false;
@@ -101,10 +80,7 @@ public:
     static const int ASSERTING   = 0x10;
     static const int DEASSERTING = 0x11;
 
-    // inline static Pins::PinDetail* create(const char* str) { return create(StringRange(str)); };
-
-    static Pin  create(const char* str) { return create(StringRange(str)); }  // ensure it's not ambiguous
-    static Pin  create(const StringRange& str);
+    static Pin  create(std::string_view str);
     static bool validate(const char* str);
 
     // We delete the copy constructor, and implement the move constructor. The move constructor is required to support
@@ -123,48 +99,63 @@ public:
     inline bool operator==(const Pin& o) const { return _detail == o._detail; }
     inline bool operator!=(const Pin& o) const { return _detail != o._detail; }
 
-    inline bool undefined() const { return _detail == undefinedPin; }
+    inline bool undefined() const { return _detail == &Pins::undefinedPin; }
     inline bool defined() const { return !undefined(); }
 
     // External libraries normally use digitalWrite, digitalRead and setMode. Since we cannot handle that behavior, we
     // just give back the pinnum_t for getNative.
     inline pinnum_t getNative(Capabilities expectedBehavior) const {
-        Assert(_detail->capabilities().has(expectedBehavior), "Requested pin %s does not have the expected behavior.", name().c_str());
+        if (!_detail->capabilities().has(expectedBehavior)) {
+            log_config_error("Pin " << name() << " cannot be used as requested");
+        }
         return _detail->_index;
     }
+    inline int8_t   driveStrength() const { return _detail->driveStrength(); }
+    inline bool     canStep() { return _detail->canStep(); }
+    inline pinnum_t index() { return _detail->_index; }
+    inline bool     inverted() { return _detail->_inverted; }
 
-    void write(bool value) const;
-    void synchronousWrite(bool value) const;
+    // In principle, IRAM_ATTR would not be needed for inlined methods, but
+    // the compiler does not seem to actually inline these.  Adding IRAM_ATTR
+    // forces the non-inlined versions into IRAM to prevent crashes when a
+    // spindle state change happens in a stepping interrupt.
+    inline void IRAM_ATTR write(bool value) const { _detail->write(value); };
+    inline void IRAM_ATTR synchronousWrite(bool value) const { _detail->synchronousWrite(value); };
+
+    inline void     setDuty(uint32_t duty) const { _detail->setDuty(duty); }
+    inline uint32_t maxDuty() const { return _detail->maxDuty(); }
 
     inline bool read() const { return _detail->read() != 0; }
 
-    inline void setAttr(Attr attributes) const { _detail->setAttr(attributes); }
+    inline void setAttr(Attr attributes, uint32_t frequency = 0) const { _detail->setAttr(attributes, frequency); }
 
     inline Attr getAttr() const { return _detail->getAttr(); }
 
     inline void on() const { write(1); }
     inline void off() const { write(0); }
 
-    static Pin Error() { return Pin(errorPin); }
+    static Pin Error() { return Pin(&Pins::errorPin); }
 
-    // ISR handlers. Map methods on 'this' types.
+    void registerEvent(InputPin* obj) { _detail->registerEvent(obj); };
 
-    // Backward compatibility ISR handler:
-    void attachInterrupt(void (*callback)(void*, bool), int mode, void* arg = nullptr) const {
-        _detail->attachInterrupt(callback, arg, mode);
-    }
-
-    void detachInterrupt() const { _detail->detachInterrupt(); }
+    inline void disarm() { _detail->disarm(); };
+    inline void rearm() { _detail->rearm(); };
 
     // Other functions:
     Capabilities capabilities() const { return _detail->capabilities(); }
 
-    inline std::string name() const { return _detail->toString(); }
+    inline const char* name() const { return _detail->name(); }
 
     void report(const char* legend);
-    void report(std::string legend) { report(legend.c_str()); }
+    void report(const std::string& legend) { report(legend.c_str()); }
 
     inline void swap(Pin& o) { std::swap(o._detail, _detail); }
 
     ~Pin();
 };
+
+#include <Print.h>
+inline Print& operator<<(Print& lhs, const Pin& v) {
+    lhs.print(v.name());
+    return lhs;
+}

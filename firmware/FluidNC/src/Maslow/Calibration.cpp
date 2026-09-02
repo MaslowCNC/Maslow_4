@@ -522,11 +522,11 @@ bool Calibration::requestStateChange(int newState) {
 
                     // Set motor positions directly from hardware readings
                     // Axis mapping: A=TL(0), B=TR(1), C=BL(2), D=BR(3), Z=router(4)
-                    set_motor_steps(0, mpos_to_steps(beltLength[_TL], 0));  // A axis = TL belt
-                    set_motor_steps(1, mpos_to_steps(beltLength[_TR], 1));  // B axis = TR belt
-                    set_motor_steps(2, mpos_to_steps(beltLength[_BL], 2));  // C axis = BL belt
-                    set_motor_steps(3, mpos_to_steps(beltLength[_BR], 3));  // D axis = BR belt
-                    set_motor_steps(4, mpos_to_steps(0.0, 4));              // Z axis = 0 (surface level) during calibration
+                    set_steps(static_cast<axis_t>(0), motor_pos_to_steps(beltLength[_TL], 0));  // A axis = TL belt
+                    set_steps(static_cast<axis_t>(1), motor_pos_to_steps(beltLength[_TR], 1));  // B axis = TR belt
+                    set_steps(static_cast<axis_t>(2), motor_pos_to_steps(beltLength[_BL], 2));  // C axis = BL belt
+                    set_steps(static_cast<axis_t>(3), motor_pos_to_steps(beltLength[_BR], 3));  // D axis = BR belt
+                    set_steps(static_cast<axis_t>(4), motor_pos_to_steps(0.0, 4));              // Z axis = 0 (surface level) during calibration
 
                     gc_sync_position();  //This updates the Gcode engine with the new position from the stepping engine that we set with set_motor_steps
                     plan_sync_position();
@@ -568,10 +568,10 @@ bool Calibration::requestStateChange(int newState) {
 
                 // Set motor positions directly from hardware readings to ensure motion system accuracy
                 // Axis mapping: A=TL(0), B=TR(1), C=BL(2), D=BR(3), Z=router(4)
-                set_motor_steps(0, mpos_to_steps(beltLength[_TL], 0));  // A axis = TL belt
-                set_motor_steps(1, mpos_to_steps(beltLength[_TR], 1));  // B axis = TR belt
-                set_motor_steps(2, mpos_to_steps(beltLength[_BL], 2));  // C axis = BL belt
-                set_motor_steps(3, mpos_to_steps(beltLength[_BR], 3));  // D axis = BR belt
+                set_steps(static_cast<axis_t>(0), motor_pos_to_steps(beltLength[_TL], 0));  // A axis = TL belt
+                set_steps(static_cast<axis_t>(1), motor_pos_to_steps(beltLength[_TR], 1));  // B axis = TR belt
+                set_steps(static_cast<axis_t>(2), motor_pos_to_steps(beltLength[_BL], 2));  // C axis = BL belt
+                set_steps(static_cast<axis_t>(3), motor_pos_to_steps(beltLength[_BR], 3));  // D axis = BR belt
                 // Z axis position is preserved during transition to READY_TO_CUT
 
                 gc_sync_position();   // Update GCode engine with synchronized position
@@ -1185,7 +1185,7 @@ void Calibration::calibration_loop() {
             }
 
             char saveCommand[] = "$CO";
-            Error saveResult   = execute_line(saveCommand, allChannels, WebUI::AuthenticationLevel::LEVEL_ADMIN);
+            Error saveResult   = execute_line(saveCommand, allChannels, AuthenticationLevel::LEVEL_ADMIN, false);
             if (saveResult != Error::Ok) {
                 log_error("Find Anchors completed, but saving configuration failed: " << static_cast<int>(saveResult));
             }
@@ -1379,10 +1379,10 @@ bool Calibration::takeSlackFunc() {
 
                 // Set motor positions directly from measured belt lengths
                 // Axis mapping: A=TL(0), B=TR(1), C=BL(2), D=BR(3), Z=router(4)
-                set_motor_steps(0, mpos_to_steps(beltLength[_TL], 0));  // A axis = TL belt
-                set_motor_steps(1, mpos_to_steps(beltLength[_TR], 1));  // B axis = TR belt
-                set_motor_steps(2, mpos_to_steps(beltLength[_BL], 2));  // C axis = BL belt
-                set_motor_steps(3, mpos_to_steps(beltLength[_BR], 3));  // D axis = BR belt
+                set_steps(static_cast<axis_t>(0), motor_pos_to_steps(beltLength[_TL], 0));  // A axis = TL belt
+                set_steps(static_cast<axis_t>(1), motor_pos_to_steps(beltLength[_TR], 1));  // B axis = TR belt
+                set_steps(static_cast<axis_t>(2), motor_pos_to_steps(beltLength[_BL], 2));  // C axis = BL belt
+                set_steps(static_cast<axis_t>(3), motor_pos_to_steps(beltLength[_BR], 3));  // D axis = BR belt
                 // Z axis is left unchanged during Apply Tension process
 
                 // Verify that the position was set correctly by reading back from motors

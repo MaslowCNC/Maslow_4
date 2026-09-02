@@ -3,15 +3,13 @@
 
 #pragma once
 
-#include "../Configuration/Configurable.h"
+#include "Configuration/Configurable.h"
 
 #include <cstdint>
 
 namespace Machine {
     class I2SOBus : public Configuration::Configurable {
         static const int NUMBER_PINS = 32;
-
-        uint32_t portData_;
 
     public:
         I2SOBus() = default;
@@ -21,15 +19,13 @@ namespace Machine {
         Pin _ws;
         Pin _oe;
 
+        uint32_t _min_pulse_us = 2;
+
         void validate() override;
         void group(Configuration::HandlerBase& handler) override;
 
         void init();
-
-        void write(int index, int high);
         void push();
-
-        inline int read(int index) { return !!(portData_ & bitnum_to_mask(index)); }
 
         ~I2SOBus() = default;
     };

@@ -9,41 +9,51 @@
 
 #include <cstdint>
 
-// Values that define the probing state machine.
-enum class ProbeState : uint8_t {
-    Off    = 0,  // Probing disabled or not in use. (Must be zero.)
-    Active = 1,  // Actively watching the input pin.
-};
-
 class Probe : public Configuration::Configurable {
     // Inverts the probe pin state depending on user settings and probing cycle mode.
-    bool _isProbeAway = false;
+    bool _away = false;
 
-    // Configurable
-    Pin _probePin;
+    class ProbeEventPin : public EventPin {
+    public:
+        ProbeEventPin(const char* legend);
+
+        // Differs from the EventPin version by sending the event on either edge
+        void trigger(bool active) override {
+            InputPin::trigger(active);
+            protocol_send_event(_event, this);
+        }
+    };
+
+    ProbeEventPin _probePin;
+    ProbeEventPin _toolsetterPin;
 
 public:
+    bool _hard_stop        = false;
+    bool _probe_hard_limit = false;
     // Configurable
     bool _check_mode_start = true;
     // _check_mode_start configures the position after a probing cycle
     // during check mode. false sets the position to the probe target,
     // true sets the position to the start position.
 
-    Probe() = default;
+    Probe() : _probePin("Probe"), _toolsetterPin("Toolsetter") {}
 
-    bool exists() const { return _probePin.defined(); }
+    // Configurable
+    bool exists() { return _probePin.defined() || _toolsetterPin.defined(); }
 
-    // Probe pin initialization routine.
     void init();
 
     // setup probing direction G38.2 vs. G38.4
-    void set_direction(bool is_away);
+    void set_direction(bool away);
 
     // Returns probe pin state. Triggered = true. Called by gcode parser and probe state monitor.
     bool get_state();
 
     // Returns true if the probe pin is tripped, depending on the direction (away or not)
-    bool IRAM_ATTR tripped();
+    bool tripped();
+
+    ProbeEventPin& probePin() { return _probePin; }
+    ProbeEventPin& toolsetterPin() { return _toolsetterPin; }
 
     // Configuration handlers.
     void validate() override;

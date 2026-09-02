@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include "../Configuration/Configurable.h"
+#include "Configuration/Configurable.h"
 #include "LimitPin.h"
 
 namespace MotorDrivers {
@@ -12,47 +12,34 @@ namespace MotorDrivers {
 }
 
 namespace Machine {
-    class Endstops;
-}
-
-namespace Machine {
     class Motor : public Configuration::Configurable {
-        LimitPin* _negLimitPin;
-        LimitPin* _posLimitPin;
-        LimitPin* _allLimitPin;
+        axis_t  _axis;
+        motor_t _motorNum;
 
-        int _axis;
-        int _motorNum;
+        LimitPin _negLimitPin;
+        LimitPin _posLimitPin;
+        LimitPin _allLimitPin;
 
     public:
-        Motor(int axis, int motorNum);
+        Motor(axis_t axis, motor_t motorNum);
 
         MotorDrivers::MotorDriver* _driver  = nullptr;
         float                      _pulloff = 1.0f;  // mm
 
-        Pin  _negPin;
-        Pin  _posPin;
-        Pin  _allPin;
         bool _hardLimits = false;
-
-        int32_t _steps   = 0;
-        bool    _limited = false;  // _limited is set by the LimitPin ISR
-        bool    _blocked = false;  // _blocked is used during asymmetric homing pulloff
 
         // Configuration system helpers:
         void group(Configuration::HandlerBase& handler) override;
         void afterParse() override;
         bool hasSwitches();
+        void rearmSwitches();
         bool isReal();
         void makeDualSwitches();
-        void limitOtherAxis(int axis);
+        void limitOtherAxis(axis_t axis);
         void init();
         void config_motor();
-        void step(bool reverse);
-        void unstep();
-        void block() { _blocked = true; }
-        void unblock() { _blocked = false; }
-        void unlimit() { _limited = false; }
+        bool can_home();
+        bool supports_homing_dir(bool positive);
         ~Motor();
     };
 }

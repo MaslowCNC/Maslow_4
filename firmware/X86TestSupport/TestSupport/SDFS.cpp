@@ -7,21 +7,11 @@ namespace fs {
         return true;
     }
     void     SDFS::end() {}
-    uint64_t SDFS::cardSize() {
-        return 0;
-    }
-    uint64_t SDFS::totalBytes() {
-        return 0;
-    }
-    uint64_t SDFS::usedBytes() {
-        return 0;
-    }
-    bool SDFS::readRAW(uint8_t* buffer, uint32_t sector) {
-        return false;
-    }
-    bool SDFS::writeRAW(uint8_t* buffer, uint32_t sector) {
-        return false;
-    }
+    uint64_t SDFS::cardSize() { return 0; }
+    uint64_t SDFS::totalBytes() { return 0; }
+    uint64_t SDFS::usedBytes() { return 0; }
+    bool     SDFS::readRAW(uint8_t* buffer, uint32_t sector) { return false; }
+    bool     SDFS::writeRAW(uint8_t* buffer, uint32_t sector) { return false; }
 
     FSImplPtr inst;
 }

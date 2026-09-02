@@ -3,20 +3,19 @@
 
 #pragma once
 
-#include "PinDetail.h"
-#include "../Machine/I2SOBus.h"
+#include "Config.h"
+#if MAX_N_I2SO
+#    include "PinDetail.h"
 
 namespace Pins {
     class I2SOPinDetail : public PinDetail {
         PinCapabilities _capabilities;
         PinAttributes   _attributes;
-        int             _readWriteMask;
 
         static const int         nI2SOPins = 32;
         static std::vector<bool> _claimed;
 
-        bool              _lastWrittenValue = false;
-        Machine::I2SOBus* _i2soDriver       = nullptr;
+        bool _lastWrittenValue = false;
 
     public:
         I2SOPinDetail(pinnum_t index, const PinOptionsParser& options);
@@ -24,14 +23,16 @@ namespace Pins {
         PinCapabilities capabilities() const override;
 
         // I/O:
-        void          write(int high) override;
-        void          synchronousWrite(int high) override;
-        int           read() override;
-        void          setAttr(PinAttributes value) override;
+        void          write(bool high) override;
+        void          synchronousWrite(bool high) override;
+        bool          read() override;
+        void          setAttr(PinAttributes value, uint32_t frequency) override;
         PinAttributes getAttr() const override;
 
-        std::string toString() override;
+        bool canStep() override { return true; }
 
         ~I2SOPinDetail() override { _claimed[_index] = false; }
     };
 }
+
+#endif

@@ -212,3 +212,9 @@ extern Maslow_& Maslow;
 
 // actual task loop for gathering telemetry data (runs on utility core)
 void telemetry_loop(void* unused);
+
+// Shared scratch buffer for snprintf-style log formatting, protected by a
+// mutex.  Kept from the pre-merge Maslow logging code; upstream FluidNC no
+// longer provides these.
+char* getLogBuffer();
+void  releaseLogBuffer();

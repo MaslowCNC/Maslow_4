@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "PinCapabilities.h"
+#include "Config.h"
 #include "PinAttributes.h"
 #include "PinOptionsParser.h"
 
@@ -12,17 +12,18 @@
 #include <string>
 #include <vector>
 
-typedef uint8_t pinnum_t;
+class InputPin;
 
 namespace Pins {
 
     // Implementation details of pins.
     class PinDetail {
-    protected:
     public:
-        int _index;
+        std::string _name;
+        pinnum_t    _index    = INVALID_PINNUM;
+        bool        _inverted = false;
 
-        PinDetail(int number) : _index(number) {}
+        PinDetail(pinnum_t index) : _index(index) {}
         PinDetail(const PinDetail& o)            = delete;
         PinDetail(PinDetail&& o)                 = delete;
         PinDetail& operator=(const PinDetail& o) = delete;
@@ -31,19 +32,25 @@ namespace Pins {
         virtual PinCapabilities capabilities() const = 0;
 
         // I/O:
-        virtual void          write(int high) = 0;
-        virtual void          synchronousWrite(int high);
-        virtual int           read()                       = 0;
-        virtual void          setAttr(PinAttributes value) = 0;
-        virtual PinAttributes getAttr() const              = 0;
+        virtual void          write(bool high) = 0;
+        virtual void          synchronousWrite(bool high);
+        virtual void          setDuty(uint32_t duty) {};
+        virtual uint32_t      maxDuty() { return 0; }
+        virtual bool          read()                                               = 0;
+        virtual void          setAttr(PinAttributes value, uint32_t frequency = 0) = 0;
+        virtual PinAttributes getAttr() const                                      = 0;
 
-        // ISR's.
-        virtual void attachInterrupt(void (*callback)(void*, bool), void* arg, int mode);
-        virtual void detachInterrupt();
+        virtual int8_t driveStrength() { return -1; }
 
-        virtual std::string toString() = 0;
+        virtual bool canStep() { return false; }
 
-        inline int number() const { return _index; }
+        virtual void registerEvent(InputPin* obj);
+        virtual void disarm();
+        virtual void rearm();
+
+        const char* name() { return _name.c_str(); }
+
+        inline pinnum_t number() const { return _index; }
 
         virtual ~PinDetail() {}
     };

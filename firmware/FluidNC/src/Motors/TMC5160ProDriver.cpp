@@ -2,12 +2,14 @@
 // Use of this source code is governed by a GPLv3 license that can be found in the LICENSE file.
 
 #include "TMC5160ProDriver.h"
-#include "../Machine/MachineConfig.h"
+#include "Machine/MachineConfig.h"
 #include <atomic>
 
 namespace MotorDrivers {
 
     void TMC5160ProDriver::init() {
+        TrinamicSpiDriver::init();
+
         uint8_t cs_id;
         cs_id = setupSPI();
 

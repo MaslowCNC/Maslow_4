@@ -10,10 +10,12 @@
 #pragma once
 
 #include <Print.h>
+#include <string>
+#include <vector>
 
 class Lineedit {
 private:
-    static const int MAXHISTORY = 400;
+    static const int MAX_HISTORY_ENTRIES = 20;
     Print*           out;
 
     /* Use negative numbers here to co-exist with normal unicode chars */
@@ -31,24 +33,23 @@ private:
     bool editing      = false;
     bool needs_reecho = false;
 
-    char* thisaddr;
-    char* startaddr;
-    char* endaddr;
-    char* maxaddr;
+    char*       thisaddr;
+    char*       startaddr;
+    char*       endaddr;
+    const char* maxaddr;
 
-    int  saved_length;
-    char lastline[MAXHISTORY];
+    std::vector<std::string> history;
 
     char killbuf[100] = { 0 };
 
-    char theWord[100];
+    char theWord[100] = { 0 };
 
-    int nmatches = 0;
-    int matchlen;
-    int thismatch = 0;
+    uint32_t nmatches  = 0;
+    uint32_t matchlen  = 0;
+    uint32_t thismatch = 0;
 
-    int escaping;
-    int history_num = -1;
+    int32_t escaping;
+    int32_t history_num = -1;
 
     void emit(char c);
 
@@ -56,10 +57,8 @@ private:
     void addchar(char c, bool echo = true);
     void erase_char();
     void erase_line();
-    void validate_history();
-    bool already_in_history(char* adr, int len);
-    void add_to_history(char* adr, int len);
-    bool get_history(int history_num);
+    void add_to_history(const char* adr, uint32_t len);
+    bool get_history(int32_t history_num);
     void backward_char();
     void forward_char();
     bool is_word_delim(char c);
@@ -67,7 +66,7 @@ private:
     void kill_forward();
     void yank();
     void backward_word();
-    bool isdelim(char* addr);
+    bool isdelim(const char* addr);
     bool find_word_under_cursor();
     void color(const char* s);
     void cyan();
@@ -81,10 +80,9 @@ private:
     void show_realtime_command(const char* s);
 
 public:
-    Lineedit(Print* out, char* line, int linelen);
+    Lineedit(Print* out, char* line, size_t linelen);
 
-    void start(char* addr, int count);
-    int  finish();
-    bool step(int c);
-    bool realtime(int c);
+    uint32_t finish();
+    bool     step(int c);
+    bool     realtime(int c);
 };

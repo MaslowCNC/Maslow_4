@@ -9,99 +9,64 @@
 */
 
 #include "Config.h"
-#include <vector>
-#include <stdint.h>
 #include "Channel.h"
 #include <freertos/FreeRTOS.h>  // TickType_T
 #include <freertos/queue.h>
-#include <mutex>
-
-// See if the character is an action command like feedhold or jogging. If so, do the action and return true
-uint8_t check_action_command(uint8_t data);
+#include <freertos/semphr.h>
+#include <stdint.h>
+#include <vector>
 
 void channel_init();
-
-// Define realtime command special characters. These characters are 'picked-off' directly from the
-// serial read data stream and are not passed to the grbl line execution parser. Select characters
-// that do not and must not exist in the streamed GCode program. ASCII control characters may be
-// used, if they are available per user setup. Also, extended ASCII codes (>127), which are never in
-// GCode programs, maybe selected for interface programs.
-// NOTE: If changed, manually update help message in report.c.
-
-// NOTE: All override realtime commands must be in the extended ASCII character set, starting
-// at character value 128 (0x80) and up to 255 (0xFF). If the normal set of realtime commands,
-// such as status reports, feed hold, reset, and cycle start, are moved to the extended set
-// space, serial.c's RX ISR will need to be modified to accommodate the change.
-
-enum class Cmd : uint8_t {
-    None                  = 0,
-    Reset                 = 0x18,  // Ctrl-X
-    StatusReport          = '?',
-    CycleStart            = '~',
-    FeedHold              = '!',
-    SafetyDoor            = 0x84,
-    JogCancel             = 0x85,
-    DebugReport           = 0x86,  // Only when DEBUG_REPORT_REALTIME enabled, sends debug report in '{}' braces.
-    Macro0                = 0x87,
-    Macro1                = 0x88,
-    Macro2                = 0x89,
-    Macro3                = 0x8a,
-    FeedOvrReset          = 0x90,  // Restores feed override value to 100%.
-    FeedOvrCoarsePlus     = 0x91,
-    FeedOvrCoarseMinus    = 0x92,
-    FeedOvrFinePlus       = 0x93,
-    FeedOvrFineMinus      = 0x94,
-    RapidOvrReset         = 0x95,  // Restores rapid override value to 100%.
-    RapidOvrMedium        = 0x96,
-    RapidOvrLow           = 0x97,
-    RapidOvrExtraLow      = 0x98,  // *NOT SUPPORTED*
-    SpindleOvrReset       = 0x99,  // Restores spindle override value to 100%.
-    SpindleOvrCoarsePlus  = 0x9A,  // 154
-    SpindleOvrCoarseMinus = 0x9B,
-    SpindleOvrFinePlus    = 0x9C,
-    SpindleOvrFineMinus   = 0x9D,
-    SpindleOvrStop        = 0x9E,
-    CoolantFloodOvrToggle = 0xA0,
-    CoolantMistOvrToggle  = 0xA1,
-};
-
-bool is_realtime_command(uint8_t data);
-void execute_realtime_command(Cmd command, Channel& channel);
 
 Channel* pollChannels(char* line = nullptr);
 
 class AllChannels : public Channel {
     std::vector<Channel*> _channelq;
+    std::vector<Channel*> _zombies;
 
-    Channel*     _lastChannel = nullptr;
-    xQueueHandle _killQueue;
+    Channel*      _lastChannel = nullptr;
+    QueueHandle_t _killQueue;
 
-    static std::mutex _mutex;
+    static SemaphoreHandle_t _mutex_general;
+    static SemaphoreHandle_t _mutex_pollLine;
+
+    void                  reap_channels();
+    std::vector<Channel*> snapshot_channels();
 
 public:
-    AllChannels() : Channel("all") { _killQueue = xQueueCreate(3, sizeof(Channel*)); }
+    // Depth covers the worst realistic burst: every WebSocket client plus the
+    // telnet and HTTP-command channels being torn down between two poll cycles.
+    AllChannels() : Channel("all") { _killQueue = xQueueCreate(32, sizeof(Channel*)); }
 
-    void kill(Channel* channel);
+    // Queues a channel for deletion by the polling task.  Returns false if it
+    // could not be queued (kill queue full, or never created); the caller still
+    // owns the channel in that case and must retry.
+    bool kill(Channel* channel);
 
     void registration(Channel* channel);
     void registrationFront(Channel* channel);
     void deregistration(Channel* channel);
-    void init();
+    void init() override;
+    void ready();
 
     size_t write(uint8_t data) override;
     size_t write(const uint8_t* buffer, size_t length) override;
 
-    void flushRx();
+    void print_msg(MsgLevel level, const char* msg) override;
 
+    void flushRx() override;
+
+    void notifyState();
+    void notifyOvr();
     void notifyWco();
     void notifyNgc(CoordIndex coord);
 
     void listChannels(Channel& out);
 
-    Channel* pollLine(char* line) override;
+    Channel* find(const std::string_view name);
+    Channel* poll(char* line);
 
-    void stopJob() override;
-    void pauseJob() override;
+    void pauseJob();
 };
 
 extern AllChannels allChannels;

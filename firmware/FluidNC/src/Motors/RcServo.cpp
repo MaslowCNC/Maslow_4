@@ -17,55 +17,30 @@
 
 #include "RcServo.h"
 
-#include "../Machine/MachineConfig.h"
-#include "../System.h"  // mpos_to_steps() etc
-#include "../Pin.h"
-#include "../Limits.h"  // limitsMaxPosition
-#include "RcServoSettings.h"
-
-#include <freertos/task.h>  // vTaskDelay
+#include "Machine/MachineConfig.h"
+#include "System.h"  // motor_pos_to_steps() etc
+#include "Pin.h"
 
 namespace MotorDrivers {
-    // RcServo::RcServo(Pin pwm_pin) : Servo(), _pwm_pin(pwm_pin) {}
-
     void RcServo::init() {
         if (_output_pin.undefined()) {
-            log_warn("    RC Servo disabled: No output pin");
+            log_config_error("    RC Servo disabled: No output pin");
             _has_errors = true;
             return;  // We cannot continue without the output pin
         }
 
-        _axis_index = axis_index();
-
-        _pwm = new PwmPin(_output_pin, _pwm_freq);  // Allocate a channel
-
+        _axis = axis_index();
+        _output_pin.setAttr(Pin::Attr::PWM, _pwm_freq);
         _current_pwm_duty = 0;
-
         read_settings();
-
         config_message();
-
         _disabled = true;
-
         schedule_update(this, _timer_ms);
     }
 
     void RcServo::config_message() {
-        char* buffer = getLogBuffer();
-        snprintf(buffer, 1400, "    %s Pin:%s Pulse Len(%d,%d period:%d)",
-                name(), _output_pin.name().c_str(), _min_pulse_us, _max_pulse_us, _pwm->period());
-        log_info(buffer);
-        releaseLogBuffer();
-    }
-
-    void RcServo::_write_pwm(uint32_t duty) {
-        // to prevent excessive calls to pwmSetDuty, make sure duty has changed
-        if (duty == _current_pwm_duty) {
-            return;
-        }
-
-        _current_pwm_duty = duty;
-        _pwm->setDuty(duty);
+        log_info("    " << name() << " Pin:" << _output_pin.name() << " Pulse Len(" << _min_pulse_us << "," << _max_pulse_us
+                        << " period:" << _output_pin.maxDuty() << ")");
     }
 
     // sets the PWM to zero. This allows most servos to be manually moved
@@ -80,21 +55,22 @@ namespace MotorDrivers {
         }
     }
 
-    // Homing justs sets the new system position and the servo will move there
+    // Homing just sets the new system position and the servo will move there
     bool RcServo::set_homing_mode(bool isHoming) {
-        log_debug("Servo homing:" << isHoming);
         if (_has_errors)
             return false;
 
         if (isHoming) {
-            auto axis = config->_axes->_axis[_axis_index];
-            set_motor_steps(_axis_index, mpos_to_steps(axis->_homing->_mpos, _axis_index));
+            auto  axisConfig = Axes::_axis[_axis];
+            auto  homing     = axisConfig->_homing;
+            float motor_pos  = homing ? config->_kinematics->max_motor_pos(_axis) : 0;
+            set_steps(_axis, motor_pos_to_steps(motor_pos, _axis));
 
-            float home_time_sec = (axis->_maxTravel / axis->_maxRate * 60 * 1.1);  // 1.1 fudge factor for accell time.
+            float home_time_sec = (axisConfig->_maxTravel / axisConfig->_maxRate * 60 * 1.1);  // 1.1 fudge factor for accell time.
 
             _disabled = false;
-            set_location();                    // force the PWM to update now
-            vTaskDelay(home_time_sec * 1000);  // give time to move
+            set_location();                                         // force the PWM to update now
+            dwell_ms(home_time_sec * 1000, DwellMode::SysSuspend);  // give time to move
         }
         return false;  // Cannot be homed in the conventional way
     }
@@ -104,30 +80,30 @@ namespace MotorDrivers {
     }
 
     void RcServo::set_location() {
+        static uint32_t last_pc = 0;
+
         if (_disabled || _has_errors) {
             return;
         }
 
-        uint32_t servo_pulse_len;
-        float    servo_pos;
-
         read_settings();
 
-        float mpos = steps_to_mpos(get_axis_motor_steps(_axis_index), _axis_index);  // get the axis machine position in mm
-        servo_pos  = mpos;                                                           // determine the current work position
+        steps_t steps = get_axis_steps(_axis);  // get the axis machine position in mm
 
         // determine the pulse length
-        servo_pulse_len = static_cast<uint32_t>(mapConstrain(
-            servo_pos, limitsMinPosition(_axis_index), limitsMaxPosition(_axis_index), (float)_min_pulse_cnt, (float)_max_pulse_cnt));
+        uint32_t pulse_count = mapConstrain(steps, _min_steps, _max_steps, (int32_t)_min_pulse_cnt, (int32_t)_max_pulse_cnt);
 
-        // log_info("su " << servo_pulse_len);
-
-        _write_pwm(servo_pulse_len);
+        _write_pwm(pulse_count);
     }
 
     void RcServo::read_settings() {
-        _min_pulse_cnt = (_min_pulse_us * ((_pwm_freq * _pwm->period()) / 1000)) / 1000;  // play some math games to prevent overflowing 32 bit
-        _max_pulse_cnt = (_max_pulse_us * ((_pwm_freq * _pwm->period()) / 1000)) / 1000;
+        uint32_t pulse_counts_per_ms = _pwm_freq * _output_pin.maxDuty() / 1000;
+
+        _min_pulse_cnt = _min_pulse_us * pulse_counts_per_ms / 1000;
+        _max_pulse_cnt = _max_pulse_us * pulse_counts_per_ms / 1000;
+
+        _min_steps = motor_pos_to_steps(config->_kinematics->min_motor_pos(_axis), _axis);
+        _max_steps = motor_pos_to_steps(config->_kinematics->max_motor_pos(_axis), _axis);
     }
 
     // Configuration registration

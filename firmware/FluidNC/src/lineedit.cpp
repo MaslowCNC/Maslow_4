@@ -2,8 +2,11 @@
 // Use of this source code is governed by a GPLv3 license that can be found in the LICENSE file.
 
 #include "lineedit.h"
+#include <cstdio>
+#include <string>
+#include <string_view>
 
-Lineedit::Lineedit(Print* _out, char* line, int linelen) : out(_out), needs_reecho(false), startaddr(line), maxaddr(line + linelen) {
+Lineedit::Lineedit(Print* _out, char* line, size_t linelen) : out(_out), needs_reecho(false), startaddr(line), maxaddr(line + linelen) {
     restart();
 }
 
@@ -14,19 +17,20 @@ void Lineedit::emit(char c) {
 }
 
 void Lineedit::echo_line() {
-    for (char* p = startaddr; p < endaddr; ++p) {
+    for (const char* p = startaddr; p < endaddr; ++p) {
         emit(*p);
     }
-    for (char* p = endaddr; p > thisaddr; --p) {
+    for (const char* p = endaddr; p > thisaddr; --p) {
         emit('\b');
     }
 }
 
 void Lineedit::addchar(char c, bool echo) {
-    char* p;
     if (thisaddr < maxaddr) {
-        if (endaddr < maxaddr)
+        char* p;
+        if (endaddr < maxaddr) {
             ++endaddr;
+        }
         for (p = endaddr; --p >= thisaddr + 1;) {
             *p = *(p - 1);
         }
@@ -44,11 +48,11 @@ void Lineedit::addchar(char c, bool echo) {
 }
 
 void Lineedit::erase_char() {
-    char* p;
     if (thisaddr > startaddr) {
         --thisaddr;
         --endaddr;
         emit('\b');
+        char* p;
         for (p = thisaddr; p < endaddr; p++) {
             *p = *(p + 1);
             emit(*p);
@@ -68,126 +72,41 @@ void Lineedit::erase_line() {
     endaddr = startaddr;
 }
 
-void Lineedit::validate_history() {
-    int i;
-
-    // Clear history if it is invalid
-    if (saved_length == 0 || saved_length > MAXHISTORY)
-        goto clear_history;
-
-    for (i = 0; i < MAXHISTORY; i++) {
-        if (lastline[i] & 0x80)
-            goto clear_history;
+void Lineedit::add_to_history(const char* adr, uint32_t len) {
+    if (len == 0) {
+        return;
     }
-    return;
+    std::string entry(adr, len);
 
-clear_history:
-    for (i = 0; i < MAXHISTORY; i++) {
-        lastline[i] = '\0';
-    }
-    saved_length = 0;
-}
-
-bool Lineedit::already_in_history(char* adr, int len) {
-    char* p;
-    char* first;
-    char* thischar;
-    int   i;
-    if (!saved_length)
-        return false;
-
-    thischar = adr;
-    first    = lastline;
-    for (p = lastline; p < &lastline[MAXHISTORY];) {
-        if (*p == '\0') {
-            if ((p - first) == len) {
-                // Found a match; reorder history so the match
-                // is at the beginning.
-                while ((--p - lastline) > len) {
-                    *p = p[-len - 1];
-                }
-                *p = '\0';
-                for (i = 0; i < len; i++) {
-                    lastline[i] = adr[i];
-                }
-                return true;
-            }
-            if (++p == &lastline[MAXHISTORY])
-                return false;
-            thischar = adr;
-            first    = p;
-            continue;
-        }
-        if (*p == *thischar) {
-            // Match
-            ++p;
-            ++thischar;
-        } else {
-            // Mismatch
-            while (*++p != '\0') {}
-            ++p;
-            thischar = adr;
-            first    = p;
+    // If already present, move it to the front instead of duplicating
+    for (auto it = history.begin(); it != history.end(); ++it) {
+        if (*it == entry) {
+            history.erase(it);
+            break;
         }
     }
-    return false;
-}
 
-void Lineedit::add_to_history(char* adr, int len) {
-    int i;
-    int new_length;
+    history.insert(history.begin(), entry);
 
-    validate_history();
-    if (len && !already_in_history(adr, len)) {
-        len += 1;  // Room for null
-        new_length = (len > MAXHISTORY) ? MAXHISTORY : len;
-
-        // Make room for new history line
-        for (i = MAXHISTORY; --i >= new_length;)
-            lastline[i] = lastline[i - new_length];
-
-        lastline[MAXHISTORY - 1] = '\0';  // Truncate the last line
-        lastline[i]              = '\0';
-
-        while (--i >= 0)
-            lastline[i] = adr[i];
-
-        saved_length += new_length;
-        if (saved_length > MAXHISTORY)
-            saved_length = MAXHISTORY;
+    if (history.size() > MAX_HISTORY_ENTRIES) {
+        history.resize(MAX_HISTORY_ENTRIES);
     }
 }
 
 // history_num is the number of the history line to fetch
 // returns true if that line exists.
-bool Lineedit::get_history(int history_num) {
-    int   i;
-    int   hn;
-    char* p;
-
-    validate_history();
-
-    if (saved_length == 0)
+bool Lineedit::get_history(int32_t history_num) {
+    if (history_num < 0 || (size_t)history_num >= history.size()) {
         return false;
-
-    if (history_num < 0)
-        return false;
-
-    p = lastline;
-    for (hn = 0; hn < history_num; hn++) {
-        while (*p++ != '\0') {}
-        if ((p - lastline) >= saved_length)
-            return false;
     }
 
+    const std::string& entry = history[history_num];
     erase_line();
-    for (i = 0; i < maxaddr - startaddr - 1; i++) {
-        if (*p == '\0') {
-            break;
-        }
-        addchar(*p++);
+    size_t maxlen = (maxaddr - startaddr) - 1;
+    size_t n      = entry.size() < maxlen ? entry.size() : maxlen;
+    for (size_t i = 0; i < n; ++i) {
+        addchar(entry[i]);
     }
-
     return true;
 }
 
@@ -237,7 +156,7 @@ void Lineedit::kill_forward() {
     *p = '\0';
 }
 void Lineedit::yank() {
-    for (char* p = killbuf; *p; ++p) {
+    for (const char* p = killbuf; *p; ++p) {
         addchar(*p);
     }
 }
@@ -267,30 +186,31 @@ void Lineedit::backward_word() {
 }
 
 #ifndef NO_COMPLETION
-bool Lineedit::isdelim(char* addr) {
+// cppcheck-suppress unusedFunction
+bool Lineedit::isdelim(const char* addr) {
     return (addr < startaddr) || (addr == endaddr) || is_word_delim(*addr);
 }
 
-char theWord[100];
+std::string proposal;
+
 bool Lineedit::find_word_under_cursor() {
+    proposal.erase(0);
     if (startaddr == endaddr || *startaddr != '$') {
         return false;
     }
-    int   i    = 0;
-    char* addr = startaddr + 1;
-    while (addr < thisaddr && i < (100 - 1)) {
-        theWord[i++] = *addr++;
+    const char* addr = startaddr + 1;
+    while (addr < thisaddr) {
+        proposal += *addr++;
     }
     // Move to the end of the item name
-    while (thisaddr < endaddr && i < (100 - 1) && *thisaddr != '=') {
+    while (thisaddr < endaddr && *thisaddr != '=') {
         emit(*thisaddr);
-        theWord[i++] = *thisaddr++;
+        proposal += *thisaddr++;
     }
-    theWord[i] = '\0';
     return true;
 }
 
-extern int num_initial_matches(char* key, int keylen, int matchnum, char* matchname);
+extern uint32_t num_initial_matches(std::string_view key, uint32_t matchnum, std::string& matchname);
 
 void Lineedit::color(const char* s) {
     emit(0x1b);
@@ -319,15 +239,14 @@ void Lineedit::complete_word() {
     if (!find_word_under_cursor()) {
         return;
     }
-    char name[100];
-    name[0]  = '\0';
-    int len  = strlen(theWord);
-    nmatches = num_initial_matches(theWord, len, 0, name);
+    std::string name;
+    uint32_t    len = proposal.length();
+    nmatches        = num_initial_matches(proposal, 0, name);
 
     if (nmatches == 0) {
         return;
     }
-    matchlen = strlen(name);
+    matchlen = name.length();
     if (nmatches == 1) {
         while (len < matchlen) {
             addchar(name[len++]);
@@ -337,13 +256,14 @@ void Lineedit::complete_word() {
     }
 
     while (len < matchlen) {
-        theWord[len] = name[len];
-        if (nmatches != num_initial_matches(theWord, len + 1, 0, nullptr)) {
+        proposal += name[len];
+        std::string dummy;
+        if (nmatches != num_initial_matches(proposal, 0, dummy)) {
             break;
         }
-        addchar(theWord[len++]);
+        addchar(proposal[len++]);
     }
-    theWord[len] = '\0';
+    proposal.erase(len);
 
     thismatch = 0;
     highlight();
@@ -357,11 +277,10 @@ void Lineedit::propose_word() {
     if (++thismatch == nmatches) {
         thismatch = 0;
     }
-    char name[100];
-    name[0]         = '\0';
-    int len         = strlen(theWord);
-    int nmatches    = num_initial_matches(theWord, len, thismatch, name);
-    int newmatchlen = strlen(name);
+    std::string name;
+    uint32_t    len      = proposal.length();
+    nmatches             = num_initial_matches(proposal, thismatch, name);
+    uint32_t newmatchlen = name.length();
 
     while (matchlen > len) {
         erase_char();
@@ -374,8 +293,8 @@ void Lineedit::propose_word() {
     lowlight();
 }
 void Lineedit::accept_word() {
-    int len = strlen(theWord);
-    int i;
+    uint32_t len = proposal.length();
+    uint32_t i;
     for (i = matchlen; i > len; --i) {
         emit('\b');
         --thisaddr;
@@ -391,7 +310,6 @@ void Lineedit::accept_word() {
 void Lineedit::restart() {
     needs_reecho = false;
     endaddr = thisaddr = startaddr;
-    endaddr            = startaddr;
     escaping           = 0;
     history_num        = -1;
 }
@@ -413,8 +331,9 @@ void Lineedit::show_realtime_command(const char* s) {
 
 // public
 
-int Lineedit::finish() {
-    int length = (int)(endaddr - startaddr);
+// cppcheck-suppress unusedFunction
+uint32_t Lineedit::finish() {
+    uint32_t length = endaddr - startaddr;
     add_to_history(startaddr, length);
     restart();
     return (length);
@@ -427,6 +346,7 @@ int Lineedit::finish() {
 // of the line that is being collected.
 // Returns true if the character should be treated as realtime.
 
+// cppcheck-suppress unusedFunction
 bool Lineedit::realtime(int c) {
     if (!editing) {
         return true;
@@ -457,6 +377,7 @@ bool Lineedit::realtime(int c) {
 }
 
 // Returns true when the line is complete
+// cppcheck-suppress unusedFunction
 bool Lineedit::step(int c) {
     // Regardless of editing mode, ^L turns off editing/echoing
     if (c == CTRL('l')) {

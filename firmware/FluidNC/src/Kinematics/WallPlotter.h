@@ -14,7 +14,7 @@
 namespace Kinematics {
     class WallPlotter : public KinematicSystem {
     public:
-        WallPlotter() = default;
+        WallPlotter(const char* name) : KinematicSystem(name) {}
 
         WallPlotter(const WallPlotter&)            = delete;
         WallPlotter(WallPlotter&&)                 = delete;
@@ -27,16 +27,14 @@ namespace Kinematics {
         bool canHome(AxisMask axisMask) override;
         void init_position() override;
         bool cartesian_to_motors(float* target, plan_line_data_t* pl_data, float* position) override;
-        void motors_to_cartesian(float* cartesian, float* motors, int n_axis) override;
-        void transform_cartesian_to_motors(float* cartesian, float* motors) override;
+        void motors_to_cartesian(float* cartesian, float* motors, axis_t n_axis) override;
+        bool transform_cartesian_to_motors(float* motors, float* cartesian) override;
+        bool kinematics_homing(AxisMask& axisMask) override;
 
         // Configuration handlers:
         void validate() override {}
         void group(Configuration::HandlerBase& handler) override;
         void afterParse() override {}
-
-        // Name of the configurable. Must match the name registered in the cpp file.
-        const char* name() const override { return "WallPlotter"; }
 
         ~WallPlotter() {}
 
@@ -50,13 +48,13 @@ namespace Kinematics {
         float last_motor_segment_end[MAX_N_AXIS];
 
         // Parameters
-        int   _left_axis     = 0;
-        float _left_anchor_x = -100;
-        float _left_anchor_y = 100;
+        int32_t _left_axis     = 0;
+        float   _left_anchor_x = -100;
+        float   _left_anchor_y = 100;
 
-        int   _right_axis     = 1;
-        float _right_anchor_x = 100;
-        float _right_anchor_y = 100;
-        float _segment_length = 10;
+        int32_t _right_axis     = 1;
+        float   _right_anchor_x = 100;
+        float   _right_anchor_y = 100;
+        float   _segment_length = 10;
     };
 }  //  namespace Kinematics

@@ -4,30 +4,35 @@
 
 #include "MachineConfig.h"
 
-#include "../Kinematics/Kinematics.h"
-#include "../Kinematics/MaslowKinematics.h"
+#include "Kinematics/Kinematics.h"
+#include "Kinematics/MaslowKinematics.h"
+#include "Maslow/Maslow.h"  // Maslow.using_default_config, M
 
-#include "../Motors/MotorDriver.h"
-#include "../Motors/NullMotor.h"
+#include "Motors/MotorDriver.h"
+#include "Motors/NullMotor.h"
 
-#include "../Spindles/NullSpindle.h"
-#include "../UartChannel.h"
+#include "Spindles/NullSpindle.h"
+#include "ToolChangers/atc.h"
+#include "Driver/Console.h"
 
-#include "../SettingsDefinitions.h"  // config_filename
-#include "../FileStream.h"
+#include "SettingsDefinitions.h"  // config_filename
+#include "FileStream.h"
 
-#include "../Configuration/Parser.h"
-#include "../Configuration/ParserHandler.h"
-#include "../Configuration/Validator.h"
-#include "../Configuration/AfterParse.h"
-#include "../Configuration/ParseException.h"
-#include "../Config.h"  // ENABLE_*
+#include "Configuration/Parser.h"
+#include "Configuration/ParserHandler.h"
+#include "Configuration/Validator.h"
+#include "Configuration/AfterParse.h"
+#include "Config.h"  // ENABLE_*
+
+#include "Driver/restart.h"
+#include "Driver/backtrace.h"
 
 #include "../Maslow/Maslow.h"  // using_default_config
 
 #include <cstdio>
 #include <cstring>
 #include <atomic>
+#include <memory>
 
 Machine::MachineConfig* config;
 
@@ -35,8 +40,23 @@ Machine::MachineConfig* config;
 
 namespace Machine {
     void MachineConfig::group(Configuration::HandlerBase& handler) {
+        // @config board
+        // @default "None"
+        // Descriptive text for the controller board, e.g. "ESP32 Dev Controller V4".
+        // Informational only -- not validated against a list of known boards, and not
+        // used to select behavior.
         handler.item("board", _board);
+
+        // @config name
+        // @default "None"
+        // A basic description of the machine, e.g. "Router XYYZ 10V Spindle" -- shown in
+        // startup/status messages.
         handler.item("name", _name);
+
+        // @config meta
+        // @default ""
+        // @default_note empty
+        // Free-form notes about the config file itself, e.g. "B. Dring 2022-03-15 Rev 2".
         handler.item("meta", _meta);
 
         groupM4Items(handler);
@@ -44,24 +64,27 @@ namespace Machine {
         // Maslow M4 - Limited sections
         handler.section("stepping", _stepping);
 
-        handler.section("uart1", _uarts[1], 1);
-
-        // The following could all be commented out and left to defaults from FluidNC
-        // uart2, uart_channel1, uart_channel2, i2so, i2c0, i2c1,
-        // kinematics,
-        // control, coolant, probe, macros, start, parking, user_outputs, oled
-        handler.section("uart2", _uarts[2], 2);
-
-        handler.section("uart_channel1", _uart_channels[1]);
-        handler.section("uart_channel2", _uart_channels[2]);
-
+        handler.sections("uart", 1, MAX_N_UARTS, true, _uarts);
+        handler.sections("uart_channel", 1, MAX_N_UARTS, true, _uart_channels);
+#if MAX_N_I2SO
+        // We currently support only one I2S bus
         handler.section("i2so", _i2so);
-
-        handler.section("i2c0", _i2c[0], 0);
-        handler.section("i2c1", _i2c[1], 1);
-
+#endif
+#if MAX_N_I2C
+        handler.sections("i2c", 0, MAX_N_I2C, false, _i2c);
+#endif
+#if MAX_N_SPI
+        // We currently support only one SPI bus
         handler.section("spi", _spi);
+#endif
+
+#if MAX_N_SDCARD
         handler.section("sdcard", _sdCard);
+#endif
+
+#if MAX_N_ETH
+        handler.section("ethernet", _ethernet);
+#endif
 
         handler.section("kinematics", _kinematics);
         handler.section("axes", _axes);
@@ -70,27 +93,80 @@ namespace Machine {
         handler.section("coolant", _coolant);
         handler.section("probe", _probe);
         handler.section("macros", _macros);
-
+#if SUPPORT_PIN_EXTENDERS
+        handler.section("extenders", _extenders);
+#endif
         handler.section("start", _start);
         handler.section("parking", _parking);
 
         handler.section("user_outputs", _userOutputs);
+        handler.section("user_inputs", _userInputs);
 
-        handler.section("oled", _oled);
-
-        Spindles::SpindleFactory::factory(handler, _spindles);
-
-        // Maslow M4 Specific?
-        Listeners::SysListenerFactory::factory(handler, _sysListeners);
+        ConfigurableModuleFactory::factory(handler);
+        ATCs::ATCFactory::factory(handler);
+        Spindles::SpindleFactory::factory(handler);
+#if SUPPORT_LISTENERS
+        Listeners::SysListenerFactory::factory(handler);
+#endif
 
         // TODO: Consider putting these under a gcode: hierarchy level? Or motion control?
-        // The following could all be commented out and left to defaults from FluidNC
+
+        // @config arc_tolerance_mm
+        // @default 0.002
+        // @tuning typical
+        // Maximum deviation, in mm, allowed when tessellating G2/G3 arcs into straight-line
+        // segments. Smaller values produce smoother arcs at the cost of more segments (and
+        // therefore more planner/computation work). Rarely changed from the default.
         handler.item("arc_tolerance_mm", _arcTolerance, 0.001, 1.0);
+
+        // @config junction_deviation_mm
+        // @default 0.01
+        // @tuning typical
+        // Controls how aggressively the planner slows down at sharp corners between
+        // consecutive moves (the Grbl-style "junction deviation" cornering algorithm).
+        // Smaller values force more slowdown at corners; larger values allow faster
+        // cornering at the cost of more deviation from the programmed path. Rarely changed
+        // from the default -- see the planner source for the full derivation.
         handler.item("junction_deviation_mm", _junctionDeviation, 0.01, 1.0);
+
+        // @config verbose_errors
+        // @default true
+        // @tuning typical
+        // Includes descriptive text alongside the numeric error code in error responses.
+        // Some GCode senders may not parse the extra text correctly.
         handler.item("verbose_errors", _verboseErrors);
+
+        // @config report_inches
+        // @default false
+        // @tuning typical
+        // Reports position and feed rate values in inches instead of millimeters. This
+        // only affects reporting, not how input values in the GCode/config are interpreted.
         handler.item("report_inches", _reportInches);
+
+        // @config enable_parking_override_control
+        // @default false
+        // @tuning typical
+        // Enables the M56 GCode command, which lets a running program toggle the parking-
+        // motion override on/off at runtime (M56 P0 disables parking, M56 P1 enables it).
+        // This only gates whether M56 has any effect; start.deactivate_parking sets what
+        // the override defaults to, and parking.enable is the separate switch for the
+        // parking feature existing at all.
         handler.item("enable_parking_override_control", _enableParkingOverrideControl);
+
+        // @config use_line_numbers
+        // @default false
+        // @tuning typical
+        // When true, line numbers written into GCode as N<number> (e.g. N100) are tracked
+        // and echoed back in status reports as Ln:100, so a report can be correlated with
+        // the source line currently being executed. Reports Ln:0 when the GCode has no line
+        // number information.
         handler.item("use_line_numbers", _useLineNumbers);
+
+        // @config planner_blocks
+        // @default 16
+        // @tuning typical
+        // Number of motion blocks held in the look-ahead planner buffer. Leave at the
+        // default unless tuning for a special application.
         handler.item("planner_blocks", _planner_blocks, 10, 120);
     }
 
@@ -150,17 +226,25 @@ namespace Machine {
             _userOutputs = new UserOutputs();
         }
 
+        if (_userInputs == nullptr) {
+            _userInputs = new UserInputs();
+        }
+
+#if MAX_N_SDCARD
         if (_sdCard == nullptr) {
             log_config_error(M + " M4 expects the 'scCard' section to be defined in the file or the default config");
             // The following is NOT expected to yield the correct result for the M4
             _sdCard = new SDCard();
         }
+#endif
 
+#if MAX_N_SPI
         if (_spi == nullptr) {
             log_config_error(M + " M4 expects the 'spi' section to be defined in the file or the default config");
             // The following is NOT expected to yield the correct result for the M4
             _spi = new SPIBus();
         }
+#endif
 
         if (_stepping == nullptr) {
             log_config_error(M + " M4 expects the 'stepping' section to be defined in the file or the default config");
@@ -190,19 +274,28 @@ namespace Machine {
             _parking = new Parking();
         }
 
-        if (_spindles.size() == 0) {
-            _spindles.push_back(new Spindles::Null());
+        auto& spindles = Spindles::SpindleFactory::objects();
+        if (spindles.size() == 0) {
+            spindles.push_back(new Spindles::Null("NoSpindle"));
+            //            Spindles::SpindleFactory::add(new Spindles::Null());
         }
+
+        std::sort(spindles.begin(), spindles.end(), [](Spindles::Spindle* s1, Spindles::Spindle* s2) { return s1->_tool < s2->_tool; });
 
         // Precaution in case the full spindle initialization does not happen
         // due to a configuration error
-        spindle = _spindles[0];
+        spindle = spindles[0];
 
-        uint32_t next_tool = 100;
-        for (auto s : _spindles) {
-            if (s->_tool == -1) {
-                s->_tool = next_tool++;
+        int32_t last_tool = -1;
+        for (auto s : Spindles::SpindleFactory::objects()) {
+            if (last_tool == -1 && s->_tool != 0) {  // first must be 0
+                log_warn(s->name() << " spindle set to tool 0");
+                s->_tool = 0;
+            } else if (s->_tool <= last_tool) {
+                s->_tool = last_tool + 100;
+                log_warn(s->name() << " spindle tool set to:" << s->_tool);
             }
+            last_tool = s->_tool;
         }
 
         // macros runs with its FluidNC defaults
@@ -211,19 +304,14 @@ namespace Machine {
         }
     }
 
-    // Common Default Config partial strings
+    // Maslow M4 built-in default configuration, used when the config file
+    // cannot be loaded.  Composed from partial strings for readability.
     const std::string mcgrid = M + "_calibration_grid_";
 
-    // Individual Default Config items and sections
-    // Default Config - Board
     const std::string dcBoard = "name: Default (" + M + " S3 Board)\nboard: " + M + "\n";
 
     const std::string dcM4Vert            = M + "_vertical: false\n";
     const std::string dcM4CalibrationGrid = mcgrid + "width_mm_X: 0\n" + mcgrid + "height_mm_Y: 0\n" + mcgrid + "size: 9\n";
-
-    const std::string dcM4Anchors = M + "_tlX: -27.6\n" + M + "_tlY: 2064.9\n" + M + "_trX: 2924.3\n" + M + "_trY: 2066.5\n" + M +
-                                    "_blX: 0\n" + M + "_blY: 0\n" + M + "_brX: 2953.2\n" + M + "_brY: 0\n";
-    const std::string dcM4ZAxis = M + "_tlZ: 100\n" + M + "_trZ: 56\n" + M + "_blZ: 34\n" + M + "_brZ: 78\n";
 
     const std::string dcM4CurrentThreshold = M + "_Retract_Current_Threshold: 1300\n" + M + "_Acceptable_Calibration_Threshold: 0.5\n";
     const std::string dcM4ApplyTensionLimit =
@@ -277,148 +365,132 @@ namespace Machine {
         "    motor0:\n      tmc_2209:\n        addr: 0\n        direction_pin: gpio.16\n        step_pin: gpio.15\n" +
         dcZMotor + "    motor1:\n      tmc_2209:\n        addr: 1\n        direction_pin: NO_PIN\n        step_pin: gpio.46\n" + dcZMotor;
 
-    bool MachineConfig::load() {
-        bool configOkay;
-
-        // If the system crashes we skip the config file and use the default
-        // builtin config.  This helps prevent reset loops on bad config files.
-        esp_reset_reason_t reason = esp_reset_reason();
-
-        // TEST: Uncomment the following to mock an ESP panic reset
-        //reason = ESP_RST_PANIC;
-
-        // Always try to load the user config file, even after a panic.
-        // The default config is now fixed and will be used as fallback if needed.
-        if (reason == ESP_RST_PANIC) {
+    void MachineConfig::load() {
+        // Maslow: unlike stock FluidNC, always try the user config file even
+        // after a panic - the fixed built-in default config is the fallback,
+        // so a bad config file cannot cause an unrecoverable reset loop.
+        if (restart_was_panic()) {
             log_warn("Previous boot ended in panic - attempting to load config anyway");
+            backtrace_t bt;
+            if (backtrace_get(&bt)) {
+                char buf[16];
+                snprintf(buf, sizeof(buf), "0x%08x", bt.pc);
+                log_error("Previous crash backtrace (PC=" << buf << " cause=" << bt.exccause << "):");
+                std::string btLine = "Backtrace:";
+                for (size_t i = 0; i < bt.num_addresses; i++) {
+                    snprintf(buf, sizeof(buf), " 0x%08x", bt.addresses[i]);
+                    btLine += buf;
+                    btLine += ":0x00000000";
+                }
+                log_error(btLine.c_str());
+            }
         }
-        configOkay = load_file(config_filename->get());
-
-        if (!configOkay) {
-            log_info("Using default configuration");
-            configOkay                  = load_yaml(new StringRange(defaultConfig.c_str()));
-            Maslow.using_default_config = true;
-        }
-        //configOkay = load(config_filename->get());
-        return configOkay;
+        load_file(config_filename->get());
     }
 
-    bool MachineConfig::load_file(const char* filename) {
+    void MachineConfig::load_file(const std::string_view filename) {
         try {
-            FileStream file(std::string { filename }, "r", "");
+            FileStream file(std::string { filename }, "rb", LocalFS);
 
             auto filesize = file.size();
             if (filesize <= 0) {
                 log_config_error("Configuration file:" << filename << " is empty");
-                return false;
+                load_yaml("");
+                return;
             }
 
-            char* buffer     = new char[filesize + 1];
+            auto buffer      = std::make_unique<char[]>(filesize + 1);
             buffer[filesize] = '\0';
-            auto actual      = file.read(buffer, filesize);
+            auto actual      = file.read(buffer.get(), filesize);
             if (actual != filesize) {
-                log_config_error("Configuration file:" << filename << " read error");
-                return false;
+                log_config_error("Configuration file:" << filename << " read error - expected " << filesize << " got " << actual);
+                return;
             }
             log_info("Configuration file:" << filename);
-            bool retval = load_yaml(new StringRange(buffer, buffer + filesize));
-            delete[] buffer;
-            return retval;
+            load_yaml(std::string_view { buffer.get(), filesize });
         } catch (...) {
-            log_config_error("Cannot open configuration file:" << filename);
-            return false;
+            // Maslow: fall back to the fully-functional built-in default config
+            // instead of entering ConfigAlarm, so a fresh or corrupted filesystem
+            // still yields a usable machine.
+            log_warn("Cannot open configuration file:" << filename);
+            log_info("Using default configuration");
+            Maslow.using_default_config = true;
+            load_yaml(defaultConfig);
         }
     }
 
-    bool MachineConfig::load_yaml(StringRange* input) {
-        bool successful = false;
+    void MachineConfig::load_yaml(std::string_view input) {
         try {
-            Configuration::Parser        parser(input->begin(), input->end());
-            Configuration::ParserHandler handler(parser);
+            try {
+                Configuration::Parser        parser(input);
+                Configuration::ParserHandler handler(parser);
 
-            // instance() is by reference, so we can just get rid of an old instance and
-            // create a new one here:
-            {
-                auto& machineConfig = instance();
-                if (machineConfig != nullptr) {
-                    delete machineConfig;
+                // instance() is by reference, so we can just get rid of an old instance and
+                // create a new one here:
+                {
+                    auto& machineConfig = instance();
+                    if (machineConfig != nullptr) {
+                        delete machineConfig;
+                    }
+                    machineConfig = new MachineConfig();
                 }
-                machineConfig = new MachineConfig();
+                config = instance();
+
+                handler.enterSection("machine", config);
+
+                log_debug("Running after-parse tasks");
+            } catch (std::exception& ex) {
+                // Log exception:
+                log_config_error("Configuration parse error: " << ex.what());
             }
-            config = instance();
-
-            handler.enterSection("machine", config);
-
-            log_debug("Running after-parse tasks");
 
             try {
                 Configuration::AfterParse afterParse;
                 config->afterParse();
                 config->group(afterParse);
-            } catch (std::exception& ex) { log_error("Validation error: " << ex.what()); }
-
-            log_debug("Checking configuration");
+            } catch (std::exception& ex) {
+                // Log exception:
+                log_config_error("Configuration after-parse error: " << ex.what());
+            }
 
             try {
+                log_debug("Checking configuration");
+
                 Configuration::Validator validator;
                 config->validate();
                 config->group(validator);
-            } catch (std::exception& ex) { log_config_error("Validation error: " << ex.what()); }
 
-            // log_info("Heap size after configuation load is " << uint32_t(xPortGetFreeHeapSize()));
-
-            successful = (sys.state() != State::ConfigAlarm);
-
-            if (!successful) {
-                log_config_error("Configuration is invalid");
+                // log_info("Heap size after configuration load is " << uint32_t(xPortGetFreeHeapSize()));
+            } catch (std::exception& ex) {
+                // Log exception:
+                log_config_error("Configuration validation error: " << ex.what());
             }
-        } catch (const Configuration::ParseException& ex) {
-            sys.set_state(State::ConfigAlarm);
-            log_config_error("Configuration parse error on line " << ex.LineNumber() << ": " << ex.What());
-        } catch (const AssertionFailed& ex) {
-            sys.set_state(State::ConfigAlarm);
-            // Get rid of buffer and return
-            log_config_error("Configuration loading failed: " << ex.what());
-        } catch (std::exception& ex) {
-            sys.set_state(State::ConfigAlarm);
-            // Log exception:
-            log_config_error("Configuration validation error: " << ex.what());
+
         } catch (...) {
-            sys.set_state(State::ConfigAlarm);
             // Get rid of buffer and return
             log_config_error("Unknown error while processing config file");
         }
-        delete[] input;
 
-        std::atomic_thread_fence(std::memory_order::memory_order_seq_cst);
-
-        return successful;
+        std::atomic_thread_fence(std::memory_order_seq_cst);
     }
 
     MachineConfig::~MachineConfig() {
         delete _axes;
+#if MAX_N_I2SO
         delete _i2so;
+#endif
         delete _coolant;
         delete _probe;
+#if MAX_N_SDCARD
         delete _sdCard;
+#endif
+#if MAX_N_ETH
+        delete _ethernet;
+#endif
+#if MAX_N_SDCARD
         delete _spi;
+#endif
         delete _control;
         delete _macros;
-
-        // Maslow M4 specific?
-        delete _extenders;
-
-        // Also, what about ...
-        /*
-        delete _kinematics;
-        delete _stepping;
-        delete _userOutputs;
-        delete _start;
-        delete _parking;
-        delete _oled;
-        */
-
-        // And proper deletion of
-        // _i2c[MAX_N_I2C], _uart_channels[MAX_N_UARTS], _uarts[MAX_N_UARTS]
     }
 }

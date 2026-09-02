@@ -1,10 +1,11 @@
 // Copyright (c) 2021 -	Stefan de Bruijn
 // Use of this source code is governed by a GPLv3 license that can be found in the LICENSE file.
 
+#include "Config.h"
 #include "AfterParse.h"
 
 #include "Configurable.h"
-#include "../System.h"
+#include "System.h"
 
 #include <cstring>
 
@@ -14,12 +15,8 @@ namespace Configuration {
 
         try {
             value->afterParse();
-        } catch (const AssertionFailed& ex) {
-            // Log something meaningful to the user:
-            log_error("Initialization error at "; for (auto it : _path) { ss << '/' << it; } ss << ": " << ex.msg);
-
-            // Set the state to config alarm, so users can't run time machine.
-            sys.set_state(State::ConfigAlarm);
+        } catch (std::exception& ex) {
+            log_config_error("Initialization error at "; for (auto it : _path) { ss << '/' << it; } ss << ": " << ex.what());
         }
 
         value->group(*this);

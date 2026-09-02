@@ -16,21 +16,17 @@
 */
 
 #include "Servo.h"
-#include "../Machine/MachineConfig.h"
+#include "Machine/MachineConfig.h"
 
 #include <atomic>
-#include <freertos/task.h>  // portTICK_PERIOD_MS, vTaskDelay
 
 namespace MotorDrivers {
-
-    Servo::Servo() : MotorDriver() {}
-
     void Servo::update_servo(TimerHandle_t timer) {
         Servo* servo = static_cast<Servo*>(pvTimerGetTimerID(timer));
         servo->update();
     }
 
-    void Servo::schedule_update(Servo* object, int interval) {
+    void Servo::schedule_update(Servo* object, uint32_t interval) {
         auto timer = xTimerCreate("",
                                   interval,
                                   true,  // auto reload

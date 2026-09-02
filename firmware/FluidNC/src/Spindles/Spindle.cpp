@@ -6,15 +6,31 @@
 */
 #include "Spindle.h"
 
-#include "../System.h"  //sys.spindle_speed_ovr
-#include <esp32-hal.h>  // delay()
+#include "System.h"  //sys.spindle_speed_ovr
 
 Spindles::Spindle* spindle = nullptr;
 
 namespace Spindles {
     // ========================= Spindle ==================================
 
-    void Spindle::switchSpindle(uint32_t new_tool, SpindleList spindles, Spindle*& spindle) {
+    void Spindle::init_atc() {
+        auto atcs = ATCs::ATCFactory::objects();
+        _atc_name = string_util::trim(_atc_name);
+        for (auto a : atcs) {
+            if (_atc_name == a->name()) {
+                _atc      = a;
+                _atc_info = " atc:" + _atc_name;
+                return;
+            }
+        }
+        if (!_atc_name.empty()) {
+            _atc_info = " atc: '" + _atc_name + "' not found";
+        } else if (!_m6_macro._gcode.empty()) {
+            _atc_info = " with m6_macro";
+        }
+    }
+
+    void Spindle::switchSpindle(uint32_t new_tool, SpindleList spindles, Spindle*& spindle, bool& stop_spindle, bool& new_spindle) {
         // Find the spindle whose tool number is closest to and below the new tool number
         Spindle* candidate = nullptr;
         for (auto s : spindles) {
@@ -23,11 +39,15 @@ namespace Spindles {
             }
         }
         if (candidate) {
-            if (candidate != spindle) {
-                if (spindle != nullptr) {
-                    spindle->stop();
-                }
-                spindle = candidate;
+            if (spindle != nullptr) {
+                spindle->stop();      // stop the current spindle
+                stop_spindle = true;  // used to stop the next spindle
+            }
+            if (candidate != spindle) {  // we are changing spindles
+                gc_state.selected_tool = new_tool;
+                spindle                = candidate;
+                new_spindle            = true;
+                log_info("Changed to spindle:" << spindle->name());
             }
         } else {
             if (spindle == nullptr) {
@@ -38,7 +58,6 @@ namespace Spindles {
                 spindle = spindles[0];
             }
         }
-        log_info("Using spindle " << spindle->name());
     }
 
     bool Spindle::isRateAdjusted() {
@@ -46,11 +65,11 @@ namespace Spindles {
     }
 
     void Spindle::setupSpeeds(uint32_t max_dev_speed) {
-        int nsegments = _speeds.size() - 1;
+        size_t nsegments = _speeds.size() - 1;
         if (nsegments < 1) {
             return;
         }
-        int i;
+        size_t i;
 
         SpindleSpeed offset;
         uint32_t     scaler;
@@ -103,25 +122,70 @@ namespace Spindles {
         _speeds.push_back({ max, 100.0f });
     }
 
-    uint32_t IRAM_ATTR Spindle::mapSpeed(SpindleSpeed speed) {
+    // pre_select is generally ignored except for machines that need to get a tool ready
+    // set_tool is just used to tell the atc what is already installed.
+    bool Spindle::tool_change(uint32_t tool_number, bool pre_select, bool set_tool) {
+        if (_atc != NULL) {
+            log_info(_name << " spindle changed to tool:" << tool_number << " using " << _atc_name);
+            return _atc->tool_change(tool_number, pre_select, set_tool);
+        }
+        if (!_m6_macro.get().empty()) {
+            if (pre_select) {
+                return true;
+            }
+            _last_tool = tool_number;
+            if (set_tool) {
+                return true;
+            }
+            _m6_macro.run(nullptr);
+            // What happens if the macro failed...set alarm in macro & test here?
+            //gc_state.current_tool = gc_state.selected_tool;
+            return true;
+            //}
+        }
+
+        return true;
+    }
+
+    uint32_t Spindle::maxSpeed() {
+        if (_speeds.size() == 0) {
+            return 0;
+        } else {
+            return _speeds[_speeds.size() - 1].speed;
+        }
+    }
+
+    uint32_t IRAM_ATTR Spindle::mapSpeed(SpindleState state, SpindleSpeed speed) {
+        speed = speed * sys.spindle_speed_ovr() / 100;
+        sys.set_spindle_speed(speed);
+        if (state == SpindleState::Disable) {  // Halt or set spindle direction and speed.
+            if (_zero_speed_with_disable) {
+                sys.set_spindle_speed(0);
+                return 0;
+            }
+        }
         if (_speeds.size() == 0) {
             return 0;
         }
-        speed = speed * sys.spindle_speed_ovr() / 100;
-        sys.set_spindle_speed(speed);
         if (speed < _speeds[0].speed) {
             return _speeds[0].offset;
         }
         if (speed == 0) {
             return _speeds[0].offset;
         }
-        int num_segments = _speeds.size() - 1;
-        int i;
+        size_t num_segments = _speeds.size() - 1;
+        size_t i;
         for (i = 0; i < num_segments; i++) {
             if (speed < _speeds[i + 1].speed) {
                 break;
             }
         }
+
+        // if the offset is that max value of uint32, then the offset was never set. therefore, bypass the mapping process
+        if (_speeds[i].offset == -1) {
+            return speed;
+        }
+
         uint32_t dev_speed = _speeds[i].offset;
 
         // If the requested speed is greater than the maximum map speed,
@@ -156,6 +220,7 @@ namespace Spindles {
                         down = _current_speed;
                         break;
                 }
+                break;
             case SpindleState::Cw:
                 switch (_current_state) {
                     case SpindleState::Unknown:
@@ -168,7 +233,7 @@ namespace Spindles {
                         if (speed > _current_speed) {
                             up = speed - _current_speed;
                         } else {
-                            down = speed - _current_speed;
+                            down = _current_speed - speed;
                         }
                         break;
                     case SpindleState::Ccw:
@@ -176,6 +241,7 @@ namespace Spindles {
                         up   = speed;
                         break;
                 }
+                break;
             case SpindleState::Ccw:
                 switch (_current_state) {
                     case SpindleState::Unknown:
@@ -196,13 +262,20 @@ namespace Spindles {
                         }
                         break;
                 }
+                break;
         }
+        int32_t dwell = 0;
         if (down) {
-            delay(down < maxSpeed() ? _spindown_ms * down / maxSpeed() : _spindown_ms);
+            dwell = (down < maxSpeed() ? _spindown_ms * down / maxSpeed() : _spindown_ms);
+            log_debug("Spin down delay ms:" << dwell);
+            dwell_ms((uint32_t)dwell, DwellMode::SysSuspend);
         }
         if (up) {
-            delay(up < maxSpeed() ? _spinup_ms * up / maxSpeed() : _spinup_ms);
+            dwell = (up < maxSpeed() ? _spinup_ms * up / maxSpeed() : _spinup_ms);
+            log_debug("Spin up delay ms:" << dwell);
+            dwell_ms((uint32_t)dwell, DwellMode::SysSuspend);
         }
+
         _current_state = state;
         _current_speed = speed;
     }

@@ -34,7 +34,7 @@ public:
 
     // Overloaded cast operator to allow IPAddress objects to be used where a pointer
     // to a four-byte uint8_t array is expected
-    operator uint32_t() const { return _address.dword; }
+         operator uint32_t() const { return _address.dword; }
     bool operator==(const IPAddress& addr) const { return _address.dword == addr._address.dword; }
     bool operator==(const uint8_t* addr) const { return (*this) == IPAddress(addr); }
 

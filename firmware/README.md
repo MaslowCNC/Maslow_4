@@ -16,6 +16,10 @@ There is no need to compile the firmware. You use an installation script to uplo
 
 You can have multiple config files stored on the ESP32. The default is config.yaml, but you can change that with [**$Config/Filename=<myOtherConfig.yaml>**](http://wiki.fluidnc.com/en/features/commands_and_settings#config_filename)
 
+### AI Config File Helpers
+
+Writing a config file by hand (or with the help of an AI assistant) can be error-prone given how many sections and fields FluidNC supports. The [`tools/`](tools/) directory has a formal spec, a JSON Schema, a command-line validator, and an MCP server that an AI assistant can call directly to check its own work. See [AI Config File Helpers](http://wiki.fluidnc.com/en/config/overview#ai-config-file-helpers) on the wiki for details.
+
 ## Basic Grbl Compatibility
 
 The intent is to maintain as much Grbl compatibility as possible. It is 100% compatible with the day to day operations of running gcode with a sender, so there is no change to the Grbl gcode send/response protocol, and all Grbl gcode are supported. Most of the $ settings have been replaced with easily readable items in the config file.
@@ -47,18 +51,3 @@ We have a Discord server for the development this project. Ask for an invite
 This project requires a lot of work and often expensive items for testing. Please consider a safe, secure and highly appreciated donation via the PayPal link below or via the GitHub sponsor link at the top of the page.
 
 [![](https://www.paypalobjects.com/en_US/i/btn/btn_donateCC_LG.gif)](https://www.paypal.com/donate/?hosted_button_id=8DYLB6ZYYDG7Y)
-
-
-## Automatic Firmware Compilation
-
-When a user comments "please build" or "/build" on a pull request, a GitHub Action automatically compiles the firmware and posts a comment with download instructions. The compiled `firmware.bin` file is available as a downloadable artifact from the Actions tab.
-
-## Development Commands
-
-Two useful command from the platform IO terminal are 
-
-pio run -e wifi_s3 -t  erase
-
-pio run -e wifi_s3 -t uploadfs
-
-to erase and upload the file system if the UI is not responding.

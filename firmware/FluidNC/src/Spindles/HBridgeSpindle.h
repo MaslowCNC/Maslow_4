@@ -9,7 +9,7 @@
      enable_pin : optional.
      output_cw_pin : Clockwise PWM signal
      output_ccw_pin : Counter Clockwise PWM signal
-     When the output CW is toggling, CCW is set LOW, and viceversa.
+     When the output CW is toggling, CCW is set LOW, and vice-versa.
 
      Features which could be added afterwards:
 
@@ -23,7 +23,6 @@
 */
 
 #include "Spindle.h"
-#include "Driver/PwmPin.h"
 
 #include <cstdint>
 
@@ -31,7 +30,7 @@ namespace Spindles {
     // This adds support for PWM H-Bridge Spindles
     class HBridge : public Spindle {
     public:
-        HBridge() = default;
+        HBridge(const char* name) : Spindle(name) {}
 
         // PWM(Pin&& output, Pin&& enable, Pin&& direction, uint32_t minRpm, uint32_t maxRpm) :
         //     _min_rpm(minRpm), _max_rpm(maxRpm), _output_pin(std::move(output)), _enable_pin(std::move(enable)),
@@ -60,19 +59,42 @@ namespace Spindles {
             // At the other end, the minimum useful precision is 2^2
             // or 4 levels of control, so the max is 80MHz/2^2 = 20MHz.
             // Those might not be practical for many CNC applications,
-            // but the ESP32 hardware can handle them, so we let the
+            // but the hardware can handle them, so we let the
             // user choose.
+            // @config pwm_hz
+            // @default 5000
+            // @tuning typical
+            // PWM signal frequency. Resolution trades off against frequency -- 76Hz or
+            // less gets the full 20-bit duty-cycle resolution, roughly halving for every
+            // doubling of frequency above that, down to 4 levels (2 bits) at the 20MHz
+            // ceiling.
             handler.item("pwm_hz", _pwm_freq, 1, 20000000);
+
+            // @config output_cw_pin
+            // @default NO_PIN
+            // @pin_attributes pwm
+            // Clockwise PWM output. While this pin is toggling, output_ccw_pin is held low.
             handler.item("output_cw_pin", _output_cw_pin);
+
+            // @config output_ccw_pin
+            // @default NO_PIN
+            // @pin_attributes pwm
+            // Counter-clockwise PWM output. While this pin is toggling, output_cw_pin is
+            // held low.
             handler.item("output_ccw_pin", _output_ccw_pin);
+
+            // @config enable_pin
+            // @default NO_PIN
+            // @pin_attributes output
+            // Optional enable signal for the H-bridge driver.
             handler.item("enable_pin", _enable_pin);
-            handler.item("disable_with_s0", _disable_with_zero_speed);
 
+            // @default_for speed_map
+            // @default 0=0% 10000=100%
+            // @default_note applied by HBridge::init() only when speed_map is left unset
             Spindle::group(handler);
+            Spindle::groupDelaySettings(handler);
         }
-
-        // Name of the configurable. Must match the name registered in the cpp file.
-        const char* name() const override { return "HBridge"; }
 
         virtual ~HBridge() {}
 
@@ -80,8 +102,6 @@ namespace Spindles {
         // TODO: A/B rename
         int32_t      _current_pwm_duty;
         SpindleState _current_state      = SpindleState::Unknown;
-        PwmPin*      _pwm_cw             = nullptr;
-        PwmPin*      _pwm_ccw            = nullptr;
         bool         _duty_update_needed = false;
 
         // _disable_with_zero_speed forces a disable when speed is 0

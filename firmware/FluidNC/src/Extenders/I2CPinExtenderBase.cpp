@@ -1,19 +1,21 @@
 // Copyright (c) 2021 -  Stefan de Bruijn
 // Use of this source code is governed by a GPLv3 license that can be found in the LICENSE file.
 
-#include "Extenders.h"
-#include "I2CPinExtenderBase.h"
-#include "../Logging.h"
+#include "Config.h"
+#if MAX_N_I2C
+#    include "Extenders.h"
+#    include "I2CPinExtenderBase.h"
+#    include "Logging.h"
 
-#include <esp32-hal-gpio.h>
-#include <freertos/FreeRTOS.h>
+// #    include <esp32-hal-gpio.h>
+#    include <freertos/FreeRTOS.h>
 
 namespace Extenders {
     void I2CPinExtenderBase::claim(pinnum_t index) {
         Assert(index >= 0 && index < 16 * 4, "I2C pin extender IO index should be [0-63]; %d is out of range", index);
 
         uint64_t mask = uint64_t(1) << index;
-        Assert((_claimed & mask) == 0, "I2C pin extender IO port %d is already used.", index);
+        Assert((_claimed & mask) == 0, "I2C pin extender IO port %d is already used", index);
 
         _claimed |= mask;
     }
@@ -51,10 +53,39 @@ namespace Extenders {
     }
 
     void I2CPinExtenderBase::group(Configuration::HandlerBase& handler) {
+        // Pin extenders (extenders: / pinextenderN: / the pinextN.M pin-string prefix) are
+        // PROVISIONAL and may be removed from FluidNC in a future version -- do not use in
+        // a new config. This is documented here only so an existing config using the
+        // feature can be recognized and understood, not as a recommendation.
+
+        // @config busId
+        // @default 0
+        // Which top-level i2cN: bus this extender chip is attached to. No range is
+        // enforced by this item() call itself, but init() asserts it must be 0 or 1.
         handler.item("busId", _i2cBusId);
+
+        // @config interrupt0
+        // @default NO_PIN
+        // Optional interrupt pin for device 0 in this extender's chain (address
+        // baseAddress + 0). When defined, avoids polling that device for input changes.
         handler.item("interrupt0", _isrData[0]._pin);
+
+        // @config interrupt1
+        // @default NO_PIN
+        // Optional interrupt pin for device 1 in this extender's chain (address
+        // baseAddress + 1).
         handler.item("interrupt1", _isrData[1]._pin);
+
+        // @config interrupt2
+        // @default NO_PIN
+        // Optional interrupt pin for device 2 in this extender's chain (address
+        // baseAddress + 2).
         handler.item("interrupt2", _isrData[2]._pin);
+
+        // @config interrupt3
+        // @default NO_PIN
+        // Optional interrupt pin for device 3 in this extender's chain (address
+        // baseAddress + 3).
         handler.item("interrupt3", _isrData[3]._pin);
     }
 
@@ -71,22 +102,24 @@ namespace Extenders {
     }
 
     void I2CPinExtenderBase::init() {
-        Assert(_i2cBusId >= 0 && _i2cBusId < 2, "I2C bus ID out of range.");
+        Assert(_i2cBusId >= 0 && _i2cBusId < 2, "I2C bus ID out of range");
+#    if 0
         this->_i2cBus = config->_i2c[_i2cBusId];
+#    endif
 
         auto i2c = _i2cBus;
-        Assert(i2c != nullptr, "I2C pin extender only works when I2C bus is configured.");
+        Assert(i2c != nullptr, "I2C pin extender only works when I2C bus is configured");
 
         log_info("Setting up I2C pin extender on I2C" << _i2cBusId);
 
         _isrQueue = xQueueCreate(16, sizeof(void*));
-        xTaskCreatePinnedToCore(isrTaskLoop,                      // task
+        xTaskCreateAffinitySet(isrTaskLoop,                      // task
                                 "isr_handler",                    // name for task
                                 configMINIMAL_STACK_SIZE + 2048,  // size of task stack
                                 this,                             // parameters
                                 1,                                // priority
-                                &_isrHandler,
-                                SUPPORT_TASK_CORE  // core
+                                (1 << SUPPORT_TASK_CORE),         // affinity mask
+                                &_isrHandler
         );
 
         for (int i = 0; i < 4; ++i) {
@@ -103,8 +136,10 @@ namespace Extenders {
                 // Initialize ISR pin:
                 data._pin.setAttr(Pin::Attr::ISR | Pin::Attr::Input);
 
+#    if 0
                 // The interrupt pin is 'active low'. So if it falls, we're interested in the new value.
                 data._pin.attachInterrupt(updateRegisterState, FALLING, &data);
+#    endif
             } else {
                 // Reset valueBase so we know it's not bound to an ISR:
                 data._valueBase = nullptr;
@@ -130,6 +165,7 @@ namespace Extenders {
 
                 if (_isrCallback[i] != nullptr && (oldValue & mask) != (value & mask)) {
                     // log_info("State change pin " << i);
+#    if 0
                     switch (_isrMode[i]) {
                         case RISING:
                             if ((value & mask) == mask) {
@@ -145,6 +181,7 @@ namespace Extenders {
                             _isrCallback[i](_isrArgument[i], (value & mask) == mask);
                             break;
                     }
+#    endif
                 }
             }
         }
@@ -230,9 +267,9 @@ namespace Extenders {
     }
 
     // ISR's:
-    void I2CPinExtenderBase::attachInterrupt(pinnum_t index, void (*callback)(void*, bool), void* arg, int mode) {
-        int device    = index / 16;
-        int pinNumber = index % 16;
+    void I2CPinExtenderBase::attachInterrupt(pinnum_t index, void (*callback)(void*, bool), void* arg, uint8_t mode) {
+        uint8_t  device    = index / 16;
+        pinnum_t pinNumber = index % 16;
 
         Assert(_isrData[device]._isrCallback[pinNumber] == nullptr, "You can only set a single ISR for pin %d", index);
 
@@ -243,8 +280,8 @@ namespace Extenders {
     }
 
     void I2CPinExtenderBase::detachInterrupt(pinnum_t index) {
-        int device    = index / 16;
-        int pinNumber = index % 16;
+        uint8_t  device    = index / 16;
+        pinnum_t pinNumber = index % 16;
 
         _isrData[device]._isrCallback[pinNumber] = nullptr;
         _isrData[device]._isrArgument[pinNumber] = nullptr;
@@ -262,8 +299,11 @@ namespace Extenders {
             auto& data = _isrData[i];
 
             if (!data._pin.undefined()) {
+#    if 0
                 data._pin.detachInterrupt();
+#    endif
             }
         }
     }
 }
+#endif

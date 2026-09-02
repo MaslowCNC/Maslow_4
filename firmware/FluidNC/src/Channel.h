@@ -16,54 +16,138 @@
 
 #pragma once
 
-#include "Error.h"  // Error
-#include "GCode.h"  // gc_modal_t
-#include "Types.h"  // State
+#include "Error.h"        // Error
+#include "GCode.h"        // gc_modal_t
+#include "Types.h"        // MotorMask
+#include "RealtimeCmd.h"  // Cmd
+#include "UTF8.h"
+
+#include "Pins/PinAttributes.h"
+#include "Machine/EventPin.h"
+
 #include <Stream.h>
 #include <freertos/FreeRTOS.h>  // TickType_T
+#include <freertos/semphr.h>
+#include <atomic>
 #include <queue>
 
 class Channel : public Stream {
+private:
+    void pin_event(pinnum_t pinnum, bool active);
+
+    static constexpr int PinACK = 0xB2;
+    static constexpr int PinNAK = 0xB3;
+    static constexpr int PinRST = 0xB4;
+
+    static constexpr int timeout = 2000;
+
 public:
-    static const int maxLine = 255;
+    static constexpr int PinLowFirst  = 0x100;
+    static constexpr int PinLowLast   = 0x13f;
+    static constexpr int PinHighFirst = 0x140;
+    static constexpr int PinHighLast  = 0x17f;
+
+    static constexpr int maxLine = 255;
+
+    uint32_t _message_level = MsgLevelVerbose;
 
 protected:
-    const char* _name;
-    char        _line[maxLine];
-    size_t      _linelen;
-    bool        _addCR     = false;
-    char        _lastWasCR = false;
+    std::string _name;
+    char        _line[maxLine] = {};
+    size_t      _linelen       = 0;
+    bool        _addCR         = false;
+    char        _lastWasCR     = false;
 
-    std::queue<uint8_t> _queue;
+    mutable SemaphoreHandle_t _queue_mutex = xSemaphoreCreateMutex();
+    std::queue<uint8_t>       _queue;
+
+    // _queue holds non-realtime input bytes seen by pollLine(nullptr) until a
+    // pollLine(line) call consumes them.  A channel that is polled for realtime
+    // characters but never for lines - e.g. any non-job channel while a job is
+    // running - would otherwise grow _queue without bound.  Bound it at a few
+    // lines of slack (~4).  When a new line arrives with the queue already at
+    // the bound, that whole line is discarded through its newline; a line
+    // already in progress is allowed to finish, so the queue never holds a
+    // partial line.  State below is touched only under _queue_mutex.
+    static constexpr size_t _queue_limit        = 4 * maxLine;
+    bool                    _queue_at_line_start = true;   // last queued byte ended a line (or queue empty)
+    bool                    _queue_discarding    = false;  // dropping the rest of an over-limit line
+    bool                    _queue_overflow_logged = false;  // one debug line per overflow episode
+    // Enqueue one non-realtime input byte, applying the whole-line drop policy.
+    void queue_push(uint8_t byte);
 
     uint32_t _reportInterval = 0;
     int32_t  _nextReportTime = 0;
 
-    gc_modal_t _lastModal;
-    uint8_t    _lastTool;
-    float      _lastSpindleSpeed;
-    float      _lastFeedRate;
-    State      _lastState;
-    MotorMask  _lastLimits;
-    bool       _lastProbe;
+    gc_modal_t  _lastModal        = modal_defaults;
+    uint8_t     _lastTool         = 0;
+    float       _lastSpindleSpeed = 0;
+    float       _lastFeedRate     = 0;
+    MotorMask   _lastLimits       = 0;
+    bool        _lastJobActive    = false;
+    std::string _lastPinString    = "";
 
-    bool       _reportWco = true;
-    CoordIndex _reportNgc = CoordIndex::End;
+    bool       _reportState = true;
+    bool       _reportOvr   = true;
+    bool       _reportWco   = true;
+    CoordIndex _reportNgc   = CoordIndex::End;
+
+    Cmd _last_rt_cmd = Cmd::None;
+
+    std::map<int, InputPin*> _pins;
+
+    UTF8 _utf8;
+
+    bool _ended   = false;
+    bool _percent = false;
+
+protected:
+    bool                  _active = true;
+    bool                  _paused = false;
+    std::atomic<uint32_t> _queued_log_refs { 0 };
+    std::atomic<uint32_t> _processing_refs { 0 };
+    std::atomic<bool>     _closing { false };
 
 public:
-    Channel(const char* name, bool addCR = false) : _name(name), _linelen(0), _addCR(addCR) {}
-    virtual ~Channel() = default;
+    explicit Channel(const std::string& name, bool addCR = false);
+    explicit Channel(const char* name, bool addCR = false);
+    Channel(const char* name, objnum_t num, bool addCR = false);
 
-    virtual void     handle() {}
-    virtual Channel* pollLine(char* line);
-    virtual void     ack(Error status);
-    const char*      name() { return _name; }
+    Channel(const Channel&)            = delete;
+    Channel& operator=(const Channel&) = delete;
+    Channel(Channel&&)                 = delete;
+    Channel& operator=(Channel&&)      = delete;
+
+    virtual ~Channel() {
+        if (_queue_mutex) {
+            vSemaphoreDelete(_queue_mutex);
+            _queue_mutex = nullptr;
+        }
+    }
+
+    int8_t _ackwait = 0;  // 1 - waiting, 0 - ACKed, -1 - NAKed
+
+    virtual void  init() {}
+    virtual void  handle() {}
+    virtual Error pollLine(char* line);
+    virtual void  ack(Error status);
+    const char*   name() { return _name.c_str(); }
+
+    virtual void sendLine(MsgLevel level, const char* line);
+    virtual void sendLine(MsgLevel level, const std::string* line);
+    virtual void sendLine(MsgLevel level, const std::string& line);
+
+    size_t _line_number = 0;
+
+    std::string _progress;
 
     // rx_buffer_available() is the number of bytes that can be sent without overflowing
     // a reception buffer, even if the system is busy.  Channels that can handle external
     // input via an interrupt or other background mechanism should override it to return
     // the remaining space that mechanism has available.
-    virtual int rx_buffer_available() { return 0; };
+    // The queue can handle more than 256 characters but we don't want it to get too
+    // large, so we report a limited size.
+    virtual int rx_buffer_available() { return std::max(0, 256 - int(queued_bytes())); }
 
     // flushRx() discards any characters that have already been received.  It is used
     // after a reset, so that anything already sent will not be processed.
@@ -76,6 +160,8 @@ public:
     // be a realtime character.
     virtual bool realtimeOkay(char c) { return true; }
 
+    void handleRealtimeCharacter(uint8_t byte);
+
     // lineComplete() accumulates the character into the line, returning true if a line
     // end is seen.
     virtual bool lineComplete(char* line, char c);
@@ -85,10 +171,16 @@ public:
         return readBytes(buffer, length);
     }
 
-    virtual void stopJob() {}
+    virtual bool is_visible(const std::string& stem, std::string extension, bool isdir);
+
+    // Maslow: called on feedhold so channels (e.g. InputFile) can log pause context
     virtual void pauseJob() {}
 
-    size_t timedReadBytes(uint8_t* buffer, size_t length, TickType_t timeout) { return timedReadBytes((char*)buffer, length, timeout); }
+    size_t timedReadBytes(uint8_t* buffer, size_t length, TickType_t timeout) {
+        return timedReadBytes(reinterpret_cast<char*>(buffer), length, timeout);
+    }
+
+    void writeUTF8(uint32_t code);
 
     bool setCr(bool on) {
         bool retval = _addCR;
@@ -96,15 +188,71 @@ public:
         return retval;
     }
 
+    void notifyState() { _reportState = true; }
+    void notifyOvr() { _reportOvr = true; }
     void notifyWco() { _reportWco = true; }
     void notifyNgc(CoordIndex coord) { _reportNgc = coord; }
 
     int peek() override { return -1; }
     int read() override { return -1; }
-    int available() override { return 0; }
+    int available() override { return queued_bytes(); }
 
-    uint32_t setReportInterval(uint32_t ms);
-    uint32_t getReportInterval() { return _reportInterval; }
-    void     autoReport();
-    void     autoReportGCodeState();
+    virtual void print_msg(MsgLevel level, const char* msg);
+
+    void print_msg(MsgLevel level, const std::string& msg) { print_msg(level, msg.c_str()); }
+
+    uint32_t     setReportInterval(uint32_t ms);
+    uint32_t     getReportInterval() { return _reportInterval; }
+    virtual void autoReport();
+    void         autoReportGCodeState();
+
+    void push(uint8_t byte);
+    void push(const uint8_t* data, size_t length) {
+        while (length--) {
+            push(*data++);
+        }
+    }
+    void push(std::string_view data) {
+        for (auto const& c : data) {
+            push((uint8_t)c);
+        }
+    }
+    void push(const std::string& s) { push(reinterpret_cast<const uint8_t*>(s.c_str()), s.length()); }
+
+    size_t queued_bytes() const;
+    bool   try_pop_queued_byte(uint8_t& byte);
+
+    void end() { _ended = true; }
+    void percent() { _percent = true; }
+
+    // Pin extender functions
+    virtual void out(const char* s, const char* tag);
+    virtual void out(const std::string& s, const char* tag);
+    virtual void out_acked(const std::string& s, const char* tag);
+
+    virtual void beginJSON(const char* json_tag) {}
+    virtual void endJSON(const char* json_tag) {}
+
+    void ready();
+    void registerEvent(pinnum_t pinnum, InputPin* obj);
+
+    size_t lineNumber() { return _line_number; }
+    void   setLineNumber(size_t line_number) { _line_number = line_number; }
+
+    virtual void   save() {}
+    virtual void   restore() {}
+    virtual size_t position() { return 0; }
+    virtual void   set_position(size_t pos) {}
+
+    void pause();
+    void resume();
+
+    bool     try_acquire_log_ref();
+    void     release_log_ref();
+    bool     try_acquire_processing_ref();
+    void     release_processing_ref();
+    void     begin_closing();
+    bool     is_closing() const;
+    uint32_t pending_log_refs() const;
+    uint32_t pending_processing_refs() const;
 };

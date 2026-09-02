@@ -30,14 +30,13 @@ void DCMotor::begin(uint8_t forwardPin, uint8_t backwardPin, int readbackPin, in
     _channel1 = channel1;
     _channel2 = channel2;
 
-    //Setup the motor controllers
-    ledcSetup(channel1, motorPWMFreq, motorPWMRes);  // configure PWM functionalities...this uses timer 0 (channel, freq, resolution)
-    ledcAttachPin(_forward, channel1);               // attach the channel to the GPIO to be controlled
-    ledcWrite(channel1, 0);                          //Turn the motor off
+    //Setup the motor controllers.  Arduino core 3 auto-assigns LEDC channels
+    //per pin; ledcWrite now takes the pin rather than the channel number.
+    ledcAttach(_forward, motorPWMFreq, motorPWMRes);
+    ledcWrite(_forward, 0);  //Turn the motor off
 
-    ledcSetup(channel2, motorPWMFreq, motorPWMRes);
-    ledcAttachPin(_back, channel2);
-    ledcWrite(channel2, 0);
+    ledcAttach(_back, motorPWMFreq, motorPWMRes);
+    ledcWrite(_back, 0);
 }
 
 /*!
@@ -104,12 +103,12 @@ void DCMotor::runAtPWM(long signed_speed) {
  */
 void DCMotor::runAtSpeed(uint8_t direction, uint16_t speed) {
     if (direction == 0) {
-        ledcWrite(_channel1, _maxSpeed);
-        ledcWrite(_channel2, _maxSpeed - speed);
+        ledcWrite(_forward, _maxSpeed);
+        ledcWrite(_back, _maxSpeed - speed);
 
     } else {
-        ledcWrite(_channel2, _maxSpeed);
-        ledcWrite(_channel1, _maxSpeed - speed);
+        ledcWrite(_back, _maxSpeed);
+        ledcWrite(_forward, _maxSpeed - speed);
     }
 }
 
@@ -118,16 +117,16 @@ void DCMotor::runAtSpeed(uint8_t direction, uint16_t speed) {
  */
 void DCMotor::stop() {
     //These could be set to 1023 to allow coasting
-    ledcWrite(_channel1, 0);  //Stop
-    ledcWrite(_channel2, 0);
+    ledcWrite(_forward, 0);  //Stop
+    ledcWrite(_back, 0);
 }
 
 /*!
  *  @brief  Stop the motors in a high-z state
  */
 void DCMotor::highZ() {
-    ledcWrite(_channel1, 0);  //Stop
-    ledcWrite(_channel2, 0);
+    ledcWrite(_forward, 0);  //Stop
+    ledcWrite(_back, 0);
 }
 
 /*!

@@ -5,28 +5,50 @@
 #pragma once
 
 #include "Configuration/Configurable.h"
-#include "Driver/StepTimer.h"
+#include "Driver/step_engine.h"
+#include "System.h"
 
 namespace Machine {
     class Stepping : public Configuration::Configurable {
     public:
-        // fStepperTimer should be an integer divisor of the bus speed, i.e. of fTimers
-        static const uint32_t fStepperTimer = 20000000;  // frequency of step pulse timer
-
+        static uint32_t fStepperTimer;  // frequency of step pulse timer
     private:
-        static bool onStepperDriverTimer();
+        static bool    _switchedStepper;
+        static int32_t _stepPulseEndTime;
+        static int32_t _i2sPulseCounts;
 
-        static const int ticksPerMicrosecond = fStepperTimer / 1000000;
+        static const int MAX_MOTORS_PER_AXIS = 2;
+        struct motor_pins_t {
+            pinnum_t step_pin;
+            pinnum_t dir_pin;
+            bool     step_invert;
+            bool     dir_invert;
+            bool     blocked;
+            bool     limited;
+        };
+        static motor_pins_t* axis_motors[MAX_N_AXIS][MAX_MOTORS_PER_AXIS];
+        static axis_t        _n_active_axes;
 
-        bool    _switchedStepper = false;
-        int32_t _stepPulseEndTime;
+        static void    startPulseTimer();
+        static void    waitDirection();  // Wait for direction delay
+        static steps_t axis_steps[MAX_N_AXIS];
 
     public:
+        static step_engine_t* _engine;
+
         enum stepper_id_t {
+#if MAX_N_SIMULATOR
+            SIMULATOR = 0,
+            TIMED,
+#else
             TIMED = 0,
-            RMT,
+#endif
+            RMT_ENGINE,
             I2S_STATIC,
             I2S_STREAM,
+#if MAX_N_PIO
+            PIO_ENGINE,
+#endif
         };
 
         Stepping() = default;
@@ -38,32 +60,44 @@ namespace Machine {
         // execution lead time there is for other processes to run.  The latency for a feedhold or other
         // override is roughly 10 ms times _segments.
 
-        int32_t _segments = 12;
+        static int32_t _segments;
 
-        uint32_t _idleMsecs           = 255;
-        uint32_t _pulseUsecs          = 4;
-        uint32_t _directionDelayUsecs = 0;
-        uint32_t _disableDelayUsecs   = 0;
-
-        static int _engine;
+        static uint32_t _idleMsecs;
+        static uint32_t _pulseUsecs;
+        static uint32_t _directionDelayUsecs;
+        static uint32_t _disableDelayUsecs;
 
         // Interfaces to stepping engine
-        void init();
+        static void init();
 
-        void reset();  // Clean up old state and start fresh
-        void beginLowLatency();
-        void endLowLatency();
-        void startPulseTimer();
-        void waitPulse();      // Wait for pulse length
-        void waitDirection();  // Wait for direction delay
-        void waitMotion();     // Wait for motion to complete
-        void finishPulse();    // Cleanup after unstep
+        static steps_t getSteps(axis_t axis) { return axis_steps[axis]; }
+        static void    setSteps(axis_t axis, steps_t steps) { axis_steps[axis] = steps; }
 
-        uint32_t maxPulsesPerSec();
+        static void assignMotor(axis_t axis, motor_t motor, pinnum_t step_pin, bool step_invert, pinnum_t dir_pin, bool dir_invert);
+
+        static void reset();  // Clean up old state and start fresh
+        static void beginLowLatency();
+        static void endLowLatency();
+
+        static void step(AxisMask step_mask, AxisMask dir_mask);
+        static void unstep();
+
+        // Used to stop a motor quickly when a limit switch is hit
+        static bool* limit_var(axis_t axis, motor_t motor);
+        static void  limit(axis_t axis, motor_t motor);
+        static void  unlimit(axis_t axis, motor_t motor);
+
+        // Used to stop a motor during ganged homint
+        static void block(axis_t axis, motor_t motor);
+        static void unblock(axis_t axis, motor_t motor);
+
+        static uint32_t maxPulsesPerSec();
+
+        static AxisMask direction_mask;
 
         // Timers
-        void        setTimerPeriod(uint16_t timerTicks);
-        void        startTimer();
+        static void setTimerPeriod(uint32_t timerTicks);
+        static void startTimer();
         static void stopTimer();
 
         // Configuration system helpers:
@@ -71,4 +105,4 @@ namespace Machine {
         void afterParse() override;
     };
 }
-extern EnumItem stepTypes[];
+extern const EnumItem stepTypes[];

@@ -4,7 +4,7 @@
 #include "MaslowKinematics.h"
 
 #include "../Machine/MachineConfig.h"
-#include "../Limits.h"
+#include "../Limit.h"
 #include "../Machine/Homing.h"
 #include "../Protocol.h"
 #include "../System.h"
@@ -67,8 +67,8 @@ namespace Kinematics {
 
     void MaslowKinematics::init_position() {
         auto n_axis = config->_axes->_numberAxis;
-        for (size_t axis = 0; axis < n_axis; axis++) {
-            set_motor_steps(axis, 0);  // Set to zeros
+        for (axis_t axis = X_AXIS; axis < n_axis; axis++) {
+            set_steps(axis, 0);  // Set to zeros
         }
     }
 
@@ -221,7 +221,7 @@ namespace Kinematics {
         return mc_move_motors(motors, pl_data);
     }
 
-    void MaslowKinematics::motors_to_cartesian(float* cartesian, float* motors, int n_axis) {
+    void MaslowKinematics::motors_to_cartesian(float* cartesian, float* motors, axis_t n_axis) {
         /* 
         Forward kinematics for Maslow CNC - convert belt lengths back to X,Y,Z coordinates.
         
@@ -273,7 +273,7 @@ namespace Kinematics {
         }
     }
 
-    void MaslowKinematics::transform_cartesian_to_motors(float* motors, float* cartesian) {
+    bool MaslowKinematics::transform_cartesian_to_motors(float* motors, float* cartesian) {
         // In this implementation, FluidNC axis order is ABCDZX:
         // motors[0] = A axis = Top Left belt length
         // motors[1] = B axis = Top Right belt length
@@ -298,10 +298,10 @@ namespace Kinematics {
         } else {
             // When belts are not ready, keep them at their current positions
             // This prevents the motion planner from synchronizing Z-axis with large belt movements
-            motors[0] = steps_to_mpos(get_axis_motor_steps(0), 0);  // Keep TL at current position
-            motors[1] = steps_to_mpos(get_axis_motor_steps(1), 1);  // Keep TR at current position
-            motors[2] = steps_to_mpos(get_axis_motor_steps(2), 2);  // Keep BL at current position
-            motors[3] = steps_to_mpos(get_axis_motor_steps(3), 3);  // Keep BR at current position
+            motors[0] = steps_to_motor_pos(get_axis_steps(static_cast<axis_t>(0)), 0);  // Keep TL at current position
+            motors[1] = steps_to_motor_pos(get_axis_steps(static_cast<axis_t>(1)), 1);  // Keep TR at current position
+            motors[2] = steps_to_motor_pos(get_axis_steps(static_cast<axis_t>(2)), 2);  // Keep BL at current position
+            motors[3] = steps_to_motor_pos(get_axis_steps(static_cast<axis_t>(3)), 3);  // Keep BR at current position
         }
 
         motors[4] = z;     // Z position -> Z axis (pass through)
@@ -312,6 +312,7 @@ namespace Kinematics {
         for (size_t axis = 6; axis < n_axis; axis++) {
             motors[axis] = cartesian[axis];
         }
+        return true;
     }
 
     // Belt length calculation functions - moved from Maslow.cpp

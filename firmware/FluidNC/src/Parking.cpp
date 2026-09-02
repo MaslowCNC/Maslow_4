@@ -63,7 +63,8 @@ void Parking::setup() {
     plan_data.motion                = {};
     plan_data.motion.systemMotion   = 1;
     plan_data.motion.noFeedOverride = 1;
-    plan_data.line_number           = PARKING_MOTION_LINE_NUMBER;
+    plan_data.line_number           = 0;
+    plan_data.is_jog                = false;
     block                           = plan_get_current_block();
 
     if (block) {
@@ -112,7 +113,7 @@ void Parking::park(bool restart) {
 
         log_debug("Spin down");
         spindle->spinDown();
-        report_ovr_counter = 0;  // Set to report change immediately
+        gc_ovr_changed();
 
         // Execute fast parking retract motion to parking target location.
         if (parking_target[_axis] < _target_mpos) {
@@ -127,7 +128,7 @@ void Parking::park(bool restart) {
         // NOTE: Laser mode does not start a parking motion to ensure the laser stops immediately.
         spindle->spinDown();
         config->_coolant->off();
-        report_ovr_counter = 0;  // Set to report changes immediately
+        gc_ovr_changed();
     }
 }
 void Parking::unpark(bool restart) {
@@ -153,7 +154,7 @@ void Parking::unpark(bool restart) {
             } else {
                 log_debug("Spin up");
                 restore_spindle();
-                report_ovr_counter = 0;  // Set to report change immediately
+                gc_ovr_changed();
             }
         }
     }
@@ -161,7 +162,7 @@ void Parking::unpark(bool restart) {
         // Block if safety door re-opened during prior restore actions.
         if (!restart) {
             restore_coolant();
-            report_ovr_counter = 0;  // Set to report change immediately
+            gc_ovr_changed();
         }
     }
 
@@ -190,10 +191,49 @@ void Parking::restore_coolant() {
 }
 
 void Parking::group(Configuration::HandlerBase& handler) {
+    // @config enable
+    // @default false
+    // @tuning per-machine
+    // Enables the parking feature: opening the safety door (or sending the SafetyDoor
+    // real-time command, 0x84) pulls the parking axis out and retracts it to target_mpos_mm
+    // instead of just stopping motion. Also gated by enable_parking_override_control/M56 if
+    // that's enabled, and by parking.axis's homing status -- parking never runs before that
+    // axis has been homed.
     handler.item("enable", _enable);
-    handler.item("axis", _axis, axisType);
+
+    // @config axis
+    // @default z
+    // @ignore_drift Z_AXIS is axis_t's enum value for 'z', not a plain literal
+    // @tuning per-machine
+    // Which axis performs the parking retract/return sequence. Typically Z. Homing that
+    // axis is required -- parking silently does nothing until it has been homed.
+    handler.item("axis", _axis);
+
+    // @config target_mpos_mm
+    // @default -5.0
+    // @tuning per-machine
+    // Machine-position target (not affected by any active offset) for the final parking
+    // retract move.
     handler.item("target_mpos_mm", _target_mpos);
+
+    // @config rate_mm_per_min
+    // @default 800.0
+    // @tuning per-machine
+    // Feed rate for the final parking retract move, from the pull-out waypoint to
+    // target_mpos_mm.
     handler.item("rate_mm_per_min", _rate);
+
+    // @config pullout_distance_mm
+    // @default 5.0
+    // @tuning per-machine
+    // Distance of the initial slow pull-out move, relative to the position where parking
+    // started -- done before the spindle stops and the fast retract to target_mpos_mm.
     handler.item("pullout_distance_mm", _pullout, 0, 3e38);
+
+    // @config pullout_rate_mm_per_min
+    // @default 250.0
+    // @tuning per-machine
+    // Feed rate for the initial pull-out move (and the equivalent slow return move when
+    // resuming from park).
     handler.item("pullout_rate_mm_per_min", _pullout_rate);
 }
