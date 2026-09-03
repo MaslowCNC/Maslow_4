@@ -115,6 +115,12 @@ public:
     void   panic();
     void   resetUpdateWatchdog();
 
+    /** Clears a latched error or watchdog condition and turns the red LED off.
+     *  Called when the user clears the alarm with $X.  Returns true if a latched
+     *  condition was actually cleared.  Before this existed both latches were
+     *  permanent and the only recovery was a power cycle. */
+    bool   clearError();
+
     // Set true during file/firmware uploads to suppress the update-loop watchdog.
     // Flash write operations stall both CPU cores; without this flag the 100 ms
     // watchdog fires spuriously and latches the red LED until a power cycle.
