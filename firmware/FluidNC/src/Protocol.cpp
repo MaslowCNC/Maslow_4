@@ -811,6 +811,7 @@ void protocol_disable_steppers() {
 void protocol_do_cycle_stop() {
     // log_debug("protocol_do_cycle_stop " << state_name());
     protocol_disable_steppers();
+    const bool wasJog = (sys.state() == State::Jog);
 
     switch (sys.state()) {
         case State::Hold:
@@ -849,6 +850,14 @@ void protocol_do_cycle_stop() {
                 Stepper::reset();
                 gc_sync_position();
                 plan_sync_position();
+            }
+            if (wasJog) {
+                log_info("X/Y commanded: X=" << Maslow.getTargetX() << " Y=" << Maslow.getTargetY() << " TL target: "
+                                             << Maslow.axis[_TL].getTarget() << " TL measured: " << Maslow.axis[_TL].getPosition()
+                                             << " TR target: " << Maslow.axis[_TR].getTarget() << " TR measured: "
+                                             << Maslow.axis[_TR].getPosition() << " BL target: " << Maslow.axis[_BL].getTarget()
+                                             << " BL measured: " << Maslow.axis[_BL].getPosition() << " BR target: "
+                                             << Maslow.axis[_BR].getTarget() << " BR measured: " << Maslow.axis[_BR].getPosition());
             }
             {
                 auto suspend = sys.suspend();
