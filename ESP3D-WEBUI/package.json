@@ -3,7 +3,9 @@
   "description": "Web UI for ESP3D",
   "scripts": {
     "build": "gulp package",
-    "build:en": "gulp package -en",
+    "build:en": "gulp package --lang en",
+    "build:split": "gulp package:split",
+    "build:split:en": "gulp package:split --lang en",
     "serve": "python fluidnc-web-sim.py maslow.local",
     "start": "npm run build:en && npm run serve"
   },

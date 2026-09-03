@@ -375,6 +375,58 @@ function compress() {
     .pipe(size())
 }
 
+// Split build: update the script reference so index.html loads app.js from the root
+// rather than js/app.js, matching the location of the separately gzipped app.js.gz.
+function updateAppScriptRef() {
+  return gulp
+    .src('dist/index.html')
+    .pipe(
+      replace(
+        /<!-- smoosh -->\s*<script src="js\/app\.js"><\/script>\s*<!-- endsmoosh -->/,
+        '<script src="app.js"></script>'
+      )
+    )
+    .pipe(gulp.dest('dist'))
+}
+
+// Split build: inline the CSS from the smoosh block so that index.html.gz is
+// self-contained for styling without needing a separate css/style.css file on
+// the ESP32 filesystem.
+// Note: the <!-- smoosh -->...<!-- endsmoosh --> markers survive minifyApp because
+// htmlmin only collapses whitespace and does not process those comment markers.
+function inlineCss() {
+  return gulp
+    .src('dist/index.html')
+    .pipe(
+      replace(
+        /<!-- smoosh -->\s*<link[^>]+href="(css\/[^"]+)"[^>]*\/?>\s*<!-- endsmoosh -->/g,
+        function (match, cssPath) {
+          var cssContent = fs.readFileSync('dist/' + cssPath, 'utf8')
+          return '<style>' + cssContent + '</style>'
+        }
+      )
+    )
+    .pipe(gulp.dest('dist'))
+}
+
+// Gzip the HTML for the split build (no smoosh step, so JS stays external).
+function compressHtml() {
+  return gulp
+    .src('dist/index.html')
+    .pipe(gzip({ gzipOptions: { level: 9 } }))
+    .pipe(gulp.dest('dist'))
+    .pipe(size())
+}
+
+// Gzip the minified app.js as a separately-deployable file.
+function compressApp() {
+  return gulp
+    .src('dist/js/app.js')
+    .pipe(gzip({ gzipOptions: { level: 9 } }))
+    .pipe(gulp.dest('dist'))
+    .pipe(size())
+}
+
 gulp.task(clean)
 gulp.task(lint)
 gulp.task(Copy)
@@ -418,7 +470,29 @@ var package2Series = gulp.series(
 )
 var package2testSeries = gulp.series(clean, lint, Copytest, concatApptest, includehtml, includehtml, replaceSVG, smoosh)
 
+// Split build: produces index.html.gz (HTML + CSS inlined, no JS) and app.js.gz (all JavaScript).
+// Upload both files to the ESP32 filesystem.  The HTML references app.js at the
+// root level so the firmware serves it transparently from app.js.gz.
+var packageSplitSeries = gulp.series(
+  clean,
+  lint,
+  Copy,
+  concatApp,
+  includehtml,
+  includehtml,
+  replaceVersion,
+  replaceSVG,
+  clearlang,
+  minifyApp,
+  inlineCss,
+  updateAppScriptRef,
+  compressHtml,
+  compressApp,
+  clean2
+)
+
 gulp.task('default', defaultSeries)
 gulp.task('package', packageSeries)
 gulp.task('package2', package2Series)
 gulp.task('package2test', package2testSeries)
+gulp.task('package:split', packageSplitSeries)
