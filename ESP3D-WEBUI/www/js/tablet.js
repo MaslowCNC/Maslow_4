@@ -1655,8 +1655,8 @@ const applyTensionBeltLimitDefaults = { retractionLimit: 300.0, extendDist: 2600
 const getScaleThicknessValues = () => {
   const lv = globalThis.loadedValues || {};
   return {
-    scaleX: isNaN(parseFloat(lv.scaleX)) ? scaleThicknessDefaults.scaleX : parseFloat(lv.scaleX),
-    scaleY: isNaN(parseFloat(lv.scaleY)) ? scaleThicknessDefaults.scaleY : parseFloat(lv.scaleY),
+    scaleX: isNaN(parseFloat(lv.scaleX)) ? scaleThicknessDefaults.scaleX.toFixed(3) : parseFloat(lv.scaleX).toFixed(3),
+    scaleY: isNaN(parseFloat(lv.scaleY)) ? scaleThicknessDefaults.scaleY.toFixed(3) : parseFloat(lv.scaleY).toFixed(3),
     workThickness: isNaN(parseFloat(lv.workThickness)) ? scaleThicknessDefaults.workThickness : parseFloat(lv.workThickness),
     spoilboardThickness: isNaN(parseFloat(lv.spoilboardThickness)) ? scaleThicknessDefaults.spoilboardThickness : parseFloat(lv.spoilboardThickness),
   };
@@ -1682,16 +1682,35 @@ const tabletOpenScaleThicknessPopup = () => {
   openModal("scale-thickness-popup");
 };
 
+const normalizeScaleValue = (raw) => {
+  const normalized = raw.replace(/,/g, ".");
+  const parsed = parseFloat(normalized);
+  if (isNaN(parsed)) return null;
+  return parsed.toFixed(3);
+};
+
 const tabletSaveScaleThickness = () => {
   const elScaleX = id("scaleX");
   const elScaleY = id("scaleY");
   const elWorkThickness = id("workThickness");
   const elSpoilboardThickness = id("spoilboardThickness");
 
-  const newScaleX = elScaleX ? elScaleX.value.trim() : "";
-  const newScaleY = elScaleY ? elScaleY.value.trim() : "";
+  const rawScaleX = elScaleX ? elScaleX.value.trim() : "";
+  const rawScaleY = elScaleY ? elScaleY.value.trim() : "";
   const newWorkThickness = elWorkThickness ? elWorkThickness.value.trim() : "";
   const newSpoilboardThickness = elSpoilboardThickness ? elSpoilboardThickness.value.trim() : "";
+
+  const newScaleX = rawScaleX !== "" ? normalizeScaleValue(rawScaleX) : "";
+  const newScaleY = rawScaleY !== "" ? normalizeScaleValue(rawScaleY) : "";
+
+  if (rawScaleX !== "" && newScaleX === null) {
+    addMessage(`Invalid Scale X value: "${rawScaleX}". Use a decimal number (e.g. 1.002).`);
+    return;
+  }
+  if (rawScaleY !== "" && newScaleY === null) {
+    addMessage(`Invalid Scale Y value: "${rawScaleY}". Use a decimal number (e.g. 1.002).`);
+    return;
+  }
 
   const lv = globalThis.loadedValues || {};
   const keys = [

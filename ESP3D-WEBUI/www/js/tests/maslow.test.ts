@@ -137,4 +137,31 @@ describe('maslowMsgHandling', () => {
     expect((allElements[1] as HTMLInputElement).value).toBe("12.0");
     expect(global.loadedValues["workThickness"]).toBe("12.0");
   });
+
+  test("Scale_X value with many decimal places is displayed with 3 decimal places", () => {
+    document.body.innerHTML = `<input id="scaleX" value="" />`;
+    global.loadedValues = {};
+    maslowMsgHandling("Scale_X=1.002001");
+    const el = document.getElementById("scaleX") as HTMLInputElement;
+    expect(el.value).toBe("1.002");
+    expect(global.loadedValues["scaleX"]).toBe("1.002");
+  });
+
+  test("Scale_Y value with many decimal places is displayed with 3 decimal places", () => {
+    document.body.innerHTML = `<input id="scaleY" value="" />`;
+    global.loadedValues = {};
+    maslowMsgHandling("Scale_Y=1.003001");
+    const el = document.getElementById("scaleY") as HTMLInputElement;
+    expect(el.value).toBe("1.003");
+    expect(global.loadedValues["scaleY"]).toBe("1.003");
+  });
+
+  test("Scale_X integer value is displayed with 3 decimal places", () => {
+    document.body.innerHTML = `<input id="scaleX" value="" />`;
+    global.loadedValues = {};
+    maslowMsgHandling("Scale_X=1");
+    const el = document.getElementById("scaleX") as HTMLInputElement;
+    expect(el.value).toBe("1.000");
+    expect(global.loadedValues["scaleX"]).toBe("1.000");
+  });
 });
