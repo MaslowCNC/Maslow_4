@@ -193,6 +193,10 @@ void Maslow_::update() {
         if (currentMaslowState == READY_TO_CUT || currentMaslowState == RETRACTED || currentMaslowState == EXTENDEDOUT) {
             saveBeltPositions();
         }
+        // Both saves commit to NVS, and the flash write stalls both cores.  That time is
+        // spent inside this call to update(), so it would otherwise be charged against the
+        // watchdog budget checked below and trip the emergency stop.
+        resetUpdateWatchdog();
     }
 
     // Track state changes and mark belt positions as stale when leaving valid states
@@ -220,10 +224,15 @@ void Maslow_::update() {
         if (!uploadInProgress && now - lastCallToUpdate > UPDATE_WATCHDOG_MS) {
             unsigned int elapsedTime = now - lastCallToUpdate;
             log_error("Emergency stop. Update function not being called enough. " << elapsedTime << "ms since last call");
+            log_error("  longest phase: " << worstActivity << " (" << (uint32_t)worstActivityMs << "ms), now in: "
+                                          << (const char*)lastActivity << " (" << (uint32_t)(now - lastActivityStart)
+                                          << "ms), sys.state=" << state_name()
+                                          << ", maslowState=" << calibration.getCurrentState());
             watchdogFired = true;
             Maslow.panic();
         }
         lastCallToUpdate = now;
+        clearWorstActivity();
 
         Maslow.updateEncoderPositions();  //We always update encoder positions in any state,
 
@@ -361,14 +370,14 @@ bool Maslow_::updateEncoderPositions() {
     if (millis() - encoderFailTimer > 1000) {
         for (int i = 0; i < 4; i++) {
             //turn i into proper label
-            String label = axis_id_to_label(i);
+            const char* label = axis_id_to_label(i);
             if (encoderFailCounter[i] > 0.1 * ENCODER_READ_FREQUENCY_HZ) {
                 // log error statement with appropriate label
-                log_error("Failure on " << label.c_str() << " encoder, failed to read " << encoderFailCounter[i]
+                log_error("Failure on " << label << " encoder, failed to read " << encoderFailCounter[i]
                                         << " times in the last second");
                 Maslow.panic();
             } else if (encoderFailCounter[i] > 0) {  //0.01*ENCODER_READ_FREQUENCY_HZ){
-                log_warn("Bad connection on " << label.c_str() << " encoder, failed to read " << encoderFailCounter[i]
+                log_warn("Bad connection on " << label << " encoder, failed to read " << encoderFailCounter[i]
                                               << " times in the last second");
             }
             encoderFailCounter[i] = 0;
@@ -988,23 +997,18 @@ void Maslow_::markBeltPositionsStale() {
 //------------------------------------------------------
 
 // int to string name conversion for axis labels
-String Maslow_::axis_id_to_label(int axis_id) {
-    String label;
+const char* Maslow_::axis_id_to_label(int axis_id) {
     switch (axis_id) {
         case TLEncoderLine:
-            label = "Top Left";
-            break;
+            return "Top Left";
         case TREncoderLine:
-            label = "Top Right";
-            break;
+            return "Top Right";
         case BREncoderLine:
-            label = "Bottom Right";
-            break;
+            return "Bottom Right";
         case BLEncoderLine:
-            label = "Bottom Left";
-            break;
+            return "Bottom Left";
     }
-    return label;
+    return "";
 }
 
 //Runs the self test feature
@@ -1262,7 +1266,7 @@ void Maslow_::safety_control() {
             panicCounter[i]++;
             if (panicCounter[i] > tresholdHitsBeforePanic) {
                 if (sys.state() == State::Jog || sys.state() == State::Cycle) {
-                    log_warn("Motor current on " << axis_id_to_label(i).c_str() << " axis exceeded threshold of " << 4000);
+                    log_warn("Motor current on " << axis_id_to_label(i) << " axis exceeded threshold of " << 4000);
                     //Maslow.panic();
                 }
                 tick[i] = true;
@@ -1282,10 +1286,10 @@ void Maslow_::safety_control() {
         if (axis[i].getMotorPower() > 450 && abs(axis[i].getBeltSpeed()) < 0.1 && !tick[i]) {
             axisSlackCounter[i]++;
             if (axisSlackCounter[i] > 3000) {
-                // log_info("SLACK:" << axis_id_to_label(i).c_str() << " motor power is " << int(axis[i].getMotorPower())
+                // log_info("SLACK:" << axis_id_to_label(i) << " motor power is " << int(axis[i].getMotorPower())
                 //                   << ", but the belt speed is" << axis[i].getBeltSpeed());
                 // log_info(axisSlackCounter[i]);
-                // log_info("Pull on " << axis_id_to_label(i).c_str() << " and restart!");
+                // log_info("Pull on " << axis_id_to_label(i) << " and restart!");
                 tick[i]             = true;
                 axisSlackCounter[i] = 0;
                 Maslow.panic();
@@ -1295,7 +1299,7 @@ void Maslow_::safety_control() {
 
         //If the motor has a position error greater than 1mm and we are running a file or jogging
         if ((abs(axis[i].getPositionError()) > 1) && (sys.state() == State::Jog || sys.state() == State::Cycle) && !tick[i]) {
-            // log_error("Position error on " << axis_id_to_label(i).c_str() << " axis exceeded 1mm, error is " << axis[i].getPositionError()
+            // log_error("Position error on " << axis_id_to_label(i) << " axis exceeded 1mm, error is " << axis[i].getPositionError()
             //                                << "mm");
             tick[i] = true;
         }
@@ -1304,7 +1308,7 @@ void Maslow_::safety_control() {
         previousPositionError[i] = axis[i].getPositionError();
         if ((abs(axis[i].getPositionError()) > 15) && (sys.state() == State::Cycle)) {
             positionErrorCounter[i]++;
-            log_warn("Position error on " << axis_id_to_label(i).c_str() << " axis exceeded 15mm while running. Error is "
+            log_warn("Position error on " << axis_id_to_label(i) << " axis exceeded 15mm while running. Error is "
                                           << axis[i].getPositionError() << "mm" << " Counter: " << positionErrorCounter[i]);
             log_warn("Previous error was " << previousPositionError[i] << "mm");
 
@@ -1374,6 +1378,11 @@ void Maslow_::set_telemetry(bool enabled) {
         // }
     }
     telemetry_enabled = enabled;
+    if (enabled) {
+        // The telemetry task is created lazily so its stack does not sit in the
+        // heap on machines that never turn telemetry on.
+        ensure_telemetry_task();
+    }
     log_info("Telemetry: " << (enabled ? "enabled" : "disabled"));
 }
 

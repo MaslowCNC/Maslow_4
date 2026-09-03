@@ -19,15 +19,15 @@
 void MotorUnit::begin(int forwardPin, int backwardPin, int readbackPin, int encoderAddress, int channel1, int channel2) {
     _encoderAddress = encoderAddress;
 
-    String encAddrLabel = Maslow.axis_id_to_label(_encoderAddress);
+    const char* encAddrLabel = Maslow.axis_id_to_label(_encoderAddress);
 
     Maslow.I2CMux.setPort(_encoderAddress);
     if (!encoder.begin()) {
-        log_error("Encoder not found on " << encAddrLabel.c_str());
+        log_error("Encoder not found on " << encAddrLabel);
         Maslow.error        = true;
-        Maslow.errorMessage = "Encoder not found on " + encAddrLabel;
+        Maslow.errorMessage = String("Encoder not found on ") + encAddrLabel;
     } else {
-        log_info("Encoder connected on " << encAddrLabel.c_str());
+        log_info("Encoder connected on " << encAddrLabel);
     }
     zero();
 
@@ -37,11 +37,11 @@ void MotorUnit::begin(int forwardPin, int backwardPin, int readbackPin, int enco
     positionPID.setOutputLimits(-1023, 1023);
 
     if (!motor_test()) {
-        log_error("Motor not found on " << encAddrLabel.c_str());
+        log_error("Motor not found on " << encAddrLabel);
         Maslow.error        = true;
-        Maslow.errorMessage = "Motor not found on " + encAddrLabel;
+        Maslow.errorMessage = String("Motor not found on ") + encAddrLabel;
     } else {
-        log_info("Motor detected on " << encAddrLabel.c_str());
+        log_info("Motor detected on " << encAddrLabel);
     }
 }
 
@@ -49,32 +49,32 @@ void MotorUnit::begin(int forwardPin, int backwardPin, int readbackPin, int enco
 bool MotorUnit::test() {
     bool allTestsPassed = true;
 
-    String encAddrLabel = Maslow.axis_id_to_label(_encoderAddress);
+    const char* encAddrLabel = Maslow.axis_id_to_label(_encoderAddress);
 
     //Check if the motor / motor driver are connected
     if (!motor_test()) {
-        log_warn("Motor not found on " << encAddrLabel.c_str());
+        log_warn("Motor not found on " << encAddrLabel);
         Maslow.error        = true;
-        Maslow.errorMessage = "Motor not found on " + encAddrLabel;
+        Maslow.errorMessage = String("Motor not found on ") + encAddrLabel;
         allTestsPassed      = false;
     }
 
     //Check if the encoder is connected
     if (!updateEncoderPosition()) {
-        log_warn("Encoder not found on " << encAddrLabel.c_str());
+        log_warn("Encoder not found on " << encAddrLabel);
         Maslow.error        = true;
-        Maslow.errorMessage = "Encoder not found on " + encAddrLabel;
+        Maslow.errorMessage = String("Encoder not found on ") + encAddrLabel;
         allTestsPassed      = false;
     }
 
     //Check for the presence of the magnet
     if (!encoder.detectMagnet()) {
-        log_warn("Magnet not detected on " << encAddrLabel.c_str());
+        log_warn("Magnet not detected on " << encAddrLabel);
         allTestsPassed = false;
     }
 
     if (allTestsPassed) {
-        log_info("All tests passed on " << encAddrLabel.c_str());
+        log_info("All tests passed on " << encAddrLabel);
     }
 
     return !Maslow.error;
@@ -119,7 +119,7 @@ bool MotorUnit::updateEncoderPosition() {
     if (!Maslow.I2CMux.setPort(_encoderAddress))
         return false;
 
-    String encAddrLabel = Maslow.axis_id_to_label(_encoderAddress);
+    const char* encAddrLabel = Maslow.axis_id_to_label(_encoderAddress);
 
     if (encoder.isConnected()) {                                               //this func has 50ms timeout (or worse?, hard to tell)
         mostRecentCumulativeEncoderReading = encoder.getCumulativePosition();  //This updates and returns the encoder value
@@ -129,14 +129,14 @@ bool MotorUnit::updateEncoderPosition() {
         if (error != 0) {  // AS5600_OK = 0
             if (millis() - encoderReadFailurePrintTime > 5000) {
                 encoderReadFailurePrintTime = millis();
-                log_warn("Encoder I2C error " << error << " on " << encAddrLabel.c_str());
+                log_warn("Encoder I2C error " << error << " on " << encAddrLabel);
             }
             return false;
         }
         return true;
     } else if (millis() - encoderReadFailurePrintTime > 5000) {
         encoderReadFailurePrintTime = millis();
-        log_warn("Encoder read failure on " << encAddrLabel.c_str());
+        log_warn("Encoder read failure on " << encAddrLabel);
         //Maslow.panic();
     }
     return false;
@@ -203,8 +203,8 @@ bool MotorUnit::retract() {
     if (!pull_tight(Maslow.calibration.retractCurrentThreshold))
         return false;
 
-    String encAddrLabel = Maslow.axis_id_to_label(_encoderAddress);
-    log_info(encAddrLabel.c_str() << " pulled tight with offset " << getPosition());
+    const char* encAddrLabel = Maslow.axis_id_to_label(_encoderAddress);
+    log_info(encAddrLabel << " pulled tight with offset " << getPosition());
     zero();
 
     return true;

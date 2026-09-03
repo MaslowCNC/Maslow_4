@@ -21,6 +21,7 @@
 #include "Settings.h"       // settings_execute_startup
 #include "Machine/LimitPin.h"
 #include "./Maslow/Maslow.h"
+#include <esp_heap_caps.h>
 
 volatile ExecAlarm rtAlarm;  // Global realtime executor bitflag variable for setting various alarms.
 
@@ -205,18 +206,31 @@ void stop_telemetry() {
     }
 }
 
-void start_telemetry() {
+// Create the telemetry task on demand.  Its stack is large (telemetry_loop
+// buffers samples before writing them to the SD card) and telemetry is off by
+// default, so the task is only created once telemetry is actually enabled.
+// Keeping it uncreated leaves that stack in the heap for the rest of the
+// firmware, which matters on the ESP32-S3 where free heap runs tight.
+void ensure_telemetry_task() {
     if (telemetryTask) {
         vTaskResume(telemetryTask);
-    } else {
-        xTaskCreatePinnedToCore(telemetry_loop,    // task
-                                "telemetry",       // name for task
-                                16000,             // size of task stack
-                                0,                 // parameters
-                                1,                 // priority
-                                &telemetryTask,    // task handle
-                                SUPPORT_TASK_CORE  // core
-        );
+        return;
+    }
+    xTaskCreatePinnedToCore(telemetry_loop,    // task
+                            "telemetry",       // name for task
+                            16000,             // size of task stack
+                            0,                 // parameters
+                            1,                 // priority
+                            &telemetryTask,    // task handle
+                            SUPPORT_TASK_CORE  // core
+    );
+}
+
+void start_telemetry() {
+    // Only resume an already-created task.  If telemetry has never been turned
+    // on there is no task to start; set_telemetry() creates it when needed.
+    if (telemetryTask) {
+        vTaskResume(telemetryTask);
     }
 }
 
@@ -310,6 +324,35 @@ static void check_startup_state() {
 const uint32_t heapWarnThreshold = 15000;
 
 uint32_t heapLowWater = UINT_MAX;
+
+// Distinguishes the three things that look identical from a bare free-heap number:
+//   - a leak            -> allocBlocks climbs and never comes back down
+//   - fragmentation     -> free stays flat but largestBlock shrinks
+//   - a legitimate peak -> both recover after the operation finishes
+// Stack numbers are the smallest free space each task has ever had; a value near
+// zero means that task is about to overflow its stack, which looks like a crash
+// rather than an allocation failure.
+void report_memory_diagnostics() {
+    multi_heap_info_t info;
+    heap_caps_get_info(&info, MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL);
+
+    log_info("Heap free: " << xPortGetFreeHeapSize() << " min: " << heapLowWater);
+    log_info("Heap largestBlock: " << info.largest_free_block << " allocBlocks: " << info.allocated_blocks
+                                   << " freeBlocks: " << info.free_blocks);
+
+    if (pollingTask) {
+        log_info("Stack free poller: " << uxTaskGetStackHighWaterMark(pollingTask));
+    }
+    if (outputTask) {
+        log_info("Stack free output: " << uxTaskGetStackHighWaterMark(outputTask));
+    }
+    if (telemetryTask) {
+        log_info("Stack free telemetry: " << uxTaskGetStackHighWaterMark(telemetryTask));
+    }
+    log_info("Stack free main: " << uxTaskGetStackHighWaterMark(nullptr));
+
+    allChannels.listChannelStats();
+}
 void     protocol_main_loop() {
     check_startup_state();
     start_polling();
@@ -326,10 +369,13 @@ void     protocol_main_loop() {
             report_echo_line_received(activeLine, allChannels);
 #endif
 
+            Maslow.markActivity(activeLine);
             Error status_code = execute_line(activeLine, *activeChannel, WebUI::AuthenticationLevel::LEVEL_GUEST);
 
             // Tell the channel that the line has been processed.
+            Maslow.markActivity("ack");
             activeChannel->ack(status_code);
+            Maslow.markActivity("main loop");
 
             // Tell the input polling task that the line has been processed,
             // so it can give us another one when available
@@ -339,7 +385,9 @@ void     protocol_main_loop() {
         protocol_execute_realtime();  // Runtime command check point.
         // Auto-cycle start any queued moves.
         protocol_auto_cycle_start();
+        Maslow.markActivity("sys.process_changes");
         sys.process_changes();
+        Maslow.markActivity("stepper disable check");
 
         if (sys.abort()) {
             stop_polling();
@@ -367,7 +415,13 @@ void     protocol_main_loop() {
         if (newHeapSize < heapLowWater) {
             heapLowWater = newHeapSize;
             if (heapLowWater < heapWarnThreshold) {
-                log_warn("Low memory: " << heapLowWater << " bytes");
+                // Carry the block counts along with the free number.  Rising
+                // allocBlocks means something is leaking; a largestBlock far below
+                // the free total means the heap is fragmented rather than exhausted.
+                multi_heap_info_t info;
+                heap_caps_get_info(&info, MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL);
+                log_warn("Low memory: " << heapLowWater << " bytes largestBlock: " << info.largest_free_block
+                                        << " allocBlocks: " << info.allocated_blocks);
             }
         }
     }
