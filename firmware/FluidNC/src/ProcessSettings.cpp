@@ -1056,6 +1056,26 @@ static Error maslow_get_info(const char* value, WebUI::AuthenticationLevel auth_
     return Error::Ok;
 }
 
+static Error maslow_belt_distance(const char* value, WebUI::AuthenticationLevel auth_level, Channel& out) {
+    int   pairIndex         = (Maslow.measurementPair == "BR_TL") ? 1 : 0;
+    float extendDistanceMm  = Maslow.measurementExtendDistanceMm;
+    int   retractionForceMa = Maslow.measurementRetractionForceMa;
+
+    if (value && *value) {
+        char trailing = '\0';
+        int  fields   = sscanf(value, "%d,%f,%d%c", &pairIndex, &extendDistanceMm, &retractionForceMa, &trailing);
+        if (fields < 3 || trailing != '\0') {
+            log_error("BeltDistance command format: $MBD=<pair>,<extend_mm>,<retraction_force_ma>");
+            return Error::BadNumberFormat;
+        }
+    }
+
+    if (!Maslow.startBeltDistanceMeasurement(pairIndex, extendDistanceMm, retractionForceMa)) {
+        return Error::InvalidValue;
+    }
+    return Error::Ok;
+}
+
 // Commands use the same syntax as Settings, but instead of setting or
 // displaying a persistent value, a command causes some action to occur.
 // That action could be anything, from displaying a run-time parameter
@@ -1149,6 +1169,7 @@ void make_user_commands() {
     new UserCommand("SETZSTOP", M + "/setZStop", maslow_set_zStop, anyState);
     new UserCommand("MINFO", M + "/getInfo", maslow_get_info, anyState);
     new UserCommand("GSTATE", M + "/gstate", maslow_get_state, anyState);
+    new UserCommand("MBD", M + "/beltDistance", maslow_belt_distance, anyState);
 };
 
 // normalize_key puts a key string into canonical form -
