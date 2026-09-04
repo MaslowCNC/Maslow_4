@@ -691,10 +691,17 @@ function tabletShowMessage(msg, collecting) {
 
 function tabletShowResponse(response) { }
 
+const showAlarmRecoveryWarning = () => alertdlg(
+  "Alarm Reset",
+  "Maslow position may not be accurate. We suggest a Retract, Extend cycle after resetting the alarm.",
+  null,
+  translate_text_item("Continue")
+);
+
 function clearAlarm() {
   if (getText('systemStatus') === 'Alarm') {
     id('systemStatus').classList.remove('system-status-alarm')
-    SendPrinterCommand('$X', true, null, null, 114, 1)
+    SendPrinterCommand('$X', true, showAlarmRecoveryWarning, null, 114, 1)
   }
 }
 
