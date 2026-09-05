@@ -1143,14 +1143,334 @@ const tabletDOMActivate = () => {
 // Button event handlers - First Row
 const Z_JOG_UP = "Z+";
 const Z_JOG_DOWN = "Z-";
+const CALIBRATION_ONBOARDING_STEP_COUNT = 8;
+const CALIBRATION_ONBOARDING_LIVE_UPDATE_TIMEOUT_MS = 5000;
+const CALIBRATION_ONBOARDING_TARGET_IDS = {
+  1: "tablettab_cal_zstop",
+  2: "tablettab_cal_retract",
+  3: "tablettab_cal_extend",
+  4: null,
+  5: null,
+  6: "tablettab_cal_calibrate",
+  7: null,
+  8: null,
+};
 
 const tabletMoveZUp = () => sendMove(Z_JOG_UP);
 const tabletMoveTopLeft = () => sendMove("X-Y+");
 const tabletMoveTop = () => sendMove("Y+");
 const tabletMoveTopRight = () => sendMove("X+Y+");
+const calibrationOnboardingState = {
+  isOpen: false,
+  devRetracted: false,
+  devExtended: false,
+  devReadyToCut: false,
+  anchorErrorMessage: "",
+  zStopSet: false,
+  beltsAttached: false,
+  thicknessSaved: false,
+  findAnchorsStarted: false,
+};
+
+const CALIBRATION_ONBOARDING_THICKNESS_LIMITS_MM = {
+  min: 0,
+  max: 50,
+};
+
+const getMaslowStateValue = () => (typeof maslowStatus !== 'undefined' ? maslowStatus.state : null);
+const isCalibrationOnboardingDevMode = () => ["localhost", "127.0.0.1", "0.0.0.0"].includes(window.location.hostname);
+const hasRecentMaslowLiveUpdate = () => {
+  const lastLiveUpdateAt = Number(globalThis.maslowLastLiveUpdateAt || 0);
+  return lastLiveUpdateAt > 0 && (Date.now() - lastLiveUpdateAt) <= CALIBRATION_ONBOARDING_LIVE_UPDATE_TIMEOUT_MS;
+}
+const shouldSimulateCalibrationOnboarding = () => isCalibrationOnboardingDevMode() && !hasRecentMaslowLiveUpdate();
+const getCalibrationOnboardingZStep = () => {
+  const inputValue = getValueFloat("calibration-onboarding-z-step");
+  if (inputValue > 0) {
+    return inputValue;
+  }
+  const defaultStep = Number(getText("disZ"));
+  return defaultStep > 0 ? defaultStep : 5;
+}
+
+const syncCalibrationOnboardingZStepInput = () => {
+  const zStepInput = id("calibration-onboarding-z-step");
+  if (!zStepInput) {
+    return;
+  }
+  const stepValue = getCalibrationOnboardingZStep();
+  zStepInput.value = `${stepValue}`;
+}
+
+const getCalibrationOnboardingThicknessFieldValue = (inputId, fallbackValue = 0) => {
+  const input = id(inputId);
+  const rawValue = input ? input.value.trim() : "";
+  const parsedValue = Number.parseFloat(rawValue);
+  const value = Number.isFinite(parsedValue) ? parsedValue : fallbackValue;
+  return Math.min(
+    CALIBRATION_ONBOARDING_THICKNESS_LIMITS_MM.max,
+    Math.max(CALIBRATION_ONBOARDING_THICKNESS_LIMITS_MM.min, value)
+  );
+}
+
+const syncCalibrationOnboardingThicknessInputs = () => {
+  const { workThickness, spoilboardThickness } = getScaleThicknessValues();
+  const workThicknessInput = id("calibration-onboarding-work-thickness");
+  const spoilboardThicknessInput = id("calibration-onboarding-spoilboard-thickness");
+  if (workThicknessInput) {
+    workThicknessInput.value = `${workThickness}`;
+  }
+  if (spoilboardThicknessInput) {
+    spoilboardThicknessInput.value = `${spoilboardThickness}`;
+  }
+}
+
+const syncCalibrationOnboardingState = () => {
+  const state = getMaslowStateValue();
+  if (state === MASLOW_STATE_READY_TO_CUT) {
+    calibrationOnboardingState.devRetracted = true;
+    calibrationOnboardingState.devExtended = true;
+    calibrationOnboardingState.devReadyToCut = true;
+    calibrationOnboardingState.zStopSet = true;
+    calibrationOnboardingState.beltsAttached = true;
+    calibrationOnboardingState.thicknessSaved = true;
+    calibrationOnboardingState.findAnchorsStarted = true;
+    return;
+  }
+
+  const shouldResetManualProgress = state !== null
+    && state < 4
+    && !calibrationOnboardingState.devExtended
+    && !calibrationOnboardingState.devReadyToCut;
+
+  if (shouldResetManualProgress) {
+    calibrationOnboardingState.beltsAttached = false;
+    calibrationOnboardingState.findAnchorsStarted = false;
+  }
+
+  if (state !== null && state >= MASLOW_STATE_FINDING_ANCHORS) {
+    calibrationOnboardingState.thicknessSaved = true;
+  }
+}
+
+const getCalibrationOnboardingStepNumber = () => {
+  const state = getMaslowStateValue();
+  const isReadyToCut = state === MASLOW_STATE_READY_TO_CUT || calibrationOnboardingState.devReadyToCut;
+  const hasRetracted = (state !== null && state >= 2) || calibrationOnboardingState.devRetracted;
+  const hasExtended = (state !== null && state >= 4) || calibrationOnboardingState.devExtended;
+  const hasStartedFindAnchors = calibrationOnboardingState.findAnchorsStarted || calibrationOnboardingState.devReadyToCut || (state !== null && state >= MASLOW_STATE_FINDING_ANCHORS);
+  const beltsAttached = calibrationOnboardingState.beltsAttached || (state !== null && state >= MASLOW_STATE_FINDING_ANCHORS);
+  const thicknessSaved = calibrationOnboardingState.thicknessSaved || isReadyToCut || (state !== null && state >= MASLOW_STATE_FINDING_ANCHORS);
+
+  if (!(calibrationOnboardingState.zStopSet || isReadyToCut)) return 1;
+  if (!hasRetracted) return 2;
+  if (!hasExtended) return 3;
+  if (!(beltsAttached || isReadyToCut)) return 4;
+  if (!thicknessSaved) return 5;
+  if (!(hasStartedFindAnchors || isReadyToCut)) return 6;
+  if (!isReadyToCut) return 7;
+  return 8;
+}
+
+const clearCalibrationOnboardingTargets = () => {
+  Object.values(CALIBRATION_ONBOARDING_TARGET_IDS).forEach((targetId) => {
+    if (targetId) {
+      id(targetId)?.classList.remove("calibration-onboarding-target-button");
+    }
+  });
+}
+
+const setCalibrationOnboardingTarget = (stepNumber) => {
+  clearCalibrationOnboardingTargets();
+  const targetId = CALIBRATION_ONBOARDING_TARGET_IDS[stepNumber];
+  if (targetId) {
+    id(targetId)?.classList.add("calibration-onboarding-target-button");
+  }
+}
+
+const hideCalibrationOnboarding = () => {
+  calibrationOnboardingState.isOpen = false;
+  clearCalibrationOnboardingTargets();
+  hideModal("calibration-onboarding-popup");
+}
+
+const openCalibrationOnboarding = () => {
+  const onboardingModal = id("calibration-onboarding-popup");
+  if (!onboardingModal) {
+    return;
+  }
+  calibrationOnboardingState.isOpen = true;
+  syncCalibrationOnboardingZStepInput();
+  syncCalibrationOnboardingThicknessInputs();
+  openModal("calibration-onboarding-popup");
+  updateCalibrationOnboarding();
+}
+
+const openCalibrationOnboardingFromButton = () => {
+  tabletClick();
+  resetCalibrationOnboardingSessionState();
+  openCalibrationOnboarding();
+}
+
+const showCalibrationOnboardingAnchorError = (message) => {
+  calibrationOnboardingState.anchorErrorMessage = message;
+  updateCalibrationOnboarding();
+}
+
+const clearCalibrationOnboardingAnchorError = () => {
+  if (!calibrationOnboardingState.anchorErrorMessage) {
+    return;
+  }
+  calibrationOnboardingState.anchorErrorMessage = "";
+  updateCalibrationOnboarding();
+}
+
+const scheduleCalibrationOnboardingDevAdvance = (callback, delayMs = 600) => {
+  if (!shouldSimulateCalibrationOnboarding()) {
+    return;
+  }
+  scheduleCallback(() => {
+    if (!shouldSimulateCalibrationOnboarding()) {
+      return;
+    }
+    callback();
+    updateCalibrationOnboarding();
+  }, delayMs);
+}
+
+const resetCalibrationOnboardingDevState = () => {
+  calibrationOnboardingState.devRetracted = false;
+  calibrationOnboardingState.devExtended = false;
+  calibrationOnboardingState.devReadyToCut = false;
+}
+
+const resetCalibrationOnboardingSessionState = () => {
+  resetCalibrationOnboardingDevState();
+  calibrationOnboardingState.zStopSet = false;
+  calibrationOnboardingState.beltsAttached = false;
+  calibrationOnboardingState.thicknessSaved = false;
+  calibrationOnboardingState.findAnchorsStarted = false;
+  calibrationOnboardingState.anchorErrorMessage = "";
+}
+
+const calibrationOnboardingAnchorFailed = () => {
+  calibrationOnboardingState.findAnchorsStarted = false;
+  calibrationOnboardingState.devReadyToCut = false;
+  updateCalibrationOnboarding();
+}
+
+const updateCalibrationOnboarding = () => {
+  syncCalibrationOnboardingState();
+  const stepNumber = getCalibrationOnboardingStepNumber();
+  const zStepValue = id("calibration-onboarding-z-step");
+  const zStepUnit = id("calibration-onboarding-z-step-unit");
+  if (zStepValue) {
+    if (!(Number.parseFloat(zStepValue.value) > 0)) {
+      syncCalibrationOnboardingZStepInput();
+    }
+    zStepValue.title = `Jog step in ${gCodeModal.units === 'G20' ? 'in' : 'mm'}`;
+  }
+  if (zStepUnit) {
+    zStepUnit.textContent = gCodeModal.units === 'G20' ? 'in' : 'mm';
+  }
+
+  for (let index = 1; index <= CALIBRATION_ONBOARDING_STEP_COUNT; index += 1) {
+    const stepEl = id(`calibration-onboarding-step-${index}`);
+    if (stepEl) {
+      stepEl.style.display = index === stepNumber ? "block" : "none";
+    }
+  }
+
+  const progressText = id("calibration-onboarding-progress-text");
+  if (progressText) {
+    progressText.textContent = `Step ${stepNumber} / ${CALIBRATION_ONBOARDING_STEP_COUNT}`;
+  }
+
+  for (let index = 1; index <= CALIBRATION_ONBOARDING_STEP_COUNT; index += 1) {
+    const dot = id(`calibration-onboarding-dot-${index}`);
+    if (!dot) {
+      continue;
+    }
+    dot.classList.toggle("complete", index < stepNumber || stepNumber === CALIBRATION_ONBOARDING_STEP_COUNT);
+    dot.classList.toggle("active", index === stepNumber && stepNumber !== CALIBRATION_ONBOARDING_STEP_COUNT);
+  }
+
+  const finishDot = id(`calibration-onboarding-dot-${CALIBRATION_ONBOARDING_STEP_COUNT}`);
+  if (finishDot) {
+    finishDot.classList.toggle("active", stepNumber === CALIBRATION_ONBOARDING_STEP_COUNT);
+  }
+
+  const machineStateLabel = id("calibration-onboarding-machine-state");
+  if (machineStateLabel) {
+    machineStateLabel.textContent = getText("main-state-label") || getText("state-label") || "State: Waiting...";
+  }
+
+  const anchorErrorLabel = id("calibration-onboarding-anchor-error");
+  if (anchorErrorLabel) {
+    const shouldShowError = stepNumber === 7 && !!calibrationOnboardingState.anchorErrorMessage;
+    anchorErrorLabel.style.display = shouldShowError ? "block" : "none";
+    anchorErrorLabel.textContent = calibrationOnboardingState.anchorErrorMessage;
+  }
+
+  const confirmBeltsBtn = id("calibration-onboarding-confirm-belts");
+  if (confirmBeltsBtn) {
+    confirmBeltsBtn.disabled = stepNumber !== 4;
+  }
+
+  if (calibrationOnboardingState.isOpen) {
+    setCalibrationOnboardingTarget(stepNumber);
+  } else {
+    clearCalibrationOnboardingTargets();
+  }
+}
+
+const confirmCalibrationBeltsAttached = () => {
+  tabletClick();
+  calibrationOnboardingState.beltsAttached = true;
+  updateCalibrationOnboarding();
+  returnFocusToTablet();
+}
+
+const saveCalibrationOnboardingThickness = () => {
+  tabletClick();
+  const { workThickness: currentWorkThickness, spoilboardThickness: currentSpoilboardThickness } = getScaleThicknessValues();
+  const newWorkThickness = getCalibrationOnboardingThicknessFieldValue("calibration-onboarding-work-thickness", currentWorkThickness);
+  const newSpoilboardThickness = getCalibrationOnboardingThicknessFieldValue("calibration-onboarding-spoilboard-thickness", currentSpoilboardThickness);
+  const updates = [
+    { field: "workThickness", cmd: "Maslow_workThickness", newVal: `${newWorkThickness}` },
+    { field: "spoilboardThickness", cmd: "Maslow_spoilboardThickness", newVal: `${newSpoilboardThickness}` },
+  ];
+  const lv = globalThis.loadedValues || {};
+
+  updates.forEach((update) => {
+    if (String(lv[update.field] || "") !== update.newVal) {
+      SendPrinterCommand(`$/${update.cmd}=${update.newVal}`);
+    }
+  });
+
+  if (!globalThis.loadedValues) {
+    globalThis.loadedValues = {};
+  }
+  globalThis.loadedValues.workThickness = updates[0].newVal;
+  globalThis.loadedValues.spoilboardThickness = updates[1].newVal;
+  calibrationOnboardingState.thicknessSaved = true;
+  syncCalibrationOnboardingThicknessInputs();
+  saveMaslowYaml();
+  updateCalibrationOnboarding();
+  returnFocusToTablet();
+}
+
 const tabletCalibrationOpen = () => {
   loadCornerValues();
+  resetCalibrationOnboardingDevState();
   openModal("calibration-popup");
+}
+const handleCalibrationOnboardingZStepBlur = () => {
+  const input = id("calibration-onboarding-z-step");
+  if (!input) {
+    return;
+  }
+  input.value = getCalibrationOnboardingZStep();
 }
 // Button event handlers - Second Row
 const tabletMoveLeft = () => sendMove("X-");
@@ -1251,6 +1571,14 @@ const moveSetZHomePopupZ = (direction) => {
   }
 
   setZHomeInputTracksMachineZ = true;
+  sendMove(direction, { distance });
+}
+
+const moveCalibrationOnboardingZ = (direction) => {
+  const distance = getCalibrationOnboardingZStep();
+  if (distance <= 0) {
+    return;
+  }
   sendMove(direction, { distance });
 }
 
@@ -1419,6 +1747,14 @@ const resetStopButtonColors = () => {
 };
 // Control event handlers - Calibration Popup
 const tabletCalPopupHide = () => hideModal("calibration-popup");
+const tabletCalibrationFlowHide = () => {
+  hideCalibrationOnboarding();
+  tabletCalPopupHide();
+}
+
+const closeCalibrationPopupOnly = () => {
+  tabletCalPopupHide();
+}
 
 // Helper function to set focus back to tablet view
 const returnFocusToTablet = () => {
@@ -1429,11 +1765,27 @@ const returnFocusToTablet = () => {
 };
 
 const tabletCalRetract = () => {
+  clearCalibrationOnboardingAnchorError();
   onCalibrationButtonsClick("$ALL", "Retract All");
+  scheduleCalibrationOnboardingDevAdvance(() => {
+    calibrationOnboardingState.devRetracted = true;
+    calibrationOnboardingState.devExtended = false;
+    calibrationOnboardingState.devReadyToCut = false;
+    calibrationOnboardingState.beltsAttached = false;
+    calibrationOnboardingState.findAnchorsStarted = false;
+  });
+  updateCalibrationOnboarding();
   returnFocusToTablet();
 };
 const tabletCalExtend = () => {
+  clearCalibrationOnboardingAnchorError();
   onCalibrationButtonsClick("$EXT", "Extend All");
+  scheduleCalibrationOnboardingDevAdvance(() => {
+    calibrationOnboardingState.devRetracted = true;
+    calibrationOnboardingState.devExtended = true;
+    calibrationOnboardingState.devReadyToCut = false;
+  });
+  updateCalibrationOnboarding();
   returnFocusToTablet();
 };
 const tabletCalCalibrate = () => {
@@ -1442,15 +1794,26 @@ const tabletCalCalibrate = () => {
     "Please confirm Z is fully lowered to continue",
     (response) => {
       if (response === "yes") {
+        clearCalibrationOnboardingAnchorError();
+        calibrationOnboardingState.beltsAttached = true;
+        calibrationOnboardingState.findAnchorsStarted = true;
+        updateCalibrationOnboarding();
         onCalibrationButtonsClick("$CAL", "Find Anchors");
-        scheduleCallback(() => { hideModal("calibration-popup"); }, 1000);
+        scheduleCalibrationOnboardingDevAdvance(() => {
+          calibrationOnboardingState.devRetracted = true;
+          calibrationOnboardingState.devExtended = true;
+        }, 300);
+        scheduleCalibrationOnboardingDevAdvance(() => {
+          calibrationOnboardingState.devReadyToCut = true;
+        }, 1400);
+        scheduleCallback(() => { tabletCalPopupHide(); }, 1000);
       }
     }
   );
 };
 const tabletCalTense = () => {
   onCalibrationButtonsClick("$TKSLK", "Apply Tension");
-  scheduleCallback(() => { hideModal("calibration-popup"); }, 1000);
+  scheduleCallback(closeCalibrationPopupOnly, 1000);
 };
 // const tabletCalZHome = () => onCalibrationButtonsClick("$TKSLK", "Home Z");
 const tabletCalOpenConfig = () => {
@@ -1467,12 +1830,20 @@ const tabletCalStop = () => {
   returnFocusToTablet();
 };
 const tabletCalSetZStop = () => {
+  clearCalibrationOnboardingAnchorError();
+  calibrationOnboardingState.zStopSet = true;
   onCalibrationButtonsClick("$SETZSTOP", "Set Z-Stop");
+  updateCalibrationOnboarding();
+  returnFocusToTablet();
+};
+const tabletCalibrationOnboardingFinish = () => {
+  tabletClick();
+  tabletCalibrationFlowHide();
   returnFocusToTablet();
 };
 const tabletCalTest = () => {
   onCalibrationButtonsClick("$TEST", "Test");
-  scheduleCallback(() => { hideModal("calibration-popup"); }, 1000);
+  scheduleCallback(closeCalibrationPopupOnly, 1000);
 };
 const tabletCalRelax = () => {
   onCalibrationButtonsClick("$CMP", "Release Tension");
@@ -1900,8 +2271,22 @@ function tabletInit() {
     id("tablettab_trace_boundary").addEventListener("click", traceBoundary);
 
     // Buttons - Calibration Pop-up
-    id("calibration-popup").addEventListener("click", tabletCalPopupHide);
+    id("calibration-popup").addEventListener("click", tabletCalibrationFlowHide);
     id("calibration_popup_content").addEventListener("click", tabletPopupStopProp);
+    id("calibration-onboarding-popup").addEventListener("click", hideCalibrationOnboarding);
+    id("calibration_onboarding_popup_content").addEventListener("click", tabletPopupStopProp);
+    id("tablettab_cal_onboarding").addEventListener("click", openCalibrationOnboardingFromButton);
+    id("calibration-onboarding-close").addEventListener("click", hideCalibrationOnboarding);
+    id("calibration-onboarding-z-step").addEventListener("blur", handleCalibrationOnboardingZStepBlur);
+    id("calibration-onboarding-z-up").addEventListener("click", () => moveCalibrationOnboardingZ(Z_JOG_UP));
+    id("calibration-onboarding-z-down").addEventListener("click", () => moveCalibrationOnboardingZ(Z_JOG_DOWN));
+    id("calibration-onboarding-action-zstop").addEventListener("click", tabletCalSetZStop);
+    id("calibration-onboarding-action-retract").addEventListener("click", tabletCalRetract);
+    id("calibration-onboarding-action-extend").addEventListener("click", tabletCalExtend);
+    id("calibration-onboarding-confirm-belts").addEventListener("click", confirmCalibrationBeltsAttached);
+    id("calibration-onboarding-save-thickness").addEventListener("click", saveCalibrationOnboardingThickness);
+    id("calibration-onboarding-action-calibrate").addEventListener("click", tabletCalCalibrate);
+    id("calibration-onboarding-finish").addEventListener("click", tabletCalibrationOnboardingFinish);
     id("tablettab_cal_retract").addEventListener("click", tabletCalRetract);
     id("tablettab_cal_extend").addEventListener("click", tabletCalExtend);
     id("tablettab_cal_calibrate").addEventListener("click", tabletCalCalibrate);

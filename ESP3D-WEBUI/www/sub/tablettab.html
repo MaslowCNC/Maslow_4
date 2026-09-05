@@ -191,6 +191,134 @@
           <button id="tablettab_cal_zstop" class="calibration-modal-button"
             title="Record the 'bottom' limit for Z-axis movement">Set Z-Stop</button>
         </div>
+        <div class="buttons-row calibration-onboarding-launch-row">
+          <button id="tablettab_cal_onboarding" class="calibration-modal-button green-button">Show Onboarding</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="calibration-onboarding-popup" class="calibration-modal-container calibration-onboarding-modal">
+    <div id="calibration_onboarding_popup_content" class="calibration-modal-content calibration-onboarding-content">
+      <button id="calibration-onboarding-close" type="button" class="calibration-onboarding-close" aria-label="Close onboarding">×</button>
+      <div class="calibration-onboarding-panel-header">
+        <label class="calibration-onboarding-panel-title">Calibration Onboarding</label>
+      </div>
+
+      <div id="calibration-onboarding-step-1" class="calibration-onboarding-panel">
+        <div class="calibration-onboarding-step-title">Lower Z to the bottom stop</div>
+        <p class="calibration-onboarding-step-text">Use the Z arrows below, then record the bottom limit with <strong>Set Z-Stop</strong>.</p>
+        <svg aria-hidden="true" style="display: none; position: absolute; width: 0; height: 0;">
+          <symbol id="calibration-onboarding-z-up-icon" viewBox="0 0 38 38">
+            <polygon fill="currentColor" points="10.319 5.525 17.833 13.039 2.805 13.039 10.319 5.525" />
+            <rect fill="currentColor" height="2.5" transform="translate(31.899 11.262) rotate(90)" width="21.79" x="-0.576" y="20.33" />
+          </symbol>
+          <symbol id="calibration-onboarding-z-down-icon" viewBox="0 0 38 38">
+            <polygon transform="rotate(180) translate(-21 -44)" fill="currentColor" points="10.319 5.525 17.833 13.039 2.805 13.039 10.319 5.525"></polygon>
+            <rect fill="currentColor" height="2.5" transform="translate(32 10) rotate(90)" width="21.79" x="-0.576" y="20.33"></rect>
+          </symbol>
+        </svg>
+        <div class="buttons-row calibration-onboarding-jog-row">
+          <button id="calibration-onboarding-z-up" type="button" class="calibration-modal-button set-z-home-jog-button" aria-label="Jog Z up">
+            <svg class="set-z-home-jog-icon" viewBox="0 0 38 38" aria-hidden="true"><use href="#calibration-onboarding-z-up-icon"></use></svg>
+            Z Up
+          </button>
+          <div class="calibration-onboarding-step-input-wrapper">
+            <label for="calibration-onboarding-z-step" class="calibration-onboarding-step-input-label">Step</label>
+            <input id="calibration-onboarding-z-step" type="number" min="0" step="any" class="calibration-onboarding-step-input" value="5" aria-label="Z jog step">
+            <span id="calibration-onboarding-z-step-unit" class="calibration-onboarding-step-input-unit">mm</span>
+          </div>
+          <button id="calibration-onboarding-z-down" type="button" class="calibration-modal-button set-z-home-jog-button" aria-label="Jog Z down">
+            <svg class="set-z-home-jog-icon" viewBox="0 0 38 38" aria-hidden="true"><use href="#calibration-onboarding-z-down-icon"></use></svg>
+            Z Down
+          </button>
+        </div>
+        <div class="buttons-row calibration-onboarding-action-row">
+          <button id="calibration-onboarding-action-zstop" type="button" class="calibration-modal-button">Set Z-Stop</button>
+        </div>
+      </div>
+
+      <div id="calibration-onboarding-step-2" class="calibration-onboarding-panel" style="display: none;">
+        <div class="calibration-onboarding-step-title">Retract all belts</div>
+        <p class="calibration-onboarding-step-text">Press <strong>Retract All</strong> and wait until the machine state becomes <strong>Retracted</strong>.</p>
+        <div class="buttons-row calibration-onboarding-action-row">
+          <button id="calibration-onboarding-action-retract" type="button" class="calibration-modal-button">Retract All</button>
+        </div>
+      </div>
+
+      <div id="calibration-onboarding-step-3" class="calibration-onboarding-panel" style="display: none;">
+        <div class="calibration-onboarding-step-title">Extend all belts</div>
+        <p class="calibration-onboarding-step-text">Press <strong>Extend All</strong> and wait until the machine state becomes <strong>Extended</strong>.</p>
+        <div class="buttons-row calibration-onboarding-action-row">
+          <button id="calibration-onboarding-action-extend" type="button" class="calibration-modal-button">Extend All</button>
+        </div>
+      </div>
+
+      <div id="calibration-onboarding-step-4" class="calibration-onboarding-panel" style="display: none;">
+        <div class="calibration-onboarding-step-title">Attach belts to anchors</div>
+        <p class="calibration-onboarding-step-text">Attach each belt to its matching anchor, then confirm to continue.</p>
+        <div class="buttons-row calibration-onboarding-action-row">
+          <button id="calibration-onboarding-confirm-belts" type="button" class="calibration-modal-button green-button">Belts Attached</button>
+        </div>
+      </div>
+
+      <div id="calibration-onboarding-step-5" class="calibration-onboarding-panel" style="display: none;">
+        <div class="calibration-onboarding-step-title">Set material thickness</div>
+        <p class="calibration-onboarding-step-text">Enter the spoilboard and work thickness values used for Z moves, then save them before continuing.</p>
+        <div class="grid-container" title="Valid Range is 0-50mm">
+          <div class="input-row">
+            <label for="calibration-onboarding-spoilboard-thickness" class="input-label">Spoilboard Thickness (mm)</label>
+          </div>
+          <div class="input-row">
+            <input id="calibration-onboarding-spoilboard-thickness" type="number" min="0" max="50" step="0.1" class="calibration-modal-input" placeholder="0">
+          </div>
+          <div class="input-row">
+            <label for="calibration-onboarding-work-thickness" class="input-label">Work Thickness (mm)</label>
+          </div>
+          <div class="input-row">
+            <input id="calibration-onboarding-work-thickness" type="number" min="0" max="50" step="0.1" class="calibration-modal-input" placeholder="0">
+          </div>
+        </div>
+        <div class="buttons-row calibration-onboarding-action-row">
+          <button id="calibration-onboarding-save-thickness" type="button" class="calibration-modal-button green-button">Save Thickness</button>
+        </div>
+      </div>
+
+      <div id="calibration-onboarding-step-6" class="calibration-onboarding-panel" style="display: none;">
+        <div class="calibration-onboarding-step-title">Find anchor locations</div>
+        <p class="calibration-onboarding-step-text">Start the anchor search once belts are attached and Z is fully lowered.</p>
+        <div class="buttons-row calibration-onboarding-action-row">
+          <button id="calibration-onboarding-action-calibrate" type="button" class="calibration-modal-button">Find Anchor Locations</button>
+        </div>
+      </div>
+
+      <div id="calibration-onboarding-step-7" class="calibration-onboarding-panel" style="display: none;">
+        <div class="calibration-onboarding-step-title">Wait for READY_TO_CUT</div>
+        <p class="calibration-onboarding-step-text">Calibration is running. This popup advances automatically when Maslow reports <strong>Ready to Cut</strong>.</p>
+        <div id="calibration-onboarding-machine-state" class="calibration-onboarding-state-pill">State: Waiting...</div>
+        <div id="calibration-onboarding-anchor-error" class="calibration-onboarding-message calibration-onboarding-message-error" style="display: none;"></div>
+      </div>
+
+      <div id="calibration-onboarding-step-8" class="calibration-onboarding-panel" style="display: none;">
+        <div class="calibration-onboarding-step-title">Calibration complete</div>
+        <p class="calibration-onboarding-step-text">Maslow is now in <strong>READY_TO_CUT</strong>. The machine is ready.</p>
+        <div class="buttons-row calibration-onboarding-action-row">
+          <button id="calibration-onboarding-finish" type="button" class="calibration-modal-button green-button">Finish</button>
+        </div>
+      </div>
+
+      <div class="calibration-onboarding-progress-wrap">
+        <div id="calibration-onboarding-progress-text" class="calibration-onboarding-progress-text">Step 1 / 8</div>
+        <div class="calibration-onboarding-progress-track">
+          <span id="calibration-onboarding-dot-1" class="calibration-onboarding-dot active"></span>
+          <span id="calibration-onboarding-dot-2" class="calibration-onboarding-dot"></span>
+          <span id="calibration-onboarding-dot-3" class="calibration-onboarding-dot"></span>
+          <span id="calibration-onboarding-dot-4" class="calibration-onboarding-dot"></span>
+          <span id="calibration-onboarding-dot-5" class="calibration-onboarding-dot"></span>
+          <span id="calibration-onboarding-dot-6" class="calibration-onboarding-dot"></span>
+          <span id="calibration-onboarding-dot-7" class="calibration-onboarding-dot"></span>
+          <span id="calibration-onboarding-dot-8" class="calibration-onboarding-dot"></span>
+        </div>
       </div>
     </div>
   </div>
