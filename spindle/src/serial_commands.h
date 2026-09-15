@@ -14,7 +14,7 @@ extern int active_motor;
 extern PhaseOffset phase_offset;
 
 // Fault code reported to the XY board over the link:
-//   0 = OK, 1 = DRV8316 hardware fault, 2 = overcurrent
+//   0 = OK, 1 = driver hardware fault (nFAULT), 2 = overcurrent
 extern volatile uint8_t g_fault_code;
 
 // Suction/cooling fan power (0-100), set by the XY board over the link ('C' command).

@@ -115,7 +115,7 @@ void applyFanForMotorState(bool localMotorsEnabled) {
 
 int active_motor = 0;  // 0 = motor 1, 1 = motor 2, 2 = both
 PhaseOffset phase_offset;
-volatile uint8_t g_fault_code = 0;  // 0 = OK, 1 = DRV8316 fault, 2 = overcurrent
+volatile uint8_t g_fault_code = 0;  // 0 = OK, 1 = driver fault (nFAULT), 2 = overcurrent
 
 // Suction/cooling fan power (0-100), configured by the XY board over the link via
 // the 'C' command.  The fan runs at this level whenever local motors are enabled or

@@ -14,15 +14,13 @@
 
 // ------------------- Hardware Objects -------------------
 
-SPIClass drvSPI(FSPI);
-
+// MP6541A: independent HS/LS inputs, driven as plain 6-PWM.  The drivers have no enable pin
+// of their own - the shared nSLEEP line is managed by MotorController::enable()/disable().
 BLDCMotor motor1_hw(POLE_PAIRS);
-DRV8316Driver6PWM driver1_hw(INHA, INLA, INHB, INLB, INHC, INLC,
-                              SPI_CS_PIN, false, EN_GATE, NFAULT);
+BLDCDriver6PWM driver1_hw(INHA, INLA, INHB, INLB, INHC, INLC);
 
 BLDCMotor motor2_hw(POLE_PAIRS);
-DRV8316Driver6PWM driver2_hw(INHA2, INLA2, INHB2, INLB2, INHC2, INLC2,
-                              SPI_CS_PIN2, false, EN_GATE, NFAULT);
+BLDCDriver6PWM driver2_hw(INHA2, INLA2, INHB2, INLB2, INHC2, INLC2);
 
 // ------------------- Motor Controllers -------------------
 // direction: +1 for motor 1 (forward), -1 for motor 2 (opposite)
@@ -128,8 +126,8 @@ static void reportEvent(const char* level, const char* fmt, ...) {
     // The motor FOC loop runs in THIS SAME task.  A blocking serial write (the UART TX buffer
     // filling, or the USB CDC host not draining fast enough) would stall the loop; at high RPM
     // even a few ms stall makes the open-loop electrical angle jump between FOC updates, which
-    // applies a coarse voltage step that spikes phase current and trips the DRV8316 OCP (all six
-    // phase comparators at once).  So write only when the whole line already fits in the TX
+    // applies a coarse voltage step that spikes phase current and trips the driver's hardware
+    // over-current protection.  So write only when the whole line already fits in the TX
     // buffer; otherwise drop it - these link/USB messages are advisory and a fresh status or
     // telemetry line follows shortly.  This keeps inter-board serial traffic from disturbing FOC.
     char line[128];
@@ -226,120 +224,132 @@ static void updateFaultRecovery() {
     }
 }
 
-static void checkDRV8316Faults() {
-    if (!mc1.enabled && !mc2.enabled) return;
+// --- nFAULT monitoring ---
+// The MP6541A has no status registers.  Each driver has one open-drain nFAULT pin, and the two
+// faults it reports are told apart by their shape:
+//   over-current  - outputs off, automatic retry after ~2ms, so the pin produces a BURST of
+//                   falling edges for as long as the overload lasts.  A 100ms poll would miss
+//                   those 2ms pulses entirely, so the edges are counted in an ISR.
+//   over-temp     - outputs off and the pin held LOW continuously until the die cools ~25C.
+// Over-voltage and UVLO do NOT pull nFAULT low on this part, so they can no longer be seen
+// from firmware (the driver still protects itself).
+static volatile uint32_t nfault_edges1 = 0;
+static volatile uint32_t nfault_edges2 = 0;
+
+static void IRAM_ATTR onNFault1() { nfault_edges1++; }
+static void IRAM_ATTR onNFault2() { nfault_edges2++; }
+
+static void initFaultPins() {
+    pinMode(DRV_NFAULT1, INPUT);   // 5.1k pull-up on the board
+    pinMode(DRV_NFAULT2, INPUT);
+    attachInterrupt(digitalPinToInterrupt(DRV_NFAULT1), onNFault1, FALLING);
+    attachInterrupt(digitalPinToInterrupt(DRV_NFAULT2), onNFault2, FALLING);
+}
+
+// True while a driver is holding nFAULT low with no retry activity - i.e. a thermal shutdown.
+// Only meaningful while the drivers are awake; a sleeping MP6541A releases the pin.
+static bool drv_over_temp1 = false;
+static bool drv_over_temp2 = false;
+
+bool driverOverTemp(int motor_idx) {
+    return (motor_idx == 0) ? drv_over_temp1 : drv_over_temp2;
+}
+
+static void checkDriverFaults() {
+    if (!mc1.enabled && !mc2.enabled) {
+        drv_over_temp1 = drv_over_temp2 = false;   // nFAULT says nothing with the motors off
+        return;
+    }
     if (millis() - last_drv_check < 100) return;
     last_drv_check = millis();
 
-    DRV8316Status st1 = mc1.driver.getStatus();
-    DRV8316Status st2 = mc2.driver.getStatus();
+    // nFAULT only means anything once the drivers are awake and past their ~1ms start-up.
+    if (!driversAwake() || (millis() - driversAwakeSince()) < 5) {
+        nfault_edges1 = nfault_edges2 = 0;
+        drv_over_temp1 = drv_over_temp2 = false;
+        return;
+    }
 
-    bool ocp1 = st1.isFault() && st1.isOverCurrent();
-    bool ocp2 = st2.isFault() && st2.isOverCurrent();
-    bool serious1 = st1.isFault() && (st1.isOverTemperature() || st1.isOverVoltage());
-    bool serious2 = st2.isFault() && (st2.isOverTemperature() || st2.isOverVoltage());
+    uint32_t edges1 = nfault_edges1; nfault_edges1 = 0;
+    uint32_t edges2 = nfault_edges2; nfault_edges2 = 0;
+    bool low1 = (digitalRead(DRV_NFAULT1) == LOW);
+    bool low2 = (digitalRead(DRV_NFAULT2) == LOW);
+
+    // Retrying over-current: edges in this window (a pin found low with an edge is the same
+    // event caught mid-retry).  Sustained low with no edges at all: thermal shutdown.
+    bool ocp1 = (edges1 > 0);
+    bool ocp2 = (edges2 > 0);
+    drv_over_temp1 = low1 && (edges1 == 0);
+    drv_over_temp2 = low2 && (edges2 == 0);
 
     ocp_consec_count1 = ocp1 ? (ocp_consec_count1 + 1) : 0;
     ocp_consec_count2 = ocp2 ? (ocp_consec_count2 + 1) : 0;
 
-    // Debounce over-temp / over-voltage: real thermal/voltage faults are sustained, so require
-    // the OT/OVP bit to persist across SERIOUS_CONSEC_LIMIT reads before treating it as a
-    // genuine (latching) serious fault.  A hard over-current burst (e.g. the open-loop spin-up
-    // current transient) can momentarily co-assert OT/OVP for a single read; without this
-    // debounce that single co-assertion latches a hard fault and alarms the XY board even
-    // though the real event is an over-current.  The DRV8316 hardware OTP/OVP still protects
-    // instantly regardless of this debounce.
-    serious_consec_count1 = serious1 ? (serious_consec_count1 + 1) : 0;
-    serious_consec_count2 = serious2 ? (serious_consec_count2 + 1) : 0;
+    serious_consec_count1 = drv_over_temp1 ? (serious_consec_count1 + 1) : 0;
+    serious_consec_count2 = drv_over_temp2 ? (serious_consec_count2 + 1) : 0;
 
     bool persistent_ocp = (ocp_consec_count1 >= OCP_CONSEC_LIMIT) ||
                           (ocp_consec_count2 >= OCP_CONSEC_LIMIT);
-    bool serious = (serious_consec_count1 >= SERIOUS_CONSEC_LIMIT) ||
-                   (serious_consec_count2 >= SERIOUS_CONSEC_LIMIT);
+    // While a calibration sweep is running, a thermal shutdown is the sweep's own business
+    // (it coasts to cool and carries on) rather than a latching fault.
+    bool serious = !calibration.isActive() &&
+                   ((serious_consec_count1 >= SERIOUS_CONSEC_LIMIT) ||
+                    (serious_consec_count2 >= SERIOUS_CONSEC_LIMIT));
 
-    // Ride through any not-yet-confirmed fault (a transient OCP, or an OT/OVP flicker that has
-    // not persisted long enough): clear the driver latch so the next read reflects reality and
-    // a one-shot glitch resets its counter.  The consecutive counters above keep accumulating
-    // across reads, so a genuinely persistent OCP or sustained OT/OVP still escalates below.
+    // Ride through a fault that has not yet persisted: the MP6541A clears and retries on its
+    // own, and the consecutive counters above keep accumulating, so a genuinely persistent
+    // over-current or sustained over-temperature still escalates below.
     if (!serious && !persistent_ocp) {
-        if (st1.isFault()) { mc1.driver.clearFault(); delayMicroseconds(1); }
-        if (st2.isFault()) { mc2.driver.clearFault(); delayMicroseconds(1); }
         if ((ocp1 || ocp2) && (ocp_consec_count1 == 1 || ocp_consec_count2 == 1)) {
-            Serial.printf("DRV8316 OCP transient (CBC auto-clear): M1=%d M2=%d\n", ocp1, ocp2);
+            Serial.printf("nFAULT over-current transient (auto-retry): M1=%lu M2=%lu edges\n",
+                          (unsigned long)edges1, (unsigned long)edges2);
         }
         return;
     }
 
-    if (st1.isFault()) {
-        Serial.printf("DRV8316 HARDWARE FAULT (Motor 1): OCP=%d OT=%d OVP=%d\n",
-                      st1.isOverCurrent(), st1.isOverTemperature(), st1.isOverVoltage());
-        mc1.driver.clearFault(); delayMicroseconds(1);
-    }
-    if (st2.isFault()) {
-        Serial.printf("DRV8316 HARDWARE FAULT (Motor 2): OCP=%d OT=%d OVP=%d\n",
-                      st2.isOverCurrent(), st2.isOverTemperature(), st2.isOverVoltage());
-        mc2.driver.clearFault(); delayMicroseconds(1);
-    }
     if (persistent_ocp) {
-        Serial.println(F("  (persistent OCP - fault present for 500+ ms)"));
+        Serial.printf("DRIVER OVER-CURRENT: M1=%lu M2=%lu retries in the last 100ms (500+ ms persistent)\n",
+                      (unsigned long)edges1, (unsigned long)edges2);
+    }
+    if (serious) {
+        Serial.printf("DRIVER THERMAL SHUTDOWN: nFAULT held low M1=%d M2=%d\n",
+                      (int)drv_over_temp1, (int)drv_over_temp2);
     }
 
     ocp_consec_count1 = 0;
     ocp_consec_count2 = 0;
 
-    // Over-current only (no CONFIRMED over-temperature / over-voltage): pause and retry like the
-    // software monitor.  Sustained over-temp / over-voltage is genuinely dangerous, so it latches.
+    // Over-current only: pause and retry like the software monitor.  A sustained thermal
+    // shutdown is genuinely dangerous, so it latches.
     if (!serious && persistent_ocp) {
-        if (beginFaultRecovery("DRV8316 over-current (persistent OCP)")) {
+        if (beginFaultRecovery("driver over-current (nFAULT retries)")) {
             return;
         }
         // Retries exhausted (or a calibration sweep is running) -> fail out without latching.
         mc1.emergencyStop();
         mc2.emergencyStop();
         if (calibration.isActive()) {
-            reportEvent("ERR", "DRV8316 over-current during calibration - aborting");
-            calibration.abort(mc1, mc2, "DRV8316 over-current");
+            reportEvent("ERR", "driver over-current during calibration - aborting");
+            calibration.abort(mc1, mc2, "driver over-current");
         } else {
-            reportEvent("WARN", "DRV8316 over-current persisted after %d tries - spindle stopped (0 RPM); send a new speed to restart",
+            reportEvent("WARN", "driver over-current persisted after %d tries - spindle stopped (0 RPM); send a new speed to restart",
                         FAULT_RECOVERY_MAX_ATTEMPTS);
         }
         return;
     }
 
-    // Confirmed serious fault (sustained over-temp / over-voltage): latch and alarm the XY board.
-    // Include the exact status bits so the operator can see which one tripped in the ESP3D web
-    // console.  Kept compact so the whole line fits the XY board's link receive buffer.
+    // Confirmed thermal shutdown: latch and alarm the XY board.
     serious_consec_count1 = 0;
     serious_consec_count2 = 0;
 
-    // Diagnostic dump: the summary OT bit is set by EITHER an over-temp WARNING (OTW, ~20C
-    // below shutdown) OR an over-temp SHUTDOWN (OTS); distinguish them, and also surface the
-    // per-phase OCP bits and SPI/charge-pump errors, plus the raw register bytes for off-line
-    // decoding.  This tells us whether "OT" is a real thermal shutdown, a mere warning, or a
-    // glitched SPI read (which would also set the SPI/parity bits).
-    reportEvent("MSG", "DRVraw M1[IC%02X S1%02X S2%02X] M2[IC%02X S1%02X S2%02X]",
-                st1.status.reg, st1.status1.reg, st1.status2.reg,
-                st2.status.reg, st2.status1.reg, st2.status2.reg);
-    reportEvent("MSG", "M1 OTS%d OTW%d OVP%d SPI%d VCPuv%d OCP[HA%d LA%d HB%d LB%d HC%d LC%d]",
-                st1.isOverTemperatureShutdown(), st1.isOverTemperatureWarning(), st1.isOverVoltage(),
-                st1.isSPIError(), st1.isChargePumpUnderVoltage(),
-                st1.isOverCurrent_Ah(), st1.isOverCurrent_Al(), st1.isOverCurrent_Bh(),
-                st1.isOverCurrent_Bl(), st1.isOverCurrent_Ch(), st1.isOverCurrent_Cl());
-    reportEvent("MSG", "M2 OTS%d OTW%d OVP%d SPI%d VCPuv%d OCP[HA%d LA%d HB%d LB%d HC%d LC%d]",
-                st2.isOverTemperatureShutdown(), st2.isOverTemperatureWarning(), st2.isOverVoltage(),
-                st2.isSPIError(), st2.isChargePumpUnderVoltage(),
-                st2.isOverCurrent_Ah(), st2.isOverCurrent_Al(), st2.isOverCurrent_Bh(),
-                st2.isOverCurrent_Bl(), st2.isOverCurrent_Ch(), st2.isOverCurrent_Cl());
+    reportEvent("ERR", "driver over-temperature (nFAULT low) M1[%d] M2[%d]",
+                (int)drv_over_temp1, (int)drv_over_temp2);
 
-    reportEvent("ERR", "DRV8316 fault M1[OC%d OT%d OV%d] M2[OC%d OT%d OV%d]",
-                st1.isOverCurrent(), st1.isOverTemperature(), st1.isOverVoltage(),
-                st2.isOverCurrent(), st2.isOverTemperature(), st2.isOverVoltage());
-
-    g_fault_code = 1;  // DRV8316 hardware fault
+    g_fault_code = 1;  // driver hardware fault
     mc1.emergencyStop();
     mc2.emergencyStop();
 
-    calibration.abort(mc1, mc2, "DRV8316 hardware fault");
+    calibration.abort(mc1, mc2, "driver hardware fault");
 }
 
 static void checkOvercurrent() {
@@ -501,7 +511,7 @@ static void checkMotorTimeouts() {
 // When the XY board reports the machine is idle (the 'D' command sets
 // g_hold_release_requested), power the Z-axis BLDC drivers down once their phase move
 // has actually settled.  Holding a Z position in angle mode keeps drawing current,
-// which heats the DRV8316s and keeps the cooling fan running even though nothing is
+// which heats the drivers and keeps the cooling fan running even though nothing is
 // moving.  We wait for the phase ramp to reach its target here (rather than powering
 // down the instant the XY board goes idle) so the Z axis is not released before it has
 // finished its move.  A new spindle-speed or Z-target command clears the request.
@@ -981,7 +991,7 @@ static void housekeepingTask(void* arg) {
         checkMotorTimeouts();
         checkPhaseHoldPowerdown();
         updateFaultRecovery();
-        checkDRV8316Faults();
+        checkDriverFaults();
         checkOvercurrent();
         // Tool state machine (power-up homing, tool load/unload via the top-of-travel beam).
         // Its commanded phase target is picked up by updatePhaseOffset in the FOC task.
@@ -1012,7 +1022,7 @@ static void housekeepingTask(void* arg) {
 void setup() {
     // Disable the hardware brownout detector as the very first thing the app does. If the
     // board's 3.3V rail dips briefly when 24V is applied (inrush charging the 24V bulk caps
-    // and the DRV8316 drivers), a brownout reset can put the chip into a reset loop so the
+    // and the motor drivers), a brownout reset can put the chip into a reset loop so the
     // application never runs unless USB's stiff 5V holds the rail up. Clearing this register
     // stops brownout-triggered resets. NOTE: this only helps if the chip actually reaches
     // this line; a sag during the first few ms of power-on (before the app starts) is a
@@ -1091,12 +1101,14 @@ void setup() {
 
     initFanControl();   // drives the fan OFF (its hardware default is ON)
 
-    // Initialize SPI bus
-    drvSPI.begin(SPI_SCK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN, SPI_CS_PIN);
+    // Both MP6541As sleep until a motor is enabled, and their nFAULT pins are monitored by
+    // interrupt (the over-current retry pulses are only ~2ms wide).
+    initDriverSleepPin();
+    initFaultPins();
 
     // Initialize both motor drivers and motors
-    mc1.initDriver(&drvSPI);
-    mc2.initDriver(&drvSPI);
+    mc1.initDriver();
+    mc2.initDriver();
     mc1.initMotor();
     mc2.initMotor();
 
@@ -1125,11 +1137,13 @@ void setup() {
 
     // --- Console banner LAST, and only when a USB host is actually attached. ---
     if (Serial) {
-        Serial.println(F("\n=== ESP32-S3 + DRV8316 (SPI + 6-PWM) + Hall + SimpleFOC ==="));
+        Serial.println(F("\n=== ESP32-S3 + MP6541A (6-PWM) + SimpleFOC ==="));
         Serial.printf("Inter-board link ready on Serial1 (RX=GPIO%d, TX=GPIO%d, %d baud, 8N1)\n",
                       LINK_RX_PIN, LINK_TX_PIN, LINK_BAUD);
         Serial.println(F("Waiting for handshake ('H') from XY board over the link..."));
-        mc1.printFaultStatus();
+        Serial.printf("Driver sense zero (V): M1 %.3f/%.3f/%.3f  M2 %.3f/%.3f/%.3f\n",
+                      mc1.cur_zero_a, mc1.cur_zero_b, mc1.cur_zero_c,
+                      mc2.cur_zero_a, mc2.cur_zero_b, mc2.cur_zero_c);
         Serial.println(F("Motor 1 initialized for open-loop control"));
         Serial.println(F("Motor 2 initialized for open-loop control (opposite direction)"));
         printCommandHelp();

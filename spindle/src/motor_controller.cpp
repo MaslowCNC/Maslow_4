@@ -1,6 +1,94 @@
 #include "motor_controller.h"
+#include "pins.h"
+#include <driver/mcpwm.h>
+#include "drivers/hardware_specific/esp32/esp32_driver_mcpwm.h"
 
-MotorController::MotorController(BLDCMotor& m, DRV8316Driver6PWM& d,
+// --- Per-motor hard off ---
+// SimpleFOC's 6-PWM disable() is NOT an "outputs off" on this hardware: with the ESP32's
+// hardware dead-time the low-side output is the complement of the high side, so a duty of 0
+// leaves all three LOW-SIDE inputs HIGH - i.e. the motor's windings shorted (braked).  The
+// DRV8316 board hid that behind DRVOFF, which the MP6541A does not have; its only off switch
+// is nSLEEP, which is shared by both drivers, so a motor disabled while the OTHER motor runs
+// (every calibration sweep, and single-motor serial commands) would be braked - and the two
+// motors are mechanically coupled through the Z phase mechanism.
+//
+// So disable the dead-time generator and zero both duties, which leaves HSx and LSx both low:
+// outputs Hi-Z, exactly what DRVOFF used to do.  enable() restores the dead-time pairing
+// before the motor drives any PWM.
+static mcpwm_unit_t driverUnit(const BLDCDriver6PWM& driver) {
+    return ((ESP32MCPWMDriverParams*)driver.params)->mcpwm_unit;
+}
+
+static void driverOutputsOff(BLDCDriver6PWM& driver) {
+    if (!driver.params) return;
+    mcpwm_unit_t unit = driverUnit(driver);
+    for (int t = 0; t < 3; t++) {
+        mcpwm_deadtime_disable(unit, (mcpwm_timer_t)t);
+        mcpwm_set_duty(unit, (mcpwm_timer_t)t, MCPWM_OPR_A, 0.0f);
+        mcpwm_set_duty(unit, (mcpwm_timer_t)t, MCPWM_OPR_B, 0.0f);
+    }
+}
+
+static void driverOutputsOn(BLDCDriver6PWM& driver) {
+    if (!driver.params) return;
+    ESP32MCPWMDriverParams* p = (ESP32MCPWMDriverParams*)driver.params;
+    // Same dead time SimpleFOC's own _configureTimerFrequency() installs, recomputed here
+    // because it is not kept in the params struct (only the dead-zone fraction is).
+    float dead_time = ((float)_MCPWM_FREQ / (float)p->pwm_frequency) * p->deadtime;
+    for (int t = 0; t < 3; t++) {
+        mcpwm_deadtime_enable(p->mcpwm_unit, (mcpwm_timer_t)t,
+                              MCPWM_ACTIVE_HIGH_COMPLIMENT_MODE,
+                              dead_time / 2.0f, dead_time / 2.0f);
+    }
+}
+
+// --- Shared nSLEEP ---
+// Both MP6541As share one nSLEEP line, and the calibration sweep runs one motor while the
+// other is disabled, so the line must stay high while EITHER motor is enabled.  enable() and
+// disable() are called from both the FOC task (core 1) and the housekeeping task (core 0),
+// so the count is guarded.  The drivers need ~1ms (tPUD) after nSLEEP rises before they
+// respond to the HSx/LSx inputs.
+static portMUX_TYPE sleep_mux = portMUX_INITIALIZER_UNLOCKED;
+static int drivers_awake_count = 0;
+static volatile uint32_t drivers_awake_since = 0;  // millis() when nSLEEP last went high
+
+void initDriverSleepPin() {
+    pinMode(DRV_NSLEEP, OUTPUT);
+    digitalWrite(DRV_NSLEEP, LOW);
+    drivers_awake_count = 0;
+}
+
+// Returns true if this call woke the drivers (so the caller waits out tPUD).
+static bool acquireDriverWake() {
+    bool first;
+    taskENTER_CRITICAL(&sleep_mux);
+    first = (drivers_awake_count++ == 0);
+    taskEXIT_CRITICAL(&sleep_mux);
+    if (first) {
+        digitalWrite(DRV_NSLEEP, HIGH);
+        drivers_awake_since = millis();
+    }
+    return first;
+}
+
+static void releaseDriverWake() {
+    bool last;
+    taskENTER_CRITICAL(&sleep_mux);
+    if (drivers_awake_count > 0) drivers_awake_count--;
+    last = (drivers_awake_count == 0);
+    taskEXIT_CRITICAL(&sleep_mux);
+    if (last) digitalWrite(DRV_NSLEEP, LOW);
+}
+
+bool driversAwake() {
+    return drivers_awake_count > 0;
+}
+
+uint32_t driversAwakeSince() {
+    return drivers_awake_since;
+}
+
+MotorController::MotorController(BLDCMotor& m, BLDCDriver6PWM& d,
                                  int ca, int cb, int cc, int dir)
     : motor(m), driver(d),
       cur_a_pin(ca), cur_b_pin(cb), cur_c_pin(cc),
@@ -12,37 +100,45 @@ MotorController::MotorController(BLDCMotor& m, DRV8316Driver6PWM& d,
     }
 }
 
-void MotorController::initDriver(SPIClass* spi) {
+// The MP6541A has no configuration interface: PWM mode (independent HSx/LSx inputs), slew
+// rate, OVP (~45V), OCP level (16-20A, 2us deglitch, 2ms auto-retry) and the current-sense
+// ratio are all fixed in silicon, so there is nothing to set up beyond the PWM peripheral.
+// driver.init() itself is called from initMotor() via motor.init().
+void MotorController::initDriver() {
     pinMode(cur_a_pin, INPUT);
     pinMode(cur_b_pin, INPUT);
     pinMode(cur_c_pin, INPUT);
-
-    driver.init(spi);
-    driver.setRegistersLocked(false);
-    delayMicroseconds(1);
-    driver.setPWMMode(DRV8316_PWMMode::PWM6_Mode);
-    delayMicroseconds(1);
-    driver.setSlew(DRV8316_Slew::Slew_25Vus);
-    delayMicroseconds(1);
-    driver.setOvervoltageProtection(true);
-    delayMicroseconds(1);
-    driver.setOvervoltageLevel(DRV8316_OVP::OVP_SEL_32V);
-    delayMicroseconds(1);
-    driver.setCurrentSenseGain(DRV8316_CSAGain::Gain_0V25);
-    delayMicroseconds(1);
-    driver.setOCPDeglitchTime(DRV8316_OCPDeglitch::Deglitch_1us1);
-    delayMicroseconds(1);
-    driver.setOCPMode(DRV8316_OCPMode::AutoRetry_Fault);
-    delayMicroseconds(1);
-    driver.setOCPLevel(DRV8316_OCPLevel::Curr_24A);
-    delayMicroseconds(1);
-    driver.setOCPClearInPWMCycleChange(true);
-    delayMicroseconds(1);
 
     driver.voltage_power_supply = SUPPLY_VOLTAGE;
     driver.voltage_limit        = SUPPLY_VOLTAGE * 0.8f;
     driver.pwm_frequency        = PWM_FREQUENCY;
     driver.dead_zone            = DEAD_ZONE;
+
+    // NOTE: pwm_frequency and dead_zone are only read by init(), so they must be set first.
+    // (On the DRV8316 board DRV8316Driver6PWM::init() ran BEFORE these assignments, so they
+    // never reached SimpleFOC and the PWM ran at its 20kHz default - see config.h.)
+    driver.init();
+
+    // MCPWM starts with duty 0, which (see driverOutputsOff) means all three low-side inputs
+    // high.  The drivers are still asleep here, but force the outputs off so this motor stays
+    // Hi-Z when the OTHER motor wakes the shared nSLEEP line.
+    driverOutputsOff(driver);
+
+    // Measure the sense-input zero now, while nSLEEP is still low and no phase current flows.
+    calibrateCurrentZero();
+}
+
+void MotorController::calibrateCurrentZero() {
+    const int N = 64;
+    uint32_t sum_a = 0, sum_b = 0, sum_c = 0;
+    for (int i = 0; i < N; i++) {
+        sum_a += analogRead(cur_a_pin);
+        sum_b += analogRead(cur_b_pin);
+        sum_c += analogRead(cur_c_pin);
+    }
+    cur_zero_a = ((float)sum_a / N / 4095.0f) * 3.3f;
+    cur_zero_b = ((float)sum_b / N / 4095.0f) * 3.3f;
+    cur_zero_c = ((float)sum_c / N / 4095.0f) * 3.3f;
 }
 
 void MotorController::initMotor() {
@@ -59,8 +155,9 @@ void MotorController::initMotor() {
 void MotorController::enable() {
     if (enabled) return;
     resetFilterState();
-    driver.setDriverOffEnabled(false);
-    delayMicroseconds(1);
+    // Wake the (shared) drivers and give them tPUD ~1ms to come up before driving the inputs.
+    if (acquireDriverWake()) delay(2);
+    driverOutputsOn(driver);   // restore complementary HS/LS with dead time
     motor.enable();
     enabled = true;
     start_time = millis();
@@ -68,8 +165,8 @@ void MotorController::enable() {
 
 void MotorController::disable() {
     motor.disable();
-    driver.setDriverOffEnabled(true);
-    delayMicroseconds(1);
+    driverOutputsOff(driver);  // HSx and LSx both low -> outputs Hi-Z, no braking
+    if (enabled) releaseDriverWake();
     enabled = false;
     reached_speed = false;
 }
@@ -134,9 +231,12 @@ void MotorController::updateCurrent() {
     int adc_b = analogRead(cur_b_pin);
     int adc_c = analogRead(cur_c_pin);
 
-    float current_a = (((adc_a / 4095.0f) * 3.3f) - 1.65f) / 0.25f;
-    float current_b = (((adc_b / 4095.0f) * 3.3f) - 1.65f) / 0.25f;
-    float current_c = (((adc_c / 4095.0f) * 3.3f) - 1.65f) / 0.25f;
+    // MP6541A: SOx sources/sinks ILOAD/11000, turned into a voltage by the board's 3.3k/3.3k
+    // termination (Vref = 1.65V, Rref = 1.65k) -> CSA_GAIN_V_PER_A volts per amp.  Only the
+    // low-side FET current is sensed, as on the DRV8316.
+    float current_a = (((adc_a / 4095.0f) * 3.3f) - cur_zero_a) / CSA_GAIN_V_PER_A;
+    float current_b = (((adc_b / 4095.0f) * 3.3f) - cur_zero_b) / CSA_GAIN_V_PER_A;
+    float current_c = (((adc_c / 4095.0f) * 3.3f) - cur_zero_c) / CSA_GAIN_V_PER_A;
 
     float instantaneous = sqrtf((current_a * current_a +
                                  current_b * current_b +
@@ -186,33 +286,4 @@ void MotorController::applyVoltageLimit(bool in_calibration, float hunt_voltage,
     else
         v = lutVoltageForSpeed(fabsf(current_velocity)) + extra_voltage;
     motor.voltage_limit = constrain(v, BASE_VOLTAGE, MAX_VOLTAGE);
-}
-
-void MotorController::printFaultStatus() {
-    DRV8316Status st = driver.getStatus();
-
-    if (st.isFault() || st.isOverTemperature() || st.isOverCurrent() ||
-        st.isOverVoltage() || st.isSPIError() || st.isBuckError() ||
-        st.isOverCurrent_Ah() || st.isOverCurrent_Al() ||
-        st.isOverCurrent_Bh() || st.isOverCurrent_Bl() ||
-        st.isOverCurrent_Ch() || st.isOverCurrent_Cl()) {
-
-        Serial.println(F("DRV8316 FAULT DETECTED:"));
-        Serial.print(F("  Fault=")); Serial.print(st.isFault());
-        Serial.print(F("  OT="));    Serial.print(st.isOverTemperature());
-        Serial.print(F("  OCP="));   Serial.print(st.isOverCurrent());
-        Serial.print(F("  OVP="));   Serial.print(st.isOverVoltage());
-        Serial.print(F("  SPIErr="));Serial.print(st.isSPIError());
-        Serial.print(F("  BuckErr="));Serial.print(st.isBuckError());
-        Serial.print(F("  POR="));   Serial.println(st.isPowerOnReset());
-
-        Serial.print(F("  OCP A(h,l)=(")); Serial.print(st.isOverCurrent_Ah()); Serial.print(','); Serial.print(st.isOverCurrent_Al()); Serial.println(')');
-        Serial.print(F("  OCP B(h,l)=(")); Serial.print(st.isOverCurrent_Bh()); Serial.print(','); Serial.print(st.isOverCurrent_Bl()); Serial.println(')');
-        Serial.print(F("  OCP C(h,l)=(")); Serial.print(st.isOverCurrent_Ch()); Serial.print(','); Serial.print(st.isOverCurrent_Cl()); Serial.println(')');
-    }
-
-    if (st.isFault()) {
-        driver.clearFault();
-        delayMicroseconds(1);
-    }
 }

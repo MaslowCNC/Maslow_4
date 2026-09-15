@@ -61,7 +61,8 @@ static void otaTask(void* arg) {
     (void)arg;
 
     // Shed the motor-driver current load BEFORE the WiFi radio powers up.  The radio's
-    // start-up surge briefly loads the 3.3V rail, and with the two DRV8316 drivers still
+    // start-up surge briefly loads the 3.3V rail (fed from the board's MP2459 buck + LDO),
+    // and with the two motor drivers still
     // energised the rail can sag far enough to hang the chip (the brownout detector is
     // deliberately disabled, so it hangs instead of resetting).  The motor control loop
     // (core 1) watches g_ota_active and disables both drivers when it is set, so raise

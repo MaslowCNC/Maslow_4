@@ -9,15 +9,33 @@ const float SUPPLY_VOLTAGE = 24.0f;
 // Voltage limits
 const float BASE_VOLTAGE = 1.3f;
 // Open-loop ceiling.  At 16V the motors saturate around 13,300 (M1) / 13,900 (M2) RPM and pull
-// out (over-current) before reaching the 14,000 RPM command.  The DRV8316 driver limit is
+// out (over-current) before reaching the 14,000 RPM command.  The driver voltage limit is
 // SUPPLY_VOLTAGE*0.8 = 19.2V (motor_controller.cpp), so raise the ceiling to 18V to give enough
 // headroom to stay synchronized at 14,000 RPM.  The calibration LUT must be rebuilt (run "CAL")
 // after changing this so the top-of-range entries are no longer clamped at 16V.
 const float MAX_VOLTAGE = 18.0f;
 
-// PWM configuration
-const long  PWM_FREQUENCY = 60000;   // 60 kHz
+// PWM configuration.  The MP6541A adds no dead time of its own (HSx+LSx both high simply
+// gives Hi-Z), so the dead zone below is the only shoot-through margin.
+// NOTE: on the DRV8316 board these two values were assigned AFTER the driver was initialized,
+// so they never reached SimpleFOC and the PWM actually ran at its 20kHz default - which is
+// what the calibration LUT below was measured at.  They now take effect, so the value here is
+// set to that same 20kHz to keep commutation identical to the old board.  (SimpleFOC's ESP32
+// 6-PWM clamps to 50kHz, so the old 60000 would have become 50kHz - a 2.5x jump in switching
+// loss on a gate drive whose slew rate is no longer configurable.)  Raise it deliberately,
+// and re-run CAL, if the motors want a higher carrier.
+const long  PWM_FREQUENCY = 20000;   // 20 kHz
 const float DEAD_ZONE = 0.02f;       // ~2% deadtime
+
+// Phase current sensing (MP6541A SOx -> board termination -> ESP32 ADC).
+// SOx sources/sinks ILOAD/11000 into a 3.3k/3.3k divider across 3V3, so Rref = 1.65k and the
+// nominal mid-point is 1.65V:  V = Vref + Rref * ILOAD / 11000  ->  0.15 V/A.
+// (The preliminary MPQ6541 datasheet quotes 1/10,000, which would be 0.165 V/A - verify on
+// the bench against a clamp meter before trusting the current-based trip points below.)
+const float CSA_RREF_OHMS   = 1650.0f;
+const float CSA_RATIO       = 11000.0f;
+const float CSA_GAIN_V_PER_A = CSA_RREF_OHMS / CSA_RATIO;   // 0.15 V/A
+const float CSA_VREF        = 1.65f;   // nominal zero-current level; measured at boot
 
 // Fan PWM configuration
 const long FAN_PWM_FREQUENCY = 25000;
@@ -44,7 +62,7 @@ const float SPINDLE_RAMP_RATE  = 500.0f;  // rad/s per second, spindle on/off sp
 // and status reporting - runs on a SEPARATE housekeeping task pinned to core 0, ticking every
 // FOC_HOUSEKEEPING_INTERVAL_MS.  This keeps the expensive/slow work entirely off the FOC core so it
 // can never lengthen a commutation step (the ~1.8 kHz-with-hiccups single-task design pulled the
-// open-loop rotor out of sync at high RPM and tripped the DRV8316 per-phase OCP even with voltage
+// open-loop rotor out of sync at high RPM and tripped the driver's hardware OCP even with voltage
 // headroom).
 const uint32_t FOC_HOUSEKEEPING_INTERVAL_MS = 2;     // core-0 housekeeping task period
 
@@ -155,21 +173,28 @@ const float CAL_RAMP_VOLT_PER_RAD = 0.0025f;                        // Open-loop
                                                                     // Kept BELOW the real current-limited curve so the hunt
                                                                     // can converge; spin-up between steps relies on the
                                                                     // previous step's voltage carried forward, not this floor.
-const uint32_t CAL_COOLDOWN_TIMEOUT_MS = 8000;                      // Max time to wait for a DRV8316 over-temp WARNING to
-                                                                    // clear (motor de-energized/coasting) before continuing
-                                                                    // the sweep.  At low RPM the open-loop current sits on one
-                                                                    // or two FETs long enough to heat the die (package can
-                                                                    // still feel cool); coasting to cool before advancing
-                                                                    // stops the heat cascading up through the rest of the sweep.
+const uint32_t CAL_COOLDOWN_MS = 8000;                              // How long to coast (motor de-energized) after the driver
+                                                                    // thermally shuts down before continuing the sweep.  At low
+                                                                    // RPM the open-loop current sits on one or two FETs long
+                                                                    // enough to heat the die (the package can still feel cool);
+                                                                    // coasting to cool before advancing stops the heat cascading
+                                                                    // up through the rest of the sweep.  The MP6541A has no
+                                                                    // over-temperature WARNING and nFAULT is released once the
+                                                                    // drivers sleep, so the die temperature cannot be polled
+                                                                    // while cooling - this is a fixed wait.
 
-// DRV8316 fault detection
-const int OCP_CONSEC_LIMIT = 5;  // 5 x 100ms = 500ms persistent OCP -> disable
-// Over-temp / over-voltage must persist across this many 100ms reads before it is treated
-// as a genuine (latching) serious fault.  A hard over-current burst (e.g. the open-loop
-// spin-up current transient) can momentarily co-assert the OT/OVP status bit for a single
-// read; that must NOT be mistaken for a real thermal/voltage fault (which is sustained).
-// The DRV8316's own hardware OTP/OVP still protects instantly regardless of this debounce.
-const int SERIOUS_CONSEC_LIMIT = 3;  // 3 x 100ms = 300ms sustained OT/OVP -> latch
+// MP6541A fault detection (nFAULT, one open-drain pin per driver).
+// The MP6541A reports two things on nFAULT, distinguished by shape rather than by any status
+// register: an OVER-CURRENT disables the outputs and auto-retries after ~2ms, so it appears as
+// a burst of falling EDGES (counted by an ISR - a 100ms poll would miss the pulses), while an
+// OVER-TEMPERATURE shutdown holds the pin LOW continuously until the die cools by ~25C.
+// Over-voltage and UVLO are NOT reported on nFAULT at all, so they can no longer be observed
+// in firmware; the MP6541A still protects itself in hardware.
+const int OCP_CONSEC_LIMIT = 5;  // 5 x 100ms = 500ms of repeated OCP retries -> disable
+// An over-temperature must be seen held low across this many 100ms samples before it is
+// treated as a genuine (latching) serious fault, so that the brief low of an over-current
+// retry sampled at just the wrong moment is not mistaken for a thermal shutdown.
+const int SERIOUS_CONSEC_LIMIT = 3;  // 3 x 100ms = 300ms sustained OT -> latch
 
 // Over-current response.  A transient over-current briefly stops the motors, lets the current
 // settle, then resumes the last commanded speed - retrying up to FAULT_RECOVERY_MAX_ATTEMPTS

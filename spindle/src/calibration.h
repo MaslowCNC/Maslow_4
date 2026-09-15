@@ -2,6 +2,11 @@
 
 #include "motor_controller.h"
 
+// Defined by the fault monitor in main.cpp: true while that motor's driver is holding nFAULT
+// low with no retry activity, i.e. it has thermally shut down.  The MP6541A gives no
+// over-temperature warning, so this is the only thermal signal the sweep can act on.
+bool driverOverTemp(int motor_idx);
+
 enum CalState {
     CAL_IDLE,
     CAL_RAMP,

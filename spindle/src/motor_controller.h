@@ -1,13 +1,12 @@
 #pragma once
 
 #include <SimpleFOC.h>
-#include "drivers/drv8316/drv8316.h"
 #include "config.h"
 
 struct MotorController {
     // Hardware references
     BLDCMotor& motor;
-    DRV8316Driver6PWM& driver;
+    BLDCDriver6PWM& driver;
     const int cur_a_pin, cur_b_pin, cur_c_pin;
 
     // Direction multiplier: +1 for motor 1, -1 for motor 2
@@ -28,6 +27,14 @@ struct MotorController {
     float protection_current = 0.0f;
     float last_instantaneous_current = 0.0f;  // Raw phase RMS from last sample
 
+    // Measured zero-current output of each phase's sense termination (volts).  The MP6541A's
+    // SOx pins source/sink a current that the board's 3.3k/3.3k divider turns into a voltage
+    // centred on VREF; the real centre is set by resistor tolerance and the ADC's own offset,
+    // so it is measured at boot (drivers asleep = zero phase current) instead of assumed.
+    float cur_zero_a = CSA_VREF;
+    float cur_zero_b = CSA_VREF;
+    float cur_zero_c = CSA_VREF;
+
     // Motor timing
     uint32_t start_time = 0;
     bool enabled = false;
@@ -38,12 +45,16 @@ struct MotorController {
     bool cal_lut_valid = true;
     bool cal_lut_recorded[CAL_LUT_SIZE];
 
-    MotorController(BLDCMotor& m, DRV8316Driver6PWM& d,
+    MotorController(BLDCMotor& m, BLDCDriver6PWM& d,
                     int ca, int cb, int cc, int dir);
 
     // Initialization
-    void initDriver(SPIClass* spi);
+    void initDriver();
     void initMotor();
+
+    // Measure the zero-current level of the three sense inputs.  Must be called with the
+    // drivers asleep (no phase current) - i.e. before the first enable().
+    void calibrateCurrentZero();
 
     // Control
     void enable();
@@ -62,7 +73,13 @@ struct MotorController {
 
     // Apply voltage limit from LUT or calibration hunt voltage
     void applyVoltageLimit(bool in_calibration, float hunt_voltage, float extra_voltage = 0.0f);
-
-    // DRV8316 status
-    void printFaultStatus();
 };
+
+// Put both MP6541A drivers to sleep (nSLEEP low).  Called once from setup() before the
+// drivers are configured; enable()/disable() manage nSLEEP from then on.
+void initDriverSleepPin();
+
+// True while nSLEEP is high (at least one motor enabled).  nFAULT is only meaningful then:
+// a sleeping MP6541A releases its open-drain output, so the pin reads high regardless.
+bool     driversAwake();
+uint32_t driversAwakeSince();  // millis() when nSLEEP last went high

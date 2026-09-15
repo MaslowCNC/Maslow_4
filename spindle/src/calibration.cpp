@@ -335,13 +335,12 @@ void Calibration::update(MotorController& mc1, MotorController& mc2) {
                                        v_floor + 0.3f,
                                        MAX_VOLTAGE);
 
-        // Thermal guard: the DRV8316 asserts an over-temperature WARNING (OTW)
-        // before it hard-faults with an over-temperature SHUTDOWN. At low RPM the
-        // open-loop current sits on one or two FETs for a long dwell (the rotor
-        // barely turns), heating the die past the warning threshold even though the
-        // package/heatsink still feels cool.  Cool it before continuing.
-        DRV8316Status thermal_st = mc.driver.getStatus();
-        if (thermal_st.isOverTemperatureWarning() || thermal_st.isOverTemperatureShutdown()) {
+        // Thermal guard: at low RPM the open-loop current sits on one or two FETs for a long
+        // dwell (the rotor barely turns), heating the die even though the package/heatsink
+        // still feels cool.  The MP6541A gives no advance warning - unlike the DRV8316's OTW,
+        // the only signal is nFAULT held low at the 150C shutdown itself, by which point the
+        // outputs are already off - so cool the die before continuing the sweep.
+        if (driverOverTemp(active_motor_idx)) {
             // Record the last voltage the die actually sustained at this speed as the
             // checkpoint's (thermally-limited) value.  Then COOL the die by coasting:
             // above the lowest RPM the motor needs well over the spin-floor voltage to
@@ -408,24 +407,21 @@ void Calibration::update(MotorController& mc1, MotorController& mc2) {
     }
 
     case CAL_COOLDOWN: {
-        // Motor is de-energized and coasting so the DRV8316 die can shed its localized
-        // low-RPM heat with zero phase current (no stall risk - it is not being driven).
-        // Poll the over-temp status every 500 ms; once it clears (or a safety timeout
-        // elapses so a genuinely thermally-limited point can't stall the sweep forever)
-        // re-energize and ramp back up to the next checkpoint.  Higher RPM spreads the
-        // current across all six FETs, so the warning stops and the important high-speed
-        // points calibrate normally.
+        // Motor is de-energized and coasting so the driver die can shed its localized low-RPM
+        // heat with zero phase current (no stall risk - it is not being driven).  The die
+        // temperature cannot be polled: the MP6541A has no status register, and with the
+        // motor disabled the drivers sleep and release nFAULT.  So simply coast for a fixed
+        // CAL_COOLDOWN_MS, then re-energize and ramp back up to the next checkpoint.  Higher
+        // RPM spreads the current across all six FETs, so the important high-speed points
+        // calibrate normally.
         if (millis() - timer < 500UL) break;
         timer = millis();
 
-        DRV8316Status cd_st = mc.driver.getStatus();
-        bool still_hot = cd_st.isOverTemperatureWarning() || cd_st.isOverTemperatureShutdown();
         uint32_t elapsed = millis() - cooldown_start;
 
-        if (!still_hot || elapsed >= CAL_COOLDOWN_TIMEOUT_MS) {
-            Serial.printf("[CAL] %.0f RPM: die %s (%lu ms) - resuming\n",
+        if (elapsed >= CAL_COOLDOWN_MS) {
+            Serial.printf("[CAL] %.0f RPM: die coasted %lu ms - resuming\n",
                           checkpoint * 60.0f / (2.0f * PI),
-                          still_hot ? "cooldown timed out" : "cooled",
                           (unsigned long)elapsed);
             if (checkpoint >= CAL_MAX_RAD - 0.5f) {
                 // Last checkpoint already recorded; let CAL_DONE ramp down (the motor is

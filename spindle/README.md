@@ -1,14 +1,14 @@
 # Spindle Motor Control Board
 
-Dual BLDC motor control firmware for ESP32-S3 with two DRV8316 motor drivers and SimpleFOC library.
+Dual BLDC motor control firmware for ESP32-S3 with two MP6541A three-phase power stages and the SimpleFOC library.
 
 ## Overview
 
 This project provides open-loop control for two BLDC motors simultaneously using:
 - **Microcontroller**: ESP32-S3
-- **Motor Drivers**: Two Texas Instruments DRV8316 (6-PWM mode with SPI configuration)
-- **Control Library**: SimpleFOC with SimpleFOCDrivers
-- **Current Sensing**: Analog current monitoring on all three phases of each motor
+- **Motor Drivers**: Two Monolithic Power MP6541A (independent HS/LS inputs, driven as 6-PWM)
+- **Control Library**: SimpleFOC
+- **Current Sensing**: Analog current monitoring on all three phases of each motor (low-side)
 - **Voltage Control**: Pre-measured calibration LUT for open-loop voltage-to-RPM mapping
 - **Build System**: PlatformIO
 
@@ -16,38 +16,41 @@ This project provides open-loop control for two BLDC motors simultaneously using
 
 ### Pin Mapping
 
-**Motor Driver U1 (Motor 1) - 6-PWM Mode:**
+**Motor Driver U14 (Motor 1) - 6-PWM:**
 - INHA: GPIO 18
 - INLA: GPIO 9
 - INHB: GPIO 8
 - INLB: GPIO 10
 - INHC: GPIO 3
 - INLC: GPIO 14
-- SPI CS: GPIO 43
 
-**Motor Driver U13 (Motor 2) - 6-PWM Mode:**
+**Motor Driver U15 (Motor 2) - 6-PWM:**
 - INHA2: GPIO 21
 - INLA2: GPIO 4
 - INHB2: GPIO 47
 - INLB2: GPIO 35
 - INHC2: GPIO 48
 - INLC2: GPIO 36
-- SPI CS2: GPIO 44
 
-**Current Sense ADC - Motor 1 (U1):**
+**Current Sense ADC - Motor 1 (U14):**
 - CURA: GPIO 5
 - CURB: GPIO 6
 - CURC: GPIO 7
 
-**Current Sense ADC - Motor 2 (U13):**
+**Current Sense ADC - Motor 2 (U15):**
 - CURA2: GPIO 15
 - CURB2: GPIO 16
 - CURC2: GPIO 17
 
-**SPI Bus (shared):**
-- MOSI: GPIO 11
-- SCK: GPIO 12
-- MISO: GPIO 13
+**Driver fault / sleep:**
+- nFAULT (U14): GPIO 11 (open drain, 5.1k pull-up)
+- nFAULT (U15): GPIO 12 (open drain, 5.1k pull-up)
+- nSLEEP (both drivers, shared): GPIO 13
+
+**Other I/O:**
+- Vacuum / fan PWM: GPIO 40
+- Inter-board link to the XY board: RX GPIO 39, TX GPIO 38
+- Z homing beam: IR LED GPIO 1, detector GPIO 2 (HIGH = beam interrupted)
 
 ## Required Software and Libraries
 
@@ -89,9 +92,6 @@ The `platformio.ini` file specifies these dependencies which will be automatical
 1. **SimpleFOC** (`askuric/Simple FOC @ 2.3.2`) - Core FOC control library
    - GitHub: https://github.com/simplefoc/Arduino-FOC
 
-2. **SimpleFOCDrivers** (`simplefoc/SimpleFOCDrivers @ 1.0.8`) - Extended driver support including DRV8316
-   - GitHub: https://github.com/simplefoc/Arduino-FOC-drivers
-
 No manual library installation is required when using PlatformIO.
 
 ## Configuration
@@ -99,11 +99,10 @@ No manual library installation is required when using PlatformIO.
 The firmware is configured in `src/config.h`:
 - **Motor**: 1 pole pair BLDC motor
 - **Supply Voltage**: 24V
-- **PWM Frequency**: 60 kHz
-- **Dead Time**: 2%
-- **Overvoltage Protection**: 32V threshold
-- **Current Sense Gain**: 0.25 V/A
-- **Overcurrent Trip**: 5.0 A phase-RMS (6.0 A during calibration)
+- **PWM Frequency**: 20 kHz
+- **Dead Time**: 2% (software/MCPWM - the MP6541A inserts none of its own)
+- **Current Sense Gain**: 0.15 V/A (SOx / 11000 into the board's 3.3k/3.3k termination)
+- **Overcurrent Trip**: 6.0 A phase-RMS (software); the MP6541A's own OCP is fixed at 16-20 A
 - **Velocity Ramp Rate**: 20 rad/s per second
 
 ### Motor Parameters
@@ -112,7 +111,7 @@ Adjust these constants in `src/config.h` as needed for your motor:
 ```cpp
 const int   POLE_PAIRS     = 1;     // Number of pole pairs
 const float SUPPLY_VOLTAGE = 24.0f; // Supply voltage in volts
-const float MAX_VOLTAGE    = 12.0f; // Maximum output voltage
+const float MAX_VOLTAGE    = 18.0f; // Maximum output voltage
 ```
 
 ## Building and Uploading
@@ -158,8 +157,9 @@ This may take several minutes. Subsequent builds will be much faster.
 ## Usage
 
 After uploading, the firmware will:
-1. Initialize both DRV8316 drivers over the shared SPI bus
-2. Configure motor parameters and protection settings for each driver
+1. Configure the PWM peripheral for both drivers (the MP6541A needs no register setup) and
+   measure the zero-current level of the six current-sense inputs
+2. Leave both drivers asleep (nSLEEP low) until a motor is commanded
 3. Load pre-measured calibration LUT data for both motors
 4. Wait for serial commands — motors do **not** start automatically
 
@@ -198,16 +198,19 @@ Telemetry is printed every 500 ms in the following format:
    3000       2.83       0.450      3000       2.91       0.462
 ```
 
-### DRV8316 Status Monitoring
+### Driver Status Monitoring
 
-The firmware continuously monitors and reports:
-- Fault conditions
-- Overcurrent protection (per phase, high and low side)
-- Overvoltage protection
-- Overtemperature warnings
-- SPI communication errors
-- Buck regulator errors
-- Power-on-reset status
+The MP6541A has no status registers — each driver reports faults on a single open-drain
+nFAULT pin, and the firmware tells the two fault types apart by their shape:
+
+- **Over-current**: the driver turns the outputs off and retries after ~2 ms, so nFAULT
+  produces a burst of falling edges (counted by an interrupt handler). Persisting for 500 ms
+  pauses and retries the commanded speed; repeated failures stop the spindle at 0 RPM.
+- **Over-temperature**: nFAULT is held low continuously until the die cools. Sustained for
+  300 ms this latches a fault and alarms the XY board.
+
+Over-voltage and UVLO are **not** reported on nFAULT by this part, so they cannot be observed
+in firmware; the driver still protects itself in hardware.
 
 ### Voltage Calibration LUT
 
@@ -239,9 +242,9 @@ The firmware uses a 100-entry look-up table (LUT) mapping speed (100–10000 RPM
 ### Motor Not Running
 
 1. Send a velocity command (`1`–`9`) via the Serial Monitor
-2. Check DRV8316 status output for fault conditions
+2. Check the console for nFAULT (over-current / over-temperature) messages
 3. Verify all power connections and supply voltage (24V)
-4. Check SPI communication is working (no SPI errors in status)
+4. Check nSLEEP (GPIO 13) goes high when a motor is commanded
 5. Verify motor phase connections (A, B, C)
 
 ### Overcurrent Faults
@@ -259,5 +262,5 @@ This project is open source. Please check the repository for license details.
 
 - [SimpleFOC Documentation](https://docs.simplefoc.com/)
 - [SimpleFOCDrivers Library](https://github.com/simplefoc/Arduino-FOC-drivers)
-- [DRV8316 Datasheet](https://www.ti.com/product/DRV8316)
+- [MP6541A Datasheet](https://www.monolithicpower.com/en/mp6541a.html)
 - [ESP32-S3 Technical Reference](https://www.espressif.com/en/products/socs/esp32-s3)
