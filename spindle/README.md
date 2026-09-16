@@ -111,7 +111,7 @@ Adjust these constants in `src/config.h` as needed for your motor:
 ```cpp
 const int   POLE_PAIRS     = 1;     // Number of pole pairs
 const float SUPPLY_VOLTAGE = 24.0f; // Supply voltage in volts
-const float MAX_VOLTAGE    = 18.0f; // Maximum output voltage
+const float MAX_VOLTAGE    = 24.0f; // Maximum output voltage (the full bus)
 ```
 
 ## Building and Uploading
@@ -172,7 +172,7 @@ Open the Serial Monitor at **115200 baud** and use the following commands:
 | `q` | Select Motor 1 (default) |
 | `w` | Select Motor 2 (spins opposite direction) |
 | `e` | Select both motors |
-| `0`–`9` | Set velocity: `0` = 0 RPM, `1` = 1000 RPM, …, `9` = 10000 RPM |
+| `0`–`9` | Set velocity: `0` = 0 RPM, `1` = 2000 RPM, …, `9` = 18000 RPM |
 | `+` | Step angle forward (active motor, angle-control mode) |
 | `-` | Step angle backward (active motor, angle-control mode) |
 | `r` | Toggle continuous rotation (active motor) |
@@ -214,7 +214,15 @@ in firmware; the driver still protects itself in hardware.
 
 ### Voltage Calibration LUT
 
-The firmware uses a 100-entry look-up table (LUT) mapping speed (100–10000 RPM in 100 RPM steps) to a drive voltage. Pre-measured default values are included in `main.cpp`. Running auto-calibration (`C`) will replace these values for your specific motors.
+The firmware uses a 180-entry look-up table (LUT) mapping speed (100–18000 RPM in 100 RPM steps)
+to a drive voltage. Pre-measured default values are included in `main.cpp`; they only cover
+100–14000 RPM, so the entries above that repeat the last measured value until a calibration
+sweep fills them in. Running auto-calibration (`C`) replaces the whole table for your motors.
+
+Note that the LUT belongs to the PWM carrier and the current target it was measured at — change
+either and the table should be rebuilt. A stored calibration in NVS is also sized by
+`CAL_LUT_SIZE`, so changing the LUT length makes the board ignore any previously saved sweep and
+fall back to the compiled-in defaults.
 
 ## Troubleshooting
 

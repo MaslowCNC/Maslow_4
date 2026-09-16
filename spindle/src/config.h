@@ -8,22 +8,30 @@ const float SUPPLY_VOLTAGE = 24.0f;
 
 // Voltage limits
 const float BASE_VOLTAGE = 1.3f;
-// Open-loop ceiling.  At 16V the motors saturate around 13,300 (M1) / 13,900 (M2) RPM and pull
-// out (over-current) before reaching the 14,000 RPM command.  The driver voltage limit is
-// SUPPLY_VOLTAGE*0.8 = 19.2V (motor_controller.cpp), so raise the ceiling to 18V to give enough
-// headroom to stay synchronized at 14,000 RPM.  The calibration LUT must be rebuilt (run "CAL")
-// after changing this so the top-of-range entries are no longer clamped at 16V.
-const float MAX_VOLTAGE = 18.0f;
+// Open-loop ceiling, raised to the full 24V bus to give the sweep room up to 18,000 RPM.
+// NOTE this also required raising the DRIVER limit to SUPPLY_VOLTAGE in motor_controller.cpp -
+// BLDCDriver6PWM::setPwm() clamps every phase to driver.voltage_limit, which was
+// SUPPLY_VOLTAGE*0.8 = 19.2V, so a 24V ceiling here alone would simply have been clipped there.
+//
+// Physical reality above ~12V: with SinePWM on a 24V bus the largest UNCLIPPED q-axis amplitude
+// is voltage_power_supply/2 = 12V.  Past that the waveform clips, and at full square wave the
+// fundamental tops out near (4/pi)(Vdc/2) = 15.3V.  So requesting 18-24V buys progressively less
+// speed and progressively more harmonic current and heat - which is also what trips the
+// MP6541A's fixed 16-20A OCP.  Expect the top of the LUT to flatten out somewhere in here.
+// The calibration LUT must be rebuilt (run "CAL") after changing this.
+const float MAX_VOLTAGE = 24.0f;
 
 // PWM configuration.  The MP6541A adds no dead time of its own (HSx+LSx both high simply
 // gives Hi-Z), so the dead zone below is the only shoot-through margin.
 // NOTE: on the DRV8316 board these two values were assigned AFTER the driver was initialized,
 // so they never reached SimpleFOC and the PWM actually ran at its 20kHz default - which is
 // what the calibration LUT below was measured at.  They now take effect, so the value here is
-// set to that same 20kHz to keep commutation identical to the old board.  (SimpleFOC's ESP32
-// 6-PWM clamps to 50kHz, so the old 60000 would have become 50kHz - a 2.5x jump in switching
-// loss on a gate drive whose slew rate is no longer configurable.)  Raise it deliberately,
-// and re-run CAL, if the motors want a higher carrier.
+// set to that same 20kHz to keep commutation identical to the old board.  Note the practical
+// ceiling is ~26.7kHz, NOT the 50kHz that _constrain() in _configure6PWM suggests: the timer
+// period is then clamped to _PWM_RES_MIN = 3000 counts, giving 160MHz/(2*3000).  Anything above
+// that is silently rounded down to it.  Raise deliberately and re-run CAL, remembering that a
+// higher carrier shrinks the ripple the sweep measures, so the same current target then
+// corresponds to a higher real fundamental current.
 const long  PWM_FREQUENCY = 20000;   // 20 kHz
 const float DEAD_ZONE = 0.02f;       // ~2% deadtime
 
@@ -73,7 +81,8 @@ const float PHASE_OFFSET_RAMP_RATE = 400.0f * PI / 180.0f;    // 400 deg/s ramp
 // Inter-board link (UART to FluidNC XY board)
 const long    LINK_BAUD = 115200;          // baud rate for the XY <-> spindle link
 const uint32_t LINK_STATUS_INTERVAL_MS = 50;  // how often to report status to the XY board
-const int     MAX_COMMAND_RPM = 14000;     // clamp for spindle speed commands
+const int     MAX_COMMAND_RPM = 18000;     // clamp for spindle speed commands; keep in step with
+                                           // CAL_MAX_RAD so the whole LUT is reachable over the link
 
 // On-demand WiFi OTA.  The board normally keeps its radio off; when the XY board sends
 // the 'W' link command (in response to $Spindle/EnableOTA) it joins the XY board's WiFi
@@ -163,10 +172,15 @@ const float Z_TOOL_REMOVE_MAX_RAD =
 const uint32_t Z_TOOL_REMOVE_CONFIRM_MS = 500;  // beam must stay clear this long to finish
 
 // Calibration LUT
-const int   CAL_LUT_SIZE = 140;                                     // 100, 200, ... 14000 RPM
-const float CAL_TARGET_CURRENT = 3.5f;                              // Target phase-RMS current (A)
+const int   CAL_LUT_SIZE = 180;                                     // 100, 200, ... 18000 RPM
+const float CAL_TARGET_CURRENT = 2.625f;                            // Target phase-RMS current (A).
+                                                                    // 75% of the 3.5A used on the DRV8316 board: the
+                                                                    // MP6541A's hardware OCP is fixed at 16-20A (the
+                                                                    // DRV8316 was configured for 24A), so the sweep
+                                                                    // hunts to a lower current to keep the spin-up
+                                                                    // transient clear of that lower ceiling.
 const float CAL_CHECKPOINT_STEP_RAD = 100.0f * 2.0f * PI / 60.0f;  // 100 RPM step in rad/s
-const float CAL_MAX_RAD = 14000.0f * 2.0f * PI / 60.0f;            // 14000 RPM in rad/s
+const float CAL_MAX_RAD = 18000.0f * 2.0f * PI / 60.0f;            // 18000 RPM in rad/s
 const uint32_t CAL_SETTLE_MS = 500;                                 // ms to wait after reaching speed
 const float CAL_HUNT_VOLTAGE_MARGIN = 0.9f;                         // Max extra volts above seeded LUT at each step
 const float CAL_RAMP_VOLT_PER_RAD = 0.0025f;                        // Open-loop spin-floor slope (volts per rad/s).

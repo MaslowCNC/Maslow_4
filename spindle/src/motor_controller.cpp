@@ -110,7 +110,9 @@ void MotorController::initDriver() {
     pinMode(cur_c_pin, INPUT);
 
     driver.voltage_power_supply = SUPPLY_VOLTAGE;
-    driver.voltage_limit        = SUPPLY_VOLTAGE * 0.8f;
+    // Full bus: setPwm() clamps every phase to this, so it has to be at least MAX_VOLTAGE or
+    // the open-loop ceiling in config.h is silently clipped here instead.
+    driver.voltage_limit        = SUPPLY_VOLTAGE;
     driver.pwm_frequency        = PWM_FREQUENCY;
     driver.dead_zone            = DEAD_ZONE;
 
