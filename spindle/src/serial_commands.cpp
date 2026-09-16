@@ -115,7 +115,8 @@ void applyFanForMotorState(bool localMotorsEnabled) {
 
 int active_motor = 0;  // 0 = motor 1, 1 = motor 2, 2 = both
 PhaseOffset phase_offset;
-volatile uint8_t g_fault_code = 0;  // 0 = OK, 1 = driver fault (nFAULT), 2 = overcurrent
+volatile uint8_t g_fault_code = 0;  // 0 = OK, 1 = driver fault (nFAULT), 2 = over-current stop
+volatile bool    g_z_reference_valid = false;  // true once homing establishes the phase zero
 
 // Suction/cooling fan power (0-100), configured by the XY board over the link via
 // the 'C' command.  The fan runs at this level whenever local motors are enabled or
@@ -127,7 +128,6 @@ volatile bool    g_belt_cooling_requested = false;
 // Z-axis BLDC drivers may be powered down once their phase move has settled.  Cleared
 // as soon as any new motion command (spindle speed or Z target) arrives.
 volatile bool g_hold_release_requested = false;
-volatile bool g_speed_command_flag = false;
 volatile bool g_home_requested = false;
 volatile bool g_remove_tool_requested = false;
 
@@ -359,8 +359,10 @@ static void setSpindleSpeed(float rpm, MotorController& mc1, MotorController& mc
     if (rpm < 0.0f) rpm = 0.0f;
     if (rpm > MAX_COMMAND_RPM) rpm = MAX_COMMAND_RPM;
 
-    g_fault_code = 0;  // a fresh command clears any latched fault
-    g_speed_command_flag = true;  // let the over-current retry logic see a fresh operator command
+    // A fresh speed command is the operator's deliberate restart after an over-current stop,
+    // so it clears the latched fault.  (The Z reference is NOT restored here - only a homing
+    // cycle can do that.)
+    g_fault_code = 0;
     g_hold_release_requested = false;  // motion commanded: cancel any pending Z-hold release
 
     MotorController* motors[] = { &mc1, &mc2 };
@@ -374,6 +376,30 @@ static void setSpindleSpeed(float rpm, MotorController& mc1, MotorController& mc
 // Set the absolute target phase offset (Z position) in degrees.
 static void setPhaseTarget(float deg, MotorController& mc1, MotorController& mc2) {
     float new_target = deg * PI / 180.0f;
+
+    // After an over-current the rotor slipped, so the phase offset no longer corresponds to a
+    // real Z position: moving to a commanded Z would drive the axis somewhere arbitrary.  Refuse
+    // until a homing cycle re-establishes the zero.  The XY board keeps streaming Z targets, so
+    // warn at most once every few seconds rather than on every one.
+    if (!g_z_reference_valid) {
+        static uint32_t last_refusal_ms = 0;
+        uint32_t        now             = millis();
+        if (last_refusal_ms == 0 || now - last_refusal_ms > 5000) {
+            last_refusal_ms = now;
+            char line[128];
+            int  n = snprintf(line, sizeof(line),
+                              "WARN:Z move to %.1f deg refused - Z not homed since the over-current stop\n", deg);
+            // Write only when the whole line already fits, exactly as reportEvent() does: a
+            // blocked write would stall this task's command handling.
+            if (n > 0 && Serial1.availableForWrite() >= n) {
+                Serial1.write(reinterpret_cast<const uint8_t*>(line), n);
+            }
+            if (n > 0 && Serial && Serial.availableForWrite() >= n) {
+                Serial.write(reinterpret_cast<const uint8_t*>(line), n);
+            }
+        }
+        return;  // note: does NOT clear g_fault_code - the alarm must stand until the operator acts
+    }
 
     // Ignore a redundant target equal to where the Z already is (e.g. the XY board
     // re-sending its Z on connect, or its home matching the post-homing zero).  Acting on

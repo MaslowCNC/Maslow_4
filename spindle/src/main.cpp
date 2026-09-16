@@ -104,15 +104,6 @@ static int serious_consec_count2 = 0;
 static uint32_t last_drv_check = 0;
 static int overcurrent_count = 0;
 
-// --- Over-current auto-recovery state ---
-static bool     recovery_pending = false;
-static uint32_t recovery_resume_at = 0;
-static float    recovery_target_v1 = 0.0f;
-static float    recovery_target_v2 = 0.0f;
-static int      recovery_attempts = 0;
-static uint32_t recovery_last_fault_at = 0;  // millis() of the most recent over-current retry
-static char     recovery_cause[80] = "";  // the fault that triggered the pending recovery
-
 // Send a human-readable event to the XY board (which surfaces it in the ESP3D web console
 // via log_warn / log_error / log_info) and to the local USB console.  level is one of
 // "WARN", "ERR" or "MSG" - the XY board maps these to the matching log level.
@@ -151,77 +142,34 @@ static void notifyZHomed() {
     if (Serial) Serial.println(F("[MSG] Z zero re-established -> notified XY board (ZHOMED)"));
 }
 
-// Begin auto-recovery from a transient over-current: remember the commanded speed, stop the
-// motors for a brief cooldown, and schedule a resume.  Returns false (so the caller fails out)
-// during calibration, or once over-currents keep recurring past FAULT_RECOVERY_MAX_ATTEMPTS
-// within the window.
-static bool beginFaultRecovery(const char* what) {
-    // A calibration sweep drives the motors open-loop; retrying velocity mode would corrupt it,
-    // so the caller aborts the sweep instead.
-    if (calibration.isActive()) return false;
+// Defined with the tool state machine below: drop the Z reference and park the sub-machine in
+// NeedsHoming, so nothing moves the Z until a homing cycle re-establishes the zero.
+static void requireRehome();
 
-    uint32_t now = millis();
-    // Reset the retry counter only after a sustained CLEAN run since the last over-current.
-    // Each failed spin-up retry recurs quickly (cooldown + OCP re-detect ~1 s), which is far
-    // shorter than the window, so consecutive fast retries must keep accumulating - otherwise
-    // a wall-clock window that expires mid-chain would reset the count and loop forever instead
-    // of failing out.  A genuine one-off transient during a long job clears the count because
-    // the motor then runs fault-free for longer than FAULT_RECOVERY_WINDOW_MS.
-    if (recovery_attempts > 0 && now - recovery_last_fault_at > FAULT_RECOVERY_WINDOW_MS) {
-        recovery_attempts = 0;
-    }
-    recovery_last_fault_at = now;
-    recovery_attempts++;
-    if (recovery_attempts > FAULT_RECOVERY_MAX_ATTEMPTS) {
-        return false;  // kept over-currenting -> let the caller fail out to 0 RPM
-    }
-
-    // Remember what was running so we can resume after the cooldown.
-    recovery_target_v1 = mc1.velocity_mode ? mc1.target_velocity : 0.0f;
-    recovery_target_v2 = mc2.velocity_mode ? mc2.target_velocity : 0.0f;
-
+// Stop for an over-current.  The motors run OPEN-LOOP, so an over-current means the rotor has
+// already lost synchronisation with the commanded field - resuming the commanded speed cannot
+// recover that, it just re-trips.  So come to rest and wait for the operator.
+//
+// Two things follow from the slip:
+//   - fault code 2 is latched so the XY board raises its alarm and a running job stops.  It must
+//     STAY latched: the XY board alarms only on a 0 -> non-zero transition.  A fresh speed
+//     command (setSpindleSpeed) is the deliberate restart that clears it.
+//   - the Z position IS the relative phase between the two motors, so a slip invalidates it.
+//     Z targets are refused until a homing cycle re-establishes the zero.
+static void stopForOverCurrent(const char* detail) {
     mc1.emergencyStop();
     mc2.emergencyStop();
 
-    recovery_pending = true;
-    recovery_resume_at = now + FAULT_RECOVERY_COOLDOWN_MS;
-    g_speed_command_flag = false;  // ignore our own resume; watch for a NEW operator command
+    g_fault_code = 2;
+    requireRehome();
 
-    // Remember the cause so the later "retried" message can name what tripped it.
-    strncpy(recovery_cause, what, sizeof(recovery_cause) - 1);
-    recovery_cause[sizeof(recovery_cause) - 1] = '\0';
-
-    reportEvent("WARN", "%s - pausing %lums to retry (%d/%d)", what,
-                (unsigned long)FAULT_RECOVERY_COOLDOWN_MS, recovery_attempts, FAULT_RECOVERY_MAX_ATTEMPTS);
-    return true;
-}
-
-// Complete a pending auto-recovery once the cooldown has elapsed, resuming the last commanded
-// speed so a transient overload does not stop the job.
-static void updateFaultRecovery() {
-    if (!recovery_pending) return;
-
-    // A fresh operator/XY speed command during the cooldown wins - drop the recovery so we do
-    // not override it (e.g. the operator commanded a stop).
-    if (g_speed_command_flag) {
-        recovery_pending = false;
+    if (calibration.isActive()) {
+        reportEvent("ERR", "%s during calibration - aborting", detail);
+        calibration.abort(mc1, mc2, "over-current");
         return;
     }
-    if ((int32_t)(millis() - recovery_resume_at) < 0) return;
 
-    recovery_pending = false;
-
-    bool resumed = false;
-    if (fabsf(recovery_target_v1) > 0.1f) { mc1.target_velocity = recovery_target_v1; mc1.velocity_mode = true; resumed = true; }
-    if (fabsf(recovery_target_v2) > 0.1f) { mc2.target_velocity = recovery_target_v2; mc2.velocity_mode = true; resumed = true; }
-
-    if (resumed) {
-        float v = (fabsf(recovery_target_v1) > 0.1f) ? recovery_target_v1 : recovery_target_v2;
-        reportEvent("MSG", "retried %s - resuming %.0f RPM", recovery_cause,
-                    fabsf(v) * 60.0f / (2.0f * PI));
-    } else {
-        reportEvent("MSG", "retried %s - motors idle", recovery_cause);
-    }
+    reportEvent("WARN", "%s - spindle stopped; re-home the Z, then send a new speed", detail);
 }
 
 // --- nFAULT monitoring ---
@@ -319,22 +267,10 @@ static void checkDriverFaults() {
     ocp_consec_count1 = 0;
     ocp_consec_count2 = 0;
 
-    // Over-current only: pause and retry like the software monitor.  A sustained thermal
-    // shutdown is genuinely dangerous, so it latches.
+    // Over-current: the rotor has slipped, so stop rather than retry.  A sustained thermal
+    // shutdown falls through to the latching path below.
     if (!serious && persistent_ocp) {
-        if (beginFaultRecovery("driver over-current (nFAULT retries)")) {
-            return;
-        }
-        // Retries exhausted (or a calibration sweep is running) -> fail out without latching.
-        mc1.emergencyStop();
-        mc2.emergencyStop();
-        if (calibration.isActive()) {
-            reportEvent("ERR", "driver over-current during calibration - aborting");
-            calibration.abort(mc1, mc2, "driver over-current");
-        } else {
-            reportEvent("WARN", "driver over-current persisted after %d tries - spindle stopped (0 RPM); send a new speed to restart",
-                        FAULT_RECOVERY_MAX_ATTEMPTS);
-        }
+        stopForOverCurrent("driver over-current (nFAULT retries)");
         return;
     }
 
@@ -348,6 +284,10 @@ static void checkDriverFaults() {
     g_fault_code = 1;  // driver hardware fault
     mc1.emergencyStop();
     mc2.emergencyStop();
+
+    // A thermal shutdown cuts the outputs mid-rotation, so the open-loop rotor slips just as it
+    // does on an over-current: the Z reference is no longer trustworthy either.
+    requireRehome();
 
     calibration.abort(mc1, mc2, "driver hardware fault");
 }
@@ -404,22 +344,7 @@ static void checkOvercurrent() {
 
     Serial.printf("OVERCURRENT: %s\n", detail);
 
-    // Transient over-current: pause and retry the commanded speed without latching.
-    if (beginFaultRecovery(detail)) {
-        return;
-    }
-
-    // Retries exhausted (or a calibration sweep is running).
-    mc1.emergencyStop();
-    mc2.emergencyStop();
-    if (calibration.isActive()) {
-        reportEvent("ERR", "%s during calibration - aborting", detail);
-        calibration.abort(mc1, mc2, "overcurrent fault");
-    } else {
-        // Fail out: come to rest at 0 RPM and wait for a fresh speed command (no fault/alarm).
-        reportEvent("WARN", "%s persisted after %d tries - spindle stopped (0 RPM); send a new speed to restart",
-                    detail, FAULT_RECOVERY_MAX_ATTEMPTS);
-    }
+    stopForOverCurrent(detail);
 }
 
 // ------------------- Phase Offset -------------------
@@ -553,6 +478,8 @@ static void checkPhaseHoldPowerdown() {
 //   UnloadingTool      - raising the Z to lift the tool up and out through the beam (ejected)
 //   SpindleRunning     - the spindle is spinning
 //   Calibrating        - the auto-calibration sweep is running
+//   NeedsHoming        - an over-current slipped the rotor: the Z zero is no longer trusted
+//                        and Z moves are refused until the operator runs a homing cycle
 //   Fault              - a latched fault stopped the motors
 //   OtaUpdate          - a WiFi/OTA firmware update is in progress
 //
@@ -562,6 +489,7 @@ static void checkPhaseHoldPowerdown() {
 // single reported state (g_machine_state) always reflects the board's real activity.
 enum class MachineState : uint8_t {
     Booting,
+    NeedsHoming,
     Homing,
     IdleToolLoaded,
     IdleToolUnloaded,
@@ -581,6 +509,7 @@ static MachineState g_machine_state = MachineState::Booting;  // reported state 
 static const char* machineStateName(MachineState s) {
     switch (s) {
         case MachineState::Booting:          return "Booting";
+        case MachineState::NeedsHoming:      return "Needs Homing";
         case MachineState::Homing:           return "Homing";
         case MachineState::IdleToolLoaded:   return "Idle - Tool Loaded";
         case MachineState::IdleToolUnloaded: return "Idle - Tool Unloaded";
@@ -647,7 +576,16 @@ static void finishZMove() {
     mc2.disable();
     zeroPhaseReference();                    // coherent phase + motor-angle zero
     g_beam_prev_blocked = beamBlocked();     // arm edge detection at the current level
+    g_z_reference_valid = true;              // the phase offset means a real Z position again
     notifyZHomed();                          // XY board resets its Z position to match this zero
+}
+
+// Drop the Z reference after a slip.  Deliberately parks in NeedsHoming rather than Booting:
+// Booting auto-starts a homing cycle after BOOT_HOMING_DELAY_MS, and the Z must not move on its
+// own immediately after a fault - the operator (or the XY board's 'G') asks for it.
+static void requireRehome() {
+    g_z_reference_valid = false;
+    g_tool_state        = MachineState::NeedsHoming;
 }
 
 // Begin the power-up / re-home decision.  Entered from the Booting state once OTA,
@@ -705,8 +643,10 @@ static void updateToolStateMachine() {
                     (int)g_ota_active, (int)calibration.isActive(), (int)g_fault_code, (int)beamBlocked());
     }
 
-    // Never home or move a tool while OTA, calibration, or a latched fault is in progress.
-    if (g_ota_active || calibration.isActive() || g_fault_code != 0) {
+    // Never home or move a tool while OTA, calibration, or a HARD driver fault is in progress.
+    // An over-current stop (code 2) deliberately does NOT block homing: re-homing is exactly how
+    // the operator recovers the Z reference it invalidated.
+    if (g_ota_active || calibration.isActive() || g_fault_code == 1) {
         return;
     }
 
@@ -718,6 +658,12 @@ static void updateToolStateMachine() {
     }
 
     switch (g_tool_state) {
+        case MachineState::NeedsHoming:
+            // An over-current invalidated the Z zero.  Sit still - no beam watching, no tool
+            // moves - until the operator runs a homing cycle ('G'), which re-enters Booting
+            // above and re-establishes the reference.
+            break;
+
         case MachineState::Booting:
             // Give the shared 24V rail and the other boards time to come up before the homing
             // raise energizes the motors.  Only the initial boot homing is delayed; an operator
@@ -990,7 +936,6 @@ static void housekeepingTask(void* arg) {
 
         checkMotorTimeouts();
         checkPhaseHoldPowerdown();
-        updateFaultRecovery();
         checkDriverFaults();
         checkOvercurrent();
         // Tool state machine (power-up homing, tool load/unload via the top-of-travel beam).

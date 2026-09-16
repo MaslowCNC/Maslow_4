@@ -149,7 +149,7 @@ The project is configured for `esp32-s3-devkitc-1` in `platformio.ini`. If you h
 
 On the first build, PlatformIO will:
 1. Download the ESP32 platform tools
-2. Download SimpleFOC and SimpleFOCDrivers libraries
+2. Download the SimpleFOC library
 3. Compile the firmware
 
 This may take several minutes. Subsequent builds will be much faster.
@@ -205,7 +205,7 @@ nFAULT pin, and the firmware tells the two fault types apart by their shape:
 
 - **Over-current**: the driver turns the outputs off and retries after ~2 ms, so nFAULT
   produces a burst of falling edges (counted by an interrupt handler). Persisting for 500 ms
-  pauses and retries the commanded speed; repeated failures stop the spindle at 0 RPM.
+  stops the spindle — see *Overcurrent Faults* below.
 - **Over-temperature**: nFAULT is held low continuously until the die cools. Sustained for
   300 ms this latches a fault and alarms the XY board.
 
@@ -249,10 +249,20 @@ The firmware uses a 100-entry look-up table (LUT) mapping speed (100–10000 RPM
 
 ### Overcurrent Faults
 
-If an overcurrent fault trips both motors:
-- The fault threshold is `OVERCURRENT_THRESHOLD` (5.0 A phase-RMS)
-- Send any velocity command to re-enable the motors after a fault
-- If faults persist, check motor wiring or reduce the target RPM
+The motors run open-loop, so an over-current means the rotor has already lost synchronisation
+with the commanded field. Spinning it straight back up cannot recover that, so the firmware
+does **not** retry — it stops and waits for the operator:
+
+- Both motors stop at 0 RPM, from either the software trip (`OVERCURRENT_THRESHOLD`, 6.0 A
+  phase-RMS) or the MP6541A's own hardware OCP reported on nFAULT.
+- Fault code **2** is latched, which alarms the XY board and stops a running job. It stays
+  latched until you send a new speed command — that is the deliberate restart.
+- The Z reference is invalidated. Z position is the relative phase between the two motors, so a
+  slip makes it meaningless: **Z targets are refused until a homing cycle runs** (`G`), and the
+  board reports state "Needs Homing". Homing is deliberately still allowed while the fault is
+  latched, since it is how you recover.
+- If it keeps tripping, check motor wiring, the 24 V supply's current limit, or reduce the
+  target RPM.
 
 ## License
 
@@ -261,6 +271,5 @@ This project is open source. Please check the repository for license details.
 ## References
 
 - [SimpleFOC Documentation](https://docs.simplefoc.com/)
-- [SimpleFOCDrivers Library](https://github.com/simplefoc/Arduino-FOC-drivers)
 - [MP6541A Datasheet](https://www.monolithicpower.com/en/mp6541a.html)
 - [ESP32-S3 Technical Reference](https://www.espressif.com/en/products/socs/esp32-s3)

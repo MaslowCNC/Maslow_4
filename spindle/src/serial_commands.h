@@ -14,8 +14,15 @@ extern int active_motor;
 extern PhaseOffset phase_offset;
 
 // Fault code reported to the XY board over the link:
-//   0 = OK, 1 = driver hardware fault (nFAULT), 2 = overcurrent
+//   0 = OK, 1 = driver hardware fault (nFAULT), 2 = over-current stop
+// Both non-zero codes alarm the XY board (it raises ExecAlarm::SpindleControl on a 0 ->
+// non-zero transition), so a code must stay latched until the operator acts on it.
 extern volatile uint8_t g_fault_code;
+
+// False once an over-current has stopped the motors: the open-loop rotor slipped, so the
+// relative phase between the two motors - which IS the Z position - no longer means anything.
+// Z targets are refused until a homing cycle re-establishes the zero.
+extern volatile bool g_z_reference_valid;
 
 // Suction/cooling fan power (0-100), set by the XY board over the link ('C' command).
 extern volatile uint8_t g_suction_level;
@@ -26,11 +33,6 @@ extern volatile bool g_belt_cooling_requested;
 // Set true by the XY board's 'D' (machine idle) command so the Z-axis BLDC drivers can
 // be powered down once their phase move has settled.  Cleared by any new motion command.
 extern volatile bool g_hold_release_requested;
-
-// Set true by setSpindleSpeed() whenever a fresh speed command arrives, so the over-current
-// retry logic can tell an operator command apart from its own resume and cancel a pending
-// retry if the operator (or XY board) commands a new/zero speed during the cooldown.
-extern volatile bool g_speed_command_flag;
 
 // Set true by the XY board's 'G' (home) command so the power-up Z homing cycle is re-run
 // on demand (e.g. from the web UI test button).  Cleared once homing restarts.

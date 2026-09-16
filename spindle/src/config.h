@@ -196,11 +196,7 @@ const int OCP_CONSEC_LIMIT = 5;  // 5 x 100ms = 500ms of repeated OCP retries ->
 // retry sampled at just the wrong moment is not mistaken for a thermal shutdown.
 const int SERIOUS_CONSEC_LIMIT = 3;  // 3 x 100ms = 300ms sustained OT -> latch
 
-// Over-current response.  A transient over-current briefly stops the motors, lets the current
-// settle, then resumes the last commanded speed - retrying up to FAULT_RECOVERY_MAX_ATTEMPTS
-// times within FAULT_RECOVERY_WINDOW_MS.  Only if it keeps over-currenting past that do we
-// "fail out": the spindle comes to rest at 0 RPM and waits for a fresh speed command (it does
-// NOT latch a fault/alarm).  Over-temperature / over-voltage still latch immediately.
-const uint32_t FAULT_RECOVERY_COOLDOWN_MS  = 600;    // motors held off this long before retrying
-const uint32_t FAULT_RECOVERY_WINDOW_MS    = 8000;   // sliding window for counting retries
-const int      FAULT_RECOVERY_MAX_ATTEMPTS = 8;      // retries allowed before failing out to 0 RPM
+// Over-current response: the motors run open-loop, so an over-current means the rotor has
+// already slipped.  There is nothing to retry - the spindle stops at 0 RPM, latches fault
+// code 2 (which alarms the XY board and stops a running job), and invalidates the Z reference
+// until a homing cycle re-establishes it.  A fresh speed command is the deliberate restart.
