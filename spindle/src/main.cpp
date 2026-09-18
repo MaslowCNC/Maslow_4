@@ -23,10 +23,11 @@ BLDCMotor motor2_hw(POLE_PAIRS);
 BLDCDriver6PWM driver2_hw(INHA2, INLA2, INHB2, INLB2, INHC2, INLC2);
 
 // ------------------- Motor Controllers -------------------
-// direction: +1 for motor 1 (forward), -1 for motor 2 (opposite)
+// direction: the two motors always run in opposite senses; SPINDLE_DIRECTION (config.h) flips
+// both together to reverse the spindle.
 
-MotorController mc1(motor1_hw, driver1_hw, CURA, CURB, CURC, +1);
-MotorController mc2(motor2_hw, driver2_hw, CURA2, CURB2, CURC2, -1);
+MotorController mc1(motor1_hw, driver1_hw, CURA, CURB, CURC, +1 * SPINDLE_DIRECTION);
+MotorController mc2(motor2_hw, driver2_hw, CURA2, CURB2, CURC2, -1 * SPINDLE_DIRECTION);
 
 Calibration calibration;
 static TaskHandle_t motor_control_task_handle = nullptr;

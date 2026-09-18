@@ -6,6 +6,13 @@
 const int   POLE_PAIRS = 1;
 const float SUPPLY_VOLTAGE = 24.0f;
 
+// Which way the spindle turns.  The two motors always run in OPPOSITE senses (the spindle is
+// driven by the difference of their angles); this flips both at once, which reverses the
+// spindle.  The Z axis is unaffected: it comes from the phase OFFSET, which updatePhaseOffset()
+// applies as the same delta to both motors without consulting these signs, so homing, tool
+// load and tool removal keep their existing directions.  Flip to +1 to spin the other way.
+const int SPINDLE_DIRECTION = -1;
+
 // Voltage limits
 const float BASE_VOLTAGE = 1.3f;
 // Open-loop ceiling, raised to the full 24V bus to give the sweep room up to 18,000 RPM.
