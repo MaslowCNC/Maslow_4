@@ -1,0 +1,5 @@
+(fp_lib_table
+  (version 7)
+  (lib (name "ProPrj_Dri-easyedapro")(type "KiCad")(uri "${KIPRJMOD}/ProPrj_Dri-easyedapro.pretty")(options "")(descr "Footprints from the EasyEDA Pro driver board"))
+  (lib (name "MaslowMerged")(type "KiCad")(uri "${KIPRJMOD}/MaslowMerged.pretty")(options "")(descr "Footprints from the EasyEDA Standard motor control board"))
+)

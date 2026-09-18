@@ -1,0 +1,437 @@
+(footprint "CAP-SMD_BD6.3-L6.6-W6.6-LS7.3-FD"
+	(version 20260206)
+	(generator "pcbnew")
+	(generator_version "10.0")
+	(layer "F.Cu")
+	(property "Reference" "REF**"
+		(at -0.8079 -1.526 90)
+		(layer "F.SilkS")
+		(effects
+			(font
+				(size 0.4 0.4)
+				(thickness 0.1524)
+			)
+			(justify left top)
+		)
+	)
+	(property "Value" "CAP-SMD_BD6.3-L6.6-W6.6-LS7.3-FD"
+		(at -0.0772 -6.4059 90)
+		(layer "F.SilkS")
+		(effects
+			(font
+				(size 0.9144 0.9144)
+				(thickness 0.1524)
+			)
+			(justify left top)
+		)
+	)
+	(property "Datasheet" ""
+		(at 0 0 90)
+		(layer "F.Fab")
+		(hide yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+		)
+	)
+	(property "Description" ""
+		(at 0 0 90)
+		(layer "F.Fab")
+		(hide yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+		)
+	)
+	(property "JLC_3DModel" "0cd93a8a020043018b876f47573d4285"
+		(at 0 0 0)
+		(layer "Cmts.User")
+		(hide yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+		)
+	)
+	(property "JLC_3D_Size" "7.3 6.6"
+		(at 0 0 0)
+		(layer "Cmts.User")
+		(hide yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+		)
+	)
+	(duplicate_pad_numbers_are_jumpers no)
+	(fp_line
+		(start 3.3762 -3.3761)
+		(end -1.98 -3.3761)
+		(stroke
+			(width 0.1524)
+			(type default)
+		)
+		(layer "F.SilkS")
+	)
+	(fp_line
+		(start -1.98 -3.3761)
+		(end -3.3762 -1.98)
+		(stroke
+			(width 0.1524)
+			(type default)
+		)
+		(layer "F.SilkS")
+	)
+	(fp_line
+		(start -3.3762 -1.98)
+		(end -3.3762 -0.6858)
+		(stroke
+			(width 0.1524)
+			(type default)
+		)
+		(layer "F.SilkS")
+	)
+	(fp_line
+		(start 3.3695 -0.7077)
+		(end 3.3762 -3.3761)
+		(stroke
+			(width 0.1524)
+			(type default)
+		)
+		(layer "F.SilkS")
+	)
+	(fp_line
+		(start 3.3556 0.7393)
+		(end 3.3757 3.3757)
+		(stroke
+			(width 0.1524)
+			(type default)
+		)
+		(layer "F.SilkS")
+	)
+	(fp_line
+		(start -3.3757 1.9812)
+		(end -3.3624 0.6858)
+		(stroke
+			(width 0.1524)
+			(type default)
+		)
+		(layer "F.SilkS")
+	)
+	(fp_line
+		(start 3.3757 3.3757)
+		(end -1.9812 3.3757)
+		(stroke
+			(width 0.1524)
+			(type default)
+		)
+		(layer "F.SilkS")
+	)
+	(fp_line
+		(start -1.9812 3.3757)
+		(end -3.3757 1.9812)
+		(stroke
+			(width 0.1524)
+			(type default)
+		)
+		(layer "F.SilkS")
+	)
+	(fp_rect
+		(start 4.6698 -0.85)
+		(end -4.67 0.85)
+		(stroke
+			(width 0.05)
+			(type default)
+		)
+		(fill no)
+		(layer "F.CrtYd")
+	)
+	(fp_circle
+		(center -3.6515 3.2999)
+		(end -3.6515 3.3299)
+		(stroke
+			(width 0.06)
+			(type default)
+		)
+		(fill no)
+		(layer "User.5")
+	)
+	(fp_text user "${REFERENCE}"
+		(at 0 0 0)
+		(layer "F.Fab")
+		(effects
+			(font
+				(size 0.5 0.5)
+				(thickness 0.1)
+			)
+		)
+	)
+	(pad "1" smd rect
+		(at -2.67 0 90)
+		(size 3.5 1.2)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+		(net "VCC")
+		(solder_mask_margin 0.0508)
+		(solder_paste_margin 0)
+		(thermal_bridge_angle 0)
+	)
+	(pad "2" smd rect
+		(at 2.6698 0 90)
+		(size 3.5 1.2)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+		(net "GND")
+		(solder_mask_margin 0.0508)
+		(solder_paste_margin 0)
+		(thermal_bridge_angle 0)
+	)
+	(zone
+		(layer "F.SilkS")
+		(hatch edge 0.5)
+		(priority 100)
+		(connect_pads yes
+			(clearance 0)
+		)
+		(min_thickness 0)
+		(fill yes
+			(thermal_gap 0.5)
+			(thermal_bridge_width 0.5)
+			(island_removal_mode 0)
+		)
+		(polygon
+			(pts
+				(xy 159.8026 69.7179) (xy 161.1226 69.7179) (xy 161.1226 69.5199) (xy 159.8026 69.5199)
+			)
+		)
+		(filled_polygon
+			(layer "F.SilkS")
+			(island yes)
+			(pts
+				(xy 159.8026 69.7179) (xy 161.1226 69.7179) (xy 161.1226 69.5199) (xy 159.8026 69.5199)
+			)
+		)
+	)
+	(zone
+		(layer "F.SilkS")
+		(hatch edge 0.5)
+		(priority 100)
+		(connect_pads yes
+			(clearance 0)
+		)
+		(min_thickness 0)
+		(fill yes
+			(thermal_gap 0.5)
+			(thermal_bridge_width 0.5)
+			(island_removal_mode 0)
+		)
+		(polygon
+			(pts
+				(xy 160.3636 63.8109) (xy 160.5616 63.8109) (xy 160.5616 64.6029) (xy 160.3636 64.6029)
+			)
+		)
+		(filled_polygon
+			(layer "F.SilkS")
+			(island yes)
+			(pts
+				(xy 160.3636 63.8109) (xy 160.5616 63.8109) (xy 160.5616 64.6029) (xy 160.3636 64.6029)
+			)
+		)
+	)
+	(zone
+		(layer "F.SilkS")
+		(hatch edge 0.5)
+		(priority 100)
+		(connect_pads yes
+			(clearance 0)
+		)
+		(min_thickness 0)
+		(fill yes
+			(thermal_gap 0.5)
+			(thermal_bridge_width 0.5)
+			(island_removal_mode 0)
+		)
+		(polygon
+			(pts
+				(xy 160.3636 70.0149) (xy 160.5616 70.0149) (xy 160.5616 69.2229) (xy 160.3636 69.2229)
+			)
+		)
+		(filled_polygon
+			(layer "F.SilkS")
+			(island yes)
+			(pts
+				(xy 160.3636 70.0149) (xy 160.5616 70.0149) (xy 160.5616 69.2229) (xy 160.3636 69.2229)
+			)
+		)
+	)
+	(zone
+		(layer "Dwgs.User")
+		(hatch edge 0.5)
+		(priority 100)
+		(connect_pads yes
+			(clearance 0)
+		)
+		(min_thickness 0)
+		(fill yes
+			(thermal_gap 0.5)
+			(thermal_bridge_width 0.5)
+			(island_removal_mode 0)
+		)
+		(polygon
+			(pts
+				(xy 158.2846 69.7179) (xy 159.6046 69.7179) (xy 159.6046 69.5199) (xy 158.2846 69.5199)
+			)
+		)
+		(filled_polygon
+			(layer "Dwgs.User")
+			(island yes)
+			(pts
+				(xy 158.2846 69.7179) (xy 159.6046 69.7179) (xy 159.6046 69.5199) (xy 158.2846 69.5199)
+			)
+		)
+	)
+	(zone
+		(layer "Dwgs.User")
+		(hatch edge 0.5)
+		(priority 100)
+		(connect_pads yes
+			(clearance 0)
+		)
+		(min_thickness 0)
+		(fill yes
+			(thermal_gap 0.5)
+			(thermal_bridge_width 0.5)
+			(island_removal_mode 0)
+		)
+		(polygon
+			(pts
+				(xy 158.8456 63.8109) (xy 159.0436 63.8109) (xy 159.0436 64.6029) (xy 158.8456 64.6029)
+			)
+		)
+		(filled_polygon
+			(layer "Dwgs.User")
+			(island yes)
+			(pts
+				(xy 158.8456 63.8109) (xy 159.0436 63.8109) (xy 159.0436 64.6029) (xy 158.8456 64.6029)
+			)
+		)
+	)
+	(zone
+		(layer "Dwgs.User")
+		(hatch edge 0.5)
+		(priority 100)
+		(connect_pads yes
+			(clearance 0)
+		)
+		(min_thickness 0)
+		(fill yes
+			(thermal_gap 0.5)
+			(thermal_bridge_width 0.5)
+			(island_removal_mode 0)
+		)
+		(polygon
+			(pts
+				(xy 158.8456 70.0149) (xy 159.0436 70.0149) (xy 159.0436 69.2229) (xy 158.8456 69.2229)
+			)
+		)
+		(filled_polygon
+			(layer "Dwgs.User")
+			(island yes)
+			(pts
+				(xy 158.8456 70.0149) (xy 159.0436 70.0149) (xy 159.0436 69.2229) (xy 158.8456 69.2229)
+			)
+		)
+	)
+	(zone
+		(layer "User.3")
+		(hatch edge 0.5)
+		(priority 100)
+		(connect_pads yes
+			(clearance 0)
+		)
+		(min_thickness 0)
+		(fill yes
+			(thermal_gap 0.5)
+			(thermal_bridge_width 0.5)
+			(island_removal_mode 0)
+		)
+		(polygon
+			(pts
+				(xy 155.6446 63.6129) (xy 162.2446 63.6129) (xy 162.2446 68.8929) (xy 160.9246 70.2129) (xy 156.9646 70.2129)
+				(xy 155.6446 68.8929)
+			)
+		)
+		(filled_polygon
+			(layer "User.3")
+			(island yes)
+			(pts
+				(xy 155.6446 63.6129) (xy 162.2446 63.6129) (xy 162.2446 68.8929) (xy 160.9246 70.2129) (xy 156.9646 70.2129)
+				(xy 155.6446 68.8929)
+			)
+		)
+	)
+	(zone
+		(layer "User.4")
+		(hatch edge 0.5)
+		(priority 100)
+		(connect_pads yes
+			(clearance 0)
+		)
+		(min_thickness 0)
+		(fill yes
+			(thermal_gap 0.5)
+			(thermal_bridge_width 0.5)
+			(island_removal_mode 0)
+		)
+		(polygon
+			(pts
+				(xy 158.5946 65.9144) (xy 158.5946 63.2644) (xy 159.2946 63.2644) (xy 159.2946 65.9144)
+			)
+		)
+		(filled_polygon
+			(layer "User.4")
+			(island yes)
+			(pts
+				(xy 158.5946 65.9144) (xy 158.5946 63.2644) (xy 159.2946 63.2644) (xy 159.2946 65.9144)
+			)
+		)
+	)
+	(zone
+		(layer "User.4")
+		(hatch edge 0.5)
+		(priority 100)
+		(connect_pads yes
+			(clearance 0)
+		)
+		(min_thickness 0)
+		(fill yes
+			(thermal_gap 0.5)
+			(thermal_bridge_width 0.5)
+			(island_removal_mode 0)
+		)
+		(polygon
+			(pts
+				(xy 158.5946 70.5645) (xy 158.5946 67.9145) (xy 159.2946 67.9145) (xy 159.2946 70.5645)
+			)
+		)
+		(filled_polygon
+			(layer "User.4")
+			(island yes)
+			(pts
+				(xy 158.5946 70.5645) (xy 158.5946 67.9145) (xy 159.2946 67.9145) (xy 159.2946 70.5645)
+			)
+		)
+	)
+	(embedded_fonts no)
+	(model "${KIPRJMOD}/EASYEDA_MODELS/CAP-SMD_BD6.3-L6.6-W6.6-LS7.3-FD.step"
+		(offset
+			(xyz 0 -0 0)
+		)
+		(scale
+			(xyz 1 1 1)
+		)
+		(rotate
+			(xyz -0 -0 -180)
+		)
+	)
+)
