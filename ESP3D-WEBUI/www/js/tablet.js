@@ -1861,6 +1861,7 @@ function tabletInit() {
     id("tablettab_move_to_xy_home").addEventListener("click", moveHome);
     id("tablettab_toggle_units").addEventListener("click", toggleUnits);
     id("tablettab_set_xy_home").addEventListener("click", openSetHomePopup);
+    id("tablettab_release_main").addEventListener("click", tabletCalRelax);
 
     // Buttons - Set Home Pop-up
     id("set-home-popup").addEventListener("click", () => hideModal("set-home-popup"));
@@ -1986,6 +1987,10 @@ const showGCode = (gcode, append = false, updateToolpath = true) => {
       tpDisplayer().showToolpath(_gcodeRaw, gCodeModal, arrayToXYZ(WPOS));
       updateJobBoundsDisplay();
     }
+  }
+
+  if (typeof updateJobBoundsDisplay === "function") {
+    updateJobBoundsDisplay();
   }
 
   // TODO: this needs to take into account error states

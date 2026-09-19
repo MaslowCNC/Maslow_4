@@ -2054,13 +2054,25 @@ var setGcodeViewerPage = function(pageNumber) {
 
 // Function to update the job bounds display
 var updateJobBoundsDisplay = function() {
+    const boundsContainer = document.getElementById("tablettab-job-bounds-container");
     const boundsInfo = document.getElementById("job-bounds-info");
     const boundsText = document.getElementById("job-bounds-text");
     const traceButton = document.getElementById("tablettab_trace_boundary");
 
-    if (!boundsInfo || !boundsText || !traceButton) {
+    if (!boundsContainer || !boundsInfo || !boundsText || !traceButton) {
         return;
     }
+
+    if (typeof gCodeLoaded === "undefined" || !gCodeLoaded) {
+        boundsContainer.style.display = "none";
+        boundsInfo.style.display = "none";
+        traceButton.style.display = "none";
+        return;
+    }
+
+    boundsContainer.style.display = "";
+    boundsInfo.style.display = "block";
+    traceButton.style.display = "";
 
     if (jobBboxExists()) {
         const bbox = getJobBoundingBox();
@@ -2074,8 +2086,7 @@ var updateJobBoundsDisplay = function() {
         traceButton.style.pointerEvents = "auto";
         traceButton.style.cursor = "pointer";
     } else {
-        boundsText.innerHTML = "No file loaded";
-        boundsInfo.style.display = "none";
+        boundsText.innerHTML = "No movement commands found";
         traceButton.style.opacity = "0.5";
         traceButton.style.pointerEvents = "none";
         traceButton.style.cursor = "not-allowed";
