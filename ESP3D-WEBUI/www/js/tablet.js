@@ -1896,8 +1896,9 @@ function tabletInit() {
 
     id("tablettab_save_serial_msg").addEventListener("click", saveSerialMessages);
     
-    // Trace boundary button
+    // Trace boundary and release tension buttons
     id("tablettab_trace_boundary").addEventListener("click", traceBoundary);
+    id("dynamic_button_3").addEventListener("click", tabletCalRelax);
 
     // Buttons - Calibration Pop-up
     id("calibration-popup").addEventListener("click", tabletCalPopupHide);
@@ -1964,6 +1965,9 @@ const showGCode = (gcode, append = false, updateToolpath = true) => {
     _gcodeRaw = "";
     setValue("tablettab_gcode", "(No GCode loaded)");
     tpDisplayer().clear();
+    if (typeof updateJobBoundsDisplay === "function") {
+      updateJobBoundsDisplay();
+    }
   } else {
     let startLine;
     if (append) {
