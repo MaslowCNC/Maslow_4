@@ -1898,7 +1898,7 @@ function tabletInit() {
     
     // Trace boundary and release tension buttons
     id("tablettab_trace_boundary").addEventListener("click", traceBoundary);
-    id("dynamic_button_3").addEventListener("click", tabletCalRelax);
+    id("tablettab_release_tension").addEventListener("click", tabletCalRelax);
 
     // Buttons - Calibration Pop-up
     id("calibration-popup").addEventListener("click", tabletCalPopupHide);
