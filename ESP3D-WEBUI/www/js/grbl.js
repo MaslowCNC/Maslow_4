@@ -565,12 +565,12 @@ const show_grbl_status = (stateName = "", message = "", hasSD = false) => {
   // Set systemStatus for tablet view (will be updated with progress by show_grbl_SD if file is running)
   setHTML("systemStatus", stateName);
 
-  const wasAlarm = currentGrblStateName === "Alarm";
+  const previousStateName = currentGrblStateName;
   if (stateName === "Alarm") {
     id("systemStatus").classList.add("system-status-alarm");
   } else {
     id("systemStatus").classList.remove("system-status-alarm");
-    if (wasAlarm) {
+    if (previousStateName === "Alarm") {
       resetAlarmSerialLogSave();
     }
   }
