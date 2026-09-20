@@ -569,6 +569,7 @@ const show_grbl_status = (stateName = "", message = "", hasSD = false) => {
     id("systemStatus").classList.add("system-status-alarm");
   } else {
     id("systemStatus").classList.remove("system-status-alarm");
+    resetAlarmSerialLogSave();
   }
 
   const clickable = clickableFromStateName(stateName, hasSD);
