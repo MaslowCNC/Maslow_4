@@ -644,13 +644,13 @@ function saveAlarmSerialLog(msg) {
     return;
   }
 
-  hasSavedAlarmSerialLog = true;
   const alarmDetails = translate_text_item(alarmMessage);
   if (alarmDetails && alarmDetails !== alarmMessage) {
     addMessage(`Alarm details: ${alarmDetails}`);
   }
 
   saveSerialMessages();
+  hasSavedAlarmSerialLog = true;
 }
 
 /** Loaded Values of the maslow config, this can be a const because we only change the fields within it */
