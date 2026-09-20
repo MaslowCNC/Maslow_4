@@ -649,8 +649,13 @@ function saveAlarmSerialLog(msg) {
     addMessage(`Alarm details: ${alarmDetails}`);
   }
 
-  saveSerialMessages();
   hasSavedAlarmSerialLog = true;
+  try {
+    saveSerialMessages();
+  } catch (error) {
+    hasSavedAlarmSerialLog = false;
+    throw error;
+  }
 }
 
 /** Loaded Values of the maslow config, this can be a const because we only change the fields within it */
