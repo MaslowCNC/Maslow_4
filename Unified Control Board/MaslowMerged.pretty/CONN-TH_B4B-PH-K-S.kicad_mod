@@ -226,32 +226,6 @@
 		(solder_paste_margin 0)
 		(thermal_bridge_angle 0)
 	)
-	(zone
-		(layer "User.3")
-		(hatch edge 0.5)
-		(priority 100)
-		(connect_pads yes
-			(clearance 0)
-		)
-		(min_thickness 0)
-		(fill yes
-			(thermal_gap 0.5)
-			(thermal_bridge_width 0.5)
-			(island_removal_mode 0)
-		)
-		(polygon
-			(pts
-				(xy 157.0106 44.8781) (xy 146.7566 44.8781) (xy 146.7566 49.6322) (xy 157.0106 49.6322)
-			)
-		)
-		(filled_polygon
-			(layer "User.3")
-			(island yes)
-			(pts
-				(xy 157.0106 44.8781) (xy 146.7566 44.8781) (xy 146.7566 49.6322) (xy 157.0106 49.6322)
-			)
-		)
-	)
 	(embedded_fonts no)
 	(model "${KIPRJMOD}/EASYEDA_MODELS/PH2.0-LI-4P.step"
 		(offset

@@ -1,0 +1,63 @@
+{
+  "version": 1,
+  "project": "Unified Control Board.kicad_pro",
+  "current": "2026-09-18_1446-2",
+  "runs": {
+    "2026-09-18_1328": {
+      "source_hashes": {
+        "Unified Control Board.kicad_sch": "sha256:6cea7112b622c3bd336959908d13d4ef0ba3ec9e014b8a30ff1298eb04ba4016",
+        "Unified Control Board.kicad_pcb": "sha256:8ff0ca0cc934ccb193e838d0a2db7b80d959cb4d4a2864804b656c4503e03b33",
+        "schematic.json": "sha256:2a5f5eac17432c135d275084d9a206fcbeb47e7e25e7d3217fb66f22aff91c17",
+        "pcb.json": "sha256:9926f2b4eb2e75f1edf7bec76508db744f4a3de55627b5c30dd044f91da519f6"
+      },
+      "outputs": {
+        "schematic": "schematic.json",
+        "pcb": "pcb.json",
+        "cross_analysis": "cross_analysis.json",
+        "emc": "emc.json",
+        "thermal": "thermal.json"
+      },
+      "scripts": {
+        "schematic": "analyze_schematic.py Unified Control Board.kicad_sch"
+      },
+      "generated": "2026-09-18T13:29:20-07:00",
+      "pinned": false
+    },
+    "2026-09-18_1446": {
+      "source_hashes": {
+        "Unified Control Board.kicad_sch": "sha256:ffbbc9fad24a40a65268746df9519877293bfe052690d3b667da43331458a8e2"
+      },
+      "outputs": {
+        "schematic": "schematic.json",
+        "pcb": "pcb.json",
+        "cross_analysis": "cross_analysis.json",
+        "emc": "emc.json",
+        "thermal": "thermal.json"
+      },
+      "scripts": {
+        "schematic": "analyze_schematic.py Unified Control Board.kicad_sch"
+      },
+      "generated": "2026-09-18T14:46:39-07:00",
+      "pinned": false
+    },
+    "2026-09-18_1446-2": {
+      "source_hashes": {
+        "Unified Control Board.kicad_pcb": "sha256:4ab8dee7e3909a92a7f3b3199920d880c4091a90fed1f32d0ab798cbcc993f09",
+        "schematic.json": "sha256:56ffb6efe3539578ebafc0d577ab6ed098f0748c396b3f5f1c6e05ac22a0b755",
+        "pcb.json": "sha256:9926f2b4eb2e75f1edf7bec76508db744f4a3de55627b5c30dd044f91da519f6"
+      },
+      "outputs": {
+        "schematic": "schematic.json",
+        "pcb": "pcb.json",
+        "cross_analysis": "cross_analysis.json",
+        "emc": "emc.json",
+        "thermal": "thermal.json"
+      },
+      "scripts": {
+        "pcb": "analyze_pcb.py Unified Control Board.kicad_pcb"
+      },
+      "generated": "2026-09-18T14:46:40-07:00",
+      "pinned": false
+    }
+  }
+}

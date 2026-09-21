@@ -1,4 +1,5 @@
 (sym_lib_table
   (version 7)
   (lib (name "ProPrj_Dri-easyedapro")(type "KiCad")(uri "${KIPRJMOD}/ProPrj_Dri-easyedapro.kicad_sym")(options "")(descr "Symbols from the EasyEDA Pro driver board"))
+  (lib (name "MaslowMerged")(type "KiCad")(uri "${KIPRJMOD}/MaslowMerged.kicad_sym")(options "")(descr "Symbols authored for the merged board"))
 )

@@ -62,7 +62,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "0402CG120J500NT"
+		(property "MPN" "0402CG120J500NT"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -265,7 +265,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "0402CG200J500NT"
+		(property "MPN" "0402CG200J500NT"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -468,7 +468,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "0402CG220J500NT"
+		(property "MPN" "0402CG220J500NT"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -671,7 +671,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "0402CG3R3C500NT"
+		(property "MPN" "0402CG3R3C500NT"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -874,7 +874,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "0402WGF0000TCE"
+		(property "MPN" "0402WGF0000TCE"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -1040,7 +1040,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "0402WGF1000TCE"
+		(property "MPN" "0402WGF1000TCE"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -1206,7 +1206,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "0402WGF1002TCE"
+		(property "MPN" "0402WGF1002TCE"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -1372,7 +1372,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "0402WGF1003TCE"
+		(property "MPN" "0402WGF1003TCE"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -1538,7 +1538,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "0402WGF1200TCE"
+		(property "MPN" "0402WGF1200TCE"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -1704,7 +1704,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "0402WGF3300TCE"
+		(property "MPN" "0402WGF3300TCE"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -1870,7 +1870,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "0402WGF5101TCE"
+		(property "MPN" "0402WGF5101TCE"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -2036,7 +2036,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "0603WAF1000T5E"
+		(property "MPN" "0603WAF1000T5E"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -2422,7 +2422,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "1206W4F1000T5E"
+		(property "MPN" "1206W4F1000T5E"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -2587,7 +2587,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "19-213/Y2C-CQ2R2L/3T(CY)"
+		(property "MPN" "19-213/Y2C-CQ2R2L/3T(CY)"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -2813,7 +2813,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "1N4148WS"
+		(property "MPN" "1N4148WS"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -2991,7 +2991,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "B-2100N10P-B110"
+		(property "MPN" "B-2100N10P-B110"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -3300,7 +3300,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "AMS1117-3.3"
+		(property "MPN" "AMS1117-3.3"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -3512,7 +3512,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "AO3401A"
+		(property "MPN" "AO3401A"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -3840,7 +3840,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "APX824-26W5G-7"
+		(property "MPN" "APX824-26W5G-7"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -4070,7 +4070,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "AW32710CSR"
+		(property "MPN" "AW32710CSR"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -4426,7 +4426,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "B2B-XH-A(LF)(SN)"
+		(property "MPN" "B2B-XH-A(LF)(SN)"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -4602,7 +4602,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "B3B-XH-2(LF)(SN)"
+		(property "MPN" "B3B-XH-2(LF)(SN)"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -4796,7 +4796,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "B5B-XH-A(LF)(SN)"
+		(property "MPN" "B5B-XH-A(LF)(SN)"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -5026,7 +5026,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "BZT52B5V1S"
+		(property "MPN" "BZT52B5V1S"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -5228,7 +5228,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "CA-IF1044VD-Q1"
+		(property "MPN" "CA-IF1044VD-Q1"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -5531,7 +5531,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "CJ15-160000810A20"
+		(property "MPN" "CJ15-160000810A20"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -5842,7 +5842,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "CL05A105KA5NQNC"
+		(property "MPN" "CL05A105KA5NQNC"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -6045,7 +6045,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "CL05B103KB5NNNC"
+		(property "MPN" "CL05B103KB5NNNC"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -6248,7 +6248,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "CL05B104KB54PNC"
+		(property "MPN" "CL05B104KB54PNC"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -6451,7 +6451,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "CL05C100JB5NNNC"
+		(property "MPN" "CL05C100JB5NNNC"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -6654,7 +6654,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "CL10A226MQ8NRNC"
+		(property "MPN" "CL10A226MQ8NRNC"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -6857,7 +6857,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "CL10B473KB8NNNC"
+		(property "MPN" "CL10B473KB8NNNC"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -7060,7 +7060,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "CL21A226MAQNNNE"
+		(property "MPN" "CL21A226MAQNNNE"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -7262,7 +7262,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "DRV8316CRRGFR"
+		(property "MPN" "DRV8316CRRGFR"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -8141,7 +8141,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "ERS1VM221F12OT"
+		(property "MPN" "ERS1VM221F12OT"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -8369,7 +8369,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "ESP32-S3(FN8)"
+		(property "MPN" "ESP32-S3(FN8)"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -9535,7 +9535,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "ESP32-S3-MINI-1-N4R2"
+		(property "MPN" "ESP32-S3-MINI-1-N4R2"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -10774,7 +10774,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "ESP32-S3-WROOM-1-N8R2"
+		(property "MPN" "ESP32-S3-WROOM-1-N8R2"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -11652,7 +11652,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "FPC3P1.25"
+		(property "MPN" "FPC3P1.25"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -11872,7 +11872,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "GRM21BR61H106KE43L"
+		(property "MPN" "GRM21BR61H106KE43L"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -12211,7 +12211,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "HCZZ0032-3"
+		(property "MPN" "HCZZ0032-3"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -12441,7 +12441,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "HL3401A"
+		(property "MPN" "HL3401A"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -12747,7 +12747,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "IR12-21C/TR8"
+		(property "MPN" "IR12-21C/TR8"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -13015,7 +13015,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "IR91-21C/TR7"
+		(property "MPN" "IR91-21C/TR7"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -13241,7 +13241,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "KH-A1001LF-03A"
+		(property "MPN" "KH-A1001LF-03A"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -13471,7 +13471,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "KT-0603R"
+		(property "MPN" "KT-0603R"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -13698,7 +13698,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "MGCI1005T2N2ST-LF"
+		(property "MPN" "MGCI1005T2N2ST-LF"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -13900,7 +13900,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "MP6541A"
+		(property "MPN" "MP6541A"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -14484,7 +14484,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "MT6701CT-STD"
+		(property "MPN" "MT6701CT-STD"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -14768,7 +14768,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "MT6701CT-STD"
+		(property "MPN" "MT6701CT-STD"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -15052,7 +15052,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "MT6701QT-STD"
+		(property "MPN" "MT6701QT-STD"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -15701,7 +15701,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "OT252040MJBA4SL"
+		(property "MPN" "OT252040MJBA4SL"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -15913,7 +15913,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "P4-1010RGBTA1-0.4T-A"
+		(property "MPN" "P4-1010RGBTA1-0.4T-A"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -16332,7 +16332,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "PRS3015-470MT"
+		(property "MPN" "PRS3015-470MT"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -16544,7 +16544,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "PT12-21C/TR8"
+		(property "MPN" "PT12-21C/TR8"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -16925,7 +16925,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "RP2040"
+		(property "MPN" "RP2040"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -18207,7 +18207,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "S3B-PH-SM4-TB(LF)(SN)"
+		(property "MPN" "S3B-PH-SM4-TB(LF)(SN)"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -18426,7 +18426,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "SM03B-SRSS-TB(LF)(SN)"
+		(property "MPN" "SM03B-SRSS-TB(LF)(SN)"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -18656,7 +18656,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "SMCJ24A"
+		(property "MPN" "SMCJ24A"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -18834,7 +18834,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "SML-311UTT86"
+		(property "MPN" "SML-311UTT86"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -19060,7 +19060,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "SN65HVD230DR"
+		(property "MPN" "SN65HVD230DR"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -19344,7 +19344,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "SS14"
+		(property "MPN" "SS14"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -19523,7 +19523,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "STM32F103C8T6"
+		(property "MPN" "STM32F103C8T6"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -20527,7 +20527,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "STM32G431CBU6"
+		(property "MPN" "STM32G431CBU6"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -21549,7 +21549,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "STSPIN32G4"
+		(property "MPN" "STSPIN32G4"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -23671,7 +23671,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "TS-1187A-B-A-B"
+		(property "MPN" "TS-1187A-B-A-B"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -23943,7 +23943,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "TS24CA"
+		(property "MPN" "TS24CA"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -24203,7 +24203,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "TSA002A3512A02"
+		(property "MPN" "TSA002A3512A02"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -24428,7 +24428,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "TYPE-C 16P CB0.8 073"
+		(property "MPN" "TYPE-C 16P CB0.8 073"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -24802,7 +24802,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "TYPE-C 16PIN 2MD(073)"
+		(property "MPN" "TYPE-C 16PIN 2MD(073)"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -25194,7 +25194,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "USB-TYPE-C-016"
+		(property "MPN" "USB-TYPE-C-016"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -25956,7 +25956,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "X322512MSB4SI"
+		(property "MPN" "X322512MSB4SI"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -26267,7 +26267,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "X50328MSB2GI"
+		(property "MPN" "X50328MSB2GI"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -26530,7 +26530,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "XC6206P332MR-G"
+		(property "MPN" "XC6206P332MR-G"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -26713,7 +26713,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "XH-5AW"
+		(property "MPN" "XH-5AW"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -26943,7 +26943,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "XT30U-F"
+		(property "MPN" "XT30U-F"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -27119,7 +27119,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "XT30U-M"
+		(property "MPN" "XT30U-M"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -27295,7 +27295,7 @@
 				)
 			)
 		)
-		(property "Manufacturer Part" "YTS1C0172BWJ00"
+		(property "MPN" "YTS1C0172BWJ00"
 			(at 0 0 0)
 			(show_name no)
 			(do_not_autoplace no)
