@@ -4,6 +4,7 @@
 var interval_status = -1
 var probe_progress_status = 0
 var grbl_error_msg = ''
+var serialLogSavedForCurrentAlarm = false
 var WCO = undefined
 var OVR = { feed: undefined, rapid: undefined, spindle: undefined }
 var MPOS = [0, 0, 0]
@@ -568,6 +569,7 @@ const show_grbl_status = (stateName = "", message = "", hasSD = false) => {
   if (stateName === "Alarm") {
     id("systemStatus").classList.add("system-status-alarm");
   } else {
+    serialLogSavedForCurrentAlarm = false;
     id("systemStatus").classList.remove("system-status-alarm");
   }
 
@@ -867,6 +869,10 @@ const grblHandleMessage = (msg) => {
     }
     if (grbl_error_msg.length === 0) {
       grbl_error_msg = translate_text_item(msg.trim());
+    }
+    if (!serialLogSavedForCurrentAlarm && typeof saveSerialMessages === 'function') {
+      saveSerialMessages();
+      serialLogSavedForCurrentAlarm = true;
     }
     return;
   }
