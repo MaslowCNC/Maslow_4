@@ -2,6 +2,7 @@
 // Use of this source code is governed by a GPLv3 license that can be found in the LICENSE file.
 
 #include "Config.h"
+#include "FileStream.h"
 #include "Protocol.h"
 #include "Serial.h"
 #include "SettingsDefinitions.h"
@@ -16,6 +17,7 @@ bool atMsgLevel(MsgLevel level) {
 // Using 1400 bytes as suggested to handle the largest log messages
 static char logBuffer[1400];
 static SemaphoreHandle_t logBufferMutex = nullptr;
+static constexpr const char* localFsErrorLogFile = "maslow-error.log";
 
 // Initialize mutex on first use
 static void ensureLogBufferMutex() {
@@ -52,4 +54,15 @@ LogStream::~LogStream() {
         *_line += ']';
     }
     send_line(_channel, _line);
+
+    // Persist machine fault/error lines on LocalFS for later retrieval from the web file browser.
+    if (_line->rfind("[MSG:ERR:", 0) == 0 || _line->rfind("ALARM:", 0) == 0) {
+        try {
+            FileStream errorLog(localFsErrorLogFile, "a", "localfs");
+            errorLog.write((const uint8_t*)_line->c_str(), _line->length());
+            errorLog.write((uint8_t)'\n');
+        } catch (...) {
+            // Ignore log file write errors to avoid impacting normal message reporting.
+        }
+    }
 }
