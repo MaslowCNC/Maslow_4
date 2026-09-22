@@ -174,7 +174,7 @@
 		(layers "*.Cu" "*.Mask")
 	)
 	(pad "1" thru_hole oval
-		(at -4.3199 -1.765 270)
+		(at -4.3199 -1.765)
 		(size 1.2 2)
 		(drill oval 0.7 1.7)
 		(layers "*.Cu" "*.Mask")
@@ -185,7 +185,7 @@
 		(thermal_bridge_angle 0)
 	)
 	(pad "2" thru_hole oval
-		(at 4.3202 -1.765 270)
+		(at 4.3202 -1.765)
 		(size 1.2 2)
 		(drill oval 0.7 1.7)
 		(layers "*.Cu" "*.Mask")
@@ -196,7 +196,7 @@
 		(thermal_bridge_angle 0)
 	)
 	(pad "3" thru_hole oval
-		(at -4.3199 2.4151 270)
+		(at -4.3199 2.4151)
 		(size 1.2 1.8)
 		(drill oval 0.7 1.4)
 		(layers "*.Cu" "*.Mask")
@@ -207,7 +207,7 @@
 		(thermal_bridge_angle 0)
 	)
 	(pad "4" thru_hole oval
-		(at 4.3202 2.4151 270)
+		(at 4.3202 2.4151)
 		(size 1.2 1.8)
 		(drill oval 0.7 1.4)
 		(layers "*.Cu" "*.Mask")
@@ -218,7 +218,7 @@
 		(thermal_bridge_angle 0)
 	)
 	(pad "A1" smd rect
-		(at -3.3501 -2.4152 270)
+		(at -3.3501 -2.4152)
 		(size 0.3 1.3)
 		(layers "F.Cu" "F.Mask" "F.Paste")
 		(net "GND")
@@ -227,7 +227,7 @@
 		(thermal_bridge_angle 0)
 	)
 	(pad "A4" smd rect
-		(at -2.55 -2.4152 270)
+		(at -2.55 -2.4152)
 		(size 0.3 1.3)
 		(layers "F.Cu" "F.Mask" "F.Paste")
 		(net "USB5V")
@@ -236,7 +236,7 @@
 		(thermal_bridge_angle 0)
 	)
 	(pad "A5" smd rect
-		(at -1.2501 -2.415 270)
+		(at -1.2501 -2.415)
 		(size 0.3 1.3)
 		(layers "F.Cu" "F.Mask" "F.Paste")
 		(net "USB2_A5")
@@ -245,7 +245,7 @@
 		(thermal_bridge_angle 0)
 	)
 	(pad "A6" smd rect
-		(at -0.2501 -2.415 270)
+		(at -0.2501 -2.415)
 		(size 0.3 1.3)
 		(layers "F.Cu" "F.Mask" "F.Paste")
 		(net "USBD+")
@@ -254,7 +254,7 @@
 		(thermal_bridge_angle 0)
 	)
 	(pad "A7" smd rect
-		(at 0.2498 -2.4152 270)
+		(at 0.2498 -2.4152)
 		(size 0.3 1.3)
 		(layers "F.Cu" "F.Mask" "F.Paste")
 		(net "USBD-")
@@ -263,7 +263,7 @@
 		(thermal_bridge_angle 0)
 	)
 	(pad "A8" smd rect
-		(at 1.2496 -2.415 270)
+		(at 1.2496 -2.415)
 		(size 0.3 1.3)
 		(layers "F.Cu" "F.Mask" "F.Paste")
 		(solder_mask_margin 0.05)
@@ -271,7 +271,7 @@
 		(thermal_bridge_angle 0)
 	)
 	(pad "A9" smd rect
-		(at 2.55 -2.415 270)
+		(at 2.55 -2.415)
 		(size 0.3 1.3)
 		(layers "F.Cu" "F.Mask" "F.Paste")
 		(net "USB5V")
@@ -280,7 +280,7 @@
 		(thermal_bridge_angle 0)
 	)
 	(pad "A12" smd rect
-		(at 3.3499 -2.415 270)
+		(at 3.3499 -2.415)
 		(size 0.3 1.3)
 		(layers "F.Cu" "F.Mask" "F.Paste")
 		(net "GND")
@@ -289,7 +289,7 @@
 		(thermal_bridge_angle 0)
 	)
 	(pad "B1" smd rect
-		(at 3.0499 -2.415 270)
+		(at 3.0499 -2.415)
 		(size 0.3 1.3)
 		(layers "F.Cu" "F.Mask" "F.Paste")
 		(net "GND")
@@ -298,7 +298,7 @@
 		(thermal_bridge_angle 0)
 	)
 	(pad "B4" smd rect
-		(at 2.2498 -2.415 270)
+		(at 2.2498 -2.415)
 		(size 0.3 1.3)
 		(layers "F.Cu" "F.Mask" "F.Paste")
 		(net "USB5V")
@@ -307,7 +307,7 @@
 		(thermal_bridge_angle 0)
 	)
 	(pad "B5" smd rect
-		(at 1.7499 -2.415 270)
+		(at 1.7499 -2.415)
 		(size 0.3 1.3)
 		(layers "F.Cu" "F.Mask" "F.Paste")
 		(net "USB2_B5")
@@ -316,7 +316,7 @@
 		(thermal_bridge_angle 0)
 	)
 	(pad "B6" smd rect
-		(at 0.7499 -2.415 270)
+		(at 0.7499 -2.415)
 		(size 0.3 1.3)
 		(layers "F.Cu" "F.Mask" "F.Paste")
 		(net "USBD+")
@@ -325,7 +325,7 @@
 		(thermal_bridge_angle 0)
 	)
 	(pad "B7" smd rect
-		(at -0.7502 -2.4152 270)
+		(at -0.7502 -2.4152)
 		(size 0.3 1.3)
 		(layers "F.Cu" "F.Mask" "F.Paste")
 		(net "USBD-")
@@ -334,7 +334,7 @@
 		(thermal_bridge_angle 0)
 	)
 	(pad "B8" smd rect
-		(at -1.7502 -2.415 270)
+		(at -1.7502 -2.415)
 		(size 0.3 1.3)
 		(layers "F.Cu" "F.Mask" "F.Paste")
 		(solder_mask_margin 0.05)
@@ -342,7 +342,7 @@
 		(thermal_bridge_angle 0)
 	)
 	(pad "B9" smd rect
-		(at -2.2501 -2.4152 270)
+		(at -2.2501 -2.4152)
 		(size 0.3 1.3)
 		(layers "F.Cu" "F.Mask" "F.Paste")
 		(net "USB5V")
@@ -351,7 +351,7 @@
 		(thermal_bridge_angle 0)
 	)
 	(pad "B12" smd rect
-		(at -3.0502 -2.4152 270)
+		(at -3.0502 -2.4152)
 		(size 0.3 1.3)
 		(layers "F.Cu" "F.Mask" "F.Paste")
 		(net "GND")
