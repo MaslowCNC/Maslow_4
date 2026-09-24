@@ -11,7 +11,8 @@ jobs:
     # Run only when specific build commands are used in a comment on a PR
     if: |
       github.event.issue.pull_request != null &&
-      (contains(github.event.comment.body, 'please build') || contains(github.event.comment.body, '/build'))
+      (contains(github.event.comment.body, 'please build') || contains(github.event.comment.body, '/build') ||
+       contains(github.event.comment.body, 'build:split'))
     
     steps:
     - name: Get PR details for issue comment
@@ -90,10 +91,23 @@ jobs:
         cd ESP3D-WEBUI
         npm install
         
+    - name: Detect build mode
+      id: buildmode
+      run: |
+        if echo "${{ github.event.comment.body }}" | grep -qi 'build:split'; then
+          echo "split=true" >> $GITHUB_OUTPUT
+        else
+          echo "split=false" >> $GITHUB_OUTPUT
+        fi
+
     - name: Build ESP3D-WEBUI
       run: |
         cd ESP3D-WEBUI
-        npx gulp package --lang en
+        if [ "${{ steps.buildmode.outputs.split }}" = "true" ]; then
+          npx gulp package:split --lang en
+        else
+          npx gulp package --lang en
+        fi
         
     - name: Build firmware
       run: |
@@ -105,15 +119,43 @@ jobs:
         mkdir -p firmware-package
 
         cp firmware/.pio/build/wifi_s3/firmware.bin firmware-package/
-        
+
         # Verify ESP3D-WEBUI build output exists before copying
         if [ ! -f ESP3D-WEBUI/dist/index.html.gz ]; then
           echo "Error: ESP3D-WEBUI/dist/index.html.gz not found"
           exit 1
         fi
         cp ESP3D-WEBUI/dist/index.html.gz firmware-package/
-        
-        cat > firmware-package/README.txt << 'EOF'
+
+        # In split mode, also include the separate app.js.gz
+        if [ "${{ steps.buildmode.outputs.split }}" = "true" ]; then
+          if [ ! -f ESP3D-WEBUI/dist/app.js.gz ]; then
+            echo "Error: ESP3D-WEBUI/dist/app.js.gz not found"
+            exit 1
+          fi
+          cp ESP3D-WEBUI/dist/app.js.gz firmware-package/
+          cat > firmware-package/README.txt << 'EOF'
+        FluidNC Firmware Package (Split Web UI)
+        ========================================
+
+        This package contains the firmware and a split web UI (HTML + JS as separate files).
+
+        Contents:
+        - firmware.bin: The main FluidNC firmware for ESP32-S3
+        - index.html.gz: The ESP3D web interface HTML + CSS (compressed, no JS)
+        - app.js.gz: All web interface JavaScript (compressed)
+
+        Installation Instructions:
+        1. Upload firmware.bin to the machine as normal
+        2. Upload BOTH index.html.gz AND app.js.gz to the /littlefs filesystem root
+
+        Both web UI files are required. The firmware serves app.js.gz transparently
+        when the browser requests app.js.
+
+        This firmware and web UI were automatically compiled from the pull request changes.
+        EOF
+        else
+          cat > firmware-package/README.txt << 'EOF'
         FluidNC Firmware Package
         ========================
 
@@ -130,6 +172,7 @@ jobs:
 
         This firmware and web UI were automatically compiled from the pull request changes.
         EOF
+        fi
         
     - name: Upload firmware as artifact
       uses: actions/upload-artifact@v4
@@ -149,13 +192,23 @@ jobs:
           const fileSizeInMB = (fileSizeInBytes / (1024*1024)).toFixed(2);
           
           // Get ESP3D-WEBUI size
+          const isSplit = '${{ steps.buildmode.outputs.split }}' === 'true';
           let webuiSizeKB = 'N/A';
+          let appjsSizeKB = 'N/A';
           try {
             const webuiPath = 'ESP3D-WEBUI/dist/index.html.gz';
             const webuiStats = fs.statSync(webuiPath);
             webuiSizeKB = (webuiStats.size / 1024).toFixed(2);
           } catch (e) {
             console.log('Could not read ESP3D-WEBUI size:', e.message);
+          }
+          if (isSplit) {
+            try {
+              const appjsStats = fs.statSync('ESP3D-WEBUI/dist/app.js.gz');
+              appjsSizeKB = (appjsStats.size / 1024).toFixed(2);
+            } catch (e) {
+              console.log('Could not read app.js.gz size:', e.message);
+            }
           }
           
           // Extract version number from version.cpp
@@ -209,7 +262,15 @@ jobs:
           const commitSha = pr.head.sha;
           
           const triggerText = '_This comment was automatically generated in response to a build request comment._';
-          
+
+          const webuiDetails = isSplit
+            ? `- Language: English only (split build)\n          - index.html.gz: ${webuiSizeKB} KB (HTML + CSS, no JS)\n          - app.js.gz: ${appjsSizeKB} KB (all JavaScript)\n          - ⚠️ Both files must be uploaded to the ESP32 filesystem`
+            : `- Language: English only\n          - WebUI size: ${webuiSizeKB} KB (compressed)\n          - Format: index.html.gz`;
+
+          const artifactContents = isSplit
+            ? 'firmware.bin, index.html.gz, app.js.gz, and installation instructions'
+            : 'firmware.bin, index.html.gz, and installation instructions';
+
           const comment = `🤖 **Firmware & Web UI Compilation Complete** 🤖
           
           ✅ Successfully compiled FluidNC firmware and ESP3D-WEBUI
@@ -223,12 +284,10 @@ jobs:
           - RAM usage: ${ramUsed} (${ramPercent}%)
           
           **Web UI Build Details:**
-          - Language: English only
-          - WebUI size: ${webuiSizeKB} KB (compressed)
-          - Format: index.html.gz
+          ${webuiDetails}
           
           **Download:**
-          The firmware package (containing firmware.bin, index.html.gz, and installation instructions) has been uploaded as a build artifact named "firmware-package" and can be downloaded from the [Actions tab](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}).
+          The firmware package (containing ${artifactContents}) has been uploaded as a build artifact named "firmware-package" and can be downloaded from the [Actions tab](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}).
           
           To test this release please:
           [] Try running calibration with a fresh maslow.yaml file
