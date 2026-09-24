@@ -289,6 +289,7 @@ static Error disable_alarm_lock(const char* value, WebUI::AuthenticationLevel au
             return err;
         }
         report_feedback_message(Message::AlarmUnlock);
+        Maslow.clearError();
         sys.set_state(State::Idle);
 
         // Don't run startup script. Prevents stored moves in startup from causing accidents.

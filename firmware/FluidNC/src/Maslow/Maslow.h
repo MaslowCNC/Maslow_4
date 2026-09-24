@@ -112,6 +112,7 @@ public:
 
     void   stop();
     void   eStop(String message = "Emergency stop triggered.");
+    void   clearError();
     void   panic();
     void   resetUpdateWatchdog();
 
