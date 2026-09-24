@@ -632,6 +632,32 @@ function saveSerialMessages() {
   document.body.removeChild(link);
 }
 
+let hasSavedAlarmSerialLog = false;
+
+function resetAlarmSerialLogSave() {
+  hasSavedAlarmSerialLog = false;
+}
+
+function saveAlarmSerialLog(msg) {
+  const alarmMessage = (msg || "").trim();
+  if (!alarmMessage.startsWith("ALARM:") || hasSavedAlarmSerialLog) {
+    return;
+  }
+
+  const alarmDetails = translate_text_item(alarmMessage);
+  if (alarmDetails && alarmDetails !== alarmMessage) {
+    addMessage(`Alarm details: ${alarmDetails}`);
+  }
+
+  hasSavedAlarmSerialLog = true;
+  try {
+    saveSerialMessages();
+  } catch (error) {
+    hasSavedAlarmSerialLog = false;
+    throw error;
+  }
+}
+
 /** Loaded Values of the maslow config, this can be a const because we only change the fields within it */
 const loaded_values = {};
 /** Work with the maslow config loaded values.
@@ -687,6 +713,7 @@ function tabletShowMessage(msg, collecting) {
   }
 
   addMessage(`${maslowErrorMsgHandling(msg) || msg}`);
+  saveAlarmSerialLog(msg);
 }
 
 function tabletShowResponse(response) { }
