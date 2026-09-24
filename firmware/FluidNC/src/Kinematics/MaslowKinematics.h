@@ -81,6 +81,22 @@ namespace Kinematics {
         float getCenterX() const { return _centerX; }
         float getCenterY() const { return _centerY; }
 
+        // Belt elasticity (stretch) compensation parameters
+        float getBeltAxialStiffness() const { return _beltAxialStiffness; }
+        float getSledWeight() const { return _sledWeight; }
+        float getCalibrationPullForce() const { return _calibrationPullForce; }
+
+        // Belt stretch helpers. Belts elongate under tension by delta = F * L / (A*E).
+        // These convert between the paid-out (encoder/relaxed) belt length and the physical
+        // (geometric, taut) span the belt bridges under a given tension in Newtons. Both return
+        // their input unchanged when compensation is disabled (stiffness or tension <= 0).
+        float paidOutToGeometric(float paidOutLength, float tension) const;
+        float geometricToPaidOut(float geometricLength, float tension) const;
+
+        // Static gravity + geometry estimate of the tension (N) carried by one belt while the
+        // sled sits at the given position. Used to size the stretch correction during cutting.
+        float estimateBeltTension(int arm, float x, float y, float z) const;
+
         // Forward kinematics methods for position synchronization
         bool  computeXYfromBeltLengths(float tlLength, float trLength, float& x, float& y) const;
         float measurementToXYPlane(float measurement, float zHeight) const;
@@ -107,6 +123,11 @@ namespace Kinematics {
         // Belt and arm parameters (in mm)
         float _beltEndExtension = 30.0f;   // Belt end extension
         float _armLength        = 123.4f;  // Arm length
+
+        // Belt elasticity / stretch compensation parameters
+        float _beltAxialStiffness   = 0.0f;  // Effective axial stiffness A*E (N); belt stretch = F*L/(A*E). 0 disables compensation.
+        float _sledWeight           = 0.0f;  // Sled weight (N) used by the static gravity tension model
+        float _calibrationPullForce = 0.0f;  // Belt tension (N) applied while taking Find Anchors measurements
 
         // Material thickness offsets (in mm) - accounts for spoil board and work piece thickness
         float _spoilboardThickness = 0.0f;  // Spoil board thickness added to all anchor heights

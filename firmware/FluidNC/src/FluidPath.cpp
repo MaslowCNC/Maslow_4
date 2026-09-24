@@ -7,6 +7,7 @@
 #include "Config.h"
 #include "Error.h"
 #include "HashFS.h"
+#include "Maslow/Maslow.h"  // resetUpdateWatchdog()
 
 int FluidPath::_refcnt = 0;
 
@@ -17,6 +18,12 @@ FluidPath::FluidPath(const char* name, const char* fs, std::error_code* ecptr) :
     if (_isSD) {
         if (_refcnt == 0) {
             std::error_code ec = sd_mount();
+            // Mounting the card runs the full SD init sequence and blocks for
+            // ~100 ms.  Whichever task does it - the protocol task, when a job
+            // is started with $sd/run - is not calling Maslow.update() while it
+            // waits, which trips the 100 ms update watchdog into an emergency
+            // stop.  Same treatment as the other known-blocking operations.
+            Maslow.resetUpdateWatchdog();
             if (ec) {
                 if (ecptr) {
                     *ecptr = ec;
@@ -68,6 +75,7 @@ FluidPath::~FluidPath() {
     // log_debug("~ refcnt " << _isSD << " " << _refcnt);
     if (_isSD && (_refcnt && --_refcnt == 0)) {
         sd_unmount();
+        Maslow.resetUpdateWatchdog();
     }
 }
 

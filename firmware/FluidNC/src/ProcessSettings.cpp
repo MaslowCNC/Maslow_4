@@ -818,7 +818,7 @@ static Error setReportInterval(const char* value, WebUI::AuthenticationLevel aut
 }
 
 static Error showHeap(const char* value, WebUI::AuthenticationLevel auth_level, Channel& out) {
-    log_info("Heap free: " << xPortGetFreeHeapSize() << " min: " << heapLowWater);
+    report_memory_diagnostics();
     return Error::Ok;
 }
 
