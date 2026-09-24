@@ -69,10 +69,21 @@ function build_accept(file_filters_list) {
 	}
 	const fif = id("files_input_file");
 	if (fif) {
-		fif.accept = accept_txt;
+		fif.accept = files_getUploadAccept(accept_txt);
 	}
 	console.log(accept_txt);
 }
+
+const files_getUploadAccept = (acceptValue) => {
+	if (typeof C2DConverter !== "undefined" && typeof C2DConverter.buildAcceptAttribute === "function") {
+		return C2DConverter.buildAcceptAttribute(acceptValue);
+	}
+	const current = String(acceptValue || "");
+	if (/\.c2d/i.test(current)) {
+		return current;
+	}
+	return [current, ".c2d", ".C2D"].filter(Boolean).join(", ");
+};
 
 const filesRefreshCurrent = () => files_refreshFiles(files_currentPath());
 const filesRefreshPrimarySD = () => files_refreshFiles(primary_sd);
@@ -121,7 +132,18 @@ function init_files_panel(dorefresh = true) {
 }
 
 /** Wire up the `files_input_file` handler */
-const initFilesInputFile = () => id("files_input_file").addEventListener("change", files_check_if_upload);
+const initFilesInputFile = () => {
+	const input = id("files_input_file");
+	if (!input) {
+		return;
+	}
+	input.accept = files_getUploadAccept(input.accept);
+	if (input.dataset.uploadHandlerBound === "true") {
+		return;
+	}
+	input.addEventListener("change", files_check_if_upload);
+	input.dataset.uploadHandlerBound = "true";
+};
 
 const files_set_button_as_filter = (isfilter) => setHTML("files_filter_glyph", get_icon_svg(!isfilter ? "filter" : "list-alt", "1em", "1em"));
 
@@ -758,15 +780,63 @@ const BuildFileUploadFormData = (path, files, perFileFn) => {
 	return formData;
 }
 
-function files_start_upload() {
+async function files_prepareUploadFile(file) {
+	if (!file || typeof C2DConverter === "undefined" || typeof C2DConverter.convertUploadFile !== "function") {
+		return {
+			converted: false,
+			file,
+			warnings: [],
+		};
+	}
+
+	if (!C2DConverter.isC2DFileName(file.name)) {
+		return {
+			converted: false,
+			file,
+			warnings: [],
+		};
+	}
+
+	Monitor_output_Update(`[Import] Converting C2D file: ${file.name}\n`);
+	const result = await C2DConverter.convertUploadFile(file);
+	Monitor_output_Update(`[Import] Conversion completed: ${result.file.name}\n`);
+	for (const warning of result.warnings || []) {
+		Monitor_output_Update(`[Import] Warning: ${warning}\n`);
+	}
+
+	return result;
+}
+
+async function files_prepareUploadFiles(files) {
+	const prepared = [];
+	for (const file of files) {
+		const result = await files_prepareUploadFile(file);
+		prepared.push(result.file);
+	}
+	return prepared;
+}
+
+async function files_start_upload() {
 	if (CheckForHttpCommLock()) {
 		return;
 	}
 
-	const files = id("files_input_file").files;
+	const filesInput = id("files_input_file");
+	const selectedFiles = Array.from(filesInput.files || []);
 
-	if (!files.length || typeof files[0].name === "undefined") {
+	if (!selectedFiles.length || typeof selectedFiles[0].name === "undefined") {
 		console.log("nothing to upload");
+		return;
+	}
+
+	let files;
+	try {
+		files = await files_prepareUploadFiles(selectedFiles);
+	} catch (error) {
+		console.error("Error preparing upload:", error);
+		Monitor_output_Update(`[Import] Failed to prepare upload: ${error.message}\n`);
+		alertdlg("Import failed", error.message);
+		setValue("files_input_file", "");
 		return;
 	}
 

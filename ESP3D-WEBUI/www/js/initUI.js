@@ -35,7 +35,7 @@ const update_UI_firmware_target = () => {
 
 	const fif = id("files_input_file");
 	if (fif) {
-		fif.accept = ".g,.gc,.gco,.gcode,.nc,.txt,.G,.GC,.GCO,.GCODE,.NC,.TXT";
+		fif.accept = ".g,.gc,.gco,.gcode,.nc,.txt,.c2d,.G,.GC,.GCO,.GCODE,.NC,.TXT,.C2D";
 	}
 	displayInitial("zero_xyz_btn");
 	displayInitial("zero_x_btn");
