@@ -17,6 +17,9 @@ describe('maslowMsgHandling', () => {
               <input id="workThickness" value="" />
               <input id="applyTensionBeltRetractionLimit" value="" />
               <input id="applyTensionAllowLimiting" value="" />
+              <input id="measurementPair" value="" />
+              <input id="measurementExtendDist" value="" />
+              <input id="measurementRetractionForce" value="" />
               <input id="machineWidth" value="" />
               <input id="machineHeight" value="" />
           `;
@@ -48,6 +51,9 @@ describe('maslowMsgHandling', () => {
     ["workThickness", "19.0", "workThickness"],
     ["Apply_Tension_Belt_Retraction_Limit", "300", "applyTensionBeltRetractionLimit"],
     ["Apply_Tension_Allow_Limiting", "true", "applyTensionAllowLimiting"],
+    ["Measurement_Pair", "BL_TR", "measurementPair"],
+    ["Measurement_Extend_Dist", "2000", "measurementExtendDist"],
+    ["Measurement_Retraction_Force", "1300", "measurementRetractionForce"],
   ];
 
   const noErrorResult = (key, value) => {
