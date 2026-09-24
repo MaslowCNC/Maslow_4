@@ -15,6 +15,10 @@ const MASLOW_STATE_FIND_ANCHORS_COMPUTING = 9;
 const FIND_ANCHORS_WAYPOINT_COORDINATE_REGEX = /^\[MSG:INFO:\s*Waypoint\s+\d+\s+coordinates:\s*X=([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\s+Y=([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\]$/;
 let wasFindingAnchors = false;
 
+const markMaslowLiveUpdate = () => {
+	globalThis.maslowLastLiveUpdateAt = Date.now();
+};
+
 /** This keeps track of when we saw the last heartbeat from the machine */
 //I think this is not used anymore and can be removed now
 let lastHeartBeatTime = new Date().getTime();
@@ -269,6 +273,10 @@ const updateDynamicButtons = () => {
 		resetStopButtonColors();
 	}
 
+	if (typeof updateCalibrationOnboarding === 'function') {
+		updateCalibrationOnboarding();
+	}
+
 	// Show or hide status fields based on whether Find Anchors is running
 	updateFindAnchorsView();
 }
@@ -343,11 +351,13 @@ const maslowInfoMsgHandling = (msg) => {
 		if (typeof resetStopButtonColors === 'function') {
 			resetStopButtonColors();
 		}
+		markMaslowLiveUpdate();
 		return true;
 	}
 
 	if (msg.startsWith('[MSG:INFO: Heartbeat')) {
 		lastHeartBeatTime = new Date().getTime();
+		markMaslowLiveUpdate();
 		return true;
 	}
 
@@ -362,6 +372,7 @@ const maslowInfoMsgHandling = (msg) => {
 				return false;
 			}
 			maslowStatus.state = state;
+			markMaslowLiveUpdate();
 			updateDynamicButtons();
 		}
 		return true;
@@ -385,6 +396,16 @@ const maslowInfoMsgHandling = (msg) => {
 	if (msg.startsWith("[MSG:INFO: Calibration complete")) {
 		showCalibrationCompleteMessage();
 		return true;
+	}
+
+	if ((msg.startsWith("[MSG:WARN:") || msg.startsWith("error:"))
+		&& (msg.toLowerCase().includes("anchor") || msg.toLowerCase().includes("calibration"))) {
+		if (typeof calibrationOnboardingAnchorFailed === 'function') {
+			calibrationOnboardingAnchorFailed();
+		}
+		if (typeof showCalibrationOnboardingAnchorError === 'function') {
+			showCalibrationOnboardingAnchorError(msg.replace(/^\[MSG:WARN:\s*|\]$/g, '').trim());
+		}
 	}
 
 	if (msg.startsWith(`[MSG:WARN: ${APPLY_TENSION_WARNING_PREFIX}`)) {
