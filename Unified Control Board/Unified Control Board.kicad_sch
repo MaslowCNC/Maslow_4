@@ -25499,6 +25499,14 @@
 		(at 561.34 278.13)
 		(uuid "ffcaa38e-fdad-4122-b4d5-31ec9567d189")
 	)
+	(no_connect
+		(at 209.55 -2.54)
+		(uuid "627c703d-7f24-4db4-a39f-563ebed5190d")
+	)
+	(no_connect
+		(at 209.55 -5.08)
+		(uuid "00dac9e8-169a-4dd6-a80c-0b75b542196d")
+	)
 	(wire
 		(pts
 			(xy 175.26 5.08) (xy 179.07 5.08)
@@ -25598,16 +25606,6 @@
 			(type default)
 		)
 		(uuid "0a69b59b-b61f-4420-8d6c-d934daa5674f")
-	)
-	(wire
-		(pts
-			(xy 242.57 -2.54) (xy 240.03 -2.54)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "0accf22b-d6ce-4357-9a63-89571630863e")
 	)
 	(wire
 		(pts
@@ -26561,16 +26559,6 @@
 	)
 	(wire
 		(pts
-			(xy 242.57 -12.7) (xy 240.03 -12.7)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "62c36a6a-a40e-41dd-80d6-bad84c84cc2d")
-	)
-	(wire
-		(pts
 			(xy 480.06 214.63) (xy 486.41 214.63)
 		)
 		(stroke
@@ -26678,16 +26666,6 @@
 			(type default)
 		)
 		(uuid "6e734fc8-8313-4589-b6d2-93f7aa44748f")
-	)
-	(wire
-		(pts
-			(xy 212.09 -2.54) (xy 209.55 -2.54)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "6f77e408-52ee-4efb-9508-74e59c2d6fbb")
 	)
 	(wire
 		(pts
@@ -28008,16 +27986,6 @@
 			(type default)
 		)
 		(uuid "e1eebcee-0cbc-4239-83ce-77164db5aaff")
-	)
-	(wire
-		(pts
-			(xy 212.09 -5.08) (xy 209.55 -5.08)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "e293b6bf-79b8-44bc-a784-880c49e096ce")
 	)
 	(wire
 		(pts
@@ -31337,28 +31305,6 @@
 			)
 		)
 	)
-	(global_label "TrinamicTX"
-		(shape input)
-		(at 242.57 -12.7 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left)
-		)
-		(uuid "6ca6e327-d231-42d2-9e01-7320bfe8e7e8")
-		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 242.57 -12.7 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-	)
 	(global_label "CC1"
 		(shape input)
 		(at 745.49 -59.69 0)
@@ -31899,28 +31845,6 @@
 		(uuid "7e9cc098-b03a-4446-96d3-93fc4d0d9c02")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
 			(at -716.28 -20.32 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-	)
-	(global_label "TrinamicRX"
-		(shape input)
-		(at 212.09 -2.54 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left)
-		)
-		(uuid "7ec6f85a-7209-4d89-882d-7a94c8b2560f")
-		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 212.09 -2.54 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -33009,28 +32933,6 @@
 			)
 		)
 	)
-	(global_label "TrinamicRX"
-		(shape input)
-		(at 242.57 -2.54 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left)
-		)
-		(uuid "a1ca225d-604c-440a-977a-2a5c61be6903")
-		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 242.57 -2.54 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-	)
 	(global_label "GND"
 		(shape input)
 		(at 510.54 -36.83 0)
@@ -33043,28 +32945,6 @@
 		(uuid "a2dbf154-3b19-429b-893a-6eed910624bd")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
 			(at 510.54 -36.83 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-	)
-	(global_label "TrinamicTX"
-		(shape input)
-		(at 212.09 -5.08 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left)
-		)
-		(uuid "a34834bf-2dc8-4a8b-b486-cec682035574")
-		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 212.09 -5.08 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -65001,133 +64881,6 @@
 			(project "Unified Control Board"
 				(path "/dfafd8b3-c553-40fe-89ed-f7586d7cf6a1"
 					(reference "#PWR12")
-					(unit 0)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "0805W8F1501T5E_4")
-		(at 240.03 -7.62 0)
-		(unit 0)
-		(body_style 0)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(in_pos_files yes)
-		(dnp no)
-		(uuid "edeb0276-65dd-4646-87e4-6fe088fe8108")
-		(property "Reference" "R6"
-			(at 241.5794 -8.4963 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(face "Arial")
-					(size 1.6891 1.6891)
-				)
-				(justify left top)
-			)
-		)
-		(property "Value" "1.5kΩ"
-			(at 241.554 -6.2103 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(face "Arial")
-					(size 1.6891 1.6891)
-				)
-				(justify left top)
-			)
-		)
-		(property "Footprint" "ProPrj_Dri-easyedapro:R0402"
-			(at 240.03 -7.62 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" ""
-			(at 240.03 -7.62 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" ""
-			(at 240.03 -7.62 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "MPN" "0402WGF1501TCE"
-			(at 240.03 -7.62 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Manufacturer" "UNI-ROYAL(厚声)"
-			(at 240.03 -7.62 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Supplier Part" "C25867"
-			(at 240.03 -7.62 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Supplier" "LCSC"
-			(at 240.03 -7.62 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(pin "1"
-			(uuid "ba532a92-e4a4-47b2-9553-9d779a66b06e")
-		)
-		(pin "2"
-			(uuid "0031ab89-ca93-40e3-84b2-fb88ae6a4098")
-		)
-		(instances
-			(project "Unified Control Board"
-				(path "/dfafd8b3-c553-40fe-89ed-f7586d7cf6a1"
-					(reference "R6")
 					(unit 0)
 				)
 			)
