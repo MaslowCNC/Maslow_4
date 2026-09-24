@@ -4,67 +4,79 @@
 
 #pragma once
 
-#include "../Configuration/Configurable.h"
-#include "../WebUI/InputBuffer.h"  // WebUI::inputBuffer
-#include "../UartChannel.h"
-#include "../Event.h"
-#include <algorithm>
+#include "Configuration/Configurable.h"
+#include "Event.h"
+// #include <algorithm>  // std::replace()
 
 class MacroEvent : public Event {
-    int _num;
+    objnum_t _num;
 
 public:
     MacroEvent(int num) : _num(num) {}
-    void run(void*) override;
+    void run(void*) const override;
 };
 
-extern MacroEvent macro0Event;
-extern MacroEvent macro1Event;
-extern MacroEvent macro2Event;
-extern MacroEvent macro3Event;
+extern const MacroEvent macro0Event;
+extern const MacroEvent macro1Event;
+extern const MacroEvent macro2Event;
+extern const MacroEvent macro3Event;
 
+class Macro;
 namespace Machine {
     class Macros : public Configuration::Configurable {
     public:
-        static const int n_startup_lines = 2;
-        static const int n_macros        = 4;
+        static const objnum_t n_macros = 4;
 
-    private:
-        std::string _startup_line[n_startup_lines];
-        std::string _macro[n_macros];
+        static Macro _macro[];
+        static Macro _startup;
+        static Macro _startup_line0;
+        static Macro _startup_line1;
+        static Macro _after_homing;
+        static Macro _after_reset;
+        static Macro _after_unlock;
 
-    public:
         Macros() = default;
-
-        bool run_macro(size_t index);
-
-        std::string startup_line(size_t index) {
-            if (index >= n_startup_lines) {
-                return "";
-            }
-            auto s = _startup_line[index];
-            if (s == "") {
-                return s;
-            }
-            // & is a proxy for newlines in startup lines, because you cannot
-            // enter a newline directly in a config file string value.
-            std::replace(s.begin(), s.end(), '&', '\n');
-            return s + "\n";
-        }
 
         // Configuration helpers:
 
-        // TODO: We could validate the startup lines
-
         void group(Configuration::HandlerBase& handler) override {
-            handler.item("startup_line0", _startup_line[0]);
-            handler.item("startup_line1", _startup_line[1]);
-            handler.item("macro0", _macro[0]);
-            handler.item("macro1", _macro[1]);
-            handler.item("macro2", _macro[2]);
-            handler.item("macro3", _macro[3]);
+            handler.item(_startup_line0.name(), _startup_line0);
+            handler.item(_startup_line1.name(), _startup_line1);
+            handler.item(_macro[0].name(), _macro[0]);
+            handler.item(_macro[1].name(), _macro[1]);
+            handler.item(_macro[2].name(), _macro[2]);
+            handler.item(_macro[3].name(), _macro[3]);
+            handler.item(_after_homing.name(), _after_homing);
+            handler.item(_after_reset.name(), _after_reset);
+            handler.item(_after_unlock.name(), _after_unlock);
         }
 
         ~Macros() {}
+    };
+
+    class MacroChannel : public Channel {
+    private:
+        Error  _pending_error = Error::Ok;
+        size_t _position      = 0;
+        size_t _blank_lines   = 0;
+
+        Macro* _macro;
+
+        Error readLine(char* line, size_t maxlen);
+        void  end_message();
+
+    public:
+        Error pollLine(char* line) override;
+
+        MacroChannel(Macro* macro);
+
+        MacroChannel(const MacroChannel&)            = delete;
+        MacroChannel& operator=(const MacroChannel&) = delete;
+
+        // Channel methods
+        size_t write(uint8_t c) override { return 0; }
+        void   ack(Error status) override;
+
+        ~MacroChannel();
     };
 }

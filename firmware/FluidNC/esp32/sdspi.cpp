@@ -1,3 +1,10 @@
+// Copyright (c) 2022 Mitch Bradley
+// Use of this source code is governed by a GPLv3 license that can be found in the LICENSE file.
+
+#include <esp_log.h>
+#undef CONFIG_LOG_MAXIMUM_LEVEL
+#define CONFIG_LOG_MAXIMUM_LEVEL CORE_DEBUG_LEVEL
+
 #include <vfs_api.h>
 #include <esp_vfs_fat.h>
 #include <diskio_impl.h>
@@ -5,27 +12,28 @@
 #include <ff.h>
 #include <soc/sdmmc_struct.h>
 #include <sdmmc_cmd.h>
-#include "driver/sdspi_host.h"
+#include <driver/sdspi_host.h>
+#include <esp_error.hpp>
 
 #include "Driver/sdspi.h"
-#include "src/Config.h"
+#include "Config.h"
 
 #define CHECK_EXECUTE_RESULT(err, str)                                                                                                     \
     do {                                                                                                                                   \
         if ((err) != ESP_OK) {                                                                                                             \
-            log_error(str << " code 0x" << to_hex(err));                                                                                   \
+            log_error(str << " code " << to_hex(err));                                                                                     \
             goto cleanup;                                                                                                                  \
         }                                                                                                                                  \
     } while (0)
 
-static esp_err_t mount_to_vfs_fat(int max_files, sdmmc_card_t* card, uint8_t pdrv, const char* base_path) {
+static esp_err_t mount_to_vfs_fat(uint32_t max_files, sdmmc_card_t* card, uint8_t pdrv, const char* base_path) {
     FATFS*    fs = NULL;
     esp_err_t err;
     ff_diskio_register_sdmmc(pdrv, card);
 
     //    ESP_LOGD(TAG, "using pdrv=%i", pdrv);
     // Drive names are "0:", "1:", etc.
-    char drv[3] = { (char)('0' + pdrv), ':', 0 };
+    const char drv[3] = { (char)('0' + pdrv), ':', 0 };
 
     FRESULT res;
 
@@ -56,7 +64,12 @@ fail:
     return err;
 }
 
+// NOTE: SDSPI_HOST_DEFAULT is incomplete and will give a warning
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmissing-field-initializers"
 sdmmc_host_t  host_config = SDSPI_HOST_DEFAULT();
+#pragma GCC diagnostic pop
+
 sdmmc_card_t* card        = NULL;
 const char*   base_path   = "/sd";
 
@@ -68,8 +81,12 @@ static void call_host_deinit(const sdmmc_host_t* host_config) {
     }
 }
 
-bool sd_init_slot(uint32_t freq_hz, int cs_pin, int cd_pin, int wp_pin) {
+// cppcheck-suppress unusedFunction
+bool sd_init_slot(uint32_t freq_hz, pinnum_t cs_pin, pinnum_t cd_pin, pinnum_t wp_pin) {
     esp_err_t err;
+
+    esp_log_level_set("sdmmc_sd", ESP_LOG_NONE);
+    esp_log_level_set("sdmmc_common", ESP_LOG_NONE);
 
     // Note: esp_vfs_fat_sdmmc/sdspi_mount is all-in-one convenience functions.
     // Please check its source code and implement error recovery when developing
@@ -96,17 +113,6 @@ bool sd_init_slot(uint32_t freq_hz, int cs_pin, int cd_pin, int wp_pin) {
     err = sdspi_host_init_device(&slot_config, &(host_config.slot));
     CHECK_EXECUTE_RESULT(err, "slot init failed");
 
-    // Empirically it is necessary to set the frequency twice.
-    // If you do it only above, the max frequency will be pinned
-    // at the highest "standard" frequency lower than the requested
-    // one, which is 400 kHz for requested frequencies < 20 MHz.
-    // If you do it only once below, the attempt to change it seems to
-    // be ignored, and you get 20 MHz regardless of what you ask for.
-    if (freq_hz) {
-        err = sdspi_host_set_card_clk(host_config.slot, freq_hz / 1000);
-        CHECK_EXECUTE_RESULT(err, "set slot clock speed failed");
-    }
-
     SDMMC.clock.phase_dout = 1;
     SDMMC.clock.phase_din  = 6;
 
@@ -119,49 +125,45 @@ cleanup:
     return false;
 }
 
-#if 0
-bool init_spi_bus(int mosi_pin, int miso_pin, int clk_pin) {
-    spi_bus_config_t bus_cfg = {
-        .mosi_io_num     = mosi_pin,
-        .miso_io_num     = miso_pin,
-        .sclk_io_num     = clk_pin,
-        .quadwp_io_num   = -1,
-        .quadhd_io_num   = -1,
-        .max_transfer_sz = 4000,
-    };
-    esp_err_t err = spi_bus_initialize(host_config.slot, &bus_cfg, SPI_DMA_CHAN);
-    return err == ESP_OK;
-}
-#endif
-
 // adapted from vfs_fat_sdmmc.c:esp_vfs_fat_sdmmc_mount()
-std::error_code sd_mount(int max_files) {
+// cppcheck-suppress unusedFunction
+std::error_code sd_mount(uint32_t max_files) {
     log_verbose("Mount_sd");
     esp_err_t err;
+
+    if ((err = host_config.set_card_clk(host_config.slot, host_config.max_freq_khz)) != ESP_OK) {
+        log_debug("spi_set_card_clk failed");
+        return esp_error::make_error_code(err);
+    }
 
     // mount_prepare_mem() ... minus the strdup of base_path
     // Search for a free drive slot
     BYTE pdrv = FF_DRV_NOT_USED;
     if ((err = ff_diskio_get_drive(&pdrv)) != ESP_OK) {
         log_debug("ff_diskio_get_drive failed");
-        return std::error_code(err, std::system_category());
+        return esp_error::make_error_code(err);
     }
     if (pdrv == FF_DRV_NOT_USED) {
         log_debug("the maximum count of volumes is already mounted");
-        return std::error_code(ESP_FAIL, std::system_category());
+        return esp_error::make_error_code(ESP_FAIL);
     }
     // pdrv is now the index of the unused drive slot
 
     // not using ff_memalloc here, as allocation in internal RAM is preferred
-    card = (sdmmc_card_t*)malloc(sizeof(sdmmc_card_t));
+    card = static_cast<sdmmc_card_t*>(malloc(sizeof(sdmmc_card_t)));
     if (card == NULL) {
         log_debug("could not allocate new sdmmc_card_t");
-        return std::error_code(ESP_ERR_NO_MEM, std::system_category());
+        return esp_error::make_error_code(ESP_ERR_NO_MEM);
     }
     // /mount_prepare_mem()
 
     // probe and initialize card
     err = sdmmc_card_init(&host_config, card);
+    if (err != ESP_OK) {
+        // Some cards fail the first time after they are inserted, but then succeed,
+        // so we retry this step once.
+        err = sdmmc_card_init(&host_config, card);
+    }
     CHECK_EXECUTE_RESULT(err, "sdmmc_card_init failed");
 
     err = mount_to_vfs_fat(max_files, card, pdrv, base_path);
@@ -171,18 +173,18 @@ std::error_code sd_mount(int max_files) {
 cleanup:
     free(card);
     card = NULL;
-    return std::error_code(err, std::system_category());
+    return esp_error::make_error_code(err);
 }
 
+// cppcheck-suppress unusedFunction
 void sd_unmount() {
-    log_verbose("Unmount_sd");
     BYTE pdrv = ff_diskio_get_pdrv_card(card);
     if (pdrv == 0xff) {
         return;
     }
 
     // unmount
-    char drv[3] = { (char)('0' + pdrv), ':', 0 };
+    const char drv[3] = { (char)('0' + pdrv), ':', 0 };
     f_mount(NULL, drv, 0);
 
     esp_vfs_fat_unregister_path(base_path);
@@ -194,22 +196,11 @@ void sd_unmount() {
     card = NULL;
 }
 
+// cppcheck-suppress unusedFunction
 void sd_deinit_slot() {
-    // log_debug("Deinit slot");
     sdspi_host_remove_device(host_config.slot);
     call_host_deinit(&host_config);
 
     //deinitialize the bus after all devices are removed
     //    spi_bus_free(HSPI_HOST);
 }
-
-#if 0
-static esp_err_t unmount_card_core(const char* base_path, sdmmc_card_t* card) {
-    return err;
-}
-
-unmount2() {
-    char drv[3] = { (char)('0' + pdrv), ':', 0 };
-    f_mount(NULL, drv, 0);
-}
-#endif

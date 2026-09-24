@@ -4,8 +4,8 @@
 #pragma once
 
 #include "TrinamicBase.h"
-#include "../Pin.h"
-#include "../PinMapper.h"
+#include "Pin.h"
+#include "PinMapper.h"
 
 #include <cstdint>
 
@@ -16,6 +16,7 @@ namespace MotorDrivers {
 
     class TrinamicSpiDriver : public TrinamicBase {
     public:
+        TrinamicSpiDriver(const char* name) : TrinamicBase(name) {}
         TrinamicSpiDriver() = default;
 
         // Overrides for inherited methods
@@ -25,7 +26,7 @@ namespace MotorDrivers {
         // Configuration handlers:
         void afterParse() override {
             if (!_spi_setup_done) {
-                if (daisy_chain_cs_id == 255) {
+                if (daisy_chain_cs_id == INVALID_PINNUM) {
                     // Either it is not a daisy chain or this is the first daisy-chained TMC in the config file
                     Assert(_cs_pin.defined(), "TMC cs_pin: pin must be configured");
                     if (_spi_index != -1) {
@@ -54,25 +55,86 @@ namespace MotorDrivers {
         void group(Configuration::HandlerBase& handler) override {
             TrinamicBase::group(handler);
 
+            // @config cs_pin
+            // @default NO_PIN
+            // @pin_attributes output
+            // SPI chip-select for this driver. In independent (non-daisy-chained) SPI mode
+            // each driver needs its own; in a daisy chain, define this only on the motor
+            // with spi_index: 1 -- the rest share that same physical CS line.
             handler.item("cs_pin", _cs_pin);
+
+            // @config spi_index
+            // @default -1
+            // -1 means independent SPI mode (used on all drivers when not daisy-chaining).
+            // In a daisy chain, each driver gets a distinct position number (1, 2, 3, ...)
+            // in chain order -- every physical position in the chain must be represented by
+            // a motor entry, even unused ones, or the chain's data alignment breaks.
             handler.item("spi_index", _spi_index, -1, 127);
 
+            // @config run_mode
+            // @default StealthChop
+            // Chopper algorithm while running: StealthChop (very quiet), CoolStep (runs
+            // cooler, allows higher current), or StallGuard (CoolStep plus stall/load
+            // detection).
             handler.item("run_mode", _run_mode, trinamicModes);
+
+            // @config homing_mode
+            // @default StealthChop
+            // Chopper algorithm while homing (same choices as run_mode) -- StallGuard is
+            // typically used here for sensorless homing.
             handler.item("homing_mode", _homing_mode, trinamicModes);
+
+            // @config stallguard
+            // @default 0
+            // StallGuard sensitivity threshold for this SPI-driven chip family, -64
+            // (most sensitive) to 63 (least sensitive). Only meaningful when run_mode or
+            // homing_mode is StallGuard.
             handler.item("stallguard", _stallguard, -64, 63);
+
+            // @config stallguard_debug
+            // @default false
+            // Logs live StallGuard sensor values -- useful for tuning the stallguard
+            // threshold for sensorless homing.
             handler.item("stallguard_debug", _stallguardDebugMode);
+
+            // @config toff_coolstep
+            // @default 3
+            // TOFF (off-time) register value used in CoolStep/StallGuard mode.
             handler.item("toff_coolstep", _toff_coolstep, 2, 15);
+
+            // @config diag0_error
+            // @default false
+            // Enables the DIAG0 pin to signal driver error conditions. SPI-driver-specific
+            // -- not available on the UART-controlled Trinamic drivers.
+            handler.item("diag0_error", _diag0_error);
+
+            // @config diag0_otpw
+            // @default false
+            // Enables the DIAG0 pin to signal an over-temperature pre-warning.
+            // SPI-driver-specific -- not available on the UART-controlled Trinamic drivers.
+            handler.item("diag0_otpw", _diag0_otpw);
+
+            // @config diag0_int_pushpull
+            // @default false
+            // Configures the DIAG0 pin's output stage as push-pull instead of open-drain.
+            // SPI-driver-specific -- not available on the UART-controlled Trinamic drivers.
+            handler.item("diag0_int_pushpull", _diag0_int_pushpull);
         }
 
     protected:
-        Pin       _cs_pin;  // The chip select pin (can be the same for daisy chain)
-        int32_t   _spi_index      = -1;
-        const int _spi_freq       = 100000;
-        bool      _spi_setup_done = false;
+        Pin     _cs_pin;  // The chip select pin (can be the same for daisy chain)
+        int32_t _spi_index      = -1;
+        bool    _spi_setup_done = false;
+
+        bool _diag0_error        = false;
+        bool _diag0_otpw         = false;
+        bool _diag0_int_pushpull = false;
+
+        static constexpr int _spi_freq = 100000;
 
         void config_message() override;
 
-        uint8_t setupSPI();
+        pinnum_t setupSPI();
 
         bool    reportTest(uint8_t result);
         uint8_t toffValue();

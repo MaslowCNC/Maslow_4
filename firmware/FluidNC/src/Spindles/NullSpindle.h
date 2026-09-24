@@ -15,7 +15,7 @@ namespace Spindles {
     // It is used to ignore spindle commands when no spindle is desired
     class Null : public Spindle {
     public:
-        Null() = default;
+        Null(const char* name) : Spindle(name) {}
 
         Null(const Null&)            = delete;
         Null(Null&&)                 = delete;
@@ -29,9 +29,6 @@ namespace Spindles {
 
         // Configuration handlers:
         void group(Configuration::HandlerBase& handler) override {}
-
-        // Name of the configurable. Must match the name registered in the cpp file.
-        const char* name() const override { return "NoSpindle"; }
 
         ~Null() {}
     };

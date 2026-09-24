@@ -11,9 +11,10 @@
 
 #include "TrinamicUartDriver.h"
 
-#include "../Machine/MachineConfig.h"
-#include "../Uart.h"
+#include "Machine/MachineConfig.h"
+#include "Uart.h"
 
+#include <cstdint>       // MUST be before TMCStepper.h
 #include <TMCStepper.h>  // https://github.com/teemuatlut/TMCStepper
 #include <atomic>
 
@@ -21,22 +22,25 @@ namespace MotorDrivers {
 
     void TrinamicUartDriver::init() {
         _uart = config->_uarts[_uart_num];
-        if (!_uart) {
-            log_error("TMC2208: Missing uart" << _uart_num << "section");
+        Assert(_uart, "TMC Driver missing uart%d section", _uart_num);
+        if (!_uart->configured()) {
+            log_error(name() << ": uart" << _uart_num << " failed configuration");
+            _has_errors = true;
             return;
         }
+
+        _cs_pin.setAttr(Pin::Attr::Output);
+        TrinamicBase::init();
     }
 
     /*
         This is the startup message showing the basic definition. 
+
+        log_info(" UART CS:" << );
     */
     void TrinamicUartDriver::config_message() {  //TODO: The RX/TX pin could be added to the msg.
-        char* buffer = getLogBuffer();
-        snprintf(buffer, 1400, "    %s UART%d Addr:%d Step:%s Dir:%s Disable:%s R:%g",
-                name(), _uart_num, _addr, _step_pin.name().c_str(), _dir_pin.name().c_str(),
-                _disable_pin.name().c_str(), _r_sense);
-        log_info(buffer);
-        releaseLogBuffer();
+        log_info("    " << name() << " UART" << _uart_num << " Addr:" << _addr << " CS:" << _cs_pin.name() << " Step:" << _step_pin.name()
+                        << " Dir:" << _dir_pin.name() << " Disable:" << _disable_pin.name() << " R:" << _r_sense);
     }
 
     uint8_t TrinamicUartDriver::toffValue() {

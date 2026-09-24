@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "../Configuration/Configurable.h"
+#include "Configuration/Configurable.h"
 #include "PinExtenderDriver.h"
 
 namespace Extenders {

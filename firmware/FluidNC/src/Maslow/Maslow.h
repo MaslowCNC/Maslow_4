@@ -121,6 +121,15 @@ public:
      *  permanent and the only recovery was a power cycle. */
     bool   clearError();
 
+    /** True while a latched error or a fired watchdog is making update() return before the
+     *  motion state machine runs.  Commands that start motion ask this first: without it
+     *  they are accepted, switch the state to Homing, and then sit there forever because
+     *  nothing downstream ever runs. */
+    bool   motionBlocked() const { return error || watchdogFired; }
+
+    /** Why motion is blocked, phrased for the user and ending in the recovery step. */
+    String motionBlockedReason() const;
+
     // Set true during file/firmware uploads to suppress the update-loop watchdog.
     // Flash write operations stall both CPU cores; without this flag the 100 ms
     // watchdog fires spuriously and latches the red LED until a power cycle.
@@ -157,10 +166,26 @@ public:
 
     bool readingFromSD = false;  //Used to turn off reading from the encoders when reading from the - i dont think we need this anymore TODO
     bool using_default_config = false;
+    // Set once begin() has completed; update() is a no-op before that because
+    // protocol_execute_realtime() can pump update() during setup, before the
+    // I2C bus and motor units exist.
+    bool initialized = false;
+    // Diagnostics: how many times update() has run, and how far it got
+    volatile uint32_t updateCount = 0;
+    volatile uint32_t homeCallCount = 0;
+
+    // Consumed by the Maslow web UI / updater; parsed here so the keys in
+    // maslow.yaml are recognized by the config system.
+    bool        autoUpdate = true;
+    std::string updateURL  = "";
     QWIICMUX I2CMux;
 
     bool   error = false;
     String errorMessage;
+    // errorMessage used to be wiped as soon as it was logged, which left nothing to tell the
+    // user why motion was refused minutes later.  Keep the text and track the logging
+    // separately so the reason survives for as long as the latch does.
+    bool errorMessageLogged = false;
 
     void test_();
     void reset_all_axis();
@@ -218,3 +243,9 @@ extern Maslow_& Maslow;
 
 // actual task loop for gathering telemetry data (runs on utility core)
 void telemetry_loop(void* unused);
+
+// Shared scratch buffer for snprintf-style log formatting, protected by a
+// mutex.  Kept from the pre-merge Maslow logging code; upstream FluidNC no
+// longer provides these.
+char* getLogBuffer();
+void  releaseLogBuffer();

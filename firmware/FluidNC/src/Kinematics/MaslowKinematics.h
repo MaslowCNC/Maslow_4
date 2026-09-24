@@ -23,7 +23,7 @@
 namespace Kinematics {
     class MaslowKinematics : public KinematicSystem {
     public:
-        MaslowKinematics() = default;
+        MaslowKinematics(const char* name) : KinematicSystem(name) {}
 
         MaslowKinematics(const MaslowKinematics&)            = delete;
         MaslowKinematics(MaslowKinematics&&)                 = delete;
@@ -34,8 +34,8 @@ namespace Kinematics {
         void init() override;
         void init_position() override;
         bool cartesian_to_motors(float* target, plan_line_data_t* pl_data, float* position) override;
-        void motors_to_cartesian(float* cartesian, float* motors, int n_axis) override;
-        void transform_cartesian_to_motors(float* motors, float* cartesian) override;
+        void motors_to_cartesian(float* cartesian, float* motors, axis_t n_axis) override;
+        bool transform_cartesian_to_motors(float* motors, float* cartesian) override;
 
         bool canHome(AxisMask axisMask) override;
         void releaseMotors(AxisMask axisMask, MotorMask motors) override;
@@ -45,9 +45,6 @@ namespace Kinematics {
         void validate() override;
         void group(Configuration::HandlerBase& handler) override;
         void afterParse() override;
-
-        // Name of the configurable. Must match the name registered in the cpp file.
-        const char* name() const override { return "MaslowKinematics"; }
 
         ~MaslowKinematics();
 

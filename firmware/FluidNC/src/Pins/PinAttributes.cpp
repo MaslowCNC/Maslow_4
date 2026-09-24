@@ -2,7 +2,6 @@
 // Use of this source code is governed by a GPLv3 license that can be found in the LICENSE file.
 
 #include "PinAttributes.h"
-#include "PinCapabilities.h"
 
 namespace Pins {
     PinAttributes PinAttributes::Undefined(0);
@@ -18,12 +17,24 @@ namespace Pins {
     PinAttributes PinAttributes::Output(1 << (__LINE__ - START_LINE));
     PinAttributes PinAttributes::PullUp(1 << (__LINE__ - START_LINE));
     PinAttributes PinAttributes::PullDown(1 << (__LINE__ - START_LINE));
-    PinAttributes PinAttributes::ISR(1 << (__LINE__ - START_LINE));     // ^        These are capabilities mapped
+    PinAttributes PinAttributes::ISR(1 << (__LINE__ - START_LINE));  // ^        These are capabilities mapped
+
+    PinAttributes PinAttributes::PWM(1 << (__LINE__ - START_LINE));
+    PinAttributes PinAttributes::UART(1 << (__LINE__ - START_LINE));
+    PinAttributes PinAttributes::ADC(1 << (__LINE__ - START_LINE));
+    PinAttributes PinAttributes::DAC(1 << (__LINE__ - START_LINE));
+
     const int     capabilityMask = (1 << (__LINE__ - START_LINE)) - 1;  // -------- Mask capabilities till here
     PinAttributes PinAttributes::ActiveLow(1 << (__LINE__ - START_LINE));
     PinAttributes PinAttributes::Exclusive(1 << (__LINE__ - START_LINE));  // \/       These are attributes
     PinAttributes PinAttributes::InitialOn(1 << (__LINE__ - START_LINE));  // \/       These are attributes
 
+    PinAttributes PinAttributes::DS0(1 << (__LINE__ - START_LINE));  // Lowest drive strength
+    PinAttributes PinAttributes::DS1(1 << (__LINE__ - START_LINE));  // Second to lowest drive strength
+    PinAttributes PinAttributes::DS2(1 << (__LINE__ - START_LINE));  // Second to highest drive strength
+    PinAttributes PinAttributes::DS3(1 << (__LINE__ - START_LINE));  // Highest drive strength
+
+    // cppcheck-suppress unusedFunction
     bool PinAttributes::validateWith(PinCapabilities caps) {
         auto capMask  = (caps._value & capabilityMask);
         auto attrMask = (_value & capabilityMask);
@@ -33,6 +44,7 @@ namespace Pins {
                (capMask | attrMask) == capMask;     // if the required attributes all match an available capability
     }
 
+    // cppcheck-suppress unusedFunction
     bool PinAttributes::conflictsWith(PinAttributes t) {
         // If it's exclusive, we are not allowed to set it again:
         if (_value != Undefined._value && this->has(Exclusive) && _value != t._value) {

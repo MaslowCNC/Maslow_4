@@ -10,6 +10,32 @@
 
 #include "DCMotor.h"
 
+#include "esp_adc/adc_oneshot.h"
+
+extern void bootTrace(const char*);  // TEMPORARY bring-up diagnostics
+
+// ADC access via the IDF oneshot driver.  Arduino core 3's analogRead() can
+// wedge on ADC2 pins (the TL current sense is GPIO18 = ADC2_CH7) while WiFi
+// holds the ADC2 arbitration lock.  Reading through adc_oneshot with an
+// explicit error path degrades to "no reading" instead of blocking.
+#ifndef ADC_ATTEN_DB_12
+#    define ADC_ATTEN_DB_12 ADC_ATTEN_DB_11
+#endif
+static adc_oneshot_unit_handle_t adcUnits[2] = { nullptr, nullptr };
+
+static adc_oneshot_unit_handle_t adcUnitHandle(adc_unit_t unit) {
+    if (adcUnits[unit] == nullptr) {
+        adc_oneshot_unit_init_cfg_t cfg = {};
+        cfg.unit_id                     = unit;
+        cfg.ulp_mode                    = ADC_ULP_MODE_DISABLE;
+        if (adc_oneshot_new_unit(&cfg, &adcUnits[unit]) != ESP_OK) {
+            adcUnits[unit] = nullptr;
+        }
+    }
+    return adcUnits[unit];
+}
+
+
 #define motorPWMFreq 16000
 #define motorPWMRes 10
 
@@ -30,14 +56,29 @@ void DCMotor::begin(uint8_t forwardPin, uint8_t backwardPin, int readbackPin, in
     _channel1 = channel1;
     _channel2 = channel2;
 
-    //Setup the motor controllers
-    ledcSetup(channel1, motorPWMFreq, motorPWMRes);  // configure PWM functionalities...this uses timer 0 (channel, freq, resolution)
-    ledcAttachPin(_forward, channel1);               // attach the channel to the GPIO to be controlled
-    ledcWrite(channel1, 0);                          //Turn the motor off
+    //Setup the motor controllers.  Arduino core 3 auto-assigns LEDC channels
+    //per pin; ledcWrite now takes the pin rather than the channel number.
+    ledcAttach(_forward, motorPWMFreq, motorPWMRes);
+    ledcWrite(_forward, 0);  //Turn the motor off
 
-    ledcSetup(channel2, motorPWMFreq, motorPWMRes);
-    ledcAttachPin(_back, channel2);
-    ledcWrite(channel2, 0);
+    ledcAttach(_back, motorPWMFreq, motorPWMRes);
+    ledcWrite(_back, 0);
+
+    bootTrace("DC adc map");
+    //Set up the current-sense ADC channel through the oneshot driver
+    _adcValid = false;
+    if (adc_oneshot_io_to_channel(_readback, &_adcUnit, &_adcChannel) == ESP_OK) {
+        bootTrace("DC adc unit");
+        if (auto handle = adcUnitHandle(_adcUnit)) {
+            bootTrace("DC adc cfg");
+            adc_oneshot_chan_cfg_t ch_cfg = {};
+            ch_cfg.atten                  = ADC_ATTEN_DB_12;
+            ch_cfg.bitwidth               = ADC_BITWIDTH_12;
+            if (adc_oneshot_config_channel(handle, _adcChannel, &ch_cfg) == ESP_OK) {
+                _adcValid = true;
+            }
+        }
+    }
 }
 
 /*!
@@ -104,12 +145,12 @@ void DCMotor::runAtPWM(long signed_speed) {
  */
 void DCMotor::runAtSpeed(uint8_t direction, uint16_t speed) {
     if (direction == 0) {
-        ledcWrite(_channel1, _maxSpeed);
-        ledcWrite(_channel2, _maxSpeed - speed);
+        ledcWrite(_forward, _maxSpeed);
+        ledcWrite(_back, _maxSpeed - speed);
 
     } else {
-        ledcWrite(_channel2, _maxSpeed);
-        ledcWrite(_channel1, _maxSpeed - speed);
+        ledcWrite(_back, _maxSpeed);
+        ledcWrite(_forward, _maxSpeed - speed);
     }
 }
 
@@ -118,16 +159,16 @@ void DCMotor::runAtSpeed(uint8_t direction, uint16_t speed) {
  */
 void DCMotor::stop() {
     //These could be set to 1023 to allow coasting
-    ledcWrite(_channel1, 0);  //Stop
-    ledcWrite(_channel2, 0);
+    ledcWrite(_forward, 0);  //Stop
+    ledcWrite(_back, 0);
 }
 
 /*!
  *  @brief  Stop the motors in a high-z state
  */
 void DCMotor::highZ() {
-    ledcWrite(_channel1, 0);  //Stop
-    ledcWrite(_channel2, 0);
+    ledcWrite(_forward, 0);  //Stop
+    ledcWrite(_back, 0);
 }
 
 /*!
@@ -138,6 +179,33 @@ void DCMotor::highZ() {
  *  @return Reading of current is in arbitrary units. 0 is no current, 4095 is max. TODO: Compute max in mA based on resistor choices.
  *
  */
+void DCMotor::probeADC(int& unit, int& channel, bool& valid, int& raw, int& err, int& viaArduino) {
+    unit    = (int)_adcUnit;
+    channel = (int)_adcChannel;
+    valid   = _adcValid;
+    raw     = -1;
+    err     = ESP_FAIL;
+    if (_adcValid) {
+        if (auto handle = adcUnitHandle(_adcUnit)) {
+            err = adc_oneshot_read(handle, _adcChannel, &raw);
+        }
+    }
+    viaArduino = analogRead(_readback);
+}
+
 double DCMotor::readCurrent() {
-    return analogRead(_readback);
+    if (!_adcValid) {
+        return 0;
+    }
+    // ADC2 is read here too.  It was skipped for a while on the assumption that the WiFi
+    // radio owns the ADC2 arbitration on the ESP32-S3, but $MADC shows adc_oneshot_read()
+    // on ADC2_CH7 returning ESP_OK with WiFi up, and skipping it is not harmless: the TL
+    // current sense is the only one of the four on ADC2 (GPIO18), so returning a stale 0
+    // made motor_test() run its full 100 ms pulse - the belt twitch at every boot - and
+    // then declare "Motor not found on Top Left".
+    int raw = 0;
+    if (adc_oneshot_read(adcUnits[_adcUnit], _adcChannel, &raw) == ESP_OK) {
+        _lastCurrentReading = raw;
+    }
+    return _lastCurrentReading;
 }

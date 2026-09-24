@@ -3,11 +3,10 @@
 
 #pragma once
 
-#include "../Config.h"
-#include "../Assert.h"
-#include "../Configuration/GenericFactory.h"
-#include "../Configuration/HandlerBase.h"
-#include "../Configuration/Configurable.h"
+#include "Config.h"
+#include "Configuration/GenericFactory.h"
+#include "Configuration/HandlerBase.h"
+#include "Configuration/Configurable.h"
 
 /*
     Header file for Motor Classes
@@ -22,17 +21,19 @@
     See motorClass.cpp for more details
 */
 
-#include "../Configuration/Configurable.h"
+#include "Configuration/Configurable.h"
 
 #include <cstdint>
 
 namespace MotorDrivers {
     class MotorDriver : public Configuration::Configurable {
+        const char* _name;
+
     public:
-        MotorDriver() = default;
+        MotorDriver(const char* name) : _name(name) {}
 
         static constexpr int      max_n_axis = MAX_N_AXIS;
-        static constexpr uint32_t axis_mask  = (1 << max_n_axis) - 1;
+        static constexpr AxisMask axis_mask  = (1 << max_n_axis) - 1;
 
         // init() establishes configured motor parameters.  It is called after
         // all motor objects have been constructed.
@@ -46,11 +47,6 @@ namespace MotorDrivers {
         // the stallguard debugging problem.
         virtual void debug_message();
 
-        // read_settings(), called from init(), re-establishes the motor
-        // setup from configurable arameters.
-        // TODO Architecture: Maybe this should be subsumed by init()
-        virtual void read_settings() {}
-
         // set_homing_mode() is called from motors_set_homing_mode(),
         // which in turn is called at the beginning of a homing cycle
         // with isHoming true, and at the end with isHoming false.
@@ -58,25 +54,13 @@ namespace MotorDrivers {
         // normal operation.  Returns true if the motor can home
         virtual bool set_homing_mode(bool isHoming) = 0;
 
+        // this is used to determine if the motor can home
+        // it is tested when hoing cycles are requested.
+        virtual bool can_self_home() = 0;
+
         // set_disable() disables or enables a motor.  It is used to
         // make a motor transition between idle and non-idle states.
         virtual void set_disable(bool disable);
-
-        // set_direction() sets the motor movement direction.  It is
-        // invoked for every motion segment.
-        virtual void set_direction(bool);
-
-        // step() initiates a step operation on a motor.  It is called
-        // from motors_step() for ever motor than needs to step now.
-        // For ordinary step/direction motors, it sets the step pin
-        // to the active state.
-        virtual void step();
-
-        // unstep() turns off the step pin, if applicable, for a motor.
-        // It is called from motors_unstep() for all motors, since
-        // motors_unstep() is used in many contexts where the previous
-        // states of the step pins are unknown.
-        virtual void unstep();
 
         // this is used to configure and test motors. This would be used for Trinamic
         virtual void config_motor() {}
@@ -88,7 +72,7 @@ namespace MotorDrivers {
         virtual bool test();
 
         // Name is required for the configuration factory to work.
-        virtual const char* name() const = 0;
+        const char* name() { return _name; }
 
         // Test for a real motor as opposed to a NullMotor placeholder
         virtual bool isReal() { return true; }
@@ -115,8 +99,8 @@ namespace MotorDrivers {
         //   tables can be indexed by these variables.
         // TODO Architecture: It might be useful to cache a
         // reference to the axis settings entry.
-        size_t axis_index() const;       // X_AXIS, etc
-        size_t dual_axis_index() const;  // motor number 0 or 1
+        axis_t axis_index() const;       // X_AXIS, etc
+        motor_t dual_axis_index() const;  // motor number 0 or 1
     };
 
     using MotorFactory = Configuration::GenericFactory<MotorDriver>;

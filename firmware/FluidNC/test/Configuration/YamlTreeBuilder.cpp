@@ -1,4 +1,4 @@
-#include "../TestFramework.h"
+#include "TestFramework.h"
 
 #include <string>
 
@@ -41,7 +41,7 @@ namespace Configuration {
         ST_I2S_STATIC,
     };
 
-    EnumItem stepTypes[] = {
+    const EnumItem stepTypes[] = {
         { ST_TIMED, "Timed" }, { ST_RMT, "RMT" }, { ST_I2S_STATIC, "I2S_static" }, { ST_I2S_STREAM, "I2S_stream" }, EnumItem(ST_RMT)
     };
 

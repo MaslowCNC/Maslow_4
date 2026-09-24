@@ -1,10 +1,10 @@
 #include "CoreXY.h"
 
-#include "../Machine/MachineConfig.h"
-#include "../Limits.h"  // ambiguousLimit()
-#include "../Machine/Homing.h"
+#include "Machine/MachineConfig.h"
+#include "Limit.h"  // ambiguousLimit()
+#include "Machine/Homing.h"
 
-#include "../Protocol.h"  // protocol_execute_realtime
+#include "Protocol.h"  // protocol_execute_realtime
 
 #include <cmath>
 
@@ -17,9 +17,7 @@ kinematics:
 
 Scaling factors are made for midTbot type machines.
 
-TODO: Implement scalers
-
-On a midTbot the motors themselves move in X or Y so they need to be compensated. It 
+On a midTbot the motors themselves move in X or Y so they need to be compensated. It
 would use x_scaler: 1 on bots where the motors move in X
 
 TODO: If touching back off
@@ -27,14 +25,23 @@ TODO: If touching back off
 */
 
 namespace Kinematics {
-    void CoreXY::group(Configuration::HandlerBase& handler) {}
+    void CoreXY::group(Configuration::HandlerBase& handler) {
+        // @config x_scaler
+        // @default 1.0
+        // Compensation factor for midTbot-style machines where the motors themselves
+        // move in X, so a cartesian X move corresponds to a larger motor-space move.
+        // Leave at 1 on CoreXY machines where the motors don't move in X.
+        handler.item("x_scaler", _x_scaler, 0.1, 10.0);
+    }
 
     void CoreXY::init() {
         log_info("Kinematic system: " << name());
 
         // A limit switch on either axis stops both motors
-        config->_axes->_axis[X_AXIS]->_motors[0]->limitOtherAxis(Y_AXIS);
-        config->_axes->_axis[Y_AXIS]->_motors[0]->limitOtherAxis(X_AXIS);
+        Axes::_axis[X_AXIS]->_motors[0]->limitOtherAxis(Y_AXIS);
+        Axes::_axis[Y_AXIS]->_motors[0]->limitOtherAxis(X_AXIS);
+
+        Cartesian::init_position();
     }
 
     bool CoreXY::canHome(AxisMask axisMask) {
@@ -73,9 +80,14 @@ namespace Kinematics {
     void CoreXY::releaseMotors(AxisMask axisMask, MotorMask motors) {
         auto axes   = config->_axes;
         auto n_axis = axes->_numberAxis;
-        for (size_t axis = X_AXIS; axis < n_axis; axis++) {
+        // In CoreXY kinematics, the X and Y axes are coupled through two motors.
+        if (bitnum_is_true(axisMask, X_AXIS) || bitnum_is_true(axisMask, Y_AXIS)) {
+            Stepping::unlimit(X_AXIS, MOTOR0);
+            Stepping::unlimit(Y_AXIS, MOTOR0);
+        }
+        for (axis_t axis = Z_AXIS; axis < n_axis; axis++) {
             if (bitnum_is_true(axisMask, axis)) {
-                axes->_axis[axis]->_motors[0]->unlimit();
+                Stepping::unlimit(axis, MOTOR0);
             }
         }
     }
@@ -93,9 +105,9 @@ namespace Kinematics {
     bool CoreXY::cartesian_to_motors(float* target, plan_line_data_t* pl_data, float* position) {
         //        log_debug("cartesian_to_motors position (" << position[X_AXIS] << "," << position[Y_AXIS] << ") target (" << target[X_AXIS] << "," << target[Y_AXIS] << ")");
 
-        auto n_axis = config->_axes->_numberAxis;
+        auto n_axis = Axes::_numberAxis;
 
-        float motors[n_axis];
+        float motors[MAX_N_AXIS];
         transform_cartesian_to_motors(motors, target);
 
         if (!pl_data->motion.rapidMotion) {
@@ -103,7 +115,7 @@ namespace Kinematics {
             float cartesian_distance = vector_distance(target, position, n_axis);
 
             // Calculate vector distance of the motion in motor coordinates
-            float last_motors[n_axis];
+            float last_motors[MAX_N_AXIS];
             transform_cartesian_to_motors(last_motors, position);
             float motor_distance = vector_distance(motors, last_motors, n_axis);
 
@@ -118,13 +130,13 @@ namespace Kinematics {
       The status command uses motors_to_cartesian() to convert
       motor positions to cartesian X,Y,Z... coordinates.
     */
-    void CoreXY::motors_to_cartesian(float* cartesian, float* motors, int n_axis) {
+    void CoreXY::motors_to_cartesian(float* cartesian, float* motors, axis_t n_axis) {
         // apply the forward kinemetics to the machine coordinates
         // https://corexy.com/theory.html
         cartesian[X_AXIS] = 0.5 * (motors[X_AXIS] + motors[Y_AXIS]) / _x_scaler;
         cartesian[Y_AXIS] = 0.5 * (motors[X_AXIS] - motors[Y_AXIS]);
 
-        for (int axis = Z_AXIS; axis < n_axis; axis++) {
+        for (axis_t axis = Z_AXIS; axis < n_axis; axis++) {
             cartesian[axis] = motors[axis];
         }
     }
@@ -132,14 +144,15 @@ namespace Kinematics {
     /*
       Kinematic equations
     */
-    void CoreXY::transform_cartesian_to_motors(float* motors, float* cartesian) {
+    bool CoreXY::transform_cartesian_to_motors(float* motors, float* cartesian) {
         motors[X_AXIS] = (_x_scaler * cartesian[X_AXIS]) + cartesian[Y_AXIS];
         motors[Y_AXIS] = (_x_scaler * cartesian[X_AXIS]) - cartesian[Y_AXIS];
 
-        auto n_axis = config->_axes->_numberAxis;
-        for (size_t axis = Z_AXIS; axis < n_axis; axis++) {
+        auto n_axis = Axes::_numberAxis;
+        for (axis_t axis = Z_AXIS; axis < n_axis; axis++) {
             motors[axis] = cartesian[axis];
         }
+        return true;
     }
 
     // Configuration registration

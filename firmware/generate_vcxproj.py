@@ -6,7 +6,7 @@
 PATHS_TO_SEARCH = ['FluidNC']
 HEADER_EXT = ['.h', '.inl']
 SOURCE_EXT = ['.c', '.cpp']
-OTHER_EXT = ['.ino', '.md']
+OTHER_EXT = ['.ino', '.md', '.txt']
 TEST_IGNORE = ['I2SOut.cpp','I2SOut.h']
 
 import os, uuid
@@ -47,7 +47,7 @@ class Vcxproj:
 	# configuration, platform
 	ImportGroupFmt = '\n'.join([
 		'	<ImportGroup Label="PropertySheets" Condition="\'$(Configuration)|$(Platform)\'==\'{0}|{1}\'">',
-		'		<Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists(\'$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props\')" Label="LocalAppDataPlatform" />',
+		'		<Import Project="$(UserRootDir)\\Microsoft.Cpp.$(Platform).user.props" Condition="exists(\'$(UserRootDir)\\Microsoft.Cpp.$(Platform).user.props\')" Label="LocalAppDataPlatform" />',
 		'	</ImportGroup>'
 	])
 
@@ -134,7 +134,11 @@ class Generator:
 			return
 		elif path.find('\\test\\') >= 0:
 			return
-			
+		elif path.find('/managed_components/') >= 0:
+			return
+		elif path.find('\\managed_components\\') >= 0:
+			return
+            
 		(root, ext) = os.path.splitext(path)
 		if ext in HEADER_EXT:
 			self.Headers.add(path)
@@ -192,12 +196,12 @@ class Generator:
 		project.append('	<Keyword>Win32Proj</Keyword>')
 		project.append('</PropertyGroup>')
 
-		project.append('<Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />')
+		project.append('<Import Project="$(VCTargetsPath)\\Microsoft.Cpp.Default.props" />')
 		for p in self.Platforms:
 			for c in self.Configurations:
 				project.append(Vcxproj.ConfigTypePropertyGroup(c, p))
 
-		project.append('<Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />')
+		project.append('<Import Project="$(VCTargetsPath)\\Microsoft.Cpp.props" />')
 		project.append('<ImportGroup Label="ExtensionSettings">')
 		project.append('</ImportGroup>')
 		project.append('	<ImportGroup Label="Shared">')
@@ -214,7 +218,7 @@ class Generator:
 		
 		project.append('<ItemDefinitionGroup>')
 		project.append('</ItemDefinitionGroup>')
-		project.append('<Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />')
+		project.append('<Import Project="$(VCTargetsPath)\\Microsoft.Cpp.targets" />')
 		project.append('	<ImportGroup Label="ExtensionTargets">')
 		project.append('</ImportGroup>')
 		project.append('<ProjectExtensions>')

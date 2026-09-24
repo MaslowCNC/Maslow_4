@@ -4,22 +4,26 @@
 #pragma once
 
 #include "HandlerType.h"
-#include "../Pin.h"
-#include "../EnumItem.h"
-#include "../SpindleDatatypes.h"
-#include "../UartTypes.h"
+#include "Pin.h"
+#include "Machine/EventPin.h"
+#include "EnumItem.h"
+#include "SpindleDatatypes.h"
+#include "UartTypes.h"
+#include "Macro.h"
+#include "Platform.h"
 
 #include <IPAddress.h>
 #include <string>
+#include "Driver/step_engine.h"
 
 namespace Configuration {
     class Configurable;
 
-    typedef struct {
-        SpindleSpeed speed;
-        float        percent;
-        uint32_t     offset;
-        uint32_t     scale;
+    typedef struct speed_entry_t {
+        SpindleSpeed speed   = 0;
+        float        percent = 0.0;
+        uint32_t     offset  = 0;
+        uint32_t     scale   = 0;
     } speedEntry;
 
     template <typename BaseType>
@@ -34,15 +38,17 @@ namespace Configuration {
         friend class GenericFactory;
 
     public:
-        virtual void item(const char* name, bool& value) = 0;
-        virtual void item(const std::string name, bool& value) { item(name.c_str(), value); };
-        virtual void item(const char* name, int32_t& value, int32_t minValue = 0, int32_t maxValue = INT32_MAX) = 0;
-        virtual void item(const std::string name, int32_t& value, int32_t minValue = 0, int32_t maxValue = INT32_MAX) {
+        virtual void item(const char* name, Macro& value)                                                                       = 0;
+        virtual void item(const char* name, bool& value)                                                                        = 0;
+        virtual void item(const char* name, int32_t& value, const int32_t minValue = 0, const int32_t maxValue = INT32_MAX)     = 0;
+        virtual void item(const char* name, uint32_t& value, const uint32_t minValue = 0, uint32_t const maxValue = UINT32_MAX) = 0;
+        // Maslow: std::string-name wrappers; M4 config item names are composed at runtime
+        void item(const std::string& name, bool& value) { item(name.c_str(), value); }
+        void item(const std::string& name, int32_t& value, int32_t minValue = 0, int32_t maxValue = INT32_MAX) {
             item(name.c_str(), value, minValue, maxValue);
-        };
-        virtual void item(const char* name, uint32_t& value, uint32_t minValue = 0, uint32_t maxValue = UINT32_MAX) = 0;
+        }
 
-        void item(const char* name, uint8_t& value, uint8_t minValue = 0, uint8_t maxValue = UINT8_MAX) {
+        void item(const char* name, uint8_t& value, const uint8_t minValue = 0, const uint8_t maxValue = UINT8_MAX) {
             int32_t v = int32_t(value);
             item(name, v, int32_t(minValue), int32_t(maxValue));
             value = uint8_t(v);
@@ -53,19 +59,25 @@ namespace Configuration {
             value = uint8_t(v);
         }
 
-        virtual void item(const char* name, float& value, float minValue = -3e38, float maxValue = 3e38) = 0;
-        virtual void item(const std::string name, float& value, float minValue = -3e38, float maxValue = 3e38) {
+        virtual void item(const char* name, float& value, const float minValue = -3e38, const float maxValue = 3e38) = 0;
+        void         item(const std::string& name, float& value, float minValue = -3e38, float maxValue = 3e38) {
             item(name.c_str(), value, minValue, maxValue);
-        };
+        }
         virtual void item(const char* name, std::vector<speedEntry>& value)                               = 0;
+        virtual void item(const char* name, std::vector<float>& value)                                    = 0;
         virtual void item(const char* name, UartData& wordLength, UartParity& parity, UartStop& stopBits) = 0;
 
+        virtual void item(const char* name, EventPin& value)  = 0;
+        virtual void item(const char* name, InputPin& value)  = 0;
         virtual void item(const char* name, Pin& value)       = 0;
         virtual void item(const char* name, IPAddress& value) = 0;
 
-        virtual void item(const char* name, int& value, EnumItem* e) = 0;
+        virtual void item(const char* name, step_engine*& value) = 0;
 
-        virtual void item(const char* name, std::string& value, int minLength = 0, int maxLength = 255) = 0;
+        virtual void item(const char* name, uint32_t& value, const EnumItem* e) = 0;
+        virtual void item(const char* name, axis_t& value)                      = 0;
+
+        virtual void item(const char* name, std::string& value, const int minLength = 0, const int maxLength = 255) = 0;
 
         virtual HandlerType handlerType() = 0;
 
@@ -75,15 +87,24 @@ namespace Configuration {
                 // For Parser, matchesUninitialized(name) resolves to _parser.is(name)
                 if (matchesUninitialized(name)) {
                     Assert(value == nullptr, "Duplicate section %s", name);
-                    if (value == nullptr) {
-                        value = new T(args...);
-                        enterSection(name, value);
-                    }
+                    value = new T(args...);
+                    enterSection(name, value);
                 }
             } else {
                 if (value != nullptr) {
                     enterSection(name, value);
                 }
+            }
+        }
+
+        template <typename T>
+        void sections(const char* name, uint32_t first_section, uint32_t limit_section, bool omit0, T* array) {
+            for (int i = first_section; i < limit_section; i++) {
+                std::string section_name(name);
+                if (i || !omit0) {
+                    section_name += std::to_string(i);
+                }
+                section(section_name.c_str(), array[i], i);
             }
         }
 

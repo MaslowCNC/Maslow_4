@@ -4,45 +4,47 @@
 #pragma once
 
 #include "PinDetail.h"
+#include "Driver/PwmPin.h"
 
 namespace Pins {
     class GPIOPinDetail : public PinDetail {
         PinCapabilities _capabilities;
         PinAttributes   _attributes;
-        int             _readWriteMask;
 
         static PinCapabilities GetDefaultCapabilities(pinnum_t index);
 
-        static std::vector<bool> _claimed;
+        static bool _claimed[MAX_N_GPIO];
 
         bool _lastWrittenValue = false;
 
-    public:
-#ifdef ARDUINO_ESP32S3_DEV
-        static const int nGPIOPins = 49;
-#elif CONFIG_IDF_TARGET_ESP32S2
-        static const int nGPIOPins = 47;
-#else
-        static const int nGPIOPins = 40;
-#endif
+        PwmPin* _pwm;
 
+        int8_t _driveStrength = -1;
+
+        void setDriveStrength(uint8_t n, PinAttributes attr);
+
+    public:
         GPIOPinDetail(pinnum_t index, PinOptionsParser options);
 
         PinCapabilities capabilities() const override;
 
         // I/O:
-        void          write(int high) override;
-        int IRAM_ATTR read() override;
-        void          setAttr(PinAttributes value) override;
+        void          write(bool high) override;
+        bool          read() override;
+        void          setAttr(PinAttributes value, uint32_t frequency) override;
         PinAttributes getAttr() const override;
 
-        // ISR's:
-        void attachInterrupt(void (*callback)(void*, bool), void* arg, int mode) override;
-        void detachInterrupt() override;
+        void     setDuty(uint32_t duty) override;
+        uint32_t maxDuty() override { return _pwm->period(); };
 
-        std::string toString() override;
+        int8_t driveStrength() override { return _driveStrength; }
+
+        bool canStep() override { return true; }
+
+        void registerEvent(InputPin* obj) override;
+        void disarm() override;
+        void rearm() override;
 
         ~GPIOPinDetail() override { _claimed[_index] = false; }
     };
-
 }

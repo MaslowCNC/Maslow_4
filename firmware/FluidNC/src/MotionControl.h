@@ -5,25 +5,15 @@
 
 #pragma once
 
-#include "Types.h"  // AxisMask
 #include "Planner.h"
 #include "Config.h"
 #include "Probe.h"
 
 #include <cstdint>
 
-extern volatile ProbeState probeState;  // Probing state value.  Used to coordinate the probing cycle with stepper ISR.
+extern volatile bool probing;  // Probing state value.  Used to coordinate the probing cycle with stepper ISR.
 
 extern bool probe_succeeded;  // Tracks if last probing cycle was successful.
-
-// System motion commands must have a line number of zero.
-const int PARKING_MOTION_LINE_NUMBER = 0;
-
-// Execute linear motion in absolute millimeter coordinates. Feed rate given in millimeters/second
-// unless invert_feed_rate is true. Then the feed_rate means that the motion should be completed in
-// (1 minute)/feed_rate time.
-bool cartesian_to_motors(float* target, plan_line_data_t* pl_data, float* position);
-void motors_to_cartesian(float* cartesian, float* motors, int n_axis);
 
 // Execute a linear motion in cartesian space.
 bool mc_linear(float* target, plan_line_data_t* pl_data, float* position);
@@ -40,23 +30,23 @@ void mc_arc(float*            target,
             float*            position,
             float*            offset,
             float             radius,
-            size_t            axis_0,
-            size_t            axis_1,
-            size_t            axis_linear,
+            axis_t            axis_0,
+            axis_t            axis_1,
+            axis_t            axis_linear,
             bool              is_clockwise_arc,
-            int               pword_rotations);
+            uint32_t          rotations);
 
 // Dwell for a specific number of seconds
 bool mc_dwell(int32_t milliseconds);
 
 // Perform tool length probe cycle. Requires probe switch.
-GCUpdatePos mc_probe_cycle(float* target, plan_line_data_t* pl_data, bool away, bool no_error, uint8_t offsetAxis, float offset);
+GCUpdatePos mc_probe_cycle(float* target, plan_line_data_t* pl_data, bool away, bool no_error, AxisMask offsetAxis, float offset);
 
 // Handles updating the override control state.
 void mc_override_ctrl_update(Override override_state);
 
 // Performs system reset. If in motion state, kills all motion and sets system alarm.
-void mc_reset();
+void mc_critical(ExecAlarm alarm);
 
 void mc_cancel_jog();
 

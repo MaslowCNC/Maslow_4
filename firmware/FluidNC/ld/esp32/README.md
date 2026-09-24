@@ -25,7 +25,7 @@ One solution would be to stop calling virtual methods from ISR code,
 but that would require some tedious recoding.  Instead, we choose,
 for now, to force the compilation toolchain to place vtables in RAM.
 
-Changing the vtable placment requires modifications to the linker
+Changing the vtable placement requires modifications to the linker
 scripts (.ld files) that control where things are placed in memory.
 The linker scripts reside in the Arduino framework code where they
 cannot easily be changed, but we can take advantage of some PlatformIO
@@ -50,8 +50,8 @@ add into that file the line
 
    INCLUDE ( vtable_in_dram.ld )
 
-The INCLUDE line is added inside the section that puts things into
-data RAM.  It causes the contents of the new file "vtable_in_dram.ld"
+The INCLUDE line is added inside a section that puts things into
+RAM.  It causes the contents of the new file "vtable_in_dram.ld"
 to be processed in that context, which has the effect of forcing the
 vtables from several code modules to be placed in RAM.  We use the
 INCLUDE technique to isolate the changes into one new file, for easier
@@ -65,10 +65,12 @@ feature.  In the platformio.ini [env] section, we add this line
 
    extra_scripts = FluidNC/ld/esp32/vtable_in_dram.py
 
-"vtable_in_dram.py" contains code that puts this directory at
+"vtable_in_dram.py" contains code that puts a directory at
 the beginning of LIBPATH so this directory will be searched before
 the standard list of directories.  Thus the linker will find
 the modified esp32.project.ld instead of the stock version.
+The directory name depends on the build type:
+FluidNC/ld/esp32/$PIOENV where $PIOENV is wifi, bt, or noradio.
 
 ### Contents of vtable_in_dram.ld
 

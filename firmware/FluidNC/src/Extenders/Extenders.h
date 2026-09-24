@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include "../Configuration/Configurable.h"
-#include "../Configuration/GenericFactory.h"
+#include "Configuration/Configurable.h"
+#include "Configuration/GenericFactory.h"
 #include "PinExtender.h"
 
 namespace Extenders {

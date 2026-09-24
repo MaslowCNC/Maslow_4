@@ -6,12 +6,11 @@
 #include "HandlerBase.h"
 #include "Parser.h"
 #include "Configurable.h"
-#include "../System.h"
+#include "System.h"
+#include "parser_logging.h"
 
 #include <vector>
 
-// #define DEBUG_VERBOSE_YAML_PARSER
-// #define DEBUG_CHATTY_YAML_PARSER
 namespace Configuration {
     class ParserHandler : public Configuration::HandlerBase {
     private:
@@ -24,18 +23,14 @@ namespace Configuration {
 
             // On entry, the token is for the section that invoked us.
             // We will handle following nodes with indents greater than entryIndent
-            int entryIndent = _parser.token_.indent_;
-#ifdef DEBUG_CHATTY_YAML_PARSER
-            log_debug("Entered section " << name << " at indent " << entryIndent);
-#endif
+            int_fast8_t entryIndent = _parser._token._indent;
+            log_parser_verbose("Entered section " << name << " at indent " << entryIndent);
 
             // The next token controls what we do next.  If thisIndent is greater
             // than entryIndent, there are some subordinate tokens.
             _parser.Tokenize();
-            int thisIndent = _parser.token_.indent_;
-#ifdef DEBUG_VERBOSE_YAML_PARSER
-            log_debug("thisIndent " << _parser.key().str() << " " << thisIndent);
-#endif
+            int_fast8_t thisIndent = _parser._token._indent;
+            log_parser_verbose("thisIndent " << _parser.key() << " " << thisIndent);
 
             // If thisIndent <= entryIndent, the section is empty - there are
             // no more-deeply-indented subordinate tokens.
@@ -43,36 +38,25 @@ namespace Configuration {
             if (thisIndent > entryIndent) {
                 // If thisIndent > entryIndent, the new token is the first token within
                 // this section so we process tokens at the same level as thisIndent.
-                for (; _parser.token_.indent_ >= thisIndent; _parser.Tokenize()) {
-#ifdef DEBUG_VERBOSE_YAML_PARSER
-                    log_debug(" KEY " << _parser.key().str() << " state " << int(_parser.token_.state) << " indent "
-                                      << _parser.token_.indent_);
-#endif
-                    if (_parser.token_.indent_ > thisIndent) {
-                        log_error("Skipping key " << _parser.key().str() << " indent " << _parser.token_.indent_ << " this indent "
-                                                  << thisIndent);
+                for (; _parser._token._indent >= thisIndent; _parser.Tokenize()) {
+                    log_parser_verbose(" KEY " << _parser.key() << " state " << uint32_t(_parser._token._state) << " indent "
+                                               << _parser._token._indent);
+                    if (_parser._token._indent > thisIndent) {
+                        log_error("Skipping key " << _parser.key() << " indent " << _parser._token._indent << " this indent " << thisIndent);
                     } else {
-#ifdef DEBUG_VERBOSE_YAML_PARSER
-                        log_debug("Parsing key " << _parser.key().str());
-#endif
+                        log_parser_verbose("Parsing key " << _parser.key());
                         try {
                             section->group(*this);
-                        } catch (const AssertionFailed& ex) {
-                            // Log something meaningful to the user:
-                            log_error("Configuration error at "; for (auto it : _path) { ss << '/' << it; } ss << ": " << ex.msg);
-
-                            // Set the state to config alarm, so users can't run time machine.
-                            sys.set_state(State::ConfigAlarm);
+                        } catch (std::exception& ex) {
+                            log_config_error("Configuration error at "; for (auto it : _path) { ss << '/' << it; } ss << ": " << ex.what());
                         }
 
-                        if (_parser.token_.state == TokenState::Matching) {
-                            log_warn("Ignored key " << _parser.key().str());
+                        if (_parser._token._state == TokenState::Matching) {
+                            log_config_error("Ignored key " << _parser.key());
                         }
-#ifdef DEBUG_CHATTY_YAML_PARSER
-                        if (_parser.token_.state == Configuration::TokenState::Matched) {
-                            log_debug("Handled key " << _parser.key().str());
+                        if (_parser._token._state == Configuration::TokenState::Matched) {
+                            log_parser_verbose("Handled key " << _parser.key());
                         }
-#endif
                     }
                 }
             }
@@ -82,12 +66,10 @@ namespace Configuration {
             // the caller will call Tokenize() to get a token, so we
             // "hold" the current token so that Tokenize() will
             // release that token instead of parsing ahead.
-            // _parser.token_.held = true;
+            // _parser._token.held = true;
 
-            _parser.token_.state = TokenState::Held;
-#ifdef DEBUG_CHATTY_YAML_PARSER
-            log_debug("Left section at indent " << entryIndent << " holding " << _parser.key().str());
-#endif
+            _parser._token._state = TokenState::Held;
+            log_parser_verbose("Left section at indent " << entryIndent << " holding " << _parser.key());
 
             _path.erase(_path.begin() + (_path.size() - 1));
         }
@@ -104,16 +86,36 @@ namespace Configuration {
             }
         }
 
-        void item(const char* name, uint32_t& value, uint32_t minValue, uint32_t maxValue) override {
+        void item(const char* name, uint32_t& value, const uint32_t minValue, const uint32_t maxValue) override {
             if (_parser.is(name)) {
                 value = _parser.uintValue();
                 constrain_with_message(value, minValue, maxValue, name);
             }
         }
 
-        void item(const char* name, int& value, EnumItem* e) override {
+        void item(const char* name, step_engine*& value) override {
+            if (_parser.is(name)) {
+                value = _parser.stepEngineValue();
+            }
+        }
+
+        void item(const char* name, uint32_t& value, const EnumItem* e) override {
             if (_parser.is(name)) {
                 value = _parser.enumValue(e);
+            }
+        }
+
+        void item(const char* name, axis_t& value) override {
+            if (_parser.is(name)) {
+                auto token = string_util::trim(_parser.stringValue());
+                if (token.length()) {
+                    axis_t axis = Machine::Axes::axisNum(token);
+                    if (axis != INVALID_AXIS) {
+                        value = axis;
+                        return;
+                    }
+                }
+                value = X_AXIS;
             }
         }
 
@@ -123,7 +125,7 @@ namespace Configuration {
             }
         }
 
-        void item(const char* name, float& value, float minValue, float maxValue) override {
+        void item(const char* name, float& value, const float minValue, const float maxValue) override {
             if (_parser.is(name)) {
                 value = _parser.floatValue();
                 constrain_with_message(value, minValue, maxValue, name);
@@ -136,15 +138,35 @@ namespace Configuration {
             }
         }
 
+        void item(const char* name, std::vector<float>& value) override {
+            if (_parser.is(name)) {
+                value = _parser.floatArray();
+            }
+        }
+
         void item(const char* name, UartData& wordLength, UartParity& parity, UartStop& stopBits) override {
             if (_parser.is(name)) {
                 _parser.uartMode(wordLength, parity, stopBits);
             }
         }
 
-        void item(const char* name, std::string& value, int minLength, int maxLength) override {
+        void item(const char* name, std::string& value, const int minLength, const int maxLength) override {
             if (_parser.is(name)) {
-                value = _parser.stringValue().str().c_str();
+                value = _parser.stringValue();
+            }
+        }
+
+        void item(const char* name, EventPin& value) override {
+            if (_parser.is(name)) {
+                auto parsed = _parser.pinValue();
+                value.swap(parsed);
+            }
+        }
+
+        void item(const char* name, InputPin& value) override {
+            if (_parser.is(name)) {
+                auto parsed = _parser.pinValue();
+                value.swap(parsed);
             }
         }
 
@@ -152,6 +174,12 @@ namespace Configuration {
             if (_parser.is(name)) {
                 auto parsed = _parser.pinValue();
                 value.swap(parsed);
+            }
+        }
+
+        void item(const char* name, Macro& value) override {
+            if (_parser.is(name)) {
+                value.set(_parser.stringValue());
             }
         }
 

@@ -2,12 +2,14 @@
 // Use of this source code is governed by a GPLv3 license that can be found in the LICENSE file.
 
 #include "TMC5160Driver.h"
-#include "../Machine/MachineConfig.h"
+#include "Machine/MachineConfig.h"
 #include <atomic>
 
 namespace MotorDrivers {
 
     void TMC5160Driver::init() {
+        TrinamicSpiDriver::init();
+
         uint8_t cs_id;
         cs_id = setupSPI();
 
@@ -47,10 +49,14 @@ namespace MotorDrivers {
         tmc5160->rms_current(run_i, TrinamicSpiDriver::holdPercent());
 
         // The TMCStepper library uses the value 0 to mean 1x microstepping
-        int usteps = _microsteps == 1 ? 0 : _microsteps;
+        uint32_t usteps = _microsteps == 1 ? 0 : _microsteps;
         tmc5160->microsteps(usteps);
 
         tmc5160->tpfd(_tpfd);
+
+        tmc5160->diag0_error(_diag0_error);
+        tmc5160->diag0_otpw(_diag0_otpw);
+        tmc5160->diag0_int_pushpull(_diag0_int_pushpull);
 
         switch (_mode) {
             case TrinamicMode ::StealthChop:
@@ -69,12 +75,10 @@ namespace MotorDrivers {
             case TrinamicMode ::StallGuard:
                 log_debug(axisName() << " Stallguard");
                 {
-                    auto feedrate = config->_axes->_axis[axis_index()]->_homing->_feedRate;
-
                     tmc5160->en_pwm_mode(false);
                     tmc5160->pwm_autoscale(false);
-                    tmc5160->TCOOLTHRS(calc_tstep(feedrate, 150.0));
-                    tmc5160->THIGH(calc_tstep(feedrate, 60.0));
+                    tmc5160->TCOOLTHRS(calc_tstep(150));
+                    tmc5160->THIGH(calc_tstep(60));
                     tmc5160->sfilt(1);
                     tmc5160->diag1_stall(true);  // stallguard i/o is on diag1
                     tmc5160->sgt(constrain(_stallguard, -64, 63));
@@ -82,13 +86,13 @@ namespace MotorDrivers {
                 }
         }
         // dump the registers. This is helpful for people migrating to the Pro version
-        log_debug("CHOPCONF: 0x" << to_hex(tmc5160->CHOPCONF()));
-        log_debug("COOLCONF: 0x" << to_hex(tmc5160->COOLCONF()));
-        log_debug("THIGH: 0x" << to_hex(tmc5160->THIGH()));
-        log_debug("TCOOLTHRS: 0x" << to_hex(tmc5160->TCOOLTHRS()));
-        log_debug("GCONF: 0x" << to_hex(tmc5160->GCONF()));
-        log_debug("PWMCONF: 0x" << to_hex(tmc5160->PWMCONF()));
-        log_debug("IHOLD_IRUN: 0x" << to_hex(tmc5160->IHOLD_IRUN()));
+        log_verbose("CHOPCONF: " << to_hex(tmc5160->CHOPCONF()));
+        log_verbose("COOLCONF: " << to_hex(tmc5160->COOLCONF()));
+        log_verbose("THIGH: " << to_hex(tmc5160->THIGH()));
+        log_verbose("TCOOLTHRS: " << to_hex(tmc5160->TCOOLTHRS()));
+        log_verbose("GCONF: " << to_hex(tmc5160->GCONF()));
+        log_verbose("PWMCONF: " << to_hex(tmc5160->PWMCONF()));
+        log_verbose("IHOLD_IRUN: " << to_hex(tmc5160->IHOLD_IRUN()));
     }
 
     // Report diagnostic and tuning info

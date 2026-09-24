@@ -7,6 +7,8 @@
 // way that causes compiler error on spi_ll.h
 
 #include "hal/spi_ll.h"
+#include <soc/rtc.h>
+#include <esp_idf_version.h>
 
 #include <sdkconfig.h>
 #ifdef CONFIG_IDF_TARGET_ESP32S3
@@ -21,6 +23,8 @@ static spi_ll_clock_val_t clk_reg_val = 0;
 // Establish the SPI bus configuration needed for TMC device access
 // This should be done one before every TMC read or write operation,
 // to reconfigure the bus from whatever mode the SD card driver used.
+
+// cppcheck-suppress unusedFunction
 void tmc_spi_bus_setup() {
 #if 0
     PIN_FUNC_SELECT(GPIO_PIN_MUX_REG[bus_config->miso_io_num], PIN_FUNC_GPIO);
@@ -30,7 +34,11 @@ void tmc_spi_bus_setup() {
 #endif
 
     if (clk_reg_val == 0) {
+#ifdef SPI_LL_PERIPH_CLK_FREQ
         spi_ll_master_cal_clock(SPI_LL_PERIPH_CLK_FREQ, 2000000, 128, &clk_reg_val);
+#else
+        spi_ll_master_cal_clock(APB_CLK_FREQ, 2000000, 128, &clk_reg_val);
+#endif
     }
     spi_ll_master_set_clock_by_reg(hw, &clk_reg_val);
 
@@ -44,7 +52,7 @@ void tmc_spi_bus_setup() {
 
 // Perform a full-duplex transfer from out/out_bitlen to in/in_bitlen
 // If in_bitlen is 0, the input data will be ignored
-void tmc_spi_transfer_data(uint8_t* out, int out_bitlen, uint8_t* in, int in_bitlen) {
+void tmc_spi_transfer_data(const uint8_t* out, int out_bitlen, uint8_t* in, int in_bitlen) {
     spi_ll_set_mosi_bitlen(hw, out_bitlen);
 
     spi_ll_set_miso_bitlen(hw, in_bitlen);
@@ -59,7 +67,9 @@ void tmc_spi_transfer_data(uint8_t* out, int out_bitlen, uint8_t* in, int in_bit
     }
 
     spi_ll_clear_int_stat(hw);
+#if ESP_IDF_VERSION_MAJOR < 5
     spi_ll_master_user_start(hw);
+#endif
     while (!spi_ll_usr_is_done(hw)) {}
 
     spi_ll_read_buffer(hw, in, in_bitlen);  // No-op if in_bitlen is 0
@@ -69,13 +79,14 @@ void tmc_spi_transfer_data(uint8_t* out, int out_bitlen, uint8_t* in, int in_bit
 // accounting for the number of TMC devices (index) daisy-chained
 // before the target device.  For reads, this is the first register
 // access that latches the register data into the output register.
+
+// cppcheck-suppress unusedFunction
 void tmc_spi_rw_reg(uint8_t cmd, uint32_t data, int index) {
     int before = index > 0 ? index - 1 : 0;
 
-    const size_t packetLen       = 5;
-    size_t       dummy_out_bytes = before * packetLen;
-    size_t       total_bytes     = (before + 1) * packetLen;
-    size_t       total_bits      = total_bytes * 8;
+    const size_t packetLen   = 5;
+    size_t       total_bytes = (before + 1) * packetLen;
+    size_t       total_bits  = total_bytes * 8;
 
     uint8_t out[total_bytes];
 

@@ -1,112 +1,145 @@
 // Copyright (c) 2021 -  Stefan de Bruijn
+// Copyright (c) 2023 -	Dylan Knutson <dymk@dymk.co>
 // Use of this source code is governed by a GPLv3 license that can be found in the LICENSE file.
 
 #include "Pin.h"
 
 // Pins:
+#include "Platform.h"
 #include "Config.h"
 #include "Pins/PinOptionsParser.h"
 #include "Pins/GPIOPinDetail.h"
 #include "Pins/VoidPinDetail.h"
 #include "Pins/I2SOPinDetail.h"
+#include "Pins/ChannelPinDetail.h"
+#ifdef ENABLE_WS_CHANNEL_PINS
+#    include "Pins/WSChannelPinDetail.h"
+#endif
 #include "Pins/ErrorPinDetail.h"
-#include "Pins/ExtPinDetail.h"
-#include <stdio.h>  // snprintf()
+#include "string_util.h"
+#include "Machine/MachineConfig.h"  // config
+#include <string_view>
+#include <charconv>
+#if SUPPORT_PIN_EXTENDERS
+#    include "Pins/ExtPinDetail.h"
+#endif
+#include "Pins/SimPinDetail.h"
 
-Pins::PinDetail* Pin::undefinedPin = new Pins::VoidPinDetail();
-Pins::PinDetail* Pin::errorPin     = new Pins::ErrorPinDetail("unknown");
+static constexpr bool verbose_debugging = false;
 
-const char* Pin::parse(StringRange tmp, Pins::PinDetail*& pinImplementation) {
+const char* Pin::parse(std::string_view pin_str, Pins::PinDetail*& pinImplementation) {
+    if (verbose_debugging) {
+        log_info("Parsing pin string: " << pin_str);
+    }
+
     // Initialize pinImplementation first! Callers might want to delete it, and we don't want a random pointer.
     pinImplementation = nullptr;
 
-    // Parse the definition: [GPIO].[pinNumber]:[attributes]
-
-    const char* end = tmp.end();
-
     // Skip whitespaces at the start
-    auto nameStart = tmp.begin();
-    for (; nameStart != end && ::isspace(*nameStart); ++nameStart) {}
+    pin_str = string_util::trim(pin_str);
 
-    if (nameStart == end) {
-        // Re-use undefined pins happens in 'create':
+    if (pin_str.empty()) {
+        // Reuse undefined pins happens in 'create':
+        pinImplementation = &Pins::undefinedPin;
+        return nullptr;
+    }
+
+    std::string_view pin_type;
+    string_util::split_prefix(pin_str, pin_type, '.');
+
+    if (verbose_debugging) {
+        log_info("Parsed pin type: " << pin_type << ", rest: " << pin_str);
+    }
+
+    std::string_view num_str;
+    string_util::split_prefix(pin_str, num_str, ':');
+
+    uint32_t pin_number;
+    string_util::from_decimal(num_str, pin_number);
+
+    if (verbose_debugging) {
+        log_info("Parsed pin number: " << pin_number << ", options: " << pin_str);
+    }
+
+    // Build an options parser:
+    Pins::PinOptionsParser parser(pin_str);
+
+    // Build this pin:
+    if (string_util::equal_ignore_case(pin_type, "gpio")) {
+        pinImplementation = new Pins::GPIOPinDetail(static_cast<pinnum_t>(pin_number), parser);
+        return nullptr;
+    }
+#if MAX_N_I2SO
+    if (string_util::equal_ignore_case(pin_type, "i2so")) {
+        pinImplementation = new Pins::I2SOPinDetail(static_cast<pinnum_t>(pin_number), parser);
+        return nullptr;
+    }
+#endif
+#if MAX_N_SIMULATOR
+    if (string_util::equal_ignore_case(pin_type, "sim")) {
+        pinImplementation = new Pins::SimPinDetail(static_cast<pinnum_t>(pin_number), parser);
+        return nullptr;
+    }
+#endif
+    if (string_util::starts_with_ignore_case(pin_type, "uart_channel")) {
+        auto     num_str = pin_type.substr(strlen("uart_channel"));
+        objnum_t channel_num;
+        auto [ptr, ec] = std::from_chars(num_str.data(), num_str.data() + num_str.size(), channel_num);
+        if (ec != std::errc() || ptr != (num_str.data() + num_str.size())) {
+            return "Bad uart_channel number";
+        }
+        if (config->_uart_channels[channel_num] == nullptr) {
+            return "uart_channel is not configured";
+        }
+
+        pinImplementation = new Pins::ChannelPinDetail(config->_uart_channels[channel_num], pin_number, parser);
+        return nullptr;
+    }
+
+#ifdef ENABLE_WS_CHANNEL_PINS
+    if (string_util::starts_with_ignore_case(pin_type, "ws")) {
+        auto num_str      = pin_type.substr(strlen("ws"));
+        pinImplementation = new Pins::WSChannelPinDetail(pin_number, parser);
+        return nullptr;
+    }
+#endif
+
+    if (string_util::equal_ignore_case(pin_type, "no_pin")) {
+        pinImplementation = &Pins::undefinedPin;
+        return nullptr;
+    }
+
+    if (string_util::equal_ignore_case(pin_type, "void")) {
+        // Note: having multiple void pins has its uses for debugging.
         pinImplementation = new Pins::VoidPinDetail();
         return nullptr;
     }
 
-    auto idx = nameStart;
-    for (; idx != end && *idx != '.' && *idx != ':'; ++idx) {}
-
-    StringRange prefix(tmp.begin(), idx);
-
-    if (idx != end) {  // skip '.'
-        ++idx;
-    }
-
-    int pinNumber = 0;
-    if (prefix != "") {
-        if (idx != end) {
-            for (int n = 0; idx != end && n <= 4 && *idx >= '0' && *idx <= '9'; ++idx, ++n) {
-                pinNumber = pinNumber * 10 + int(*idx - '0');
-            }
-        }
-    }
-
-    while (idx != end && ::isspace(*idx)) {
-        ++idx;
-    }
-
-    if (idx != end) {
-        if (*idx != ':') {
-            // Pin definition attributes or EOF expected.
-            return "Pin attributes (':') were expected.";
-        }
-        ++idx;
-    }
-
-    // Build an options parser:
-    Pins::PinOptionsParser parser(idx, end);
-
-    // Build this pin:
-    if (prefix == "gpio") {
-        pinImplementation = new Pins::GPIOPinDetail(pinnum_t(pinNumber), parser);
-    }
-#ifdef ESP32
-    if (prefix == "i2so") {
-        pinImplementation = new Pins::I2SOPinDetail(pinnum_t(pinNumber), parser);
-    }
-#endif
-    if (prefix == "no_pin") {
-        pinImplementation = undefinedPin;
-    }
-
-    if (prefix == "void") {
-        // Note: having multiple void pins has its uses for debugging.
-        pinImplementation = new Pins::VoidPinDetail();
-    }
-
-    if (prefix.substr(0, 6) == "pinext") {
-        if (prefix.length() == 7 && prefix[6] >= '0' && prefix[6] <= '9') {
-            auto deviceId     = prefix[6] - '0';
-            pinImplementation = new Pins::ExtPinDetail(deviceId, pinnum_t(pinNumber), parser);
+#if SUPPORT_PIN_EXTENDERS
+    if (string_util::starts_with_ignore_case(pin_type, "pinext")) {
+        if (pin_type.length() == 7 && isdigit(pin_type[6])) {
+            auto deviceId     = pin_type[6] - '0';
+            pinImplementation = new Pins::ExtPinDetail(deviceId, pinnum_t(pin_number), parser);
         } else {
             // For now this should be sufficient, if not we can easily change it to 100 extenders:
             return "Incorrect pin extender specification. Expected 'pinext[0-9].[port number]'.";
         }
     }
-    if (pinImplementation == nullptr) {
-        log_error("Unknown prefix:" << prefix);
-        return "Unknown pin prefix";
-    } else {
-#ifdef DEBUG_PIN_DUMP
-        pinImplementation = new Pins::DebugPinDetail(pinImplementation);
 #endif
 
-        return nullptr;
+    if (pinImplementation == nullptr) {
+        log_error("Unknown pin type:" << pin_type);
+        return "Unknown pin type";
     }
+#ifdef DEBUG_PIN_DUMP
+    pinImplementation = new Pins::DebugPinDetail(pinImplementation);
+    return nullptr;
+#else
+    return "Unknown pin type";
+#endif
 }
 
-Pin Pin::create(const StringRange& str) {
+Pin Pin::create(std::string_view str) {
     Pins::PinDetail* pinImplementation = nullptr;
     try {
         const char* err = parse(str, pinImplementation);
@@ -115,23 +148,15 @@ Pin Pin::create(const StringRange& str) {
                 delete pinImplementation;
             }
 
-            log_error("Setting up pin:" << str.str() << " failed:" << err);
-            return Pin(new Pins::ErrorPinDetail(str.str().c_str()));
+            log_error("Setting up pin: " << str << " failed:" << err);
+            return Pin(new Pins::ErrorPinDetail(str));
         } else {
             return Pin(pinImplementation);
         }
-    } catch (const AssertionFailed& ex) {  // We shouldn't get here under normal circumstances.
-
-        char buf[255];
-        snprintf(buf, 255, "ERR: %s - %s", str.str().c_str(), ex.what());
-
-        Assert(false, buf);
-
-        /*
-          log_error("ERR: " << str.str() << " - " << ex.what());
-
-        return Pin(new Pins::ErrorPinDetail(str.str()));
-        */
+    } catch (std::exception& ex) {  // We shouldn't get here under normal circumstances.
+        log_error(str << " - " << ex.what());
+        Assert(false, "Pin creation failed");
+        // return Pin(new Pins::ErrorPinDetail(str.str()));
     }
 }
 
@@ -152,16 +177,8 @@ void Pin::report(const char* legend) {
     }
 }
 
-void IRAM_ATTR Pin::write(bool value) const {
-    _detail->write(value);
-}
-
-void IRAM_ATTR Pin::synchronousWrite(bool value) const {
-    _detail->synchronousWrite(value);
-}
-
 Pin::~Pin() {
-    if (_detail != undefinedPin && _detail != errorPin) {
+    if (defined() && _detail != &Pins::errorPin) {
         delete _detail;
     }
 }

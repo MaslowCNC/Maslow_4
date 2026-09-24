@@ -17,11 +17,18 @@ the following (or, in a CMD window, CD to the directory that
 contains the file you are reading and type the batch file
 name as below).
 
-To install the WiFi version:            install-wifi.bat
-To install the Bluetooth version:       install-bt.bat
-To replace the ESP32 local filesystem:  install-fs.bat
-To erase everything on the ESP32:       erase.bat
-To just run FluidTerm:                  fluidterm.bat
+To just run FluidTerm (either chi):  fluidterm.bat
+
+ESP32:
+To install the WiFi version:       install-wifi.bat
+To install the Bluetooth version:  install-bt.bat
+To replace the local filesystem:   install-fs.bat
+To erase everything on the ESP32:  erase.bat
+
+ESP32S3:
+To install the WiFi version:       install-wifi_s3.bat
+To replace the local filesystem:   install-fs_s3.bat
+To erase everything on the ESP32:  erase_s3.bat
 
 ### Erasing the ESP32
 
@@ -30,6 +37,8 @@ on top of that other software might not work right.  You can get
 rid of that other software with:
 
     erase.bat
+or
+    erase_s3.bat
 
 Then you can install FluidNC with install-* commands mentioned above.
 
@@ -74,3 +83,11 @@ you know which COM port is for the ESP32, the baud rate (115200),
 and some other settings - no hardware or software flow control,
 accept linefeed as end-of-line on input, etc.  FluidTerm tried
 to make it easy for you by using all the correct defaults.
+
+### Updating
+
+Either just follow the install steps above, or use the OTA update feature with one of the following files:
+
+    bt\firmware.bin
+    wifi\firmware.bin
+    wifi_s3\firmware.bin

@@ -9,10 +9,10 @@
 namespace Configuration {
     class Completer : public Configuration::HandlerBase {
     private:
-        std::string _key;
-        int         _reqMatch;
-        char*       _matchedStr;
-        std::string _currentPath;
+        std::string  _key;
+        uint32_t     _reqMatch;
+        std::string& _matchedStr;
+        std::string  _currentPath;
 
         void addCandidate(std::string fullName);
 
@@ -21,21 +21,27 @@ namespace Configuration {
         bool matchesUninitialized(const char* name) override { return false; }
 
     public:
-        Completer(const char* key, int requestedMatch, char* matchedStr);
+        Completer(const std::string_view key, uint32_t requestedMatch, std::string& matchedStr);
 
-        int _numMatches;
+        uint32_t _numMatches;
 
         void item(const char* name);
         void item(const char* name, bool& value) override { item(name); }
-        void item(const char* name, int32_t& value, int32_t minValue, int32_t maxValue) override { item(name); }
-        void item(const char* name, uint32_t& value, uint32_t minValue, uint32_t maxValue) override { item(name); }
-        void item(const char* name, float& value, float minValue, float maxValue) override { item(name); }
+        void item(const char* name, int32_t& value, const int32_t minValue, const int32_t maxValue) override { item(name); }
+        void item(const char* name, uint32_t& value, const uint32_t minValue, const uint32_t maxValue) override { item(name); }
+        void item(const char* name, float& value, const float minValue, const float maxValue) override { item(name); }
         void item(const char* name, std::vector<speedEntry>& value) override { item(name); }
+        void item(const char* name, std::vector<float>& value) override { item(name); }
         void item(const char* name, UartData& wordLength, UartParity& parity, UartStop& stopBits) override { item(name); }
-        void item(const char* name, std::string& value, int minLength, int maxLength) override { item(name); }
-        void item(const char* name, Pin& value) { item(name); }
+        void item(const char* name, std::string& value, const int minLength, const int maxLength) override { item(name); }
+        void item(const char* name, EventPin& value) override { item(name); }
+        void item(const char* name, InputPin& value) override { item(name); }
+        void item(const char* name, Pin& value) override { item(name); }
+        void item(const char* name, Macro& value) override { item(name); }
         void item(const char* name, IPAddress& value) override { item(name); }
-        void item(const char* name, int& value, EnumItem* e) override { item(name); }
+        void item(const char* name, step_engine*& value) override { item(name); }
+        void item(const char* name, uint32_t& value, const EnumItem* e) override { item(name); }
+        void item(const char* name, axis_t& value) override { item(name); }
 
         HandlerType handlerType() override { return HandlerType::Completer; }
 

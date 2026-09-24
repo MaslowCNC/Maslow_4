@@ -1,0 +1,61 @@
+#!/usr/bin/env python3 -u
+# runs python unbuffered
+
+from termcolor import colored
+import argparse
+import os
+import serial
+from tool import op_entries
+from tool.controller import Controller
+
+parser = argparse.ArgumentParser()
+parser.add_argument("device")
+parser.add_argument("fixture_file")
+parser.add_argument("-b", "--baudrate", type=int, default=115200)
+args = parser.parse_args()
+
+fixture_paths = []
+
+# check if fixture_file is a directory
+if os.path.isdir(args.fixture_file):
+    for file in os.listdir(args.fixture_file):
+        if file.endswith(".nc"):
+            fixture_paths.append(os.path.join(args.fixture_file, file))
+else:
+    fixture_paths.append(args.fixture_file)
+
+
+def run_fixture(fixture_path, controller):
+    op_entries_parsed = op_entries.parse_file(fixture_path)
+
+    try:
+        for op_entry in op_entries_parsed:
+            if not op_entry.execute(controller):
+                print(
+                    colored(f"--- Fixture ", "red")
+                    + colored(fixture_path, "red", attrs=["bold"])
+                    + colored(" failed ---", "red")
+                )
+                exit(1)
+
+    except KeyboardInterrupt:
+        print("Interrupt")
+
+    except TimeoutError as e:
+        print("Timeout waiting for response, line: " + e.args[0])
+
+    print(
+        colored(f"--- Fixture ", "green")
+        + colored(fixture_path, "green", attrs=["bold"])
+        + colored(" passed ---", "green"),
+        end="\n\n",
+    )
+
+
+if __name__ == "__main__":
+    controller = Controller(args.device, args.baudrate, timeout=1)
+    for fixture_path in fixture_paths:
+        controller.send_soft_reset()
+        run_fixture(fixture_path, controller)
+        # clear the buffer so rest of the fixtures can run
+        controller.drain()

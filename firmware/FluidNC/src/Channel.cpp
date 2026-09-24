@@ -2,17 +2,174 @@
 // Use of this source code is governed by a GPLv3 license that can be found in the LICENSE file.
 
 #include "Channel.h"
+#include "Driver/Console.h"
 #include "Report.h"                 // report_gcode_modes
 #include "Machine/MachineConfig.h"  // config
-#include "Serial.h"                 // execute_realtime_command
-#include "Limits.h"
+#include "RealtimeCmd.h"            // execute_realtime_command
+#include "Limit.h"
+#include "Logging.h"
+#include "Job.h"
+#include <string_view>
+#include <algorithm>
+
+namespace {
+    constexpr TickType_t message_queue_retry_ticks = 10;
+    constexpr uint32_t   message_queue_max_retries = 25;
+
+    bool enqueue_log_message(LogMessage& msg) {
+        if (!message_queue) {
+            return false;
+        }
+
+        for (uint32_t attempt = 0; attempt < message_queue_max_retries; ++attempt) {
+            if (xQueueSend(message_queue, &msg, message_queue_retry_ticks)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+}
+
+Channel::Channel(const std::string& name, bool addCR) : _name(name), _linelen(0), _addCR(addCR) {}
+Channel::Channel(const char* name, bool addCR) : _name(name), _linelen(0), _addCR(addCR) {}
+Channel::Channel(const char* name, objnum_t num, bool addCR) : _name(name) {
+    _name += std::to_string(num);
+    _linelen = 0;
+    _addCR   = addCR;
+}
+
+bool Channel::try_acquire_log_ref() {
+    if (_closing.load(std::memory_order_acquire)) {
+        return false;
+    }
+
+    _queued_log_refs.fetch_add(1, std::memory_order_acq_rel);
+    if (_closing.load(std::memory_order_acquire)) {
+        _queued_log_refs.fetch_sub(1, std::memory_order_acq_rel);
+        return false;
+    }
+
+    return true;
+}
+
+void Channel::release_log_ref() {
+    _queued_log_refs.fetch_sub(1, std::memory_order_acq_rel);
+}
+
+bool Channel::try_acquire_processing_ref() {
+    if (_closing.load(std::memory_order_acquire)) {
+        return false;
+    }
+
+    _processing_refs.fetch_add(1, std::memory_order_acq_rel);
+    if (_closing.load(std::memory_order_acquire)) {
+        _processing_refs.fetch_sub(1, std::memory_order_acq_rel);
+        return false;
+    }
+
+    return true;
+}
+
+void Channel::release_processing_ref() {
+    _processing_refs.fetch_sub(1, std::memory_order_acq_rel);
+}
+
+void Channel::begin_closing() {
+    _closing.store(true, std::memory_order_release);
+}
+
+bool Channel::is_closing() const {
+    return _closing.load(std::memory_order_acquire);
+}
+
+uint32_t Channel::pending_log_refs() const {
+    return _queued_log_refs.load(std::memory_order_acquire);
+}
+
+uint32_t Channel::pending_processing_refs() const {
+    return _processing_refs.load(std::memory_order_acquire);
+}
+
+void Channel::pause() {
+    _paused = true;
+}
+
+void Channel::resume() {
+    _paused = false;
+}
 
 void Channel::flushRx() {
     _linelen   = 0;
     _lastWasCR = false;
+    xSemaphoreTake(_queue_mutex, portMAX_DELAY);
     while (_queue.size()) {
         _queue.pop();
     }
+    _queue_at_line_start   = true;
+    _queue_discarding      = false;
+    _queue_overflow_logged = false;
+    xSemaphoreGive(_queue_mutex);
+}
+
+// Enqueue one non-realtime byte.  Drop policy is whole-line: if a new line
+// starts while _queue is already at _queue_limit, the whole line is discarded
+// through its newline.  A line already in progress finishes, so _queue never
+// holds a partial line.  Worst-case size is _queue_limit + one maxLine line.
+void Channel::queue_push(uint8_t byte) {
+    bool is_newline = byte == '\n' || byte == '\r';
+    bool log_now    = false;
+
+    xSemaphoreTake(_queue_mutex, portMAX_DELAY);
+    if (_queue_discarding) {
+        if (is_newline) {
+            _queue_discarding    = false;  // over-limit line consumed; re-check at the next one
+            _queue_at_line_start = true;
+        }
+    } else if (_queue_at_line_start && _queue.size() >= _queue_limit) {
+        // No room for another line.  A newline here is an empty line - drop it
+        // and stay at a line boundary so the next line gets a fresh check;
+        // otherwise discard the whole incoming line through its newline.
+        if (!is_newline) {
+            _queue_discarding    = true;
+            _queue_at_line_start = false;
+        }
+        log_now                = !_queue_overflow_logged;
+        _queue_overflow_logged = true;
+    } else {
+        _queue.push(byte);
+        _queue_at_line_start = is_newline;
+    }
+    xSemaphoreGive(_queue_mutex);
+
+    if (log_now) {
+        log_debug("Input queue full on " << _name << "; dropping lines");
+    }
+}
+
+size_t Channel::queued_bytes() const {
+    xSemaphoreTake(_queue_mutex, portMAX_DELAY);
+    auto size = _queue.size();
+    xSemaphoreGive(_queue_mutex);
+    return size;
+}
+
+bool Channel::try_pop_queued_byte(uint8_t& byte) {
+    xSemaphoreTake(_queue_mutex, portMAX_DELAY);
+    if (_queue.empty()) {
+        xSemaphoreGive(_queue_mutex);
+        return false;
+    }
+    byte = _queue.front();
+    _queue.pop();
+    if (_queue.empty()) {
+        // Fully drained: reset framing state and re-arm the overflow warning.
+        _queue_at_line_start   = true;
+        _queue_discarding      = false;
+        _queue_overflow_logged = false;
+    }
+    xSemaphoreGive(_queue_mutex);
+    return true;
 }
 
 bool Channel::lineComplete(char* line, char ch) {
@@ -75,33 +232,46 @@ uint32_t Channel::setReportInterval(uint32_t ms) {
     _lastTool       = 255;  // Force GCodeState report
     return actual;
 }
+static bool motionState() {
+    return state_is(State::Cycle) || state_is(State::Homing) || state_is(State::Jog);
+}
+
 void Channel::autoReportGCodeState() {
-    if (memcmp(&_lastModal, &gc_state.modal, sizeof(_lastModal)) || _lastTool != gc_state.tool ||
-        _lastSpindleSpeed != gc_state.spindle_speed || _lastFeedRate != gc_state.feed_rate) {
+    // When moving, we suppress $G reports in which the only change is the motion mode
+    // (e.g. G0/G1/G2/G3 changes) because rapid-fire motion mode changes are fairly common.
+    // We would rather not issue a $G report after every GCode line.
+    // Similarly, F and S values can change rapidly, especially in laser programs.
+    // F and S values are also reported in ? status reports, so they will show up
+    // at the chosen periodic rate there.
+    if (motionState()) {
+        // Force the compare to succeed if the only change is the motion mode
+        _lastModal.motion = gc_state.modal.motion;
+    }
+    if (memcmp(&_lastModal, &gc_state.modal, sizeof(_lastModal)) || _lastTool != gc_state.selected_tool ||
+        (!motionState() && (_lastSpindleSpeed != gc_state.spindle_speed || _lastFeedRate != gc_state.feed_rate))) {
         report_gcode_modes(*this);
         memcpy(&_lastModal, &gc_state.modal, sizeof(_lastModal));
-        _lastTool         = gc_state.tool;
+        _lastTool         = gc_state.selected_tool;
         _lastSpindleSpeed = gc_state.spindle_speed;
         _lastFeedRate     = gc_state.feed_rate;
     }
 }
-static bool motionState() {
-    return sys.state() == State::Cycle || sys.state() == State::Homing || sys.state() == State::Jog;
-}
-
 void Channel::autoReport() {
     if (_reportInterval) {
-        auto limitState = limits_get_state();
-        auto probeState = config->_probe->get_state();
-        if (_reportWco || sys.state() != _lastState || limitState != _lastLimits || probeState != _lastProbe ||
-            (motionState() && (int32_t(xTaskGetTickCount()) - _nextReportTime) >= 0)) {
+        const char* stateName = state_name();
+        if (_reportOvr || _reportWco || _reportState || _lastPinString != report_pin_string ||
+            (motionState() && (int32_t(xTaskGetTickCount()) - _nextReportTime) >= 0) || (_lastJobActive != Job::active())) {
+            _reportState = false;
+            if (_reportOvr) {
+                report_ovr_counter = 0;
+                _reportOvr         = false;
+            }
             if (_reportWco) {
                 report_wco_counter = 0;
+                _reportWco         = false;
             }
-            _reportWco  = false;
-            _lastState  = sys.state();
-            _lastLimits = limitState;
-            _lastProbe  = probeState;
+            _lastPinString = report_pin_string;
+            _lastJobActive = Job::active();
 
             _nextReportTime = xTaskGetTickCount() + _reportInterval;
             report_realtime_status(*this);
@@ -114,52 +284,249 @@ void Channel::autoReport() {
     }
 }
 
-Channel* Channel::pollLine(char* line) {
+void Channel::pin_event(pinnum_t pinnum, bool active) {
+    try {
+        auto input_pin = _pins.at(pinnum);
+        protocol_send_event(active ? &pinActiveEvent : &pinInactiveEvent, input_pin);
+    } catch (const std::out_of_range& e) { log_error("Unregistered event from channel pin " << (int)pinnum); }
+}
+
+void Channel::handleRealtimeCharacter(uint8_t ch) {
+    uint32_t cmd = 0;
+
+    if ((ch & 0xf8) == 0xf8) {
+        // 0xf8-0xff are not valid UTF-8 byte but can appear under some
+        // glitch conditions.
+        return;
+    }
+    int res = _utf8.decode(ch, cmd);
+    if (res == -1) {
+        // This can be caused by line noise on an unpowered pendant
+        log_debug("UTF8 decoding error " << to_hex(ch) << " " << to_hex(cmd));
+        _active = false;
+        return;
+    }
+    if (res == 0) {
+        return;
+    }
+    // Otherwise res==1 and we have decoded a sequence so proceed
+
+    _active = true;
+    if (cmd == PinACK) {
+        _ackwait = 0;
+        return;
+    }
+    if (cmd == PinNAK) {
+        log_verbose("NAK");
+        _ackwait = -1;
+        return;
+    }
+    if (cmd == PinRST) {
+        _ackwait = -1;
+        send_alarm(ExecAlarm::ExpanderReset);
+        return;
+    }
+    if (cmd >= PinLowFirst && cmd < PinLowLast) {
+        pin_event(cmd - PinLowFirst, false);
+        return;
+    }
+    if (cmd >= PinHighFirst && cmd < PinHighLast) {
+        pin_event(cmd - PinHighFirst, true);
+        return;
+    }
+    execute_realtime_command(static_cast<Cmd>(cmd), *this);
+}
+
+void Channel::push(uint8_t byte) {
+    if (is_realtime_command(byte)) {
+        handleRealtimeCharacter(byte);
+    } else {
+        queue_push(byte);
+    }
+}
+static int  _cnt = 10;
+Error       Channel::pollLine(char* line) {
+    if (_paused) {
+        return Error::Ok;
+    }
     handle();
     while (1) {
-        int ch;
-        if (line && _queue.size()) {
-            ch = _queue.front();
-            _queue.pop();
+        if (_cnt) {
+            --_cnt;
+        }
+        int32_t ch = -1;
+        uint8_t queued = 0;
+        if (line && try_pop_queued_byte(queued)) {
+            ch = queued;
         } else {
             ch = read();
+            if (ch < 0) {
+                break;
+            }
         }
-
-        // ch will only be negative if read() was called and returned -1
-        // The _queue path will return only nonnegative character values
-        if (ch < 0) {
-            break;
-        }
+        _active = true;
         if (realtimeOkay(ch) && is_realtime_command(ch)) {
-            execute_realtime_command(static_cast<Cmd>(ch), *this);
+            handleRealtimeCharacter((uint8_t)ch);
             continue;
         }
         if (!line) {
-            // If we are not able to handle a line we save the character
-            // until later
-            _queue.push(uint8_t(ch));
+            queue_push((uint8_t)ch);
             continue;
         }
-        if (line && lineComplete(line, ch)) {
-            return this;
+        // Fall through if line is non-null and it is not a realtime character
+
+        if (_cnt) {
+            --_cnt;
+        }
+
+        if (lineComplete(line, ch)) {
+            return Error::Ok;
         }
     }
-    autoReport();
-    return nullptr;
+    if (_active) {
+        autoReport();
+    }
+    return Error::NoData;
+}
+
+void Channel::out(const char* s, const char* tag) {
+    sendLine(MsgLevelNone, s);
+}
+
+void Channel::out(const std::string& s, const char* tag) {
+    sendLine(MsgLevelNone, s);
+}
+
+void Channel::out_acked(const std::string& s, const char* tag) {
+    out(s, tag);
+}
+
+void Channel::ready() {}
+
+void Channel::registerEvent(pinnum_t pinnum, InputPin* obj) {
+    _pins[pinnum] = obj;
 }
 
 void Channel::ack(Error status) {
     if (status == Error::Ok) {
-        log_to(*this, "ok");
+        sendLine(MsgLevelNone, "ok");
         return;
     }
     // With verbose errors, the message text is displayed instead of the number.
     // Grbl 0.9 used to display the text, while Grbl 1.1 switched to the number.
     // Many senders support both formats.
-    LogStream msg(*this, "error:");
-    if (config->_verboseErrors) {
-        msg << errorString(status);
-    } else {
+    {
+        LogStream msg(*this, "error:");
         msg << static_cast<int>(status);
+    }
+    if (config->_verboseErrors) {
+        log_error_to(*this, errorString(status));
+    }
+}
+
+void Channel::print_msg(MsgLevel level, const char* msg) {
+    if (_message_level >= level) {
+        write(msg);
+        write("\n");
+    }
+}
+
+// This overload is used primarily with fixed string
+// values.  It sends a pointer to the string whose
+// memory does not need to be reclaimed later.
+// This is the most efficient form, but it only works
+// with fixed messages.
+void Channel::sendLine(MsgLevel level, const char* line) {
+    if (outputTask && try_acquire_log_ref()) {
+        LogMessage msg { this, (void*)line, level, false };
+        if (!enqueue_log_message(msg)) {
+            release_log_ref();
+        }
+    } else {
+        if (!_closing.load(std::memory_order_acquire)) {
+            print_msg(level, line);
+        }
+    }
+}
+
+// This overload is used primarily with log_*() where
+// a std::string is dynamically allocated with "new",
+// and then extended to construct the message.  Its
+// pointer is sent to the output task, which sends
+// the message to the output channel and then "delete"s
+// the pointer to reclaim the memory.
+// This form has intermediate efficiency, as the string
+// is allocated once and freed once.
+void Channel::sendLine(MsgLevel level, const std::string* line) {
+    if (outputTask && try_acquire_log_ref()) {
+        LogMessage msg { this, (void*)line, level, true };
+        if (!enqueue_log_message(msg)) {
+            release_log_ref();
+            delete line;
+        }
+    } else {
+        if (!_closing.load(std::memory_order_acquire)) {
+            print_msg(level, line->c_str());
+        }
+        delete line;
+    }
+}
+
+// This overload is used for many miscellaneous messages
+// where the std::string is allocated in a code block and
+// then extended with various information.  This send_line()
+// copies that string to a newly allocated one and sends that
+// via the std::string* version of send_line().  The original
+// string is freed by the caller sometime after send_line()
+// returns, while the new string is freed by the output task
+// after the message is forwarded to the output channel.
+// This is the least efficient form, requiring two strings
+// to be allocated and freed, with an intermediate copy.
+// It is used only rarely.
+void Channel::sendLine(MsgLevel level, const std::string& line) {
+    if (outputTask) {
+        sendLine(level, new std::string(line));
+    } else {
+        print_msg(level, line.c_str());
+    }
+}
+
+bool Channel::is_visible(const std::string& stem, std::string extension, bool isdir) {
+    if (stem.length() && stem[0] == '.') {
+        // Exclude hidden files and directories
+        return false;
+    }
+    if (stem == "System Volume Information") {
+        // Exclude a common SD card metadata subdirectory
+        return false;
+    }
+    if (isdir) {
+        return true;
+    }
+
+    // Convert extension to canonical lower case format
+    std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char c) { return ::tolower(c); });
+
+    // common gcode extensions
+    std::string_view extensions(".g .gc .gco .gcode .nc .ngc .ncc .txt .cnc .tap");
+    size_t           pos = 0;
+    while (extensions.length()) {
+        auto             next_pos       = extensions.find_first_of(' ', pos);
+        std::string_view next_extension = extensions.substr(0, next_pos);
+        if (extension == next_extension) {
+            return true;
+        }
+        if (next_pos == extensions.npos) {
+            break;
+        }
+        extensions.remove_prefix(next_pos + 1);
+    }
+    return false;
+}
+
+void Channel::writeUTF8(uint32_t code) {
+    auto v = _utf8.encode(code);
+    for (auto const& b : v) {
+        write(b);
     }
 }

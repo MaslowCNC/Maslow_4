@@ -1,9 +1,10 @@
-#include "RGBLed.h"
+#if 0
+#    include "RGBLed.h"
 
-#include "../System.h"
+#    include "System.h"
 
 namespace Listeners {
-    RGBLed::RGBLed() {}
+    RGBLed::RGBLed() : SysListener("rgbled") {}
 
     void RGBLed::init() {
         log_info("Initializing RGB Led on gpio " << pin_ << ", index " << index_);
@@ -23,8 +24,8 @@ namespace Listeners {
 
     void RGBLed::handleChangeDetail(SystemDirty changes, const system_t& state) {
         if ((int(changes) & int(SystemDirty::State)) != 0) {
-            int index = index_;
-            int value = -1;
+            uint32_t index = index_;
+            int32_t value = -1;
 
             switch (state.state()) {
                 case State::Idle:
@@ -76,3 +77,4 @@ namespace Listeners {
         SysListenerFactory::InstanceBuilder<RGBLed> registration("rgbled");
     }
 }
+#endif

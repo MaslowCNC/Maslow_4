@@ -3,6 +3,11 @@
 // following exception: it may not be used for any reason by MakerMade or anyone with a business or personal connection to MakerMade
 
 #include "MotorUnit.h"
+
+// TEMPORARY bring-up diagnostics
+extern void bootTrace(const char*);
+#define MUMARK(x) bootTrace("[MU] " x)
+
 #include "../Report.h"
 #include "Maslow.h"
 #include <cmath>
@@ -17,11 +22,15 @@
 //------------------------------------------------------
 
 void MotorUnit::begin(int forwardPin, int backwardPin, int readbackPin, int encoderAddress, int channel1, int channel2) {
+    MUMARK("begin enter");
     _encoderAddress = encoderAddress;
 
     String encAddrLabel = Maslow.axis_id_to_label(_encoderAddress);
+    MUMARK("label done");
 
     Maslow.I2CMux.setPort(_encoderAddress);
+    MUMARK("mux setPort done");
+    MUMARK("encoder.begin...");
     if (!encoder.begin()) {
         log_error("Encoder not found on " << encAddrLabel.c_str());
         Maslow.error        = true;
@@ -29,13 +38,17 @@ void MotorUnit::begin(int forwardPin, int backwardPin, int readbackPin, int enco
     } else {
         log_info("Encoder connected on " << encAddrLabel.c_str());
     }
+    MUMARK("zero...");
     zero();
+    MUMARK("zero done");
 
     motor.begin(forwardPin, backwardPin, readbackPin, channel1, channel2);
+    MUMARK("motor.begin done");
 
     positionPID.setPID(P, I, D);
     positionPID.setOutputLimits(-1023, 1023);
 
+    MUMARK("motor_test...");
     if (!motor_test()) {
         log_error("Motor not found on " << encAddrLabel.c_str());
         Maslow.error        = true;
@@ -82,6 +95,9 @@ bool MotorUnit::test() {
 
 bool MotorUnit::motor_test() {
     //run motor for 100ms and check if the current gets above zero
+    MUMARK("first current read...");
+    motor.readCurrent();
+    MUMARK("first current read done");
     unsigned long time        = millis();
     unsigned long elapsedTime = millis() - time;
     while (elapsedTime < 100) {

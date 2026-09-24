@@ -1,50 +1,81 @@
 #include "Settings.h"
 
-#include "WebUI/JSONEncoder.h"  // JSON
-#include "WebUI/WifiConfig.h"   // WebUI::WiFiConfig
-#include "WebUI/Commands.h"     // WebUI::COMMANDS
-#include "System.h"             // sys
-#include "Protocol.h"           // protocol_buffer_synchronize
+#include "System.h"    // sys
+#include "Protocol.h"  // protocol_buffer_synchronize
+#include "Machine/MachineConfig.h"
+#include "Parameters.h"
 
 #include <map>
 #include <limits>
 #include <cstring>
-#include <cmath>
 #include <vector>
-#include <nvs.h>
+#include <charconv>
+#include <Driver/NVS.h>
+
+std::vector<Setting*> Setting::List __attribute__((init_priority(101))) = {};
+std::vector<Command*> Command::List __attribute__((init_priority(102))) = {};
+
+bool get_param(const char* parameter, const char* key, std::string& s) {
+    const char* start = strstr(parameter, key);
+    if (!start) {
+        return false;
+    }
+    s = "";
+    for (const char* p = start + strlen(key); *p; ++p) {
+        if (*p == ' ') {
+            break;  // Unescaped space
+        }
+        if (*p == '\\') {
+            if (*++p == '\0') {
+                break;
+            }
+        }
+        s += *p;
+    }
+    return true;
+}
+
+bool paramIsJSON(const char* cmd_params) {
+    return strstr(cmd_params, "json=yes") != NULL;
+}
 
 bool anyState() {
     return false;
 }
 bool notIdleOrJog() {
-    return sys.state() != State::Idle && sys.state() != State::Jog;
+    return !state_is(State::Idle) && !state_is(State::Jog);
 }
 bool notIdleOrAlarm() {
-    return sys.state() != State::Idle && sys.state() != State::Alarm && sys.state() != State::ConfigAlarm;
+    return !state_is(State::Idle) && !state_is(State::Alarm) && !state_is(State::ConfigAlarm) && !state_is(State::SafetyDoor) &&
+           !state_is(State::Critical);
 }
 bool cycleOrHold() {
-    return sys.state() == State::Cycle || sys.state() == State::Hold;
+    return state_is(State::Cycle) || state_is(State::Hold);
+}
+
+bool allowConfigStates() {
+    return !state_is(State::Idle) && !state_is(State::Alarm) && !state_is(State::ConfigAlarm) && !state_is(State::Critical);
 }
 
 Word::Word(type_t type, permissions_t permissions, const char* description, const char* grblName, const char* fullName) :
     _description(description), _grblName(grblName), _fullName(fullName), _type(type), _permissions(permissions) {}
 
-Command* Command::List = NULL;
-
-Command::Command(
-    const char* description, type_t type, permissions_t permissions, const char* grblName, const char* fullName, bool (*cmdChecker)()) :
-    Word(type, permissions, description, grblName, fullName), _cmdChecker(cmdChecker) {
-    link = List;
-    List = this;
+Command::Command(const char*   description,
+                 type_t        type,
+                 permissions_t permissions,
+                 const char*   grblName,
+                 const char*   fullName,
+                 bool (*cmdChecker)(),
+                 bool needs_protocol_context,
+                 bool drains_buffer) :
+    Word(type, permissions, description, grblName, fullName),
+    _cmdChecker(cmdChecker), _needs_protocol_context(needs_protocol_context), _drains_buffer(drains_buffer) {
+    List.insert(List.begin(), this);
 }
 
-Setting* Setting::List = NULL;
-
-Setting::Setting(
-    const char* description, type_t type, permissions_t permissions, const char* grblName, const char* fullName, bool (*checker)(char*)) :
-    Word(type, permissions, description, grblName, fullName), _checker(checker) {
-    link = List;
-    List = this;
+Setting::Setting(const char* description, type_t type, permissions_t permissions, const char* grblName, const char* fullName) :
+    Word(type, permissions, description, grblName, fullName) {
+    List.insert(List.begin(), this);
 
     // NVS keys are limited to 15 characters, so if the setting name is longer
     // than that, we derive a 15-character name from a hash function
@@ -53,35 +84,25 @@ Setting::Setting(
         _keyName = _fullName;
     } else {
         // This is Donald Knuth's hash function from Vol 3, chapter 6.4
-        char*    hashName = (char*)malloc(16);
-        uint32_t hash     = len;
+        uint32_t hash = len;
         for (const char* s = fullName; *s; s++) {
             hash = ((hash << 5) ^ (hash >> 27)) ^ (*s);
         }
-        sprintf(hashName, "%.7s%08x", fullName, hash);
+
+        char* hashName = (char*)malloc(16);  // Intentionally not freed
+        snprintf(hashName, 16, "%.7s%08x", fullName, static_cast<unsigned int>(hash));
         _keyName = hashName;
     }
 }
 
-Error Setting::check(char* s) {
+Error Setting::check_state() {
     if (notIdleOrAlarm()) {
         return Error::IdleError;
     }
-    if (!_checker) {
-        return Error::Ok;
-    }
-    return _checker(s) ? Error::Ok : Error::InvalidValue;
+    return Error::Ok;
 }
 
-nvs_handle Setting::_handle = 0;
-
-void Setting::init() {
-    if (!_handle) {
-        if (esp_err_t err = nvs_open("FluidNC", NVS_READWRITE, &_handle)) {
-            log_debug("nvs_open failed with error " << err);
-        }
-    }
-}
+void Setting::init() {}
 
 IntSetting::IntSetting(const char*   description,
                        type_t        type,
@@ -91,16 +112,15 @@ IntSetting::IntSetting(const char*   description,
                        int32_t       defVal,
                        int32_t       minVal,
                        int32_t       maxVal,
-                       bool (*checker)(char*) = NULL,
-                       bool currentIsNvm) :
-    Setting(description, type, permissions, grblName, name, checker), _defaultValue(defVal), _currentValue(defVal), _minValue(minVal),
-    _maxValue(maxVal), _currentIsNvm(currentIsNvm) {
+                       bool          currentIsNvm) :
+    Setting(description, type, permissions, grblName, name),
+    _defaultValue(defVal), _currentValue(defVal), _minValue(minVal), _maxValue(maxVal), _currentIsNvm(currentIsNvm) {
     _storedValue = std::numeric_limits<int32_t>::min();
+    load();
 }
 
 void IntSetting::load() {
-    esp_err_t err = nvs_get_i32(_handle, _keyName, &_storedValue);
-    if (err) {
+    if (nvs.get_i32(_keyName, &_storedValue)) {
         _storedValue  = std::numeric_limits<int32_t>::min();
         _currentValue = _defaultValue;
     } else {
@@ -110,26 +130,27 @@ void IntSetting::load() {
 
 void IntSetting::setDefault() {
     if (_currentIsNvm) {
-        nvs_erase_key(_handle, _keyName);
+        nvs.erase_key(_keyName);
     } else {
         _currentValue = _defaultValue;
         if (_storedValue != _currentValue) {
-            nvs_erase_key(_handle, _keyName);
+            nvs.erase_key(_keyName);
         }
     }
 }
 
-Error IntSetting::setStringValue(char* s) {
-    s         = trim(s);
-    Error err = check(s);
+Error IntSetting::setStringValue(std::string_view s) {
+    Error err = check_state();
     if (err != Error::Ok) {
         return err;
     }
-    char*   endptr;
-    int32_t convertedValue = strtol(s, &endptr, 10);
-    if (endptr == s || *endptr != '\0') {
+    trim(s);
+    float fnum;
+    if (!read_number(s, fnum)) {
         return Error::BadNumberFormat;
     }
+
+    int32_t convertedValue = fnum;
     if (convertedValue < _minValue || convertedValue > _maxValue) {
         return Error::NumberRange;
     }
@@ -141,28 +162,27 @@ Error IntSetting::setStringValue(char* s) {
 
     if (_storedValue != convertedValue) {
         if (convertedValue == _defaultValue) {
-            nvs_erase_key(_handle, _keyName);
+            nvs.erase_key(_keyName);
         } else {
-            if (nvs_set_i32(_handle, _keyName, convertedValue)) {
+            if (nvs.set_i32(_keyName, convertedValue)) {
                 return Error::NvsSetFailed;
             }
             _storedValue = convertedValue;
         }
     }
-    check(NULL);
     return Error::Ok;
 }
 
 const char* IntSetting::getDefaultString() {
     static char strval[32];
-    sprintf(strval, "%d", _defaultValue);
+    snprintf(strval, 32, "%d", int(_defaultValue));
     return strval;
 }
 
 const char* IntSetting::getStringValue() {
     static char strval[32];
 
-    int currentSettingValue;
+    int32_t currentSettingValue;
     if (_currentIsNvm) {
         if (std::numeric_limits<int32_t>::min() == _storedValue) {
             currentSettingValue = _defaultValue;
@@ -173,13 +193,13 @@ const char* IntSetting::getStringValue() {
         currentSettingValue = get();
     }
 
-    sprintf(strval, "%d", currentSettingValue);
+    snprintf(strval, 32, "%d", int(currentSettingValue));
     return strval;
 }
 
-void IntSetting::addWebui(WebUI::JSONencoder* j) {
+void IntSetting::addWebui(JSONencoder* j) {
     if (getDescription()) {
-        j->begin_webui(getName(), getName(), "I", getStringValue(), _minValue, _maxValue);
+        j->begin_webui(getName(), "I", getStringValue(), _minValue, _maxValue);
         j->end_object();
     }
 }
@@ -190,30 +210,25 @@ StringSetting::StringSetting(const char*   description,
                              const char*   grblName,
                              const char*   name,
                              const char*   defVal,
-                             int           min,
-                             int           max,
-                             bool (*checker)(char*)) : Setting(description, type, permissions, grblName, name, checker) {
-    _defaultValue = defVal;
-    _currentValue = defVal;
-    _minLength    = min;
-    _maxLength    = max;
+                             int32_t       min,
+                             int32_t       max) :
+    Setting(description, type, permissions, grblName, name),
+    _defaultValue(defVal), _currentValue(defVal), _minLength(min), _maxLength(max) {
+    load();
 };
 
 void StringSetting::load() {
-    size_t    len = 0;
-    esp_err_t err = nvs_get_str(_handle, _keyName, NULL, &len);
-    if (err) {
+    size_t len = 0;
+    if (nvs.get_str(_keyName, NULL, &len)) {
         _storedValue  = _defaultValue;
         _currentValue = _defaultValue;
         return;
     }
 
-    // TODO: Can't we allocate the string immediately?
-    std::vector<char> buffer;
-    buffer.resize(len);
+    std::vector<char> buffer(len);
+
     char* buf = buffer.data();
-    err       = nvs_get_str(_handle, _keyName, buf, &len);
-    if (err) {
+    if (nvs.get_str(_keyName, buf, &len)) {
         _storedValue  = _defaultValue;
         _currentValue = _defaultValue;
         return;
@@ -225,73 +240,66 @@ void StringSetting::load() {
 void StringSetting::setDefault() {
     _currentValue = _defaultValue;
     if (_storedValue != _currentValue) {
-        nvs_erase_key(_handle, _keyName);
+        nvs.erase_key(_keyName);
     }
 }
 
-Error StringSetting::setStringValue(char* s) {
-    if (_minLength && _maxLength && (strlen(s) < size_t(_minLength) || strlen(s) > size_t(_maxLength))) {
-        log_error("Setting length error");
-        return Error::BadNumberFormat;
-    }
-    Error err = check(s);
+Error StringSetting::setStringValue(std::string_view s) {
+    Error err = check_state();
     if (err != Error::Ok) {
         return err;
+    }
+    if (_minLength && _maxLength && (s.length() < size_t(_minLength) || s.length() > size_t(_maxLength))) {
+        log_error("Setting length error");
+        return Error::BadNumberFormat;
     }
     _currentValue = s;
     if (_storedValue != _currentValue) {
         if (_currentValue == _defaultValue) {
-            nvs_erase_key(_handle, _keyName);
+            nvs.erase_key(_keyName);
             _storedValue = _defaultValue;
         } else {
-            if (nvs_set_str(_handle, _keyName, _currentValue.c_str())) {
+            if (nvs.set_str(_keyName, _currentValue.c_str())) {
                 return Error::NvsSetFailed;
             }
             _storedValue = _currentValue;
         }
     }
-    check(NULL);
     return Error::Ok;
 }
 
-static bool isPassword(bool (*_checker)(char*)) {
-    if (_checker == (bool (*)(char*))WebUI::WiFiConfig::isPasswordValid) {
-        return true;
-    }
-    return _checker == (bool (*)(char*))WebUI::COMMANDS::isLocalPasswordValid;
-}
-
 const char* StringSetting::getDefaultString() {
-    // If the string is a password do not display it
-    return (_checker && isPassword(_checker)) ? "******" : _defaultValue.c_str();
+    return _defaultValue.c_str();
 }
 const char* StringSetting::getStringValue() {
-    return (_checker && isPassword(_checker)) ? "******" : get();
+    return get();
 }
 
-void StringSetting::addWebui(WebUI::JSONencoder* j) {
+void StringSetting::addWebui(JSONencoder* j) {
     if (!getDescription()) {
         return;
     }
-    j->begin_webui(getName(), getName(), "S", getStringValue(), _minLength, _maxLength);
+    j->begin_webui(getName(), "S", getStringValue(), _minLength, _maxLength);
     j->end_object();
 }
 
-typedef std::map<const char*, int8_t, cmp_str> enum_opt_t;
+// typedef std::map<const char*, int8_t, cmp_str> enum_opt_t;
+// typedef std::map<const char*, int8_t, std::less<>> enum_opt_t;
 
-EnumSetting::EnumSetting(const char*   description,
-                         type_t        type,
-                         permissions_t permissions,
-                         const char*   grblName,
-                         const char*   name,
-                         int8_t        defVal,
-                         enum_opt_t*   opts,
-                         bool (*checker)(char*) = NULL) :
-    Setting(description, type, permissions, grblName, name, checker), _defaultValue(defVal), _options(opts) {}
+EnumSetting::EnumSetting(const char*       description,
+                         type_t            type,
+                         permissions_t     permissions,
+                         const char*       grblName,
+                         const char*       name,
+                         int8_t            defVal,
+                         const enum_opt_t* opts) :
+    Setting(description, type, permissions, grblName, name),
+    _defaultValue(defVal), _options(opts) {
+    load();
+}
 
 void EnumSetting::load() {
-    esp_err_t err = nvs_get_i8(_handle, _keyName, &_storedValue);
-    if (err) {
+    if (nvs.get_i8(_keyName, &_storedValue)) {
         _storedValue  = -1;
         _currentValue = _defaultValue;
     } else {
@@ -302,7 +310,7 @@ void EnumSetting::load() {
 void EnumSetting::setDefault() {
     _currentValue = _defaultValue;
     if (_storedValue != _currentValue) {
-        nvs_erase_key(_handle, _keyName);
+        nvs.erase_key(_keyName);
     }
 }
 
@@ -310,28 +318,29 @@ void EnumSetting::setDefault() {
 // either with the string name or the numeric value.
 // This is necessary for WebUI, which uses the number
 // for setting.
-Error EnumSetting::setStringValue(char* s) {
-    s         = trim(s);
-    Error err = check(s);
+Error EnumSetting::setStringValue(std::string_view s) {
+    Error err = check_state();
     if (err != Error::Ok) {
         return err;
     }
-    enum_opt_t::iterator it = _options->find(s);
+    trim(s);
+    std::string                str(s);
+    enum_opt_t::const_iterator it = _options->find(str.c_str());
     if (it == _options->end()) {
         // If we don't find the value in keys, look for it in the numeric values
 
         // Disallow empty string
-        if (!s || !*s) {
+        if (!s.length()) {
             showList();
             return Error::BadNumberFormat;
         }
-        char*   endptr;
-        uint8_t num = uint8_t(strtol(s, &endptr, 10));
-        // Disallow non-numeric characters in string
-        if (*endptr) {
+        float fnum;
+        if (!read_number(s, fnum)) {
             showList();
             return Error::BadNumberFormat;
         }
+
+        int32_t num = fnum;
         for (it = _options->begin(); it != _options->end(); it++) {
             if (it->second == num) {
                 break;
@@ -344,20 +353,19 @@ Error EnumSetting::setStringValue(char* s) {
     _currentValue = it->second;
     if (_storedValue != _currentValue) {
         if (_currentValue == _defaultValue) {
-            nvs_erase_key(_handle, _keyName);
+            nvs.erase_key(_keyName);
         } else {
-            if (nvs_set_i8(_handle, _keyName, _currentValue)) {
+            if (nvs.set_i8(_keyName, _currentValue)) {
                 return Error::NvsSetFailed;
             }
             _storedValue = _currentValue;
         }
     }
-    check(NULL);
     return Error::Ok;
 }
 
 const char* EnumSetting::enumToString(int8_t value) {
-    for (enum_opt_t::iterator it = _options->begin(); it != _options->end(); it++) {
+    for (enum_opt_t::const_iterator it = _options->begin(); it != _options->end(); it++) {
         if (it->second == value) {
             return it->first;
         }
@@ -374,19 +382,19 @@ const char* EnumSetting::getStringValue() {
 
 void EnumSetting::showList() {
     std::string optList = "";
-    for (enum_opt_t::iterator it = _options->begin(); it != _options->end(); it++) {
+    for (enum_opt_t::const_iterator it = _options->begin(); it != _options->end(); it++) {
         optList = optList + " " + it->first;
     }
     log_info("Valid options:" << optList);
 }
 
-void EnumSetting::addWebui(WebUI::JSONencoder* j) {
+void EnumSetting::addWebui(JSONencoder* j) {
     if (!getDescription()) {
         return;
     }
-    j->begin_webui(getName(), getName(), "B", get());
+    j->begin_webui(getName(), "B", get());
     j->begin_array("O");
-    for (enum_opt_t::iterator it = _options->begin(); it != _options->end(); it++) {
+    for (enum_opt_t::const_iterator it = _options->begin(); it != _options->end(); it++) {
         j->begin_object();
         j->member(it->first, it->second);
         j->end_object();
@@ -395,7 +403,7 @@ void EnumSetting::addWebui(WebUI::JSONencoder* j) {
     j->end_object();
 }
 
-Error UserCommand::action(char* value, WebUI::AuthenticationLevel auth_level, Channel& out) {
+Error UserCommand::action(const char* value, AuthenticationLevel auth_level, Channel& out) {
     if (_cmdChecker && _cmdChecker()) {
         return Error::IdleError;
     }
@@ -404,82 +412,62 @@ Error UserCommand::action(char* value, WebUI::AuthenticationLevel auth_level, Ch
 Coordinates* coords[CoordIndex::End];
 
 bool Coordinates::load() {
-    // len is set to buffer size as input, and will be set to actual data size as output
-    size_t len = sizeof(_currentValue);
-    switch (nvs_get_blob(Setting::_handle, _name, _currentValue, &len)) {
-        case ESP_OK:
-            // Verify we got the expected amount of data
-            if (len == sizeof(_currentValue)) {
-                // Check for NaN values that may have been stored previously due to
-                // kinematics producing NaN when belt lengths were invalid.
-                for (int i = 0; i < MAX_N_AXIS; i++) {
-                    if (std::isnan(_currentValue[i])) {
-                        log_error("Coordinates::load: NaN value detected for axis " << i << " in " << _name << ", resetting to defaults");
-                        return false;
-                    }
-                }
-                return true;
-            }
-            // If length mismatch, fall through to use defaults
-            [[fallthrough]];
-        case ESP_ERR_NVS_INVALID_LENGTH:
-            // This could happen if the stored value length doesn't match the buffer.
-            // Rather than risk using uninitialized or partial data that could contain
-            // NAN values, we return false to trigger setDefault() which sets coordinates to 0.
-            return false;
-        case ESP_ERR_NVS_INVALID_NAME:
-        case ESP_ERR_NVS_INVALID_HANDLE:
-        default:
-            return false;
+    size_t len = U_AXIS * sizeof(float);  // 6 is old MAX_N_AXIS
+    if (nvs.get_blob(_name, _currentValue, &len)) {
+        return false;
     }
+    // If this is a UVW build, try to get additional coordinate data
+    // The UVW data is stored separately to work around a bug in old
+    // builds that could overrun the memory buffer if the stored blob
+    // is too large.
+    if (MAX_N_AXIS > U_AXIS) {
+        len = (MAX_N_AXIS - U_AXIS) * sizeof(float);
+        if (nvs.get_blob((std::string("UVW") + _name).c_str(), &_currentValue[U_AXIS], &len)) {
+            for (axis_t axis = U_AXIS; axis < MAX_N_AXIS; axis++) {
+                _currentValue[axis] = 0;
+            }
+        }
+    }
+    return true;
 };
 
 void Coordinates::set(float value[MAX_N_AXIS]) {
-    // Validate that no NaN values are stored - NaN in coordinate offsets would
-    // permanently corrupt the home position stored in NVS.
-    for (int i = 0; i < MAX_N_AXIS; i++) {
-        if (std::isnan(value[i])) {
-            log_error("Coordinates::set: refusing to store NaN value for axis " << i << " in " << _name);
-            return;
-        }
-    }
     memcpy(&_currentValue, value, sizeof(_currentValue));
+    if (!is_saved) {
+        return;
+    }
     if (FORCE_BUFFER_SYNC_DURING_NVS_WRITE) {
         protocol_buffer_synchronize();
     }
-    nvs_set_blob(Setting::_handle, _name, _currentValue, sizeof(_currentValue));
-}
+    size_t len = U_AXIS * sizeof(float);  // 6 is old MAX_N_AXIS
+    nvs.set_blob(_name, _currentValue, len);
 
-IPaddrSetting::IPaddrSetting(const char*   description,
-                             type_t        type,
-                             permissions_t permissions,
-                             const char*   grblName,
-                             const char*   name,
-                             uint32_t      defVal,
-                             bool (*checker)(char*) = NULL) :
-    Setting(description, type, permissions, grblName, name, checker)  // There are no GRBL IP settings.
-    ,
-    _defaultValue(defVal), _currentValue(defVal) {}
-
-IPaddrSetting::IPaddrSetting(const char*   description,
-                             type_t        type,
-                             permissions_t permissions,
-                             const char*   grblName,
-                             const char*   name,
-                             const char*   defVal,
-                             bool (*checker)(char*) = NULL) : Setting(description, type, permissions, grblName, name, checker) {
-    IPAddress ipaddr;
-    if (ipaddr.fromString(defVal)) {
-        _defaultValue = ipaddr;
-        _currentValue = _defaultValue;
-    } else {
-        throw std::runtime_error("Bad IPaddr default");
+    if (MAX_N_AXIS == 9) {
+        len = (MAX_N_AXIS - U_AXIS) * sizeof(float);
+        nvs.set_blob((std::string("UVW") + _name).c_str(), &_currentValue[U_AXIS], len);
     }
 }
 
+IPaddrSetting::IPaddrSetting(
+    const char* description, type_t type, permissions_t permissions, const char* grblName, const char* name, uint32_t defVal) :
+    Setting(description, type, permissions, grblName, name)  // There are no GRBL IP settings.
+    ,
+    _defaultValue(defVal), _currentValue(defVal) {
+    load();
+}
+
+IPaddrSetting::IPaddrSetting(
+    const char* description, type_t type, permissions_t permissions, const char* grblName, const char* name, const char* defVal) :
+    Setting(description, type, permissions, grblName, name) {
+    IPAddress ipaddr;
+    Assert(ipaddr.fromString(defVal), "Bad IPaddr default");
+    _defaultValue = ipaddr;
+    _currentValue = _defaultValue;
+    load();
+}
+
 void IPaddrSetting::load() {
-    esp_err_t err = nvs_get_i32(_handle, _keyName, (int32_t*)&_storedValue);
-    if (err) {
+    if (nvs.get_i32(_keyName, (int32_t*)&_storedValue)) {
         _storedValue  = 0x000000ff;  // Unreasonable value for any IP thing
         _currentValue = _defaultValue;
     } else {
@@ -490,32 +478,31 @@ void IPaddrSetting::load() {
 void IPaddrSetting::setDefault() {
     _currentValue = _defaultValue;
     if (_storedValue != _currentValue) {
-        nvs_erase_key(_handle, _keyName);
+        nvs.erase_key(_keyName);
     }
 }
 
-Error IPaddrSetting::setStringValue(char* s) {
-    s         = trim(s);
-    Error err = check(s);
+Error IPaddrSetting::setStringValue(std::string_view s) {
+    Error err = check_state();
     if (err != Error::Ok) {
         return err;
     }
-    IPAddress ipaddr;
-    if (!ipaddr.fromString(s)) {
+    IPAddress   ipaddr;
+    std::string str(s);
+    if (!ipaddr.fromString(str.c_str())) {
         return Error::InvalidValue;
     }
     _currentValue = ipaddr;
     if (_storedValue != _currentValue) {
         if (_currentValue == _defaultValue) {
-            nvs_erase_key(_handle, _keyName);
+            nvs.erase_key(_keyName);
         } else {
-            if (nvs_set_i32(_handle, _keyName, (int32_t)_currentValue)) {
+            if (nvs.set_i32(_keyName, (int32_t)_currentValue)) {
                 return Error::NvsSetFailed;
             }
             _storedValue = _currentValue;
         }
     }
-    check(NULL);
     return Error::Ok;
 }
 
@@ -530,9 +517,26 @@ const char* IPaddrSetting::getStringValue() {
     return ipstr;
 }
 
-void IPaddrSetting::addWebui(WebUI::JSONencoder* j) {
+void IPaddrSetting::addWebui(JSONencoder* j) {
     if (getDescription()) {
-        j->begin_webui(getName(), getName(), "A", getStringValue());
+        j->begin_webui(getName(), "A", getStringValue());
         j->end_object();
     }
+}
+
+Error WebCommand::action(const char* value, AuthenticationLevel auth_level, Channel& out) {
+    if (_cmdChecker && _cmdChecker()) {
+        return Error::AnotherInterfaceBusy;
+    }
+    char empty = '\0';
+    if (!value) {
+        value = &empty;
+    }
+    return _action(value, auth_level, out);
+};
+
+const char* IntProxySetting::getStringValue() {
+    auto got     = _getter(*MachineConfig::instance());
+    _cachedValue = std::to_string(got);
+    return _cachedValue.c_str();
 }
