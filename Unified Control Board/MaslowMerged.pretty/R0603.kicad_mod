@@ -65,6 +65,7 @@
 			)
 		)
 	)
+	(attr smd)
 	(duplicate_pad_numbers_are_jumpers no)
 	(fp_line
 		(start -1.3851 -0.6606)
@@ -156,7 +157,7 @@
 		(layers "F.Cu" "F.Mask" "F.Paste")
 		(net "MCU_RST")
 		(solder_mask_margin 0.0508)
-		(solder_paste_margin -100)
+		(solder_paste_margin 0)
 		(thermal_bridge_angle 0)
 	)
 	(pad "2" smd rect
@@ -165,7 +166,7 @@
 		(layers "F.Cu" "F.Mask" "F.Paste")
 		(net "3V3")
 		(solder_mask_margin 0.0508)
-		(solder_paste_margin -100)
+		(solder_paste_margin 0)
 		(thermal_bridge_angle 0)
 	)
 	(embedded_fonts no)

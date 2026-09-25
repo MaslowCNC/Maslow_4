@@ -70,7 +70,8 @@
 				)
 			)
 		)
-		(duplicate_pad_numbers_are_jumpers no)
+		(attr smd)
+	(duplicate_pad_numbers_are_jumpers no)
 		(fp_poly
 			(pts
 				(xy -0.18 -0.225) (xy -0.18 0.225) (xy -0.25 0.275) (xy -0.73 0.275) (xy -0.78 0.225) (xy -0.78 -0.225)

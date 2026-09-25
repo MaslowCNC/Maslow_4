@@ -67,7 +67,8 @@
 				)
 			)
 		)
-		(duplicate_pad_numbers_are_jumpers no)
+		(attr smd)
+	(duplicate_pad_numbers_are_jumpers no)
 		(fp_line
 			(start -0.873 -1.043)
 			(end 0.873 -1.043)

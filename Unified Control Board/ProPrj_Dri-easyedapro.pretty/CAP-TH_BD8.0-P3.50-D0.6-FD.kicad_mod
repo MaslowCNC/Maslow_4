@@ -70,7 +70,8 @@
 				)
 			)
 		)
-		(duplicate_pad_numbers_are_jumpers no)
+		(attr through_hole)
+	(duplicate_pad_numbers_are_jumpers no)
 		(fp_line
 			(start -2.8225 -0.527)
 			(end -2.8225 -1.873)

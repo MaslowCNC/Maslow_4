@@ -17,6 +17,7 @@
 		(uuid "b5fae004-5df4-428f-88d3-c0d49485b3e3")
 		(effects (font (size 1 1) (thickness 0.15)))
 	)
+	(attr through_hole)
 	(fp_rect (start -3.0 -2.65) (end 3.0 2.65) (stroke (width 0.12) (type solid)) (fill none) (layer "F.SilkS") (uuid "4f0ba46c-5672-4f71-ac1c-0c5d43f13ef9"))
 	(fp_poly (pts (xy 3.4 -0.5) (xy 3.4 0.5) (xy 4.1 0)) (stroke (width 0.1) (type solid)) (fill solid) (layer "F.SilkS") (uuid "a1a20e55-1320-4194-88e0-4255e6b84f76"))
 	(fp_rect (start -3.0 -2.65) (end 3.0 2.65) (stroke (width 0.1) (type solid)) (fill none) (layer "F.Fab") (uuid "155b5e08-5db2-42fa-b708-9525b3b20498"))

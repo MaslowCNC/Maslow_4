@@ -72,115 +72,11 @@
       "diff_pair_dimensions": [],
       "drc_exclusions": [
         [
-          "clearance|-11810000|36930000|ac6a3e6f-0f4c-488c-ab50-199e6cfd5f32|326a1b30-8a93-4bbb-8369-de4b4d9378f3",
-          ""
-        ],
-        [
-          "clearance|-11810000|37580000|ecc3d195-6317-47dc-a41a-61c781dc1cbc|326a1b30-8a93-4bbb-8369-de4b4d9378f3",
-          ""
-        ],
-        [
           "clearance|-11810000|37880000|4c22dbb4-11fb-40fc-9073-6c4c1be6dcfb|ecc3d195-6317-47dc-a41a-61c781dc1cbc",
           ""
         ],
         [
-          "clearance|-11810000|38230000|a3835f0c-1c3e-4e09-a624-6ad0f602d899|326a1b30-8a93-4bbb-8369-de4b4d9378f3",
-          ""
-        ],
-        [
-          "clearance|-11810000|38880000|ca188863-fc91-43a6-9894-d005fadab9bb|326a1b30-8a93-4bbb-8369-de4b4d9378f3",
-          ""
-        ],
-        [
-          "clearance|-11810000|41480000|afd11a78-abfb-4dd4-b352-29ff719eef8c|3dac0c60-d186-4f0c-b505-f1cb73d30e67",
-          ""
-        ],
-        [
-          "clearance|-11910000|39655000|3dac0c60-d186-4f0c-b505-f1cb73d30e67|17eca6c8-c1c2-4cfa-a421-b020250a2441",
-          ""
-        ],
-        [
-          "clearance|-11910000|40180000|3dac0c60-d186-4f0c-b505-f1cb73d30e67|ad4ba8d1-94a1-4443-a6f9-5d0b4bb79794",
-          ""
-        ],
-        [
-          "clearance|-11910000|40830000|3dac0c60-d186-4f0c-b505-f1cb73d30e67|c8c42927-ce59-4580-9daa-03abd946986e",
-          ""
-        ],
-        [
-          "clearance|-1580000|30130000|328a0b08-552a-4119-9d12-18996b4a77ad|bbfc0363-c99e-47f5-88f1-c91b306707f1",
-          ""
-        ],
-        [
-          "clearance|-1580000|34230000|78639a70-135d-48a9-8e0f-d6a1bcd8ffff|f561ce1c-55e6-445a-88eb-0c60998b43ec",
-          ""
-        ],
-        [
-          "clearance|-15910000|36930000|c55d92ba-5d3b-4e7d-9639-8aababbee126|ab6d2f19-1d09-4338-ab57-99dd26236c1c",
-          ""
-        ],
-        [
-          "clearance|-15910000|37580000|c55d92ba-5d3b-4e7d-9639-8aababbee126|21fa2c63-dd0b-487f-8fe8-8a7a4d69910b",
-          ""
-        ],
-        [
-          "clearance|-15910000|38230000|c55d92ba-5d3b-4e7d-9639-8aababbee126|6b0ce51b-429b-4ad2-911b-cae496415e4e",
-          ""
-        ],
-        [
-          "clearance|-15910000|38880000|c55d92ba-5d3b-4e7d-9639-8aababbee126|d2e63bd0-251b-4b9e-a978-f10bb9e2c43d",
-          ""
-        ],
-        [
-          "clearance|-15910000|40830000|e4e7e034-23f2-427b-814f-6c0610935ed3|e148d24e-6465-4e4c-86dc-68c3538ebdd3",
-          ""
-        ],
-        [
-          "clearance|-15910000|41480000|e4e7e034-23f2-427b-814f-6c0610935ed3|355c095e-04d3-4fb1-86c5-94fddda63567",
-          ""
-        ],
-        [
-          "clearance|-16010000|39655000|a4b6a54d-c07c-4fde-98e7-d6e6a8c448ae|e4e7e034-23f2-427b-814f-6c0610935ed3",
-          ""
-        ],
-        [
-          "clearance|-16010000|40180000|4fcaabfe-14aa-4923-a71d-bca86b862581|e4e7e034-23f2-427b-814f-6c0610935ed3",
-          ""
-        ],
-        [
-          "clearance|-16010000|41130000|813e82a7-d3f1-4877-ba32-af258e354b36|e148d24e-6465-4e4c-86dc-68c3538ebdd3",
-          ""
-        ],
-        [
-          "clearance|-1930000|30130000|328a0b08-552a-4119-9d12-18996b4a77ad|ca6bfe7c-ca84-48ba-86fb-396264c56f51",
-          ""
-        ],
-        [
-          "clearance|-2105000|34230000|0941a244-896c-423d-8eff-ff20ca88f60e|f561ce1c-55e6-445a-88eb-0c60998b43ec",
-          ""
-        ],
-        [
-          "clearance|-2230000|34230000|0941a244-896c-423d-8eff-ff20ca88f60e|244c3a10-5d6e-4ed6-931f-cd54b6eb61d1",
-          ""
-        ],
-        [
-          "clearance|-2580000|30030000|2846d4c3-cbe4-4412-8960-1df89dd324ca|40419315-3070-44a7-b395-11c775356b60",
-          ""
-        ],
-        [
-          "clearance|-2705000|34230000|34226c4d-6a45-41ec-abab-a671a7a91bbf|3422b398-85ae-4017-9cf9-122bff087667",
-          ""
-        ],
-        [
-          "clearance|-280000|30030000|4197a7ee-65c6-4ef8-ac1e-1cc6d1af21a3|328a0b08-552a-4119-9d12-18996b4a77ad",
-          ""
-        ],
-        [
-          "clearance|-280000|34230000|e4710c0d-4422-4b79-bf52-e2c3ddd8108c|f561ce1c-55e6-445a-88eb-0c60998b43ec",
-          ""
-        ],
-        [
-          "clearance|-2880000|30130000|ca1131ee-d00c-4698-bc78-080e78ccead7|40419315-3070-44a7-b395-11c775356b60",
+          "clearance|-16010000|39830000|813e82a7-d3f1-4877-ba32-af258e354b36|a4b6a54d-c07c-4fde-98e7-d6e6a8c448ae",
           ""
         ],
         [
@@ -188,47 +84,23 @@
           ""
         ],
         [
-          "clearance|-3530000|30130000|ca1131ee-d00c-4698-bc78-080e78ccead7|606304ee-1009-4f7e-8093-cf71cc002e4e",
-          ""
-        ],
-        [
-          "clearance|-3530000|34130000|3422b398-85ae-4017-9cf9-122bff087667|00c1d2e9-57c1-4751-9098-4597f8e76ebb",
-          ""
-        ],
-        [
           "clearance|-35484420|29076443|26e3e5a7-5424-4ca2-8e03-b02c31fc2fd9|e8953818-ce09-4446-b056-f8725dae0cf7",
           ""
         ],
         [
-          "clearance|-4180000|30130000|ca1131ee-d00c-4698-bc78-080e78ccead7|cc5cd143-5b17-43c1-9000-ca838ddeb8e3",
+          "clearance|-3880000|30030000|2846d4c3-cbe4-4412-8960-1df89dd324ca|cc5cd143-5b17-43c1-9000-ca838ddeb8e3",
+          ""
+        ],
+        [
+          "clearance|-4180000|30030000|1495e7d3-df81-492f-82b7-eda5b254d3f4|cc5cd143-5b17-43c1-9000-ca838ddeb8e3",
+          ""
+        ],
+        [
+          "clearance|-4180000|34230000|244c3a10-5d6e-4ed6-931f-cd54b6eb61d1|77af4e6c-3b23-4f66-a191-ca43710118e1",
           ""
         ],
         [
           "clearance|-4180000|34230000|61cef8a7-d1a7-4fd6-bc70-826d53e42346|77af4e6c-3b23-4f66-a191-ca43710118e1",
-          ""
-        ],
-        [
-          "clearance|-4180000|34230000|77af4e6c-3b23-4f66-a191-ca43710118e1|3422b398-85ae-4017-9cf9-122bff087667",
-          ""
-        ],
-        [
-          "clearance|-4530000|30030000|1495e7d3-df81-492f-82b7-eda5b254d3f4|2855fa81-82bb-48c9-838b-350eecc8df43",
-          ""
-        ],
-        [
-          "clearance|-4830000|30130000|ca1131ee-d00c-4698-bc78-080e78ccead7|2855fa81-82bb-48c9-838b-350eecc8df43",
-          ""
-        ],
-        [
-          "clearance|-4830000|34230000|b2bd2956-d86f-4cb2-af90-d97d9161512a|3422b398-85ae-4017-9cf9-122bff087667",
-          ""
-        ],
-        [
-          "clearance|-930000|30130000|328a0b08-552a-4119-9d12-18996b4a77ad|336c6797-cc69-4272-9755-59b0b07d62d3",
-          ""
-        ],
-        [
-          "clearance|-930000|34230000|35936480-7deb-4d45-a78a-32e76f8dc133|f561ce1c-55e6-445a-88eb-0c60998b43ec",
           ""
         ],
         [
@@ -261,66 +133,6 @@
         ],
         [
           "hole_clearance|34904695|23910617|24dc4ab1-42ef-4a8d-8808-22550a9d7c36|37a31ff0-fdfa-49cf-8a74-1475331db1cc",
-          ""
-        ],
-        [
-          "starved_thermal|-20361339|-22678927|e5c39deb-8e99-45e0-bdab-a44b99454d28|42edd05b-ee0d-4bc8-ae43-8458911521e3|F.Cu",
-          ""
-        ],
-        [
-          "starved_thermal|-21400000|41434000|e5c39deb-8e99-45e0-bdab-a44b99454d28|a86f76f7-d802-42d7-a129-ef833c48fb69|F.Cu",
-          ""
-        ],
-        [
-          "starved_thermal|-21600000|47100000|e5c39deb-8e99-45e0-bdab-a44b99454d28|2706f536-ec52-4077-bfab-447f17e6bf56|F.Cu",
-          ""
-        ],
-        [
-          "starved_thermal|-26267000|41100000|c0c4dd05-8cf4-46e4-9b0f-6cb6003c6cc3|7d0e376f-1915-4160-9d7e-cbfc1df01ec2|B.Cu",
-          ""
-        ],
-        [
-          "starved_thermal|-34274032|27071395|e5c39deb-8e99-45e0-bdab-a44b99454d28|68d40662-cf40-4501-822a-db806a16245a|F.Cu",
-          ""
-        ],
-        [
-          "starved_thermal|-34351652|27361076|e5c39deb-8e99-45e0-bdab-a44b99454d28|ca66c0f2-9e2f-4400-a0f6-f7ed32919cd0|F.Cu",
-          ""
-        ],
-        [
-          "starved_thermal|-35930667|33253268|e5c39deb-8e99-45e0-bdab-a44b99454d28|1f5efc81-39f4-477c-9339-afc2d6046985|F.Cu",
-          ""
-        ],
-        [
-          "starved_thermal|-36008313|33543046|e5c39deb-8e99-45e0-bdab-a44b99454d28|163c3c4c-171e-4dcc-84d5-309805233d0a|F.Cu",
-          ""
-        ],
-        [
-          "starved_thermal|-44718955|45062070|c0c4dd05-8cf4-46e4-9b0f-6cb6003c6cc3|eb037818-6481-450e-bf17-60f9cb2dac24|B.Cu",
-          ""
-        ],
-        [
-          "starved_thermal|-6097500|56265000|c0c4dd05-8cf4-46e4-9b0f-6cb6003c6cc3|282324cd-6a33-4b6a-a6a8-543ff0e8154a|B.Cu",
-          ""
-        ],
-        [
-          "starved_thermal|12600000|28000000|c0c4dd05-8cf4-46e4-9b0f-6cb6003c6cc3|9561896a-0a30-49e0-a870-854d64aa7d02|B.Cu",
-          ""
-        ],
-        [
-          "starved_thermal|17000100|34073300|c0c4dd05-8cf4-46e4-9b0f-6cb6003c6cc3|85a3e11a-a330-4a9c-a136-8658540df6d8|B.Cu",
-          ""
-        ],
-        [
-          "starved_thermal|21463534|7033534|e5c39deb-8e99-45e0-bdab-a44b99454d28|7fd6bd94-84a0-43db-ad18-67a0748fd616|F.Cu",
-          ""
-        ],
-        [
-          "starved_thermal|36810000|46500000|c0c4dd05-8cf4-46e4-9b0f-6cb6003c6cc3|af3453c1-684c-42c2-9f7e-750cd5d4f0a5|B.Cu",
-          ""
-        ],
-        [
-          "starved_thermal|37600000|42500000|c0c4dd05-8cf4-46e4-9b0f-6cb6003c6cc3|55976ef7-d41c-46f2-a8f6-b22292a68797|B.Cu",
           ""
         ]
       ],
@@ -764,6 +576,44 @@
         "via_diameter": 0.6,
         "via_drill": 0.3,
         "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.2,
+        "diff_pair_gap": 0.25,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "Motor",
+        "pcb_color": "rgba(0, 0, 0, 0.000)",
+        "priority": 0,
+        "schematic_color": "rgba(0, 0, 0, 0.000)",
+        "track_width": 2.0,
+        "tuning_profile": "",
+        "via_diameter": 0.6,
+        "via_drill": 0.3,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.2,
+        "diff_pair_gap": 0.25,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "Power",
+        "pcb_color": "rgba(0, 0, 0, 0.000)",
+        "priority": 1,
+        "schematic_color": "rgba(0, 0, 0, 0.000)",
+        "track_width": 1.0,
+        "tuning_profile": "",
+        "via_diameter": 0.6,
+        "via_drill": 0.3,
+        "wire_width": 6
       }
     ],
     "meta": {
@@ -771,7 +621,80 @@
     },
     "net_colors": null,
     "netclass_assignments": null,
-    "netclass_patterns": []
+    "netclass_patterns": [
+      {
+        "netclass": "Motor",
+        "pattern": "PHA1"
+      },
+      {
+        "netclass": "Motor",
+        "pattern": "PHB1"
+      },
+      {
+        "netclass": "Motor",
+        "pattern": "PHC1"
+      },
+      {
+        "netclass": "Motor",
+        "pattern": "PHA2"
+      },
+      {
+        "netclass": "Motor",
+        "pattern": "PHB2"
+      },
+      {
+        "netclass": "Motor",
+        "pattern": "PHC2"
+      },
+      {
+        "netclass": "Motor",
+        "pattern": "TL OUT1"
+      },
+      {
+        "netclass": "Motor",
+        "pattern": "TL OUT2"
+      },
+      {
+        "netclass": "Motor",
+        "pattern": "TR OUT1"
+      },
+      {
+        "netclass": "Motor",
+        "pattern": "TR OUT2"
+      },
+      {
+        "netclass": "Motor",
+        "pattern": "BL OUT1"
+      },
+      {
+        "netclass": "Motor",
+        "pattern": "BL OUT2"
+      },
+      {
+        "netclass": "Motor",
+        "pattern": "BR OUT1"
+      },
+      {
+        "netclass": "Motor",
+        "pattern": "BR OUT2"
+      },
+      {
+        "netclass": "Power",
+        "pattern": "VCC"
+      },
+      {
+        "netclass": "Power",
+        "pattern": "VSUP"
+      },
+      {
+        "netclass": "Power",
+        "pattern": "USB5V"
+      },
+      {
+        "netclass": "Power",
+        "pattern": "VBUS"
+      }
+    ]
   },
   "pcbnew": {
     "last_paths": {
