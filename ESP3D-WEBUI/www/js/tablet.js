@@ -121,7 +121,7 @@ const setXYHome = () => {
   const mposY = MPOS && MPOS.length >= 2 ? parseFloat(MPOS[1]) : NaN;
   const proposedHomeX = Number.isFinite(mposX) ? mposX : currentHome.x;
   const proposedHomeY = Number.isFinite(mposY) ? mposY : currentHome.y;
-  if (!checkLoadedJobWithinWorkArea(proposedHomeX, proposedHomeY, "Set XY Home blocked", true)) {
+  if (!checkLoadedJobWithinWorkArea(proposedHomeX, proposedHomeY, "Set XY Home blocked", true, true)) {
     return;
   }
 
@@ -348,7 +348,7 @@ const confirmSetHome = () => {
 
   const homeXmm = fromDisplayUnitsToMm(xVal);
   const homeYmm = fromDisplayUnitsToMm(yVal);
-  if (!checkLoadedJobWithinWorkArea(homeXmm, homeYmm, "Set home blocked", true)) {
+  if (!checkLoadedJobWithinWorkArea(homeXmm, homeYmm, "Set home blocked", true, true)) {
     return;
   }
 
