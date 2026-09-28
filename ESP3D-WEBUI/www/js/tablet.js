@@ -6,6 +6,7 @@ const FILE_LIST_LOAD_DELAY_MS = 500; // Delay to ensure file list is loaded befo
 const MM_PER_INCH = 25.4;
 const workAreaDefaults = { x: 2440, y: 1220, offX: 0, offY: 0 };
 const WORK_AREA_BOUNDS_EPSILON_MM = 0.001;
+const OUT_OF_BOUNDS_WARNING_TEXT = "File loaded but out of bounds. Adjust Home position";
 
 var gCodeLoaded = false;
 var gCodeDisplayable = false;
@@ -123,8 +124,8 @@ const setXYHome = () => {
   // home' = currentHome + currentWorkPosition.
   const proposedHomeX = currentHome.x + (Number.isFinite(workX) ? workX : 0);
   const proposedHomeY = currentHome.y + (Number.isFinite(workY) ? workY : 0);
-  if (!checkLoadedJobWithinWorkArea(proposedHomeX, proposedHomeY, "Set XY Home blocked", true, true)) {
-    return;
+  if (!checkLoadedJobWithinWorkArea(proposedHomeX, proposedHomeY, "Set XY Home warning", false, true)) {
+    alertdlg("Warning", OUT_OF_BOUNDS_WARNING_TEXT);
   }
 
   // Capture initial WCO values before zeroing
@@ -371,8 +372,8 @@ const confirmSetHome = () => {
 
   const homeXmm = fromDisplayUnitsToMm(xVal);
   const homeYmm = fromDisplayUnitsToMm(yVal);
-  if (!checkLoadedJobWithinWorkArea(homeXmm, homeYmm, "Set home blocked", true, true)) {
-    return;
+  if (!checkLoadedJobWithinWorkArea(homeXmm, homeYmm, "Set home warning", false, true)) {
+    alertdlg("Warning", OUT_OF_BOUNDS_WARNING_TEXT);
   }
 
   hideModal("set-home-popup");
@@ -2157,7 +2158,9 @@ function finalizeGCodePreviewLoad() {
 
   // Validate only after load/preview completion.
   const home = getCurrentHomeInMm();
-  checkLoadedJobWithinWorkArea(home.x, home.y, "Loaded GCode is outside work area", false, true);
+  if (!checkLoadedJobWithinWorkArea(home.x, home.y, "Loaded GCode is outside work area", false, true)) {
+    alertdlg("Warning", OUT_OF_BOUNDS_WARNING_TEXT);
+  }
 }
 
 function tabletLoadGCodeFile(path, size) {
