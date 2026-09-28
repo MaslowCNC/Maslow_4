@@ -5,6 +5,7 @@
 const FILE_LIST_LOAD_DELAY_MS = 500; // Delay to ensure file list is loaded before restoration
 const MM_PER_INCH = 25.4;
 const workAreaDefaults = { x: 2440, y: 1220, offX: 0, offY: 0 };
+const WORK_AREA_BOUNDS_EPSILON_MM = 0.001;
 
 var gCodeLoaded = false;
 var gCodeDisplayable = false;
@@ -114,6 +115,15 @@ const clearXYHomeTimer = () => {
 const setXYHome = () => {
   clearXYHomeTimer();
 
+  const currentHome = getCurrentHomeInMm();
+  const mposX = MPOS && MPOS.length >= 2 ? parseFloat(MPOS[0]) : NaN;
+  const mposY = MPOS && MPOS.length >= 2 ? parseFloat(MPOS[1]) : NaN;
+  const proposedHomeX = Number.isFinite(mposX) ? mposX : currentHome.x;
+  const proposedHomeY = Number.isFinite(mposY) ? mposY : currentHome.y;
+  if (!checkLoadedJobWithinWorkArea(proposedHomeX, proposedHomeY, "Set XY Home blocked", true)) {
+    return;
+  }
+
   // Capture initial WCO values before zeroing
   const oldWCO = WCO ? [WCO[0], WCO[1]] : null;
 
@@ -196,6 +206,61 @@ const getUnitInfo = () => {
   };
 }
 
+const getCurrentHomeInMm = () => {
+  const wcoX = WCO && WCO.length >= 2 ? parseFloat(WCO[0]) : 0;
+  const wcoY = WCO && WCO.length >= 2 ? parseFloat(WCO[1]) : 0;
+  return {
+    x: Number.isFinite(wcoX) ? wcoX : 0,
+    y: Number.isFinite(wcoY) ? wcoY : 0,
+  };
+}
+
+const getLoadedJobBoundsInMachineCoordinates = (homeX, homeY) => {
+  if (typeof getJobBoundingBox !== "function") {
+    return null;
+  }
+  const bbox = getJobBoundingBox();
+  if (!bbox) {
+    return null;
+  }
+
+  return {
+    minX: bbox.min.x + homeX,
+    maxX: bbox.max.x + homeX,
+    minY: bbox.min.y + homeY,
+    maxY: bbox.max.y + homeY,
+  };
+}
+
+const checkLoadedJobWithinWorkArea = (homeX, homeY, sourceLabel, showPopup = false) => {
+  const jobBounds = getLoadedJobBoundsInMachineCoordinates(homeX, homeY);
+  if (!jobBounds) {
+    return true;
+  }
+
+  const workArea = getWorkAreaBounds();
+  const inside =
+    jobBounds.minX >= workArea.minX - WORK_AREA_BOUNDS_EPSILON_MM &&
+    jobBounds.maxX <= workArea.maxX + WORK_AREA_BOUNDS_EPSILON_MM &&
+    jobBounds.minY >= workArea.minY - WORK_AREA_BOUNDS_EPSILON_MM &&
+    jobBounds.maxY <= workArea.maxY + WORK_AREA_BOUNDS_EPSILON_MM;
+
+  if (inside) {
+    return true;
+  }
+
+  const message =
+    `${sourceLabel}: GCode bounds X:${jobBounds.minX.toFixed(1)}..${jobBounds.maxX.toFixed(1)} ` +
+    `Y:${jobBounds.minY.toFixed(1)}..${jobBounds.maxY.toFixed(1)} mm exceed ` +
+    `work area X:${workArea.minX.toFixed(1)}..${workArea.maxX.toFixed(1)} ` +
+    `Y:${workArea.minY.toFixed(1)}..${workArea.maxY.toFixed(1)} mm`;
+  addMessage(message);
+  if (showPopup) {
+    alertdlg("Home Position Outside Work Area", message);
+  }
+  return false;
+}
+
 const fromMmToDisplayUnits = (mm) => gCodeModal.units === 'G20' ? mm / MM_PER_INCH : mm;
 const fromDisplayUnitsToMm = (distance) => gCodeModal.units === 'G20' ? distance * MM_PER_INCH : distance;
 
@@ -267,6 +332,12 @@ const confirmSetHome = () => {
 
   if (xVal !== rawX || yVal !== rawY) {
     addMessage(`Home position clamped to work area: X=${xVal} Y=${yVal}`);
+  }
+
+  const homeXmm = fromDisplayUnitsToMm(xVal);
+  const homeYmm = fromDisplayUnitsToMm(yVal);
+  if (!checkLoadedJobWithinWorkArea(homeXmm, homeYmm, "Set home blocked", true)) {
+    return;
   }
 
   hideModal("set-home-popup");
@@ -2065,6 +2136,8 @@ function tabletLoadGCodeFile(path, size) {
         .then((response) => response.text())
         .then((gcode) => {
           showGCode(gcode);
+          const home = getCurrentHomeInMm();
+          checkLoadedJobWithinWorkArea(home.x, home.y, "Loaded GCode is outside work area");
           // Save GCode state after successful load
           saveGCodeState();
           // Restore ping monitoring after preview completes
@@ -2153,6 +2226,8 @@ async function tabletLoadGCodeFileSequentially(path) {
     if (gCodeDisplayable) {
       tpDisplayer().showToolpath(_gcodeRaw, gCodeModal, arrayToXYZ(WPOS));
       updateJobBoundsDisplay();
+      const home = getCurrentHomeInMm();
+      checkLoadedJobWithinWorkArea(home.x, home.y, "Loaded GCode is outside work area");
     }
 
     // Save GCode state after successful load
