@@ -208,11 +208,19 @@ const getUnitInfo = () => {
 }
 
 const getCurrentHomeInMm = () => {
+  const mposX = MPOS && MPOS.length >= 2 ? parseFloat(MPOS[0]) : NaN;
+  const mposY = MPOS && MPOS.length >= 2 ? parseFloat(MPOS[1]) : NaN;
+  const wposX = WPOS && WPOS.length >= 2 ? parseFloat(WPOS[0]) : NaN;
+  const wposY = WPOS && WPOS.length >= 2 ? parseFloat(WPOS[1]) : NaN;
   const wcoX = WCO && WCO.length >= 2 ? parseFloat(WCO[0]) : 0;
   const wcoY = WCO && WCO.length >= 2 ? parseFloat(WCO[1]) : 0;
+
+  const homeX = Number.isFinite(mposX) && Number.isFinite(wposX) ? mposX - wposX : wcoX;
+  const homeY = Number.isFinite(mposY) && Number.isFinite(wposY) ? mposY - wposY : wcoY;
+
   return {
-    x: Number.isFinite(wcoX) ? wcoX : 0,
-    y: Number.isFinite(wcoY) ? wcoY : 0,
+    x: Number.isFinite(homeX) ? homeX : 0,
+    y: Number.isFinite(homeY) ? homeY : 0,
   };
 }
 
@@ -261,16 +269,29 @@ const checkLoadedJobWithinWorkArea = (homeX, homeY, sourceLabel, showPopup = fal
     `Y:${jobBounds.minY.toFixed(1)}..${jobBounds.maxY.toFixed(1)} mm exceed ` +
     `work area X:${workArea.minX.toFixed(1)}..${workArea.maxX.toFixed(1)} ` +
     `Y:${workArea.minY.toFixed(1)}..${workArea.maxY.toFixed(1)} mm`;
-  if (!suppressDuplicateMessage || message !== lastLoadBoundsWarning) {
+  const shouldNotify = !suppressDuplicateMessage || message !== lastLoadBoundsWarning;
+  if (shouldNotify) {
     addMessage(message);
     if (suppressDuplicateMessage) {
       lastLoadBoundsWarning = message;
     }
-  }
-  if (showPopup) {
-    alertdlg("Home Position Outside Work Area", message);
+    if (showPopup) {
+      alertdlg("Home Position Outside Work Area", message);
+    }
   }
   return false;
+}
+
+const resetLoadBoundsWarningState = () => {
+  lastLoadBoundsWarning = "";
+}
+
+if (typeof globalThis !== "undefined") {
+  globalThis.__tabletBoundsTestApi = {
+    checkLoadedJobWithinWorkArea,
+    getCurrentHomeInMm,
+    resetLoadBoundsWarningState,
+  };
 }
 
 const fromMmToDisplayUnits = (mm) => gCodeModal.units === 'G20' ? mm / MM_PER_INCH : mm;
