@@ -66,6 +66,21 @@ describe("tablet work area bounds checks", () => {
     expect(alertCount).toBe(1);
   });
 
+  test("warning suppression resets between loads", () => {
+    g.getJobBoundingBox = () => ({
+      min: { x: -60, y: -20, z: 0 },
+      max: { x: 40, y: 20, z: 0 },
+    });
+
+    g.__tabletBoundsTestApi.checkLoadedJobWithinWorkArea(0, 0, "Load", false, true);
+    g.__tabletBoundsTestApi.checkLoadedJobWithinWorkArea(0, 0, "Load", false, true);
+    expect(messages.textContent.match(/exceed work area/g)?.length).toBe(1);
+
+    g.__tabletBoundsTestApi.resetLoadBoundsWarningState();
+    g.__tabletBoundsTestApi.checkLoadedJobWithinWorkArea(0, 0, "Load", false, true);
+    expect(messages.textContent.match(/exceed work area/g)?.length).toBe(2);
+  });
+
   test("derives home from MPOS-WPOS when available", () => {
     g.MPOS = [150, 80];
     g.WPOS = [10, 5];

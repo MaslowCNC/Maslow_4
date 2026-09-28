@@ -2148,8 +2148,21 @@ function runGCode() {
   // expandVisualizer()
 }
 
+function finalizeGCodePreviewLoad() {
+  // Save GCode state after successful load
+  saveGCodeState();
+  // Restore ping monitoring after preview completes
+  restorePingAfterUpload();
+  Monitor_output_Update("[Preview] GCode preview loaded successfully\n");
+
+  // Validate only after load/preview completion.
+  const home = getCurrentHomeInMm();
+  checkLoadedJobWithinWorkArea(home.x, home.y, "Loaded GCode is outside work area", false, true);
+}
+
 function tabletLoadGCodeFile(path, size) {
   gCodeFilename = path
+  resetLoadBoundsWarningState();
   if ((Number.isNaN(size) && size.endsWith('GB')) || size > 10000000) {
     showGCode('GCode file too large to display (> 1MB)');
     gCodeDisplayable = false;
@@ -2171,13 +2184,7 @@ function tabletLoadGCodeFile(path, size) {
         .then((response) => response.text())
         .then((gcode) => {
           showGCode(gcode);
-          const home = getCurrentHomeInMm();
-          checkLoadedJobWithinWorkArea(home.x, home.y, "Loaded GCode is outside work area", false, true);
-          // Save GCode state after successful load
-          saveGCodeState();
-          // Restore ping monitoring after preview completes
-          restorePingAfterUpload();
-          Monitor_output_Update("[Preview] GCode preview loaded successfully\n");
+          finalizeGCodePreviewLoad();
         })
         .catch((error) => {
           // Restore ping monitoring on error
@@ -2261,15 +2268,9 @@ async function tabletLoadGCodeFileSequentially(path) {
     if (gCodeDisplayable) {
       tpDisplayer().showToolpath(_gcodeRaw, gCodeModal, arrayToXYZ(WPOS));
       updateJobBoundsDisplay();
-      const home = getCurrentHomeInMm();
-      checkLoadedJobWithinWorkArea(home.x, home.y, "Loaded GCode is outside work area", false, true);
     }
 
-    // Save GCode state after successful load
-    saveGCodeState();
-    // Restore ping monitoring after preview completes
-    restorePingAfterUpload();
-    Monitor_output_Update("[Preview] GCode preview loaded successfully\n");
+    finalizeGCodePreviewLoad();
     
   } catch (error) {
     console.error('Error loading GCode file:', error);
