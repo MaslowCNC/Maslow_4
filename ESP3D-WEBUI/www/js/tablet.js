@@ -5,10 +5,13 @@
 const FILE_LIST_LOAD_DELAY_MS = 500; // Delay to ensure file list is loaded before restoration
 const MM_PER_INCH = 25.4;
 const workAreaDefaults = { x: 2440, y: 1220, offX: 0, offY: 0 };
+const WORK_AREA_BOUNDS_EPSILON_MM = 0.001;
+const OUT_OF_BOUNDS_WARNING_TEXT = "File loaded but out of bounds. Adjust Home position";
 
 var gCodeLoaded = false;
 var gCodeDisplayable = false;
 var _gcodeRaw = "";
+var lastLoadBoundsWarning = "";
 
 var snd = null;
 var sndok = true;
@@ -114,6 +117,17 @@ const clearXYHomeTimer = () => {
 const setXYHome = () => {
   clearXYHomeTimer();
 
+  const currentHome = getCurrentHomeInMm();
+  const workX = WPOS && WPOS.length >= 2 ? parseFloat(WPOS[0]) : NaN;
+  const workY = WPOS && WPOS.length >= 2 ? parseFloat(WPOS[1]) : NaN;
+  // setXYHome zeroes current work position, so resulting home becomes:
+  // home' = currentHome + currentWorkPosition.
+  const proposedHomeX = currentHome.x + (Number.isFinite(workX) ? workX : 0);
+  const proposedHomeY = currentHome.y + (Number.isFinite(workY) ? workY : 0);
+  if (!checkLoadedJobWithinWorkArea(proposedHomeX, proposedHomeY, "Set XY Home warning", false, true)) {
+    alertdlg("Warning", OUT_OF_BOUNDS_WARNING_TEXT);
+  }
+
   // Capture initial WCO values before zeroing
   const oldWCO = WCO ? [WCO[0], WCO[1]] : null;
 
@@ -196,6 +210,93 @@ const getUnitInfo = () => {
   };
 }
 
+const getCurrentHomeInMm = () => {
+  const mposX = MPOS && MPOS.length >= 2 ? parseFloat(MPOS[0]) : NaN;
+  const mposY = MPOS && MPOS.length >= 2 ? parseFloat(MPOS[1]) : NaN;
+  const wposX = WPOS && WPOS.length >= 2 ? parseFloat(WPOS[0]) : NaN;
+  const wposY = WPOS && WPOS.length >= 2 ? parseFloat(WPOS[1]) : NaN;
+  const wcoX = WCO && WCO.length >= 2 ? parseFloat(WCO[0]) : 0;
+  const wcoY = WCO && WCO.length >= 2 ? parseFloat(WCO[1]) : 0;
+
+  const homeX = Number.isFinite(mposX) && Number.isFinite(wposX) ? mposX - wposX : wcoX;
+  const homeY = Number.isFinite(mposY) && Number.isFinite(wposY) ? mposY - wposY : wcoY;
+
+  return {
+    x: Number.isFinite(homeX) ? homeX : 0,
+    y: Number.isFinite(homeY) ? homeY : 0,
+  };
+}
+
+const getLoadedJobBoundsInMachineCoordinates = (homeX, homeY) => {
+  if (typeof getJobBoundingBox !== "function") {
+    return null;
+  }
+  const bbox = getJobBoundingBox();
+  if (!bbox) {
+    return null;
+  }
+
+  return {
+    minX: bbox.min.x + homeX,
+    maxX: bbox.max.x + homeX,
+    minY: bbox.min.y + homeY,
+    maxY: bbox.max.y + homeY,
+  };
+}
+
+const checkLoadedJobWithinWorkArea = (homeX, homeY, sourceLabel, showPopup = false, suppressDuplicateMessage = false) => {
+  const jobBounds = getLoadedJobBoundsInMachineCoordinates(homeX, homeY);
+  if (!jobBounds) {
+    if (suppressDuplicateMessage) {
+      lastLoadBoundsWarning = "";
+    }
+    return true;
+  }
+
+  const workArea = getWorkAreaBounds();
+  const inside =
+    jobBounds.minX >= workArea.minX - WORK_AREA_BOUNDS_EPSILON_MM &&
+    jobBounds.maxX <= workArea.maxX + WORK_AREA_BOUNDS_EPSILON_MM &&
+    jobBounds.minY >= workArea.minY - WORK_AREA_BOUNDS_EPSILON_MM &&
+    jobBounds.maxY <= workArea.maxY + WORK_AREA_BOUNDS_EPSILON_MM;
+
+  if (inside) {
+    if (suppressDuplicateMessage) {
+      lastLoadBoundsWarning = "";
+    }
+    return true;
+  }
+
+  const message =
+    `${sourceLabel}: GCode bounds X:${jobBounds.minX.toFixed(1)}..${jobBounds.maxX.toFixed(1)} ` +
+    `Y:${jobBounds.minY.toFixed(1)}..${jobBounds.maxY.toFixed(1)} mm exceed ` +
+    `work area X:${workArea.minX.toFixed(1)}..${workArea.maxX.toFixed(1)} ` +
+    `Y:${workArea.minY.toFixed(1)}..${workArea.maxY.toFixed(1)} mm`;
+  const shouldNotify = !suppressDuplicateMessage || message !== lastLoadBoundsWarning;
+  if (shouldNotify) {
+    addMessage(message);
+    if (suppressDuplicateMessage) {
+      lastLoadBoundsWarning = message;
+    }
+    if (showPopup) {
+      alertdlg("Home Position Outside Work Area", message);
+    }
+  }
+  return false;
+}
+
+const resetLoadBoundsWarningState = () => {
+  lastLoadBoundsWarning = "";
+}
+
+if (typeof globalThis !== "undefined") {
+  globalThis.__tabletBoundsTestApi = {
+    checkLoadedJobWithinWorkArea,
+    getCurrentHomeInMm,
+    resetLoadBoundsWarningState,
+  };
+}
+
 const fromMmToDisplayUnits = (mm) => gCodeModal.units === 'G20' ? mm / MM_PER_INCH : mm;
 const fromDisplayUnitsToMm = (distance) => gCodeModal.units === 'G20' ? distance * MM_PER_INCH : distance;
 
@@ -267,6 +368,12 @@ const confirmSetHome = () => {
 
   if (xVal !== rawX || yVal !== rawY) {
     addMessage(`Home position clamped to work area: X=${xVal} Y=${yVal}`);
+  }
+
+  const homeXmm = fromDisplayUnitsToMm(xVal);
+  const homeYmm = fromDisplayUnitsToMm(yVal);
+  if (!checkLoadedJobWithinWorkArea(homeXmm, homeYmm, "Set home warning", false, true)) {
+    alertdlg("Warning", OUT_OF_BOUNDS_WARNING_TEXT);
   }
 
   hideModal("set-home-popup");
@@ -2042,8 +2149,23 @@ function runGCode() {
   // expandVisualizer()
 }
 
+function finalizeGCodePreviewLoad() {
+  // Save GCode state after successful load
+  saveGCodeState();
+  // Restore ping monitoring after preview completes
+  restorePingAfterUpload();
+  Monitor_output_Update("[Preview] GCode preview loaded successfully\n");
+
+  // Validate only after load/preview completion.
+  const home = getCurrentHomeInMm();
+  if (!checkLoadedJobWithinWorkArea(home.x, home.y, "Loaded GCode is outside work area", false, true)) {
+    alertdlg("Warning", OUT_OF_BOUNDS_WARNING_TEXT);
+  }
+}
+
 function tabletLoadGCodeFile(path, size) {
   gCodeFilename = path
+  resetLoadBoundsWarningState();
   if ((Number.isNaN(size) && size.endsWith('GB')) || size > 10000000) {
     showGCode('GCode file too large to display (> 1MB)');
     gCodeDisplayable = false;
@@ -2065,11 +2187,7 @@ function tabletLoadGCodeFile(path, size) {
         .then((response) => response.text())
         .then((gcode) => {
           showGCode(gcode);
-          // Save GCode state after successful load
-          saveGCodeState();
-          // Restore ping monitoring after preview completes
-          restorePingAfterUpload();
-          Monitor_output_Update("[Preview] GCode preview loaded successfully\n");
+          finalizeGCodePreviewLoad();
         })
         .catch((error) => {
           // Restore ping monitoring on error
@@ -2155,11 +2273,7 @@ async function tabletLoadGCodeFileSequentially(path) {
       updateJobBoundsDisplay();
     }
 
-    // Save GCode state after successful load
-    saveGCodeState();
-    // Restore ping monitoring after preview completes
-    restorePingAfterUpload();
-    Monitor_output_Update("[Preview] GCode preview loaded successfully\n");
+    finalizeGCodePreviewLoad();
     
   } catch (error) {
     console.error('Error loading GCode file:', error);
