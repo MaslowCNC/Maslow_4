@@ -10,6 +10,7 @@ const WORK_AREA_BOUNDS_EPSILON_MM = 0.001;
 var gCodeLoaded = false;
 var gCodeDisplayable = false;
 var _gcodeRaw = "";
+var lastLoadBoundsWarning = "";
 
 var snd = null;
 var sndok = true;
@@ -232,9 +233,12 @@ const getLoadedJobBoundsInMachineCoordinates = (homeX, homeY) => {
   };
 }
 
-const checkLoadedJobWithinWorkArea = (homeX, homeY, sourceLabel, showPopup = false) => {
+const checkLoadedJobWithinWorkArea = (homeX, homeY, sourceLabel, showPopup = false, suppressDuplicateMessage = false) => {
   const jobBounds = getLoadedJobBoundsInMachineCoordinates(homeX, homeY);
   if (!jobBounds) {
+    if (suppressDuplicateMessage) {
+      lastLoadBoundsWarning = "";
+    }
     return true;
   }
 
@@ -246,6 +250,9 @@ const checkLoadedJobWithinWorkArea = (homeX, homeY, sourceLabel, showPopup = fal
     jobBounds.maxY <= workArea.maxY + WORK_AREA_BOUNDS_EPSILON_MM;
 
   if (inside) {
+    if (suppressDuplicateMessage) {
+      lastLoadBoundsWarning = "";
+    }
     return true;
   }
 
@@ -254,7 +261,12 @@ const checkLoadedJobWithinWorkArea = (homeX, homeY, sourceLabel, showPopup = fal
     `Y:${jobBounds.minY.toFixed(1)}..${jobBounds.maxY.toFixed(1)} mm exceed ` +
     `work area X:${workArea.minX.toFixed(1)}..${workArea.maxX.toFixed(1)} ` +
     `Y:${workArea.minY.toFixed(1)}..${workArea.maxY.toFixed(1)} mm`;
-  addMessage(message);
+  if (!suppressDuplicateMessage || message !== lastLoadBoundsWarning) {
+    addMessage(message);
+    if (suppressDuplicateMessage) {
+      lastLoadBoundsWarning = message;
+    }
+  }
   if (showPopup) {
     alertdlg("Home Position Outside Work Area", message);
   }
@@ -2137,7 +2149,7 @@ function tabletLoadGCodeFile(path, size) {
         .then((gcode) => {
           showGCode(gcode);
           const home = getCurrentHomeInMm();
-          checkLoadedJobWithinWorkArea(home.x, home.y, "Loaded GCode is outside work area");
+          checkLoadedJobWithinWorkArea(home.x, home.y, "Loaded GCode is outside work area", false, true);
           // Save GCode state after successful load
           saveGCodeState();
           // Restore ping monitoring after preview completes
@@ -2227,7 +2239,7 @@ async function tabletLoadGCodeFileSequentially(path) {
       tpDisplayer().showToolpath(_gcodeRaw, gCodeModal, arrayToXYZ(WPOS));
       updateJobBoundsDisplay();
       const home = getCurrentHomeInMm();
-      checkLoadedJobWithinWorkArea(home.x, home.y, "Loaded GCode is outside work area");
+      checkLoadedJobWithinWorkArea(home.x, home.y, "Loaded GCode is outside work area", false, true);
     }
 
     // Save GCode state after successful load
