@@ -74,4 +74,13 @@ describe("tablet work area bounds checks", () => {
     const home = g.__tabletBoundsTestApi.getCurrentHomeInMm();
     expect(home).toEqual({ x: 140, y: 75 });
   });
+
+  test("falls back to WCO when MPOS/WPOS are unavailable", () => {
+    g.MPOS = null;
+    g.WPOS = null;
+    g.WCO = [42, -9];
+
+    const home = g.__tabletBoundsTestApi.getCurrentHomeInMm();
+    expect(home).toEqual({ x: 42, y: -9 });
+  });
 });

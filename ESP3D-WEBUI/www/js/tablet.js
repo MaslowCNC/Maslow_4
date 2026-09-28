@@ -117,10 +117,12 @@ const setXYHome = () => {
   clearXYHomeTimer();
 
   const currentHome = getCurrentHomeInMm();
-  const mposX = MPOS && MPOS.length >= 2 ? parseFloat(MPOS[0]) : NaN;
-  const mposY = MPOS && MPOS.length >= 2 ? parseFloat(MPOS[1]) : NaN;
-  const proposedHomeX = Number.isFinite(mposX) ? mposX : currentHome.x;
-  const proposedHomeY = Number.isFinite(mposY) ? mposY : currentHome.y;
+  const workX = WPOS && WPOS.length >= 2 ? parseFloat(WPOS[0]) : NaN;
+  const workY = WPOS && WPOS.length >= 2 ? parseFloat(WPOS[1]) : NaN;
+  // setXYHome zeroes current work position, so resulting home becomes:
+  // home' = currentHome + currentWorkPosition.
+  const proposedHomeX = currentHome.x + (Number.isFinite(workX) ? workX : 0);
+  const proposedHomeY = currentHome.y + (Number.isFinite(workY) ? workY : 0);
   if (!checkLoadedJobWithinWorkArea(proposedHomeX, proposedHomeY, "Set XY Home blocked", true, true)) {
     return;
   }
