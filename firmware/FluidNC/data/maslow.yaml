@@ -10,6 +10,9 @@ Maslow_Acceptable_Calibration_Threshold: 0.450000
 Maslow_Apply_Tension_Belt_Retraction_Limit: 300.000000
 Maslow_Apply_Tension_Allow_Limiting: true
 Maslow_Extend_Dist: 2600.000000
+Maslow_Measurement_Pair: BL_TR
+Maslow_Measurement_Extend_Dist: 2000.000000
+Maslow_Measurement_Retraction_Force: 1300
 Maslow_Scale_X: 1.000000
 Maslow_Scale_Y: 1.000000
 Maslow_debugEnabled: false

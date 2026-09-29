@@ -12,6 +12,7 @@
 #include <nvs.h>
 #include "FreeRTOS.h"
 #include "semphr.h"
+#include <string>
 
 #define TCAADDR 0x70
 
@@ -75,6 +76,26 @@ private:
     Maslow_() = default;  // Make constructor private
 
 public:
+    enum BeltMeasurementPair : uint8_t { BELT_PAIR_BL_TR = 0, BELT_PAIR_BR_TL = 1 };
+    enum BeltMeasurementStage : uint8_t {
+        BELT_MEASUREMENT_IDLE = 0,
+        BELT_MEASUREMENT_RETRACTING,
+        BELT_MEASUREMENT_EXTENDING,
+        BELT_MEASUREMENT_APPLYING_TENSION,
+        BELT_MEASUREMENT_COMPLETE
+    };
+
+    struct BeltMeasurementRequest {
+        bool                active            = false;
+        BeltMeasurementPair pair              = BELT_PAIR_BL_TR;
+        float               extendDistanceMm  = 2000.0f;
+        int                 retractionForceMa = 1300;
+        BeltMeasurementStage stage            = BELT_MEASUREMENT_IDLE;
+        unsigned long       stageStartMs      = 0;
+        bool                armADone          = false;
+        bool                armBDone          = false;
+    };
+
     static Maslow_& getInstance();  // Accessor for singleton instance
 
     Maslow_(const Maslow_&)            = delete;  // no copying
@@ -147,6 +168,8 @@ public:
     void dump_telemetry(const char* filename);
     // writes whatever is in teh telemetry buffer to SD card
     void write_telemetry_buffer(uint8_t* buffer, size_t length);
+    bool startBeltDistanceMeasurement(int pairIndex, float extendDistanceMm, int retractionForceMa);
+    void processBeltDistanceMeasurement();
 
     //These are the current targets set by the setTargets function used for moving the machine during normal operations
     double targetX = 0;
@@ -183,6 +206,9 @@ public:
 
     bool test         = false;
     bool debugEnabled = false;
+    std::string measurementPair              = "BL_TR";
+    float       measurementExtendDistanceMm  = 2000.0f;
+    int         measurementRetractionForceMa = 1300;
 
 private:
     //Used to keep track of how often the PID controller is updated
@@ -212,6 +238,8 @@ private:
     void log_telem_hdr_csv();
     void log_telem_pt_csv(TelemetryData data);
     float currentZHome() const;
+    void reportBeltDistanceMeasurement();
+    BeltMeasurementRequest beltMeasurementRequest;
 };
 
 extern Maslow_& Maslow;
