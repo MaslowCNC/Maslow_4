@@ -123,6 +123,30 @@ app = Flask(__name__)
 
 test_files = 'test_files'
 
+def normalize_relative_path(path):
+    path = (path or '').replace('\\', '/')
+    path = path.lstrip('/')
+    normalized = os.path.normpath(path)
+    if normalized in ('', '.'):
+        return ''
+    if normalized.startswith('..') or os.path.isabs(normalized):
+        raise ValueError('Invalid path')
+    return normalized.replace('\\', '/')
+
+def fs_directory(fs, subdir=''):
+    relative = normalize_relative_path(subdir)
+    directory = os.path.join(test_files, fs, relative)
+    os.makedirs(directory, exist_ok=True)
+    return directory
+
+def fs_file_path(fs, filepath=''):
+    relative = normalize_relative_path(filepath)
+    fullpath = os.path.join(test_files, fs, relative)
+    parent = os.path.dirname(fullpath)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+    return fullpath
+
 def file_entry(directory, filename):
     fullpath = os.path.join(directory, filename)
     if os.path.isfile(fullpath):
@@ -153,9 +177,7 @@ def format_bytes(n):
 
 def make_files_list(fs, subdir, status):
     print("mfl", fs, subdir)
-    if len(subdir) and subdir[0] == '/':
-        subdir = subdir[1:]
-    directory = os.path.join(test_files, fs, subdir)
+    directory = fs_directory(fs, subdir)
     print("dir", directory)
     diskusage = shutil.disk_usage(directory)
     disktotalsize = diskusage.total
@@ -272,9 +294,9 @@ def handle_files(fs, request):
     if proxy:
         return do_proxy(request)
     method = request.method
-    action = request.args.get('action')
-    filename = request.args.get('filename')
-    path = request.args.get('path')
+    action = request.values.get('action')
+    filename = request.values.get('filename')
+    path = request.values.get('path')
     print("handle_files", method, action, filename, path)
     if path == None:
         path = ''
@@ -283,16 +305,28 @@ def handle_files(fs, request):
     if filename == None or filename == 'all':
         filename = ''
 
-    if len(path) and path[0] == '/':
-        path = path[1:]
+    path = normalize_relative_path(path)
+    filename = normalize_relative_path(filename)
     if path == '':
         filepath = filename
+    elif filename == '':
+        filepath = path
     else:
-        filepath = path + '/' + filename
+        filepath = normalize_relative_path(path + '/' + filename)
 
-    localpath = os.path.join(test_files, fs, filepath)
+    localpath = fs_file_path(fs, filepath) if filepath else fs_directory(fs, path)
     if method == 'POST':
-        status = 'Upload not implemented'
+        status = 'Ok'
+        try:
+            uploads = request.files.getlist('myfile[]')
+            if not uploads:
+                status = 'No file uploaded'
+            for upload in uploads:
+                uploaded_name = normalize_relative_path(upload.filename)
+                save_path = fs_file_path(fs, uploaded_name or filepath)
+                upload.save(save_path)
+        except Exception as err:
+            status = f'Upload failed: {err}'
     else:
         status = 'Ok'
         if action == 'delete':
@@ -331,8 +365,8 @@ def do_get_file(filename):
     print("/ ", filename)
     if filename.startswith('SD/'):
         filename = filename[3:]
-        return send_from_directory(os.path.join(test_files, 'sd'), filename)
-    return send_from_directory(os.path.join(test_files, 'localfs'), filename)
+        return send_from_directory(fs_directory('sd'), filename)
+    return send_from_directory(fs_directory('localfs'), filename)
 
 @app.route('/', methods=['GET'])
 def index():
@@ -366,20 +400,21 @@ async def message_control(websocket, path):
         await unregister(websocket)
 
 
-if not proxy:
-    if len(sys.argv) == 2:
-        if sys.argv[1] == 'run_socket':
-            start_server = websockets.serve(message_control, domain, ws_port, subprotocols=['arduino'])
-            asyncio.get_event_loop().run_until_complete(start_server)
-            asyncio.get_event_loop().run_forever()
-        else:
-            time.sleep(1)
-            print("Triggering websocket server")
-            return_value = (subprocess.Popen([
-                python_path,
-                script_path,
-                'run_socket'
-            ]))
+if __name__ == '__main__':
+    if not proxy:
+        if len(sys.argv) == 2:
+            if sys.argv[1] == 'run_socket':
+                start_server = websockets.serve(message_control, domain, ws_port, subprotocols=['arduino'])
+                asyncio.get_event_loop().run_until_complete(start_server)
+                asyncio.get_event_loop().run_forever()
+            else:
+                time.sleep(1)
+                print("Triggering websocket server")
+                return_value = (subprocess.Popen([
+                    python_path,
+                    script_path,
+                    'run_socket'
+                ]))
 
-print("Starting flask server")
-app.run(port=http_port)
+    print("Starting flask server")
+    app.run(port=http_port)
