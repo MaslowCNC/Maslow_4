@@ -3,42 +3,24 @@
 #include "config.h"
 #include "ota_service.h"
 #include "trip_recorder.h"
-#include <Preferences.h>
 #include <string.h>
 
-static Preferences fan_prefs;
-static const char* FAN_PREF_NAMESPACE = "fan_ctrl";
-static const char* FAN_PREF_LEVEL_KEY = "level";
-static const char* FAN_PREF_ENABLED_KEY = "enabled";
-static constexpr bool FAN_PERSIST_RUNTIME = false;
-
 static const uint8_t fan_default_level = 49;
-static uint8_t fan_speed_index = fan_default_level;
-static bool fan_enabled = true;
+static uint8_t fan_speed_index = fan_default_level;  // level being applied (0..FAN_LEVEL_COUNT-1)
+static bool fan_enabled = false;                       // whether the fan is being driven
 static float fan_current_pwm = 0.0f;
 static float fan_target_pwm = 0.0f;
 
-static uint8_t clampFanLevel(int index) {
-    if (index < 0) return 0;
-    if (index >= FAN_LEVEL_COUNT) {
-        return (uint8_t)(FAN_LEVEL_COUNT - 1);
-    }
-    return (uint8_t)index;
-}
+// USB manual override ('f' toggles, 'F' steps the level).  While on, the fan runs at
+// fan_manual_level whatever the motors are doing; while off, applyFanForMotorState() decides.
+static bool    fan_manual_on    = false;
+static uint8_t fan_manual_level = fan_default_level;
 
 static uint8_t fanDutyForLevel(uint8_t level) {
     if (FAN_LEVEL_COUNT <= 1) return FAN_MAX_DUTY;
     uint16_t span = (uint16_t)(FAN_MAX_DUTY - FAN_MIN_DUTY);
     uint16_t scaled = (uint16_t)((uint32_t)span * level / (uint32_t)(FAN_LEVEL_COUNT - 1));
     return (uint8_t)(FAN_MIN_DUTY + scaled);
-}
-
-static void persistFanState() {
-    if (!FAN_PERSIST_RUNTIME) {
-        return;
-    }
-    fan_prefs.putUChar(FAN_PREF_LEVEL_KEY, fan_speed_index);
-    fan_prefs.putBool(FAN_PREF_ENABLED_KEY, fan_enabled);
 }
 
 static void writeFanOutput(float pwm) {
@@ -51,31 +33,11 @@ static void updateFanTarget() {
     fan_target_pwm = fan_enabled ? fanDutyForLevel(fan_speed_index) : 0.0f;
 }
 
-static void setFanState(bool enabled) {
-    fan_enabled = enabled;
-    updateFanTarget();
-    persistFanState();
-}
-
-static void setFanLevel(uint8_t level, bool keepEnabled = true) {
-    fan_speed_index = clampFanLevel(level);
-    if (keepEnabled) {
-        fan_enabled = true;
-    }
-    updateFanTarget();
-    persistFanState();
-}
-
 void initFanControl() {
     pinMode(FAN_PWM_PIN, OUTPUT);
     ledcSetup(FAN_PWM_CHANNEL, FAN_PWM_FREQUENCY, FAN_PWM_RESOLUTION_BITS);
     ledcAttachPin(FAN_PWM_PIN, FAN_PWM_CHANNEL);
 
-    fan_prefs.begin(FAN_PREF_NAMESPACE, !FAN_PERSIST_RUNTIME);
-    fan_speed_index = clampFanLevel(fan_prefs.getUChar(FAN_PREF_LEVEL_KEY, fan_default_level));
-    if (!FAN_PERSIST_RUNTIME) {
-        fan_prefs.end();
-    }
     fan_enabled = false;
     fan_current_pwm = 0.0f;
     updateFanTarget();
@@ -102,9 +64,13 @@ void updateFanControl(float dt) {
 }
 
 // Drive the fan automatically whenever local spindle/Z motors or the XY belt motors need
-// cooling.  Called every control-loop iteration; updateFanControl() ramps toward the target.
+// cooling, unless the USB manual override is on.  Called every housekeeping pass;
+// updateFanControl() ramps toward the target.
 void applyFanForMotorState(bool localMotorsEnabled) {
-    if ((localMotorsEnabled || g_belt_cooling_requested) && g_suction_level > 0) {
+    if (fan_manual_on) {
+        fan_speed_index = fan_manual_level;
+        fan_enabled     = true;
+    } else if ((localMotorsEnabled || g_belt_cooling_requested) && g_suction_level > 0) {
         // Map the 0-100 suction percentage onto the fan's level index (0..FAN_LEVEL_COUNT-1).
         fan_speed_index = (uint8_t)((uint32_t)g_suction_level * (FAN_LEVEL_COUNT - 1) / 100u);
         fan_enabled     = true;
@@ -166,8 +132,8 @@ void printCommandHelp() {
     Serial.println(F("  'a' print status of all motors"));
 
     Serial.println(F("  '0-9' set velocity (0=0RPM, 1=2000RPM, ..., 8=16000RPM, 9=MAX_COMMAND_RPM)"));
-    Serial.println(F("  'f'   toggle fan on/off"));
-    Serial.println(F("  'F'   cycle fan speed through 100 levels"));
+    Serial.println(F("  'f'   toggle manual fan override (on = run now; off = automatic)"));
+    Serial.println(F("  'F'   step the manual fan level (1-100) and turn the override on"));
     Serial.println(F("  'C'   auto-calibrate voltage LUT"));
     Serial.println(F("  'Q'   manual calibration Motor 1"));
     Serial.println(F("  'W'   manual calibration Motor 2"));
@@ -254,7 +220,7 @@ void handleSerialCommand(char cmd, MotorController& mc1, MotorController& mc2, C
         }
         mc1.emergencyStop();
         mc2.emergencyStop();
-        setFanState(false);
+        fan_manual_on = false;  // back to automatic: with the motors stopped, that is off
         Serial.println(F("STOP: both motors disabled, velocity zeroed."));
     }
 
@@ -325,21 +291,17 @@ void handleSerialCommand(char cmd, MotorController& mc1, MotorController& mc2, C
 
     // Fan control
     else if (cmd == 'f') {
-        if (fan_enabled) {
-            setFanState(false);
-            Serial.println(F("Fan: OFF"));
+        fan_manual_on = !fan_manual_on;
+        if (fan_manual_on) {
+            Serial.printf("Fan: ON (manual, %d/100)\n", fan_manual_level + 1);
         } else {
-            setFanState(true);
-            Serial.printf("Fan: ON (%d/100)\n", fan_speed_index + 1);
+            Serial.println(F("Fan: manual override OFF (automatic: runs while motors are enabled)"));
         }
     }
     else if (cmd == 'F') {
-        uint8_t next_index = (uint8_t)((fan_speed_index + 1) % FAN_LEVEL_COUNT);
-        setFanLevel(next_index, true);
-        Serial.printf("Fan speed: %d/100\n", fan_speed_index + 1);
-        if (!fan_enabled) {
-            Serial.println(F("Fan: OFF"));
-        }
+        fan_manual_level = (uint8_t)((fan_manual_level + 1) % FAN_LEVEL_COUNT);
+        fan_manual_on    = true;
+        Serial.printf("Fan: ON (manual, %d/100)\n", fan_manual_level + 1);
     }
 
     // Calibration commands
