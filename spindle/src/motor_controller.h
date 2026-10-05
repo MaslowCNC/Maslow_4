@@ -26,6 +26,9 @@ struct MotorController {
     float filtered_current = 0.0f;
     float protection_current = 0.0f;
     float last_instantaneous_current = 0.0f;  // Raw phase RMS from last sample
+    float last_current_a = 0.0f;              // Per-phase currents from the last sample (A),
+    float last_current_b = 0.0f;              // kept for the trip recorder
+    float last_current_c = 0.0f;
 
     // Measured zero-current output of each phase's sense termination (volts).  The MP6541A's
     // SOx pins source/sink a current that the board's 3.3k/3.3k divider turns into a voltage

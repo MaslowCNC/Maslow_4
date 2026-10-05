@@ -2,6 +2,7 @@
 #include "pins.h"
 #include "config.h"
 #include "ota_service.h"
+#include "trip_recorder.h"
 #include <Preferences.h>
 #include <string.h>
 
@@ -148,6 +149,9 @@ void printCommandHelp() {
     Serial.println(F("  'D'      machine idle: power down the Z-axis drivers once the move has settled"));
     Serial.println(F("  'G'      run the Z homing cycle (raise until the top-of-travel beam breaks)"));
     Serial.println(F("  'R'      remove tool: raise the Z until the loaded tool clears the beam"));
+    Serial.println(F("\nTrip recorder (USB only): the last ~2 s are dumped as TRIPCSV lines when a fault stops the motors"));
+    Serial.println(F("  'TRIP'   print the captured recording again"));
+    Serial.println(F("  'REARM'  discard it and start recording again"));
     Serial.println(F("\nLegacy single-character commands (USB maintenance/calibration):"));
     Serial.println(F("  'q' select motor 1 (default)"));
     Serial.println(F("  'w' select motor 2 (spins opposite direction)"));
@@ -364,6 +368,7 @@ static void setSpindleSpeed(float rpm, MotorController& mc1, MotorController& mc
     // cycle can do that.)
     g_fault_code = 0;
     g_hold_release_requested = false;  // motion commanded: cancel any pending Z-hold release
+    if (rpm > 0.0f) tripRecorderArm();  // restarting: record afresh for the next trip
 
     MotorController* motors[] = { &mc1, &mc2 };
     for (int i = 0; i < 2; i++) {
@@ -461,6 +466,15 @@ static void processCommandLine(const char* line, size_t len,
             g_suction_level = 100;
             Serial.println(F("Cooling/suction fan forced ON (100%) for calibration."));
             cal.startAuto(mc1, mc2);
+            return;
+        }
+        if (strcmp(line, "TRIP") == 0) {
+            tripRecorderRequestDump();
+            return;
+        }
+        if (strcmp(line, "REARM") == 0) {
+            tripRecorderArm();
+            Serial.println(F("[TRIP] recorder re-armed"));
             return;
         }
         if (strcmp(line, "DUMP") == 0) {

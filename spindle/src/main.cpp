@@ -11,6 +11,7 @@
 #include "calibration.h"
 #include "serial_commands.h"
 #include "ota_service.h"
+#include "trip_recorder.h"
 
 // ------------------- Hardware Objects -------------------
 
@@ -34,45 +35,55 @@ static TaskHandle_t motor_control_task_handle = nullptr;
 static TaskHandle_t housekeeping_task_handle  = nullptr;
 
 // ------------------- Calibration LUT Default Data -------------------
-// Full auto-calibration sweep (100-14000 RPM in 100 RPM steps, tuned to I_phase_rms = 3.5 A).
-// These are the per-motor open-loop voltages measured on the bench; the drive reaches its
-// 16 V ceiling around 13300 RPM (M1) / 13900 RPM (M2), which is well above the 10000 RPM
-// machine max.  Loaded as the seed LUT at boot (a stored NVS calibration, if present,
-// overrides them), so the spindle has a correct rising high-RPM voltage profile out of the
-// box instead of stalling/over-currenting above 6000 RPM.
+// Per-motor open-loop voltages from the MP6541A board's auto-calibration (CAL) sweep, 100-18000 RPM
+// in 100 RPM steps, hunted to a MEASURED I_phase_rms of CAL_TARGET_CURRENT (2.625 A).  Copied from
+// the board's stored NVS calibration on 2026-10-05.  Loaded as the seed LUT at boot; a stored NVS
+// calibration, if present, overrides them.
+//
+// Note the top of both tables: M1 reaches the 24 V bus by ~17000 RPM and M2 is at 23.3 V by 18000,
+// i.e. deep into SinePWM over-modulation.  A trip recording at ~17700 RPM showed M1 tripping the
+// driver's hardware over-current there, so speeds near the top of these tables are not usable.
 
 static const float MC1_DEFAULT_LUT[] = {
-    1.638f, 1.637f, 1.672f, 1.696f, 1.689f, 1.724f, 1.780f, 1.822f, 1.876f, 1.914f,   // 100-1000
-    1.946f, 2.020f, 2.061f, 2.122f, 2.177f, 2.243f, 2.319f, 2.361f, 2.444f, 2.503f,   // 1100-2000
-    2.591f, 2.646f, 2.722f, 2.786f, 2.851f, 2.937f, 3.007f, 3.087f, 3.154f, 3.239f,   // 2100-3000
-    3.307f, 3.374f, 3.460f, 3.541f, 3.611f, 3.691f, 3.758f, 3.839f, 3.928f, 4.004f,   // 3100-4000
-    4.085f, 4.160f, 4.237f, 4.319f, 4.394f, 4.469f, 4.556f, 4.642f, 4.723f, 4.794f,   // 4100-5000
-    4.882f, 4.968f, 5.052f, 5.128f, 5.203f, 5.303f, 5.369f, 5.457f, 5.540f, 5.619f,   // 5100-6000
-    5.705f, 5.791f, 5.872f, 5.963f, 6.047f, 6.131f, 6.206f, 6.297f, 6.376f, 6.464f,   // 6100-7000
-    6.547f, 6.629f, 6.715f, 6.800f, 6.876f, 6.976f, 7.058f, 7.126f, 7.223f, 7.313f,   // 7100-8000
-    7.396f, 7.478f, 7.566f, 7.662f, 7.731f, 7.818f, 7.897f, 7.985f, 8.041f, 8.076f,   // 8100-9000
-    8.163f, 8.192f, 8.245f, 8.318f, 8.387f, 8.454f, 8.520f, 8.614f, 8.680f, 8.741f,   // 9100-10000
-    8.814f, 8.884f, 8.951f, 9.025f, 9.111f, 9.184f, 9.280f, 9.363f, 9.430f, 9.551f,   // 10100-11000
-    9.643f, 9.756f, 9.876f, 9.988f, 10.143f, 10.300f, 10.422f, 10.618f, 10.786f, 11.015f,  // 11100-12000
-    11.236f, 11.459f, 11.746f, 12.026f, 12.278f, 12.623f, 13.018f, 13.406f, 13.758f, 14.365f, // 12100-13000
-    14.894f, 15.414f, 16.000f, 16.000f, 16.000f, 16.000f, 16.000f, 16.000f, 16.000f, 16.000f, // 13100-14000
+    2.386f, 2.589f, 2.622f, 2.635f, 2.643f, 2.649f, 2.712f, 2.718f, 2.725f, 2.809f,   // 100-1000
+    2.820f, 2.906f, 2.948f, 3.013f, 3.030f, 3.098f, 3.092f, 3.179f, 3.230f, 3.307f,   // 1100-2000
+    3.345f, 3.442f, 3.488f, 3.542f, 3.581f, 3.653f, 3.738f, 3.741f, 3.819f, 3.894f,   // 2100-3000
+    4.040f, 4.073f, 4.138f, 4.185f, 4.263f, 4.312f, 4.412f, 4.472f, 4.551f, 4.623f,   // 3100-4000
+    4.688f, 4.780f, 4.831f, 4.893f, 5.020f, 5.059f, 5.112f, 5.240f, 5.301f, 5.302f,   // 4100-5000
+    5.435f, 5.501f, 5.599f, 5.626f, 5.754f, 5.819f, 5.924f, 5.958f, 6.024f, 6.085f,   // 5100-6000
+    6.191f, 6.308f, 6.365f, 6.428f, 6.511f, 6.597f, 6.697f, 6.742f, 6.818f, 6.930f,   // 6100-7000
+    7.009f, 7.092f, 7.099f, 7.240f, 7.273f, 7.387f, 7.444f, 7.489f, 7.618f, 7.717f,   // 7100-8000
+    7.789f, 7.863f, 7.952f, 8.031f, 8.087f, 8.194f, 8.234f, 8.370f, 8.367f, 8.441f,   // 8100-9000
+    8.586f, 8.656f, 8.661f, 8.795f, 8.901f, 8.961f, 9.027f, 9.020f, 9.190f, 9.401f,   // 9100-10000
+    9.380f, 9.392f, 9.479f, 9.642f, 9.656f, 9.818f, 9.835f, 9.951f, 10.018f, 10.098f,   // 10100-11000
+    10.145f, 10.221f, 10.311f, 10.449f, 10.506f, 10.587f, 10.637f, 10.724f, 10.833f, 10.937f,   // 11100-12000
+    10.961f, 11.058f, 11.107f, 11.201f, 11.316f, 11.377f, 11.442f, 11.521f, 11.613f, 11.683f,   // 12100-13000
+    11.737f, 11.787f, 11.931f, 11.993f, 12.112f, 12.215f, 12.314f, 12.427f, 12.504f, 12.657f,   // 13100-14000
+    12.770f, 12.920f, 13.045f, 13.197f, 13.418f, 13.465f, 13.547f, 13.836f, 14.109f, 14.250f,   // 14100-15000
+    14.552f, 14.620f, 15.014f, 15.445f, 15.592f, 15.711f, 16.249f, 16.584f, 17.112f, 17.459f,   // 15100-16000
+    17.855f, 18.389f, 18.719f, 19.370f, 19.991f, 20.690f, 21.564f, 22.213f, 23.076f, 23.976f,   // 16100-17000
+    24.000f, 24.000f, 24.000f, 24.000f, 24.000f, 24.000f, 24.000f, 24.000f, 24.000f, 24.000f,   // 17100-18000
 };
 
 static const float MC2_DEFAULT_LUT[] = {
-    2.107f, 2.157f, 2.158f, 2.161f, 2.174f, 2.172f, 2.243f, 2.255f, 2.277f, 2.278f,   // 100-1000
-    2.283f, 2.330f, 2.472f, 2.468f, 2.497f, 2.598f, 2.617f, 2.669f, 2.669f, 2.749f,   // 1100-2000
-    2.832f, 2.885f, 2.914f, 2.956f, 3.056f, 3.103f, 3.103f, 3.271f, 3.307f, 3.376f,   // 2100-3000
-    3.438f, 3.472f, 3.615f, 3.680f, 3.710f, 3.744f, 3.840f, 3.920f, 3.922f, 4.078f,   // 3100-4000
-    4.118f, 4.241f, 4.319f, 4.348f, 4.408f, 4.513f, 4.588f, 4.664f, 4.730f, 4.817f,   // 4100-5000
-    4.884f, 4.957f, 5.025f, 5.111f, 5.222f, 5.250f, 5.337f, 5.420f, 5.501f, 5.561f,   // 5100-6000
-    5.625f, 5.732f, 5.782f, 5.901f, 5.955f, 6.041f, 6.105f, 6.175f, 6.276f, 6.341f,   // 6100-7000
-    6.418f, 6.518f, 6.572f, 6.656f, 6.740f, 6.828f, 6.889f, 6.990f, 7.081f, 7.159f,   // 7100-8000
-    7.241f, 7.305f, 7.402f, 7.484f, 7.559f, 7.643f, 7.701f, 7.784f, 7.854f, 7.919f,   // 8100-9000
-    7.980f, 8.047f, 8.100f, 8.124f, 8.186f, 8.231f, 8.331f, 8.371f, 8.424f, 8.486f,   // 9100-10000
-    8.561f, 8.632f, 8.709f, 8.787f, 8.845f, 8.917f, 8.988f, 9.063f, 9.137f, 9.191f,   // 10100-11000
-    9.260f, 9.355f, 9.438f, 9.519f, 9.623f, 9.720f, 9.810f, 9.956f, 10.087f, 10.207f, // 11100-12000
-    10.331f, 10.504f, 10.667f, 10.913f, 11.064f, 11.235f, 11.504f, 11.743f, 11.962f, 12.308f, // 12100-13000
-    12.608f, 12.913f, 13.321f, 13.607f, 14.167f, 14.567f, 14.977f, 15.605f, 16.000f, 16.000f, // 13100-14000
+    2.685f, 2.750f, 2.745f, 2.815f, 2.822f, 2.867f, 2.914f, 2.926f, 2.918f, 2.939f,   // 100-1000
+    3.080f, 3.077f, 3.175f, 3.204f, 3.233f, 3.261f, 3.267f, 3.355f, 3.396f, 3.471f,   // 1100-2000
+    3.472f, 3.544f, 3.586f, 3.650f, 3.661f, 3.783f, 3.803f, 3.866f, 3.918f, 3.967f,   // 2100-3000
+    4.027f, 4.109f, 4.109f, 4.187f, 4.289f, 4.297f, 4.369f, 4.454f, 4.544f, 4.568f,   // 3100-4000
+    4.654f, 4.730f, 4.797f, 4.797f, 4.914f, 4.954f, 5.039f, 5.139f, 5.195f, 5.243f,   // 4100-5000
+    5.294f, 5.366f, 5.479f, 5.514f, 5.643f, 5.647f, 5.751f, 5.838f, 5.878f, 5.911f,   // 5100-6000
+    6.037f, 6.110f, 6.222f, 6.260f, 6.299f, 6.381f, 6.486f, 6.505f, 6.583f, 6.646f,   // 6100-7000
+    6.718f, 6.804f, 6.902f, 6.962f, 7.002f, 7.115f, 7.167f, 7.249f, 7.348f, 7.397f,   // 7100-8000
+    7.488f, 7.507f, 7.635f, 7.731f, 7.762f, 7.808f, 7.922f, 7.960f, 8.069f, 8.107f,   // 8100-9000
+    8.229f, 8.282f, 8.312f, 8.433f, 8.486f, 8.574f, 8.667f, 8.664f, 8.813f, 8.831f,   // 9100-10000
+    8.925f, 9.028f, 9.054f, 9.166f, 9.226f, 9.292f, 9.391f, 9.388f, 9.509f, 9.609f,   // 10100-11000
+    9.679f, 9.716f, 9.835f, 9.889f, 9.984f, 10.013f, 10.103f, 10.228f, 10.260f, 10.394f,   // 11100-12000
+    10.416f, 10.471f, 10.576f, 10.642f, 10.710f, 10.754f, 10.872f, 10.913f, 10.980f, 11.087f,   // 12100-13000
+    11.146f, 11.239f, 11.275f, 11.329f, 11.445f, 11.534f, 11.611f, 11.695f, 11.777f, 11.816f,   // 13100-14000
+    11.863f, 11.971f, 11.996f, 12.191f, 12.195f, 12.417f, 12.439f, 12.532f, 12.580f, 12.739f,   // 14100-15000
+    12.751f, 13.003f, 13.005f, 13.326f, 13.396f, 13.565f, 13.744f, 13.971f, 14.173f, 14.395f,   // 15100-16000
+    14.625f, 14.789f, 15.066f, 15.323f, 15.705f, 15.997f, 16.403f, 16.645f, 17.052f, 17.323f,   // 16100-17000
+    17.625f, 18.341f, 18.689f, 19.485f, 20.190f, 20.750f, 21.379f, 22.279f, 22.436f, 23.336f,   // 17100-18000
 };
 
 static void loadDefaultLUT(MotorController& mc, int motor_idx,
@@ -158,6 +169,7 @@ static void requireRehome();
 //   - the Z position IS the relative phase between the two motors, so a slip invalidates it.
 //     Z targets are refused until a homing cycle re-establishes the zero.
 static void stopForOverCurrent(const char* detail) {
+    tripRecorderTrigger(detail);
     mc1.emergencyStop();
     mc2.emergencyStop();
 
@@ -185,8 +197,13 @@ static void stopForOverCurrent(const char* detail) {
 static volatile uint32_t nfault_edges1 = 0;
 static volatile uint32_t nfault_edges2 = 0;
 
-static void IRAM_ATTR onNFault1() { nfault_edges1++; }
-static void IRAM_ATTR onNFault2() { nfault_edges2++; }
+// Running totals for the trip recorder, which takes its own per-sample differences (the counters
+// above are zeroed by checkDriverFaults every 100ms).
+static volatile uint32_t nfault_total1 = 0;
+static volatile uint32_t nfault_total2 = 0;
+
+static void IRAM_ATTR onNFault1() { nfault_edges1++; nfault_total1++; }
+static void IRAM_ATTR onNFault2() { nfault_edges2++; nfault_total2++; }
 
 static void initFaultPins() {
     pinMode(DRV_NFAULT1, INPUT);   // 5.1k pull-up on the board
@@ -282,6 +299,7 @@ static void checkDriverFaults() {
     reportEvent("ERR", "driver over-temperature (nFAULT low) M1[%d] M2[%d]",
                 (int)drv_over_temp1, (int)drv_over_temp2);
 
+    tripRecorderTrigger("driver over-temperature (nFAULT held low)");
     g_fault_code = 1;  // driver hardware fault
     mc1.emergencyStop();
     mc2.emergencyStop();
@@ -845,9 +863,16 @@ static void updateReportedState() {
     setMachineState(reported);
 }
 
+// FOC loop timing for the trip recorder.  Written by the FOC task (core 1), read and reset by the
+// housekeeping task (core 0) each sample.  The period is measured start-to-start, so it includes
+// anything that held core 1 off between iterations (ISRs, preemption, an enable()'s tPUD wait).
+static volatile uint32_t g_foc_loops      = 0;
+static volatile uint32_t g_foc_max_period_us = 0;
+
 static void motorControlTask(void* arg) {
     (void)arg;
     uint32_t last_ramp_time = millis();
+    uint32_t last_iter_us   = micros();
 
     for (;;) {
         // During OTA keep the drivers off and stand down.  The housekeeping task (which owns the
@@ -859,8 +884,15 @@ static void motorControlTask(void* arg) {
             mc2.disable();
             last_ramp_time = millis();
             vTaskDelay(pdMS_TO_TICKS(10));
+            last_iter_us = micros();
             continue;
         }
+
+        uint32_t iter_us = micros();
+        uint32_t period  = iter_us - last_iter_us;
+        last_iter_us     = iter_us;
+        if (period > g_foc_max_period_us) g_foc_max_period_us = period;
+        g_foc_loops++;
 
         uint32_t current_time  = millis();
         float    dt            = (current_time - last_ramp_time) / 1000.0f;
@@ -898,6 +930,42 @@ static void motorControlTask(void* arg) {
     }
 }
 
+// Take one trip-recorder sample of both motors.  Called right after the current update so the
+// per-phase currents are fresh; the fault checks later in the same pass may then trigger it.
+static void recordTripSample(uint32_t now_ms) {
+    static uint32_t prev_nf_total[2] = { 0, 0 };
+
+    TripSample s;
+    s.t_ms = now_ms;
+    // Take-and-reset the FOC counters.  The exchange is atomic, so no iteration is lost between
+    // the read and the reset.
+    uint32_t loops  = __atomic_exchange_n(&g_foc_loops, 0, __ATOMIC_RELAXED);
+    uint32_t max_us = __atomic_exchange_n(&g_foc_max_period_us, 0, __ATOMIC_RELAXED);
+    s.foc_loops  = (uint16_t)min<uint32_t>(loops, 65535);
+    s.foc_max_us = (uint16_t)min<uint32_t>(max_us, 65535);
+    s.phase_cur  = phase_offset.current;
+    s.phase_tgt  = phase_offset.target;
+
+    const MotorController* motors[2]   = { &mc1, &mc2 };
+    const uint32_t         nf_total[2] = { nfault_total1, nfault_total2 };
+    const int              nf_pin[2]   = { DRV_NFAULT1, DRV_NFAULT2 };
+    for (int i = 0; i < 2; i++) {
+        const MotorController& mc = *motors[i];
+        TripMotorSample&       m  = s.m[i];
+        m.rpm      = mc.current_velocity * 60.0f / (2.0f * PI);
+        m.vlim     = mc.motor.voltage_limit;
+        m.ia       = mc.last_current_a;
+        m.ib       = mc.last_current_b;
+        m.ic       = mc.last_current_c;
+        m.prot     = mc.protection_current;
+        m.enabled  = mc.enabled ? 1 : 0;
+        m.nf_edges = (uint8_t)min<uint32_t>(nf_total[i] - prev_nf_total[i], 255);
+        m.nf_low   = (digitalRead(nf_pin[i]) == LOW) ? 1 : 0;
+        prev_nf_total[i] = nf_total[i];
+    }
+    tripRecorderPush(s);
+}
+
 // Housekeeping task (core 0).  Owns everything that is not time-critical for commutation:
 // current sensing (the six analogReads), the calibration sweep, serial command dispatch, fault
 // monitoring, the Z tool state machine, fan control, telemetry and status reporting.  Keeping all
@@ -930,6 +998,7 @@ static void housekeepingTask(void* arg) {
         mc2.updateCurrent();
         calibration.accumulateCurrentSample(mc1.last_instantaneous_current, 0);
         calibration.accumulateCurrentSample(mc2.last_instantaneous_current, 1);
+        recordTripSample(now_ms);
 
         // Calibration sweep and serial command handling (both set targets the FOC task actuates).
         calibration.update(mc1, mc2);
@@ -947,6 +1016,7 @@ static void housekeepingTask(void* arg) {
         // Reconcile the single reported state now that this pass's tool state, faults,
         // calibration and spindle commands have all been applied, logging any transition.
         updateReportedState();
+        tripRecorderService();  // stream a captured trip recording to USB, a few lines per pass
 
         // Report status to the XY board over the inter-board link.  Only send when the whole
         // line already fits the TX buffer so this write can never block; if the buffer is

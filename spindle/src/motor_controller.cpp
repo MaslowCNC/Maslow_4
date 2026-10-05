@@ -245,6 +245,9 @@ void MotorController::updateCurrent() {
                                  current_c * current_c) / 3.0f);
 
     last_instantaneous_current = instantaneous;
+    last_current_a = current_a;
+    last_current_b = current_b;
+    last_current_c = current_c;
 
     // Fast path: raw phase RMS for stall detection and calibration
     protection_current = protection_current * (1.0f - PROTECTION_FILTER_ALPHA)
