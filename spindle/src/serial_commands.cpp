@@ -119,6 +119,7 @@ void printCommandHelp() {
     Serial.println(F("\nTrip recorder (USB only): the last ~2 s are dumped as TRIPCSV lines when a fault stops the motors"));
     Serial.println(F("  'TRIP'   print the captured recording again"));
     Serial.println(F("  'REARM'  discard it and start recording again"));
+    Serial.println(F("  'TRIPTEST' trigger a recording now (no fault) to test the dump"));
     Serial.println(F("\nLegacy single-character commands (USB maintenance/calibration):"));
     Serial.println(F("  'q' select motor 1 (default)"));
     Serial.println(F("  'w' select motor 2 (spins opposite direction)"));
@@ -434,6 +435,11 @@ static void processCommandLine(const char* line, size_t len,
         }
         if (strcmp(line, "TRIP") == 0) {
             tripRecorderRequestDump();
+            return;
+        }
+        if (strcmp(line, "TRIPTEST") == 0) {
+            // Trigger a recording with no fault, to exercise the dump path on the bench.
+            tripRecorderTrigger("manual test (TRIPTEST)");  // prints whether it was captured
             return;
         }
         if (strcmp(line, "REARM") == 0) {

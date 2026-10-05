@@ -1,4 +1,5 @@
 #include "trip_recorder.h"
+#include <stdarg.h>
 
 // 1000 samples x ~2 ms housekeeping period = ~2 s of history (~70 KB of RAM).
 static constexpr int TRIP_REC_SAMPLES = 1000;
@@ -35,11 +36,34 @@ void tripRecorderPush(const TripSample& s) {
     }
 }
 
+// Print a short status line now, without blocking (dropped if the USB TX buffer is full).
+static void notice(const char* fmt, ...) {
+    if (!Serial) return;
+    char    line[160];
+    va_list ap;
+    va_start(ap, fmt);
+    int n = vsnprintf(line, sizeof(line), fmt, ap);
+    va_end(ap);
+    if (n <= 0) return;
+    if (n >= (int)sizeof(line)) n = sizeof(line) - 1;
+    if (Serial.availableForWrite() >= n) Serial.write(reinterpret_cast<const uint8_t*>(line), n);
+}
+
 void tripRecorderTrigger(const char* reason) {
-    if (s_state != REC_ARMED) return;
+    uint32_t now = millis();
+    if (s_state != REC_ARMED) {
+        // Say so, rather than silently keeping the older recording.
+        notice("[TRIP] NOT recorded (%s at %lu.%03lus): still holding the trip from %lu.%03lus - "
+               "send TRIP to print it, REARM to clear\n",
+               reason ? reason : "", (unsigned long)(now / 1000), (unsigned long)(now % 1000),
+               (unsigned long)(s_trigger_ms / 1000), (unsigned long)(s_trigger_ms % 1000));
+        return;
+    }
+    notice("[TRIP] captured: %s at %lu.%03lus uptime - recording prints in ~0.1 s\n",
+           reason ? reason : "", (unsigned long)(now / 1000), (unsigned long)(now % 1000));
     s_state          = REC_POST_TRIGGER;
     s_post_remaining = TRIP_REC_POST_SAMPLES;
-    s_trigger_ms     = millis();
+    s_trigger_ms     = now;
     strncpy(s_reason, reason ? reason : "", sizeof(s_reason) - 1);
     s_reason[sizeof(s_reason) - 1] = '\0';
 }
@@ -79,7 +103,8 @@ void tripRecorderService() {
     for (int budget = 8; budget > 0 && s_dumping; budget--) {
         int n;
         if (s_dump_line == -4) {
-            n = snprintf(line, sizeof(line), "\n[TRIP] ===== trip recording: %s =====\n", s_reason);
+            n = snprintf(line, sizeof(line), "\n[TRIP] ===== trip recording: %s (at %lu.%03lus uptime) =====\n",
+                         s_reason, (unsigned long)(s_trigger_ms / 1000), (unsigned long)(s_trigger_ms % 1000));
         } else if (s_dump_line == -3) {
             n = snprintf(line, sizeof(line),
                          "[TRIP] %d samples, t_ms is relative to the trigger.  TRIP reprints, REARM clears.\n",
