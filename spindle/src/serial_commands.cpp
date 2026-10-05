@@ -11,10 +11,11 @@ static bool fan_enabled = false;                       // whether the fan is bei
 static float fan_current_pwm = 0.0f;
 static float fan_target_pwm = 0.0f;
 
-// USB manual override ('f' toggles, 'F' steps the level).  While on, the fan runs at
+// USB manual override ('f' toggles, 'F' raises the level by FAN_MANUAL_STEP).  While on, the fan runs at
 // fan_manual_level whatever the motors are doing; while off, applyFanForMotorState() decides.
 static bool    fan_manual_on    = false;
 static uint8_t fan_manual_level = fan_default_level;
+static const uint8_t FAN_MANUAL_STEP = 5;  // levels per 'F' press
 
 static uint8_t fanDutyForLevel(uint8_t level) {
     if (FAN_LEVEL_COUNT <= 1) return FAN_MAX_DUTY;
@@ -133,7 +134,7 @@ void printCommandHelp() {
 
     Serial.println(F("  '0-9' set velocity (0=0RPM, 1=2000RPM, ..., 8=16000RPM, 9=MAX_COMMAND_RPM)"));
     Serial.println(F("  'f'   toggle manual fan override (on = run now; off = automatic)"));
-    Serial.println(F("  'F'   step the manual fan level (1-100) and turn the override on"));
+    Serial.println(F("  'F'   raise the manual fan level by 5 (wraps past 100) and turn the override on"));
     Serial.println(F("  'C'   auto-calibrate voltage LUT"));
     Serial.println(F("  'Q'   manual calibration Motor 1"));
     Serial.println(F("  'W'   manual calibration Motor 2"));
@@ -299,7 +300,7 @@ void handleSerialCommand(char cmd, MotorController& mc1, MotorController& mc2, C
         }
     }
     else if (cmd == 'F') {
-        fan_manual_level = (uint8_t)((fan_manual_level + 1) % FAN_LEVEL_COUNT);
+        fan_manual_level = (uint8_t)((fan_manual_level + FAN_MANUAL_STEP) % FAN_LEVEL_COUNT);
         fan_manual_on    = true;
         Serial.printf("Fan: ON (manual, %d/100)\n", fan_manual_level + 1);
     }
