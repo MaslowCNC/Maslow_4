@@ -92,10 +92,11 @@ const float PHASE_OFFSET_RAMP_RATE = 400.0f * PI / 180.0f;    // 400 deg/s ramp
 // Inter-board link (UART to FluidNC XY board)
 const long    LINK_BAUD = 115200;          // baud rate for the XY <-> spindle link
 const uint32_t LINK_STATUS_INTERVAL_MS = 50;  // how often to report status to the XY board
-// Highest speed the spindle will accept, from the link or the USB digit keys.  Limited by the 24V
-// bus: at the MAX_VOLTAGE cap, M1 held 17,000 RPM but lost sync at a steady 17,100 RPM (trip
-// recording, 2026-10-05).  16,500 leaves ~500 RPM of margin.  Keep equal to CAL_MAX_RAD.
-const int     MAX_COMMAND_RPM = 16500;
+// Highest speed the spindle will accept, from the link or the USB digit keys; also the top of the
+// calibration sweep (CAL_MAX_RAD).  Limited by the 24V bus: with no tool, M1 held 17,000 RPM at the
+// MAX_VOLTAGE cap but lost sync at 17,100 RPM; with a tool loaded both motors tripped at 14,000 RPM
+// (2026-10-05).  12,000 RPM has run reliably with a tool, so that is the limit for now.
+const int     MAX_COMMAND_RPM = 12000;
 
 // On-demand WiFi OTA.  The board normally keeps its radio off; when the XY board sends
 // the 'W' link command (in response to $Spindle/EnableOTA) it joins the XY board's WiFi

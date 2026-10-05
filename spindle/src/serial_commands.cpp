@@ -133,7 +133,7 @@ void printCommandHelp() {
     Serial.println(F("  'i' print current angle and status (active motor)"));
     Serial.println(F("  'a' print status of all motors"));
 
-    Serial.println(F("  '0-9' set velocity (0=0RPM, 1=2000RPM, ..., 8=16000RPM, 9=MAX_COMMAND_RPM)"));
+    Serial.println(F("  '0-9' set velocity in 2000 RPM steps (0=0RPM, 1=2000RPM, ..., 6=12000RPM; 7-9 capped at MAX_COMMAND_RPM)"));
     Serial.println(F("  'f'   toggle manual fan override (on = run now; off = automatic)"));
     Serial.println(F("  'F'   raise the manual fan level by 5 (wraps past 100) and turn the override on"));
     Serial.println(F("  'C'   auto-calibrate voltage LUT"));
