@@ -165,7 +165,7 @@ void printCommandHelp() {
     Serial.println(F("  'i' print current angle and status (active motor)"));
     Serial.println(F("  'a' print status of all motors"));
 
-    Serial.println(F("  '0-9' set velocity (0=0RPM, 1=2000RPM, ..., 9=18000RPM)"));
+    Serial.println(F("  '0-9' set velocity (0=0RPM, 1=2000RPM, ..., 8=16000RPM, 9=MAX_COMMAND_RPM)"));
     Serial.println(F("  'f'   toggle fan on/off"));
     Serial.println(F("  'F'   cycle fan speed through 100 levels"));
     Serial.println(F("  'C'   auto-calibrate voltage LUT"));
@@ -275,6 +275,7 @@ void handleSerialCommand(char cmd, MotorController& mc1, MotorController& mc2, C
         int rpm;
         if      (cmd == '0') rpm = 0;
         else                 rpm = (cmd - '0') * 2000;
+        if (rpm > MAX_COMMAND_RPM) rpm = MAX_COMMAND_RPM;  // '9' (18000) is above the usable range
 
         for (int i = 0; i < 2; i++) {
             if (affectsMotor(i)) {

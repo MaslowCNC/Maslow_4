@@ -92,8 +92,10 @@ const float PHASE_OFFSET_RAMP_RATE = 400.0f * PI / 180.0f;    // 400 deg/s ramp
 // Inter-board link (UART to FluidNC XY board)
 const long    LINK_BAUD = 115200;          // baud rate for the XY <-> spindle link
 const uint32_t LINK_STATUS_INTERVAL_MS = 50;  // how often to report status to the XY board
-const int     MAX_COMMAND_RPM = 18000;     // clamp for spindle speed commands; keep in step with
-                                           // CAL_MAX_RAD so the whole LUT is reachable over the link
+// Highest speed the spindle will accept, from the link or the USB digit keys.  Limited by the 24V
+// bus: at the MAX_VOLTAGE cap, M1 held 17,000 RPM but lost sync at a steady 17,100 RPM (trip
+// recording, 2026-10-05).  16,500 leaves ~500 RPM of margin.  Keep equal to CAL_MAX_RAD.
+const int     MAX_COMMAND_RPM = 16500;
 
 // On-demand WiFi OTA.  The board normally keeps its radio off; when the XY board sends
 // the 'W' link command (in response to $Spindle/EnableOTA) it joins the XY board's WiFi
@@ -191,7 +193,13 @@ const float CAL_TARGET_CURRENT = 2.625f;                            // Target ph
                                                                     // hunts to a lower current to keep the spin-up
                                                                     // transient clear of that lower ceiling.
 const float CAL_CHECKPOINT_STEP_RAD = 100.0f * 2.0f * PI / 60.0f;  // 100 RPM step in rad/s
-const float CAL_MAX_RAD = 18000.0f * 2.0f * PI / 60.0f;            // 18000 RPM in rad/s
+const float CAL_MAX_RAD = MAX_COMMAND_RPM * 2.0f * PI / 60.0f;     // top of the sweep (rad/s).
+                                                                    // The LUT keeps 180 entries (so stored
+                                                                    // calibrations still load); steps above
+                                                                    // this are never swept or commanded.
+const uint32_t CAL_TRIP_PAUSE_MS = 5000;                            // after motor 1 trips during auto-cal,
+                                                                    // let it coast to rest before motor 2's
+                                                                    // sweep starts
 const uint32_t CAL_SETTLE_MS = 500;                                 // ms to wait after reaching speed
 const float CAL_HUNT_VOLTAGE_MARGIN = 0.9f;                         // Max extra volts above seeded LUT at each step
 const float CAL_RAMP_VOLT_PER_RAD = 0.0025f;                        // Open-loop spin-floor slope (volts per rad/s).

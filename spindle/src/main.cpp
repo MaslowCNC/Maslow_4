@@ -174,15 +174,21 @@ static void stopForOverCurrent(const char* detail) {
     mc1.emergencyStop();
     mc2.emergencyStop();
 
-    g_fault_code = 2;
     requireRehome();
 
     if (calibration.isActive()) {
+        // A trip at the top of motor 1's auto sweep just marks the end of its usable range: the
+        // sweep moves on to motor 2, so do not latch a fault (which would also alarm the XY board).
+        if (calibration.handleMotorTrip(mc1, mc2, "over-current")) {
+            reportEvent("WARN", "%s during calibration - motor 1 sweep ended, continuing with motor 2", detail);
+            return;
+        }
+        g_fault_code = 2;
         reportEvent("ERR", "%s during calibration - aborting", detail);
-        calibration.abort(mc1, mc2, "over-current");
         return;
     }
 
+    g_fault_code = 2;
     reportEvent("WARN", "%s - spindle stopped; re-home the Z, then send a new speed", detail);
 }
 

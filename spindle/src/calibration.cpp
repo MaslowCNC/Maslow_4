@@ -159,6 +159,46 @@ void Calibration::abort(MotorController& mc1, MotorController& mc2, const char* 
                   active_motor_idx + 1);
 }
 
+bool Calibration::handleMotorTrip(MotorController& mc1, MotorController& mc2, const char* reason) {
+    bool auto_sweep = (state == CAL_RAMP || state == CAL_SETTLE || state == CAL_HUNT ||
+                       state == CAL_COOLDOWN || state == CAL_DONE || state == CAL_RAMP_DOWN);
+    if (!auto_sweep || active_motor_idx != 0) {
+        abort(mc1, mc2, reason);
+        return false;
+    }
+
+    // Motor 1 has reached the end of what it can do on this supply.  Keep and save the steps it
+    // recorded (the rest keep their previous values, as in abort()), then calibrate motor 2 rather
+    // than giving up on it.
+    Serial.printf("[CAL] Motor 1 tripped (%s) at %.0f RPM - ending its sweep there.\n",
+                  reason, checkpoint * 60.0f / (2.0f * PI));
+    printPartialResults(mc1);
+    mc1.cal_lut_valid = true;
+    saveCalibrationLUT(mc1, 0);
+    Serial.printf("[CAL] Motor 1 saved.  Starting Motor 2 in %lu ms (letting Motor 1 coast to rest).\n",
+                  (unsigned long)CAL_TRIP_PAUSE_MS);
+    timer = millis();
+    state = CAL_TRIP_PAUSE;
+    return true;
+}
+
+// Begin motor 2's auto sweep from the first checkpoint.  Motor 1 must already be stopped.
+void Calibration::startMotor2Sweep(MotorController& mc2) {
+    Serial.println(F("\n--- Starting auto-calibration for Motor 2 ---"));
+    active_motor_idx = 1;
+    hunt_voltage = BASE_VOLTAGE;
+    mc2.cal_lut_valid = false;
+    memset(mc2.cal_lut_recorded, 0, sizeof(mc2.cal_lut_recorded));
+    checkpoint = CAL_CHECKPOINT_STEP_RAD;
+    mc2.target_velocity = checkpoint * mc2.direction;
+    mc2.current_velocity = 0.0f;
+    mc2.velocity_mode = true;
+    mc2.resetFilterState();
+    mc2.enable();
+    timer = millis();
+    state = CAL_RAMP;
+}
+
 void Calibration::accumulateCurrentSample(float instantaneous_current, int motor_idx) {
     if (state == CAL_HUNT && active_motor_idx == motor_idx) {
         current_sum += instantaneous_current;
@@ -184,7 +224,7 @@ void Calibration::startAuto(MotorController& mc1, MotorController& mc2) {
     mc1.cal_lut_valid = false;
     memset(mc1.cal_lut_recorded, 0, sizeof(mc1.cal_lut_recorded));
 
-    mc1.target_velocity = checkpoint;
+    mc1.target_velocity = checkpoint * mc1.direction;
     mc1.current_velocity = 0.0f;
     mc1.velocity_mode = true;
     mc1.enable();
@@ -472,21 +512,8 @@ void Calibration::update(MotorController& mc1, MotorController& mc2) {
         // If motor 1 just finished, immediately start motor 2.
         // Avoid blocking output here so handoff timing stays deterministic.
         if (active_motor_idx == 0) {
-            Serial.println(F("\n--- Starting auto-calibration for Motor 2 ---"));
             saveCalibrationLUT(mc, active_motor_idx);
-            active_motor_idx = 1;
-            MotorController& mc2_ref = mc2;
-            hunt_voltage = BASE_VOLTAGE;
-            mc2_ref.cal_lut_valid = false;
-            memset(mc2_ref.cal_lut_recorded, 0, sizeof(mc2_ref.cal_lut_recorded));
-            checkpoint = CAL_CHECKPOINT_STEP_RAD;
-            mc2_ref.target_velocity = -checkpoint;
-            mc2_ref.current_velocity = 0.0f;
-            mc2_ref.velocity_mode = true;
-            mc2_ref.resetFilterState();
-            mc2_ref.enable();
-            timer = millis();
-            state = CAL_RAMP;
+            startMotor2Sweep(mc2);
         } else {
             Serial.printf("\n=== AUTO CALIBRATION COMPLETE (Motor %d) ===\n", active_motor_idx + 1);
             saveCalibrationLUT(mc, active_motor_idx);
@@ -494,6 +521,13 @@ void Calibration::update(MotorController& mc1, MotorController& mc2) {
         }
         break;
     }
+
+    case CAL_TRIP_PAUSE:
+        // Motor 1 tripped and is coasting with its outputs off; motor 2 starts once it is at rest.
+        if (millis() - timer >= CAL_TRIP_PAUSE_MS) {
+            startMotor2Sweep(mc2);
+        }
+        break;
 
     // ---- Manual calibration states ----
 
