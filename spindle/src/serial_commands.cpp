@@ -165,7 +165,7 @@ void printCommandHelp() {
     Serial.println(F("  'i' print current angle and status (active motor)"));
     Serial.println(F("  'a' print status of all motors"));
 
-    Serial.println(F("  '0-9' set velocity (0=0RPM, 1=1000RPM, ..., 9=10000RPM)"));
+    Serial.println(F("  '0-9' set velocity (0=0RPM, 1=2000RPM, ..., 9=18000RPM)"));
     Serial.println(F("  'f'   toggle fan on/off"));
     Serial.println(F("  'F'   cycle fan speed through 100 levels"));
     Serial.println(F("  'C'   auto-calibrate voltage LUT"));

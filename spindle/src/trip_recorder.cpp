@@ -15,7 +15,9 @@ static int        s_post_remaining = 0;
 static uint32_t   s_trigger_ms = 0;
 static char       s_reason[96] = "";
 
-// Dump progress: -1 = header pending, 0..s_count-1 = next sample line, s_count = footer pending.
+// Dump progress: negative = header lines pending (-HEADER_LINES..-1), 0..s_count-1 = next sample
+// line, s_count = footer pending.
+static constexpr int HEADER_LINES = 4;
 static bool s_dumping   = false;
 static int  s_dump_line = 0;
 
@@ -29,7 +31,7 @@ void tripRecorderPush(const TripSample& s) {
     if (s_state == REC_POST_TRIGGER && --s_post_remaining <= 0) {
         s_state     = REC_FROZEN;
         s_dumping   = true;
-        s_dump_line = -1;
+        s_dump_line = -HEADER_LINES;
     }
 }
 
@@ -55,11 +57,13 @@ void tripRecorderRequestDump() {
         return;
     }
     s_dumping   = true;
-    s_dump_line = -1;
+    s_dump_line = -HEADER_LINES;
 }
 
 // Write a line only if it fits in the USB TX FIFO right now, so the housekeeping task never
-// blocks.  Returns false (line not sent, retry next pass) if it does not fit.
+// blocks.  Returns false (line not sent, retry next pass) if it does not fit.  The USB CDC TX ring
+// buffer is only 256 bytes, so every line written here must stay well under that or it can never
+// fit and the dump stalls forever - hence the header is split over several short lines.
 static bool tryWrite(const char* line, int n) {
     if (n <= 0) return true;
     if (Serial.availableForWrite() < n) return false;
@@ -70,18 +74,23 @@ static bool tryWrite(const char* line, int n) {
 void tripRecorderService() {
     if (!s_dumping || !Serial) return;
 
-    char line[512];  // the header block is ~370 chars
+    char line[200];
     // A handful of lines per pass keeps each pass short; the whole dump takes a few seconds.
     for (int budget = 8; budget > 0 && s_dumping; budget--) {
         int n;
-        if (s_dump_line < 0) {
+        if (s_dump_line == -4) {
+            n = snprintf(line, sizeof(line), "\n[TRIP] ===== trip recording: %s =====\n", s_reason);
+        } else if (s_dump_line == -3) {
             n = snprintf(line, sizeof(line),
-                         "\n[TRIP] ===== trip recording: %s =====\n"
-                         "[TRIP] %d samples, t_ms is relative to the trigger.  Send TRIP to reprint, REARM to clear.\n"
+                         "[TRIP] %d samples, t_ms is relative to the trigger.  TRIP reprints, REARM clears.\n",
+                         s_count);
+        } else if (s_dump_line == -2) {
+            n = snprintf(line, sizeof(line),
                          "TRIPCSV,t_ms,foc_loops,foc_max_us,z_phase_deg,z_target_deg,"
-                         "m1_en,m1_rpm,m1_vlim,m1_ia,m1_ib,m1_ic,m1_prot,m1_nf_edges,m1_nf_low,"
-                         "m2_en,m2_rpm,m2_vlim,m2_ia,m2_ib,m2_ic,m2_prot,m2_nf_edges,m2_nf_low\n",
-                         s_reason, s_count);
+                         "m1_en,m1_rpm,m1_vlim,m1_ia,m1_ib,m1_ic,m1_prot,m1_nf_edges,m1_nf_low,");
+        } else if (s_dump_line == -1) {
+            n = snprintf(line, sizeof(line),
+                         "m2_en,m2_rpm,m2_vlim,m2_ia,m2_ib,m2_ic,m2_prot,m2_nf_edges,m2_nf_low\n");
         } else if (s_dump_line < s_count) {
             int               oldest = (s_head - s_count + TRIP_REC_SAMPLES) % TRIP_REC_SAMPLES;
             const TripSample& s      = s_buf[(oldest + s_dump_line) % TRIP_REC_SAMPLES];
