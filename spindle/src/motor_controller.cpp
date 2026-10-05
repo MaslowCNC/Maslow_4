@@ -147,6 +147,9 @@ void MotorController::initMotor() {
     motor.linkDriver(&driver);
     motor.voltage_limit = BASE_VOLTAGE;
     motor.controller = MotionControlType::angle_openloop;
+    // Space-vector (midpoint-clamp) modulation: linear up to Vdc/sqrt(3) instead of SinePWM's
+    // Vdc/2, i.e. 15% more usable voltage at the top of the speed range.  See MAX_VOLTAGE.
+    motor.foc_modulation = FOCModulationType::SpaceVectorPWM;
     motor.useMonitoring(Serial);
     motor.init();
 

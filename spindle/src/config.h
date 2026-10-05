@@ -15,18 +15,20 @@ const int SPINDLE_DIRECTION = -1;
 
 // Voltage limits
 const float BASE_VOLTAGE = 1.3f;
-// Open-loop ceiling, raised to the full 24V bus to give the sweep room up to 18,000 RPM.
-// NOTE this also required raising the DRIVER limit to SUPPLY_VOLTAGE in motor_controller.cpp -
-// BLDCDriver6PWM::setPwm() clamps every phase to driver.voltage_limit, which was
-// SUPPLY_VOLTAGE*0.8 = 19.2V, so a 24V ceiling here alone would simply have been clipped there.
+// Open-loop ceiling: the largest phase amplitude the drive can produce WITHOUT clipping.
+// The motors use SpaceVectorPWM (midpoint clamp, see MotorController::initMotor), which stays
+// linear up to Vdc/sqrt(3) = 13.86V on a 24V bus - 15% more than SinePWM's Vdc/2 = 12V.  Below
+// 12V the two modulations give the same fundamental, so LUT values there mean the same thing.
 //
-// Physical reality above ~12V: with SinePWM on a 24V bus the largest UNCLIPPED q-axis amplitude
-// is voltage_power_supply/2 = 12V.  Past that the waveform clips, and at full square wave the
-// fundamental tops out near (4/pi)(Vdc/2) = 15.3V.  So requesting 18-24V buys progressively less
-// speed and progressively more harmonic current and heat - which is also what trips the
-// MP6541A's fixed 16-20A OCP.  Expect the top of the LUT to flatten out somewhere in here.
-// The calibration LUT must be rebuilt (run "CAL") after changing this.
-const float MAX_VOLTAGE = 24.0f;
+// Requesting more than this only clips the waveform: past it the fundamental barely rises (full
+// square wave tops out at (4/pi)(Vdc/2) = 15.3V) while the harmonic current climbs steeply.  With
+// the old 24V ceiling the calibration sweep kept raising the request above ~13,500 RPM, and a trip
+// recording at ~17,700 RPM showed exactly that clipping driving M1 into the MP6541A's 16-20A
+// hardware OCP.  So the top of the speed range is now voltage-limited (less torque margin) instead
+// of over-current tripping.  Reaching 18,000 RPM with margin needs a higher bus voltage.
+// Stored LUT entries above this are clamped at use; re-run "CAL" after changing it.
+// (driver.voltage_limit stays at SUPPLY_VOLTAGE: SimpleFOC centres the waveform on half of it.)
+const float MAX_VOLTAGE = SUPPLY_VOLTAGE / 1.7320508f;  // 13.86V on a 24V bus
 
 // PWM configuration.  The MP6541A adds no dead time of its own (HSx+LSx both high simply
 // gives Hi-Z), so the dead zone below is the only shoot-through margin.
@@ -63,11 +65,13 @@ const float FAN_PWM_RAMP_UNITS_PER_SEC = 320.0f;
 
 // Velocity ramping
 const float VELOCITY_RAMP_RATE = 20.0f;   // rad/s per second, used during calibration
-// Spindle spin-up/down uses a single uniform ramp rate (matching the reference firmware, which
-// reaches 14,000 RPM cleanly with one rate), applied by rampVelocity() every FOC iteration.
-// The earlier speed-dependent dual-rate ramp was removed: it added complexity without being the
-// cause of the high-speed fault.
-const float SPINDLE_RAMP_RATE  = 500.0f;  // rad/s per second, spindle on/off spin-up/down rate
+// Spindle spin-up/down ramp, applied by rampVelocity() every FOC iteration.  Above
+// SPINDLE_RAMP_SLOW_ABOVE_RAD the drive is close to its voltage ceiling (MAX_VOLTAGE), so there is
+// little torque margin left for acceleration; the ramp slows there so the open-loop rotor keeps
+// sync.  Applies to spin-down too, which needs braking torque from the same limited voltage.
+const float SPINDLE_RAMP_RATE      = 500.0f;  // rad/s per second (~4,800 RPM/s) below the threshold
+const float SPINDLE_RAMP_RATE_HIGH = 150.0f;  // rad/s per second (~1,400 RPM/s) above it
+const float SPINDLE_RAMP_SLOW_ABOVE_RAD = 14000.0f * 2.0f * PI / 60.0f;  // 14,000 RPM
 
 // --- FOC loop scheduling ---
 // The FOC update (loopFOC + move) runs on its OWN task pinned to core 1 with nothing else in the

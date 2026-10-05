@@ -42,7 +42,8 @@ static TaskHandle_t housekeeping_task_handle  = nullptr;
 //
 // Note the top of both tables: M1 reaches the 24 V bus by ~17000 RPM and M2 is at 23.3 V by 18000,
 // i.e. deep into SinePWM over-modulation.  A trip recording at ~17700 RPM showed M1 tripping the
-// driver's hardware over-current there, so speeds near the top of these tables are not usable.
+// driver's hardware over-current there.  These entries were measured with SinePWM and a 24 V
+// ceiling; applyVoltageLimit() now clamps them to MAX_VOLTAGE (13.86 V, the SpaceVectorPWM limit).
 
 static const float MC1_DEFAULT_LUT[] = {
     2.386f, 2.589f, 2.622f, 2.635f, 2.643f, 2.649f, 2.712f, 2.718f, 2.725f, 2.809f,   // 100-1000
@@ -869,6 +870,13 @@ static void updateReportedState() {
 static volatile uint32_t g_foc_loops      = 0;
 static volatile uint32_t g_foc_max_period_us = 0;
 
+// Ramp rate for one motor this FOC iteration (rad/s per second).
+static float spinRampRate(const MotorController& mc) {
+    if (calibration.isActive()) return VELOCITY_RAMP_RATE;
+    return (fabsf(mc.current_velocity) >= SPINDLE_RAMP_SLOW_ABOVE_RAD) ? SPINDLE_RAMP_RATE_HIGH
+                                                                       : SPINDLE_RAMP_RATE;
+}
+
 static void motorControlTask(void* arg) {
     (void)arg;
     uint32_t last_ramp_time = millis();
@@ -913,11 +921,11 @@ static void motorControlTask(void* arg) {
         mc1.applyVoltageLimit(cal_active && calibration.active_motor_idx == 0, calibration.hunt_voltage, z_move_boost);
         mc2.applyVoltageLimit(cal_active && calibration.active_motor_idx == 1, calibration.hunt_voltage, z_move_boost);
 
-        // Spindle spin-up/down uses a single uniform ramp rate; calibration keeps its slower,
-        // settled rate so per-checkpoint current measurements stay accurate.
-        float spin_rate = calibration.isActive() ? VELOCITY_RAMP_RATE : SPINDLE_RAMP_RATE;
-        mc1.rampVelocity(dt, spin_rate);
-        mc2.rampVelocity(dt, spin_rate);
+        // Spindle spin-up/down slows near the top of the range, where the drive is close to its
+        // voltage ceiling; calibration keeps its slower, settled rate so per-checkpoint current
+        // measurements stay accurate.
+        mc1.rampVelocity(dt, spinRampRate(mc1));
+        mc2.rampVelocity(dt, spinRampRate(mc2));
         updatePhaseOffset(dt);
 
         mc1.updateControlMode();

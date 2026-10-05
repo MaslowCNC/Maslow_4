@@ -20,13 +20,6 @@ static float speedVoltageFloor(float rad) {
     return constrain(CAL_RAMP_VOLT_PER_RAD * rad, BASE_VOLTAGE, MAX_VOLTAGE);
 }
 
-static bool lutFullyRecorded(const MotorController& mc) {
-    for (int i = 0; i < CAL_LUT_SIZE; i++) {
-        if (!mc.cal_lut_recorded[i]) return false;
-    }
-    return true;
-}
-
 void loadCalibrationLUT(MotorController& mc, int motor_idx, const float* defaults) {
     memcpy(mc.cal_lut_voltage, defaults, sizeof(float) * CAL_LUT_SIZE);
     memset(mc.cal_lut_recorded, 0, sizeof(mc.cal_lut_recorded));
@@ -45,7 +38,12 @@ void loadCalibrationLUT(MotorController& mc, int motor_idx, const float* default
         if (loaded == expected_size) {
             memcpy(mc.cal_lut_voltage, data.voltage, sizeof(data.voltage));
             memcpy(mc.cal_lut_recorded, data.recorded, sizeof(data.recorded));
-            mc.cal_lut_valid = lutFullyRecorded(mc);
+            // The stored table is usable even if a sweep did not record every step: a sweep only
+            // overwrites the steps it records, so the others still hold the previous table's
+            // values.  (Requiring every step here made one short sweep drop the motor to
+            // BASE_VOLTAGE at every speed after the next reboot.)  The recorded flags are kept
+            // only so manual calibration ('B') can resume from the first unrecorded step.
+            mc.cal_lut_valid = true;
         }
     }
     cal_prefs.end();
@@ -149,6 +147,16 @@ void Calibration::abort(MotorController& mc1, MotorController& mc2, const char* 
     state = CAL_IDLE;
     Serial.printf("Calibration aborted: %s\n", reason);
     printPartialResults(mc);
+
+    // Keep what the sweep measured.  It only overwrites the steps it records, so the table is
+    // already "new steps where recorded, previous values elsewhere" - a complete, usable LUT.
+    // Leaving cal_lut_valid false (as it was during the sweep) would run this motor at
+    // BASE_VOLTAGE at every speed until the next reboot.  Saved so an over-current near the top of
+    // the sweep does not throw away every step below it.
+    mc.cal_lut_valid = true;
+    saveCalibrationLUT(mc, active_motor_idx);
+    Serial.printf("Motor %d: recorded steps saved; unrecorded steps keep their previous values.\n",
+                  active_motor_idx + 1);
 }
 
 void Calibration::accumulateCurrentSample(float instantaneous_current, int motor_idx) {
