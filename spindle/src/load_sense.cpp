@@ -2,6 +2,7 @@
 #include "config.h"
 #include <Preferences.h>
 #include <stdarg.h>
+#include "usb_console.h"
 
 // ------------------- State -------------------
 
@@ -31,7 +32,8 @@ struct RefTable {
 static RefTable s_ref;
 
 // RTEST / LOADREF sequencer
-enum Mode : uint8_t { M_IDLE, M_RT_SETTLE, M_RT_MEASURE, M_REF_RAMP, M_REF_SETTLE, M_REF_MEASURE };
+enum Mode : uint8_t { M_IDLE, M_RT_SETTLE, M_RT_MEASURE, M_REF_RAMP, M_REF_SETTLE, M_REF_MEASURE,
+                     M_REF_STOPPING };
 static Mode     s_mode = M_IDLE;
 static uint32_t s_timer = 0;
 static bool     s_was_enabled[2];
@@ -53,8 +55,7 @@ static void say(const char* fmt, ...) {
     va_end(ap);
     if (n <= 0) return;
     if (n >= (int)sizeof(line)) n = sizeof(line) - 1;
-    for (int i = 0; i < 20 && Serial.availableForWrite() < n; i++) vTaskDelay(pdMS_TO_TICKS(1));
-    if (Serial.availableForWrite() >= n) Serial.write(reinterpret_cast<const uint8_t*>(line), n);
+    for (int i = 0; i < 20 && !usbWriteIfRoom(line, n); i++) vTaskDelay(pdMS_TO_TICKS(1));
 }
 
 // ------------------- Duty weighting -------------------
@@ -182,14 +183,15 @@ static void finishRefPoint(MotorController* motors[2]) {
         s_new_ref.ip[1][s_ref_idx], s_new_ref.iq[1][s_ref_idx]);
 
     if (++s_ref_idx >= s_ref_points) {
+        // Do NOT write flash yet: a flash write stalls both cores, including the FOC loop, and an
+        // open-loop rotor at full speed with commutation frozen slips at once.  Save once stopped.
         setSpindleTargets(motors, 0.0f);
         s_new_ref.magic = REF_MAGIC;
         s_new_ref.n     = (uint16_t)s_ref_points;
         s_new_ref.step  = (uint16_t)LOAD_REF_STEP_RPM;
-        s_ref           = s_new_ref;
-        saveRef();
-        say("[LOADREF] done - %d points saved; spindle ramping down\n", s_ref_points);
-        s_mode = M_IDLE;
+        say("[LOADREF] sweep complete - ramping down; will save once the spindle has stopped\n");
+        s_timer = millis();
+        s_mode  = M_REF_STOPPING;
         return;
     }
     setSpindleTargets(motors, (float)((s_ref_idx + 1) * LOAD_REF_STEP_RPM));
@@ -245,7 +247,7 @@ void loadSenseAbort(const char* why) {
         endRTest(s_motors);
         say("[RTEST] aborted: %s\n", why);
     } else {
-        setSpindleTargets(s_motors, 0.0f);
+        if (s_mode != M_REF_STOPPING) setSpindleTargets(s_motors, 0.0f);
         s_mode = M_IDLE;
         say("[LOADREF] aborted (%s) - baseline not changed\n", why);
     }
@@ -376,6 +378,20 @@ void loadSenseUpdate(MotorController& mc1, MotorController& mc2, float dt) {
                 if (now - s_timer >= LOAD_REF_MEASURE_MS) finishRefPoint(motors);
             }
             break;
+
+        case M_REF_STOPPING: {
+            bool stopped = !mc1.velocity_mode && !mc2.velocity_mode &&
+                           fabsf(mc1.current_velocity) < 0.5f && fabsf(mc2.current_velocity) < 0.5f;
+            if (stopped) {
+                s_ref = s_new_ref;
+                saveRef();
+                say("[LOADREF] done - %d points saved\n", s_ref_points);
+                s_mode = M_IDLE;
+            } else if (now - s_timer > 20000) {
+                loadSenseAbort("spindle did not stop within 20 s, so the baseline was not saved");
+            }
+            break;
+        }
 
         default:
             break;

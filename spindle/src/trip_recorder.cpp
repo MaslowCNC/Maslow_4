@@ -1,4 +1,5 @@
 #include "trip_recorder.h"
+#include "usb_console.h"
 #include <stdarg.h>
 
 // 1000 samples x ~2 ms housekeeping period = ~2 s of history (~70 KB of RAM).
@@ -46,7 +47,7 @@ static void notice(const char* fmt, ...) {
     va_end(ap);
     if (n <= 0) return;
     if (n >= (int)sizeof(line)) n = sizeof(line) - 1;
-    if (Serial.availableForWrite() >= n) Serial.write(reinterpret_cast<const uint8_t*>(line), n);
+    usbWriteIfRoom(line, n);
 }
 
 void tripRecorderTrigger(const char* reason) {
@@ -89,10 +90,7 @@ void tripRecorderRequestDump() {
 // buffer is only 256 bytes, so every line written here must stay well under that or it can never
 // fit and the dump stalls forever - hence the header is split over several short lines.
 static bool tryWrite(const char* line, int n) {
-    if (n <= 0) return true;
-    if (Serial.availableForWrite() < n) return false;
-    Serial.write(reinterpret_cast<const uint8_t*>(line), n);
-    return true;
+    return usbWriteIfRoom(line, n);
 }
 
 void tripRecorderService() {

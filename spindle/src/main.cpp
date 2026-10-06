@@ -13,6 +13,10 @@
 #include "ota_service.h"
 #include "trip_recorder.h"
 #include "load_sense.h"
+#include "usb_console.h"
+#include "esp32s3/rom/rtc.h"   // rtc_get_reset_reason: the chip-level reset cause
+
+static void reportResetReasonOnce();  // defined with setup() below
 
 // ------------------- Hardware Objects -------------------
 
@@ -143,9 +147,7 @@ static void reportEvent(const char* level, const char* fmt, ...) {
     if (Serial1.availableForWrite() >= n) {
         Serial1.write(reinterpret_cast<const uint8_t*>(line), n);
     }
-    if (Serial && Serial.availableForWrite() >= n) {
-        Serial.write(reinterpret_cast<const uint8_t*>(line), n);
-    }
+    usbWriteIfRoom(line, n);
 }
 
 // Tell the XY board that the spindle has (re)established its Z zero (phase offset 0) so it
@@ -1038,6 +1040,7 @@ static void housekeepingTask(void* arg) {
         // calibration and spindle commands have all been applied, logging any transition.
         updateReportedState();
         tripRecorderService();  // stream a captured trip recording to USB, a few lines per pass
+        reportResetReasonOnce();
 
         // Report status to the XY board over the inter-board link.  Only send when the whole
         // line already fits the TX buffer so this write can never block; if the buffer is
@@ -1052,6 +1055,20 @@ static void housekeepingTask(void* arg) {
         // throttles; this base period sets the current-sampling and command-handling cadence.
         vTaskDelay(pdMS_TO_TICKS(FOC_HOUSEKEEPING_INTERVAL_MS));
     }
+}
+
+// Why the board last reset, for the USB console.  The RESET REASON line above is printed before a
+// USB host has usually reconnected, so it is easily lost; this is repeated once a host is attached
+// and on demand with the WHY command.
+char g_reset_reason[80] = "unknown";
+
+static void reportResetReasonOnce() {
+    static bool done = false;
+    if (done || !Serial || millis() < 2000) return;
+    char line[120];
+    int  n = snprintf(line, sizeof(line), "[BOOT] last reset: %s, %lu s ago\n", g_reset_reason,
+                      (unsigned long)(millis() / 1000));
+    done = usbWriteIfRoom(line, n);
 }
 
 // ------------------- Setup & Loop -------------------
@@ -1106,7 +1123,7 @@ void setup() {
     // the XY board (detector still enabled) is the one that will report a true brownout.
     // Printed unconditionally (like the SimpleFOC MOT lines) so it is captured over USB.
     esp_reset_reason_t reset_reason = esp_reset_reason();
-    const char*        reset_str;
+    const char*        reset_str = "unknown";
     switch (reset_reason) {
         case ESP_RST_POWERON:   reset_str = "power-on"; break;
         case ESP_RST_EXT:       reset_str = "external pin"; break;
@@ -1120,6 +1137,26 @@ void setup() {
         default:                reset_str = "unknown"; break;
     }
     Serial.printf("RESET REASON: %s (%d)\n", reset_str, (int)reset_reason);
+    // The chip-level cause is more specific than esp_reset_reason() (which calls a reset from the
+    // USB flasher "unknown").  With the brownout detector disabled, a supply sag shows up as
+    // power-on (1), glitch (19/23) or brownout (15) here.
+    int         rom_reason = (int)rtc_get_reset_reason(0);
+    const char* rom_str;
+    switch (rom_reason) {
+        case 1:  rom_str = "power-on"; break;
+        case 3:  rom_str = "software"; break;
+        case 7: case 8: case 12: case 17: rom_str = "timer watchdog"; break;
+        case 9: case 14: case 16: rom_str = "RTC watchdog"; break;
+        case 15: rom_str = "brownout"; break;
+        case 18: rom_str = "super watchdog"; break;
+        case 19: rom_str = "clock glitch"; break;
+        case 21: rom_str = "USB-UART"; break;
+        case 22: rom_str = "USB-JTAG (flasher/host)"; break;
+        case 23: rom_str = "power glitch"; break;
+        default: rom_str = "other"; break;
+    }
+    snprintf(g_reset_reason, sizeof(g_reset_reason), "%s (%d); chip: %s (%d)", reset_str,
+             (int)reset_reason, rom_str, rom_reason);
 
     // Bring up the inter-board link to the FluidNC XY board first (RX=GPIO39, TX=GPIO38)
     // so it is listening as early as possible, before the XY board finishes booting and

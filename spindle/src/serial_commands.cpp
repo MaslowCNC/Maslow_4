@@ -4,6 +4,7 @@
 #include "ota_service.h"
 #include "trip_recorder.h"
 #include "load_sense.h"
+#include "usb_console.h"
 #include <string.h>
 
 static const uint8_t fan_default_level = 49;
@@ -121,6 +122,7 @@ void printCommandHelp() {
     Serial.println(F("  'TRIP'   print the captured recording again"));
     Serial.println(F("  'REARM'  discard it and start recording again"));
     Serial.println(F("  'TRIPTEST' trigger a recording now (no fault) to test the dump"));
+    Serial.println(F("  'WHY'      print why the board last reset"));
     Serial.println(F("\nLoad-sense diagnostic (USB only, takes no protective action):"));
     Serial.println(F("  'LOAD'    toggle gated current sensing + [LOAD] lines every 250 ms"));
     Serial.println(F("  'RTEST'   standstill check: verifies sign/angle and measures phase R"));
@@ -370,9 +372,7 @@ static void setPhaseTarget(float deg, MotorController& mc1, MotorController& mc2
             if (n > 0 && Serial1.availableForWrite() >= n) {
                 Serial1.write(reinterpret_cast<const uint8_t*>(line), n);
             }
-            if (n > 0 && Serial && Serial.availableForWrite() >= n) {
-                Serial.write(reinterpret_cast<const uint8_t*>(line), n);
-            }
+            if (n > 0) usbWriteIfRoom(line, n);
         }
         return;  // note: does NOT clear g_fault_code - the alarm must stand until the operator acts
     }
@@ -441,6 +441,12 @@ static void processCommandLine(const char* line, size_t len,
             g_suction_level = 100;
             Serial.println(F("Cooling/suction fan forced ON (100%) for calibration."));
             cal.startAuto(mc1, mc2);
+            return;
+        }
+        if (strcmp(line, "WHY") == 0) {
+            extern char g_reset_reason[];
+            Serial.printf("[BOOT] last reset: %s, %lu s ago\n", g_reset_reason,
+                          (unsigned long)(millis() / 1000));
             return;
         }
         if (strcmp(line, "TRIP") == 0) {
