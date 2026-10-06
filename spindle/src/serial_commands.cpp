@@ -252,6 +252,7 @@ void handleSerialCommand(char cmd, MotorController& mc1, MotorController& mc2, C
         if      (cmd == '0') rpm = 0;
         else                 rpm = (cmd - '0') * 2000;
         if (rpm > MAX_COMMAND_RPM) rpm = MAX_COMMAND_RPM;  // '9' (18000) is above the usable range
+        if (rpm > 0) tripRecorderArmOnStart();  // a spindle start records afresh for the next trip
 
         for (int i = 0; i < 2; i++) {
             if (affectsMotor(i)) {
@@ -341,7 +342,7 @@ static void setSpindleSpeed(float rpm, MotorController& mc1, MotorController& mc
     // cycle can do that.)
     g_fault_code = 0;
     g_hold_release_requested = false;  // motion commanded: cancel any pending Z-hold release
-    if (rpm > 0.0f) tripRecorderArm();  // restarting: record afresh for the next trip
+    if (rpm > 0.0f) tripRecorderArmOnStart();  // restarting: record afresh for the next trip
 
     MotorController* motors[] = { &mc1, &mc2 };
     for (int i = 0; i < 2; i++) {

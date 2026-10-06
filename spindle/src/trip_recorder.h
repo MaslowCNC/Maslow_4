@@ -10,7 +10,7 @@
 //
 // USB console commands:  TRIP  - print the frozen recording again
 //                        REARM - discard it and start recording again
-// The recorder also re-arms itself on the next non-zero spindle speed command.
+// The recorder also re-arms itself whenever the spindle is started (link S<rpm> or a USB digit key).
 
 struct TripMotorSample {
     float   rpm;          // commanded (open-loop) speed, signed
@@ -42,6 +42,10 @@ void tripRecorderTrigger(const char* reason);
 
 // Discard any frozen recording and start recording again.
 void tripRecorderArm();
+
+// Re-arm for a fresh spindle start.  If a recording is still being printed, re-arming waits until
+// the print has finished, so restarting right after a trip cannot cut the dump short.
+void tripRecorderArmOnStart();
 
 // Print the frozen recording again (no-op if nothing has been captured).
 void tripRecorderRequestDump();

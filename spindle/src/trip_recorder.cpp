@@ -17,6 +17,8 @@ static int        s_post_remaining = 0;
 static uint32_t   s_trigger_ms = 0;
 static char       s_reason[96] = "";
 
+static bool s_arm_pending = false;  // re-arm requested while a dump was printing
+
 // Dump progress: negative = header lines pending (-HEADER_LINES..-1), 0..s_count-1 = next sample
 // line, s_count = footer pending.
 static constexpr int HEADER_LINES = 4;
@@ -70,10 +72,19 @@ void tripRecorderTrigger(const char* reason) {
 }
 
 void tripRecorderArm() {
+    s_arm_pending = false;
     s_state   = REC_ARMED;
     s_head    = 0;
     s_count   = 0;
     s_dumping = false;
+}
+
+void tripRecorderArmOnStart() {
+    if (s_dumping) {
+        s_arm_pending = true;
+        return;
+    }
+    tripRecorderArm();
 }
 
 void tripRecorderRequestDump() {
@@ -138,6 +149,10 @@ void tripRecorderService() {
 
         if (s_dump_line >= s_count) {
             s_dumping = false;
+            if (s_arm_pending) {
+                s_arm_pending = false;
+                tripRecorderArm();
+            }
         } else {
             s_dump_line++;
         }
