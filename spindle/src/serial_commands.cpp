@@ -127,6 +127,7 @@ void printCommandHelp() {
     Serial.println(F("  'LOAD'    toggle the [LOAD] lines (every 250 ms); sensing + warnings always run"));
     Serial.println(F("  'BOOST'   toggle the load boost (on at boot): +2 V on both motors while a load warning is raised"));
     Serial.println(F("  'RTEST'   standstill check: verifies sign/angle and measures phase R"));
+    Serial.println(F("  'VSWEEP'  at the current steady speed, step the voltage down; log current + lag"));
     Serial.println(F("  'LOADREF' no-load baseline sweep 1000 RPM..max (spins the spindle, no cutting)"));
     Serial.println(F("\nLegacy single-character commands (USB maintenance/calibration):"));
     Serial.println(F("  'q' select motor 1 (default)"));
@@ -465,6 +466,14 @@ static void processCommandLine(const char* line, size_t len,
         }
         if (strcmp(line, "BOOST") == 0) {
             loadBoostToggle();
+            return;
+        }
+        if (strcmp(line, "VSWEEP") == 0) {
+            if (cal.isActive()) {
+                Serial.println(F("Refused: calibration is running"));
+                return;
+            }
+            loadSenseStartVSweep(mc1, mc2);
             return;
         }
         if (strcmp(line, "RTEST") == 0 || strcmp(line, "LOADREF") == 0) {

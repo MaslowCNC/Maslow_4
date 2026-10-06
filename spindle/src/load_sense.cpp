@@ -43,7 +43,13 @@ static RefTable s_ref;
 
 // RTEST / LOADREF sequencer
 enum Mode : uint8_t { M_IDLE, M_RT_SETTLE, M_RT_MEASURE, M_REF_RAMP, M_REF_SETTLE, M_REF_MEASURE,
-                     M_REF_STOPPING };
+                     M_REF_STOPPING, M_VS_SETTLE, M_VS_MEASURE };
+
+// VSWEEP state: the voltage offset applied to both motors, and the speed it was started at
+static float s_vs_offset = 0.0f;
+static float s_vs_target[2];
+static int   s_vs_steps = 0;
+static float s_vs_best_i[2], s_vs_best_dv[2];
 static Mode     s_mode = M_IDLE;
 static uint32_t s_timer = 0;
 static bool     s_was_enabled[2];
@@ -268,7 +274,17 @@ float loadBoostVolts() {
 
 // Ramp the boost toward its target and hand it to both motors.  Only applied while spinning as
 // the spindle: a Z hold or a stopped motor gets none.
+static bool vsweepActive() {
+    return s_mode == M_VS_SETTLE || s_mode == M_VS_MEASURE;
+}
+
 static void updateBoost(MotorController* motors[2], bool allow, float dt, uint32_t now) {
+    if (vsweepActive()) {   // the sweep owns the voltage offset while it runs
+        s_boost_v = 0.0f;
+        motors[0]->load_boost_v = s_vs_offset;
+        motors[1]->load_boost_v = s_vs_offset;
+        return;
+    }
     bool spinning = motors[0]->velocity_mode && motors[1]->velocity_mode;
     if (loadWarnMask()) s_boost_hold_until = now + LOAD_BOOST_HOLD_MS;
     bool want = s_boost_enabled && allow && spinning &&
@@ -331,6 +347,14 @@ bool loadSenseBusy() {
 
 void loadSenseAbort(const char* why) {
     if (s_mode == M_IDLE) return;
+    if (vsweepActive()) {
+        s_vs_offset = 0.0f;   // back to the calibrated voltage at once (more voltage is the safe way)
+        if (s_motors[0]) s_motors[0]->load_boost_v = 0.0f;
+        if (s_motors[1]) s_motors[1]->load_boost_v = 0.0f;
+        s_mode = M_IDLE;
+        say("[VSWEEP] stopped (%s) - voltage restored to the calibrated value\n", why);
+        return;
+    }
     if (s_mode == M_RT_SETTLE || s_mode == M_RT_MEASURE) {
         endRTest(s_motors);
         say("[RTEST] aborted: %s\n", why);
@@ -388,6 +412,42 @@ void loadSenseStartBaseline(MotorController& mc1, MotorController& mc2) {
     setSpindleTargets(motors, (float)LOAD_REF_STEP_RPM);
     s_timer = millis();
     s_mode  = M_REF_RAMP;
+}
+
+void loadSenseStartVSweep(MotorController& mc1, MotorController& mc2) {
+    MotorController* motors[2] = { &mc1, &mc2 };
+    if (s_mode != M_IDLE) { say("[VSWEEP] busy\n"); return; }
+    for (int m = 0; m < 2; m++) {
+        const MotorController& mc = *motors[m];
+        if (!mc.velocity_mode || !mc.enabled || fabsf(mc.target_velocity) < 1.0f ||
+            fabsf(mc.current_velocity - mc.target_velocity) > 1.0f) {
+            say("[VSWEEP] refused: spin the spindle at a steady speed first (e.g. 6 = 12000 RPM)\n");
+            return;
+        }
+    }
+    s_motors[0] = &mc1; s_motors[1] = &mc2;
+    for (int m = 0; m < 2; m++) {
+        s_vs_target[m]  = motors[m]->target_velocity;
+        s_vs_best_i[m]  = 1e9f;
+        s_vs_best_dv[m] = 0.0f;
+    }
+    s_vs_offset = VSWEEP_START_V;
+    s_vs_steps  = 0;
+    say("[VSWEEP] %.0f RPM, no cutting load: dV from %+.2f V down in %.2f V steps; stops when lag < %.0f deg. 'x' aborts.\n",
+        fabsf(mc1.current_velocity) * 60.0f / (2.0f * PI), VSWEEP_START_V, VSWEEP_STEP_V, VSWEEP_STOP_LAG_DEG);
+    say("[VSWEEP]   dV  |  M1 V   |I|pk   Ip    Iq   lag |  M2 V   |I|pk   Ip    Iq   lag\n");
+    s_timer = millis();
+    s_mode  = M_VS_SETTLE;
+}
+
+static void finishVSweep(const char* why) {
+    s_vs_offset = 0.0f;
+    if (s_motors[0]) s_motors[0]->load_boost_v = 0.0f;
+    if (s_motors[1]) s_motors[1]->load_boost_v = 0.0f;
+    s_mode = M_IDLE;
+    say("[VSWEEP] done (%s) after %d steps; voltage restored\n", why, s_vs_steps);
+    for (int m = 0; m < 2; m++)
+        say("[VSWEEP] M%d lowest current %.2f A pk at dV=%+.2f V\n", m + 1, s_vs_best_i[m], s_vs_best_dv[m]);
 }
 
 const LoadEstimate& loadEstimate(int motor_idx) {
@@ -465,6 +525,55 @@ void loadSenseUpdate(MotorController& mc1, MotorController& mc2, float dt, bool 
                 if (now - s_timer >= LOAD_REF_MEASURE_MS) finishRefPoint(motors);
             }
             break;
+
+        case M_VS_SETTLE:
+        case M_VS_MEASURE: {
+            bool same_speed = true;
+            for (int m = 0; m < 2; m++)
+                same_speed = same_speed && motors[m]->velocity_mode && motors[m]->enabled &&
+                             fabsf(motors[m]->target_velocity - s_vs_target[m]) < 0.5f;
+            if (!same_speed) { loadSenseAbort("spindle stopped or speed changed"); break; }
+            for (int m = 0; m < 2; m++) {
+                if (s_est[m].valid && s_est[m].lag_deg < VSWEEP_ABORT_LAG_DEG) {
+                    char why[48];
+                    snprintf(why, sizeof(why), "M%d lag fell to %.0f deg", m + 1, s_est[m].lag_deg);
+                    finishVSweep(why);
+                    break;
+                }
+            }
+            if (s_mode == M_IDLE) break;
+            if (s_mode == M_VS_SETTLE) {
+                if (now - s_timer >= VSWEEP_SETTLE_MS) { resetSums(); s_timer = now; s_mode = M_VS_MEASURE; }
+                break;
+            }
+            accumulateSums(motors);
+            if (now - s_timer < VSWEEP_MEASURE_MS) break;
+            // Step complete: report it, then step down or stop.
+            float ip[2], iq[2], v[2], lag[2], mag[2];
+            for (int m = 0; m < 2; m++) {
+                int c  = s_cnt[m] ? s_cnt[m] : 1;
+                ip[m]  = s_sum_ip[m] / c;
+                iq[m]  = s_sum_iq[m] / c;
+                v[m]   = s_sum_v[m] / c;
+                lag[m] = atan2f(iq[m], ip[m]) * 180.0f / PI;
+                mag[m] = sqrtf(ip[m] * ip[m] + iq[m] * iq[m]);
+                if (s_cnt[m] && mag[m] < s_vs_best_i[m]) { s_vs_best_i[m] = mag[m]; s_vs_best_dv[m] = s_vs_offset; }
+            }
+            s_vs_steps++;
+            say("[VSWEEP] %+5.2f | %5.2f %5.2f %5.2f %5.2f %4.0f | %5.2f %5.2f %5.2f %5.2f %4.0f\n",
+                s_vs_offset, v[0], mag[0], ip[0], iq[0], lag[0], v[1], mag[1], ip[1], iq[1], lag[1]);
+            if (lag[0] < VSWEEP_STOP_LAG_DEG || lag[1] < VSWEEP_STOP_LAG_DEG) {
+                finishVSweep("lag reached the stop threshold");
+            } else if (s_vs_offset - VSWEEP_STEP_V < VSWEEP_MIN_V ||
+                       v[0] <= BASE_VOLTAGE + 0.05f || v[1] <= BASE_VOLTAGE + 0.05f) {
+                finishVSweep("reached the lowest allowed voltage");
+            } else {
+                s_vs_offset -= VSWEEP_STEP_V;
+                s_timer = now;
+                s_mode  = M_VS_SETTLE;
+            }
+            break;
+        }
 
         case M_REF_STOPPING: {
             bool stopped = !mc1.velocity_mode && !mc2.velocity_mode &&

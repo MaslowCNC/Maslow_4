@@ -253,6 +253,18 @@ const float    LOAD_BOOST_V            = 2.0f;
 const float    LOAD_BOOST_UP_V_PER_S   = 50.0f;   // 2 V in 40 ms
 const float    LOAD_BOOST_DOWN_V_PER_S = 2.0f;
 const uint32_t LOAD_BOOST_HOLD_MS      = 2000;
+// Voltage sweep diagnostic (USB "VSWEEP"): at the spindle's current steady speed, offset both
+// motors' voltage from VSWEEP_START_V downward in VSWEEP_STEP_V steps, logging current and lag at
+// each, to find how far the no-load voltage (and heat) can come down and where a safe target lag
+// lies.  Stops after a step whose mean lag on either motor is below VSWEEP_STOP_LAG_DEG, and at
+// once if a lag falls below VSWEEP_ABORT_LAG_DEG mid-step (heading for pull-out).
+const float    VSWEEP_START_V       = 1.0f;
+const float    VSWEEP_STEP_V        = 0.25f;
+const float    VSWEEP_MIN_V         = -8.0f;   // never offset further than this
+const float    VSWEEP_STOP_LAG_DEG  = 20.0f;
+const float    VSWEEP_ABORT_LAG_DEG = 5.0f;
+const uint32_t VSWEEP_SETTLE_MS     = 300;
+const uint32_t VSWEEP_MEASURE_MS    = 500;
 // Phase resistance (ohm, including the driver) and inductance (H) for the load-angle estimate.
 // 0 = unknown.  RTEST measures R at standstill and uses it until reboot; L must be measured
 // separately (LCR meter, phase-to-phase / 2).  Without both, no load angle is reported.

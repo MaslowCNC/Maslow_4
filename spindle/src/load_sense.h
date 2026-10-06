@@ -47,9 +47,10 @@ void loadSenseInit();  // call once from setup(): loads the no-load baseline fro
 void loadSenseToggle();                                         // LOAD
 void loadSenseStartRTest(MotorController& mc1, MotorController& mc2);     // RTEST
 void loadSenseStartBaseline(MotorController& mc1, MotorController& mc2);  // LOADREF
+void loadSenseStartVSweep(MotorController& mc1, MotorController& mc2);    // VSWEEP
 void loadSenseAbort(const char* why);                           // e.g. emergency stop
 
-// True while RTEST or LOADREF is driving the motors (link motion commands must be ignored).
+// True while RTEST, LOADREF or VSWEEP is driving the motors (link motion commands must be ignored).
 bool loadSenseBusy();
 
 // Call every housekeeping pass, after MotorController::updateCurrent(true).  allow_warn = false
