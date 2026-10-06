@@ -315,6 +315,6 @@ void MotorController::applyVoltageLimit(bool in_calibration, float hunt_voltage,
     if (in_calibration)
         v = hunt_voltage;
     else
-        v = lutVoltageForSpeed(fabsf(current_velocity)) + extra_voltage;
+        v = lutVoltageForSpeed(fabsf(current_velocity)) + extra_voltage + load_boost_v;
     motor.voltage_limit = constrain(v, BASE_VOLTAGE, MAX_VOLTAGE);
 }

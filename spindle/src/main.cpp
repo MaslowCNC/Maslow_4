@@ -397,6 +397,16 @@ static void reportLoadWarnings() {
     prev = mask;
 }
 
+// Announce the load boost switching on and off (it holds and ramps out after warnings clear).
+static void reportLoadBoost() {
+    static bool was_on = false;
+    bool        on     = loadBoostVolts() > 0.0f;
+    if (on == was_on) return;
+    was_on = on;
+    if (on) reportEvent("MSG", "load boost on: +%.1f V on both motors", LOAD_BOOST_V);
+    else    reportEvent("MSG", "load boost off");
+}
+
 // ------------------- Phase Offset -------------------
 
 static void updatePhaseOffset(float dt) {
@@ -1045,6 +1055,7 @@ static void housekeepingTask(void* arg) {
         // Calibration hunts its own voltages, which the no-load baseline does not describe.
         loadSenseUpdate(mc1, mc2, hk_dt, !calibration.isActive());
         reportLoadWarnings();
+        reportLoadBoost();
         recordTripSample(now_ms);
 
         // Calibration sweep and serial command handling (both set targets the FOC task actuates).

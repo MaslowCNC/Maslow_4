@@ -244,6 +244,15 @@ const float    LOAD_WARN_LAG_DEG    = 20.0f;
 const uint32_t LOAD_WARN_HOLD_MS    = 100;
 const float    LOAD_WARN_CLEAR_DEG  = 12.0f;
 const uint32_t LOAD_WARN_CLEAR_MS   = 300;
+// Load boost (on at boot; USB "BOOST" toggles it until reboot).  While any load warning is raised, both motors
+// get LOAD_BOOST_V extra (capped at MAX_VOLTAGE): more voltage raises an open-loop motor's
+// pull-out torque.  It ramps in fast (a stall's "on the edge" stage lasts ~0.5 s), is held for
+// LOAD_BOOST_HOLD_MS after the warnings clear, then ramps out slowly so it does not chatter.
+const bool     LOAD_BOOST_DEFAULT_ON   = true;
+const float    LOAD_BOOST_V            = 2.0f;
+const float    LOAD_BOOST_UP_V_PER_S   = 50.0f;   // 2 V in 40 ms
+const float    LOAD_BOOST_DOWN_V_PER_S = 2.0f;
+const uint32_t LOAD_BOOST_HOLD_MS      = 2000;
 // Phase resistance (ohm, including the driver) and inductance (H) for the load-angle estimate.
 // 0 = unknown.  RTEST measures R at standstill and uses it until reboot; L must be measured
 // separately (LCR meter, phase-to-phase / 2).  Without both, no load angle is reported.

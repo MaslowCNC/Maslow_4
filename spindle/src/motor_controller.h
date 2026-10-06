@@ -17,6 +17,10 @@ struct MotorController {
     float angle_increment = 0.1f;
     bool continuous_rotation = false;
 
+    // Extra volts from the load-sense boost (load_sense.cpp, core 0), added on top of the LUT by
+    // applyVoltageLimit() on core 1.  An aligned float: written by one core, read by the other.
+    volatile float load_boost_v = 0.0f;
+
     // Velocity control
     float target_velocity = 0.0f;
     float current_velocity = 0.0f;

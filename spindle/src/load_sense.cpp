@@ -8,6 +8,11 @@
 
 static bool g_load_print = false;   // [LOAD] console lines (USB "LOAD"); the fit always runs
 
+// Load boost
+static bool     s_boost_enabled    = LOAD_BOOST_DEFAULT_ON;
+static float    s_boost_v          = 0.0f;
+static uint32_t s_boost_hold_until = 0;
+
 // Advisory load warning, per motor
 static bool     s_warn[2]          = { false, false };
 static uint32_t s_warn_pend_since[2] = { 0, 0 };   // 0 = not pending
@@ -245,6 +250,41 @@ void loadSenseToggle() {
     turnOn();
 }
 
+void loadBoostToggle() {
+    s_boost_enabled = !s_boost_enabled;
+    if (s_boost_enabled)
+        say("[LOAD] boost ENABLED: +%.1f V on both motors while a load warning is raised\n", LOAD_BOOST_V);
+    else
+        say("[LOAD] boost disabled until reboot (BOOST to re-enable)\n");
+}
+
+bool loadBoostEnabled() {
+    return s_boost_enabled;
+}
+
+float loadBoostVolts() {
+    return s_boost_v;
+}
+
+// Ramp the boost toward its target and hand it to both motors.  Only applied while spinning as
+// the spindle: a Z hold or a stopped motor gets none.
+static void updateBoost(MotorController* motors[2], bool allow, float dt, uint32_t now) {
+    bool spinning = motors[0]->velocity_mode && motors[1]->velocity_mode;
+    if (loadWarnMask()) s_boost_hold_until = now + LOAD_BOOST_HOLD_MS;
+    bool want = s_boost_enabled && allow && spinning &&
+                (loadWarnMask() || (int32_t)(s_boost_hold_until - now) > 0);
+    float target = want ? LOAD_BOOST_V : 0.0f;
+    if (!s_boost_enabled || !spinning) {
+        s_boost_v = 0.0f;                                  // off at once when disabled or stopped
+    } else if (s_boost_v < target) {
+        s_boost_v = fminf(target, s_boost_v + LOAD_BOOST_UP_V_PER_S * dt);
+    } else if (s_boost_v > target) {
+        s_boost_v = fmaxf(target, s_boost_v - LOAD_BOOST_DOWN_V_PER_S * dt);
+    }
+    motors[0]->load_boost_v = s_boost_v;
+    motors[1]->load_boost_v = s_boost_v;
+}
+
 uint8_t loadWarnMask() {
     return (s_warn[0] ? 1 : 0) | (s_warn[1] ? 2 : 0);
 }
@@ -445,6 +485,7 @@ void loadSenseUpdate(MotorController& mc1, MotorController& mc2, float dt, bool 
     }
 
     for (int m = 0; m < 2; m++) updateWarning(m, *motors[m], allow_warn, now);
+    updateBoost(motors, allow_warn, dt, now);
 
     // ---- Periodic console line ----
     if (!g_load_print) return;
@@ -466,8 +507,10 @@ void loadSenseUpdate(MotorController& mc1, MotorController& mc2, float dt, bool 
         if (!isnan(e.lag_dev)) snprintf(dev, sizeof(dev), "%+.0f", e.lag_dev);
         if (!isnan(e.delta_deg))
             snprintf(extra, sizeof(extra), " delta=%.0f load=%.0f%%", e.delta_deg, e.delta_deg / 0.9f);
-        say("[LOAD] M%d %6.0frpm V=%.2f n=%.0f Ip=%.2f Iq=%.2f lag=%.0f dev=%s dIp=%s prot=%.2f%s%s\n",
+        char boost[16] = "";
+        if (s_boost_v > 0.0f) snprintf(boost, sizeof(boost), " BOOST+%.1f", s_boost_v);
+        say("[LOAD] M%d %6.0frpm V=%.2f n=%.0f Ip=%.2f Iq=%.2f lag=%.0f dev=%s dIp=%s prot=%.2f%s%s%s\n",
             m + 1, rpm, mc.motor.voltage_limit, e.n_eff, e.ip, e.iq, e.lag_deg, dev, dip,
-            mc.protection_current, extra, s_warn[m] ? " WARN" : "");
+            mc.protection_current, extra, s_warn[m] ? " WARN" : "", boost);
     }
 }
