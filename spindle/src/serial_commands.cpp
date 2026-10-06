@@ -83,7 +83,7 @@ void applyFanForMotorState(bool localMotorsEnabled) {
     updateFanTarget();
 }
 
-int active_motor = 0;  // 0 = motor 1, 1 = motor 2, 2 = both
+int active_motor = 2;  // 0 = motor 1, 1 = motor 2, 2 = both (default: the keys drive the spindle)
 PhaseOffset phase_offset;
 volatile uint8_t g_fault_code = 0;  // 0 = OK, 1 = driver fault (nFAULT), 2 = over-current stop
 volatile bool    g_z_reference_valid = false;  // true once homing establishes the phase zero
@@ -124,7 +124,7 @@ void printCommandHelp() {
     Serial.println(F("  'TRIPTEST' trigger a recording now (no fault) to test the dump"));
     Serial.println(F("  'WHY'      print why the board last reset"));
     Serial.println(F("\nLoad-sense diagnostic (USB only, takes no protective action):"));
-    Serial.println(F("  'LOAD'    toggle gated current sensing + [LOAD] lines every 250 ms"));
+    Serial.println(F("  'LOAD'    toggle the [LOAD] lines (every 250 ms); sensing + warnings always run"));
     Serial.println(F("  'RTEST'   standstill check: verifies sign/angle and measures phase R"));
     Serial.println(F("  'LOADREF' no-load baseline sweep 1000 RPM..max (spins the spindle, no cutting)"));
     Serial.println(F("\nLegacy single-character commands (USB maintenance/calibration):"));
@@ -408,7 +408,10 @@ void sendStatus(Stream& out, MotorController& mc1, MotorController& mc2) {
     const char* state = g_fault_code ? "FAULT" : ((mc1.enabled || mc2.enabled) ? "RUN" : "IDLE");
     float phase_deg = phase_offset.current * 180.0f / PI;
     float rpm = fabsf(mc1.enabled ? mc1.current_velocity : 0.0f) * 60.0f / (2.0f * PI);
-    out.printf("T:%s,P:%.1f,R:%.0f,F:%u\n", state, phase_deg, rpm, (unsigned)g_fault_code);
+    // L: advisory load-warning bits (1 = motor 1, 2 = motor 2), after F: so the XY board's
+    // strstr("F:") parser is unaffected.
+    out.printf("T:%s,P:%.1f,R:%.0f,F:%u,L:%u\n", state, phase_deg, rpm, (unsigned)g_fault_code,
+               (unsigned)loadWarnMask());
 }
 
 // Process one complete command line from either the USB or the inter-board link.

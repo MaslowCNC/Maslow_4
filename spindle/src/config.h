@@ -232,6 +232,18 @@ const float    LOAD_CURRENT_SIGN    = -1.0f;
 // Readings are full-or-zero at random, so the fit is noisy per reading and needs a longer window.
 const float    LOAD_FILTER_TAU_S    = 0.15f;   // forgetting time constant of the current fit
 const uint32_t LOAD_LOG_INTERVAL_MS = 250;     // [LOAD] console line period while LOAD is on
+// Load warning (advisory only - takes no protective action).  Raised when a motor's current phase
+// (lag) is more than LOAD_WARN_LAG_DEG away from the no-load baseline for that speed for
+// LOAD_WARN_HOLD_MS, while the spindle is at speed.  Cleared once back within
+// LOAD_WARN_CLEAR_DEG for LOAD_WARN_CLEAR_MS.  Basis (2026-10-06): run to run, the baseline lag
+// repeated within +/-4 deg and steady running varied +/-2 deg; before a stall while cutting wood
+// at 12,000 RPM, M2's lag moved >15 deg 1.1 s before the trip (0.67 s before the first driver
+// over-current pulse) and went ~110 deg off.  Caveat: Z moves add Z_MOVE_VOLTAGE_BOOST, which
+// shifts the lag somewhat; not yet measured.
+const float    LOAD_WARN_LAG_DEG    = 20.0f;
+const uint32_t LOAD_WARN_HOLD_MS    = 100;
+const float    LOAD_WARN_CLEAR_DEG  = 12.0f;
+const uint32_t LOAD_WARN_CLEAR_MS   = 300;
 // Phase resistance (ohm, including the driver) and inductance (H) for the load-angle estimate.
 // 0 = unknown.  RTEST measures R at standstill and uses it until reboot; L must be measured
 // separately (LCR meter, phase-to-phase / 2).  Without both, no load angle is reported.

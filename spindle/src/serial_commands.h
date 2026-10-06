@@ -59,7 +59,7 @@ void applyFanForMotorState(bool localMotorsEnabled);
 //   ?       request a status report immediately
 void handleSerialCommands(MotorController& mc1, MotorController& mc2, Calibration& cal);
 
-// Emit a status line ("T:<state>,P:<deg>,R:<rpm>,F:<code>") to the given stream.
+// Emit a status line ("T:<state>,P:<deg>,R:<rpm>,F:<code>,L:<load-warn bits>") to the given stream.
 void sendStatus(Stream& out, MotorController& mc1, MotorController& mc2);
 
 void printCommandHelp();

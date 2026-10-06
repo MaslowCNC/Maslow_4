@@ -2,8 +2,9 @@
 
 #include "motor_controller.h"
 
-// Load sensing: an OPT-IN DIAGNOSTIC that estimates how hard each open-loop motor is working, to
-// see whether a stall (pull-out) can be predicted.  It takes NO protective action.
+// Load sensing: estimates how hard each open-loop motor is working and raises an ADVISORY warning
+// when a stall (pull-out) looks imminent.  It takes NO protective action itself.  The fit always
+// runs; the USB command LOAD only toggles the [LOAD] console lines.
 //
 // Everything runs on the core-0 housekeeping task; the core-1 FOC task is only READ from (the
 // commanded duty cycles and shaft angle it already writes).
@@ -35,6 +36,8 @@ struct LoadEstimate {
     float lag_deg  = NAN;  // current lag behind the applied voltage
     float dip      = NAN;  // ip minus the no-load baseline at this speed (NaN without a baseline)
     float delta_deg= NAN;  // estimated load angle (NaN unless R and L are known)
+    float lag_ref  = NAN;  // no-load baseline lag at this speed (NaN without a baseline)
+    float lag_dev  = NAN;  // lag_deg - lag_ref, wrapped to +/-180
     float n_eff    = 0.0f; // effective number of reads in the fit window
 };
 
@@ -46,13 +49,14 @@ void loadSenseStartRTest(MotorController& mc1, MotorController& mc2);     // RTE
 void loadSenseStartBaseline(MotorController& mc1, MotorController& mc2);  // LOADREF
 void loadSenseAbort(const char* why);                           // e.g. emergency stop
 
-// True while LOAD sensing is on (housekeeping then dithers the current reads).
-bool loadSenseOn();
-
 // True while RTEST or LOADREF is driving the motors (link motion commands must be ignored).
 bool loadSenseBusy();
 
-// Call every housekeeping pass, after MotorController::updateCurrent().
-void loadSenseUpdate(MotorController& mc1, MotorController& mc2, float dt);
+// Call every housekeeping pass, after MotorController::updateCurrent(true).  allow_warn = false
+// (e.g. during calibration, whose hunting voltages differ from the baseline) holds warnings off.
+void loadSenseUpdate(MotorController& mc1, MotorController& mc2, float dt, bool allow_warn);
+
+// Load warnings currently raised: bit 0 = motor 1, bit 1 = motor 2 (see LOAD_WARN_* in config.h).
+uint8_t loadWarnMask();
 
 const LoadEstimate& loadEstimate(int motor_idx);

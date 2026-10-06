@@ -17,6 +17,7 @@
 #include "esp32s3/rom/rtc.h"   // rtc_get_reset_reason: the chip-level reset cause
 
 static void reportResetReasonOnce();  // defined with setup() below
+static void reportLoadWarnings();     // defined with the fault monitoring below
 
 // ------------------- Hardware Objects -------------------
 
@@ -374,6 +375,26 @@ static void checkOvercurrent() {
     Serial.printf("OVERCURRENT: %s\n", detail);
 
     stopForOverCurrent(detail);
+}
+
+// Advisory stall warning from the load-sense fit (load_sense.h): announce each change to the XY
+// board (WARN:/MSG: lines appear in its console) and the USB console.  No protective action.
+static void reportLoadWarnings() {
+    static uint8_t prev = 0;
+    uint8_t        mask = loadWarnMask();
+    if (mask == prev) return;
+    MotorController* motors[2] = { &mc1, &mc2 };
+    for (int m = 0; m < 2; m++) {
+        uint8_t bit = 1u << m;
+        if ((mask & bit) && !(prev & bit)) {
+            const LoadEstimate& e = loadEstimate(m);
+            reportEvent("WARN", "load warning M%d: current phase %+.0f deg off no-load at %.0f RPM - stall risk",
+                        m + 1, e.lag_dev, fabsf(motors[m]->current_velocity) * 60.0f / (2.0f * PI));
+        } else if (!(mask & bit) && (prev & bit)) {
+            reportEvent("MSG", "load warning M%d cleared", m + 1);
+        }
+    }
+    prev = mask;
 }
 
 // ------------------- Phase Offset -------------------
@@ -1015,12 +1036,15 @@ static void housekeepingTask(void* arg) {
         last_hk_time    = now_ms;
 
         // Current sensing (six analogReads, ~0.5 ms) - feeds protection, telemetry and cal.
-        mc1.updateCurrent(loadSenseOn());   // dithered only while the load-sense fit is on
-        mc2.updateCurrent(loadSenseOn());
+        // Dithered: the always-on load-sense fit needs reads at random points in the PWM cycle.
+        mc1.updateCurrent(true);
+        mc2.updateCurrent(true);
         calibration.accumulateCurrentSample(mc1.last_instantaneous_current, 0);
         calibration.accumulateCurrentSample(mc2.last_instantaneous_current, 1);
-        // Opt-in gated load sensing (USB "LOAD"): extra low-side-window ADC reads, all on this core.
-        loadSenseUpdate(mc1, mc2, hk_dt);
+        // Load-sense fit over the reads above (no extra ADC reads) and the advisory stall warning.
+        // Calibration hunts its own voltages, which the no-load baseline does not describe.
+        loadSenseUpdate(mc1, mc2, hk_dt, !calibration.isActive());
+        reportLoadWarnings();
         recordTripSample(now_ms);
 
         // Calibration sweep and serial command handling (both set targets the FOC task actuates).
@@ -1046,7 +1070,7 @@ static void housekeepingTask(void* arg) {
         // line already fits the TX buffer so this write can never block; if the buffer is
         // momentarily full we skip and retry next pass.
         if (now_ms - last_status_time >= LINK_STATUS_INTERVAL_MS &&
-            Serial1.availableForWrite() >= 40) {
+            Serial1.availableForWrite() >= 48) {   // longest status line is ~36 chars
             last_status_time = now_ms;
             sendStatus(Serial1, mc1, mc2);
         }
@@ -1223,7 +1247,7 @@ void setup() {
         Serial.println(F("Motor 2 initialized for open-loop control (opposite direction)"));
         printCommandHelp();
         Serial.println(F("Motors ready. Send a velocity command to start."));
-        Serial.println(F("Active motor: 1 (use 'q', 'w', or 'e' to switch)"));
+        Serial.println(F("Active motor: BOTH (use 'q', 'w', or 'e' to switch)"));
     }
 }
 

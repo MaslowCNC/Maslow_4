@@ -6,7 +6,12 @@
 
 // ------------------- State -------------------
 
-static bool g_load_on = false;
+static bool g_load_print = false;   // [LOAD] console lines (USB "LOAD"); the fit always runs
+
+// Advisory load warning, per motor
+static bool     s_warn[2]          = { false, false };
+static uint32_t s_warn_pend_since[2] = { 0, 0 };   // 0 = not pending
+static uint32_t s_clear_since[2]   = { 0, 0 };
 
 // Per-motor least-squares accumulators (exponentially forgotten every pass).
 struct Fit {
@@ -97,7 +102,15 @@ static void solve(int m, MotorController& mc) {
     float rpm = fabsf(mc.current_velocity) * 60.0f / (2.0f * PI);
     if (mc.velocity_mode && rpm > 0.5f * LOAD_REF_STEP_RPM) {
         float ip0 = refAt(s_ref.ip[m], rpm);
+        float iq0 = refAt(s_ref.iq[m], rpm);
         if (!isnan(ip0)) e.dip = e.ip - ip0;
+        if (!isnan(ip0) && !isnan(iq0)) {
+            e.lag_ref = atan2f(iq0, ip0) * 180.0f / PI;
+            float d   = e.lag_deg - e.lag_ref;
+            while (d > 180.0f) d -= 360.0f;
+            while (d <= -180.0f) d += 360.0f;
+            e.lag_dev = d;
+        }
     }
 
     // Load angle: E = V - (R + j w L) I, with I = Ip - j Iq in the frame of the applied voltage.
@@ -213,28 +226,63 @@ void loadSenseInit() {
 static MotorController* s_motors[2] = { nullptr, nullptr };
 
 static void turnOn() {
-    if (g_load_on) return;
-    g_load_on = true;
+    if (g_load_print) return;
+    g_load_print = true;
     say("[LOAD] on: Ip/Iq are A peak; lag = current behind voltage; dIp = Ip above the no-load "
         "baseline%s\n", (s_ref.magic == REF_MAGIC) ? "" : " (none yet - run LOADREF)");
 }
 
 void loadSenseToggle() {
-    if (g_load_on && s_mode != M_IDLE) {
+    if (g_load_print && s_mode != M_IDLE) {
         say("[LOAD] stays on while RTEST/LOADREF runs\n");
         return;
     }
-    if (g_load_on) {
-        g_load_on = false;
-        for (int m = 0; m < 2; m++) { s_fit[m] = Fit(); s_est[m] = LoadEstimate(); }
-        say("[LOAD] off\n");
+    if (g_load_print) {
+        g_load_print = false;
+        say("[LOAD] lines off (sensing and warnings keep running)\n");
         return;
     }
     turnOn();
 }
 
-bool loadSenseOn() {
-    return g_load_on;
+uint8_t loadWarnMask() {
+    return (s_warn[0] ? 1 : 0) | (s_warn[1] ? 2 : 0);
+}
+
+// Advisory stall warning for one motor.  Only judged at a steady commanded speed with a baseline;
+// otherwise any warning is dropped (a stopped or ramping motor is not comparable to the baseline).
+static void updateWarning(int m, const MotorController& mc, bool allow, uint32_t now) {
+    const LoadEstimate& e = s_est[m];
+    bool at_speed = mc.velocity_mode && mc.enabled &&
+                    fabsf(mc.current_velocity - mc.target_velocity) < 1.0f &&
+                    fabsf(mc.current_velocity) * 60.0f / (2.0f * PI) >= 0.5f * LOAD_REF_STEP_RPM;
+    if (!allow || s_mode != M_IDLE || !at_speed || !e.valid || isnan(e.lag_dev)) {
+        s_warn[m] = false;
+        s_warn_pend_since[m] = s_clear_since[m] = 0;
+        return;
+    }
+    float dev = fabsf(e.lag_dev);
+    if (!s_warn[m]) {
+        if (dev > LOAD_WARN_LAG_DEG) {
+            if (!s_warn_pend_since[m]) s_warn_pend_since[m] = now ? now : 1;
+            if (now - s_warn_pend_since[m] >= LOAD_WARN_HOLD_MS) {
+                s_warn[m]         = true;
+                s_clear_since[m]  = 0;
+            }
+        } else {
+            s_warn_pend_since[m] = 0;
+        }
+    } else {
+        if (dev < LOAD_WARN_CLEAR_DEG) {
+            if (!s_clear_since[m]) s_clear_since[m] = now ? now : 1;
+            if (now - s_clear_since[m] >= LOAD_WARN_CLEAR_MS) {
+                s_warn[m]            = false;
+                s_warn_pend_since[m] = 0;
+            }
+        } else {
+            s_clear_since[m] = 0;
+        }
+    }
 }
 
 bool loadSenseBusy() {
@@ -306,10 +354,9 @@ const LoadEstimate& loadEstimate(int motor_idx) {
     return s_est[motor_idx & 1];
 }
 
-void loadSenseUpdate(MotorController& mc1, MotorController& mc2, float dt) {
+void loadSenseUpdate(MotorController& mc1, MotorController& mc2, float dt, bool allow_warn) {
     MotorController* motors[2] = { &mc1, &mc2 };
     s_motors[0] = &mc1; s_motors[1] = &mc2;
-    if (!g_load_on) return;
 
     float lambda = (dt > 0.0f) ? expf(-dt / LOAD_FILTER_TAU_S) : 1.0f;
     for (int m = 0; m < 2; m++) {
@@ -397,7 +444,10 @@ void loadSenseUpdate(MotorController& mc1, MotorController& mc2, float dt) {
             break;
     }
 
+    for (int m = 0; m < 2; m++) updateWarning(m, *motors[m], allow_warn, now);
+
     // ---- Periodic console line ----
+    if (!g_load_print) return;
     static uint32_t last_log = 0;
     if (now - last_log < LOAD_LOG_INTERVAL_MS) return;
     last_log = now;
@@ -411,12 +461,13 @@ void loadSenseUpdate(MotorController& mc1, MotorController& mc2, float dt) {
                 mc.motor.voltage_limit, e.n_eff, mc.protection_current);
             continue;
         }
-        char dip[12] = "--", extra[48] = "";
+        char dip[12] = "--", dev[12] = "--", extra[48] = "";
         if (!isnan(e.dip)) snprintf(dip, sizeof(dip), "%+.2f", e.dip);
+        if (!isnan(e.lag_dev)) snprintf(dev, sizeof(dev), "%+.0f", e.lag_dev);
         if (!isnan(e.delta_deg))
             snprintf(extra, sizeof(extra), " delta=%.0f load=%.0f%%", e.delta_deg, e.delta_deg / 0.9f);
-        say("[LOAD] M%d %6.0frpm V=%.2f n=%.0f Ip=%.2f Iq=%.2f lag=%.0f dIp=%s prot=%.2f%s\n",
-            m + 1, rpm, mc.motor.voltage_limit, e.n_eff, e.ip, e.iq, e.lag_deg, dip,
-            mc.protection_current, extra);
+        say("[LOAD] M%d %6.0frpm V=%.2f n=%.0f Ip=%.2f Iq=%.2f lag=%.0f dev=%s dIp=%s prot=%.2f%s%s\n",
+            m + 1, rpm, mc.motor.voltage_limit, e.n_eff, e.ip, e.iq, e.lag_deg, dev, dip,
+            mc.protection_current, extra, s_warn[m] ? " WARN" : "");
     }
 }
