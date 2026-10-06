@@ -15,10 +15,12 @@
 #include "load_sense.h"
 #include "usb_console.h"
 #include "esp32s3/rom/rtc.h"
-#include "esp_task_wdt.h"   // rtc_get_reset_reason: the chip-level reset cause
+#include "esp_task_wdt.h"
+#include "soc/usb_serial_jtag_struct.h"   // rtc_get_reset_reason: the chip-level reset cause
 
 static void reportResetReasonOnce();  // defined with setup() below
 static void reportLoadWarnings();     // defined with the fault monitoring below
+static void watchUsbOutput();         // defined with setup() below
 
 // ------------------- Hardware Objects -------------------
 
@@ -1083,6 +1085,7 @@ static void housekeepingTask(void* arg) {
         updateReportedState();
         tripRecorderService();  // stream a captured trip recording to USB, a few lines per pass
         reportResetReasonOnce();
+        watchUsbOutput();
 
         // Report status to the XY board over the inter-board link.  Only send when the whole
         // line already fits the TX buffer so this write can never block; if the buffer is
@@ -1111,6 +1114,48 @@ static void reportResetReasonOnce() {
     int  n = snprintf(line, sizeof(line), "[BOOT] last reset: %s, %lu s ago\n", g_reset_reason,
                       (unsigned long)(millis() / 1000));
     done = usbWriteIfRoom(line, n);
+}
+
+// USB console output watchdog.  On 2026-10-06 the board's USB output died right after a spindle
+// start while everything else (including USB input - 'x' stopped the spindle) kept working, and it
+// stayed dead even across a host reconnect.  If the USB TX buffer stays nearly full for a second,
+// report the peripheral's state over the XY-board link (which still works), then keep kicking
+// the TX path (flush the hardware FIFO + re-enable the TX-empty interrupt) every 500 ms, and
+// report when output drains again.  It also fires, harmlessly, when no USB host is reading.
+static void watchUsbOutput() {
+    static uint32_t low_since = 0, last_kick = 0;
+    static bool     reported  = false;
+    static int      kicks     = 0;
+    if (!Serial) return;
+    uint32_t now  = millis();
+    int      room = Serial.availableForWrite();
+    if (room >= 128) {
+        if (reported) reportEvent("MSG", "USB console output draining again after %d kick(s)", kicks);
+        low_since = 0;
+        reported  = false;
+        kicks     = 0;
+        return;
+    }
+    if (!low_since) {
+        low_since = now ? now : 1;
+        return;
+    }
+    if (now - low_since < 1000) return;
+    if (!reported) {
+        reported = true;
+        reportEvent("MSG", "USB console not draining (no host, or USB stall): room=%d fifo=%u ena=%lx raw=%lx ep=%u/%u/%u",
+                    room, (unsigned)USB_SERIAL_JTAG.ep1_conf.serial_in_ep_data_free,
+                    (unsigned long)USB_SERIAL_JTAG.int_ena.val, (unsigned long)USB_SERIAL_JTAG.int_raw.val,
+                    (unsigned)USB_SERIAL_JTAG.in_ep1_st.in_ep1_state,
+                    (unsigned)USB_SERIAL_JTAG.in_ep1_st.in_ep1_wr_addr,
+                    (unsigned)USB_SERIAL_JTAG.in_ep1_st.in_ep1_rd_addr);
+    }
+    if (now - last_kick >= 500) {
+        last_kick = now;
+        kicks++;
+        usb_serial_jtag_ll_txfifo_flush();
+        usb_serial_jtag_ll_ena_intr_mask(USB_SERIAL_JTAG_INTR_SERIAL_IN_EMPTY);
+    }
 }
 
 // ------------------- Setup & Loop -------------------
