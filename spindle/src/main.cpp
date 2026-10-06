@@ -14,7 +14,8 @@
 #include "trip_recorder.h"
 #include "load_sense.h"
 #include "usb_console.h"
-#include "esp32s3/rom/rtc.h"   // rtc_get_reset_reason: the chip-level reset cause
+#include "esp32s3/rom/rtc.h"
+#include "esp_task_wdt.h"   // rtc_get_reset_reason: the chip-level reset cause
 
 static void reportResetReasonOnce();  // defined with setup() below
 static void reportLoadWarnings();     // defined with the fault monitoring below
@@ -1028,7 +1029,13 @@ static void housekeepingTask(void* arg) {
     uint32_t last_status_time = 0;
     uint32_t last_hk_time     = millis();
 
+    // Watch this task (see HOUSEKEEPING_WDT_TIMEOUT_S).  esp_task_wdt_init on an already-running
+    // TWDT just updates its timeout; panic stays on so a hang reboots and leaves a coredump.
+    esp_task_wdt_init(HOUSEKEEPING_WDT_TIMEOUT_S, true);
+    esp_task_wdt_add(nullptr);
+
     for (;;) {
+        esp_task_wdt_reset();
         // OTA: stop touching the ADC and signal otaTask that it is now safe to bring the WiFi
         // radio up (see the handshake in ota_service.cpp).  The FOC task independently disables
         // the drivers.  The board reboots into the new firmware when an update completes.

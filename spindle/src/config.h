@@ -84,6 +84,12 @@ const float SPINDLE_RAMP_SLOW_ABOVE_RAD = 14000.0f * 2.0f * PI / 60.0f;  // 14,0
 // open-loop rotor out of sync at high RPM and tripped the driver's hardware OCP even with voltage
 // headroom).
 const uint32_t FOC_HOUSEKEEPING_INTERVAL_MS = 2;     // core-0 housekeeping task period
+// The housekeeping task is registered with the task watchdog: if a pass does not complete within
+// this long (stuck waiting on something), the chip panics - which stops the motors (the drivers
+// sleep until enabled again after the reboot) and saves a coredump showing where it was stuck.
+// Without this, a stuck housekeeping task leaves the spindle running with no over-current
+// monitoring or command handling (2026-10-06: board went silent after a spindle start).
+const uint32_t HOUSEKEEPING_WDT_TIMEOUT_S = 3;
 
 // Phase offset ramping
 const float PHASE_OFFSET_STEP = 45.0f * PI / 180.0f;          // 45 deg per keypress
