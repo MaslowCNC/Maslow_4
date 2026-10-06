@@ -231,10 +231,33 @@ void MotorController::updateControlMode() {
     }
 }
 
-void MotorController::updateCurrent() {
-    int adc_a = analogRead(cur_a_pin);
-    int adc_b = analogRead(cur_b_pin);
-    int adc_c = analogRead(cur_c_pin);
+// One sense read, tagged with the commanded electrical angle and the phase's duty cycle around it
+// (both written by the FOC task on core 1; aligned float reads).  The sample-and-hold instant is
+// somewhere inside the ~65 us analogRead, so the midpoint of the before/after values is used.
+static int taggedRead(BLDCMotor& motor, int pin, const float& duty, float& theta_e, float& duty_out) {
+    float a0  = motor.shaft_angle;
+    float d0  = duty;
+    int   raw = analogRead(pin);
+    float a1  = motor.shaft_angle;
+    float da  = a1 - a0;
+    while (da > PI) da -= 2.0f * PI;    // velocity open-loop keeps shaft_angle normalised to 0..2pi
+    while (da <= -PI) da += 2.0f * PI;
+    theta_e  = (a0 + 0.5f * da) * POLE_PAIRS;
+    duty_out = 0.5f * (d0 + duty);
+    return raw;
+}
+
+void MotorController::updateCurrent(bool dither) {
+    // Without dither the first read of each pass lands at nearly the same point in the PWM cycle:
+    // the housekeeping task wakes on the RTOS tick, 2 ms = exactly 40 PWM periods, both clocked
+    // from the same crystal.
+    const uint32_t period_us = (uint32_t)(1000000L / PWM_FREQUENCY);
+    if (dither) ets_delay_us(esp_random() % period_us);
+    int adc_a = taggedRead(motor, cur_a_pin, driver.dc_a, sample_theta_e[0], sample_duty[0]);
+    if (dither) ets_delay_us(esp_random() % period_us);
+    int adc_b = taggedRead(motor, cur_b_pin, driver.dc_b, sample_theta_e[1], sample_duty[1]);
+    if (dither) ets_delay_us(esp_random() % period_us);
+    int adc_c = taggedRead(motor, cur_c_pin, driver.dc_c, sample_theta_e[2], sample_duty[2]);
 
     // MP6541A: SOx sources/sinks ILOAD/11000, turned into a voltage by the board's 3.3k/3.3k
     // termination (Vref = 1.65V, Rref = 1.65k) -> CSA_GAIN_V_PER_A volts per amp.  Only the

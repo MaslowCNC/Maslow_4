@@ -3,6 +3,7 @@
 #include "config.h"
 #include "ota_service.h"
 #include "trip_recorder.h"
+#include "load_sense.h"
 #include <string.h>
 
 static const uint8_t fan_default_level = 49;
@@ -120,6 +121,10 @@ void printCommandHelp() {
     Serial.println(F("  'TRIP'   print the captured recording again"));
     Serial.println(F("  'REARM'  discard it and start recording again"));
     Serial.println(F("  'TRIPTEST' trigger a recording now (no fault) to test the dump"));
+    Serial.println(F("\nLoad-sense diagnostic (USB only, takes no protective action):"));
+    Serial.println(F("  'LOAD'    toggle gated current sensing + [LOAD] lines every 250 ms"));
+    Serial.println(F("  'RTEST'   standstill check: verifies sign/angle and measures phase R"));
+    Serial.println(F("  'LOADREF' no-load baseline sweep 1000 RPM..max (spins the spindle, no cutting)"));
     Serial.println(F("\nLegacy single-character commands (USB maintenance/calibration):"));
     Serial.println(F("  'q' select motor 1 (default)"));
     Serial.println(F("  'w' select motor 2 (spins opposite direction)"));
@@ -220,6 +225,7 @@ void handleSerialCommand(char cmd, MotorController& mc1, MotorController& mc2, C
         if (cal.isActive()) {
             cal.abort(mc1, mc2, "user emergency stop");
         }
+        loadSenseAbort("emergency stop");
         mc1.emergencyStop();
         mc2.emergencyStop();
         fan_manual_on = false;  // back to automatic: with the motors stopped, that is off
@@ -426,6 +432,10 @@ static void processCommandLine(const char* line, size_t len,
     // link so line noise cannot start a calibration.
     if (allowLegacy) {
         if (strcmp(line, "CAL") == 0) {
+            if (loadSenseBusy()) {
+                Serial.println(F("CAL refused: RTEST/LOADREF is running ('x' to stop it)"));
+                return;
+            }
             // Force the cooling/suction fan to full for the whole calibration run so the
             // motors and drivers stay cool while sweeping to high RPM.
             g_suction_level = 100;
@@ -435,6 +445,20 @@ static void processCommandLine(const char* line, size_t len,
         }
         if (strcmp(line, "TRIP") == 0) {
             tripRecorderRequestDump();
+            return;
+        }
+        // Load-sense diagnostic (see load_sense.h).  Takes no protective action.
+        if (strcmp(line, "LOAD") == 0) {
+            loadSenseToggle();
+            return;
+        }
+        if (strcmp(line, "RTEST") == 0 || strcmp(line, "LOADREF") == 0) {
+            if (cal.isActive()) {
+                Serial.println(F("Refused: calibration is running"));
+                return;
+            }
+            if (line[0] == 'R') loadSenseStartRTest(mc1, mc2);
+            else                loadSenseStartBaseline(mc1, mc2);
             return;
         }
         if (strcmp(line, "TRIPTEST") == 0) {
@@ -461,7 +485,7 @@ static void processCommandLine(const char* line, size_t len,
     // While a calibration sweep is running, ignore motion setpoints arriving over the
     // inter-board link so the XY board cannot disturb it.  Emergency stop ('E') is left
     // working on purpose.
-    if (!allowLegacy && cal.isActive() && (cmd == 'S' || cmd == 'Z')) {
+    if (!allowLegacy && (cal.isActive() || loadSenseBusy()) && (cmd == 'S' || cmd == 'Z')) {
         return;
     }
 

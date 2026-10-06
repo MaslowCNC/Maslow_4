@@ -112,10 +112,10 @@ void tripRecorderService() {
         } else if (s_dump_line == -2) {
             n = snprintf(line, sizeof(line),
                          "TRIPCSV,t_ms,foc_loops,foc_max_us,z_phase_deg,z_target_deg,"
-                         "m1_en,m1_rpm,m1_vlim,m1_ia,m1_ib,m1_ic,m1_prot,m1_nf_edges,m1_nf_low,");
+                         "m1_en,m1_rpm,m1_vlim,m1_ia,m1_ib,m1_ic,m1_prot,m1_nf_edges,m1_nf_low,m1_ip,m1_iq,m1_lag,");
         } else if (s_dump_line == -1) {
             n = snprintf(line, sizeof(line),
-                         "m2_en,m2_rpm,m2_vlim,m2_ia,m2_ib,m2_ic,m2_prot,m2_nf_edges,m2_nf_low\n");
+                         "m2_en,m2_rpm,m2_vlim,m2_ia,m2_ib,m2_ic,m2_prot,m2_nf_edges,m2_nf_low,m2_ip,m2_iq,m2_lag\n");
         } else if (s_dump_line < s_count) {
             int               oldest = (s_head - s_count + TRIP_REC_SAMPLES) % TRIP_REC_SAMPLES;
             const TripSample& s      = s_buf[(oldest + s_dump_line) % TRIP_REC_SAMPLES];
@@ -123,14 +123,14 @@ void tripRecorderService() {
             const TripMotorSample& b = s.m[1];
             n = snprintf(line, sizeof(line),
                          "TRIPCSV,%ld,%u,%u,%.2f,%.2f,"
-                         "%u,%.0f,%.2f,%.2f,%.2f,%.2f,%.2f,%u,%u,"
-                         "%u,%.0f,%.2f,%.2f,%.2f,%.2f,%.2f,%u,%u\n",
+                         "%u,%.0f,%.2f,%.2f,%.2f,%.2f,%.2f,%u,%u,%.2f,%.2f,%.0f,"
+                         "%u,%.0f,%.2f,%.2f,%.2f,%.2f,%.2f,%u,%u,%.2f,%.2f,%.0f\n",
                          (long)(s.t_ms - s_trigger_ms), (unsigned)s.foc_loops, (unsigned)s.foc_max_us,
                          s.phase_cur * 180.0f / PI, s.phase_tgt * 180.0f / PI,
                          (unsigned)a.enabled, a.rpm, a.vlim, a.ia, a.ib, a.ic, a.prot,
-                         (unsigned)a.nf_edges, (unsigned)a.nf_low,
+                         (unsigned)a.nf_edges, (unsigned)a.nf_low, a.ip, a.iq, a.lag,
                          (unsigned)b.enabled, b.rpm, b.vlim, b.ia, b.ib, b.ic, b.prot,
-                         (unsigned)b.nf_edges, (unsigned)b.nf_low);
+                         (unsigned)b.nf_edges, (unsigned)b.nf_low, b.ip, b.iq, b.lag);
         } else {
             n = snprintf(line, sizeof(line), "[TRIP] ===== end of trip recording =====\n");
         }

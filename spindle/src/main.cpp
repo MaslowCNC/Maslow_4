@@ -12,6 +12,7 @@
 #include "serial_commands.h"
 #include "ota_service.h"
 #include "trip_recorder.h"
+#include "load_sense.h"
 
 // ------------------- Hardware Objects -------------------
 
@@ -472,7 +473,7 @@ static void checkPhaseHoldPowerdown() {
     }
     // Never release while the spindle is spinning, free-running, or calibrating.
     if (mc1.velocity_mode || mc2.velocity_mode || mc1.continuous_rotation || mc2.continuous_rotation ||
-        calibration.isActive()) {
+        calibration.isActive() || loadSenseBusy()) {
         return;
     }
     // Wait until the phase ramp has reached its target (the Z move is complete).
@@ -975,6 +976,10 @@ static void recordTripSample(uint32_t now_ms) {
         m.enabled  = mc.enabled ? 1 : 0;
         m.nf_edges = (uint8_t)min<uint32_t>(nf_total[i] - prev_nf_total[i], 255);
         m.nf_low   = (digitalRead(nf_pin[i]) == LOW) ? 1 : 0;
+        const LoadEstimate& le = loadEstimate(i);
+        m.ip       = le.ip;
+        m.iq       = le.iq;
+        m.lag      = le.lag_deg;
         prev_nf_total[i] = nf_total[i];
     }
     tripRecorderPush(s);
@@ -1008,10 +1013,12 @@ static void housekeepingTask(void* arg) {
         last_hk_time    = now_ms;
 
         // Current sensing (six analogReads, ~0.5 ms) - feeds protection, telemetry and cal.
-        mc1.updateCurrent();
-        mc2.updateCurrent();
+        mc1.updateCurrent(loadSenseOn());   // dithered only while the load-sense fit is on
+        mc2.updateCurrent(loadSenseOn());
         calibration.accumulateCurrentSample(mc1.last_instantaneous_current, 0);
         calibration.accumulateCurrentSample(mc2.last_instantaneous_current, 1);
+        // Opt-in gated load sensing (USB "LOAD"): extra low-side-window ADC reads, all on this core.
+        loadSenseUpdate(mc1, mc2, hk_dt);
         recordTripSample(now_ms);
 
         // Calibration sweep and serial command handling (both set targets the FOC task actuates).
@@ -1145,6 +1152,7 @@ void setup() {
     // Load pre-measured calibration LUT data
     loadDefaultLUT(mc1, 0, MC1_DEFAULT_LUT, sizeof(MC1_DEFAULT_LUT) / sizeof(MC1_DEFAULT_LUT[0]));
     loadDefaultLUT(mc2, 1, MC2_DEFAULT_LUT, sizeof(MC2_DEFAULT_LUT) / sizeof(MC2_DEFAULT_LUT[0]));
+    loadSenseInit();  // no-load baseline for the load-sense diagnostic (NVS)
 
     // Start the housekeeping task on core 0: current sensing, calibration, serial commands, fault
     // monitoring, the Z tool state machine, fan, telemetry and status reporting - everything that

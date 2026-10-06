@@ -217,6 +217,32 @@ const uint32_t CAL_COOLDOWN_MS = 8000;                              // How long 
                                                                     // drivers sleep, so the die temperature cannot be polled
                                                                     // while cooling - this is a fixed wait.
 
+// --- Load sensing (opt-in diagnostic, USB "LOAD"; see load_sense.h) ---
+// The fit weights each existing current read by the fraction of the PWM period in which that
+// phase's low side conducts (the only time the MP6541A sense output is valid).  Half the sense
+// output's settling time after the low side turns on is taken off that fraction.  The board's
+// 330R/1nF filter settles in ~2-3 us and the MP6541A's own response comes on top - UNVERIFIED;
+// scope INLx against CURx to pin it down.
+const float    LOAD_SOX_SETTLE_US   = 3.0f;
+// Sign of the measured phase current relative to SimpleFOC's phase-voltage convention.  Measured
+// 2026-10-06: with both motors energised near standstill (Z homing raise, 2.3 V) the fit put the
+// current at 180 deg to the applied voltage on both motors (Iq ~ 0), i.e. the sense polarity is
+// inverted.  RTEST re-checks this.
+const float    LOAD_CURRENT_SIGN    = -1.0f;
+// Readings are full-or-zero at random, so the fit is noisy per reading and needs a longer window.
+const float    LOAD_FILTER_TAU_S    = 0.15f;   // forgetting time constant of the current fit
+const uint32_t LOAD_LOG_INTERVAL_MS = 250;     // [LOAD] console line period while LOAD is on
+// Phase resistance (ohm, including the driver) and inductance (H) for the load-angle estimate.
+// 0 = unknown.  RTEST measures R at standstill and uses it until reboot; L must be measured
+// separately (LCR meter, phase-to-phase / 2).  Without both, no load angle is reported.
+const float    LOAD_R_OHM           = 0.0f;
+const float    LOAD_L_H             = 0.0f;
+// No-load baseline sweep (USB "LOADREF"): both motors spin as the spindle, no tool cutting.
+const int      LOAD_REF_STEP_RPM    = 1000;
+const int      LOAD_REF_MAX_POINTS  = 24;      // room for up to 24,000 RPM
+const uint32_t LOAD_REF_SETTLE_MS   = 1500;    // after reaching each speed
+const uint32_t LOAD_REF_MEASURE_MS  = 1000;    // averaging time per speed
+
 // MP6541A fault detection (nFAULT, one open-drain pin per driver).
 // The MP6541A reports two things on nFAULT, distinguished by shape rather than by any status
 // register: an OVER-CURRENT disables the outputs and auto-retries after ~2ms, so it appears as

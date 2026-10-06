@@ -29,6 +29,10 @@ struct MotorController {
     float last_current_a = 0.0f;              // Per-phase currents from the last sample (A),
     float last_current_b = 0.0f;              // kept for the trip recorder
     float last_current_c = 0.0f;
+    // For the load-sense fit (load_sense.cpp): the commanded electrical angle and that phase's PWM
+    // duty around each of the three reads above.  Read from values core 1 already writes.
+    float sample_theta_e[3] = { 0.0f, 0.0f, 0.0f };
+    float sample_duty[3]    = { 0.5f, 0.5f, 0.5f };
 
     // Measured zero-current output of each phase's sense termination (volts).  The MP6541A's
     // SOx pins source/sink a current that the board's 3.3k/3.3k divider turns into a voltage
@@ -68,7 +72,9 @@ struct MotorController {
     // Per-loop updates
     void rampVelocity(float dt, float ramp_rate);
     void updateControlMode();
-    void updateCurrent();
+    // dither: wait a random 0..1 PWM period before each read, so reads land at random points in
+    // the PWM cycle (the load-sense fit relies on that; see load_sense.h).
+    void updateCurrent(bool dither = false);
     void runMotorLoop();
 
     // Voltage from calibration LUT (interpolated)

@@ -20,6 +20,8 @@ struct TripMotorSample {
     uint8_t enabled;
     uint8_t nf_edges;     // nFAULT falling edges since the previous sample (driver OCP retries)
     uint8_t nf_low;       // nFAULT pin level at sample time (1 = low = fault asserted)
+    float   ip, iq;       // load-sense fit: in-phase / lagging current (A peak); NaN unless LOAD is on
+    float   lag;          // load-sense fit: current lag behind the applied voltage (deg)
 };
 
 struct TripSample {
