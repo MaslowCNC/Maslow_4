@@ -2,6 +2,11 @@
 
 #include "motor_controller.h"
 
+// Defined by the fault monitor in main.cpp: true while that motor's driver is holding nFAULT
+// low with no retry activity, i.e. it has thermally shut down.  The MP6541A gives no
+// over-temperature warning, so this is the only thermal signal the sweep can act on.
+bool driverOverTemp(int motor_idx);
+
 enum CalState {
     CAL_IDLE,
     CAL_RAMP,
@@ -10,6 +15,7 @@ enum CalState {
     CAL_COOLDOWN,
     CAL_RAMP_DOWN,
     CAL_DONE,
+    CAL_TRIP_PAUSE,   // motor 1 tripped: waiting for it to coast to rest before motor 2's sweep
     MCAL_RAMP,
     MCAL_SETTLE,
     MCAL_HOLD,
@@ -46,6 +52,12 @@ struct Calibration {
     // Abort calibration and print partial results
     void abort(MotorController& mc1, MotorController& mc2, const char* reason);
 
+    // A motor tripped (over-current) during calibration; the motors are already stopped.  During
+    // the auto sweep of motor 1 this ends motor 1's sweep at the trip point (saving the steps it
+    // recorded) and moves on to motor 2 after CAL_TRIP_PAUSE_MS - returns true.  Otherwise it
+    // aborts the calibration - returns false.
+    bool handleMotorTrip(MotorController& mc1, MotorController& mc2, const char* reason);
+
     // Accumulate current sample during hunt phase
     void accumulateCurrentSample(float instantaneous_current, int motor_idx);
 
@@ -61,6 +73,7 @@ private:
     void printFullResults(MotorController& mc);
     void disableCalMotor(MotorController& mc);
     void advanceToNextStep(MotorController& mc);
+    void startMotor2Sweep(MotorController& mc2);
 };
 
 void loadCalibrationLUT(MotorController& mc, int motor_idx, const float* defaults);

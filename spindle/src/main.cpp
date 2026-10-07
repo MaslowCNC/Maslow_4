@@ -11,69 +11,89 @@
 #include "calibration.h"
 #include "serial_commands.h"
 #include "ota_service.h"
+#include "trip_recorder.h"
+#include "load_sense.h"
+#include "usb_console.h"
+#include "esp32s3/rom/rtc.h"
+#include "esp_task_wdt.h"
+#include "soc/usb_serial_jtag_struct.h"   // rtc_get_reset_reason: the chip-level reset cause
+
+static void reportResetReasonOnce();  // defined with setup() below
+static void reportLoadWarnings();     // defined with the fault monitoring below
+static void watchUsbOutput();         // defined with setup() below
 
 // ------------------- Hardware Objects -------------------
 
-SPIClass drvSPI(FSPI);
-
+// MP6541A: independent HS/LS inputs, driven as plain 6-PWM.  The drivers have no enable pin
+// of their own - the shared nSLEEP line is managed by MotorController::enable()/disable().
 BLDCMotor motor1_hw(POLE_PAIRS);
-DRV8316Driver6PWM driver1_hw(INHA, INLA, INHB, INLB, INHC, INLC,
-                              SPI_CS_PIN, false, EN_GATE, NFAULT);
+BLDCDriver6PWM driver1_hw(INHA, INLA, INHB, INLB, INHC, INLC);
 
 BLDCMotor motor2_hw(POLE_PAIRS);
-DRV8316Driver6PWM driver2_hw(INHA2, INLA2, INHB2, INLB2, INHC2, INLC2,
-                              SPI_CS_PIN2, false, EN_GATE, NFAULT);
+BLDCDriver6PWM driver2_hw(INHA2, INLA2, INHB2, INLB2, INHC2, INLC2);
 
 // ------------------- Motor Controllers -------------------
-// direction: +1 for motor 1 (forward), -1 for motor 2 (opposite)
+// direction: the two motors always run in opposite senses; SPINDLE_DIRECTION (config.h) flips
+// both together to reverse the spindle.
 
-MotorController mc1(motor1_hw, driver1_hw, CURA, CURB, CURC, +1);
-MotorController mc2(motor2_hw, driver2_hw, CURA2, CURB2, CURC2, -1);
+MotorController mc1(motor1_hw, driver1_hw, CURA, CURB, CURC, +1 * SPINDLE_DIRECTION);
+MotorController mc2(motor2_hw, driver2_hw, CURA2, CURB2, CURC2, -1 * SPINDLE_DIRECTION);
 
 Calibration calibration;
 static TaskHandle_t motor_control_task_handle = nullptr;
 static TaskHandle_t housekeeping_task_handle  = nullptr;
 
 // ------------------- Calibration LUT Default Data -------------------
-// Full auto-calibration sweep (100-14000 RPM in 100 RPM steps, tuned to I_phase_rms = 3.5 A).
-// These are the per-motor open-loop voltages measured on the bench; the drive reaches its
-// 16 V ceiling around 13300 RPM (M1) / 13900 RPM (M2), which is well above the 10000 RPM
-// machine max.  Loaded as the seed LUT at boot (a stored NVS calibration, if present,
-// overrides them), so the spindle has a correct rising high-RPM voltage profile out of the
-// box instead of stalling/over-currenting above 6000 RPM.
+// Per-motor open-loop voltages from the MP6541A board's auto-calibration (CAL) sweep, 100-18000 RPM
+// in 100 RPM steps, hunted to a MEASURED I_phase_rms of CAL_TARGET_CURRENT (2.625 A).  Copied from
+// the board's stored NVS calibration on 2026-10-05.  Loaded as the seed LUT at boot; a stored NVS
+// calibration, if present, overrides them.
+//
+// Note the top of both tables: M1 reaches the 24 V bus by ~17000 RPM and M2 is at 23.3 V by 18000,
+// i.e. deep into SinePWM over-modulation.  A trip recording at ~17700 RPM showed M1 tripping the
+// driver's hardware over-current there.  These entries were measured with SinePWM and a 24 V
+// ceiling; applyVoltageLimit() now clamps them to MAX_VOLTAGE (13.86 V, the SpaceVectorPWM limit).
 
 static const float MC1_DEFAULT_LUT[] = {
-    1.638f, 1.637f, 1.672f, 1.696f, 1.689f, 1.724f, 1.780f, 1.822f, 1.876f, 1.914f,   // 100-1000
-    1.946f, 2.020f, 2.061f, 2.122f, 2.177f, 2.243f, 2.319f, 2.361f, 2.444f, 2.503f,   // 1100-2000
-    2.591f, 2.646f, 2.722f, 2.786f, 2.851f, 2.937f, 3.007f, 3.087f, 3.154f, 3.239f,   // 2100-3000
-    3.307f, 3.374f, 3.460f, 3.541f, 3.611f, 3.691f, 3.758f, 3.839f, 3.928f, 4.004f,   // 3100-4000
-    4.085f, 4.160f, 4.237f, 4.319f, 4.394f, 4.469f, 4.556f, 4.642f, 4.723f, 4.794f,   // 4100-5000
-    4.882f, 4.968f, 5.052f, 5.128f, 5.203f, 5.303f, 5.369f, 5.457f, 5.540f, 5.619f,   // 5100-6000
-    5.705f, 5.791f, 5.872f, 5.963f, 6.047f, 6.131f, 6.206f, 6.297f, 6.376f, 6.464f,   // 6100-7000
-    6.547f, 6.629f, 6.715f, 6.800f, 6.876f, 6.976f, 7.058f, 7.126f, 7.223f, 7.313f,   // 7100-8000
-    7.396f, 7.478f, 7.566f, 7.662f, 7.731f, 7.818f, 7.897f, 7.985f, 8.041f, 8.076f,   // 8100-9000
-    8.163f, 8.192f, 8.245f, 8.318f, 8.387f, 8.454f, 8.520f, 8.614f, 8.680f, 8.741f,   // 9100-10000
-    8.814f, 8.884f, 8.951f, 9.025f, 9.111f, 9.184f, 9.280f, 9.363f, 9.430f, 9.551f,   // 10100-11000
-    9.643f, 9.756f, 9.876f, 9.988f, 10.143f, 10.300f, 10.422f, 10.618f, 10.786f, 11.015f,  // 11100-12000
-    11.236f, 11.459f, 11.746f, 12.026f, 12.278f, 12.623f, 13.018f, 13.406f, 13.758f, 14.365f, // 12100-13000
-    14.894f, 15.414f, 16.000f, 16.000f, 16.000f, 16.000f, 16.000f, 16.000f, 16.000f, 16.000f, // 13100-14000
+    2.386f, 2.589f, 2.622f, 2.635f, 2.643f, 2.649f, 2.712f, 2.718f, 2.725f, 2.809f,   // 100-1000
+    2.820f, 2.906f, 2.948f, 3.013f, 3.030f, 3.098f, 3.092f, 3.179f, 3.230f, 3.307f,   // 1100-2000
+    3.345f, 3.442f, 3.488f, 3.542f, 3.581f, 3.653f, 3.738f, 3.741f, 3.819f, 3.894f,   // 2100-3000
+    4.040f, 4.073f, 4.138f, 4.185f, 4.263f, 4.312f, 4.412f, 4.472f, 4.551f, 4.623f,   // 3100-4000
+    4.688f, 4.780f, 4.831f, 4.893f, 5.020f, 5.059f, 5.112f, 5.240f, 5.301f, 5.302f,   // 4100-5000
+    5.435f, 5.501f, 5.599f, 5.626f, 5.754f, 5.819f, 5.924f, 5.958f, 6.024f, 6.085f,   // 5100-6000
+    6.191f, 6.308f, 6.365f, 6.428f, 6.511f, 6.597f, 6.697f, 6.742f, 6.818f, 6.930f,   // 6100-7000
+    7.009f, 7.092f, 7.099f, 7.240f, 7.273f, 7.387f, 7.444f, 7.489f, 7.618f, 7.717f,   // 7100-8000
+    7.789f, 7.863f, 7.952f, 8.031f, 8.087f, 8.194f, 8.234f, 8.370f, 8.367f, 8.441f,   // 8100-9000
+    8.586f, 8.656f, 8.661f, 8.795f, 8.901f, 8.961f, 9.027f, 9.020f, 9.190f, 9.401f,   // 9100-10000
+    9.380f, 9.392f, 9.479f, 9.642f, 9.656f, 9.818f, 9.835f, 9.951f, 10.018f, 10.098f,   // 10100-11000
+    10.145f, 10.221f, 10.311f, 10.449f, 10.506f, 10.587f, 10.637f, 10.724f, 10.833f, 10.937f,   // 11100-12000
+    10.961f, 11.058f, 11.107f, 11.201f, 11.316f, 11.377f, 11.442f, 11.521f, 11.613f, 11.683f,   // 12100-13000
+    11.737f, 11.787f, 11.931f, 11.993f, 12.112f, 12.215f, 12.314f, 12.427f, 12.504f, 12.657f,   // 13100-14000
+    12.770f, 12.920f, 13.045f, 13.197f, 13.418f, 13.465f, 13.547f, 13.836f, 14.109f, 14.250f,   // 14100-15000
+    14.552f, 14.620f, 15.014f, 15.445f, 15.592f, 15.711f, 16.249f, 16.584f, 17.112f, 17.459f,   // 15100-16000
+    17.855f, 18.389f, 18.719f, 19.370f, 19.991f, 20.690f, 21.564f, 22.213f, 23.076f, 23.976f,   // 16100-17000
+    24.000f, 24.000f, 24.000f, 24.000f, 24.000f, 24.000f, 24.000f, 24.000f, 24.000f, 24.000f,   // 17100-18000
 };
 
 static const float MC2_DEFAULT_LUT[] = {
-    2.107f, 2.157f, 2.158f, 2.161f, 2.174f, 2.172f, 2.243f, 2.255f, 2.277f, 2.278f,   // 100-1000
-    2.283f, 2.330f, 2.472f, 2.468f, 2.497f, 2.598f, 2.617f, 2.669f, 2.669f, 2.749f,   // 1100-2000
-    2.832f, 2.885f, 2.914f, 2.956f, 3.056f, 3.103f, 3.103f, 3.271f, 3.307f, 3.376f,   // 2100-3000
-    3.438f, 3.472f, 3.615f, 3.680f, 3.710f, 3.744f, 3.840f, 3.920f, 3.922f, 4.078f,   // 3100-4000
-    4.118f, 4.241f, 4.319f, 4.348f, 4.408f, 4.513f, 4.588f, 4.664f, 4.730f, 4.817f,   // 4100-5000
-    4.884f, 4.957f, 5.025f, 5.111f, 5.222f, 5.250f, 5.337f, 5.420f, 5.501f, 5.561f,   // 5100-6000
-    5.625f, 5.732f, 5.782f, 5.901f, 5.955f, 6.041f, 6.105f, 6.175f, 6.276f, 6.341f,   // 6100-7000
-    6.418f, 6.518f, 6.572f, 6.656f, 6.740f, 6.828f, 6.889f, 6.990f, 7.081f, 7.159f,   // 7100-8000
-    7.241f, 7.305f, 7.402f, 7.484f, 7.559f, 7.643f, 7.701f, 7.784f, 7.854f, 7.919f,   // 8100-9000
-    7.980f, 8.047f, 8.100f, 8.124f, 8.186f, 8.231f, 8.331f, 8.371f, 8.424f, 8.486f,   // 9100-10000
-    8.561f, 8.632f, 8.709f, 8.787f, 8.845f, 8.917f, 8.988f, 9.063f, 9.137f, 9.191f,   // 10100-11000
-    9.260f, 9.355f, 9.438f, 9.519f, 9.623f, 9.720f, 9.810f, 9.956f, 10.087f, 10.207f, // 11100-12000
-    10.331f, 10.504f, 10.667f, 10.913f, 11.064f, 11.235f, 11.504f, 11.743f, 11.962f, 12.308f, // 12100-13000
-    12.608f, 12.913f, 13.321f, 13.607f, 14.167f, 14.567f, 14.977f, 15.605f, 16.000f, 16.000f, // 13100-14000
+    2.685f, 2.750f, 2.745f, 2.815f, 2.822f, 2.867f, 2.914f, 2.926f, 2.918f, 2.939f,   // 100-1000
+    3.080f, 3.077f, 3.175f, 3.204f, 3.233f, 3.261f, 3.267f, 3.355f, 3.396f, 3.471f,   // 1100-2000
+    3.472f, 3.544f, 3.586f, 3.650f, 3.661f, 3.783f, 3.803f, 3.866f, 3.918f, 3.967f,   // 2100-3000
+    4.027f, 4.109f, 4.109f, 4.187f, 4.289f, 4.297f, 4.369f, 4.454f, 4.544f, 4.568f,   // 3100-4000
+    4.654f, 4.730f, 4.797f, 4.797f, 4.914f, 4.954f, 5.039f, 5.139f, 5.195f, 5.243f,   // 4100-5000
+    5.294f, 5.366f, 5.479f, 5.514f, 5.643f, 5.647f, 5.751f, 5.838f, 5.878f, 5.911f,   // 5100-6000
+    6.037f, 6.110f, 6.222f, 6.260f, 6.299f, 6.381f, 6.486f, 6.505f, 6.583f, 6.646f,   // 6100-7000
+    6.718f, 6.804f, 6.902f, 6.962f, 7.002f, 7.115f, 7.167f, 7.249f, 7.348f, 7.397f,   // 7100-8000
+    7.488f, 7.507f, 7.635f, 7.731f, 7.762f, 7.808f, 7.922f, 7.960f, 8.069f, 8.107f,   // 8100-9000
+    8.229f, 8.282f, 8.312f, 8.433f, 8.486f, 8.574f, 8.667f, 8.664f, 8.813f, 8.831f,   // 9100-10000
+    8.925f, 9.028f, 9.054f, 9.166f, 9.226f, 9.292f, 9.391f, 9.388f, 9.509f, 9.609f,   // 10100-11000
+    9.679f, 9.716f, 9.835f, 9.889f, 9.984f, 10.013f, 10.103f, 10.228f, 10.260f, 10.394f,   // 11100-12000
+    10.416f, 10.471f, 10.576f, 10.642f, 10.710f, 10.754f, 10.872f, 10.913f, 10.980f, 11.087f,   // 12100-13000
+    11.146f, 11.239f, 11.275f, 11.329f, 11.445f, 11.534f, 11.611f, 11.695f, 11.777f, 11.816f,   // 13100-14000
+    11.863f, 11.971f, 11.996f, 12.191f, 12.195f, 12.417f, 12.439f, 12.532f, 12.580f, 12.739f,   // 14100-15000
+    12.751f, 13.003f, 13.005f, 13.326f, 13.396f, 13.565f, 13.744f, 13.971f, 14.173f, 14.395f,   // 15100-16000
+    14.625f, 14.789f, 15.066f, 15.323f, 15.705f, 15.997f, 16.403f, 16.645f, 17.052f, 17.323f,   // 16100-17000
+    17.625f, 18.341f, 18.689f, 19.485f, 20.190f, 20.750f, 21.379f, 22.279f, 22.436f, 23.336f,   // 17100-18000
 };
 
 static void loadDefaultLUT(MotorController& mc, int motor_idx,
@@ -106,15 +126,6 @@ static int serious_consec_count2 = 0;
 static uint32_t last_drv_check = 0;
 static int overcurrent_count = 0;
 
-// --- Over-current auto-recovery state ---
-static bool     recovery_pending = false;
-static uint32_t recovery_resume_at = 0;
-static float    recovery_target_v1 = 0.0f;
-static float    recovery_target_v2 = 0.0f;
-static int      recovery_attempts = 0;
-static uint32_t recovery_last_fault_at = 0;  // millis() of the most recent over-current retry
-static char     recovery_cause[80] = "";  // the fault that triggered the pending recovery
-
 // Send a human-readable event to the XY board (which surfaces it in the ESP3D web console
 // via log_warn / log_error / log_info) and to the local USB console.  level is one of
 // "WARN", "ERR" or "MSG" - the XY board maps these to the matching log level.
@@ -128,8 +139,8 @@ static void reportEvent(const char* level, const char* fmt, ...) {
     // The motor FOC loop runs in THIS SAME task.  A blocking serial write (the UART TX buffer
     // filling, or the USB CDC host not draining fast enough) would stall the loop; at high RPM
     // even a few ms stall makes the open-loop electrical angle jump between FOC updates, which
-    // applies a coarse voltage step that spikes phase current and trips the DRV8316 OCP (all six
-    // phase comparators at once).  So write only when the whole line already fits in the TX
+    // applies a coarse voltage step that spikes phase current and trips the driver's hardware
+    // over-current protection.  So write only when the whole line already fits in the TX
     // buffer; otherwise drop it - these link/USB messages are advisory and a fresh status or
     // telemetry line follows shortly.  This keeps inter-board serial traffic from disturbing FOC.
     char line[128];
@@ -140,9 +151,7 @@ static void reportEvent(const char* level, const char* fmt, ...) {
     if (Serial1.availableForWrite() >= n) {
         Serial1.write(reinterpret_cast<const uint8_t*>(line), n);
     }
-    if (Serial && Serial.availableForWrite() >= n) {
-        Serial.write(reinterpret_cast<const uint8_t*>(line), n);
-    }
+    usbWriteIfRoom(line, n);
 }
 
 // Tell the XY board that the spindle has (re)established its Z zero (phase offset 0) so it
@@ -153,193 +162,167 @@ static void notifyZHomed() {
     if (Serial) Serial.println(F("[MSG] Z zero re-established -> notified XY board (ZHOMED)"));
 }
 
-// Begin auto-recovery from a transient over-current: remember the commanded speed, stop the
-// motors for a brief cooldown, and schedule a resume.  Returns false (so the caller fails out)
-// during calibration, or once over-currents keep recurring past FAULT_RECOVERY_MAX_ATTEMPTS
-// within the window.
-static bool beginFaultRecovery(const char* what) {
-    // A calibration sweep drives the motors open-loop; retrying velocity mode would corrupt it,
-    // so the caller aborts the sweep instead.
-    if (calibration.isActive()) return false;
+// Defined with the tool state machine below: drop the Z reference and park the sub-machine in
+// NeedsHoming, so nothing moves the Z until a homing cycle re-establishes the zero.
+static void requireRehome();
 
-    uint32_t now = millis();
-    // Reset the retry counter only after a sustained CLEAN run since the last over-current.
-    // Each failed spin-up retry recurs quickly (cooldown + OCP re-detect ~1 s), which is far
-    // shorter than the window, so consecutive fast retries must keep accumulating - otherwise
-    // a wall-clock window that expires mid-chain would reset the count and loop forever instead
-    // of failing out.  A genuine one-off transient during a long job clears the count because
-    // the motor then runs fault-free for longer than FAULT_RECOVERY_WINDOW_MS.
-    if (recovery_attempts > 0 && now - recovery_last_fault_at > FAULT_RECOVERY_WINDOW_MS) {
-        recovery_attempts = 0;
-    }
-    recovery_last_fault_at = now;
-    recovery_attempts++;
-    if (recovery_attempts > FAULT_RECOVERY_MAX_ATTEMPTS) {
-        return false;  // kept over-currenting -> let the caller fail out to 0 RPM
-    }
-
-    // Remember what was running so we can resume after the cooldown.
-    recovery_target_v1 = mc1.velocity_mode ? mc1.target_velocity : 0.0f;
-    recovery_target_v2 = mc2.velocity_mode ? mc2.target_velocity : 0.0f;
-
+// Stop for an over-current.  The motors run OPEN-LOOP, so an over-current means the rotor has
+// already lost synchronisation with the commanded field - resuming the commanded speed cannot
+// recover that, it just re-trips.  So come to rest and wait for the operator.
+//
+// Two things follow from the slip:
+//   - fault code 2 is latched so the XY board raises its alarm and a running job stops.  It must
+//     STAY latched: the XY board alarms only on a 0 -> non-zero transition.  A fresh speed
+//     command (setSpindleSpeed) is the deliberate restart that clears it.
+//   - the Z position IS the relative phase between the two motors, so a slip invalidates it.
+//     Z targets are refused until a homing cycle re-establishes the zero.
+static void stopForOverCurrent(const char* detail) {
+    tripRecorderTrigger(detail);
     mc1.emergencyStop();
     mc2.emergencyStop();
 
-    recovery_pending = true;
-    recovery_resume_at = now + FAULT_RECOVERY_COOLDOWN_MS;
-    g_speed_command_flag = false;  // ignore our own resume; watch for a NEW operator command
+    requireRehome();
 
-    // Remember the cause so the later "retried" message can name what tripped it.
-    strncpy(recovery_cause, what, sizeof(recovery_cause) - 1);
-    recovery_cause[sizeof(recovery_cause) - 1] = '\0';
-
-    reportEvent("WARN", "%s - pausing %lums to retry (%d/%d)", what,
-                (unsigned long)FAULT_RECOVERY_COOLDOWN_MS, recovery_attempts, FAULT_RECOVERY_MAX_ATTEMPTS);
-    return true;
-}
-
-// Complete a pending auto-recovery once the cooldown has elapsed, resuming the last commanded
-// speed so a transient overload does not stop the job.
-static void updateFaultRecovery() {
-    if (!recovery_pending) return;
-
-    // A fresh operator/XY speed command during the cooldown wins - drop the recovery so we do
-    // not override it (e.g. the operator commanded a stop).
-    if (g_speed_command_flag) {
-        recovery_pending = false;
+    if (calibration.isActive()) {
+        // A trip at the top of motor 1's auto sweep just marks the end of its usable range: the
+        // sweep moves on to motor 2, so do not latch a fault (which would also alarm the XY board).
+        if (calibration.handleMotorTrip(mc1, mc2, "over-current")) {
+            reportEvent("WARN", "%s during calibration - motor 1 sweep ended, continuing with motor 2", detail);
+            return;
+        }
+        g_fault_code = 2;
+        reportEvent("ERR", "%s during calibration - aborting", detail);
         return;
     }
-    if ((int32_t)(millis() - recovery_resume_at) < 0) return;
 
-    recovery_pending = false;
-
-    bool resumed = false;
-    if (fabsf(recovery_target_v1) > 0.1f) { mc1.target_velocity = recovery_target_v1; mc1.velocity_mode = true; resumed = true; }
-    if (fabsf(recovery_target_v2) > 0.1f) { mc2.target_velocity = recovery_target_v2; mc2.velocity_mode = true; resumed = true; }
-
-    if (resumed) {
-        float v = (fabsf(recovery_target_v1) > 0.1f) ? recovery_target_v1 : recovery_target_v2;
-        reportEvent("MSG", "retried %s - resuming %.0f RPM", recovery_cause,
-                    fabsf(v) * 60.0f / (2.0f * PI));
-    } else {
-        reportEvent("MSG", "retried %s - motors idle", recovery_cause);
-    }
+    g_fault_code = 2;
+    reportEvent("WARN", "%s - spindle stopped; re-home the Z, then send a new speed", detail);
 }
 
-static void checkDRV8316Faults() {
-    if (!mc1.enabled && !mc2.enabled) return;
+// --- nFAULT monitoring ---
+// The MP6541A has no status registers.  Each driver has one open-drain nFAULT pin, and the two
+// faults it reports are told apart by their shape:
+//   over-current  - outputs off, automatic retry after ~2ms, so the pin produces a BURST of
+//                   falling edges for as long as the overload lasts.  A 100ms poll would miss
+//                   those 2ms pulses entirely, so the edges are counted in an ISR.
+//   over-temp     - outputs off and the pin held LOW continuously until the die cools ~25C.
+// Over-voltage and UVLO do NOT pull nFAULT low on this part, so they can no longer be seen
+// from firmware (the driver still protects itself).
+static volatile uint32_t nfault_edges1 = 0;
+static volatile uint32_t nfault_edges2 = 0;
+
+// Running totals for the trip recorder, which takes its own per-sample differences (the counters
+// above are zeroed by checkDriverFaults every 100ms).
+static volatile uint32_t nfault_total1 = 0;
+static volatile uint32_t nfault_total2 = 0;
+
+static void IRAM_ATTR onNFault1() { nfault_edges1++; nfault_total1++; }
+static void IRAM_ATTR onNFault2() { nfault_edges2++; nfault_total2++; }
+
+static void initFaultPins() {
+    pinMode(DRV_NFAULT1, INPUT);   // 5.1k pull-up on the board
+    pinMode(DRV_NFAULT2, INPUT);
+    attachInterrupt(digitalPinToInterrupt(DRV_NFAULT1), onNFault1, FALLING);
+    attachInterrupt(digitalPinToInterrupt(DRV_NFAULT2), onNFault2, FALLING);
+}
+
+// True while a driver is holding nFAULT low with no retry activity - i.e. a thermal shutdown.
+// Only meaningful while the drivers are awake; a sleeping MP6541A releases the pin.
+static bool drv_over_temp1 = false;
+static bool drv_over_temp2 = false;
+
+bool driverOverTemp(int motor_idx) {
+    return (motor_idx == 0) ? drv_over_temp1 : drv_over_temp2;
+}
+
+static void checkDriverFaults() {
+    if (!mc1.enabled && !mc2.enabled) {
+        drv_over_temp1 = drv_over_temp2 = false;   // nFAULT says nothing with the motors off
+        return;
+    }
     if (millis() - last_drv_check < 100) return;
     last_drv_check = millis();
 
-    DRV8316Status st1 = mc1.driver.getStatus();
-    DRV8316Status st2 = mc2.driver.getStatus();
+    // nFAULT only means anything once the drivers are awake and past their ~1ms start-up.
+    if (!driversAwake() || (millis() - driversAwakeSince()) < 5) {
+        nfault_edges1 = nfault_edges2 = 0;
+        drv_over_temp1 = drv_over_temp2 = false;
+        return;
+    }
 
-    bool ocp1 = st1.isFault() && st1.isOverCurrent();
-    bool ocp2 = st2.isFault() && st2.isOverCurrent();
-    bool serious1 = st1.isFault() && (st1.isOverTemperature() || st1.isOverVoltage());
-    bool serious2 = st2.isFault() && (st2.isOverTemperature() || st2.isOverVoltage());
+    uint32_t edges1 = nfault_edges1; nfault_edges1 = 0;
+    uint32_t edges2 = nfault_edges2; nfault_edges2 = 0;
+    bool low1 = (digitalRead(DRV_NFAULT1) == LOW);
+    bool low2 = (digitalRead(DRV_NFAULT2) == LOW);
+
+    // Retrying over-current: edges in this window (a pin found low with an edge is the same
+    // event caught mid-retry).  Sustained low with no edges at all: thermal shutdown.
+    bool ocp1 = (edges1 > 0);
+    bool ocp2 = (edges2 > 0);
+    drv_over_temp1 = low1 && (edges1 == 0);
+    drv_over_temp2 = low2 && (edges2 == 0);
 
     ocp_consec_count1 = ocp1 ? (ocp_consec_count1 + 1) : 0;
     ocp_consec_count2 = ocp2 ? (ocp_consec_count2 + 1) : 0;
 
-    // Debounce over-temp / over-voltage: real thermal/voltage faults are sustained, so require
-    // the OT/OVP bit to persist across SERIOUS_CONSEC_LIMIT reads before treating it as a
-    // genuine (latching) serious fault.  A hard over-current burst (e.g. the open-loop spin-up
-    // current transient) can momentarily co-assert OT/OVP for a single read; without this
-    // debounce that single co-assertion latches a hard fault and alarms the XY board even
-    // though the real event is an over-current.  The DRV8316 hardware OTP/OVP still protects
-    // instantly regardless of this debounce.
-    serious_consec_count1 = serious1 ? (serious_consec_count1 + 1) : 0;
-    serious_consec_count2 = serious2 ? (serious_consec_count2 + 1) : 0;
+    serious_consec_count1 = drv_over_temp1 ? (serious_consec_count1 + 1) : 0;
+    serious_consec_count2 = drv_over_temp2 ? (serious_consec_count2 + 1) : 0;
 
     bool persistent_ocp = (ocp_consec_count1 >= OCP_CONSEC_LIMIT) ||
                           (ocp_consec_count2 >= OCP_CONSEC_LIMIT);
-    bool serious = (serious_consec_count1 >= SERIOUS_CONSEC_LIMIT) ||
-                   (serious_consec_count2 >= SERIOUS_CONSEC_LIMIT);
+    // While a calibration sweep is running, a thermal shutdown is the sweep's own business
+    // (it coasts to cool and carries on) rather than a latching fault.
+    bool serious = !calibration.isActive() &&
+                   ((serious_consec_count1 >= SERIOUS_CONSEC_LIMIT) ||
+                    (serious_consec_count2 >= SERIOUS_CONSEC_LIMIT));
 
-    // Ride through any not-yet-confirmed fault (a transient OCP, or an OT/OVP flicker that has
-    // not persisted long enough): clear the driver latch so the next read reflects reality and
-    // a one-shot glitch resets its counter.  The consecutive counters above keep accumulating
-    // across reads, so a genuinely persistent OCP or sustained OT/OVP still escalates below.
+    // Ride through a fault that has not yet persisted: the MP6541A clears and retries on its
+    // own, and the consecutive counters above keep accumulating, so a genuinely persistent
+    // over-current or sustained over-temperature still escalates below.
     if (!serious && !persistent_ocp) {
-        if (st1.isFault()) { mc1.driver.clearFault(); delayMicroseconds(1); }
-        if (st2.isFault()) { mc2.driver.clearFault(); delayMicroseconds(1); }
         if ((ocp1 || ocp2) && (ocp_consec_count1 == 1 || ocp_consec_count2 == 1)) {
-            Serial.printf("DRV8316 OCP transient (CBC auto-clear): M1=%d M2=%d\n", ocp1, ocp2);
+            Serial.printf("nFAULT over-current transient (auto-retry): M1=%lu M2=%lu edges\n",
+                          (unsigned long)edges1, (unsigned long)edges2);
         }
         return;
     }
 
-    if (st1.isFault()) {
-        Serial.printf("DRV8316 HARDWARE FAULT (Motor 1): OCP=%d OT=%d OVP=%d\n",
-                      st1.isOverCurrent(), st1.isOverTemperature(), st1.isOverVoltage());
-        mc1.driver.clearFault(); delayMicroseconds(1);
-    }
-    if (st2.isFault()) {
-        Serial.printf("DRV8316 HARDWARE FAULT (Motor 2): OCP=%d OT=%d OVP=%d\n",
-                      st2.isOverCurrent(), st2.isOverTemperature(), st2.isOverVoltage());
-        mc2.driver.clearFault(); delayMicroseconds(1);
-    }
     if (persistent_ocp) {
-        Serial.println(F("  (persistent OCP - fault present for 500+ ms)"));
+        Serial.printf("DRIVER OVER-CURRENT: M1=%lu M2=%lu retries in the last 100ms (500+ ms persistent)\n",
+                      (unsigned long)edges1, (unsigned long)edges2);
+    }
+    if (serious) {
+        Serial.printf("DRIVER THERMAL SHUTDOWN: nFAULT held low M1=%d M2=%d\n",
+                      (int)drv_over_temp1, (int)drv_over_temp2);
     }
 
     ocp_consec_count1 = 0;
     ocp_consec_count2 = 0;
 
-    // Over-current only (no CONFIRMED over-temperature / over-voltage): pause and retry like the
-    // software monitor.  Sustained over-temp / over-voltage is genuinely dangerous, so it latches.
+    // Over-current: the rotor has slipped, so stop rather than retry.  A sustained thermal
+    // shutdown falls through to the latching path below.
     if (!serious && persistent_ocp) {
-        if (beginFaultRecovery("DRV8316 over-current (persistent OCP)")) {
-            return;
-        }
-        // Retries exhausted (or a calibration sweep is running) -> fail out without latching.
-        mc1.emergencyStop();
-        mc2.emergencyStop();
-        if (calibration.isActive()) {
-            reportEvent("ERR", "DRV8316 over-current during calibration - aborting");
-            calibration.abort(mc1, mc2, "DRV8316 over-current");
-        } else {
-            reportEvent("WARN", "DRV8316 over-current persisted after %d tries - spindle stopped (0 RPM); send a new speed to restart",
-                        FAULT_RECOVERY_MAX_ATTEMPTS);
-        }
+        stopForOverCurrent("driver over-current (nFAULT retries)");
         return;
     }
 
-    // Confirmed serious fault (sustained over-temp / over-voltage): latch and alarm the XY board.
-    // Include the exact status bits so the operator can see which one tripped in the ESP3D web
-    // console.  Kept compact so the whole line fits the XY board's link receive buffer.
+    // Confirmed thermal shutdown: latch and alarm the XY board.
     serious_consec_count1 = 0;
     serious_consec_count2 = 0;
 
-    // Diagnostic dump: the summary OT bit is set by EITHER an over-temp WARNING (OTW, ~20C
-    // below shutdown) OR an over-temp SHUTDOWN (OTS); distinguish them, and also surface the
-    // per-phase OCP bits and SPI/charge-pump errors, plus the raw register bytes for off-line
-    // decoding.  This tells us whether "OT" is a real thermal shutdown, a mere warning, or a
-    // glitched SPI read (which would also set the SPI/parity bits).
-    reportEvent("MSG", "DRVraw M1[IC%02X S1%02X S2%02X] M2[IC%02X S1%02X S2%02X]",
-                st1.status.reg, st1.status1.reg, st1.status2.reg,
-                st2.status.reg, st2.status1.reg, st2.status2.reg);
-    reportEvent("MSG", "M1 OTS%d OTW%d OVP%d SPI%d VCPuv%d OCP[HA%d LA%d HB%d LB%d HC%d LC%d]",
-                st1.isOverTemperatureShutdown(), st1.isOverTemperatureWarning(), st1.isOverVoltage(),
-                st1.isSPIError(), st1.isChargePumpUnderVoltage(),
-                st1.isOverCurrent_Ah(), st1.isOverCurrent_Al(), st1.isOverCurrent_Bh(),
-                st1.isOverCurrent_Bl(), st1.isOverCurrent_Ch(), st1.isOverCurrent_Cl());
-    reportEvent("MSG", "M2 OTS%d OTW%d OVP%d SPI%d VCPuv%d OCP[HA%d LA%d HB%d LB%d HC%d LC%d]",
-                st2.isOverTemperatureShutdown(), st2.isOverTemperatureWarning(), st2.isOverVoltage(),
-                st2.isSPIError(), st2.isChargePumpUnderVoltage(),
-                st2.isOverCurrent_Ah(), st2.isOverCurrent_Al(), st2.isOverCurrent_Bh(),
-                st2.isOverCurrent_Bl(), st2.isOverCurrent_Ch(), st2.isOverCurrent_Cl());
+    reportEvent("ERR", "driver over-temperature (nFAULT low) M1[%d] M2[%d]",
+                (int)drv_over_temp1, (int)drv_over_temp2);
 
-    reportEvent("ERR", "DRV8316 fault M1[OC%d OT%d OV%d] M2[OC%d OT%d OV%d]",
-                st1.isOverCurrent(), st1.isOverTemperature(), st1.isOverVoltage(),
-                st2.isOverCurrent(), st2.isOverTemperature(), st2.isOverVoltage());
-
-    g_fault_code = 1;  // DRV8316 hardware fault
+    tripRecorderTrigger("driver over-temperature (nFAULT held low)");
+    g_fault_code = 1;  // driver hardware fault
     mc1.emergencyStop();
     mc2.emergencyStop();
 
-    calibration.abort(mc1, mc2, "DRV8316 hardware fault");
+    // A thermal shutdown cuts the outputs mid-rotation, so the open-loop rotor slips just as it
+    // does on an over-current: the Z reference is no longer trustworthy either.
+    requireRehome();
+
+    calibration.abort(mc1, mc2, "driver hardware fault");
 }
 
 static void checkOvercurrent() {
@@ -394,22 +377,27 @@ static void checkOvercurrent() {
 
     Serial.printf("OVERCURRENT: %s\n", detail);
 
-    // Transient over-current: pause and retry the commanded speed without latching.
-    if (beginFaultRecovery(detail)) {
-        return;
-    }
+    stopForOverCurrent(detail);
+}
 
-    // Retries exhausted (or a calibration sweep is running).
-    mc1.emergencyStop();
-    mc2.emergencyStop();
-    if (calibration.isActive()) {
-        reportEvent("ERR", "%s during calibration - aborting", detail);
-        calibration.abort(mc1, mc2, "overcurrent fault");
-    } else {
-        // Fail out: come to rest at 0 RPM and wait for a fresh speed command (no fault/alarm).
-        reportEvent("WARN", "%s persisted after %d tries - spindle stopped (0 RPM); send a new speed to restart",
-                    detail, FAULT_RECOVERY_MAX_ATTEMPTS);
+// Advisory stall warning from the load-sense fit (load_sense.h): announce each change to the XY
+// board (WARN:/MSG: lines appear in its console) and the USB console.  No protective action.
+static void reportLoadWarnings() {
+    static uint8_t prev = 0;
+    uint8_t        mask = loadWarnMask();
+    if (mask == prev) return;
+    MotorController* motors[2] = { &mc1, &mc2 };
+    for (int m = 0; m < 2; m++) {
+        uint8_t bit = 1u << m;
+        if ((mask & bit) && !(prev & bit)) {
+            const LoadEstimate& e = loadEstimate(m);
+            reportEvent("WARN", "load warning M%d: current phase %+.0f deg off no-load at %.0f RPM - stall risk",
+                        m + 1, e.lag_dev, fabsf(motors[m]->current_velocity) * 60.0f / (2.0f * PI));
+        } else if (!(mask & bit) && (prev & bit)) {
+            reportEvent("MSG", "load warning M%d cleared", m + 1);
+        }
     }
+    prev = mask;
 }
 
 // ------------------- Phase Offset -------------------
@@ -501,7 +489,7 @@ static void checkMotorTimeouts() {
 // When the XY board reports the machine is idle (the 'D' command sets
 // g_hold_release_requested), power the Z-axis BLDC drivers down once their phase move
 // has actually settled.  Holding a Z position in angle mode keeps drawing current,
-// which heats the DRV8316s and keeps the cooling fan running even though nothing is
+// which heats the drivers and keeps the cooling fan running even though nothing is
 // moving.  We wait for the phase ramp to reach its target here (rather than powering
 // down the instant the XY board goes idle) so the Z axis is not released before it has
 // finished its move.  A new spindle-speed or Z-target command clears the request.
@@ -511,7 +499,7 @@ static void checkPhaseHoldPowerdown() {
     }
     // Never release while the spindle is spinning, free-running, or calibrating.
     if (mc1.velocity_mode || mc2.velocity_mode || mc1.continuous_rotation || mc2.continuous_rotation ||
-        calibration.isActive()) {
+        calibration.isActive() || loadSenseBusy()) {
         return;
     }
     // Wait until the phase ramp has reached its target (the Z move is complete).
@@ -543,6 +531,8 @@ static void checkPhaseHoldPowerdown() {
 //   UnloadingTool      - raising the Z to lift the tool up and out through the beam (ejected)
 //   SpindleRunning     - the spindle is spinning
 //   Calibrating        - the auto-calibration sweep is running
+//   NeedsHoming        - an over-current slipped the rotor: the Z zero is no longer trusted
+//                        and Z moves are refused until the operator runs a homing cycle
 //   Fault              - a latched fault stopped the motors
 //   OtaUpdate          - a WiFi/OTA firmware update is in progress
 //
@@ -552,6 +542,7 @@ static void checkPhaseHoldPowerdown() {
 // single reported state (g_machine_state) always reflects the board's real activity.
 enum class MachineState : uint8_t {
     Booting,
+    NeedsHoming,
     Homing,
     IdleToolLoaded,
     IdleToolUnloaded,
@@ -571,6 +562,7 @@ static MachineState g_machine_state = MachineState::Booting;  // reported state 
 static const char* machineStateName(MachineState s) {
     switch (s) {
         case MachineState::Booting:          return "Booting";
+        case MachineState::NeedsHoming:      return "Needs Homing";
         case MachineState::Homing:           return "Homing";
         case MachineState::IdleToolLoaded:   return "Idle - Tool Loaded";
         case MachineState::IdleToolUnloaded: return "Idle - Tool Unloaded";
@@ -637,7 +629,16 @@ static void finishZMove() {
     mc2.disable();
     zeroPhaseReference();                    // coherent phase + motor-angle zero
     g_beam_prev_blocked = beamBlocked();     // arm edge detection at the current level
+    g_z_reference_valid = true;              // the phase offset means a real Z position again
     notifyZHomed();                          // XY board resets its Z position to match this zero
+}
+
+// Drop the Z reference after a slip.  Deliberately parks in NeedsHoming rather than Booting:
+// Booting auto-starts a homing cycle after BOOT_HOMING_DELAY_MS, and the Z must not move on its
+// own immediately after a fault - the operator (or the XY board's 'G') asks for it.
+static void requireRehome() {
+    g_z_reference_valid = false;
+    g_tool_state        = MachineState::NeedsHoming;
 }
 
 // Begin the power-up / re-home decision.  Entered from the Booting state once OTA,
@@ -695,8 +696,10 @@ static void updateToolStateMachine() {
                     (int)g_ota_active, (int)calibration.isActive(), (int)g_fault_code, (int)beamBlocked());
     }
 
-    // Never home or move a tool while OTA, calibration, or a latched fault is in progress.
-    if (g_ota_active || calibration.isActive() || g_fault_code != 0) {
+    // Never home or move a tool while OTA, calibration, or a HARD driver fault is in progress.
+    // An over-current stop (code 2) deliberately does NOT block homing: re-homing is exactly how
+    // the operator recovers the Z reference it invalidated.
+    if (g_ota_active || calibration.isActive() || g_fault_code == 1) {
         return;
     }
 
@@ -708,6 +711,12 @@ static void updateToolStateMachine() {
     }
 
     switch (g_tool_state) {
+        case MachineState::NeedsHoming:
+            // An over-current invalidated the Z zero.  Sit still - no beam watching, no tool
+            // moves - until the operator runs a homing cycle ('G'), which re-enters Booting
+            // above and re-establishes the reference.
+            break;
+
         case MachineState::Booting:
             // Give the shared 24V rail and the other boards time to come up before the homing
             // raise energizes the motors.  Only the initial boot homing is delayed; an operator
@@ -888,9 +897,23 @@ static void updateReportedState() {
     setMachineState(reported);
 }
 
+// FOC loop timing for the trip recorder.  Written by the FOC task (core 1), read and reset by the
+// housekeeping task (core 0) each sample.  The period is measured start-to-start, so it includes
+// anything that held core 1 off between iterations (ISRs, preemption, an enable()'s tPUD wait).
+static volatile uint32_t g_foc_loops      = 0;
+static volatile uint32_t g_foc_max_period_us = 0;
+
+// Ramp rate for one motor this FOC iteration (rad/s per second).
+static float spinRampRate(const MotorController& mc) {
+    if (calibration.isActive()) return VELOCITY_RAMP_RATE;
+    return (fabsf(mc.current_velocity) >= SPINDLE_RAMP_SLOW_ABOVE_RAD) ? SPINDLE_RAMP_RATE_HIGH
+                                                                       : SPINDLE_RAMP_RATE;
+}
+
 static void motorControlTask(void* arg) {
     (void)arg;
     uint32_t last_ramp_time = millis();
+    uint32_t last_iter_us   = micros();
 
     for (;;) {
         // During OTA keep the drivers off and stand down.  The housekeeping task (which owns the
@@ -902,8 +925,15 @@ static void motorControlTask(void* arg) {
             mc2.disable();
             last_ramp_time = millis();
             vTaskDelay(pdMS_TO_TICKS(10));
+            last_iter_us = micros();
             continue;
         }
+
+        uint32_t iter_us = micros();
+        uint32_t period  = iter_us - last_iter_us;
+        last_iter_us     = iter_us;
+        if (period > g_foc_max_period_us) g_foc_max_period_us = period;
+        g_foc_loops++;
 
         uint32_t current_time  = millis();
         float    dt            = (current_time - last_ramp_time) / 1000.0f;
@@ -924,11 +954,11 @@ static void motorControlTask(void* arg) {
         mc1.applyVoltageLimit(cal_active && calibration.active_motor_idx == 0, calibration.hunt_voltage, z_move_boost);
         mc2.applyVoltageLimit(cal_active && calibration.active_motor_idx == 1, calibration.hunt_voltage, z_move_boost);
 
-        // Spindle spin-up/down uses a single uniform ramp rate; calibration keeps its slower,
-        // settled rate so per-checkpoint current measurements stay accurate.
-        float spin_rate = calibration.isActive() ? VELOCITY_RAMP_RATE : SPINDLE_RAMP_RATE;
-        mc1.rampVelocity(dt, spin_rate);
-        mc2.rampVelocity(dt, spin_rate);
+        // Spindle spin-up/down slows near the top of the range, where the drive is close to its
+        // voltage ceiling; calibration keeps its slower, settled rate so per-checkpoint current
+        // measurements stay accurate.
+        mc1.rampVelocity(dt, spinRampRate(mc1));
+        mc2.rampVelocity(dt, spinRampRate(mc2));
         updatePhaseOffset(dt);
 
         mc1.updateControlMode();
@@ -941,6 +971,46 @@ static void motorControlTask(void* arg) {
     }
 }
 
+// Take one trip-recorder sample of both motors.  Called right after the current update so the
+// per-phase currents are fresh; the fault checks later in the same pass may then trigger it.
+static void recordTripSample(uint32_t now_ms) {
+    static uint32_t prev_nf_total[2] = { 0, 0 };
+
+    TripSample s;
+    s.t_ms = now_ms;
+    // Take-and-reset the FOC counters.  The exchange is atomic, so no iteration is lost between
+    // the read and the reset.
+    uint32_t loops  = __atomic_exchange_n(&g_foc_loops, 0, __ATOMIC_RELAXED);
+    uint32_t max_us = __atomic_exchange_n(&g_foc_max_period_us, 0, __ATOMIC_RELAXED);
+    s.foc_loops  = (uint16_t)min<uint32_t>(loops, 65535);
+    s.foc_max_us = (uint16_t)min<uint32_t>(max_us, 65535);
+    s.phase_cur  = phase_offset.current;
+    s.phase_tgt  = phase_offset.target;
+
+    const MotorController* motors[2]   = { &mc1, &mc2 };
+    const uint32_t         nf_total[2] = { nfault_total1, nfault_total2 };
+    const int              nf_pin[2]   = { DRV_NFAULT1, DRV_NFAULT2 };
+    for (int i = 0; i < 2; i++) {
+        const MotorController& mc = *motors[i];
+        TripMotorSample&       m  = s.m[i];
+        m.rpm      = mc.current_velocity * 60.0f / (2.0f * PI);
+        m.vlim     = mc.motor.voltage_limit;
+        m.ia       = mc.last_current_a;
+        m.ib       = mc.last_current_b;
+        m.ic       = mc.last_current_c;
+        m.prot     = mc.protection_current;
+        m.enabled  = mc.enabled ? 1 : 0;
+        m.nf_edges = (uint8_t)min<uint32_t>(nf_total[i] - prev_nf_total[i], 255);
+        m.nf_low   = (digitalRead(nf_pin[i]) == LOW) ? 1 : 0;
+        const LoadEstimate& le = loadEstimate(i);
+        m.ip       = le.ip;
+        m.iq       = le.iq;
+        m.lag      = le.lag_deg;
+        prev_nf_total[i] = nf_total[i];
+    }
+    tripRecorderPush(s);
+}
+
 // Housekeeping task (core 0).  Owns everything that is not time-critical for commutation:
 // current sensing (the six analogReads), the calibration sweep, serial command dispatch, fault
 // monitoring, the Z tool state machine, fan control, telemetry and status reporting.  Keeping all
@@ -951,7 +1021,13 @@ static void housekeepingTask(void* arg) {
     uint32_t last_status_time = 0;
     uint32_t last_hk_time     = millis();
 
+    // Watch this task (see HOUSEKEEPING_WDT_TIMEOUT_S).  esp_task_wdt_init on an already-running
+    // TWDT just updates its timeout; panic stays on so a hang reboots and leaves a coredump.
+    esp_task_wdt_init(HOUSEKEEPING_WDT_TIMEOUT_S, true);
+    esp_task_wdt_add(nullptr);
+
     for (;;) {
+        esp_task_wdt_reset();
         // OTA: stop touching the ADC and signal otaTask that it is now safe to bring the WiFi
         // radio up (see the handshake in ota_service.cpp).  The FOC task independently disables
         // the drivers.  The board reboots into the new firmware when an update completes.
@@ -969,10 +1045,16 @@ static void housekeepingTask(void* arg) {
         last_hk_time    = now_ms;
 
         // Current sensing (six analogReads, ~0.5 ms) - feeds protection, telemetry and cal.
-        mc1.updateCurrent();
-        mc2.updateCurrent();
+        // Dithered: the always-on load-sense fit needs reads at random points in the PWM cycle.
+        mc1.updateCurrent(true);
+        mc2.updateCurrent(true);
         calibration.accumulateCurrentSample(mc1.last_instantaneous_current, 0);
         calibration.accumulateCurrentSample(mc2.last_instantaneous_current, 1);
+        // Load-sense fit over the reads above (no extra ADC reads) and the advisory stall warning.
+        // Calibration hunts its own voltages, which the no-load baseline does not describe.
+        loadSenseUpdate(mc1, mc2, hk_dt, !calibration.isActive());
+        reportLoadWarnings();
+        recordTripSample(now_ms);
 
         // Calibration sweep and serial command handling (both set targets the FOC task actuates).
         calibration.update(mc1, mc2);
@@ -980,8 +1062,7 @@ static void housekeepingTask(void* arg) {
 
         checkMotorTimeouts();
         checkPhaseHoldPowerdown();
-        updateFaultRecovery();
-        checkDRV8316Faults();
+        checkDriverFaults();
         checkOvercurrent();
         // Tool state machine (power-up homing, tool load/unload via the top-of-travel beam).
         // Its commanded phase target is picked up by updatePhaseOffset in the FOC task.
@@ -991,12 +1072,15 @@ static void housekeepingTask(void* arg) {
         // Reconcile the single reported state now that this pass's tool state, faults,
         // calibration and spindle commands have all been applied, logging any transition.
         updateReportedState();
+        tripRecorderService();  // stream a captured trip recording to USB, a few lines per pass
+        reportResetReasonOnce();
+        watchUsbOutput();
 
         // Report status to the XY board over the inter-board link.  Only send when the whole
         // line already fits the TX buffer so this write can never block; if the buffer is
         // momentarily full we skip and retry next pass.
         if (now_ms - last_status_time >= LINK_STATUS_INTERVAL_MS &&
-            Serial1.availableForWrite() >= 40) {
+            Serial1.availableForWrite() >= 48) {   // longest status line is ~36 chars
             last_status_time = now_ms;
             sendStatus(Serial1, mc1, mc2);
         }
@@ -1007,12 +1091,68 @@ static void housekeepingTask(void* arg) {
     }
 }
 
+// Why the board last reset, for the USB console.  The RESET REASON line above is printed before a
+// USB host has usually reconnected, so it is easily lost; this is repeated once a host is attached
+// and on demand with the WHY command.
+char g_reset_reason[80] = "unknown";
+
+static void reportResetReasonOnce() {
+    static bool done = false;
+    if (done || !Serial || millis() < 2000) return;
+    char line[120];
+    int  n = snprintf(line, sizeof(line), "[BOOT] last reset: %s, %lu s ago\n", g_reset_reason,
+                      (unsigned long)(millis() / 1000));
+    done = usbWriteIfRoom(line, n);
+}
+
+// USB console output watchdog.  On 2026-10-06 the board's USB output died right after a spindle
+// start while everything else (including USB input - 'x' stopped the spindle) kept working, and it
+// stayed dead even across a host reconnect.  If the USB TX buffer stays nearly full for a second,
+// report the peripheral's state over the XY-board link (which still works), then keep kicking
+// the TX path (flush the hardware FIFO + re-enable the TX-empty interrupt) every 500 ms, and
+// report when output drains again.  It also fires, harmlessly, when no USB host is reading.
+static void watchUsbOutput() {
+    static uint32_t low_since = 0, last_kick = 0;
+    static bool     reported  = false;
+    static int      kicks     = 0;
+    if (!Serial) return;
+    uint32_t now  = millis();
+    int      room = Serial.availableForWrite();
+    if (room >= 128) {
+        if (reported) reportEvent("MSG", "USB console output draining again after %d kick(s)", kicks);
+        low_since = 0;
+        reported  = false;
+        kicks     = 0;
+        return;
+    }
+    if (!low_since) {
+        low_since = now ? now : 1;
+        return;
+    }
+    if (now - low_since < 1000) return;
+    if (!reported) {
+        reported = true;
+        reportEvent("MSG", "USB console not draining (no host, or USB stall): room=%d fifo=%u ena=%lx raw=%lx ep=%u/%u/%u",
+                    room, (unsigned)USB_SERIAL_JTAG.ep1_conf.serial_in_ep_data_free,
+                    (unsigned long)USB_SERIAL_JTAG.int_ena.val, (unsigned long)USB_SERIAL_JTAG.int_raw.val,
+                    (unsigned)USB_SERIAL_JTAG.in_ep1_st.in_ep1_state,
+                    (unsigned)USB_SERIAL_JTAG.in_ep1_st.in_ep1_wr_addr,
+                    (unsigned)USB_SERIAL_JTAG.in_ep1_st.in_ep1_rd_addr);
+    }
+    if (now - last_kick >= 500) {
+        last_kick = now;
+        kicks++;
+        usb_serial_jtag_ll_txfifo_flush();
+        usb_serial_jtag_ll_ena_intr_mask(USB_SERIAL_JTAG_INTR_SERIAL_IN_EMPTY);
+    }
+}
+
 // ------------------- Setup & Loop -------------------
 
 void setup() {
     // Disable the hardware brownout detector as the very first thing the app does. If the
     // board's 3.3V rail dips briefly when 24V is applied (inrush charging the 24V bulk caps
-    // and the DRV8316 drivers), a brownout reset can put the chip into a reset loop so the
+    // and the motor drivers), a brownout reset can put the chip into a reset loop so the
     // application never runs unless USB's stiff 5V holds the rail up. Clearing this register
     // stops brownout-triggered resets. NOTE: this only helps if the chip actually reaches
     // this line; a sag during the first few ms of power-on (before the app starts) is a
@@ -1059,7 +1199,7 @@ void setup() {
     // the XY board (detector still enabled) is the one that will report a true brownout.
     // Printed unconditionally (like the SimpleFOC MOT lines) so it is captured over USB.
     esp_reset_reason_t reset_reason = esp_reset_reason();
-    const char*        reset_str;
+    const char*        reset_str = "unknown";
     switch (reset_reason) {
         case ESP_RST_POWERON:   reset_str = "power-on"; break;
         case ESP_RST_EXT:       reset_str = "external pin"; break;
@@ -1073,6 +1213,26 @@ void setup() {
         default:                reset_str = "unknown"; break;
     }
     Serial.printf("RESET REASON: %s (%d)\n", reset_str, (int)reset_reason);
+    // The chip-level cause is more specific than esp_reset_reason() (which calls a reset from the
+    // USB flasher "unknown").  With the brownout detector disabled, a supply sag shows up as
+    // power-on (1), glitch (19/23) or brownout (15) here.
+    int         rom_reason = (int)rtc_get_reset_reason(0);
+    const char* rom_str;
+    switch (rom_reason) {
+        case 1:  rom_str = "power-on"; break;
+        case 3:  rom_str = "software"; break;
+        case 7: case 8: case 12: case 17: rom_str = "timer watchdog"; break;
+        case 9: case 14: case 16: rom_str = "RTC watchdog"; break;
+        case 15: rom_str = "brownout"; break;
+        case 18: rom_str = "super watchdog"; break;
+        case 19: rom_str = "clock glitch"; break;
+        case 21: rom_str = "USB-UART"; break;
+        case 22: rom_str = "USB-JTAG (flasher/host)"; break;
+        case 23: rom_str = "power glitch"; break;
+        default: rom_str = "other"; break;
+    }
+    snprintf(g_reset_reason, sizeof(g_reset_reason), "%s (%d); chip: %s (%d)", reset_str,
+             (int)reset_reason, rom_str, rom_reason);
 
     // Bring up the inter-board link to the FluidNC XY board first (RX=GPIO39, TX=GPIO38)
     // so it is listening as early as possible, before the XY board finishes booting and
@@ -1091,18 +1251,21 @@ void setup() {
 
     initFanControl();   // drives the fan OFF (its hardware default is ON)
 
-    // Initialize SPI bus
-    drvSPI.begin(SPI_SCK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN, SPI_CS_PIN);
+    // Both MP6541As sleep until a motor is enabled, and their nFAULT pins are monitored by
+    // interrupt (the over-current retry pulses are only ~2ms wide).
+    initDriverSleepPin();
+    initFaultPins();
 
     // Initialize both motor drivers and motors
-    mc1.initDriver(&drvSPI);
-    mc2.initDriver(&drvSPI);
+    mc1.initDriver();
+    mc2.initDriver();
     mc1.initMotor();
     mc2.initMotor();
 
     // Load pre-measured calibration LUT data
     loadDefaultLUT(mc1, 0, MC1_DEFAULT_LUT, sizeof(MC1_DEFAULT_LUT) / sizeof(MC1_DEFAULT_LUT[0]));
     loadDefaultLUT(mc2, 1, MC2_DEFAULT_LUT, sizeof(MC2_DEFAULT_LUT) / sizeof(MC2_DEFAULT_LUT[0]));
+    loadSenseInit();  // no-load baseline for the load-sense diagnostic (NVS)
 
     // Start the housekeeping task on core 0: current sensing, calibration, serial commands, fault
     // monitoring, the Z tool state machine, fan, telemetry and status reporting - everything that
@@ -1118,24 +1281,31 @@ void setup() {
     // preempts this context).  A no-op on a normal boot.
     resumePendingOTA();
 
-    // Start the real-time FOC control task on core 1.  It runs ONLY the open-loop commutation
-    // hot path, so nothing else can lengthen a commutation step.  Created LAST because it
-    // preempts this context permanently.
-    xTaskCreatePinnedToCore(motorControlTask, "motorControl", 8192, nullptr, 3, &motor_control_task_handle, 1);
-
-    // --- Console banner LAST, and only when a USB host is actually attached. ---
+    // --- Console banner, only when a USB host is actually attached.  It MUST come before the FOC
+    // task is created: that task (priority 3, core 1, never blocks) starves this setup context
+    // for good, and a banner printed after it froze mid-print - sometimes while holding the USB
+    // driver's TX lock, which silenced every other USB writer until the FOC task next blocked
+    // (the 2 ms driver wake-up in MotorController::enable) and let a little more banner out.
+    // That was the "USB output stall" seen on 2026-10-06. ---
     if (Serial) {
-        Serial.println(F("\n=== ESP32-S3 + DRV8316 (SPI + 6-PWM) + Hall + SimpleFOC ==="));
+        Serial.println(F("\n=== ESP32-S3 + MP6541A (6-PWM) + SimpleFOC ==="));
         Serial.printf("Inter-board link ready on Serial1 (RX=GPIO%d, TX=GPIO%d, %d baud, 8N1)\n",
                       LINK_RX_PIN, LINK_TX_PIN, LINK_BAUD);
         Serial.println(F("Waiting for handshake ('H') from XY board over the link..."));
-        mc1.printFaultStatus();
+        Serial.printf("Driver sense zero (V): M1 %.3f/%.3f/%.3f  M2 %.3f/%.3f/%.3f\n",
+                      mc1.cur_zero_a, mc1.cur_zero_b, mc1.cur_zero_c,
+                      mc2.cur_zero_a, mc2.cur_zero_b, mc2.cur_zero_c);
         Serial.println(F("Motor 1 initialized for open-loop control"));
         Serial.println(F("Motor 2 initialized for open-loop control (opposite direction)"));
         printCommandHelp();
         Serial.println(F("Motors ready. Send a velocity command to start."));
-        Serial.println(F("Active motor: 1 (use 'q', 'w', or 'e' to switch)"));
+        Serial.println(F("Active motor: BOTH (use 'q', 'w', or 'e' to switch)"));
     }
+
+    // Start the real-time FOC control task on core 1.  It runs ONLY the open-loop commutation
+    // hot path, so nothing else can lengthen a commutation step.  Created LAST because it
+    // preempts this context permanently - nothing after this line runs.
+    xTaskCreatePinnedToCore(motorControlTask, "motorControl", 8192, nullptr, 3, &motor_control_task_handle, 1);
 }
 
 void loop() {

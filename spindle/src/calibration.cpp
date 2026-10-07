@@ -20,13 +20,6 @@ static float speedVoltageFloor(float rad) {
     return constrain(CAL_RAMP_VOLT_PER_RAD * rad, BASE_VOLTAGE, MAX_VOLTAGE);
 }
 
-static bool lutFullyRecorded(const MotorController& mc) {
-    for (int i = 0; i < CAL_LUT_SIZE; i++) {
-        if (!mc.cal_lut_recorded[i]) return false;
-    }
-    return true;
-}
-
 void loadCalibrationLUT(MotorController& mc, int motor_idx, const float* defaults) {
     memcpy(mc.cal_lut_voltage, defaults, sizeof(float) * CAL_LUT_SIZE);
     memset(mc.cal_lut_recorded, 0, sizeof(mc.cal_lut_recorded));
@@ -45,7 +38,12 @@ void loadCalibrationLUT(MotorController& mc, int motor_idx, const float* default
         if (loaded == expected_size) {
             memcpy(mc.cal_lut_voltage, data.voltage, sizeof(data.voltage));
             memcpy(mc.cal_lut_recorded, data.recorded, sizeof(data.recorded));
-            mc.cal_lut_valid = lutFullyRecorded(mc);
+            // The stored table is usable even if a sweep did not record every step: a sweep only
+            // overwrites the steps it records, so the others still hold the previous table's
+            // values.  (Requiring every step here made one short sweep drop the motor to
+            // BASE_VOLTAGE at every speed after the next reboot.)  The recorded flags are kept
+            // only so manual calibration ('B') can resume from the first unrecorded step.
+            mc.cal_lut_valid = true;
         }
     }
     cal_prefs.end();
@@ -149,6 +147,56 @@ void Calibration::abort(MotorController& mc1, MotorController& mc2, const char* 
     state = CAL_IDLE;
     Serial.printf("Calibration aborted: %s\n", reason);
     printPartialResults(mc);
+
+    // Keep what the sweep measured.  It only overwrites the steps it records, so the table is
+    // already "new steps where recorded, previous values elsewhere" - a complete, usable LUT.
+    // Leaving cal_lut_valid false (as it was during the sweep) would run this motor at
+    // BASE_VOLTAGE at every speed until the next reboot.  Saved so an over-current near the top of
+    // the sweep does not throw away every step below it.
+    mc.cal_lut_valid = true;
+    saveCalibrationLUT(mc, active_motor_idx);
+    Serial.printf("Motor %d: recorded steps saved; unrecorded steps keep their previous values.\n",
+                  active_motor_idx + 1);
+}
+
+bool Calibration::handleMotorTrip(MotorController& mc1, MotorController& mc2, const char* reason) {
+    bool auto_sweep = (state == CAL_RAMP || state == CAL_SETTLE || state == CAL_HUNT ||
+                       state == CAL_COOLDOWN || state == CAL_DONE || state == CAL_RAMP_DOWN);
+    if (!auto_sweep || active_motor_idx != 0) {
+        abort(mc1, mc2, reason);
+        return false;
+    }
+
+    // Motor 1 has reached the end of what it can do on this supply.  Keep and save the steps it
+    // recorded (the rest keep their previous values, as in abort()), then calibrate motor 2 rather
+    // than giving up on it.
+    Serial.printf("[CAL] Motor 1 tripped (%s) at %.0f RPM - ending its sweep there.\n",
+                  reason, checkpoint * 60.0f / (2.0f * PI));
+    printPartialResults(mc1);
+    mc1.cal_lut_valid = true;
+    saveCalibrationLUT(mc1, 0);
+    Serial.printf("[CAL] Motor 1 saved.  Starting Motor 2 in %lu ms (letting Motor 1 coast to rest).\n",
+                  (unsigned long)CAL_TRIP_PAUSE_MS);
+    timer = millis();
+    state = CAL_TRIP_PAUSE;
+    return true;
+}
+
+// Begin motor 2's auto sweep from the first checkpoint.  Motor 1 must already be stopped.
+void Calibration::startMotor2Sweep(MotorController& mc2) {
+    Serial.println(F("\n--- Starting auto-calibration for Motor 2 ---"));
+    active_motor_idx = 1;
+    hunt_voltage = BASE_VOLTAGE;
+    mc2.cal_lut_valid = false;
+    memset(mc2.cal_lut_recorded, 0, sizeof(mc2.cal_lut_recorded));
+    checkpoint = CAL_CHECKPOINT_STEP_RAD;
+    mc2.target_velocity = checkpoint * mc2.direction;
+    mc2.current_velocity = 0.0f;
+    mc2.velocity_mode = true;
+    mc2.resetFilterState();
+    mc2.enable();
+    timer = millis();
+    state = CAL_RAMP;
 }
 
 void Calibration::accumulateCurrentSample(float instantaneous_current, int motor_idx) {
@@ -176,7 +224,7 @@ void Calibration::startAuto(MotorController& mc1, MotorController& mc2) {
     mc1.cal_lut_valid = false;
     memset(mc1.cal_lut_recorded, 0, sizeof(mc1.cal_lut_recorded));
 
-    mc1.target_velocity = checkpoint;
+    mc1.target_velocity = checkpoint * mc1.direction;
     mc1.current_velocity = 0.0f;
     mc1.velocity_mode = true;
     mc1.enable();
@@ -335,13 +383,12 @@ void Calibration::update(MotorController& mc1, MotorController& mc2) {
                                        v_floor + 0.3f,
                                        MAX_VOLTAGE);
 
-        // Thermal guard: the DRV8316 asserts an over-temperature WARNING (OTW)
-        // before it hard-faults with an over-temperature SHUTDOWN. At low RPM the
-        // open-loop current sits on one or two FETs for a long dwell (the rotor
-        // barely turns), heating the die past the warning threshold even though the
-        // package/heatsink still feels cool.  Cool it before continuing.
-        DRV8316Status thermal_st = mc.driver.getStatus();
-        if (thermal_st.isOverTemperatureWarning() || thermal_st.isOverTemperatureShutdown()) {
+        // Thermal guard: at low RPM the open-loop current sits on one or two FETs for a long
+        // dwell (the rotor barely turns), heating the die even though the package/heatsink
+        // still feels cool.  The MP6541A gives no advance warning - unlike the DRV8316's OTW,
+        // the only signal is nFAULT held low at the 150C shutdown itself, by which point the
+        // outputs are already off - so cool the die before continuing the sweep.
+        if (driverOverTemp(active_motor_idx)) {
             // Record the last voltage the die actually sustained at this speed as the
             // checkpoint's (thermally-limited) value.  Then COOL the die by coasting:
             // above the lowest RPM the motor needs well over the spin-floor voltage to
@@ -408,24 +455,21 @@ void Calibration::update(MotorController& mc1, MotorController& mc2) {
     }
 
     case CAL_COOLDOWN: {
-        // Motor is de-energized and coasting so the DRV8316 die can shed its localized
-        // low-RPM heat with zero phase current (no stall risk - it is not being driven).
-        // Poll the over-temp status every 500 ms; once it clears (or a safety timeout
-        // elapses so a genuinely thermally-limited point can't stall the sweep forever)
-        // re-energize and ramp back up to the next checkpoint.  Higher RPM spreads the
-        // current across all six FETs, so the warning stops and the important high-speed
-        // points calibrate normally.
+        // Motor is de-energized and coasting so the driver die can shed its localized low-RPM
+        // heat with zero phase current (no stall risk - it is not being driven).  The die
+        // temperature cannot be polled: the MP6541A has no status register, and with the
+        // motor disabled the drivers sleep and release nFAULT.  So simply coast for a fixed
+        // CAL_COOLDOWN_MS, then re-energize and ramp back up to the next checkpoint.  Higher
+        // RPM spreads the current across all six FETs, so the important high-speed points
+        // calibrate normally.
         if (millis() - timer < 500UL) break;
         timer = millis();
 
-        DRV8316Status cd_st = mc.driver.getStatus();
-        bool still_hot = cd_st.isOverTemperatureWarning() || cd_st.isOverTemperatureShutdown();
         uint32_t elapsed = millis() - cooldown_start;
 
-        if (!still_hot || elapsed >= CAL_COOLDOWN_TIMEOUT_MS) {
-            Serial.printf("[CAL] %.0f RPM: die %s (%lu ms) - resuming\n",
+        if (elapsed >= CAL_COOLDOWN_MS) {
+            Serial.printf("[CAL] %.0f RPM: die coasted %lu ms - resuming\n",
                           checkpoint * 60.0f / (2.0f * PI),
-                          still_hot ? "cooldown timed out" : "cooled",
                           (unsigned long)elapsed);
             if (checkpoint >= CAL_MAX_RAD - 0.5f) {
                 // Last checkpoint already recorded; let CAL_DONE ramp down (the motor is
@@ -468,21 +512,8 @@ void Calibration::update(MotorController& mc1, MotorController& mc2) {
         // If motor 1 just finished, immediately start motor 2.
         // Avoid blocking output here so handoff timing stays deterministic.
         if (active_motor_idx == 0) {
-            Serial.println(F("\n--- Starting auto-calibration for Motor 2 ---"));
             saveCalibrationLUT(mc, active_motor_idx);
-            active_motor_idx = 1;
-            MotorController& mc2_ref = mc2;
-            hunt_voltage = BASE_VOLTAGE;
-            mc2_ref.cal_lut_valid = false;
-            memset(mc2_ref.cal_lut_recorded, 0, sizeof(mc2_ref.cal_lut_recorded));
-            checkpoint = CAL_CHECKPOINT_STEP_RAD;
-            mc2_ref.target_velocity = -checkpoint;
-            mc2_ref.current_velocity = 0.0f;
-            mc2_ref.velocity_mode = true;
-            mc2_ref.resetFilterState();
-            mc2_ref.enable();
-            timer = millis();
-            state = CAL_RAMP;
+            startMotor2Sweep(mc2);
         } else {
             Serial.printf("\n=== AUTO CALIBRATION COMPLETE (Motor %d) ===\n", active_motor_idx + 1);
             saveCalibrationLUT(mc, active_motor_idx);
@@ -490,6 +521,13 @@ void Calibration::update(MotorController& mc1, MotorController& mc2) {
         }
         break;
     }
+
+    case CAL_TRIP_PAUSE:
+        // Motor 1 tripped and is coasting with its outputs off; motor 2 starts once it is at rest.
+        if (millis() - timer >= CAL_TRIP_PAUSE_MS) {
+            startMotor2Sweep(mc2);
+        }
+        break;
 
     // ---- Manual calibration states ----
 
