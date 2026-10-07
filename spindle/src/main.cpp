@@ -1281,12 +1281,12 @@ void setup() {
     // preempts this context).  A no-op on a normal boot.
     resumePendingOTA();
 
-    // Start the real-time FOC control task on core 1.  It runs ONLY the open-loop commutation
-    // hot path, so nothing else can lengthen a commutation step.  Created LAST because it
-    // preempts this context permanently.
-    xTaskCreatePinnedToCore(motorControlTask, "motorControl", 8192, nullptr, 3, &motor_control_task_handle, 1);
-
-    // --- Console banner LAST, and only when a USB host is actually attached. ---
+    // --- Console banner, only when a USB host is actually attached.  It MUST come before the FOC
+    // task is created: that task (priority 3, core 1, never blocks) starves this setup context
+    // for good, and a banner printed after it froze mid-print - sometimes while holding the USB
+    // driver's TX lock, which silenced every other USB writer until the FOC task next blocked
+    // (the 2 ms driver wake-up in MotorController::enable) and let a little more banner out.
+    // That was the "USB output stall" seen on 2026-10-06. ---
     if (Serial) {
         Serial.println(F("\n=== ESP32-S3 + MP6541A (6-PWM) + SimpleFOC ==="));
         Serial.printf("Inter-board link ready on Serial1 (RX=GPIO%d, TX=GPIO%d, %d baud, 8N1)\n",
@@ -1301,6 +1301,11 @@ void setup() {
         Serial.println(F("Motors ready. Send a velocity command to start."));
         Serial.println(F("Active motor: BOTH (use 'q', 'w', or 'e' to switch)"));
     }
+
+    // Start the real-time FOC control task on core 1.  It runs ONLY the open-loop commutation
+    // hot path, so nothing else can lengthen a commutation step.  Created LAST because it
+    // preempts this context permanently - nothing after this line runs.
+    xTaskCreatePinnedToCore(motorControlTask, "motorControl", 8192, nullptr, 3, &motor_control_task_handle, 1);
 }
 
 void loop() {
