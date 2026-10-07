@@ -270,7 +270,16 @@ const float    ADAPT_K_UP              = 0.4f;    // V/s per A of Iq shortfall
 const float    ADAPT_K_DOWN            = 0.08f;   // V/s per A of Iq excess
 const float    ADAPT_UP_MAX_V_PER_S    = 5.0f;
 const float    ADAPT_DOWN_MAX_V_PER_S  = 0.5f;
-const float    ADAPT_WARN_STEP_V       = 1.0f;    // immediate step when a load warning fires
+// Immediate step when a load warning fires.  Was 1.0 V: in the 2026-10-06 cut it sent M2's Iq to
+// 8-9 A, and that lagging current - not the cutting (in-phase) current - was ~14 of M2's ~18 W.
+const float    ADAPT_WARN_STEP_V       = 0.5f;
+// Iq far above target (typically just after a warning step, once the load has passed) comes down
+// fast instead of at ADAPT_DOWN_MAX_V_PER_S - but only ADAPT_WARN_HOLD_MS after the last warning,
+// so the margin a warning step adds is not taken straight back.
+const float    ADAPT_IQ_HIGH_A          = 5.0f;
+const float    ADAPT_K_DOWN_FAST        = 0.3f;    // V/s per A of excess while Iq > ADAPT_IQ_HIGH_A
+const float    ADAPT_DOWN_FAST_V_PER_S  = 2.0f;
+const uint32_t ADAPT_WARN_HOLD_MS       = 1000;
 const float    ADAPT_TRIM_MIN_V        = -1.5f;   // never more than this below the LUT
 const float    ADAPT_TRIM_MAX_V        = 2.5f;    // never more than this above (MAX_VOLTAGE caps too)
 const float    ADAPT_MIN_RPM           = 3000.0f; // untested below 4,000 RPM - LUT only below this

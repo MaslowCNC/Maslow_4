@@ -13,6 +13,7 @@ static bool  s_adapt_enabled = ADAPT_DEFAULT_ON;
 static float s_trim[2]       = { 0.0f, 0.0f };
 static float s_trim_vel[2]   = { 0.0f, 0.0f };   // target velocity the trim was learned at
 static bool  s_prev_warn[2]  = { false, false };
+static uint32_t s_last_warn_ms[2] = { 0, 0 };     // millis() of the last warning on each motor
 
 // Advisory load warning, per motor
 static bool     s_warn[2]          = { false, false };
@@ -280,7 +281,7 @@ static bool vsweepActive() {
 
 // Per-motor adaptive voltage trim (see ADAPT_* in config.h), handed to the FOC loop through
 // load_boost_v.  VSWEEP owns that offset while it runs.
-static void updateAdaptive(MotorController* motors[2], bool allow, float dt) {
+static void updateAdaptive(MotorController* motors[2], bool allow, float dt, uint32_t now) {
     if (vsweepActive()) {
         for (int m = 0; m < 2; m++) {
             s_trim[m]               = 0.0f;
@@ -306,6 +307,8 @@ static void updateAdaptive(MotorController* motors[2], bool allow, float dt) {
         // A load warning means the slower loop below was not fast enough: add voltage at once.
         bool warn_onset = s_warn[m] && !s_prev_warn[m];
         s_prev_warn[m]  = s_warn[m];
+        if (s_warn[m]) s_last_warn_ms[m] = now;
+        bool warn_recent = (now - s_last_warn_ms[m]) < ADAPT_WARN_HOLD_MS && s_last_warn_ms[m] != 0;
 
         if (active) {
             float err = ADAPT_IQ_TARGET_A - e.iq;   // > 0: Iq too low -> more voltage
@@ -314,6 +317,8 @@ static void updateAdaptive(MotorController* motors[2], bool allow, float dt) {
                 rate = ADAPT_UP_MAX_V_PER_S;          // near or past the edge
             } else if (err > 0.0f) {
                 rate = fminf(ADAPT_K_UP * err, ADAPT_UP_MAX_V_PER_S);
+            } else if (e.iq > ADAPT_IQ_HIGH_A && !warn_recent) {
+                rate = fmaxf(ADAPT_K_DOWN_FAST * err, -ADAPT_DOWN_FAST_V_PER_S);
             } else {
                 rate = fmaxf(ADAPT_K_DOWN * err, -ADAPT_DOWN_MAX_V_PER_S);
             }
@@ -621,7 +626,7 @@ void loadSenseUpdate(MotorController& mc1, MotorController& mc2, float dt, bool 
     }
 
     for (int m = 0; m < 2; m++) updateWarning(m, *motors[m], allow_warn, now);
-    updateAdaptive(motors, allow_warn, dt);
+    updateAdaptive(motors, allow_warn, dt, now);
 
     // ---- Periodic console line ----
     if (!g_load_print) return;
