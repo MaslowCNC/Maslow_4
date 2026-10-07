@@ -125,7 +125,7 @@ void printCommandHelp() {
     Serial.println(F("  'WHY'      print why the board last reset"));
     Serial.println(F("\nLoad-sense diagnostic (USB only, takes no protective action):"));
     Serial.println(F("  'LOAD'    toggle the [LOAD] lines (every 250 ms); sensing + warnings always run"));
-    Serial.println(F("  'BOOST'   toggle the load boost (on at boot): +2 V on both motors while a load warning is raised"));
+    Serial.println(F("  'ADAPT'   toggle adaptive voltage (on at boot): per-motor trim holding Iq at ~2 A"));
     Serial.println(F("  'RTEST'   standstill check: verifies sign/angle and measures phase R"));
     Serial.println(F("  'VSWEEP'  at the current steady speed, step the voltage down; log current + lag"));
     Serial.println(F("  'LOADREF' no-load baseline sweep 1000 RPM..max (spins the spindle, no cutting)"));
@@ -464,8 +464,8 @@ static void processCommandLine(const char* line, size_t len,
             loadSenseToggle();
             return;
         }
-        if (strcmp(line, "BOOST") == 0) {
-            loadBoostToggle();
+        if (strcmp(line, "ADAPT") == 0) {
+            adaptToggle();
             return;
         }
         if (strcmp(line, "VSWEEP") == 0) {

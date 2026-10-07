@@ -8,10 +8,11 @@
 
 static bool g_load_print = false;   // [LOAD] console lines (USB "LOAD"); the fit always runs
 
-// Load boost
-static bool     s_boost_enabled    = LOAD_BOOST_DEFAULT_ON;
-static float    s_boost_v          = 0.0f;
-static uint32_t s_boost_hold_until = 0;
+// Adaptive voltage
+static bool  s_adapt_enabled = ADAPT_DEFAULT_ON;
+static float s_trim[2]       = { 0.0f, 0.0f };
+static float s_trim_vel[2]   = { 0.0f, 0.0f };   // target velocity the trim was learned at
+static bool  s_prev_warn[2]  = { false, false };
 
 // Advisory load warning, per motor
 static bool     s_warn[2]          = { false, false };
@@ -256,49 +257,73 @@ void loadSenseToggle() {
     turnOn();
 }
 
-void loadBoostToggle() {
-    s_boost_enabled = !s_boost_enabled;
-    if (s_boost_enabled)
-        say("[LOAD] boost ENABLED: +%.1f V on both motors while a load warning is raised\n", LOAD_BOOST_V);
+void adaptToggle() {
+    s_adapt_enabled = !s_adapt_enabled;
+    if (s_adapt_enabled)
+        say("[LOAD] adaptive voltage ENABLED: holding each motor's Iq at %.1f A above %.0f RPM\n",
+            ADAPT_IQ_TARGET_A, ADAPT_MIN_RPM);
     else
-        say("[LOAD] boost disabled until reboot (BOOST to re-enable)\n");
+        say("[LOAD] adaptive voltage disabled until reboot (ADAPT to re-enable) - calibrated voltage only\n");
 }
 
-bool loadBoostEnabled() {
-    return s_boost_enabled;
+bool adaptEnabled() {
+    return s_adapt_enabled;
 }
 
-float loadBoostVolts() {
-    return s_boost_v;
+float adaptTrim(int motor_idx) {
+    return s_trim[motor_idx & 1];
 }
 
-// Ramp the boost toward its target and hand it to both motors.  Only applied while spinning as
-// the spindle: a Z hold or a stopped motor gets none.
 static bool vsweepActive() {
     return s_mode == M_VS_SETTLE || s_mode == M_VS_MEASURE;
 }
 
-static void updateBoost(MotorController* motors[2], bool allow, float dt, uint32_t now) {
-    if (vsweepActive()) {   // the sweep owns the voltage offset while it runs
-        s_boost_v = 0.0f;
-        motors[0]->load_boost_v = s_vs_offset;
-        motors[1]->load_boost_v = s_vs_offset;
+// Per-motor adaptive voltage trim (see ADAPT_* in config.h), handed to the FOC loop through
+// load_boost_v.  VSWEEP owns that offset while it runs.
+static void updateAdaptive(MotorController* motors[2], bool allow, float dt) {
+    if (vsweepActive()) {
+        for (int m = 0; m < 2; m++) {
+            s_trim[m]               = 0.0f;
+            motors[m]->load_boost_v = s_vs_offset;
+        }
         return;
     }
-    bool spinning = motors[0]->velocity_mode && motors[1]->velocity_mode;
-    if (loadWarnMask()) s_boost_hold_until = now + LOAD_BOOST_HOLD_MS;
-    bool want = s_boost_enabled && allow && spinning &&
-                (loadWarnMask() || (int32_t)(s_boost_hold_until - now) > 0);
-    float target = want ? LOAD_BOOST_V : 0.0f;
-    if (!s_boost_enabled || !spinning) {
-        s_boost_v = 0.0f;                                  // off at once when disabled or stopped
-    } else if (s_boost_v < target) {
-        s_boost_v = fminf(target, s_boost_v + LOAD_BOOST_UP_V_PER_S * dt);
-    } else if (s_boost_v > target) {
-        s_boost_v = fmaxf(target, s_boost_v - LOAD_BOOST_DOWN_V_PER_S * dt);
+    for (int m = 0; m < 2; m++) {
+        MotorController&    mc  = *motors[m];
+        const LoadEstimate& e   = s_est[m];
+        float               rpm = fabsf(mc.current_velocity) * 60.0f / (2.0f * PI);
+
+        // Stopped, Z-holding, or a new speed commanded: back to the calibrated voltage.
+        if (!s_adapt_enabled || !mc.velocity_mode || !mc.enabled ||
+            fabsf(mc.target_velocity - s_trim_vel[m]) > 0.5f) {
+            s_trim[m]     = 0.0f;
+            s_trim_vel[m] = mc.target_velocity;
+        }
+        bool at_speed = fabsf(mc.current_velocity - mc.target_velocity) < 1.0f;
+        bool active   = s_adapt_enabled && allow && s_mode == M_IDLE && mc.velocity_mode && mc.enabled &&
+                        at_speed && rpm >= ADAPT_MIN_RPM && e.valid && !isnan(e.iq);
+
+        // A load warning means the slower loop below was not fast enough: add voltage at once.
+        bool warn_onset = s_warn[m] && !s_prev_warn[m];
+        s_prev_warn[m]  = s_warn[m];
+
+        if (active) {
+            float err = ADAPT_IQ_TARGET_A - e.iq;   // > 0: Iq too low -> more voltage
+            float rate;
+            if (e.iq < ADAPT_IQ_FAST_A) {
+                rate = ADAPT_UP_MAX_V_PER_S;          // near or past the edge
+            } else if (err > 0.0f) {
+                rate = fminf(ADAPT_K_UP * err, ADAPT_UP_MAX_V_PER_S);
+            } else {
+                rate = fmaxf(ADAPT_K_DOWN * err, -ADAPT_DOWN_MAX_V_PER_S);
+            }
+            s_trim[m] += rate * dt;
+            if (warn_onset) s_trim[m] += ADAPT_WARN_STEP_V;
+            s_trim[m] = constrain(s_trim[m], ADAPT_TRIM_MIN_V, ADAPT_TRIM_MAX_V);
+        }
+        // Inactive (ramping, a fit gap, calibrating, ...): hold the trim as it is.
+        mc.load_boost_v = s_trim[m];
     }
-    motors[0]->load_boost_v = s_boost_v;
-    motors[1]->load_boost_v = s_boost_v;
 }
 
 uint8_t loadWarnMask() {
@@ -534,9 +559,10 @@ void loadSenseUpdate(MotorController& mc1, MotorController& mc2, float dt, bool 
                              fabsf(motors[m]->target_velocity - s_vs_target[m]) < 0.5f;
             if (!same_speed) { loadSenseAbort("spindle stopped or speed changed"); break; }
             for (int m = 0; m < 2; m++) {
-                if (s_est[m].valid && s_est[m].lag_deg < VSWEEP_ABORT_LAG_DEG) {
-                    char why[48];
-                    snprintf(why, sizeof(why), "M%d lag fell to %.0f deg", m + 1, s_est[m].lag_deg);
+                if (s_est[m].valid && (s_est[m].lag_deg < VSWEEP_ABORT_LAG_DEG || s_est[m].iq < VSWEEP_ABORT_IQ_A)) {
+                    char why[64];
+                    snprintf(why, sizeof(why), "M%d near the edge: lag %.0f deg, Iq %.2f A", m + 1,
+                             s_est[m].lag_deg, s_est[m].iq);
                     finishVSweep(why);
                     break;
                 }
@@ -562,8 +588,9 @@ void loadSenseUpdate(MotorController& mc1, MotorController& mc2, float dt, bool 
             s_vs_steps++;
             say("[VSWEEP] %+5.2f | %5.2f %5.2f %5.2f %5.2f %4.0f | %5.2f %5.2f %5.2f %5.2f %4.0f\n",
                 s_vs_offset, v[0], mag[0], ip[0], iq[0], lag[0], v[1], mag[1], ip[1], iq[1], lag[1]);
-            if (lag[0] < VSWEEP_STOP_LAG_DEG || lag[1] < VSWEEP_STOP_LAG_DEG) {
-                finishVSweep("lag reached the stop threshold");
+            if (lag[0] < VSWEEP_STOP_LAG_DEG || lag[1] < VSWEEP_STOP_LAG_DEG ||
+                iq[0] < VSWEEP_STOP_IQ_A || iq[1] < VSWEEP_STOP_IQ_A) {
+                finishVSweep("lag or Iq reached the stop threshold");
             } else if (s_vs_offset - VSWEEP_STEP_V < VSWEEP_MIN_V ||
                        v[0] <= BASE_VOLTAGE + 0.05f || v[1] <= BASE_VOLTAGE + 0.05f) {
                 finishVSweep("reached the lowest allowed voltage");
@@ -594,7 +621,7 @@ void loadSenseUpdate(MotorController& mc1, MotorController& mc2, float dt, bool 
     }
 
     for (int m = 0; m < 2; m++) updateWarning(m, *motors[m], allow_warn, now);
-    updateBoost(motors, allow_warn, dt, now);
+    updateAdaptive(motors, allow_warn, dt);
 
     // ---- Periodic console line ----
     if (!g_load_print) return;
@@ -617,7 +644,7 @@ void loadSenseUpdate(MotorController& mc1, MotorController& mc2, float dt, bool 
         if (!isnan(e.delta_deg))
             snprintf(extra, sizeof(extra), " delta=%.0f load=%.0f%%", e.delta_deg, e.delta_deg / 0.9f);
         char boost[16] = "";
-        if (s_boost_v > 0.0f) snprintf(boost, sizeof(boost), " BOOST+%.1f", s_boost_v);
+        if (s_trim[m] != 0.0f) snprintf(boost, sizeof(boost), " trim%+.2f", s_trim[m]);
         say("[LOAD] M%d %6.0frpm V=%.2f n=%.0f Ip=%.2f Iq=%.2f lag=%.0f dev=%s dIp=%s prot=%.2f%s%s%s\n",
             m + 1, rpm, mc.motor.voltage_limit, e.n_eff, e.ip, e.iq, e.lag_deg, dev, dip,
             mc.protection_current, extra, s_warn[m] ? " WARN" : "", boost);

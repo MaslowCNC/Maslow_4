@@ -250,15 +250,30 @@ const float    LOAD_WARN_LAG_DEG    = 20.0f;
 const uint32_t LOAD_WARN_HOLD_MS    = 100;
 const float    LOAD_WARN_CLEAR_DEG  = 12.0f;
 const uint32_t LOAD_WARN_CLEAR_MS   = 300;
-// Load boost (on at boot; USB "BOOST" toggles it until reboot).  While any load warning is raised, both motors
-// get LOAD_BOOST_V extra (capped at MAX_VOLTAGE): more voltage raises an open-loop motor's
-// pull-out torque.  It ramps in fast (a stall's "on the edge" stage lasts ~0.5 s), is held for
-// LOAD_BOOST_HOLD_MS after the warnings clear, then ramps out slowly so it does not chatter.
-const bool     LOAD_BOOST_DEFAULT_ON   = true;
-const float    LOAD_BOOST_V            = 2.0f;
-const float    LOAD_BOOST_UP_V_PER_S   = 50.0f;   // 2 V in 40 ms
-const float    LOAD_BOOST_DOWN_V_PER_S = 2.0f;
-const uint32_t LOAD_BOOST_HOLD_MS      = 2000;
+// Adaptive voltage (on at boot; USB "ADAPT" toggles it until reboot).  Each motor gets its own
+// voltage trim on top of the LUT, steered so its lagging current Iq (load-sense fit) sits at
+// ADAPT_IQ_TARGET_A.  VSWEEP (2026-10-06) showed Iq falls smoothly and steeply as the voltage
+// drops toward the motor's back-EMF (about 8 A/V at 12,000 RPM, 5-8 A/V at 8,000, 2-4 A/V at
+// 4,000) and crosses ~0 where the motor goes over the pull-out edge; the calibrated LUT sits
+// 3-5 A above that, which is most of the no-load current and heat.  Holding Iq at ~2 A cuts the
+// no-load copper heat ~2-3x at 12,000 RPM and more at lower speeds, and raises the voltage as load
+// pulls Iq down - so each motor gets the same margin (M2 used to sit closest to its edge).
+// Gains are tuned for 12,000 RPM: settles ~0.3 s adding voltage, ~1.5 s removing it (slower at
+// lower speeds, where Iq is less sensitive).  Below ADAPT_IQ_FAST_A (near the edge) or when a
+// load warning fires, voltage is added at once.  Only active at a steady speed >= ADAPT_MIN_RPM
+// (not ramping, calibrating, LOADREF/RTEST/VSWEEP); any speed change resets the trim to 0 (the
+// calibrated, safe-side voltage) and it settles again.
+const bool     ADAPT_DEFAULT_ON        = true;
+const float    ADAPT_IQ_TARGET_A       = 2.0f;
+const float    ADAPT_IQ_FAST_A         = 0.5f;    // below this: add voltage at the maximum rate
+const float    ADAPT_K_UP              = 0.4f;    // V/s per A of Iq shortfall
+const float    ADAPT_K_DOWN            = 0.08f;   // V/s per A of Iq excess
+const float    ADAPT_UP_MAX_V_PER_S    = 5.0f;
+const float    ADAPT_DOWN_MAX_V_PER_S  = 0.5f;
+const float    ADAPT_WARN_STEP_V       = 1.0f;    // immediate step when a load warning fires
+const float    ADAPT_TRIM_MIN_V        = -1.5f;   // never more than this below the LUT
+const float    ADAPT_TRIM_MAX_V        = 2.5f;    // never more than this above (MAX_VOLTAGE caps too)
+const float    ADAPT_MIN_RPM           = 3000.0f; // untested below 4,000 RPM - LUT only below this
 // Voltage sweep diagnostic (USB "VSWEEP"): at the spindle's current steady speed, offset both
 // motors' voltage from VSWEEP_START_V downward in VSWEEP_STEP_V steps, logging current and lag at
 // each, to find how far the no-load voltage (and heat) can come down and where a safe target lag
@@ -269,6 +284,9 @@ const float    VSWEEP_STEP_V        = 0.25f;
 const float    VSWEEP_MIN_V         = -8.0f;   // never offset further than this
 const float    VSWEEP_STOP_LAG_DEG  = 20.0f;
 const float    VSWEEP_ABORT_LAG_DEG = 5.0f;
+// Also stop on Iq: at 4,000 RPM M1 went over the edge one step after a mean Iq of 1.2 A.
+const float    VSWEEP_STOP_IQ_A     = 1.5f;    // stop after a step whose mean Iq is below this
+const float    VSWEEP_ABORT_IQ_A    = 0.5f;    // abort mid-step if Iq falls below this
 const uint32_t VSWEEP_SETTLE_MS     = 300;
 const uint32_t VSWEEP_MEASURE_MS    = 500;
 // Phase resistance (ohm, including the driver) and inductance (H) for the load-angle estimate.

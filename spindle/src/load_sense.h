@@ -60,11 +60,11 @@ void loadSenseUpdate(MotorController& mc1, MotorController& mc2, float dt, bool 
 // Load warnings currently raised: bit 0 = motor 1, bit 1 = motor 2 (see LOAD_WARN_* in config.h).
 uint8_t loadWarnMask();
 
-// Load boost (USB "BOOST"; see LOAD_BOOST_* in config.h).  The only part of load sensing that
-// acts: it raises both motors' voltage while a warning is raised.  On at boot
-// (LOAD_BOOST_DEFAULT_ON); BOOST toggles it until reboot.
-void  loadBoostToggle();
-bool  loadBoostEnabled();
-float loadBoostVolts();   // currently applied (0 when idle)
+// Adaptive voltage (USB "ADAPT"; see ADAPT_* in config.h).  The part of load sensing that acts:
+// a per-motor voltage trim holding each motor's lagging current Iq at a small target.  On at
+// boot (ADAPT_DEFAULT_ON); ADAPT toggles it until reboot.
+void  adaptToggle();
+bool  adaptEnabled();
+float adaptTrim(int motor_idx);   // currently applied trim (V)
 
 const LoadEstimate& loadEstimate(int motor_idx);
