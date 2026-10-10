@@ -286,4 +286,1637 @@
 		)
 		(embedded_fonts no)
 	)
+	(symbol "DRV8251ADDAR"
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(duplicate_pin_numbers_are_jumpers no)
+		(property "Reference" "U"
+			(at -1.2954 -11.7983 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(face "Arial")
+					(size 1.6891 1.6891)
+				)
+				(justify left top)
+			)
+		)
+		(property "Value" "DRV8251ADDAR"
+			(at -1.6002 -14.1859 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(face "Arial")
+					(size 1.6891 1.6891)
+				)
+				(justify left top)
+			)
+		)
+		(property "Footprint" "MaslowMerged:SOIC-8-1EP_DDA0008B_ThermalVias_0.3mm"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" "https://www.ti.com/lit/ds/symlink/drv8251a.pdf"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "4.5-48V (50V abs) 4.1A brushed DC driver, IPROPI current sense"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "MPN" "DRV8251ADDAR"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Manufacturer" "Texas Instruments"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Supplier Part" "C5218844"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Supplier" "LCSC"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(symbol "DRV8251ADDAR_0_0"
+			(rectangle
+				(start -11.43 11.43)
+				(end 11.43 -11.43)
+				(stroke
+					(width 0.254)
+					(type solid)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(circle
+				(center -10.16 10.16)
+				(radius 0.254)
+				(stroke
+					(width 0.254)
+					(type solid)
+				)
+				(fill
+					(type outline)
+				)
+			)
+			(pin unspecified line
+				(at -13.97 8.89 0)
+				(length 2.54)
+				(name "IN1"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "3"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin unspecified line
+				(at -13.97 6.35 0)
+				(length 2.54)
+				(name "IN2"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "2"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin unspecified line
+				(at -13.97 -1.27 0)
+				(length 2.54)
+				(name "VREF"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "4"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin unspecified line
+				(at -13.97 -3.81 0)
+				(length 2.54)
+				(name "IPROPI"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "1"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin unspecified line
+				(at -13.97 -8.89 0)
+				(length 2.54)
+				(name "OUT1"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "6"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin unspecified line
+				(at 13.97 -6.35 180)
+				(length 2.54)
+				(name "OUT2"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "8"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin unspecified line
+				(at 13.97 -3.81 180)
+				(length 2.54)
+				(name "VM"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "5"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin unspecified line
+				(at 13.97 6.35 180)
+				(length 2.54)
+				(name "GND"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "7"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin unspecified line
+				(at 0 16.51 270)
+				(length 5.08)
+				(name "PAD"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "9"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+		)
+		(embedded_fonts no)
+	)
+	(symbol "MP6540HA"
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(duplicate_pin_numbers_are_jumpers no)
+		(property "Reference" "U"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "MP6540HA"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "MaslowMerged:QFN-26_5x5mm_MP6540H"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "MPN" "MP6541A"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Manufacturer" "MPS"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Supplier Part" "MP6541A"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(symbol "MP6540HA_1_0"
+			(rectangle
+				(start -24.13 27.94)
+				(end 24.13 -27.94)
+				(stroke
+					(width 0.254)
+					(type solid)
+				)
+				(fill
+					(type none)
+				)
+			)
+			(text "MP6541A"
+				(at -7.62 -1.27 0)
+				(effects
+					(font
+						(size 1.9558 1.9558)
+					)
+					(justify left bottom)
+				)
+			)
+			(pin unspecified line
+				(at -26.67 -5.08 0)
+				(length 2.54)
+				(name "nFAULT"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "1"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin unspecified line
+				(at -26.67 20.32 0)
+				(length 2.54)
+				(name "nSLEEP"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "2"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin unspecified line
+				(at -26.67 15.24 0)
+				(length 2.54)
+				(name "ENA/LSA"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "3"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin unspecified line
+				(at -26.67 12.7 0)
+				(length 2.54)
+				(name "ENB/LSB"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "4"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin unspecified line
+				(at -26.67 10.16 0)
+				(length 2.54)
+				(name "ENC/LSC"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "5"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin unspecified line
+				(at -26.67 5.08 0)
+				(length 2.54)
+				(name "PWMA/HSA"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "6"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin unspecified line
+				(at -26.67 2.54 0)
+				(length 2.54)
+				(name "PWMB/HSB"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "7"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin unspecified line
+				(at -26.67 0 0)
+				(length 2.54)
+				(name "PWMC/HSC"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "8"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin unspecified line
+				(at 26.67 0 180)
+				(length 2.54)
+				(name "SA"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "9"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin unspecified line
+				(at 26.67 -22.86 180)
+				(length 2.54)
+				(name "LSS"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "10"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin unspecified line
+				(at 26.67 -7.62 180)
+				(length 2.54)
+				(name "SB"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "11"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin unspecified line
+				(at 26.67 -25.4 180)
+				(length 2.54)
+				(name "LSS"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "12"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin unspecified line
+				(at 26.67 -17.78 180)
+				(length 2.54)
+				(name "SC"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "13"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin unspecified line
+				(at 26.67 5.08 180)
+				(length 2.54)
+				(name "VG"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "14"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin unspecified line
+				(at -26.67 -10.16 0)
+				(length 2.54)
+				(name "SOA"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "15"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin unspecified line
+				(at -26.67 -12.7 0)
+				(length 2.54)
+				(name "SOB"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "16"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin unspecified line
+				(at -26.67 -15.24 0)
+				(length 2.54)
+				(name "SOC"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "17"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin unspecified line
+				(at -26.67 -20.32 0)
+				(length 2.54)
+				(name "GND"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "18"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin unspecified line
+				(at 26.67 17.78 180)
+				(length 2.54)
+				(name "VCP"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "19"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin unspecified line
+				(at 26.67 25.4 180)
+				(length 2.54)
+				(name "CP1"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "20"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin unspecified line
+				(at 26.67 22.86 180)
+				(length 2.54)
+				(name "CP2"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "21"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin unspecified line
+				(at 26.67 -15.24 180)
+				(length 2.54)
+				(name "SC"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "22"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin unspecified line
+				(at 26.67 12.7 180)
+				(length 2.54)
+				(name "VIN"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "23"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin unspecified line
+				(at 26.67 -10.16 180)
+				(length 2.54)
+				(name "SB"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "24"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin unspecified line
+				(at 26.67 10.16 180)
+				(length 2.54)
+				(name "VIN"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "25"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin unspecified line
+				(at 26.67 -2.54 180)
+				(length 2.54)
+				(name "SA"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "26"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+		)
+		(embedded_fonts no)
+	)
+	(symbol "TPS54360B"
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(duplicate_pin_numbers_are_jumpers no)
+		(property "Reference" "U"
+			(at -12.7 12.7 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "TPS54360BDDAR"
+			(at -12.7 -15.24 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "MaslowMerged:AP64350SP_SO-8-EP"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" "https://www.diodes.com/assets/Datasheets/AP64350.pdf"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "3.8-40V 3.5A synchronous buck converter, SO-8EP"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "MPN" "AP64350SP-13"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Manufacturer" "DIODES"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Supplier Part" "C2071691"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Supplier" "LCSC"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(symbol "TPS54360B_0_1"
+			(rectangle
+				(start -10.16 10.16)
+				(end 10.16 -10.16)
+				(stroke
+					(width 0.254)
+					(type default)
+				)
+				(fill
+					(type background)
+				)
+			)
+		)
+		(symbol "TPS54360B_1_1"
+			(pin passive line
+				(at 12.7 5.08 180)
+				(length 2.54)
+				(name "BST"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "1"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin power_in line
+				(at -12.7 5.08 0)
+				(length 2.54)
+				(name "VIN"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "2"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin input line
+				(at -12.7 2.54 0)
+				(length 2.54)
+				(name "EN"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "3"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin input line
+				(at -12.7 -2.54 0)
+				(length 2.54)
+				(name "RT/CLK"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "4"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin input line
+				(at -12.7 -5.08 0)
+				(length 2.54)
+				(name "FB"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "5"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin passive line
+				(at 12.7 -5.08 180)
+				(length 2.54)
+				(name "COMP"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "6"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin power_in line
+				(at -2.54 -12.7 90)
+				(length 2.54)
+				(name "GND"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "7"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin output line
+				(at 12.7 2.54 180)
+				(length 2.54)
+				(name "SW"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "8"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin power_in line
+				(at 2.54 -12.7 90)
+				(length 2.54)
+				(name "EP"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "9"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+		)
+		(embedded_fonts no)
+	)
+	(symbol "Q_PMOS_GDS"
+	(pin_numbers
+		(hide yes)
+	)
+	(pin_names
+		(offset 0)
+		(hide yes)
+	)
+	(exclude_from_sim no)
+	(in_bom yes)
+	(on_board yes)
+	(in_pos_files yes)
+	(duplicate_pin_numbers_are_jumpers no)
+	(property "Reference" "Q"
+		(at 5.08 1.27 0)
+		(show_name no)
+		(do_not_autoplace no)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+	)
+	(property "Value" "Q_PMOS"
+		(at 5.08 -1.27 0)
+		(show_name no)
+		(do_not_autoplace no)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+	)
+	(property "Footprint" ""
+		(at 5.08 2.54 0)
+		(show_name no)
+		(do_not_autoplace no)
+		(hide yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+		)
+	)
+	(property "Datasheet" ""
+		(at 0 0 0)
+		(show_name no)
+		(do_not_autoplace no)
+		(hide yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+		)
+	)
+	(property "Description" "P-MOSFET transistor"
+		(at 0 0 0)
+		(show_name no)
+		(do_not_autoplace no)
+		(hide yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+		)
+	)
+	(property "ki_keywords" "PMOS P-MOS"
+		(at 0 0 0)
+		(show_name no)
+		(do_not_autoplace no)
+		(hide yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+		)
+	)
+	(symbol "Q_PMOS_GDS_0_1"
+		(polyline
+			(pts
+				(xy 0.254 1.905) (xy 0.254 -1.905)
+			)
+			(stroke
+				(width 0.254)
+				(type default)
+			)
+			(fill
+				(type none)
+			)
+		)
+		(polyline
+			(pts
+				(xy 0.254 0) (xy -2.54 0)
+			)
+			(stroke
+				(width 0)
+				(type default)
+			)
+			(fill
+				(type none)
+			)
+		)
+		(polyline
+			(pts
+				(xy 0.762 2.286) (xy 0.762 1.27)
+			)
+			(stroke
+				(width 0.254)
+				(type default)
+			)
+			(fill
+				(type none)
+			)
+		)
+		(polyline
+			(pts
+				(xy 0.762 1.778) (xy 3.302 1.778) (xy 3.302 -1.778) (xy 0.762 -1.778)
+			)
+			(stroke
+				(width 0)
+				(type default)
+			)
+			(fill
+				(type none)
+			)
+		)
+		(polyline
+			(pts
+				(xy 0.762 0.508) (xy 0.762 -0.508)
+			)
+			(stroke
+				(width 0.254)
+				(type default)
+			)
+			(fill
+				(type none)
+			)
+		)
+		(polyline
+			(pts
+				(xy 0.762 -1.27) (xy 0.762 -2.286)
+			)
+			(stroke
+				(width 0.254)
+				(type default)
+			)
+			(fill
+				(type none)
+			)
+		)
+		(circle
+			(center 1.651 0)
+			(radius 2.794)
+			(stroke
+				(width 0.254)
+				(type default)
+			)
+			(fill
+				(type none)
+			)
+		)
+		(polyline
+			(pts
+				(xy 2.286 0) (xy 1.27 0.381) (xy 1.27 -0.381) (xy 2.286 0)
+			)
+			(stroke
+				(width 0)
+				(type default)
+			)
+			(fill
+				(type outline)
+			)
+		)
+		(polyline
+			(pts
+				(xy 2.54 2.54) (xy 2.54 1.778)
+			)
+			(stroke
+				(width 0)
+				(type default)
+			)
+			(fill
+				(type none)
+			)
+		)
+		(circle
+			(center 2.54 1.778)
+			(radius 0.254)
+			(stroke
+				(width 0)
+				(type default)
+			)
+			(fill
+				(type outline)
+			)
+		)
+		(circle
+			(center 2.54 -1.778)
+			(radius 0.254)
+			(stroke
+				(width 0)
+				(type default)
+			)
+			(fill
+				(type outline)
+			)
+		)
+		(polyline
+			(pts
+				(xy 2.54 -2.54) (xy 2.54 0) (xy 0.762 0)
+			)
+			(stroke
+				(width 0)
+				(type default)
+			)
+			(fill
+				(type none)
+			)
+		)
+		(polyline
+			(pts
+				(xy 2.921 -0.381) (xy 3.683 -0.381)
+			)
+			(stroke
+				(width 0)
+				(type default)
+			)
+			(fill
+				(type none)
+			)
+		)
+		(polyline
+			(pts
+				(xy 3.302 -0.381) (xy 2.921 0.254) (xy 3.683 0.254) (xy 3.302 -0.381)
+			)
+			(stroke
+				(width 0)
+				(type default)
+			)
+			(fill
+				(type none)
+			)
+		)
+	)
+	(symbol "Q_PMOS_GDS_1_1"
+		(pin passive line
+			(at 2.54 5.08 270)
+			(length 2.54)
+			(name "D"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(number "2"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+		)
+		(pin input line
+			(at -5.08 0 0)
+			(length 2.54)
+			(name "G"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(number "1"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+		)
+		(pin passive line
+			(at 2.54 -5.08 90)
+			(length 2.54)
+			(name "S"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(number "3"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+		)
+	)
+	(embedded_fonts no)
+	)
+	(symbol "D_Zener"
+	(pin_numbers
+		(hide yes)
+	)
+	(pin_names
+		(offset 1.016)
+		(hide yes)
+	)
+	(exclude_from_sim no)
+	(in_bom yes)
+	(on_board yes)
+	(in_pos_files yes)
+	(duplicate_pin_numbers_are_jumpers no)
+	(property "Reference" "D"
+		(at 0 2.54 0)
+		(show_name no)
+		(do_not_autoplace no)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+		)
+	)
+	(property "Value" "D_Zener"
+		(at 0 -2.54 0)
+		(show_name no)
+		(do_not_autoplace no)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+		)
+	)
+	(property "Footprint" ""
+		(at 0 0 0)
+		(show_name no)
+		(do_not_autoplace no)
+		(hide yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+		)
+	)
+	(property "Datasheet" ""
+		(at 0 0 0)
+		(show_name no)
+		(do_not_autoplace no)
+		(hide yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+		)
+	)
+	(property "Description" "Zener diode"
+		(at 0 0 0)
+		(show_name no)
+		(do_not_autoplace no)
+		(hide yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+		)
+	)
+	(property "ki_keywords" "diode"
+		(at 0 0 0)
+		(show_name no)
+		(do_not_autoplace no)
+		(hide yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+		)
+	)
+	(property "ki_fp_filters" "TO-???* *_Diode_* *SingleDiode* D_*"
+		(at 0 0 0)
+		(show_name no)
+		(do_not_autoplace no)
+		(hide yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+		)
+	)
+	(symbol "D_Zener_0_1"
+		(polyline
+			(pts
+				(xy -1.27 -1.27) (xy -1.27 1.27) (xy -0.762 1.27)
+			)
+			(stroke
+				(width 0.254)
+				(type default)
+			)
+			(fill
+				(type none)
+			)
+		)
+		(polyline
+			(pts
+				(xy 1.27 0) (xy -1.27 0)
+			)
+			(stroke
+				(width 0)
+				(type default)
+			)
+			(fill
+				(type none)
+			)
+		)
+		(polyline
+			(pts
+				(xy 1.27 -1.27) (xy 1.27 1.27) (xy -1.27 0) (xy 1.27 -1.27)
+			)
+			(stroke
+				(width 0.254)
+				(type default)
+			)
+			(fill
+				(type none)
+			)
+		)
+	)
+	(symbol "D_Zener_1_1"
+		(pin passive line
+			(at -3.81 0 0)
+			(length 2.54)
+			(name "K"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(number "1"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+		)
+		(pin passive line
+			(at 3.81 0 180)
+			(length 2.54)
+			(name "A"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(number "2"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+		)
+	)
+	(embedded_fonts no)
+	)
 )

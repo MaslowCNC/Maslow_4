@@ -1,0 +1,425 @@
+(footprint "SOIC-8-1EP_DDA0008B_ThermalVias_0.3mm"
+	(version 20260206)
+	(generator "kicad-footprint-generator")
+	(layer "F.Cu")
+	(descr "Copy of KiCad SOIC-8-1EP_..._EP2.95x4.9mm_Mask2.71x3.4mm_ThermalVias (TI DDA0008B, DRV8251A) with 0.3/0.6mm thermal vias to meet the 0.3mm board minimum drill. SOIC, 8 Pin (JEDEC MS-012 variation BA (thermally enhanced), using tolerances and Exposed Pad from Texas Instruments DDA0008B, https://www.ti.com/lit/ml/pptd058j/pptd058j.pdf, https://www.ti.com/lit/ds/symlink/lm5017.pdf#page=35, https://www.jedec.org/document_search?search_api_views_fulltext=MS-012)")
+	(tags "SOIC SO Texas_PowerPAD")
+	(property "Reference" "REF**"
+		(at 0 -3.4 0)
+		(layer "F.SilkS")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Value" "SOIC-8-1EP_3.9x4.9mm_P1.27mm_EP2.95x4.9mm_Mask2.71x3.4mm_ThermalVias"
+		(at 0 3.4 0)
+		(layer "F.Fab")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "KiLib_Generator" "package/gullwing"
+		(at 0 0 0)
+		(layer "F.SilkS")
+		(hide yes)
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(attr smd)
+	(duplicate_pad_numbers_are_jumpers no)
+	(fp_line
+		(start -2.06 -2.56)
+		(end -1.735 -2.56)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(layer "F.SilkS")
+	)
+	(fp_line
+		(start -2.06 -2.465)
+		(end -2.06 -2.56)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(layer "F.SilkS")
+	)
+	(fp_line
+		(start -2.06 2.56)
+		(end -2.06 2.465)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(layer "F.SilkS")
+	)
+	(fp_line
+		(start -1.735 2.56)
+		(end -2.06 2.56)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(layer "F.SilkS")
+	)
+	(fp_line
+		(start 1.735 -2.56)
+		(end 2.06 -2.56)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(layer "F.SilkS")
+	)
+	(fp_line
+		(start 2.06 -2.56)
+		(end 2.06 -2.465)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(layer "F.SilkS")
+	)
+	(fp_line
+		(start 2.06 2.465)
+		(end 2.06 2.56)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(layer "F.SilkS")
+	)
+	(fp_line
+		(start 2.06 2.56)
+		(end 1.735 2.56)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(layer "F.SilkS")
+	)
+	(fp_poly
+		(pts
+			(xy -2.6 -2.47)
+			(xy -2.84 -2.8)
+			(xy -2.36 -2.8)
+		)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(fill yes)
+		(layer "F.SilkS")
+	)
+	(fp_line
+		(start -3.7 -2.46)
+		(end -2.2 -2.46)
+		(stroke
+			(width 0.05)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+	)
+	(fp_line
+		(start -3.7 2.46)
+		(end -3.7 -2.46)
+		(stroke
+			(width 0.05)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+	)
+	(fp_line
+		(start -2.2 -2.7)
+		(end 2.2 -2.7)
+		(stroke
+			(width 0.05)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+	)
+	(fp_line
+		(start -2.2 -2.46)
+		(end -2.2 -2.7)
+		(stroke
+			(width 0.05)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+	)
+	(fp_line
+		(start -2.2 2.46)
+		(end -3.7 2.46)
+		(stroke
+			(width 0.05)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+	)
+	(fp_line
+		(start -2.2 2.7)
+		(end -2.2 2.46)
+		(stroke
+			(width 0.05)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+	)
+	(fp_line
+		(start 2.2 -2.7)
+		(end 2.2 -2.46)
+		(stroke
+			(width 0.05)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+	)
+	(fp_line
+		(start 2.2 -2.46)
+		(end 3.7 -2.46)
+		(stroke
+			(width 0.05)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+	)
+	(fp_line
+		(start 2.2 2.46)
+		(end 2.2 2.7)
+		(stroke
+			(width 0.05)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+	)
+	(fp_line
+		(start 2.2 2.7)
+		(end -2.2 2.7)
+		(stroke
+			(width 0.05)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+	)
+	(fp_line
+		(start 3.7 -2.46)
+		(end 3.7 2.46)
+		(stroke
+			(width 0.05)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+	)
+	(fp_line
+		(start 3.7 2.46)
+		(end 2.2 2.46)
+		(stroke
+			(width 0.05)
+			(type solid)
+		)
+		(layer "F.CrtYd")
+	)
+	(fp_poly
+		(pts
+			(xy -0.975 -2.45)
+			(xy 1.95 -2.45)
+			(xy 1.95 2.45)
+			(xy -1.95 2.45)
+			(xy -1.95 -1.475)
+		)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(fill no)
+		(layer "F.Fab")
+	)
+	(fp_text user "${REFERENCE}"
+		(at 0 0 90)
+		(layer "F.Fab")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(pad "" smd roundrect
+		(at -0.68 -0.85)
+		(size 1.09 1.37)
+		(layers "F.Paste")
+		(roundrect_rratio 0.229358)
+	)
+	(pad "" smd roundrect
+		(at -0.68 0.85)
+		(size 1.09 1.37)
+		(layers "F.Paste")
+		(roundrect_rratio 0.229358)
+	)
+	(pad "" smd rect
+		(at 0 0)
+		(size 2.71 3.4)
+		(layers "F.Mask")
+	)
+	(pad "" smd roundrect
+		(at 0.68 -0.85)
+		(size 1.09 1.37)
+		(layers "F.Paste")
+		(roundrect_rratio 0.229358)
+	)
+	(pad "" smd roundrect
+		(at 0.68 0.85)
+		(size 1.09 1.37)
+		(layers "F.Paste")
+		(roundrect_rratio 0.229358)
+	)
+	(pad "1" smd roundrect
+		(at -2.5625 -1.905)
+		(size 1.775 0.6)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+		(roundrect_rratio 0.25)
+	)
+	(pad "2" smd roundrect
+		(at -2.5625 -0.635)
+		(size 1.775 0.6)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+		(roundrect_rratio 0.25)
+	)
+	(pad "3" smd roundrect
+		(at -2.5625 0.635)
+		(size 1.775 0.6)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+		(roundrect_rratio 0.25)
+	)
+	(pad "4" smd roundrect
+		(at -2.5625 1.905)
+		(size 1.775 0.6)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+		(roundrect_rratio 0.25)
+	)
+	(pad "5" smd roundrect
+		(at 2.5625 1.905)
+		(size 1.775 0.6)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+		(roundrect_rratio 0.25)
+	)
+	(pad "6" smd roundrect
+		(at 2.5625 0.635)
+		(size 1.775 0.6)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+		(roundrect_rratio 0.25)
+	)
+	(pad "7" smd roundrect
+		(at 2.5625 -0.635)
+		(size 1.775 0.6)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+		(roundrect_rratio 0.25)
+	)
+	(pad "8" smd roundrect
+		(at 2.5625 -1.905)
+		(size 1.775 0.6)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+		(roundrect_rratio 0.25)
+	)
+	(pad "9" thru_hole circle
+		(at -0.65 -1.95)
+		(size 0.6 0.6)
+		(drill 0.3)
+		(property pad_prop_heatsink)
+		(layers "*.Cu")
+		(remove_unused_layers no)
+	)
+	(pad "9" thru_hole circle
+		(at -0.65 -0.65)
+		(size 0.6 0.6)
+		(drill 0.3)
+		(property pad_prop_heatsink)
+		(layers "*.Cu")
+		(remove_unused_layers no)
+	)
+	(pad "9" thru_hole circle
+		(at -0.65 0.65)
+		(size 0.6 0.6)
+		(drill 0.3)
+		(property pad_prop_heatsink)
+		(layers "*.Cu")
+		(remove_unused_layers no)
+	)
+	(pad "9" thru_hole circle
+		(at -0.65 1.95)
+		(size 0.6 0.6)
+		(drill 0.3)
+		(property pad_prop_heatsink)
+		(layers "*.Cu")
+		(remove_unused_layers no)
+	)
+	(pad "9" smd rect
+		(at 0 0)
+		(size 1.8 4.4)
+		(property pad_prop_heatsink)
+		(layers "B.Cu")
+		(zone_connect 2)
+	)
+	(pad "9" smd rect
+		(at 0 0)
+		(size 2.95 4.9)
+		(property pad_prop_heatsink)
+		(layers "F.Cu")
+		(zone_connect 2)
+	)
+	(pad "9" thru_hole circle
+		(at 0.65 -1.95)
+		(size 0.6 0.6)
+		(drill 0.3)
+		(property pad_prop_heatsink)
+		(layers "*.Cu")
+		(remove_unused_layers no)
+	)
+	(pad "9" thru_hole circle
+		(at 0.65 -0.65)
+		(size 0.6 0.6)
+		(drill 0.3)
+		(property pad_prop_heatsink)
+		(layers "*.Cu")
+		(remove_unused_layers no)
+	)
+	(pad "9" thru_hole circle
+		(at 0.65 0.65)
+		(size 0.6 0.6)
+		(drill 0.3)
+		(property pad_prop_heatsink)
+		(layers "*.Cu")
+		(remove_unused_layers no)
+	)
+	(pad "9" thru_hole circle
+		(at 0.65 1.95)
+		(size 0.6 0.6)
+		(drill 0.3)
+		(property pad_prop_heatsink)
+		(layers "*.Cu")
+		(remove_unused_layers no)
+	)
+	(embedded_fonts no)
+	(model "${KICAD10_3DMODEL_DIR}/Package_SO.3dshapes/SOIC-8-1EP_3.9x4.9mm_P1.27mm_EP2.95x4.9mm_Mask2.71x3.4mm.step"
+		(offset
+			(xyz 0 0 0)
+		)
+		(scale
+			(xyz 1 1 1)
+		)
+		(rotate
+			(xyz 0 0 0)
+		)
+	)
+)

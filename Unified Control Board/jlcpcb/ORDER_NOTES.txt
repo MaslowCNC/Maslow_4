@@ -1,3 +1,6 @@
+STALE ON BRANCH 36v-redesign: these files are the 24V design. The 36V board is not routed yet.
+Do NOT order from them. Regenerate gerbers, BOM and CPL after routing and DRC.
+
 Unified Control Board - JLCPCB order notes
 Generated 2026-09-24 from Unified Control Board.kicad_pcb (KiCad 10.0.5)
 

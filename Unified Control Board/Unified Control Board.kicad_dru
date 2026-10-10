@@ -1,10 +1,12 @@
 (version 1)
 
-# MP6541A (U11, U12) land pattern has 0.1 mm pad-to-pad gaps. JLCPCB's 4-layer
-# minimum spacing is 0.09 mm, so allow 0.1 mm between pads of the same driver only.
-(rule "MP6541A pad-to-pad"
-	(constraint clearance (min 0.1mm))
-	(condition "A.Type == 'Pad' && B.Type == 'Pad' && ((A.memberOfFootprint('U11') && B.memberOfFootprint('U11')) || (A.memberOfFootprint('U12') && B.memberOfFootprint('U12')))"))
+# 36 V bus: exposed pads on VCC/VIN_RAW/VSUP/SW_NODE/motor nets need 0.4 mm to other nets on the
+# outer layers (IPC-2221B A6, 31-50 V). Pads inside one IC follow that IC's land pattern;
+# R59/C72/D6 only see the soft-start gate drive (<=15 V) across their own pads.
+(rule "36V bus pad clearance"
+	(layer outer)
+	(constraint clearance (min 0.4mm))
+	(condition "A.Type == 'Pad' && (A.NetName == 'VCC' || A.NetName == 'VIN_RAW' || A.NetName == 'VSUP' || A.NetName == 'SW_NODE' || A.NetClass == 'Motor') && A.NetName != B.NetName && !(A.memberOfFootprint('U2') && B.memberOfFootprint('U2')) && !(A.memberOfFootprint('U3') && B.memberOfFootprint('U3')) && !(A.memberOfFootprint('U4') && B.memberOfFootprint('U4')) && !(A.memberOfFootprint('U5') && B.memberOfFootprint('U5')) && !(A.memberOfFootprint('U9') && B.memberOfFootprint('U9')) && !(A.memberOfFootprint('U11') && B.memberOfFootprint('U11')) && !(A.memberOfFootprint('U12') && B.memberOfFootprint('U12')) && !(A.memberOfFootprint('Q1') && B.memberOfFootprint('Q1')) && !(A.memberOfFootprint('R59') && B.memberOfFootprint('R59')) && !(A.memberOfFootprint('C72') && B.memberOfFootprint('C72')) && !(A.memberOfFootprint('D6') && B.memberOfFootprint('D6'))"))
 
 # Flag narrow sections on high-current nets (warnings: pad escapes may need to neck down).
 (rule "Motor min width"

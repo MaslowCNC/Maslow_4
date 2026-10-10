@@ -684,6 +684,10 @@
       },
       {
         "netclass": "Power",
+        "pattern": "VIN_RAW"
+      },
+      {
+        "netclass": "Power",
         "pattern": "VSUP"
       },
       {
