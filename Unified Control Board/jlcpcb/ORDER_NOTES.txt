@@ -2,8 +2,9 @@ Unified Control Board - JLCPCB order notes
 Generated 2026-09-24 from Unified Control Board.kicad_pcb (KiCad 10.0.5)
 
 FILES
-  UnifiedControlBoard_Gerbers.zip   -> upload on the PCB quote page (gerbers + PTH/NPTH drill)
-  UnifiedControlBoard_BOM_JLCPCB.csv -> PCB Assembly: BOM (50 lines, 166 parts, all with LCSC numbers)
+  UnifiedControlBoard_Gerbers.zip   -> upload FIRST on the PCB quote page ("Add gerber file").
+                                       Contains all 11 layers + PTH/NPTH drill files, flat (no subfolders).
+  UnifiedControlBoard_BOM_JLCPCB.csv -> PCB Assembly: BOM (47 lines, 166 parts, one line per LCSC number, all with LCSC numbers)
   UnifiedControlBoard_CPL_JLCPCB.csv -> PCB Assembly: CPL / pick-and-place (166 parts: 55 top, 111 bottom)
 
 PCB SETTINGS

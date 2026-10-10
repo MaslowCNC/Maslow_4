@@ -48130,7 +48130,7 @@
 				(justify left bottom)
 			)
 		)
-		(property "Value" "2.4GHz"
+		(property "Value" "ESP32-S3-WROOM-1"
 			(at 482.6 -64.77 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -58030,7 +58030,7 @@
 				(justify left bottom)
 			)
 		)
-		(property "Value" "22uF/16V"
+		(property "Value" "22uF"
 			(at 674.37 157.48 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -58257,7 +58257,7 @@
 				(justify right top)
 			)
 		)
-		(property "Value" "22uF/16V"
+		(property "Value" "22uF"
 			(at 914.4 73.66 90)
 			(show_name no)
 			(do_not_autoplace no)
