@@ -271,6 +271,9 @@ const updateDynamicButtons = () => {
 
 	// Show or hide status fields based on whether Find Anchors is running
 	updateFindAnchorsView();
+	if (typeof updateJobBoundsDisplay === 'function') {
+		updateJobBoundsDisplay();
+	}
 }
 
 /**
@@ -334,6 +337,9 @@ const maslowInfoMsgHandling = (msg) => {
 						maslowStatus[key] = parsedStatus[key];
 					}
 				}
+			}
+			if (typeof updateJobBoundsDisplay === 'function') {
+				updateJobBoundsDisplay();
 			}
 		} catch (error) {
 			console.error("Parsing the 'MINFO' message failed, the maslow status has not been changed. This is probably a programmer error.");

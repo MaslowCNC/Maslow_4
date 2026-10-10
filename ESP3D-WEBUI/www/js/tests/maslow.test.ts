@@ -137,4 +137,18 @@ describe('maslowMsgHandling', () => {
     expect((allElements[1] as HTMLInputElement).value).toBe("12.0");
     expect(global.loadedValues["workThickness"]).toBe("12.0");
   });
+
+  test("MINFO status changes refresh job bounds visibility", () => {
+    let refreshCount = 0;
+    const previousUpdate = global.updateJobBoundsDisplay;
+    global.updateJobBoundsDisplay = () => { refreshCount += 1; };
+
+    try {
+      maslowInfoMsgHandling('MINFO: {"state":3}');
+
+      expect(refreshCount).toBe(1);
+    } finally {
+      global.updateJobBoundsDisplay = previousUpdate;
+    }
+  });
 });
