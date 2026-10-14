@@ -576,6 +576,7 @@ const cfgDef = {
 	Park_Z: { name: "parkZ", type: "A", cmd: "Maslow_Park_Z" },
 	Park_X: { name: "parkX", type: "A", cmd: "Maslow_Park_X" },
 	Park_Y: { name: "parkY", type: "A", cmd: "Maslow_Park_Y" },
+	Dust_Fan_Speed: { name: "dustFanSpeed", type: "A", cmd: "Maslow_Dust_Fan_Speed" },
 };
 
 /** Handle Maslow specific configuration messages

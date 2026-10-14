@@ -122,6 +122,9 @@ namespace Machine {
         handler.item(M + "_Park_Z", Maslow.parkZ, -100.0, 100.0);
         handler.item(M + "_Park_X", Maslow.parkX, -10000.0, 10000.0);
         handler.item(M + "_Park_Y", Maslow.parkY, -10000.0, 10000.0);
+
+        // Dust collection fan speed on the spindle board (0-100, 0 = off)
+        handler.item(M + "_Dust_Fan_Speed", Maslow.dustFanSpeed, 0, 100);
     }
 
     void MachineConfig::afterParse() {

@@ -46,11 +46,9 @@ namespace Spindles {
 
         config_message();
 
-        // Confirm the spindle/Z controller board is connected and talking.
+        // Confirm the spindle/Z controller board is connected and talking.  The dust
+        // collection fan speed follows on the first update() pass.
         handshake();
-
-        // Push the configured suction/cooling fan power down to the spindle board.
-        sendFan(_suction_power);
     }
 
     void SpindleBoard::handshake() {
@@ -108,8 +106,7 @@ namespace Spindles {
 
     void SpindleBoard::config_message() {
         log_info(name() << " Spindle on " << (_uart_num != -1 ? "uart" : "embedded uart")
-                        << " phase_deg_per_mm:" << _phase_deg_per_mm << " max_rpm:" << _max_rpm
-                        << " suction_power:" << _suction_power);
+                        << " phase_deg_per_mm:" << _phase_deg_per_mm << " max_rpm:" << _max_rpm);
     }
 
     void SpindleBoard::setState(SpindleState state, SpindleSpeed speed) {
@@ -282,7 +279,7 @@ namespace Spindles {
         _last_hold_release_ms = now;
     }
 
-    void SpindleBoard::update(float zPositionMM, bool beltMotionActive) {
+    void SpindleBoard::update(float zPositionMM, bool beltMotionActive, int fanSpeed) {
         if (!_uart) {
             return;
         }
@@ -292,6 +289,7 @@ namespace Spindles {
         }
         sendPhase(zPositionMM * _phase_deg_per_mm);
         sendBeltCooling(beltMotionActive);
+        sendFan(fanSpeed);
         updateHoldState();
         serviceStatus();
     }
@@ -307,16 +305,26 @@ namespace Spindles {
             }
             if (c == '\n') {
                 _rx_buf[_rx_len] = '\0';
+                // The board reports status every 50 ms, so a long silence before this line
+                // means it went away - usually a reboot or reflash, which resets its fan
+                // speed to 100.  _last_rx_ms == 0 means no line has been read yet.
+                uint32_t now    = millis();
+                uint32_t gap    = now - _last_rx_ms;
+                bool     silent = _last_rx_ms != 0 && gap > LINK_SILENCE_MS;
+                _last_rx_ms     = now;
                 // Any complete line from the board proves the link is alive.  Log the
                 // first confirmation if the boot-time handshake did not already do so.
                 if (!_link_confirmed && _rx_len > 0) {
                     _link_confirmed = true;
                     log_info(name() << ": link to spindle board confirmed -> " << _rx_buf);
-                    // The board may have just (re)booted, so re-push the configured
-                    // suction power and belt-cooling state.
-                    _last_sent_fan = -1;
+                    silent = true;  // the board may have just booted
+                } else if (silent) {
+                    log_info(name() << ": no data from spindle board for " << gap << " ms; re-sending fan speed");
+                }
+                if (silent) {
+                    // Re-send the fan speed and belt-cooling state on the next update() pass.
+                    _last_sent_fan  = -1;
                     _last_sent_belt = -1;
-                    sendFan(_suction_power);
                 }
                 // OTA lifecycle messages from the spindle board (in response to
                 // $Spindle/EnableOTA).  Surface the address so the update can be pushed.

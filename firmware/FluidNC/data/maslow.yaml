@@ -18,6 +18,7 @@ Maslow_workThickness: 0.000000
 Maslow_Park_Z: 2.000000
 Maslow_Park_X: 0.000000
 Maslow_Park_Y: 0.000000
+Maslow_Dust_Fan_Speed: 100
 stepping: 
   engine: Timed
   idle_ms: 240
@@ -262,7 +263,6 @@ user_outputs:
 SpindleBoard:
   phase_deg_per_mm: 45.000000
   max_rpm: 14000
-  suction_power: 100
   tool_num: 0
   speed_map: 0=0.000% 14000=100.000%
   off_on_alarm: true
