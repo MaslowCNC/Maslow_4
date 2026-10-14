@@ -446,6 +446,9 @@ void protocol_execute_realtime() {
 static void alarm_msg(ExecAlarm alarm_code) {
     log_to(allChannels, "ALARM:", static_cast<int>(alarm_code));
     delay_ms(500);  // Force delay to ensure message clears serial write buffer.
+    // That delay alone reaches the Maslow update watchdog's 500 ms idle limit, so without this
+    // reset every alarm is followed by a spurious "Update loop stalled" emergency stop.
+    Maslow.resetUpdateWatchdog();
 }
 
 // Executes run-time commands, when required. This function is the primary state
