@@ -12,6 +12,7 @@
       XY  -> board:  "S<rpm>"  set spindle speed (0 = stop)
                      "Z<deg>"  set absolute target phase offset (Z position)
                      "B<0|1>"  XY belt motors idle/active (vacuum cooling request)
+                     "C<0-100>" dust collection fan speed (0 = off), from Maslow_Dust_Fan_Speed
                      "E"       emergency stop
                      "?"       request status
       board -> XY:   "T:<state>,P:<phase_deg>,R:<rpm>,F:<fault>"
@@ -39,9 +40,10 @@ namespace Spindles {
         void config_message() override;
 
         // Called periodically by the Maslow update loop with the latest planned
-        // Z position (mm) and whether the XY belt motors need vacuum cooling.  Streams Z
-        // (as a phase offset), flushes pending state changes, and services the return link.
-        void update(float zPositionMM, bool beltMotionActive);
+        // Z position (mm), whether the XY belt motors need vacuum cooling, and the dust
+        // collection fan speed (0-100).  Streams Z (as a phase offset), flushes pending state
+        // changes (so a new fan speed takes effect at once), and services the return link.
+        void update(float zPositionMM, bool beltMotionActive, int fanSpeed);
 
         // Push the XY board's own WiFi station credentials to the spindle board over the
         // link so it can join WiFi and start its ArduinoOTA server.  Triggered by the
@@ -83,7 +85,6 @@ namespace Spindles {
             }
             handler.item("phase_deg_per_mm", _phase_deg_per_mm, 0.0f, 100000.0f);
             handler.item("max_rpm", _max_rpm, 1, 100000);
-            handler.item("suction_power", _suction_power, 0, 100);
 
             Spindle::group(handler);
         }
@@ -97,7 +98,6 @@ namespace Spindles {
         Uart* _uart             = nullptr;
         float _phase_deg_per_mm = 1.0f;
         int   _max_rpm          = 10000;
-        int   _suction_power    = 100;  // cooling/suction fan power 0-100, sent to the board
 
         // Last values sent so we only transmit on change
         float    _last_sent_deg  = 0.0f;
@@ -118,6 +118,13 @@ namespace Spindles {
         // Set once the spindle board has answered (handshake reply or status line),
         // so the runtime confirmation message is logged exactly once.
         bool _link_confirmed = false;
+
+        // When the last line arrived from the spindle board.  It reports status every 50 ms,
+        // so a gap longer than LINK_SILENCE_MS means it went away (typically a reboot or
+        // reflash, which resets its fan speed to 100) and the fan speed must be re-sent.
+        uint32_t _last_rx_ms = 0;
+
+        static const uint32_t LINK_SILENCE_MS = 1500;
 
         // True once we have told the spindle board the machine is at rest so it can power
         // down the Z-axis drivers.  Reset as soon as the machine starts moving again so
@@ -142,7 +149,7 @@ namespace Spindles {
         // the spindle board's BLDC drivers (and its cooling fan) do not stay energized.
         void updateHoldState();
 
-        // Send the configured suction/cooling fan power (0-100) to the spindle board.
+        // Send the dust collection fan speed (0-100) to the spindle board (only on change).
         void sendFan(int level);
 
         // Boot-time handshake: ping the spindle board and log whether it answers.

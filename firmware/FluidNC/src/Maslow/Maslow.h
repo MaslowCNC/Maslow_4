@@ -183,6 +183,10 @@ public:
     float parkX = 0.0;
     float parkY = 0.0;
 
+    // Dust collection fan speed (0-100, 0 = off) used whenever the fan runs: during moves and
+    // while the spindle is on.  Streamed live to the spindle board, so changes apply at once.
+    int dustFanSpeed = 100;
+
     bool test         = false;
     bool debugEnabled = false;
 
