@@ -4,7 +4,8 @@
 
 // Trip recorder: a RAM ring buffer of the last ~2 s of motor state, sampled every housekeeping
 // pass (~2 ms).  When a fault stops the motors it records a short post-trigger tail, freezes, and
-// streams the whole window to the USB console as CSV so the moments leading up to the trip can be
+// streams the whole window as CSV to the USB console and to the XY board (which saves it to its
+// flash as /spindle_trip.csv) so the moments leading up to the trip can be
 // examined - in particular whether the measured current rose before the trip (a real stall) or
 // jumped out of nowhere (a bad reading), and whether the FOC loop stalled just before it.
 //
@@ -50,5 +51,14 @@ void tripRecorderArmOnStart();
 // Print the frozen recording again (no-op if nothing has been captured).
 void tripRecorderRequestDump();
 
-// Stream pending dump lines to USB without blocking.  Call once per housekeeping pass.
+// Send the frozen recording to the XY board over the link again (link command "T").  Replies
+// MSG:/WARN: on the link if there is nothing to send.
+void tripRecorderRequestLinkDump();
+
+// Link test (link command "T!"): re-arm, record for ~2 s, then trigger, so the whole path to the
+// XY board's /spindle_trip.csv can be checked without a fault.  Refused (WARN: on the link) while
+// a real trip recording is held, so a test can never discard one.
+void tripRecorderLinkTest();
+
+// Stream pending dump lines to USB and the link without blocking.  Call once per housekeeping pass.
 void tripRecorderService();

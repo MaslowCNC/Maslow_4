@@ -81,6 +81,12 @@ async def run(allow_motion):
             check("upload refused", "--allow-motion" in t, t)
             t = text(await call("flash_spindle"))
             check("flash_spindle refused", "--allow-motion" in t, t)
+            t = text(await call("spindle_trip"))
+            check("spindle_trip before any trip", "No /spindle_trip.csv" in t, t)
+            t = text(await call("status_history", seconds=30))
+            check("status_history polls", "<Idle|MPos" in t, t)
+            t = text(await call("read_log"))
+            check("status reports kept out of read_log", "<Idle" not in t, t)
         else:
             t = text(await call("send_command", command="G0 X10"))
             check("motion allowed when idle", t.strip() == "ok", t)
@@ -92,6 +98,9 @@ async def run(allow_motion):
                 f.write("name: test\n")
             t = text(await call("upload_file", local_path=f.name))
             check("upload with size field", '"Ok"' in t, t)
+            t = text(await call("spindle_trip", action="test", wait=10))
+            check("spindle_trip test + diagnosis", "saved to /spindle_trip.csv" in t and "CLIMBED" in t
+                  and "pull-out" in t and "over-current on M2" in t and "Status reports" in t, t)
             # Put the fake machine into Run (via a raw line, which the fake treats as a state switch).
             await call("send_command", command="RUN")
             t = text(await call("send_command", command="G0 X20"))

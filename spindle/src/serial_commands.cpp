@@ -545,6 +545,10 @@ static void processCommandLine(const char* line, size_t len,
         case 'R':  // remove tool: raise the Z until the loaded tool clears the beam
             g_remove_tool_requested = true;
             break;
+        case 'T':  // trip recording over the link: "T" re-sends the last one, "T!" records a test one
+            if (line[1] == '!') tripRecorderLinkTest();
+            else tripRecorderRequestLinkDump();
+            break;
         case 'H':  // handshake / identity request
             reply.print(LINK_IDENTITY);
             reply.print('\n');

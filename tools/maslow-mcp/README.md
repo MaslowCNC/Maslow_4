@@ -16,6 +16,7 @@ Python 3.10 or newer.
 | `machine_status` | Connection info plus the parsed `?` report: state, position and pins. | none |
 | `send_command` | Sends one line and returns the reply up to `ok`/`error`. | depends on the command (see below) |
 | `read_log` | Timestamped output from our telnet channel, including `[MSG:…]` lines caused by anyone. Filter with a regex or a time window. | none |
+| `status_history` | The `?` reports the server polls in the background (every 0.5 s while running, 2 s otherwise): state, position, feed and spindle speed over time. Shows the last N seconds, or a window around a time taken from `read_log`. | none |
 | `get_settings` / `get_config` | `$S` and `$CD`, optionally filtered by a regex. | machine idle |
 | `firmware_info` | `[ESP800]` version string, which includes the branch and commit. | none |
 | `list_files` / `download_file` | Reads the board's flash filesystem. Downloads go to `logs/downloads/`. | none |
@@ -26,6 +27,24 @@ Python 3.10 or newer.
 | `cycle_start` | `~` | `--allow-motion` |
 | `spindle_command` | Sends a line to the spindle board through the hub and returns its output. | read-only commands are free, the rest need `--allow-motion` |
 | `spindle_log` | Tail of the newest `spindle/logs/hub-*.log`, optionally filtered by a regex. | none |
+| `spindle_trip` | Diagnoses a spindle over-current or driver-fault stop from the spindle's trip recording, adding the XY messages and status reports from around the trip. `fetch` asks the spindle to send the recording again; `test` records a test one, with no motion. `source="hub"` reads the recording from the USB hub log instead. | `fetch`/`test`: machine idle |
+
+## Spindle trip recordings
+
+The spindle board keeps the last ~2 s of motor state in RAM: per-phase currents, the filtered
+protection current, voltage limit, load-sense Iq and lag, FOC loop rate, nFAULT retries and Z
+phase. When an over-current or driver fault stops the motors, it freezes that window. It prints
+the window on USB and also sends it over the inter-board link, one line every 20 ms (~20 s in all).
+The XY board saves it to its flash as `/spindle_trip.csv`. It only saves while the machine is not
+moving, which is always true after a trip because the fault raises an alarm. `$Spindle/Trip`
+(`[ESP813]`) asks the spindle to send its recording again. `$Spindle/Trip=TEST` re-arms the
+recorder and records a test trip 2 s later. The spindle refuses the test while it holds a real
+trip, so a test cannot discard one.
+
+`spindle_trip` downloads the file and reports whether the current climbed (a real overload) or
+jumped (a commutation step, a bad reading or a jam). It also reports whether Iq fell to the
+pull-out edge, whether the FOC loop stalled, whether the driver's own protection fired and whether
+the Z was moving. The XY context only covers the time this server was running.
 
 ## Using it while someone drives the machine
 
@@ -70,7 +89,7 @@ These are environment variables, set in `.mcp.json` or your shell:
 | `SPINDLE_HUB` | `127.0.0.1:4567` |
 
 The XY log for each server run goes to `logs/xy-YYMMDD-HHMMSS.log`. Commands the server sends
-appear in it as `>> CMD`.
+appear in it as `>> CMD`. The polled status reports go to `logs/status-YYMMDD-HHMMSS.log`.
 
 ## Testing without the machine
 

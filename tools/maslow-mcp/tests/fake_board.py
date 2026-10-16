@@ -51,6 +51,8 @@ def handle(c):
                         state["s"] = "Idle"
                     if line == "[ESP810]":
                         threading.Thread(target=spindle_ota, daemon=True).start()
+                    if line.upper() == "$SPINDLE/TRIP=TEST":
+                        threading.Thread(target=spindle_trip, daemon=True).start()
                     for out in CANNED.get(line.upper(), ["ok"]):
                         c.sendall((out + "\r\n").encode())
                 else:
@@ -77,6 +79,36 @@ def spindle_ota():
     broadcast(ip % 3)
     time.sleep(2)
     broadcast("[MSG:INFO: SpindleBoard: link to spindle board confirmed -> H:spindle]")
+
+
+TRIP = {"csv": None}
+
+
+def trip_csv():
+    """A recording of M2 stalling: its current climbs over the last 600 ms while Iq falls."""
+    rows = ["[TRIP] ===== trip recording: over-current on M2 (6.3A) (at 812.345s uptime) =====",
+            "[TRIP] 1000 samples, t_ms is relative to the trigger.  TRIP reprints, REARM clears.",
+            "TRIPCSV,t_ms,foc_loops,..."]
+    for i in range(1000):
+        t = -1900 + 2 * i
+        load = max(0.0, (t + 600) / 600)
+        p2 = 2.5 + 4 * load if t <= 0 else 0.2
+        vals = [t, 40, 60, 10.0, 10.0,
+                1, 12000, 18.0, 1.0, -0.5, -0.5, 2.3, 0, 0, 1.0, 2.0, 67,
+                1 if t <= 0 else 0, 12000, 19.5 + load, p2, -p2 / 2, -p2 / 2, p2, 0, 0, 1.2, 2.0 - 1.8 * load, 67 + 40 * load]
+        rows.append("TRIPCSV," + ",".join("%g" % v for v in vals))
+    rows.append("[TRIP] ===== end of trip recording =====")
+    return "\n".join(rows) + "\n"
+
+
+def spindle_trip():
+    """Mimic $Spindle/Trip=TEST: the spindle's fault message, then the XY board saving the file."""
+    time.sleep(0.5)
+    broadcast("[MSG:WARN: SpindleBoard: over-current on M2 (6.3A) - spindle stopped; re-home the Z, then send a new speed]")
+    broadcast("[MSG:INFO: SpindleBoard: receiving spindle trip recording: over-current on M2 (6.3A) (at 812.345s uptime)]")
+    time.sleep(1)
+    TRIP["csv"] = trip_csv()
+    broadcast("[MSG:INFO: SpindleBoard: spindle trip recording saved to /spindle_trip.csv (1004 lines)]")
 
 
 def telnet():
@@ -115,6 +147,8 @@ class H(http.server.BaseHTTPRequestHandler):
             self._send(200, json.dumps({"files": [{"name": "config.yaml", "size": "42"}], "path": "/", "status": "Ok"}), "application/json")
         elif self.path == "/config.yaml":
             self._send(200, "board: Maslow S3 Board\nname: Maslow\n")
+        elif self.path == "/spindle_trip.csv" and TRIP["csv"]:
+            self._send(200, TRIP["csv"])
         else:
             self._send(404, "not found")
 

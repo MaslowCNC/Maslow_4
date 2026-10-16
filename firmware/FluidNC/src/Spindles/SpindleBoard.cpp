@@ -9,6 +9,7 @@
 #include "../GCode.h"                  // gc_sync_position
 #include "../Planner.h"                // plan_sync_position
 #include "../WebUI/WifiConfig.h"       // wifi_sta_ssid / wifi_sta_password (ENABLE_WIFI)
+#include "Driver/localfs.h"            // localfsName
 
 #include <cstdio>   // snprintf
 #include <cstdlib>  // strtol
@@ -243,6 +244,75 @@ namespace Spindles {
 #endif
     }
 
+    void SpindleBoard::sendTripRequest(bool test) {
+        if (!_uart) {
+            log_error(name() << ": cannot request the trip recording - no link to the spindle board");
+            return;
+        }
+        _uart->write((const uint8_t*)(test ? "T!\n" : "T\n"), test ? 3 : 2);
+        log_info(name() << ": " << (test ? "asked the spindle board to record a test trip"
+                                        : "asked the spindle board to re-send its trip recording")
+                        << "; it is saved to " << TRIP_FILE << " (~20 s)");
+    }
+
+    // The spindle board sends its trip recording (the ~2 s of motor state before an over-current
+    // or driver fault) as "[TRIP] ..." and "TRIPCSV,..." lines, one every 20 ms.  Save them to
+    // the local filesystem rather than the console: ~1000 lines would bury everything else.
+    // Only while the machine is not moving - a flash write can stall this loop for a few ms, and a
+    // trip stops the job with an alarm anyway.  A recording missed while moving can be fetched
+    // again with $Spindle/Trip.
+    void SpindleBoard::handleTripLine() {
+        _trip_last_ms = millis();
+        bool begin    = strncmp(_rx_buf, "[TRIP] ===== trip recording:", 28) == 0;
+        if (begin) {
+            if (_trip_file) {
+                closeTripFile("interrupted by a new recording");
+            }
+            State st = sys.state();
+            if (st == State::Cycle || st == State::Jog || st == State::Homing || st == State::Hold) {
+                log_warn(name() << ": spindle trip recording not saved while the machine is moving;"
+                                   " fetch it later with $Spindle/Trip");
+                return;
+            }
+            try {
+                _trip_file = new FileStream(TRIP_FILE, "w", localfsName);
+            } catch (...) {
+                _trip_file = nullptr;
+                log_error(name() << ": cannot create " << TRIP_FILE << " for the spindle trip recording");
+                return;
+            }
+            _trip_lines = 0;
+            // "[TRIP] ===== trip recording: <reason> (at <uptime>) =====" -> "<reason> (at <uptime>)"
+            std::string what(_rx_buf + 29);
+            if (what.size() > 6 && what.compare(what.size() - 6, 6, " =====") == 0) {
+                what.resize(what.size() - 6);
+            }
+            log_info(name() << ": receiving spindle trip recording: " << what);
+        }
+        if (!_trip_file) {
+            return;
+        }
+        _trip_file->write((const uint8_t*)_rx_buf, _rx_len);
+        _trip_file->write((const uint8_t*)"\n", 1);
+        _trip_lines++;
+        if (strncmp(_rx_buf, "[TRIP] ===== end of trip recording", 34) == 0) {
+            closeTripFile(nullptr);
+        }
+    }
+
+    void SpindleBoard::closeTripFile(const char* why) {
+        if (!_trip_file) {
+            return;
+        }
+        delete _trip_file;
+        _trip_file = nullptr;
+        if (why) {
+            log_warn(name() << ": spindle trip recording incomplete (" << why << "), " << _trip_lines << " lines in " << TRIP_FILE);
+        } else {
+            log_info(name() << ": spindle trip recording saved to " << TRIP_FILE << " (" << _trip_lines << " lines)");
+        }
+    }
+
     void SpindleBoard::updateHoldState() {
         // The Z axis is driven by the spindle board's two BLDC motors.  While the machine is
         // at rest and the spindle is stopped, those drivers would otherwise sit energized just
@@ -305,6 +375,13 @@ namespace Spindles {
             }
             if (c == '\n') {
                 _rx_buf[_rx_len] = '\0';
+                // Trip recording lines are saved to a file, not parsed as status or events.
+                if (strncmp(_rx_buf, "[TRIP]", 6) == 0 || strncmp(_rx_buf, "TRIPCSV", 7) == 0) {
+                    _last_rx_ms = millis();
+                    handleTripLine();
+                    _rx_len = 0;
+                    continue;
+                }
                 // The board reports status every 50 ms, so a long silence before this line
                 // means it went away - usually a reboot or reflash, which resets its fan
                 // speed to 100.  _last_rx_ms == 0 means no line has been read yet.
@@ -391,6 +468,9 @@ namespace Spindles {
             } else {
                 _rx_len = 0;  // overflow: drop the malformed line
             }
+        }
+        if (_trip_file && millis() - _trip_last_ms > TRIP_LINE_TIMEOUT_MS) {
+            closeTripFile("no more lines from the spindle board");
         }
     }
 

@@ -23,6 +23,7 @@
 
 #include "Spindle.h"
 #include "../Uart.h"
+#include "../FileStream.h"
 
 namespace Spindles {
     class SpindleBoard : public Spindle {
@@ -58,6 +59,13 @@ namespace Spindles {
         // Tell the spindle board to remove the loaded tool (raise the Z until the tool clears
         // the top-of-travel beam).  Triggered by the $Spindle/RemoveTool command / web UI button.
         void sendRemoveTool();
+
+        // Ask the spindle board to send its trip recording over the link again ("T"), or with
+        // test=true to record a test one now ("T!").  Triggered by $Spindle/Trip [TEST].  The
+        // recording is saved to the local filesystem as TRIP_FILE either way.
+        void sendTripRequest(bool test);
+
+        static constexpr const char* TRIP_FILE = "/spindle_trip.csv";
 
         // The single active instance, so the Maslow loop can stream Z to it
         // without depending on the spindle factory internals.
@@ -111,7 +119,7 @@ namespace Spindles {
         volatile bool     _rpm_dirty   = false;
 
         // Status return-link parsing
-        char    _rx_buf[160];
+        char    _rx_buf[400];  // the trip recording's CSV header line is ~330 chars
         size_t  _rx_len     = 0;
         uint8_t _last_fault = 0;
 
@@ -135,6 +143,17 @@ namespace Spindles {
         uint32_t _last_hold_release_ms = 0;
 
         static const uint32_t HOLD_RELEASE_REPEAT_MS = 2000;
+
+        // Trip recording being received from the spindle board (see handleTripLine).
+        FileStream* _trip_file    = nullptr;
+        int         _trip_lines   = 0;
+        uint32_t    _trip_last_ms = 0;
+
+        static const uint32_t TRIP_LINE_TIMEOUT_MS = 3000;
+
+        // Save one "[TRIP] ..." / "TRIPCSV,..." line from the spindle board to TRIP_FILE.
+        void handleTripLine();
+        void closeTripFile(const char* why);
 
         void sendSpeed(uint32_t rpm);
         void sendPhase(float deg);

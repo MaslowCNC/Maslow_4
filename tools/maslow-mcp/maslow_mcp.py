@@ -40,6 +40,8 @@ import anyio
 import requests
 from mcp.server.mcpserver import MCPServer
 
+import trip_analysis
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 LOGDIR = os.path.join(HERE, "logs")
@@ -56,6 +58,11 @@ HUB_HOST, HUB_PORT = os.environ.get("SPINDLE_HUB", "127.0.0.1:4567").rsplit(":",
 HUB_PORT = int(HUB_PORT)
 
 ALLOW_MOTION = False  # set from --allow-motion in main()
+
+SPINDLE_TRIP_FILE = "/spindle_trip.csv"  # where the XY board saves the spindle's trip recording
+# Status polling for status_history: fast while something is running, slow otherwise.
+POLL_BUSY_S, POLL_IDLE_S = 0.5, 2.0
+BUSY_STATES = {"Run", "Hold", "Jog", "Home", "Door"}
 
 # ---------------------------------------------------------------------------------------------
 # Command classification
@@ -135,7 +142,11 @@ class Board:
         os.makedirs(LOGDIR, exist_ok=True)
         self.log_path = os.path.join(LOGDIR, time.strftime("xy-%y%m%d-%H%M%S.log"))
         self.log_file = open(self.log_path, "a", buffering=1)
+        # '?' replies from the status poller, kept apart from the log: (time, raw report).
+        self.status_hist = collections.deque(maxlen=20000)
+        self.status_log = open(self.log_path.replace("xy-", "status-"), "a", buffering=1)
         threading.Thread(target=self._run, daemon=True).start()
+        threading.Thread(target=self._poll, daemon=True).start()
 
     # -- connection -------------------------------------------------------------------------
 
@@ -190,7 +201,26 @@ class Board:
             self.seq += 1
             self.lines.append((self.seq, t, text))
             self.cond.notify_all()
-        self.log_file.write("%s %s\n" % (stamp(t), text))
+        if is_status(text):
+            # Status reports go to their own log, so the poller does not bury the messages.
+            self.status_hist.append((t, text))
+            self.status_log.write("%s %s\n" % (stamp(t), text))
+        else:
+            self.log_file.write("%s %s\n" % (stamp(t), text))
+
+    def _poll(self):
+        """Ask for '?' periodically so status_history can show what the machine was doing at any
+        moment, e.g. the feed and position when the spindle tripped."""
+        while True:
+            delay = POLL_IDLE_S
+            if self.connected():
+                try:
+                    rep = self.status(timeout=2.0)
+                    if rep and parse_status(rep)["state"].split(":")[0] in BUSY_STATES:
+                        delay = POLL_BUSY_S
+                except (OSError, ConnectionError):
+                    pass
+            time.sleep(delay)
 
     def _send_raw(self, data):
         with self.cond:
@@ -260,8 +290,23 @@ class Board:
         cutoff = time.time() - since_seconds if since_seconds else 0
         rx = re.compile(pattern, re.I) if pattern else None
         with self.cond:
-            sel = [(t, s) for _, t, s in self.lines if t >= cutoff and (rx is None or rx.search(s))]
+            sel = [(t, s) for _, t, s in self.lines
+                   if t >= cutoff and not is_status(s) and (rx is None or rx.search(s))]
         return ["%s %s" % (stamp(t), s) for t, s in sel[-n:]]
+
+    def lines_between(self, t0, t1, pattern=None):
+        rx = re.compile(pattern, re.I) if pattern else None
+        with self.cond:
+            return [(t, s) for _, t, s in self.lines
+                    if t0 <= t <= t1 and not is_status(s) and (rx is None or rx.search(s))]
+
+    def statuses_between(self, t0, t1):
+        with self.cond:
+            return [(t, s) for t, s in self.status_hist if t0 <= t <= t1]
+
+
+def is_status(text):
+    return text.startswith("<") and text.endswith(">")
 
 
 def parse_status(rep):
@@ -379,6 +424,33 @@ async def send_command(command: str, timeout: float = 10) -> str:
         return "\n".join(board.command(cmd, timeout))
 
     return await run(go)
+
+
+@mcp.tool()
+async def status_history(seconds: float = 60, around: str = "", window: float = 10) -> str:
+    """The XY board's status reports ('?', polled every 0.5 s while running, 2 s otherwise).
+
+    Shows state, machine position, feed/spindle speed (FS:) and pins over time. By default the last
+    `seconds`; with `around` = a time from read_log ("HH:MM:SS[.mmm]", today) it shows `window` s
+    either side of that moment instead. The full history is in logs/status-*.log.
+    """
+    if around:
+        t = _today_at(around)
+        if t is None:
+            return "Could not read the time '%s' (want HH:MM:SS or HH:MM:SS.mmm)." % around
+        sel = board.statuses_between(t - window, t + window)
+    else:
+        sel = board.statuses_between(time.time() - seconds, time.time())
+    return "\n".join("%s %s" % (stamp(t), s) for t, s in sel) or "(no status reports in that window)"
+
+
+def _today_at(hms):
+    m = re.fullmatch(r"(\d{1,2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?", hms.strip())
+    if not m:
+        return None
+    lt = time.localtime()
+    base = time.mktime((lt.tm_year, lt.tm_mon, lt.tm_mday, int(m.group(1)), int(m.group(2)), int(m.group(3)), 0, 0, -1))
+    return base + (int(m.group(4).ljust(3, "0")) / 1000 if m.group(4) else 0)
 
 
 @mcp.tool()
@@ -722,6 +794,97 @@ async def spindle_log(lines: int = 200, grep: str = "") -> str:
         rx = re.compile(grep, re.I)
         sel = [s for s in sel if rx.search(s)]
     return "%s\n%s" % (files[-1], "\n".join(sel[-lines:]))
+
+
+def _trip_context(t_trip):
+    """XY-side messages and status reports around the moment the spindle tripped."""
+    out = ["", "XY board around the trip (%s):" % stamp(t_trip)]
+    msgs = board.lines_between(t_trip - 10, t_trip + 3, r"spindle|alarm|error|warn|load|over-?current|stall")
+    out += ["  %s %s" % (stamp(t), s) for t, s in msgs[-25:]] or ["  (no messages - was this server running then?)"]
+    sts = board.statuses_between(t_trip - 10, t_trip + 3)
+    if sts:
+        out.append("Status reports (state | position | feed,spindle):")
+        out += ["  %s %s" % (stamp(t), s) for t, s in sts[-24:]]
+    return out
+
+
+def _trip_time():
+    """When the XY board heard about the latest trip: the spindle's fault message, else the alarm."""
+    for pattern in (r"SpindleBoard: .*(over-current|over-temperature|manual test)", r"SpindleBoard reported fault",
+                    r"receiving spindle trip recording"):
+        hits = board.lines_between(0, time.time(), pattern)
+        if hits:
+            return hits[-1][0]
+    return None
+
+
+@mcp.tool()
+async def spindle_trip(action: str = "analyse", source: str = "xy", wait: float = 45) -> str:
+    """Diagnose a spindle over-current / driver-fault stop from the spindle's trip recording.
+
+    The spindle records ~2 s of motor state (per-phase currents, filtered protection current,
+    voltage limit, load-sense Iq and lag, FOC loop rate, nFAULT retries, Z phase) and, after a trip,
+    sends it to the XY board, which saves it as /spindle_trip.csv (~20 s after the trip). This tool
+    downloads that file, prints a diagnosis, and adds what the XY board was doing at the time
+    (messages and status reports).
+
+    action: "analyse" (default) reads the saved recording; "fetch" first asks the spindle to send
+    its last recording again ($Spindle/Trip); "test" records a test trip now ($Spindle/Trip=TEST,
+    no motion) to check the path end to end. fetch/test need an Idle/Alarm machine.
+    source: "xy" (the XY board's file, over WiFi) or "hub" (the newest spindle serial-hub log, USB).
+    The raw CSV is saved under logs/downloads/.
+    """
+
+    def go():
+        notes = []
+        if action not in ("analyse", "analyze", "fetch", "test"):
+            return "action must be analyse, fetch or test."
+        if action in ("fetch", "test"):
+            if source != "xy":
+                return "fetch/test go through the XY board; use source='xy'."
+            require_state(WRITE_STATES, "the trip request")
+            with board.cond:
+                start = board.seq
+            board.command("$Spindle/Trip" + ("=TEST" if action == "test" else ""), 5)
+            lines, ok = board._wait_for(
+                start, lambda t: re.search(r"trip recording (saved|incomplete|not saved)|cannot create|"
+                                           r"no trip recording|already being sent|trip test refused", t), wait)
+            notes += [l for l in lines if "SpindleBoard" in l]
+            if not ok:
+                notes.append("(the XY board did not report the recording saved within %.0f s)" % wait)
+
+        if source == "hub":
+            files = sorted(glob.glob(os.path.join(SPINDLE_LOGDIR, "hub-*.log")), key=os.path.getmtime)
+            if not files:
+                return "No hub logs in %s." % SPINDLE_LOGDIR
+            with open(files[-1], errors="replace") as f:
+                text = f.read()
+            where = files[-1]
+        else:
+            r = requests.get(base_url() + SPINDLE_TRIP_FILE, timeout=30)
+            if r.status_code == 404:
+                return "\n".join(notes + ["No %s on the XY board yet - no trip recorded since this firmware "
+                                           "was flashed. Use action='fetch' or 'test'." % SPINDLE_TRIP_FILE])
+            r.raise_for_status()
+            text = r.content.decode("utf-8", "replace")
+            dest_dir = os.path.join(LOGDIR, "downloads")
+            os.makedirs(dest_dir, exist_ok=True)
+            where = os.path.join(dest_dir, time.strftime("spindle_trip-%y%m%d-%H%M%S.csv"))
+            with open(where, "w") as f:
+                f.write(text)
+
+        recs, warnings = trip_analysis.parse(text)
+        if not recs:
+            return "\n".join(notes + ["No trip recording found in %s." % where])
+        out = notes + ["Recording: %s" % where] + ["Warning: " + w for w in warnings] + [""]
+        out.append(trip_analysis.summarise(recs[-1]))
+        if source == "xy":
+            t_trip = _trip_time()
+            if t_trip:
+                out += _trip_context(t_trip)
+        return "\n".join(out)
+
+    return await run(go)
 
 
 def main():

@@ -206,6 +206,23 @@ namespace WebUI {
         return Error::Ok;
     }
 
+    // Fetch the spindle board's trip recording (the ~2 s of motor state before its last
+    // over-current or driver fault) into /spindle_trip.csv.  "$Spindle/Trip=TEST" records a
+    // test one instead, to check the path end to end.
+    static Error spindleTrip(char* parameter, AuthenticationLevel auth_level, Channel& out) {
+        if (Spindles::SpindleBoard::instance == nullptr) {
+            log_to(out, "No SpindleBoard spindle is configured");
+            return Error::InvalidValue;
+        }
+        bool test = parameter && strcasecmp(parameter, "TEST") == 0;
+        if (parameter && *parameter && !test) {
+            log_to(out, "Usage: $Spindle/Trip or $Spindle/Trip=TEST");
+            return Error::InvalidValue;
+        }
+        Spindles::SpindleBoard::instance->sendTripRequest(test);
+        return Error::Ok;
+    }
+
     // Tell the spindle/Z controller board to run its Z homing cycle (raise the Z until the
     // top-of-travel beam breaks).  Exposed as $Spindle/Home for the web UI test button.
     static Error homeSpindle(char* parameter, AuthenticationLevel auth_level, Channel& out) {
@@ -683,6 +700,7 @@ namespace WebUI {
         new WebCommand(NULL, WEBCMD, WA, "ESP810", "Spindle/EnableOTA", enableSpindleOTA);
         new WebCommand(NULL, WEBCMD, WU, "ESP811", "Spindle/Home", homeSpindle);
         new WebCommand(NULL, WEBCMD, WU, "ESP812", "Spindle/RemoveTool", removeSpindleTool);
+        new WebCommand(NULL, WEBCMD, WU, "ESP813", "Spindle/Trip", spindleTrip);
 
         new WebCommand(NULL, WEBCMD, WU, "ESP720", "LocalFS/Size", localFSSize);
         new WebCommand("FORMAT", WEBCMD, WA, "ESP710", "LocalFS/Format", formatLocalFS);
