@@ -123,6 +123,14 @@ namespace Spindles {
         size_t  _rx_len     = 0;
         uint8_t _last_fault = 0;
 
+        // Set when the spindle board reports a fault; cleared only by a deliberate M3/M4.
+        // While set, speeds queued by the stepper ISR are dropped: the blocks still in the
+        // planner when the fault arrived carry the old speed and would restart the spindle.
+        bool _fault_latched = false;
+
+        // Whether the Maslow loop reported belt motion on the latest update() call.
+        bool _belt_motion_active = false;
+
         // Set once the spindle board has answered (handshake reply or status line),
         // so the runtime confirmation message is logged exactly once.
         bool _link_confirmed = false;
@@ -149,11 +157,16 @@ namespace Spindles {
         int         _trip_lines   = 0;
         uint32_t    _trip_last_ms = 0;
 
+        // A recording arrived while the machine was moving and was not saved.  Ask for it
+        // again once the machine is at rest and the first copy has finished arriving.
+        bool _trip_refetch = false;
+
         static const uint32_t TRIP_LINE_TIMEOUT_MS = 3000;
 
         // Save one "[TRIP] ..." / "TRIPCSV,..." line from the spindle board to TRIP_FILE.
         void handleTripLine();
         void closeTripFile(const char* why);
+        bool machineAtRest() const;
 
         void sendSpeed(uint32_t rpm);
         void sendPhase(float deg);

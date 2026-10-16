@@ -339,10 +339,12 @@ static void setSpindleSpeed(float rpm, MotorController& mc1, MotorController& mc
     if (rpm < 0.0f) rpm = 0.0f;
     if (rpm > MAX_COMMAND_RPM) rpm = MAX_COMMAND_RPM;
 
-    // A fresh speed command is the operator's deliberate restart after an over-current stop,
-    // so it clears the latched fault.  (The Z reference is NOT restored here - only a homing
-    // cycle can do that.)
-    g_fault_code = 0;
+    // A fresh non-zero speed is the operator's deliberate restart after an over-current stop,
+    // so it clears the latched fault.  S0 does not: the XY board sends it as it raises the
+    // fault's alarm, and clearing the fault then would let the next speed it sends restart the
+    // spindle on its own.  (The Z reference is NOT restored here - only a homing cycle can do
+    // that.)
+    if (rpm > 0.0f) g_fault_code = 0;
     g_hold_release_requested = false;  // motion commanded: cancel any pending Z-hold release
     if (rpm > 0.0f) tripRecorderArmOnStart();  // restarting: record afresh for the next trip
 

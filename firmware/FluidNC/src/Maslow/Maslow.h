@@ -115,6 +115,8 @@ public:
     void markBeltPositionsStale();
 
     void stopMotors();
+    /** Switches the spindle off as M5 would (used by every stop path) */
+    void stopSpindle();
     /** Raises Z axis to Z home + 2mm to prevent workpiece damage after stop */
     void raiseZ();
 
@@ -202,6 +204,9 @@ private:
 
     //Stores a reference to the global system runtime function to be called when blocking operations are needed
     void (*_sys_rt)() = nullptr;
+
+    // Stream Z, the fan level and the belt-cooling request to the spindle board and read its replies.
+    void updateSpindleBoard(bool beltMotionActive);
 
     //Used to overide and drive motors directly...dangerous
     bool          TLIOveride   = false;

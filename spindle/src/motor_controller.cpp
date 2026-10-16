@@ -202,11 +202,15 @@ void MotorController::rampVelocity(float dt, float ramp_rate) {
         current_velocity += (velocity_error > 0) ? max_change : -max_change;
     }
 
-    // Power down when velocity reaches 0
-    if (enabled && fabsf(current_velocity) < 0.1f && fabsf(target_velocity) < 0.1f) {
-        disable();
+    // Power down when velocity reaches 0.  A motor that is already off (stopped by
+    // emergencyStop() and then sent S0) just leaves velocity mode; otherwise it would stay in
+    // it for good and the board would report "Spindle On" with the motors stopped.
+    if (fabsf(current_velocity) < 0.1f && fabsf(target_velocity) < 0.1f) {
+        if (enabled) {
+            disable();
+            Serial.printf("Motor (dir=%+d) powered down - velocity at 0\n", direction);
+        }
         velocity_mode = false;
-        Serial.printf("Motor (dir=%+d) powered down - velocity at 0\n", direction);
     }
 
     // Re-enable when target is non-zero and motor is disabled

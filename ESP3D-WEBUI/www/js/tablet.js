@@ -995,6 +995,9 @@ function tabletGrblState(grbl, response) {
 
   spindleSpeed = grbl.spindleSpeed ? Number(grbl.spindleSpeed) : "";
   //setText('spindle-speed', spindleSpeed);
+  if (Number.isFinite(grbl.spindleSpeed)) {
+    tabletShowSpindleState(grbl.spindleSpeed > 0);
+  }
 
   const now = new Date();
   //setText('time-of-day', now.getHours() + ':' + String(now.getMinutes()).padStart(2, '0'));
@@ -1435,27 +1438,31 @@ const tabletOptionalSettingsPopupHide = () => hideModal("optional-settings-popup
 const tabletCalOpenOptionalSettings = () => openModal("optional-settings-popup");
 
 // Control event handlers - Spindle Toggle
+// The button follows the spindle speed the machine reports (the FS: field of each status
+// report), not its own click history: a job or a stop also turns the spindle on and off, and a
+// button that only remembered its last click would send M3 to a spindle that is already running.
 let tabletSpindleOn = false;
-const tabletToggleSpindle = () => {
-  tabletSpindleOn = !tabletSpindleOn;
+const TABLET_SPINDLE_RPM = 12000; // the spindle board's top commanded speed
+
+const tabletShowSpindleState = (on) => {
+  tabletSpindleOn = on;
   const btn = id("tablettab_spindle_toggle");
+  if (btn) {
+    btn.textContent = on ? "Spindle Off" : "Spindle On";
+    btn.classList.toggle("stop-button", on);
+    btn.classList.toggle("green-button", !on);
+  }
+};
+
+const tabletToggleSpindle = () => {
   if (tabletSpindleOn) {
-    sendCommand("M3 S14000");
-    addMessage("Spindle ON (14000 RPM)");
-    if (btn) {
-      btn.textContent = "Spindle Off";
-      btn.classList.remove("green-button");
-      btn.classList.add("stop-button");
-    }
-  } else {
     sendCommand("M5");
     addMessage("Spindle OFF");
-    if (btn) {
-      btn.textContent = "Spindle On";
-      btn.classList.remove("stop-button");
-      btn.classList.add("green-button");
-    }
+  } else {
+    sendCommand(`M3 S${TABLET_SPINDLE_RPM}`);
+    addMessage(`Spindle ON (${TABLET_SPINDLE_RPM} RPM)`);
   }
+  tabletShowSpindleState(!tabletSpindleOn);
 };
 
 // Control event handler - Spindle Z Homing (test button next to Spindle On/Off)

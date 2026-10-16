@@ -8,6 +8,8 @@
 #include "../Protocol.h"               // rtAlarm, ExecAlarm
 #include "../GCode.h"                  // gc_sync_position
 #include "../Planner.h"                // plan_sync_position
+#include "../MotionControl.h"          // mc_reset
+#include "../Maslow/Maslow.h"          // Maslow.resetUpdateWatchdog
 #include "../WebUI/WifiConfig.h"       // wifi_sta_ssid / wifi_sta_password (ENABLE_WIFI)
 #include "Driver/localfs.h"            // localfsName
 
@@ -119,6 +121,12 @@ namespace Spindles {
         uint32_t dev_speed = mapSpeed(speed);
         if (state == SpindleState::Disable) {
             dev_speed = offSpeed();
+            // A speed the stepper ISR queued for the next update() would otherwise go out
+            // after this stop and start the spindle again.
+            _rpm_dirty = false;
+        } else {
+            // M3/M4 is the operator's deliberate restart after a spindle fault.
+            _fault_latched = false;
         }
 
         sendSpeed(dev_speed);
@@ -255,12 +263,22 @@ namespace Spindles {
                         << "; it is saved to " << TRIP_FILE << " (~20 s)");
     }
 
+    // Not moving: no motion state, and the Maslow loop is not driving the belts.  The state alone
+    // is not enough - after a spindle alarm the state reads Alarm before the belts have stopped.
+    bool SpindleBoard::machineAtRest() const {
+        State st = sys.state();
+        bool  moving = st == State::Cycle || st == State::Jog || st == State::Homing || st == State::Hold ||
+                      st == State::SafetyDoor;
+        return !moving && !_belt_motion_active;
+    }
+
     // The spindle board sends its trip recording (the ~2 s of motor state before an over-current
     // or driver fault) as "[TRIP] ..." and "TRIPCSV,..." lines, one every 20 ms.  Save them to
     // the local filesystem rather than the console: ~1000 lines would bury everything else.
-    // Only while the machine is not moving - a flash write can stall this loop for a few ms, and a
-    // trip stops the job with an alarm anyway.  A recording missed while moving can be fetched
-    // again with $Spindle/Trip.
+    // Only while the machine is at rest: creating the file can stall this loop for a few hundred
+    // ms, which trips the Maslow update watchdog while the belts are moving.  A recording that
+    // arrives during motion (the usual case - it follows the trip by ~0.1 s) is asked for again
+    // once the machine has stopped; see serviceStatus().
     void SpindleBoard::handleTripLine() {
         _trip_last_ms = millis();
         bool begin    = strncmp(_rx_buf, "[TRIP] ===== trip recording:", 28) == 0;
@@ -268,12 +286,15 @@ namespace Spindles {
             if (_trip_file) {
                 closeTripFile("interrupted by a new recording");
             }
-            State st = sys.state();
-            if (st == State::Cycle || st == State::Jog || st == State::Homing || st == State::Hold) {
-                log_warn(name() << ": spindle trip recording not saved while the machine is moving;"
-                                   " fetch it later with $Spindle/Trip");
+            if (!machineAtRest()) {
+                if (!_trip_refetch) {
+                    log_info(name() << ": spindle trip recording arriving while the machine is moving;"
+                                       " it will be fetched again once the machine is at rest");
+                }
+                _trip_refetch = true;
                 return;
             }
+            _trip_refetch = false;
             try {
                 _trip_file = new FileStream(TRIP_FILE, "w", localfsName);
             } catch (...) {
@@ -281,6 +302,8 @@ namespace Spindles {
                 log_error(name() << ": cannot create " << TRIP_FILE << " for the spindle trip recording");
                 return;
             }
+            // Creating the file is a deliberate blocking flash write, made only at rest.
+            Maslow.resetUpdateWatchdog();
             _trip_lines = 0;
             // "[TRIP] ===== trip recording: <reason> (at <uptime>) =====" -> "<reason> (at <uptime>)"
             std::string what(_rx_buf + 29);
@@ -353,9 +376,15 @@ namespace Spindles {
         if (!_uart) {
             return;
         }
+        _belt_motion_active = beltMotionActive;
         if (_rpm_dirty) {
             _rpm_dirty = false;
-            sendSpeed(_pending_rpm);
+            // After a spindle fault only a deliberate M3/M4 may start the spindle again (see
+            // setState); the stepper ISR re-sending the speed of a block that was already
+            // planned must not.
+            if (!_fault_latched) {
+                sendSpeed(_pending_rpm);
+            }
         }
         sendPhase(zPositionMM * _phase_deg_per_mm);
         sendBeltCooling(beltMotionActive);
@@ -458,6 +487,13 @@ namespace Spindles {
                     uint8_t fault = (uint8_t)strtol(f + 2, nullptr, 10);
                     if (fault != 0 && _last_fault == 0) {
                         log_error("SpindleBoard reported fault " << (int)fault);
+                        // The spindle has stopped, so the machine must stop too.  An alarm on its
+                        // own leaves the steppers running and drags the stalled tool through the
+                        // work.  mc_reset() stops stepping at once, ends the job and switches the
+                        // spindle off (M5), as the VFD spindles do when they lose their drive.
+                        _fault_latched = true;
+                        _rpm_dirty     = false;
+                        mc_reset();
                         rtAlarm = ExecAlarm::SpindleControl;
                     }
                     _last_fault = fault;
@@ -471,6 +507,13 @@ namespace Spindles {
         }
         if (_trip_file && millis() - _trip_last_ms > TRIP_LINE_TIMEOUT_MS) {
             closeTripFile("no more lines from the spindle board");
+        }
+        // A recording skipped because the machine was moving: once its lines have stopped (the
+        // spindle board refuses a re-send while it is still sending) and the machine is at
+        // rest, ask for it again.  A spindle start clears the board's copy, so do it promptly.
+        if (_trip_refetch && !_trip_file && millis() - _trip_last_ms > TRIP_LINE_TIMEOUT_MS && machineAtRest()) {
+            _trip_refetch = false;
+            sendTripRequest(false);
         }
     }
 

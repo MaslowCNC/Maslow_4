@@ -172,8 +172,8 @@ static void requireRehome();
 //
 // Two things follow from the slip:
 //   - fault code 2 is latched so the XY board raises its alarm and a running job stops.  It must
-//     STAY latched: the XY board alarms only on a 0 -> non-zero transition.  A fresh speed
-//     command (setSpindleSpeed) is the deliberate restart that clears it.
+//     STAY latched: the XY board alarms only on a 0 -> non-zero transition.  A fresh non-zero
+//     speed command (setSpindleSpeed) is the deliberate restart that clears it; S0 is not.
 //   - the Z position IS the relative phase between the two motors, so a slip invalidates it.
 //     Z targets are refused until a homing cycle re-establishes the zero.
 static void stopForOverCurrent(const char* detail) {

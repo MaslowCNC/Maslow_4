@@ -154,6 +154,7 @@ void Maslow_::update() {
             digitalWrite(WIFILED, ledsOn ? HIGH : LOW);
             wdTimer = millis();
         }
+        updateSpindleBoard(false);
         return;
     }
 
@@ -175,6 +176,7 @@ void Maslow_::update() {
             }
             errorMessage = "";
         }
+        updateSpindleBoard(false);
         return;
     }
 
@@ -252,12 +254,7 @@ void Maslow_::update() {
 
         Maslow.updateEncoderPositions();  //We always update encoder positions in any state,
 
-        // Stream the planned Z position to the spindle/Z controller board (if configured).
-        // The spindle board converts this into BLDC phase offset to move the Z axis.
-        if (Spindles::SpindleBoard::instance) {
-            float zPositionMM = steps_to_mpos(get_axis_motor_steps(4), 4);  // Z from Z axis (axis 4)
-            Spindles::SpindleBoard::instance->update(zPositionMM, beltMotionActive, dustFanSpeed);
-        }
+        updateSpindleBoard(beltMotionActive);
 
         for (int arm = _TL; arm < ARM_COUNT; arm++) {
             axis[arm].update();  //update motor currents and belt speeds like this for now
@@ -1211,7 +1208,29 @@ static void stopEverything() {
 void Maslow_::panic() {
     panicCount++;
     stop();
+    stopSpindle();
     stopEverything();
+}
+
+// Switch the spindle off as M5 would.  Clearing the modal state as well means no later planner
+// block can carry the old speed back to the spindle.
+void Maslow_::stopSpindle() {
+    gc_state.modal.spindle = SpindleState::Disable;
+    if (spindle) {
+        spindle->stop();
+    }
+}
+
+// Stream the planned Z position to the spindle/Z controller board (if configured), which turns it
+// into the BLDC phase offset that moves the Z axis, along with the fan level and the belt-cooling
+// request, and read the board's replies.  This keeps running after a watchdog or emergency stop:
+// otherwise the board never hears that the belts have stopped, so the dust fan runs until a power
+// cycle, and its faults and trip recordings go unread.
+void Maslow_::updateSpindleBoard(bool beltMotionActive) {
+    if (Spindles::SpindleBoard::instance) {
+        float zPositionMM = steps_to_mpos(get_axis_motor_steps(4), 4);  // Z from Z axis (axis 4)
+        Spindles::SpindleBoard::instance->update(zPositionMM, beltMotionActive, dustFanSpeed);
+    }
 }
 
 // Reset the update watchdog timer to prevent false emergency stops during
@@ -1225,6 +1244,7 @@ void Maslow_::eStop(String message) {
     log_error("Emergency stop! Stopping all motors");
     log_warn("The machine will not respond until turned off and back on again");
     stop();
+    stopSpindle();
     error        = true;
     errorMessage = message;
     stopEverything();
