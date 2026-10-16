@@ -445,7 +445,7 @@ async def download_file(path: str) -> str:
         with open(dest, "wb") as f:
             f.write(r.content)
         msg = "Saved %d bytes to %s" % (len(r.content), dest)
-        if len(r.content) < 64000:
+        if len(r.content) < 16000:
             try:
                 msg += "\n\n" + r.content.decode("utf-8")
             except UnicodeDecodeError:
