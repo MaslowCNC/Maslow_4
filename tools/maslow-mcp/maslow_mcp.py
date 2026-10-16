@@ -44,7 +44,10 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 LOGDIR = os.path.join(HERE, "logs")
 FIRMWARE_DIR = os.path.join(REPO, "firmware")
-SPINDLE_LOGDIR = os.path.join(REPO, "spindle", "logs")
+SPINDLE_DIR = os.path.join(REPO, "spindle")
+SPINDLE_LOGDIR = os.path.join(SPINDLE_DIR, "logs")
+SPINDLE_OTA_ENV = "esp32-s3-devkitc-1-ota"
+SPINDLE_FLASH_SH = os.environ.get("SPINDLE_FLASH_SH", os.path.join(SPINDLE_DIR, "tools", "flash.sh"))  # USB upload
 
 HOST = os.environ.get("MASLOW_HOST", "maslow.local")
 TELNET_PORT = int(os.environ.get("MASLOW_TELNET_PORT", "23"))
@@ -487,7 +490,7 @@ async def upload_file(local_path: str, remote_dir: str = "/", remote_name: str =
 
 
 def _pio():
-    for p in (os.path.expanduser("~/.platformio/penv/bin/pio"), shutil.which("pio")):
+    for p in (os.environ.get("MASLOW_PIO"), os.path.expanduser("~/.platformio/penv/bin/pio"), shutil.which("pio")):
         if p and os.path.exists(p):
             return p
     raise Refused("PlatformIO (pio) not found.")
@@ -526,6 +529,103 @@ async def flash_firmware(env: str = "wifi_s3", build: bool = True) -> str:
         else:
             result += "\nBoard has not reconnected after 60 s."
         return result
+
+    return await run(go)
+
+
+# Lines the XY board logs while relaying the spindle's OTA lifecycle (SpindleBoard.cpp).
+OTA_IP_RX = re.compile(r"spindle board is on WiFi at (\d+\.\d+\.\d+\.\d+)")
+# Logged when the spindle link comes up, or when data resumes after a gap (e.g. a reboot).
+LINK_BACK_RX = re.compile(r"link to spindle board confirmed|no data from spindle board for")
+OTA_ERR_RX = re.compile(r"spindle board could not start OTA|cannot enable spindle OTA|OTA_ERR")
+
+
+def _tail(p, n=2500):
+    return (p.stdout + p.stderr)[-n:]
+
+
+def _wait_spindle_ip(start_seq, timeout):
+    """Wait for the XY board to relay the spindle's OTA address. Returns (ip, error_line)."""
+    lines, _ = board._wait_for(start_seq, lambda s: OTA_IP_RX.search(s) or OTA_ERR_RX.search(s), timeout)
+    for s in reversed(lines):
+        m = OTA_IP_RX.search(s)
+        if m:
+            return m.group(1), None
+        if OTA_ERR_RX.search(s):
+            return None, s
+    return None, None
+
+
+@mcp.tool()
+async def flash_spindle(build: bool = True, usb_fallback: bool = True, wait_for_ip: float = 90) -> str:
+    """Build the spindle firmware and flash it over WiFi (ArduinoOTA), falling back to USB.
+
+    Steps: build the OTA env; send [ESP810] ($Spindle/EnableOTA) so the XY board hands its WiFi
+    credentials to the spindle; wait for the XY log to report the spindle's IP; push with espota.
+    A failed transfer makes the spindle reboot and offer OTA again, so the upload is retried once
+    on the new address. If WiFi does not work and usb_fallback is set, runs spindle/tools/flash.sh
+    (USB, pauses the serial hub). Needs --allow-motion and an Idle/Alarm machine; the spindle's
+    motors are disabled while it is in OTA mode.
+    """
+
+    def go():
+        require_motion("flash_spindle")
+        require_state(WRITE_STATES, "flash_spindle")
+        pio = _pio()
+        report = []
+        if build:
+            p = subprocess.run([pio, "run", "-e", SPINDLE_OTA_ENV], cwd=SPINDLE_DIR, capture_output=True, text=True, timeout=900)
+            if p.returncode != 0:
+                return "Spindle build failed:\n" + _tail(p)
+            report.append("Built %s." % SPINDLE_OTA_ENV)
+
+        with board.cond:
+            start = board.seq
+        reply = board.command("[ESP810]", 5)
+        report.append("[ESP810] -> " + " | ".join(reply))
+        ip, err = _wait_spindle_ip(start, wait_for_ip)
+        ota_ok = False
+        if ip is None:
+            report.append(err or "The spindle did not report a WiFi address within %.0f s." % wait_for_ip)
+        for attempt in (1, 2):
+            if ip is None:
+                break
+            report.append("Attempt %d: espota upload to %s." % (attempt, ip))
+            with board.cond:
+                start = board.seq
+            p = subprocess.run(
+                [pio, "run", "-e", SPINDLE_OTA_ENV, "-t", "upload", "--upload-port", ip],
+                cwd=SPINDLE_DIR, capture_output=True, text=True, timeout=600,
+            )
+            if p.returncode == 0:
+                ota_ok = True
+                report.append("WiFi upload succeeded.")
+                break
+            report.append("WiFi upload failed:\n" + _tail(p, 1500))
+            if attempt == 1:
+                # The spindle reboots after a failed transfer and reports its address again.
+                ip, err = _wait_spindle_ip(start, 60)
+                if ip is None:
+                    report.append(err or "The spindle did not come back into OTA mode within 60 s.")
+
+        if not ota_ok and usb_fallback:
+            report.append("Falling back to USB (%s)." % SPINDLE_FLASH_SH)
+            p = subprocess.run(["sh", SPINDLE_FLASH_SH], capture_output=True, text=True, timeout=900)
+            if p.returncode == 0:
+                report.append("USB upload succeeded. Note: the OTA request is still stored on the spindle, "
+                              "so it may sit in OTA mode (motors off) for up to 5 minutes before resuming.")
+            else:
+                report.append("USB upload failed:\n" + _tail(p, 1500))
+        elif not ota_ok:
+            report.append("Not flashed (USB fallback disabled).")
+
+        if ota_ok:
+            # The new firmware boots and the XY board logs the link coming back.
+            with board.cond:
+                start = board.seq
+            lines, ok = board._wait_for(start, lambda s: bool(LINK_BACK_RX.search(s)), 45)
+            report.append("Spindle link back: " + lines[-1] if ok else "No spindle link confirmation in the XY log within 45 s.")
+        return "\n".join(report)
 
     return await run(go)
 

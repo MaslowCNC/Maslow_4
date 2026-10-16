@@ -21,6 +21,7 @@ Python 3.10 or newer.
 | `list_files` / `download_file` | Reads the board's flash filesystem. Downloads go to `logs/downloads/`. | none |
 | `upload_file` | Uploads to the flash filesystem. | `--allow-motion`, machine idle |
 | `flash_firmware` | Runs `pio run -e <env>`, POSTs the result to `/updatefw`, waits for the reboot and reports the new version. | `--allow-motion`, machine idle |
+| `flash_spindle` | Builds the spindle's OTA env and sends `[ESP810]` (`$Spindle/EnableOTA`). It waits for the XY log to report the spindle's WiFi address, then pushes the firmware with espota. A failed transfer makes the spindle reboot and offer OTA again, so the upload is retried once at the new address. If WiFi fails, it falls back to USB with `spindle/tools/flash.sh`. | `--allow-motion`, machine idle |
 | `feed_hold` / `soft_reset` | `!` and Ctrl-X. These stop the whole machine, including your job. | none |
 | `cycle_start` | `~` | `--allow-motion` |
 | `spindle_command` | Sends a line to the spindle board through the hub and returns its output. | read-only commands are free, the rest need `--allow-motion` |
@@ -79,3 +80,6 @@ tools/maslow-mcp/.venv/bin/python tools/maslow-mcp/tests/test_fake.py
 
 This starts `tests/fake_board.py`, a stand-in FluidNC with telnet and HTTP. It then runs the
 server over stdio and calls every tool, including the busy and motion gates.
+`tests/fake_pio.sh` and `tests/fake_flash.sh` stand in for PlatformIO and the USB flash script.
+They let the test cover `flash_spindle`'s WiFi path, its retry and its USB fallback. The test
+points the server at them with `MASLOW_PIO` and `SPINDLE_FLASH_SH`.

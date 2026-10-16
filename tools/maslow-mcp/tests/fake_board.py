@@ -29,6 +29,7 @@ CANNED = {
 
 
 def handle(c):
+    state["s"] = "Idle"  # each test session starts with an idle machine
     clients.append(c)
     buf = b""
     try:
@@ -48,12 +49,34 @@ def handle(c):
                         state["s"] = "Run"
                     elif line == "IDLE":
                         state["s"] = "Idle"
+                    if line == "[ESP810]":
+                        threading.Thread(target=spindle_ota, daemon=True).start()
                     for out in CANNED.get(line.upper(), ["ok"]):
                         c.sendall((out + "\r\n").encode())
                 else:
                     buf += bytes([b])
     finally:
         clients.remove(c)
+
+
+def broadcast(text):
+    for c in list(clients):
+        try:
+            c.sendall((text + "\r\n").encode())
+        except OSError:
+            pass
+
+
+def spindle_ota():
+    """Mimic the XY board relaying the spindle's OTA lifecycle: an address, a retry address
+    (as after a failed transfer and reboot), then the link coming back."""
+    ip = "[MSG:INFO: SpindleBoard: spindle board is on WiFi at 127.0.0.%d (also maslow-spindle.local). Reflash it with: pio run -e esp32-s3-devkitc-1-ota -t upload]"
+    time.sleep(1)
+    broadcast(ip % 2)
+    time.sleep(2)
+    broadcast(ip % 3)
+    time.sleep(2)
+    broadcast("[MSG:INFO: SpindleBoard: link to spindle board confirmed -> H:spindle]")
 
 
 def telnet():

@@ -22,8 +22,9 @@ def text(result):
     return "\n".join(c.text for c in result.content if hasattr(c, "text"))
 
 
-async def session(allow_motion):
-    env = dict(os.environ, MASLOW_HOST="127.0.0.1", MASLOW_TELNET_PORT=TELNET, MASLOW_HTTP_PORT=HTTP, SPINDLE_HUB="127.0.0.1:1")
+async def session(allow_motion, **extra_env):
+    env = dict(os.environ, MASLOW_HOST="127.0.0.1", MASLOW_TELNET_PORT=TELNET, MASLOW_HTTP_PORT=HTTP, SPINDLE_HUB="127.0.0.1:1",
+               MASLOW_PIO=os.path.join(HERE, "fake_pio.sh"), SPINDLE_FLASH_SH=os.path.join(HERE, "fake_flash.sh"), **extra_env)
     args = [os.path.join(ROOT, "maslow_mcp.py")] + (["--allow-motion"] if allow_motion else [])
     return StdioServerParameters(command=sys.executable, args=args, env=env)
 
@@ -78,9 +79,15 @@ async def run(allow_motion):
             check("spindle motion refused", "--allow-motion" in t, t)
             t = text(await call("upload_file", local_path=__file__))
             check("upload refused", "--allow-motion" in t, t)
+            t = text(await call("flash_spindle"))
+            check("flash_spindle refused", "--allow-motion" in t, t)
         else:
             t = text(await call("send_command", command="G0 X10"))
             check("motion allowed when idle", t.strip() == "ok", t)
+            t = text(await call("flash_spindle", wait_for_ip=10))
+            check("flash_spindle over WiFi", "to 127.0.0.2" in t and "WiFi upload succeeded" in t
+                  and "link back" in t and "USB" not in t, t)
+            await asyncio.sleep(3)  # let the fake's OTA chatter finish
             with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False) as f:
                 f.write("name: test\n")
             t = text(await call("upload_file", local_path=f.name))
@@ -95,12 +102,24 @@ async def run(allow_motion):
             check("light read allowed while running", t.strip().endswith("ok"), t)
 
 
+async def run_ota_failure():
+    """Both WiFi attempts fail: the retry must use the re-announced address, then USB takes over."""
+    params = await session(True, FAKE_PIO_FAIL_UPLOAD="1")
+    async with stdio_client(params) as (r, w), ClientSession(r, w) as s:
+        await s.initialize()
+        await asyncio.sleep(1.5)
+        t = text(await s.call_tool("flash_spindle", {"wait_for_ip": 10}))
+        check("flash_spindle retries on new address", "Attempt 2: espota upload to 127.0.0.3" in t, t)
+        check("flash_spindle USB fallback", "fake USB flash" not in t and "USB upload succeeded" in t, t)
+
+
 async def main():
     fake = subprocess.Popen([sys.executable, os.path.join(HERE, "fake_board.py"), TELNET, HTTP])
     try:
         await asyncio.sleep(0.5)
         await run(False)
         await run(True)
+        await run_ota_failure()
     finally:
         fake.terminate()
     print("\n%d failure(s)" % len(failures))
