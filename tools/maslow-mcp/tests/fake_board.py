@@ -102,9 +102,15 @@ def trip_csv():
 
 
 def spindle_trip():
-    """Mimic $Spindle/Trip=TEST: the spindle's fault message, then the XY board saving the file."""
+    """Mimic $Spindle/Trip=TEST as a trip during a cut: the spindle's fault message, the recording
+    skipped while the machine stops, then re-sent and saved."""
     time.sleep(0.5)
     broadcast("[MSG:WARN: SpindleBoard: over-current on M2 (6.3A) - spindle stopped; re-home the Z, then send a new speed]")
+    broadcast("[MSG:INFO: SpindleBoard: spindle trip recording arriving while the machine is moving; "
+              "it will be fetched again once the machine is at rest]")
+    time.sleep(1.5)
+    broadcast("[MSG:INFO: SpindleBoard: asked the spindle board to re-send its trip recording; "
+              "it is saved to /spindle_trip.csv (~20 s)]")
     broadcast("[MSG:INFO: SpindleBoard: receiving spindle trip recording: over-current on M2 (6.3A) (at 812.345s uptime)]")
     time.sleep(1)
     TRIP["csv"] = trip_csv()

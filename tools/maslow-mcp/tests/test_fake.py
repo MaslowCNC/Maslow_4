@@ -6,6 +6,7 @@
 
 import asyncio
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -101,6 +102,10 @@ async def run(allow_motion):
             t = text(await call("spindle_trip", action="test", wait=10))
             check("spindle_trip test + diagnosis", "saved to /spindle_trip.csv" in t and "CLIMBED" in t
                   and "pull-out" in t and "over-current on M2" in t and "Status reports" in t, t)
+            # The recording was re-sent 1.5 s after the fault: the context must centre on the fault.
+            anchor = re.search(r"around the trip \(([\d:.]+)\)", t)
+            fault = re.search(r"([\d:.]+) \[MSG:WARN: SpindleBoard: over-current on M2", t)
+            check("spindle_trip context anchored on the fault", anchor and fault and anchor.group(1) == fault.group(1), t)
             # Put the fake machine into Run (via a raw line, which the fake treats as a state switch).
             await call("send_command", command="RUN")
             t = text(await call("send_command", command="G0 X20"))

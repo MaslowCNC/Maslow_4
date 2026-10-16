@@ -808,14 +808,26 @@ def _trip_context(t_trip):
     return out
 
 
-def _trip_time():
-    """When the XY board heard about the latest trip: the spindle's fault message, else the alarm."""
-    for pattern in (r"SpindleBoard: .*(over-current|over-temperature|manual test)", r"SpindleBoard reported fault",
-                    r"receiving spindle trip recording"):
-        hits = board.lines_between(0, time.time(), pattern)
-        if hits:
-            return hits[-1][0]
-    return None
+def _trip_time(reason, uptime_s):
+    """When the spindle tripped, as the XY board heard it, for the recording with this reason and uptime.
+
+    The recording can reach the XY board long after the trip: one that arrives while the machine is
+    still stopping is fetched again once it has stopped, and action="fetch" re-sends an old one. So
+    use the spindle's own fault message, which quotes the same reason, then the XY board's alarm,
+    and only then the first time this recording (same uptime) arrived.
+    """
+    received = [t for t, s in board.lines_between(0, time.time(), r"receiving spindle trip recording")
+                if "(at %.3fs uptime)" % uptime_s in s]
+    until = received[0] if received else time.time()
+    # Lines about receiving or re-sending the recording quote the reason too; skip them.
+    events = [t for t, s in board.lines_between(0, until, re.escape(reason)) if "trip recording" not in s]
+    if events:
+        return events[-1]
+    if not reason.startswith("manual test"):
+        alarms = board.lines_between(0, until, r"SpindleBoard reported fault")
+        if alarms:
+            return alarms[-1][0]
+    return received[0] if received else None
 
 
 @mcp.tool()
@@ -879,7 +891,7 @@ async def spindle_trip(action: str = "analyse", source: str = "xy", wait: float 
         out = notes + ["Recording: %s" % where] + ["Warning: " + w for w in warnings] + [""]
         out.append(trip_analysis.summarise(recs[-1]))
         if source == "xy":
-            t_trip = _trip_time()
+            t_trip = _trip_time(recs[-1]["reason"], recs[-1]["uptime_s"])
             if t_trip:
                 out += _trip_context(t_trip)
         return "\n".join(out)
