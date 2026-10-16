@@ -265,7 +265,7 @@ const uint32_t LOAD_WARN_CLEAR_MS   = 300;
 // calibrated, safe-side voltage) and it settles again.
 const bool     ADAPT_DEFAULT_ON        = true;
 const float    ADAPT_IQ_TARGET_A       = 2.0f;
-const float    ADAPT_IQ_FAST_A         = 0.5f;    // below this: add voltage at the maximum rate
+const float    ADAPT_IQ_FAST_A         = 1.5f;    // below this: add voltage at the maximum rate
 const float    ADAPT_K_UP              = 0.4f;    // V/s per A of Iq shortfall
 const float    ADAPT_K_DOWN            = 0.08f;   // V/s per A of Iq excess
 const float    ADAPT_UP_MAX_V_PER_S    = 5.0f;
@@ -280,6 +280,20 @@ const float    ADAPT_IQ_HIGH_A          = 5.0f;
 const float    ADAPT_K_DOWN_FAST        = 0.3f;    // V/s per A of excess while Iq > ADAPT_IQ_HIGH_A
 const float    ADAPT_DOWN_FAST_V_PER_S  = 2.0f;
 const uint32_t ADAPT_WARN_HOLD_MS       = 1000;
+// Trend (2026-10-16 trip at 12,000 RPM): M2's Iq slid from 3.6 to 2.0 A over ~270 ms while the
+// loop held the voltage - Iq was still above target - and then the motor went over the edge.  The
+// loop now watches the load part of Iq (Iq less ADAPT_IQ_A_PER_V_PER_KRPM x kRPM A per volt of its
+// own trim, from VSWEEP).  While that falls faster than ADAPT_TREND_DEADBAND_A_PER_S, the target is
+// judged on Iq extrapolated LOAD_FILTER_TAU_S ahead (the fit trails by that much), and
+// ADAPT_TREND_GAIN times the voltage that would hold Iq level is added.  A rising load Iq does not
+// feed forward.  Without the deadband, fit noise kept bumping the voltage up: on the bench,
+// unloaded at 12,000 RPM, Iq settled at 4-5 A instead of 2 A.  Replaying the trip recording with
+// these values: M2 had 3.2 A instead of 2.0 A at the moment it slipped and M1's lowest point was
+// 2.3 A instead of 0.6 A; replaying the unloaded bench recording, the trim is unchanged.
+const float    ADAPT_TREND_TAU_S            = 0.10f;   // smoothing of the load-Iq slope
+const float    ADAPT_TREND_DEADBAND_A_PER_S = 1.5f;    // slower falls are left to the loop above
+const float    ADAPT_TREND_GAIN             = 6.0f;
+const float    ADAPT_IQ_A_PER_V_PER_KRPM = 0.67f;   // ~8 A/V at 12,000 RPM
 const float    ADAPT_TRIM_MIN_V        = -1.5f;   // never more than this below the LUT
 const float    ADAPT_TRIM_MAX_V        = 2.5f;    // never more than this above (MAX_VOLTAGE caps too)
 const float    ADAPT_MIN_RPM           = 3000.0f; // untested below 4,000 RPM - LUT only below this

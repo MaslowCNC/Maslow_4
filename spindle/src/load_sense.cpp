@@ -14,6 +14,10 @@ static float s_trim[2]       = { 0.0f, 0.0f };
 static float s_trim_vel[2]   = { 0.0f, 0.0f };   // target velocity the trim was learned at
 static bool  s_prev_warn[2]  = { false, false };
 static uint32_t s_last_warn_ms[2] = { 0, 0 };     // millis() of the last warning on each motor
+static float s_trim_f[2]     = { 0.0f, 0.0f };   // the trim as the fit sees it (LOAD_FILTER_TAU_S lag)
+static float s_load_slope[2] = { 0.0f, 0.0f };   // smoothed d(load Iq)/dt (A/s) while the loop is active
+static float s_prev_load[2]  = { 0.0f, 0.0f };
+static bool  s_slope_valid[2] = { false, false };
 
 // Advisory load warning, per motor
 static bool     s_warn[2]          = { false, false };
@@ -310,17 +314,41 @@ static void updateAdaptive(MotorController* motors[2], bool allow, float dt, uin
         if (s_warn[m]) s_last_warn_ms[m] = now;
         bool warn_recent = (now - s_last_warn_ms[m]) < ADAPT_WARN_HOLD_MS && s_last_warn_ms[m] != 0;
 
+        // Load trend, only while the loop is tracking this motor at a steady speed.  It is Iq less
+        // what the loop's own voltage changes did to it (seen through the fit's lag), so trimming
+        // the voltage down is not mistaken for a rising load and fought straight back.
+        float a_per_v = fmaxf(ADAPT_IQ_A_PER_V_PER_KRPM * rpm / 1000.0f, 1.0f);
+        if (dt > 0.0f) s_trim_f[m] += dt / (LOAD_FILTER_TAU_S + dt) * (s_trim[m] - s_trim_f[m]);
+        float load_iq = e.iq - a_per_v * s_trim_f[m];
+        if (active && s_slope_valid[m] && dt > 0.0f) {
+            float raw = (load_iq - s_prev_load[m]) / dt;
+            s_load_slope[m] += dt / (ADAPT_TREND_TAU_S + dt) * (raw - s_load_slope[m]);
+        } else if (!active) {
+            s_load_slope[m] = 0.0f;
+        }
+        s_slope_valid[m] = active;
+        s_prev_load[m]   = load_iq;
+
         if (active) {
-            float err = ADAPT_IQ_TARGET_A - e.iq;   // > 0: Iq too low -> more voltage
+            // A falling load Iq means the load is rising.  The fit trails it by about
+            // LOAD_FILTER_TAU_S, so judge the target on where Iq is by now.
+            float falling = fmaxf(-s_load_slope[m] - ADAPT_TREND_DEADBAND_A_PER_S, 0.0f);   // A/s
+            float iq_now  = e.iq - falling * LOAD_FILTER_TAU_S;
+            float err     = ADAPT_IQ_TARGET_A - iq_now;                 // > 0: Iq too low -> more voltage
             float rate;
             if (e.iq < ADAPT_IQ_FAST_A) {
                 rate = ADAPT_UP_MAX_V_PER_S;          // near or past the edge
             } else if (err > 0.0f) {
                 rate = fminf(ADAPT_K_UP * err, ADAPT_UP_MAX_V_PER_S);
             } else if (e.iq > ADAPT_IQ_HIGH_A && !warn_recent) {
-                rate = fmaxf(ADAPT_K_DOWN_FAST * err, -ADAPT_DOWN_FAST_V_PER_S);
+                rate = fmaxf(ADAPT_K_DOWN_FAST * (ADAPT_IQ_TARGET_A - e.iq), -ADAPT_DOWN_FAST_V_PER_S);
             } else {
-                rate = fmaxf(ADAPT_K_DOWN * err, -ADAPT_DOWN_MAX_V_PER_S);
+                rate = fmaxf(ADAPT_K_DOWN * (ADAPT_IQ_TARGET_A - e.iq), -ADAPT_DOWN_MAX_V_PER_S);
+            }
+            // Feed-forward: add the voltage that would hold Iq level, ADAPT_TREND_GAIN times over, so
+            // the margin is rebuilt while the load climbs rather than after the fit reaches the edge.
+            if (falling > 0.0f) {
+                rate = fminf(rate + ADAPT_TREND_GAIN * falling / a_per_v, ADAPT_UP_MAX_V_PER_S);
             }
             s_trim[m] += rate * dt;
             if (warn_onset) s_trim[m] += ADAPT_WARN_STEP_V;
