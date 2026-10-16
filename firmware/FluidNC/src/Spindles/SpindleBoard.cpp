@@ -490,7 +490,8 @@ namespace Spindles {
                         // The spindle has stopped, so the machine must stop too.  An alarm on its
                         // own leaves the steppers running and drags the stalled tool through the
                         // work.  mc_reset() stops stepping at once, ends the job and switches the
-                        // spindle off (M5), as the VFD spindles do when they lose their drive.
+                        // spindle off (M5), as the VFD spindles do when they lose their drive.  The
+                        // belts keep their lengths across the reset (see Maslow_::begin).
                         _fault_latched = true;
                         _rpm_dirty     = false;
                         mc_reset();
