@@ -1,0 +1,638 @@
+#!/usr/bin/env python3
+"""MCP server for debugging a Maslow (FluidNC) machine from Claude Code.
+
+Runs on the computer, not the machine.  It talks to the XY board over interfaces the firmware already
+has (telnet for commands and logs, HTTP for files and firmware updates) and to the spindle board
+through the shared serial hub (spindle/tools/serial_hub.py on localhost:4567).
+
+It is designed to run while a person drives the machine from the WebUI.  FluidNC gives every
+connection its own channel, but it interleaves lines from all channels into one G-code stream, so:
+
+  * Read-only commands are always allowed.  The ones that print a lot ($CD, $S, [ESP400], ...)
+    are only sent while the machine is Idle/Alarm/Sleep so they never compete with a running job.
+  * Anything that can move the machine or change its configuration is refused unless the server
+    was started with --allow-motion, and even then only while the machine is Idle or Alarm.
+  * feed_hold / soft_reset are always available, because stopping is always safe, but they act
+    on the whole machine (they stop the user's job too).
+
+Everything the XY board prints on our telnet channel is kept in memory and written with timestamps
+to tools/maslow-mcp/logs/xy-*.log (commands we send are logged as ">> CMD").
+
+Configuration (environment variables):
+    MASLOW_HOST         XY board host name or IP          (default maslow.local)
+    MASLOW_TELNET_PORT  FluidNC telnet port               (default 23)
+    MASLOW_HTTP_PORT    FluidNC WebUI HTTP port           (default 80)
+    SPINDLE_HUB         host:port of the spindle hub      (default 127.0.0.1:4567)
+"""
+
+import argparse
+import collections
+import glob
+import os
+import re
+import shutil
+import socket
+import subprocess
+import threading
+import time
+
+import anyio
+import requests
+from mcp.server.mcpserver import MCPServer
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+REPO = os.path.dirname(os.path.dirname(HERE))
+LOGDIR = os.path.join(HERE, "logs")
+FIRMWARE_DIR = os.path.join(REPO, "firmware")
+SPINDLE_LOGDIR = os.path.join(REPO, "spindle", "logs")
+
+HOST = os.environ.get("MASLOW_HOST", "maslow.local")
+TELNET_PORT = int(os.environ.get("MASLOW_TELNET_PORT", "23"))
+HTTP_PORT = int(os.environ.get("MASLOW_HTTP_PORT", "80"))
+HUB_HOST, HUB_PORT = os.environ.get("SPINDLE_HUB", "127.0.0.1:4567").rsplit(":", 1)
+HUB_PORT = int(HUB_PORT)
+
+ALLOW_MOTION = False  # set from --allow-motion in main()
+
+# ---------------------------------------------------------------------------------------------
+# Command classification
+# ---------------------------------------------------------------------------------------------
+
+# Read-only and short: safe in any state, including mid-job.
+LIGHT_READS = {
+    "$G", "$GCODE/MODES",
+    "$I", "$BUILD/INFO",
+    "$A", "$ALARMS/LIST",
+    "$E", "$ERRORS/LIST",
+    "$HEAP", "$HEAP/SHOW",
+    "$T", "$STATE",
+    "$CI", "$CHANNEL/INFO",
+    "$GSTATE", "$MASLOW/GSTATE",
+    "$MINFO", "$MASLOW/GETINFO",
+    "[ESP800]", "[ESP420]", "[ESP111]",
+}
+
+# Read-only but long output: only while the machine is not running anything.
+HEAVY_READS = {
+    "$", "$HELP",
+    "$CD", "$CONFIG/DUMP",
+    "$S", "$SETTINGS/LIST",
+    "$SC", "$SETTINGS/LISTCHANGED",
+    "$$", "$GRBLSETTINGS/LIST",
+    "$L", "$GRBLNAMES/LIST",
+    "$CMD", "$COMMANDS/LIST",
+    "$SS", "$STARTUP/SHOW",
+    "$#", "$GCODE/OFFSETS",
+    "$N", "$GCODE/STARTUPLINES",
+    "$GD", "$GPIO/DUMP",
+    "$LIMITS", "$LIMITS/SHOW",
+    "$V", "$SETTINGS/STATS",
+    "[ESP400]",
+}
+
+READ_STATES = {"Idle", "Alarm", "Sleep"}  # states where heavy reads are allowed
+WRITE_STATES = {"Idle", "Alarm"}  # states where motion / config changes are allowed
+
+# Spindle-board commands that only print information (or stop the spindle).
+SPINDLE_READS = {"?", "H", "WHY", "DUMP", "LOAD", "TRIP", "E"}
+
+
+def classify(cmd):
+    """Return 'light', 'heavy' or 'write' for an XY-board command line."""
+    key = re.sub(r"\s+", "", cmd).upper()
+    if key in LIGHT_READS:
+        return "light"
+    if key in HEAVY_READS:
+        return "heavy"
+    return "write"
+
+
+# ---------------------------------------------------------------------------------------------
+# XY board telnet connection
+# ---------------------------------------------------------------------------------------------
+
+
+def stamp(t=None):
+    t = time.time() if t is None else t
+    return time.strftime("%H:%M:%S", time.localtime(t)) + ".%03d" % int((t % 1) * 1000)
+
+
+class Board:
+    """Keeps a telnet connection to the XY board open, logging every line it prints."""
+
+    def __init__(self):
+        self.sock = None
+        self.ip = None
+        self.lines = collections.deque(maxlen=50000)  # (seq, time, text)
+        self.seq = 0
+        self.cond = threading.Condition()
+        self.cmd_lock = threading.Lock()  # one command/response exchange at a time
+        self.last_error = "not connected yet"
+        self.connected_since = None
+        os.makedirs(LOGDIR, exist_ok=True)
+        self.log_path = os.path.join(LOGDIR, time.strftime("xy-%y%m%d-%H%M%S.log"))
+        self.log_file = open(self.log_path, "a", buffering=1)
+        threading.Thread(target=self._run, daemon=True).start()
+
+    # -- connection -------------------------------------------------------------------------
+
+    def _resolve(self):
+        return socket.getaddrinfo(HOST, TELNET_PORT, socket.AF_INET, socket.SOCK_STREAM)[0][4][0]
+
+    def _run(self):
+        while True:
+            try:
+                ip = self._resolve()
+                s = socket.create_connection((ip, TELNET_PORT), timeout=5)
+                s.settimeout(None)
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+                with self.cond:
+                    self.sock, self.ip = s, ip
+                    self.connected_since = time.time()
+                    self.last_error = None
+                self._add("--- connected to %s:%d ---" % (ip, TELNET_PORT))
+                self._read(s)
+                self._add("--- connection closed by board ---")
+            except OSError as e:
+                with self.cond:
+                    if self.last_error != str(e):
+                        self._add("--- connect failed: %s ---" % e)
+                    self.last_error = str(e)
+            with self.cond:
+                if self.sock:
+                    try:
+                        self.sock.close()
+                    except OSError:
+                        pass
+                self.sock = None
+                self.connected_since = None
+            time.sleep(3)
+
+    def _read(self, s):
+        buf = b""
+        while True:
+            data = s.recv(4096)
+            if not data:
+                return
+            buf += data
+            while b"\n" in buf:
+                raw, buf = buf.split(b"\n", 1)
+                text = raw.decode("utf-8", "replace").strip("\r")
+                if text:
+                    self._add(text)
+
+    def _add(self, text):
+        t = time.time()
+        with self.cond:
+            self.seq += 1
+            self.lines.append((self.seq, t, text))
+            self.cond.notify_all()
+        self.log_file.write("%s %s\n" % (stamp(t), text))
+
+    def _send_raw(self, data):
+        with self.cond:
+            s = self.sock
+        if s is None:
+            raise ConnectionError("not connected to the XY board at %s (%s)" % (HOST, self.last_error))
+        s.sendall(data)
+
+    def _wait_for(self, start_seq, done, timeout):
+        """Collect lines after start_seq until done(text) is true or timeout. Returns (lines, ok)."""
+        deadline = time.time() + timeout
+        out = []
+        seen = start_seq
+        with self.cond:
+            while True:
+                fresh = []
+                for seq, t, text in reversed(self.lines):
+                    if seq <= seen:
+                        break
+                    fresh.append((seq, text))
+                for seq, text in reversed(fresh):
+                    seen = seq
+                    out.append(text)
+                    if done(text):
+                        return out, True
+                remaining = deadline - time.time()
+                if remaining <= 0:
+                    return out, False
+                self.cond.wait(remaining)
+
+    # -- public API ---------------------------------------------------------------------------
+
+    def connected(self):
+        with self.cond:
+            return self.sock is not None
+
+    def status(self, timeout=2.0):
+        """Send '?' and return the raw <...> status report, or None."""
+        with self.cmd_lock:
+            with self.cond:
+                start = self.seq
+            self._send_raw(b"?")
+            lines, ok = self._wait_for(start, lambda s: s.startswith("<") and s.endswith(">"), timeout)
+        return lines[-1] if ok else None
+
+    def state(self):
+        rep = self.status()
+        return parse_status(rep)["state"].split(":")[0] if rep else None
+
+    def command(self, cmd, timeout):
+        """Send one line and collect output until ok / error:N."""
+        with self.cmd_lock:
+            with self.cond:
+                start = self.seq
+            self.log_file.write("%s >> %s\n" % (stamp(), cmd))
+            self._send_raw((cmd + "\n").encode())
+            lines, ok = self._wait_for(start, lambda s: s == "ok" or s.startswith("error"), timeout)
+        if not ok:
+            lines.append("(no ok/error within %.0f s; the command may still be running)" % timeout)
+        return lines
+
+    def realtime(self, byte, label):
+        self.log_file.write("%s >> %s\n" % (stamp(), label))
+        self._send_raw(byte)
+
+    def recent(self, n, pattern=None, since_seconds=None):
+        cutoff = time.time() - since_seconds if since_seconds else 0
+        rx = re.compile(pattern, re.I) if pattern else None
+        with self.cond:
+            sel = [(t, s) for _, t, s in self.lines if t >= cutoff and (rx is None or rx.search(s))]
+        return ["%s %s" % (stamp(t), s) for t, s in sel[-n:]]
+
+
+def parse_status(rep):
+    """'<Idle|MPos:1,2,3|FS:0,0|Pn:P>' -> {'state': 'Idle', 'MPos': '1,2,3', ...}"""
+    parts = rep.strip("<>").split("|")
+    out = {"state": parts[0]}
+    for p in parts[1:]:
+        k, _, v = p.partition(":")
+        out[k] = v
+    return out
+
+
+board = None  # created in main()
+
+
+def base_url():
+    return "http://%s:%d" % (board.ip or HOST, HTTP_PORT)
+
+
+# ---------------------------------------------------------------------------------------------
+# Gating helpers
+# ---------------------------------------------------------------------------------------------
+
+
+class Refused(Exception):
+    pass
+
+
+def require_state(allowed, what):
+    st = board.state()
+    if st is None:
+        raise Refused("Refused %s: could not read the machine state (no reply to '?')." % what)
+    if st not in allowed:
+        raise Refused("Refused %s: machine is busy (state %s; needs %s)." % (what, st, "/".join(sorted(allowed))))
+    return st
+
+
+def require_motion(what):
+    if not ALLOW_MOTION:
+        raise Refused(
+            "Refused %s: it can move the machine or change its configuration, and this server was "
+            "started without --allow-motion. Ask the user to enable it (see tools/maslow-mcp/README.md)." % what
+        )
+
+
+async def run(fn, *args):
+    try:
+        return await anyio.to_thread.run_sync(fn, *args)
+    except Refused as e:
+        return str(e)
+    except (OSError, ConnectionError, requests.RequestException) as e:
+        return "Error: %s" % e
+
+
+# ---------------------------------------------------------------------------------------------
+# Tools
+# ---------------------------------------------------------------------------------------------
+
+mcp = MCPServer(
+    "maslow",
+    instructions=(
+        "Debug a Maslow CNC (FluidNC XY board + spindle board). The user may be driving the machine "
+        "from the WebUI at the same time: read state and logs freely, but never send motion, setting "
+        "changes, feed_hold or soft_reset unless the user asked for that action."
+    ),
+)
+
+
+@mcp.tool()
+async def machine_status() -> dict:
+    """Connection info and the XY board's current status report ('?'): state, position, feed/speed, pins."""
+
+    def go():
+        info = {
+            "host": HOST,
+            "ip": board.ip,
+            "telnet_connected": board.connected(),
+            "connected_since": stamp(board.connected_since) if board.connected_since else None,
+            "last_error": board.last_error,
+            "motion_allowed": ALLOW_MOTION,
+            "log_file": board.log_path,
+        }
+        if board.connected():
+            rep = board.status()
+            info["status_raw"] = rep
+            if rep:
+                info["status"] = parse_status(rep)
+        return info
+
+    return await run(go)
+
+
+@mcp.tool()
+async def send_command(command: str, timeout: float = 10) -> str:
+    """Send one line (G-code, $ command or [ESPxxx]) to the XY board and return its reply up to ok/error.
+
+    Read-only commands always work (long ones like $CD/$S/[ESP400] wait for the machine to be idle).
+    Anything else - motion, $X, $H, $Maslow/* actions, setting writes - needs --allow-motion and an
+    Idle/Alarm machine. Broadcast [MSG:...] lines that arrive meanwhile are included in the reply.
+    Use machine_status for '?', and feed_hold / cycle_start / soft_reset for realtime characters.
+    """
+
+    def go():
+        cmd = command.strip()
+        if not cmd:
+            return "Empty command."
+        if cmd in ("?", "!", "~") or "\x18" in cmd:
+            return "Use machine_status / feed_hold / cycle_start / soft_reset for realtime characters."
+        kind = classify(cmd)
+        if kind == "heavy":
+            require_state(READ_STATES, "'%s'" % cmd)
+        elif kind == "write":
+            require_motion("'%s'" % cmd)
+            require_state(WRITE_STATES, "'%s'" % cmd)
+        return "\n".join(board.command(cmd, timeout))
+
+    return await run(go)
+
+
+@mcp.tool()
+async def read_log(lines: int = 200, grep: str = "", since_seconds: float = 0) -> str:
+    """Recent lines the XY board printed on this server's telnet channel, timestamped.
+
+    Includes broadcast messages ([MSG:...], Maslow log output) caused by anyone, e.g. the user's
+    WebUI actions. grep is a case-insensitive regex; since_seconds limits to the last N seconds.
+    Older history is in the log file named by machine_status.
+    """
+    out = board.recent(lines, grep or None, since_seconds or None)
+    return "\n".join(out) if out else "(no matching lines)"
+
+
+def _filtered(cmd, pattern):
+    require_state(READ_STATES, "'%s'" % cmd)
+    out = board.command(cmd, 20)
+    if pattern:
+        rx = re.compile(pattern, re.I)
+        out = [s for s in out if rx.search(s)]
+    return "\n".join(out)
+
+
+@mcp.tool()
+async def get_settings(grep: str = "") -> str:
+    """All FluidNC/WebUI settings ($S), optionally filtered by a case-insensitive regex. Machine must be idle."""
+    return await run(_filtered, "$S", grep)
+
+
+@mcp.tool()
+async def get_config(grep: str = "") -> str:
+    """The running machine config as YAML ($CD), optionally filtered by regex. Machine must be idle."""
+    return await run(_filtered, "$CD", grep)
+
+
+@mcp.tool()
+async def firmware_info() -> str:
+    """Firmware version string ([ESP800]); the version includes the branch and commit."""
+    return await run(lambda: "\n".join(board.command("[ESP800]", 5)))
+
+
+@mcp.tool()
+async def list_files(path: str = "/") -> dict:
+    """List files on the XY board's local flash filesystem (config.yaml, index.html.gz, ...)."""
+
+    def go():
+        r = requests.get(base_url() + "/files", params={"action": "list", "path": path}, timeout=10)
+        r.raise_for_status()
+        return r.json()
+
+    return await run(go)
+
+
+@mcp.tool()
+async def download_file(path: str) -> str:
+    """Download a file from the XY board's flash filesystem into tools/maslow-mcp/logs/downloads.
+
+    Returns the local path, and the content too when it is small text (e.g. config.yaml).
+    """
+
+    def go():
+        r = requests.get(base_url() + "/" + path.lstrip("/"), timeout=30)
+        r.raise_for_status()
+        dest_dir = os.path.join(LOGDIR, "downloads")
+        os.makedirs(dest_dir, exist_ok=True)
+        dest = os.path.join(dest_dir, os.path.basename(path.rstrip("/")) or "file")
+        with open(dest, "wb") as f:
+            f.write(r.content)
+        msg = "Saved %d bytes to %s" % (len(r.content), dest)
+        if len(r.content) < 64000:
+            try:
+                msg += "\n\n" + r.content.decode("utf-8")
+            except UnicodeDecodeError:
+                pass
+        return msg
+
+    return await run(go)
+
+
+def _upload(endpoint, local_path, remote_dir, remote_name):
+    size = os.path.getsize(local_path)
+    remote = remote_dir.rstrip("/") + "/" + remote_name
+    with open(local_path, "rb") as f:
+        r = requests.post(
+            base_url() + endpoint,
+            # FluidNC needs the "<remote path>S" size field; /updatefw divides by it.
+            data={"path": remote_dir, remote + "S": str(size)},
+            files={"myfile[]": (remote, f, "application/octet-stream")},
+            timeout=180,
+        )
+    r.raise_for_status()
+    return size, r.text
+
+
+@mcp.tool()
+async def upload_file(local_path: str, remote_dir: str = "/", remote_name: str = "") -> str:
+    """Upload a local file (e.g. config.yaml, index.html.gz) to the XY board's flash filesystem.
+
+    Needs --allow-motion (it can change the configuration) and an Idle/Alarm machine.
+    """
+
+    def go():
+        require_motion("upload_file")
+        require_state(WRITE_STATES, "upload_file")
+        size, reply = _upload("/files", local_path, remote_dir, remote_name or os.path.basename(local_path))
+        return "Uploaded %d bytes. Board replied: %s" % (size, reply[:500])
+
+    return await run(go)
+
+
+def _pio():
+    for p in (os.path.expanduser("~/.platformio/penv/bin/pio"), shutil.which("pio")):
+        if p and os.path.exists(p):
+            return p
+    raise Refused("PlatformIO (pio) not found.")
+
+
+@mcp.tool()
+async def flash_firmware(env: str = "wifi_s3", build: bool = True) -> str:
+    """Build the XY firmware (firmware/, PlatformIO env) and flash it over WiFi via /updatefw.
+
+    Needs --allow-motion and an Idle/Alarm machine. The board reboots about a second after the
+    upload; this waits for telnet to come back and reports the new [ESP800] version.
+    """
+
+    def go():
+        require_motion("flash_firmware")
+        require_state(WRITE_STATES, "flash_firmware")
+        log = ""
+        if build:
+            p = subprocess.run([_pio(), "run", "-e", env], cwd=FIRMWARE_DIR, capture_output=True, text=True, timeout=900)
+            log = (p.stdout + p.stderr)[-3000:]
+            if p.returncode != 0:
+                return "Build failed:\n" + log
+        binfile = os.path.join(FIRMWARE_DIR, ".pio", "build", env, "firmware.bin")
+        if not os.path.exists(binfile):
+            return "No firmware at %s; build first." % binfile
+        size, reply = _upload("/updatefw", binfile, "/", "firmware.bin")
+        result = "Uploaded %d bytes; board replied %s (status 3 = success)." % (size, reply.strip())
+        # Wait for the reboot: the old connection drops, then a new one comes up.
+        time.sleep(3)
+        deadline = time.time() + 60
+        while time.time() < deadline and not board.connected():
+            time.sleep(1)
+        if board.connected():
+            time.sleep(1)
+            result += "\nBack online: " + " ".join(board.command("[ESP800]", 5))
+        else:
+            result += "\nBoard has not reconnected after 60 s."
+        return result
+
+    return await run(go)
+
+
+@mcp.tool()
+async def feed_hold() -> str:
+    """Send '!' (feed hold) - pauses ALL motion on the machine, including the user's job.
+
+    Only use when the user asks, or to stop something this server started.
+    """
+
+    def go():
+        board.realtime(b"!", "! (feed hold)")
+        return "Feed hold sent."
+
+    return await run(go)
+
+
+@mcp.tool()
+async def cycle_start() -> str:
+    """Send '~' (cycle start / resume after hold). Needs --allow-motion."""
+
+    def go():
+        require_motion("cycle_start")
+        board.realtime(b"~", "~ (cycle start)")
+        return "Cycle start sent."
+
+    return await run(go)
+
+
+@mcp.tool()
+async def soft_reset() -> str:
+    """Send Ctrl-X (soft reset) - aborts everything the machine is doing, including the user's job.
+
+    Only use when the user asks.
+    """
+
+    def go():
+        board.realtime(b"\x18", "^X (soft reset)")
+        return "Soft reset sent."
+
+    return await run(go)
+
+
+# ---------------------------------------------------------------------------------------------
+# Spindle board (through the serial hub)
+# ---------------------------------------------------------------------------------------------
+
+
+@mcp.tool()
+async def spindle_command(command: str, wait: float = 2) -> str:
+    """Send a line to the spindle board through the serial hub and return what it prints for `wait` s.
+
+    Read-only commands (?, H, WHY, DUMP, LOAD, TRIP) and E (emergency stop) always work; anything
+    else (S speed, Z move, CAL, VSWEEP, ...) needs --allow-motion. Needs the hub running
+    (spindle/tools/serial_hub.py).
+    """
+
+    def go():
+        cmd = command.strip()
+        if cmd.upper() not in SPINDLE_READS:
+            require_motion("spindle command '%s'" % cmd)
+        try:
+            s = socket.create_connection((HUB_HOST, HUB_PORT), timeout=3)
+        except OSError as e:
+            return "Spindle hub not reachable at %s:%d (%s). Start spindle/tools/serial_hub.py." % (HUB_HOST, HUB_PORT, e)
+        with s:
+            s.sendall((cmd + "\n").encode())
+            out = b""
+            deadline = time.time() + wait
+            while (remaining := deadline - time.time()) > 0:
+                s.settimeout(remaining)
+                try:
+                    data = s.recv(4096)
+                except socket.timeout:
+                    break
+                if not data:
+                    break
+                out += data
+        return out.decode("utf-8", "replace") or "(no output within %.1f s)" % wait
+
+    return await run(go)
+
+
+@mcp.tool()
+async def spindle_log(lines: int = 200, grep: str = "") -> str:
+    """Tail of the newest spindle serial-hub log (spindle/logs/hub-*.log), optionally filtered by regex."""
+    files = sorted(glob.glob(os.path.join(SPINDLE_LOGDIR, "hub-*.log")), key=os.path.getmtime)
+    if not files:
+        return "No hub logs in %s." % SPINDLE_LOGDIR
+    with open(files[-1], errors="replace") as f:
+        sel = f.read().splitlines()
+    if grep:
+        rx = re.compile(grep, re.I)
+        sel = [s for s in sel if rx.search(s)]
+    return "%s\n%s" % (files[-1], "\n".join(sel[-lines:]))
+
+
+def main():
+    global ALLOW_MOTION, board
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--allow-motion", action="store_true", help="allow commands that move the machine or change its configuration")
+    args = ap.parse_args()
+    ALLOW_MOTION = args.allow_motion or os.environ.get("MASLOW_ALLOW_MOTION") == "1"
+    board = Board()
+    mcp.run()
+
+
+if __name__ == "__main__":
+    main()
