@@ -72,21 +72,6 @@ int ENCODER_READ_FREQUENCY_HZ = 1000;  //max frequency for polling the encoders
 
 // Initialization function
 void Maslow_::begin(void (*sys_rt)()) {
-    // protocol_main_loop() calls this on every start, so it runs again after each FluidNC soft
-    // reset (Ctrl-X, or the reset a spindle fault triggers).  The encoders still hold the belt
-    // lengths then: initialising the motor units again would zero them - the next jog pays the
-    // belts out - and pulse every motor in its self-test with the belts under tension.  Keep the
-    // belts where they are instead, with the step positions matched to them.
-    static bool started = false;
-    if (started) {
-        stopMotors();
-        syncStepsToBelts();
-        lastCallToUpdate = millis();
-        log_info(M + " restarted after a reset; belt lengths kept");
-        return;
-    }
-    started = true;
-
     Wire.begin(5, 4, 200000);
     I2CMux.begin(TCAADDR, Wire);
 
@@ -114,9 +99,14 @@ void Maslow_::begin(void (*sys_rt)()) {
 
     lastCallToUpdate = millis();
 
-    // Power-on only (see above): after a soft reset the NVS copy would be stale.
-    loadZPos();           //Loads the z-axis position from EEPROM
-    loadBeltPositions();  //Loads the belt positions from EEPROM
+    // Only load positions from NVS on the first call to begin() (initial power-on)
+    // Subsequent calls (e.g., after soft reset) should not reload stale NVS data
+    static bool positionsLoaded = false;
+    if (!positionsLoaded) {
+        loadZPos();           //Loads the z-axis position from EEPROM
+        loadBeltPositions();  //Loads the belt positions from EEPROM
+        positionsLoaded = true;
+    }
 
     stopMotors();
 
@@ -1161,7 +1151,23 @@ void Maslow_::raiseZ() {
     plan_reset();
     Stepper::reset();
 
-    syncStepsToBelts();
+    // Sync belt motor step positions to actual encoder positions.
+    // Maslow.update() uses get_axis_motor_steps() as belt PID targets.  If the
+    // commanded step position is ahead of the encoder position when stop is pressed
+    // (i.e. the PID had not finished tracking the last move), the PID would continue
+    // driving the belt motors after the stop to close that error — effectively
+    // completing one last motion segment.  Updating _steps to the encoder-derived
+    // position ensures the PID target equals the current physical position so the
+    // error is immediately zero and no further belt motion occurs.
+    for (int arm = _TL; arm < ARM_COUNT; arm++) {
+        set_motor_steps(arm, mpos_to_steps((float)axis[arm].getPosition(), arm));
+        // Also reset the PID integral accumulator.  Even with target == position (zero
+        // P-error), the I-term built up during cutting would still drive the motors.
+        axis[arm].resetPID();
+    }
+
+    gc_sync_position();
+    plan_sync_position();
 
     // Clear any pending suspend bits (e.g. holdComplete from a prior feed hold) before
     // transitioning to Idle.  If left set, protocol_exec_rt_suspend() would loop indefinitely
@@ -1204,26 +1210,6 @@ void Maslow_::panic() {
     stop();
     stopSpindle();
     stopEverything();
-}
-
-// Sync belt motor step positions to actual encoder positions.
-// Maslow.update() uses get_axis_motor_steps() as belt PID targets.  If the
-// commanded step position is ahead of the encoder position when the machine stops
-// (i.e. the PID had not finished tracking the last move), the PID would continue
-// driving the belt motors after the stop to close that error — effectively
-// completing one last motion segment.  Updating _steps to the encoder-derived
-// position ensures the PID target equals the current physical position so the
-// error is immediately zero and no further belt motion occurs.
-void Maslow_::syncStepsToBelts() {
-    for (int arm = _TL; arm < ARM_COUNT; arm++) {
-        set_motor_steps(arm, mpos_to_steps((float)axis[arm].getPosition(), arm));
-        // Also reset the PID integral accumulator.  Even with target == position (zero
-        // P-error), the I-term built up during cutting would still drive the motors.
-        axis[arm].resetPID();
-    }
-
-    gc_sync_position();
-    plan_sync_position();
 }
 
 // Switch the spindle off as M5 would.  Clearing the modal state as well means no later planner

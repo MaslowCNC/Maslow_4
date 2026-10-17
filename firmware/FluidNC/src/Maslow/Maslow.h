@@ -208,9 +208,6 @@ private:
     // Stream Z, the fan level and the belt-cooling request to the spindle board and read its replies.
     void updateSpindleBoard(bool beltMotionActive);
 
-    // Make the belt step positions match the encoders and clear the PIDs, so nothing moves after a stop.
-    void syncStepsToBelts();
-
     //Used to overide and drive motors directly...dangerous
     bool          TLIOveride   = false;
     bool          TRIOveride   = false;
