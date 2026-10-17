@@ -8,7 +8,6 @@
 #include "../Protocol.h"               // rtAlarm, ExecAlarm
 #include "../GCode.h"                  // gc_sync_position
 #include "../Planner.h"                // plan_sync_position
-#include "../MotionControl.h"          // mc_reset
 #include "../Maslow/Maslow.h"          // Maslow.resetUpdateWatchdog
 #include "../WebUI/WifiConfig.h"       // wifi_sta_ssid / wifi_sta_password (ENABLE_WIFI)
 #include "Driver/localfs.h"            // localfsName
@@ -487,14 +486,22 @@ namespace Spindles {
                     uint8_t fault = (uint8_t)strtol(f + 2, nullptr, 10);
                     if (fault != 0 && _last_fault == 0) {
                         log_error("SpindleBoard reported fault " << (int)fault);
-                        // The spindle has stopped, so the machine must stop too.  An alarm on its
-                        // own leaves the steppers running and drags the stalled tool through the
-                        // work.  mc_reset() stops stepping at once, ends the job and switches the
-                        // spindle off (M5), as the VFD spindles do when they lose their drive.
+                        // The spindle has stopped, so the machine must stop too.  Pause it the way
+                        // the Pause button does: a feed hold decelerates the belts to a stop and
+                        // holds them there.  Not an alarm: that leaves the steppers running and drags
+                        // the stalled tool through the work.  Not mc_reset() either: a FluidNC reset
+                        // re-runs Maslow's start-up mid-cut - on 2026-10-16 it lost the belt lengths
+                        // once and, with a change to keep them, left the board silent with the belt
+                        // motors still driven until the E-stop.
                         _fault_latched = true;
                         _rpm_dirty     = false;
-                        mc_reset();
-                        rtAlarm = ExecAlarm::SpindleControl;
+                        protocol_send_event(&feedHoldEvent);
+                        // The board has stopped already; match it so the Z release (and the fan) follow
+                        // once the machine is at rest.  Not stop(): its spin-down delay would block here.
+                        sendSpeed(0);
+                        _current_state = SpindleState::Disable;
+                        log_error(name() << ": job paused because the spindle stopped - press Stop to end it,"
+                                           " then re-home the Z before cutting again");
                     }
                     _last_fault = fault;
                 }
