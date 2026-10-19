@@ -31,6 +31,7 @@ CANNED = {
 def handle(c):
     state["s"] = "Idle"  # each test session starts with an idle machine
     clients.append(c)
+    connected_at = time.time()
     buf = b""
     try:
         while True:
@@ -38,7 +39,9 @@ def handle(c):
             if not data:
                 return
             for b in data:
-                if b == ord("?"):
+                if b == ord("?") and time.time() - connected_at < 2.0:
+                    buf += bytes([b])  # like the firmware: no realtime characters for 2 s after connecting
+                elif b == ord("?"):
                     c.sendall(("<%s|MPos:1.000,2.000,0.000|FS:0,0>\r\n" % state["s"]).encode())
                 elif b in (ord("!"), ord("~"), 0x18):
                     c.sendall(("[MSG:INFO: realtime %r]\r\n" % chr(b)).encode())

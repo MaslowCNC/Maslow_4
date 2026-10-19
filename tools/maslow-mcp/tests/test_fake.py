@@ -44,7 +44,7 @@ async def run(allow_motion):
     params = await session(allow_motion)
     async with stdio_client(params) as (r, w), ClientSession(r, w) as s:
         await s.initialize()
-        await asyncio.sleep(1.5)  # let the telnet connection come up
+        await asyncio.sleep(3.0)  # let the telnet connection come up (incl. the 2.5 s grace)
         call = lambda n, **a: s.call_tool(n, a)
         tag = "[motion]" if allow_motion else "[read-only]"
 
@@ -121,7 +121,7 @@ async def run_ota_failure():
     params = await session(True, FAKE_PIO_FAIL_UPLOAD="1")
     async with stdio_client(params) as (r, w), ClientSession(r, w) as s:
         await s.initialize()
-        await asyncio.sleep(1.5)
+        await asyncio.sleep(3.0)
         t = text(await s.call_tool("flash_spindle", {"wait_for_ip": 10}))
         check("flash_spindle retries on new address", "Attempt 2: espota upload to 127.0.0.3" in t, t)
         check("flash_spindle USB fallback", "fake USB flash" not in t and "USB upload succeeded" in t, t)

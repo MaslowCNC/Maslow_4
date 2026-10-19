@@ -63,6 +63,10 @@ SPINDLE_TRIP_FILE = "/spindle_trip.csv"  # where the XY board saves the spindle'
 # Status polling for status_history: fast while something is running, slow otherwise.
 POLL_BUSY_S, POLL_IDLE_S = 0.5, 2.0
 BUSY_STATES = {"Run", "Hold", "Jog", "Home", "Door"}
+# For 2 s after a telnet connection the firmware treats realtime characters such as '?' as plain
+# text (TelnetClient NEGOTIATION_GRACE_PERIOD_MS), so a status poll in that window ends up glued
+# to the front of the next command and turns it into error:1.  Wait it out before using a socket.
+TELNET_GRACE_S = 2.5
 
 # ---------------------------------------------------------------------------------------------
 # Command classification
@@ -160,6 +164,7 @@ class Board:
                 s = socket.create_connection((ip, TELNET_PORT), timeout=5)
                 s.settimeout(None)
                 s.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+                time.sleep(TELNET_GRACE_S)
                 with self.cond:
                     self.sock, self.ip = s, ip
                     self.connected_since = time.time()
