@@ -142,6 +142,12 @@ const float PHASE_MOVE_COMPLETE_EPS_RAD = 0.001f;   // within ~0.06 deg of targe
 // changing (i.e. the Z axis is moving).  Changing the phase fights extra mechanical
 // resistance in the Z drive, so give the drivers a little more headroom while moving.
 const float Z_MOVE_VOLTAGE_BOOST = 1.0f;            // volts added during phase (Z) moves
+// The Z counts as moving until this long after the phase last changed.  A G-code ramp reaches the
+// spindle as a stream of tiny Z targets, each finished within a few ms at PHASE_OFFSET_RAMP_RATE,
+// so "target != current" alone was false nearly all the time: on 2026-10-19 14:14 it held for 1 of
+// 149 samples of a 0.5 s step-down.  Neither the boost nor the adaptive loop's Z-move guard
+// engaged, the loop took 0.4 V off M2 during the move, and the spindle slipped as it ended.
+const uint32_t Z_MOVE_HOLD_MS = 100;                // bridges the gaps between streamed Z targets
 
 // --- Z-axis power-up homing (top-of-travel beam break) ---
 // On power-up, an already-blocked beam makes the Z lower until the beam clears.  Otherwise,

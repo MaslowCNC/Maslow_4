@@ -903,6 +903,10 @@ static void updateReportedState() {
 static volatile uint32_t g_foc_loops      = 0;
 static volatile uint32_t g_foc_max_period_us = 0;
 
+// The Z is moving: a phase ramp in progress, or the phase changed within Z_MOVE_HOLD_MS (see
+// there).  Set by the housekeeping task, read by the FOC task for the Z-move voltage boost.
+static volatile bool g_z_moving = false;
+
 // Ramp rate for one motor this FOC iteration (rad/s per second).
 static float spinRampRate(const MotorController& mc) {
     if (calibration.isActive()) return VELOCITY_RAMP_RATE;
@@ -948,9 +952,7 @@ static void motorControlTask(void* arg) {
                           calibration.state != MCAL_RAMP_DOWN;
         // While the relative phase is changing (Z axis moving), give the motors an extra
         // volt of headroom to overcome the Z drive's mechanical resistance.
-        float z_move_boost = (fabsf(phase_offset.target - phase_offset.current) > PHASE_MOVE_COMPLETE_EPS_RAD)
-                                 ? Z_MOVE_VOLTAGE_BOOST
-                                 : 0.0f;
+        float z_move_boost = g_z_moving ? Z_MOVE_VOLTAGE_BOOST : 0.0f;
         mc1.applyVoltageLimit(cal_active && calibration.active_motor_idx == 0, calibration.hunt_voltage, z_move_boost);
         mc2.applyVoltageLimit(cal_active && calibration.active_motor_idx == 1, calibration.hunt_voltage, z_move_boost);
 
@@ -1020,6 +1022,8 @@ static void housekeepingTask(void* arg) {
     (void)arg;
     uint32_t last_status_time = 0;
     uint32_t last_hk_time     = millis();
+    float    last_z_phase     = phase_offset.current;
+    uint32_t last_z_move_ms   = 0;
 
     // Watch this task (see HOUSEKEEPING_WDT_TIMEOUT_S).  esp_task_wdt_init on an already-running
     // TWDT just updates its timeout; panic stays on so a hang reboots and leaves a coredump.
@@ -1052,8 +1056,15 @@ static void housekeepingTask(void* arg) {
         calibration.accumulateCurrentSample(mc2.last_instantaneous_current, 1);
         // Load-sense fit over the reads above (no extra ADC reads) and the advisory stall warning.
         // Calibration hunts its own voltages, which the no-load baseline does not describe.
-        loadSenseUpdate(mc1, mc2, hk_dt, !calibration.isActive(),
-                        fabsf(phase_offset.target - phase_offset.current) > PHASE_MOVE_COMPLETE_EPS_RAD);
+        {
+            float phase = phase_offset.current;
+            if (fabsf(phase_offset.target - phase) > PHASE_MOVE_COMPLETE_EPS_RAD || phase != last_z_phase) {
+                last_z_move_ms = now_ms;
+            }
+            last_z_phase = phase;
+            g_z_moving   = now_ms - last_z_move_ms < Z_MOVE_HOLD_MS;
+        }
+        loadSenseUpdate(mc1, mc2, hk_dt, !calibration.isActive(), g_z_moving);
         reportLoadWarnings();
         recordTripSample(now_ms);
 
