@@ -10,6 +10,7 @@
 #include "../Planner.h"                // plan_sync_position
 #include "../Maslow/Maslow.h"          // Maslow.resetUpdateWatchdog
 #include "../WebUI/WifiConfig.h"       // wifi_sta_ssid / wifi_sta_password (ENABLE_WIFI)
+#include "../WebUI/InputBuffer.h"      // WebUI::inputBuffer ($STOP after a spindle fault)
 #include "Driver/localfs.h"            // localfsName
 
 #include <cstdio>   // snprintf
@@ -390,6 +391,86 @@ namespace Spindles {
         sendFan(fanSpeed);
         updateHoldState();
         serviceStatus();
+        serviceFaultRecovery();
+    }
+
+    // How long the machine must sit Idle after $STOP before the Z is re-homed.  $STOP's own Z
+    // raise passes through Idle on its way into a Cycle, so a single Idle reading is not enough.
+    static const uint32_t RECOVERY_IDLE_MS = 1000;
+    // Give up on a step that has not completed in this long (e.g. the operator took over).
+    static const uint32_t RECOVERY_STEP_TIMEOUT_MS = 30000;
+
+    void SpindleBoard::serviceFaultRecovery() {
+        if (_recovery == FaultRecovery::None) {
+            return;
+        }
+        State    st  = sys.state();
+        uint32_t now = millis();
+        if (st == State::Alarm || st == State::ConfigAlarm) {
+            // $STOP would clear the alarm (it sets Idle), hiding whatever raised it.
+            _recovery = FaultRecovery::None;
+            log_warn(name() << ": machine in alarm - not recovering from the spindle fault automatically;"
+                               " clear the alarm, press Stop, then re-home the Z");
+            return;
+        }
+        if (now - _recovery_since_ms > RECOVERY_STEP_TIMEOUT_MS) {
+            _recovery = FaultRecovery::None;
+            log_warn(name() << ": spindle fault recovery timed out (state " << (int)st
+                            << ") - press Stop, then re-home the Z before cutting");
+            return;
+        }
+        switch (_recovery) {
+            case FaultRecovery::WaitForHold:
+                // The belts have stopped (or nothing was moving): end the job like the Stop button.
+                if ((st == State::Hold && sys.suspend().bit.holdComplete) || st == State::Idle) {
+                    log_info(name() << ": machine stopped after the spindle fault - ending the job ($STOP)");
+                    WebUI::inputBuffer.push("$STOP\n");
+                    _recovery          = FaultRecovery::WaitForIdle;
+                    _recovery_since_ms = now;
+                }
+                break;
+            case FaultRecovery::WaitForIdle: {
+                static uint32_t idle_since = 0;
+                if (st != State::Idle || _belt_motion_active) {
+                    idle_since = 0;
+                    break;
+                }
+                if (idle_since == 0) {
+                    idle_since = now;
+                }
+                if (now - idle_since >= RECOVERY_IDLE_MS) {
+                    idle_since = 0;
+                    log_info(name() << ": re-homing the Z after the spindle fault (raises it to the top of travel)");
+                    sendHome();
+                    _recovery          = FaultRecovery::Homing;
+                    _recovery_since_ms = now;
+                }
+                break;
+            }
+            case FaultRecovery::Homing:
+                break;  // finished by the spindle's ZHOMED (restoreWorkZ) or the timeout above
+            default:
+                break;
+        }
+    }
+
+    // After the recovery re-home, put back the work Z zero the job was cut against.  Homing sets
+    // the machine Z to 0 at the top-of-travel beam, the same reference the zero was set from
+    // (every home zeroes the work Z), so the same G54 offset finds the same surface again.
+    void SpindleBoard::restoreWorkZ() {
+        float z = _saved_work_z_mm;
+        if (gc_state.modal.units == Units::Inches) {
+            z /= MM_PER_INCH;
+        }
+        char cmd[40];
+        snprintf(cmd, sizeof(cmd), "G10 L2 P0 Z%.4f", z);
+        if (gc_execute_line(cmd) == Error::Ok) {
+            log_info(name() << ": Z re-homed after the spindle fault; work Z zero restored ("
+                            << _saved_work_z_mm << " mm) - ready to cut");
+        } else {
+            log_warn(name() << ": Z re-homed after the spindle fault, but the work Z zero could not be"
+                               " restored - set Z zero again before cutting");
+        }
     }
 
     void SpindleBoard::serviceStatus() {
@@ -470,9 +551,14 @@ namespace Spindles {
                         if (gc_execute_line(clear_g92) != Error::Ok) {
                             log_warn(name() << ": could not clear G92 offset after Z home");
                         }
-                        char zero_wcs[] = "G10 L20 P0 Z0";
-                        if (gc_execute_line(zero_wcs) != Error::Ok) {
-                            log_warn(name() << ": could not zero Z work coordinate after Z home");
+                        if (_recovery == FaultRecovery::Homing) {
+                            _recovery = FaultRecovery::None;
+                            restoreWorkZ();
+                        } else {
+                            char zero_wcs[] = "G10 L20 P0 Z0";
+                            if (gc_execute_line(zero_wcs) != Error::Ok) {
+                                log_warn(name() << ": could not zero Z work coordinate after Z home");
+                            }
                         }
                         _deg_sent = false;                           // re-send the next phase from the new zero
                         log_info(name() << ": spindle re-homed Z - reset XY Z position to 0");
@@ -500,8 +586,13 @@ namespace Spindles {
                         // once the machine is at rest.  Not stop(): its spin-down delay would block here.
                         sendSpeed(0);
                         _current_state = SpindleState::Disable;
-                        log_error(name() << ": job paused because the spindle stopped - press Stop to end it,"
-                                           " then re-home the Z before cutting again");
+                        // Then, once the belts are at rest, end the job and re-home the Z (see
+                        // serviceFaultRecovery) so the machine is ready to cut again.
+                        _saved_work_z_mm   = gc_state.coord_system[Z_AXIS];
+                        _recovery          = FaultRecovery::WaitForHold;
+                        _recovery_since_ms = millis();
+                        log_error(name() << ": job paused because the spindle stopped - stopping the job and"
+                                           " re-homing the Z once the machine is at rest");
                     }
                     _last_fault = fault;
                 }

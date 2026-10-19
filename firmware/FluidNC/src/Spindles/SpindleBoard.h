@@ -128,6 +128,16 @@ namespace Spindles {
         // planner when the fault arrived carry the old speed and would restart the spindle.
         bool _fault_latched = false;
 
+        // Recovery after a spindle fault, back to "ready to cut" with the machine stopped:
+        // once the feed hold has brought the belts to rest, end the job the way the Stop button
+        // does ($STOP), then re-home the Z (the fault dropped the spindle's Z reference) and put
+        // the work Z zero back.  Driven from update(), one step per pass.
+        enum class FaultRecovery : uint8_t { None, WaitForHold, WaitForIdle, Homing };
+        FaultRecovery _recovery          = FaultRecovery::None;
+        uint32_t      _recovery_since_ms = 0;      // when the current step started (or Idle began)
+        float         _saved_work_z_mm   = 0.0f;   // G54 Z offset (mm) when the fault arrived
+        void          serviceFaultRecovery();
+
         // Whether the Maslow loop reported belt motion on the latest update() call.
         bool _belt_motion_active = false;
 
@@ -167,6 +177,7 @@ namespace Spindles {
         void handleTripLine();
         void closeTripFile(const char* why);
         bool machineAtRest() const;
+        void restoreWorkZ();
 
         void sendSpeed(uint32_t rpm);
         void sendPhase(float deg);
