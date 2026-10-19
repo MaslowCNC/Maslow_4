@@ -18,6 +18,7 @@ static float s_trim_f[2]     = { 0.0f, 0.0f };   // the trim as the fit sees it 
 static float s_load_slope[2] = { 0.0f, 0.0f };   // smoothed d(load Iq)/dt (A/s) while the loop is active
 static float s_prev_load[2]  = { 0.0f, 0.0f };
 static bool  s_slope_valid[2] = { false, false };
+static uint32_t s_last_z_move_ms = 0;            // millis() of the last pass with the Z moving
 
 // Advisory load warning, per motor
 static bool     s_warn[2]          = { false, false };
@@ -285,7 +286,7 @@ static bool vsweepActive() {
 
 // Per-motor adaptive voltage trim (see ADAPT_* in config.h), handed to the FOC loop through
 // load_boost_v.  VSWEEP owns that offset while it runs.
-static void updateAdaptive(MotorController* motors[2], bool allow, float dt, uint32_t now) {
+static void updateAdaptive(MotorController* motors[2], bool allow, float dt, uint32_t now, bool z_moving) {
     if (vsweepActive()) {
         for (int m = 0; m < 2; m++) {
             s_trim[m]               = 0.0f;
@@ -293,6 +294,8 @@ static void updateAdaptive(MotorController* motors[2], bool allow, float dt, uin
         }
         return;
     }
+    if (z_moving) s_last_z_move_ms = now;
+    bool z_settled = !z_moving && now - s_last_z_move_ms >= ADAPT_Z_SETTLE_MS;
     for (int m = 0; m < 2; m++) {
         MotorController&    mc  = *motors[m];
         const LoadEstimate& e   = s_est[m];
@@ -316,23 +319,28 @@ static void updateAdaptive(MotorController* motors[2], bool allow, float dt, uin
 
         // Load trend, only while the loop is tracking this motor at a steady speed.  It is Iq less
         // what the loop's own voltage changes did to it (seen through the fit's lag), so trimming
-        // the voltage down is not mistaken for a rising load and fought straight back.
+        // the voltage down is not mistaken for a rising load and fought straight back.  Not judged
+        // during or just after a Z move, whose end brings Iq down without any load change.
+        bool  trend_ok = active && z_settled;
         float a_per_v = fmaxf(ADAPT_IQ_A_PER_V_PER_KRPM * rpm / 1000.0f, 1.0f);
         if (dt > 0.0f) s_trim_f[m] += dt / (LOAD_FILTER_TAU_S + dt) * (s_trim[m] - s_trim_f[m]);
         float load_iq = e.iq - a_per_v * s_trim_f[m];
-        if (active && s_slope_valid[m] && dt > 0.0f) {
+        if (trend_ok && s_slope_valid[m] && dt > 0.0f) {
             float raw = (load_iq - s_prev_load[m]) / dt;
             s_load_slope[m] += dt / (ADAPT_TREND_TAU_S + dt) * (raw - s_load_slope[m]);
-        } else if (!active) {
+        } else if (!trend_ok) {
             s_load_slope[m] = 0.0f;
         }
-        s_slope_valid[m] = active;
+        s_slope_valid[m] = trend_ok;
         s_prev_load[m]   = load_iq;
 
         if (active) {
             // A falling load Iq means the load is rising.  The fit trails it by about
-            // LOAD_FILTER_TAU_S, so judge the target on where Iq is by now.
-            float falling = fmaxf(-s_load_slope[m] - ADAPT_TREND_DEADBAND_A_PER_S, 0.0f);   // A/s
+            // LOAD_FILTER_TAU_S, so judge the target on where Iq is by now.  Only near the target:
+            // well above it the trend is the loop's own voltage (see ADAPT_TREND_MAX_IQ_A).
+            float falling = e.iq < ADAPT_TREND_MAX_IQ_A
+                                ? fmaxf(-s_load_slope[m] - ADAPT_TREND_DEADBAND_A_PER_S, 0.0f)   // A/s
+                                : 0.0f;
             float iq_now  = e.iq - falling * LOAD_FILTER_TAU_S;
             float err     = ADAPT_IQ_TARGET_A - iq_now;                 // > 0: Iq too low -> more voltage
             float rate;
@@ -512,7 +520,7 @@ const LoadEstimate& loadEstimate(int motor_idx) {
     return s_est[motor_idx & 1];
 }
 
-void loadSenseUpdate(MotorController& mc1, MotorController& mc2, float dt, bool allow_warn) {
+void loadSenseUpdate(MotorController& mc1, MotorController& mc2, float dt, bool allow_warn, bool z_moving) {
     MotorController* motors[2] = { &mc1, &mc2 };
     s_motors[0] = &mc1; s_motors[1] = &mc2;
 
@@ -654,7 +662,7 @@ void loadSenseUpdate(MotorController& mc1, MotorController& mc2, float dt, bool 
     }
 
     for (int m = 0; m < 2; m++) updateWarning(m, *motors[m], allow_warn, now);
-    updateAdaptive(motors, allow_warn, dt, now);
+    updateAdaptive(motors, allow_warn, dt, now, z_moving);
 
     // ---- Periodic console line ----
     if (!g_load_print) return;

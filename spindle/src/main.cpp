@@ -1052,7 +1052,8 @@ static void housekeepingTask(void* arg) {
         calibration.accumulateCurrentSample(mc2.last_instantaneous_current, 1);
         // Load-sense fit over the reads above (no extra ADC reads) and the advisory stall warning.
         // Calibration hunts its own voltages, which the no-load baseline does not describe.
-        loadSenseUpdate(mc1, mc2, hk_dt, !calibration.isActive());
+        loadSenseUpdate(mc1, mc2, hk_dt, !calibration.isActive(),
+                        fabsf(phase_offset.target - phase_offset.current) > PHASE_MOVE_COMPLETE_EPS_RAD);
         reportLoadWarnings();
         recordTripSample(now_ms);
 

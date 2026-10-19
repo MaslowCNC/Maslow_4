@@ -293,6 +293,15 @@ const uint32_t ADAPT_WARN_HOLD_MS       = 1000;
 const float    ADAPT_TREND_TAU_S            = 0.10f;   // smoothing of the load-Iq slope
 const float    ADAPT_TREND_DEADBAND_A_PER_S = 1.5f;    // slower falls are left to the loop above
 const float    ADAPT_TREND_GAIN             = 6.0f;
+// The feed-forward runs away on its own when it acts on an Iq well above target (2026-10-16 16:36
+// and 2026-10-19 09:59, both in air): it assumes ~8 A/V of its own trim, but well above the edge
+// Iq only rises ~2 A/V, so every volt it adds reads as a falling load Iq and it adds more, up to
+// ADAPT_TRIM_MAX_V, until the drivers' over-current protection trips.  The drop that set it off
+// was Iq coming back down as a Z move ended (Iq sits 1-2 A higher while the phase is changing).
+// So the trend only feeds forward while Iq is near the target, where the margin matters, and
+// ignores Iq during a Z move and for ADAPT_Z_SETTLE_MS after it.
+const float    ADAPT_TREND_MAX_IQ_A         = 3.5f;    // no feed-forward with Iq above this
+const uint32_t ADAPT_Z_SETTLE_MS            = 400;     // fit lag (150 ms) + slope smoothing + margin
 const float    ADAPT_IQ_A_PER_V_PER_KRPM = 0.67f;   // ~8 A/V at 12,000 RPM
 const float    ADAPT_TRIM_MIN_V        = -1.5f;   // never more than this below the LUT
 const float    ADAPT_TRIM_MAX_V        = 2.5f;    // never more than this above (MAX_VOLTAGE caps too)

@@ -55,7 +55,8 @@ bool loadSenseBusy();
 
 // Call every housekeeping pass, after MotorController::updateCurrent(true).  allow_warn = false
 // (e.g. during calibration, whose hunting voltages differ from the baseline) holds warnings off.
-void loadSenseUpdate(MotorController& mc1, MotorController& mc2, float dt, bool allow_warn);
+// z_moving: the relative phase is changing (Z axis moving), which shifts Iq on its own.
+void loadSenseUpdate(MotorController& mc1, MotorController& mc2, float dt, bool allow_warn, bool z_moving);
 
 // Load warnings currently raised: bit 0 = motor 1, bit 1 = motor 2 (see LOAD_WARN_* in config.h).
 uint8_t loadWarnMask();
