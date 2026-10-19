@@ -119,6 +119,9 @@ public:
     void stopSpindle();
     /** Raises Z axis to Z home + 2mm to prevent workpiece damage after stop */
     void raiseZ();
+    // The non-blocking first half of raiseZ(): end the job, clear the planner and stepper, hold the
+    // belts where they are, clear any feed hold and go Idle.  Safe to call from inside the hold.
+    void haltMotion();
 
     void   stop();
     void   eStop(String message = "Emergency stop triggered.");

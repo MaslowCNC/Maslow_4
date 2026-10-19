@@ -59,5 +59,9 @@ void mc_override_ctrl_update(Override override_state);
 void mc_reset();
 
 void mc_cancel_jog();
+// While set, mc_move_motors() plans nothing and stops waiting for planner space.  Set when a
+// paused job is stopped from inside the feed hold (see rtStopFromHold); cleared by the main loop
+// once the interrupted G-code line has unwound.
+void mc_set_drop_motion(bool drop);
 
 void mc_init();

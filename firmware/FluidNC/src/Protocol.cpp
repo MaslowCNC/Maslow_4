@@ -63,6 +63,8 @@ volatile bool runLimitLoop;  // Interface to show_limits()
 // Uses acquire/release semantics to guarantee visibility on dual-core ESP32-S3.
 static std::atomic<bool> feedHoldPending { false };
 
+volatile bool rtStopFromHold = false;
+
 static void protocol_exec_rt_suspend();
 static void protocol_do_initiate_cycle();  // Forward declaration for auto cycle start handler
 static void protocol_do_feedhold();        // Forward declaration for double-check guard in auto cycle start
@@ -320,6 +322,8 @@ void     protocol_main_loop() {
     // This is also where the system idles while waiting for something to do.
     // ---------------------------------------------------------------------------------
     for (;; vTaskDelay(0)) {
+        // Back at the top level, so any line interrupted by a stop-from-hold has unwound.
+        mc_set_drop_motion(false);
         if (activeChannel) {
             // The input polling task has collected a line of input
 #ifdef DEBUG_REPORT_ECHO_RAW_LINE_RECEIVED
@@ -987,6 +991,17 @@ static void protocol_exec_rt_suspend() {
 
     while (sys.suspend().value) {
         if (sys.abort()) {
+            return;
+        }
+        // Stop requested while paused (Stop button, or a spindle fault): end the job here, with
+        // the belts already at rest, instead of resuming it.  haltMotion() clears the suspend and
+        // sets Idle, so this loop exits; the drop flag keeps the G-code line that was waiting for
+        // planner space from queuing the rest of its motion as it unwinds.
+        if (rtStopFromHold && sys.state() == State::Hold && sys.suspend().bit.holdComplete) {
+            rtStopFromHold = false;
+            log_info("Stopping the paused job");
+            mc_set_drop_motion(true);
+            Maslow.haltMotion();
             return;
         }
         // if a jogCancel comes in and we have a jog "in-flight" (parsed and handed over to mc_move_motors()),

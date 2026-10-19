@@ -10,6 +10,30 @@
 
 #    include "../Serial.h"      // is_realtime_command
 #    include "../StartupLog.h"  // startupLog
+#    include "../Protocol.h"    // rtStopFromHold
+#    include "../System.h"      // sys
+
+#    include <cctype>
+#    include <strings.h>  // strncasecmp
+
+namespace {
+    // The tablet's Stop button sends "$STOP".  During a feed hold the main loop cannot run it
+    // (it is suspended inside the hold, and no new lines are read), so flag the stop here, where
+    // the bytes arrive, and let protocol_exec_rt_suspend() act on it.
+    bool isStopLine(const uint8_t* payload, size_t length) {
+        size_t i = 0;
+        while (i < length && isspace(payload[i])) {
+            ++i;
+        }
+        const char* p = reinterpret_cast<const char*>(payload + i);
+        size_t      n = length - i;
+        auto        is = [&](const char* cmd) {
+            size_t l = strlen(cmd);
+            return n >= l && strncasecmp(p, cmd, l) == 0 && (n == l || isspace((unsigned char)p[l]));
+        };
+        return is("$STOP") || is("$MASLOW/STOP");
+    }
+}
 
 namespace WebUI {
     class WSChannels;
@@ -279,6 +303,9 @@ namespace WebUI {
             } break;
             case WStype_TEXT:
             case WStype_BIN:
+                if (sys.state() == State::Hold && isStopLine(payload, length)) {
+                    rtStopFromHold = true;
+                }
                 try {
                     _wsChannels.at(num)->push(payload, length);
                 } catch (std::out_of_range& oor) {}

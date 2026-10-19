@@ -424,6 +424,12 @@ namespace Spindles {
                 // The belts have stopped (or nothing was moving): end the job like the Stop button.
                 if ((st == State::Hold && sys.suspend().bit.holdComplete) || st == State::Idle) {
                     log_info(name() << ": machine stopped after the spindle fault - ending the job ($STOP)");
+                    // A $STOP line alone waits until the hold is released (the main loop is suspended
+                    // inside it), so also ask the hold itself to end the job.  The line then raises
+                    // the Z and saves the positions as the Stop button does.
+                    if (st == State::Hold) {
+                        rtStopFromHold = true;
+                    }
                     WebUI::inputBuffer.push("$STOP\n");
                     _recovery          = FaultRecovery::WaitForIdle;
                     _recovery_since_ms = now;

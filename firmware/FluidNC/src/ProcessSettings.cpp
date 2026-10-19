@@ -846,6 +846,7 @@ static Error maslow_stop(const char* value, WebUI::AuthenticationLevel auth_leve
     // may hold that mutex while flushing the WebSocket TX buffer; without
     // these resets the 100 ms watchdog can fire and set State::Alarm.
     Maslow.resetUpdateWatchdog();
+    rtStopFromHold = false;  // this is the stop; a request still pending from a hold is done
     Maslow.stopMotors();   // Stop XY belt motors immediately
     Maslow.stopSpindle();  // Stop means everything: a running spindle would carry on into the next job
     Maslow.raiseZ();       // Raise Z to Z home + 2mm to prevent workpiece damage

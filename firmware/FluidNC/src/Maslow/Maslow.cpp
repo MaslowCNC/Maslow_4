@@ -1141,8 +1141,7 @@ void Maslow_::stopMotors() {
 // Safe Z height in mm above Z home to raise to after stop (prevents workpiece damage)
 static constexpr float Z_SAFE_HEIGHT_MM = 2.0f;
 
-// Raises Z axis to Z home + Z_SAFE_HEIGHT_MM to prevent workpiece damage after stop
-void Maslow_::raiseZ() {
+void Maslow_::haltMotion() {
     // Always stop streaming and clear the planner/stepper immediately, regardless of Z height.
     // If we only stop the job without clearing, any moves already in the planner buffer
     // will resume executing after maslow_stop() returns, causing the machine to keep moving.
@@ -1176,6 +1175,11 @@ void Maslow_::raiseZ() {
     suspend.value = 0;
     sys.set_suspend(suspend);
     sys.set_state(State::Idle);
+}
+
+// Raises Z axis to Z home + Z_SAFE_HEIGHT_MM to prevent workpiece damage after stop
+void Maslow_::raiseZ() {
+    haltMotion();
 
     float* mpos  = get_mpos();
     float* wco   = get_wco();
