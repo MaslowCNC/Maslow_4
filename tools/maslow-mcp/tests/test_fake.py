@@ -115,6 +115,8 @@ async def run(allow_motion):
             check("spindle_trip refuses a stale recording", "STALE" in t and "CLIMBED" not in t
                   and "nFAULT retries" in t and "over-current on M2" in t and "Same bytes" in t
                   and "at rest" in t, t)
+            t = text(await call("spindle_trip", action="fetch", wait=2))  # the spindle has nothing to re-send
+            check("spindle_trip fetch that saves nothing is stale", "STALE" in t and "CLIMBED" not in t, t)
             # Put the fake machine into Run (via a raw line, which the fake treats as a state switch).
             await call("send_command", command="RUN")
             t = text(await call("send_command", command="G0 X20"))

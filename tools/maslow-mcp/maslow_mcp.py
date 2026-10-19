@@ -930,7 +930,7 @@ async def spindle_trip(action: str = "analyse", source: str = "xy", wait: float 
         recs, warnings = trip_analysis.parse(text)
         if not recs:
             return "\n".join(notes + ["No trip recording found in %s." % where])
-        if source == "xy" and action not in ("fetch", "test"):
+        if source == "xy":  # also after fetch/test: a request that saved nothing leaves the old file
             stale = _stale_trip(recs[-1], where, dest_dir)
             if stale:
                 return "\n".join(notes + ["Recording: %s" % where, stale])
