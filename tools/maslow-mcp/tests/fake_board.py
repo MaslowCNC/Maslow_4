@@ -56,6 +56,8 @@ def handle(c):
                         threading.Thread(target=spindle_ota, daemon=True).start()
                     if line.upper() == "$SPINDLE/TRIP=TEST":
                         threading.Thread(target=spindle_trip, daemon=True).start()
+                    if line == "TRIPSTALE":
+                        threading.Thread(target=spindle_trip_deferred, daemon=True).start()
                     for out in CANNED.get(line.upper(), ["ok"]):
                         c.sendall((out + "\r\n").encode())
                 else:
@@ -118,6 +120,16 @@ def spindle_trip():
     time.sleep(1)
     TRIP["csv"] = trip_csv()
     broadcast("[MSG:INFO: SpindleBoard: spindle trip recording saved to /spindle_trip.csv (1004 lines)]")
+
+
+def spindle_trip_deferred():
+    """A new trip while a job runs: the job pauses in Hold, so the recording is not saved and
+    /spindle_trip.csv keeps the previous one."""
+    time.sleep(0.3)
+    broadcast("[MSG:WARN: SpindleBoard: driver over-current (nFAULT retries) - spindle stopped; re-home the Z, then send a new speed]")
+    broadcast("[MSG:ERR: SpindleBoard reported fault 2]")
+    broadcast("[MSG:INFO: SpindleBoard: spindle trip recording arriving while the machine is moving; "
+              "it will be fetched again once the machine is at rest]")
 
 
 def telnet():

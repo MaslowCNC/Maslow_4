@@ -23,6 +23,7 @@ Configuration (environment variables):
     MASLOW_TELNET_PORT  FluidNC telnet port               (default 23)
     MASLOW_HTTP_PORT    FluidNC WebUI HTTP port           (default 80)
     SPINDLE_HUB         host:port of the spindle hub      (default 127.0.0.1:4567)
+    MASLOW_LOGDIR       where logs and downloads go       (default tools/maslow-mcp/logs)
 """
 
 import argparse
@@ -44,7 +45,7 @@ import trip_analysis
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
-LOGDIR = os.path.join(HERE, "logs")
+LOGDIR = os.environ.get("MASLOW_LOGDIR") or os.path.join(HERE, "logs")
 FIRMWARE_DIR = os.path.join(REPO, "firmware")
 SPINDLE_DIR = os.path.join(REPO, "spindle")
 SPINDLE_LOGDIR = os.path.join(SPINDLE_DIR, "logs")
@@ -835,6 +836,40 @@ def _trip_time(reason, uptime_s):
     return received[0] if received else None
 
 
+def _stale_trip(rec, where, dest_dir):
+    """Why the downloaded recording predates the latest spindle trip in the XY log, or None.
+
+    The XY board only saves a recording once the machine is at rest, so after a trip mid-job (the job
+    paused in Hold) /spindle_trip.csv still holds the previous trip's recording.  Judged on this
+    server's log: a spindle fault with no "saved" message after it means the file is older.
+    """
+    now = time.time()
+    faults = [(t, s) for t, s in board.lines_between(0, now, r"SpindleBoard: .* - spindle stopped|SpindleBoard reported fault")
+              if "trip recording" not in s]
+    if not faults:
+        return None
+    t_fault = faults[-1][0]
+    if board.lines_between(t_fault, now, r"trip recording saved to"):
+        return None
+    fault = next((s for t, s in faults if t >= t_fault - 1 and "spindle stopped" in s), faults[-1][1])
+    out = ["STALE: %s is not the recording of the latest trip, so it was not analysed." % SPINDLE_TRIP_FILE,
+           "  Latest trip: %s %s" % (stamp(t_fault), fault),
+           "  The file holds: %s (at %.3fs uptime)" % (rec["reason"], rec["uptime_s"])]
+    for old in sorted(glob.glob(os.path.join(dest_dir, "spindle_trip-*.csv"))):
+        if old != where and os.path.getsize(old) == os.path.getsize(where):
+            with open(old, "rb") as a, open(where, "rb") as b:
+                if a.read() == b.read():
+                    out.append("  Same bytes as the earlier download %s" % os.path.basename(old))
+                    break
+    since = board.lines_between(t_fault, now, r"trip recording|cannot (create|request)")
+    if since:
+        out.append("XY board since the trip:")
+        out += ["  %s %s" % (stamp(t), s) for t, s in since[-6:]]
+    out.append("The recording is saved once the machine is at rest: press Stop to end the paused job (the XY "
+               "board then fetches it, ~20 s), or use action='fetch' with the machine Idle.")
+    return "\n".join(out)
+
+
 @mcp.tool()
 async def spindle_trip(action: str = "analyse", source: str = "xy", wait: float = 45) -> str:
     """Diagnose a spindle over-current / driver-fault stop from the spindle's trip recording.
@@ -848,6 +883,8 @@ async def spindle_trip(action: str = "analyse", source: str = "xy", wait: float 
     action: "analyse" (default) reads the saved recording; "fetch" first asks the spindle to send
     its last recording again ($Spindle/Trip); "test" records a test trip now ($Spindle/Trip=TEST,
     no motion) to check the path end to end. fetch/test need an Idle/Alarm machine.
+    "analyse" refuses a file older than the latest spindle trip in the XY log (the board saves a
+    recording only once the machine is at rest) and says how to get the new one.
     source: "xy" (the XY board's file, over WiFi) or "hub" (the newest spindle serial-hub log, USB).
     The raw CSV is saved under logs/downloads/.
     """
@@ -893,6 +930,10 @@ async def spindle_trip(action: str = "analyse", source: str = "xy", wait: float 
         recs, warnings = trip_analysis.parse(text)
         if not recs:
             return "\n".join(notes + ["No trip recording found in %s." % where])
+        if source == "xy" and action not in ("fetch", "test"):
+            stale = _stale_trip(recs[-1], where, dest_dir)
+            if stale:
+                return "\n".join(notes + ["Recording: %s" % where, stale])
         out = notes + ["Recording: %s" % where] + ["Warning: " + w for w in warnings] + [""]
         out.append(trip_analysis.summarise(recs[-1]))
         if source == "xy":

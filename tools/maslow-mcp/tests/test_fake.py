@@ -17,6 +17,7 @@ from mcp.client.stdio import stdio_client
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 TELNET, HTTP = "2323", "8080"
+LOGDIR = tempfile.mkdtemp(prefix="maslow-mcp-test-")  # keep test logs out of the real logs/
 
 
 def text(result):
@@ -24,7 +25,7 @@ def text(result):
 
 
 async def session(allow_motion, **extra_env):
-    env = dict(os.environ, MASLOW_HOST="127.0.0.1", MASLOW_TELNET_PORT=TELNET, MASLOW_HTTP_PORT=HTTP, SPINDLE_HUB="127.0.0.1:1",
+    env = dict(os.environ, MASLOW_HOST="127.0.0.1", MASLOW_TELNET_PORT=TELNET, MASLOW_HTTP_PORT=HTTP, SPINDLE_HUB="127.0.0.1:1", MASLOW_LOGDIR=LOGDIR,
                MASLOW_PIO=os.path.join(HERE, "fake_pio.sh"), SPINDLE_FLASH_SH=os.path.join(HERE, "fake_flash.sh"), **extra_env)
     args = [os.path.join(ROOT, "maslow_mcp.py")] + (["--allow-motion"] if allow_motion else [])
     return StdioServerParameters(command=sys.executable, args=args, env=env)
@@ -106,6 +107,14 @@ async def run(allow_motion):
             anchor = re.search(r"around the trip \(([\d:.]+)\)", t)
             fault = re.search(r"([\d:.]+) \[MSG:WARN: SpindleBoard: over-current on M2", t)
             check("spindle_trip context anchored on the fault", anchor and fault and anchor.group(1) == fault.group(1), t)
+            t = text(await call("spindle_trip"))
+            check("spindle_trip analyse of the current recording", "STALE" not in t and "CLIMBED" in t, t)
+            await call("send_command", command="TRIPSTALE")  # a new trip whose recording is held back
+            await asyncio.sleep(1)
+            t = text(await call("spindle_trip"))
+            check("spindle_trip refuses a stale recording", "STALE" in t and "CLIMBED" not in t
+                  and "nFAULT retries" in t and "over-current on M2" in t and "Same bytes" in t
+                  and "at rest" in t, t)
             # Put the fake machine into Run (via a raw line, which the fake treats as a state switch).
             await call("send_command", command="RUN")
             t = text(await call("send_command", command="G0 X20"))
