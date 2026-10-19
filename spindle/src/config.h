@@ -300,6 +300,9 @@ const float    ADAPT_TREND_GAIN             = 6.0f;
 // was Iq coming back down as a Z move ended (Iq sits 1-2 A higher while the phase is changing).
 // So the trend only feeds forward while Iq is near the target, where the margin matters, and
 // ignores Iq during a Z move and for ADAPT_Z_SETTLE_MS after it.
+// In that window the loop also never lowers the voltage (2026-10-19 11:04, under real load): during
+// a 0.7 s ramp to the next pass the Z drive raised M2's Iq from 3.4 to 6.6 A, the loop read it as
+// excess margin and took 0.7 V off, and M2 slipped 90 ms after the full cut load came back.
 const float    ADAPT_TREND_MAX_IQ_A         = 3.5f;    // no feed-forward with Iq above this
 const uint32_t ADAPT_Z_SETTLE_MS            = 400;     // fit lag (150 ms) + slope smoothing + margin
 const float    ADAPT_IQ_A_PER_V_PER_KRPM = 0.67f;   // ~8 A/V at 12,000 RPM

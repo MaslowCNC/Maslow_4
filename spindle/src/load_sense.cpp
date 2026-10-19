@@ -358,6 +358,12 @@ static void updateAdaptive(MotorController* motors[2], bool allow, float dt, uin
             if (falling > 0.0f) {
                 rate = fminf(rate + ADAPT_TREND_GAIN * falling / a_per_v, ADAPT_UP_MAX_V_PER_S);
             }
+            // Never take voltage away during a Z move or its settle window: the Z drive loads the
+            // motors (M2 most), raising Iq, and the cut load is back at full strength the moment
+            // the move ends (see ADAPT_Z_SETTLE_MS).
+            if (!z_settled && rate < 0.0f) {
+                rate = 0.0f;
+            }
             s_trim[m] += rate * dt;
             if (warn_onset) s_trim[m] += ADAPT_WARN_STEP_V;
             s_trim[m] = constrain(s_trim[m], ADAPT_TRIM_MIN_V, ADAPT_TRIM_MAX_V);
