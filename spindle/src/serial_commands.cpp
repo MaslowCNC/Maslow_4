@@ -345,10 +345,17 @@ static void setSpindleSpeed(float rpm, MotorController& mc1, MotorController& mc
     // spindle on its own.  (The Z reference is NOT restored here - only a homing cycle can do
     // that.)
     if (rpm > 0.0f) g_fault_code = 0;
-    g_hold_release_requested = false;  // motion commanded: cancel any pending Z-hold release
     if (rpm > 0.0f) tripRecorderArmOnStart();  // restarting: record afresh for the next trip
 
     MotorController* motors[] = { &mc1, &mc2 };
+    // S0 only spins down a motor that is spinning.  On a stopped one it would enter velocity
+    // mode for one FOC pass - reported as "Spindle On" (the XY board sends S0 on every boot) -
+    // and the ramp's "velocity at 0" power-down would then drop a Z hold or Z move in progress.
+    if (rpm == 0.0f && !mc1.velocity_mode && !mc2.velocity_mode && !mc1.continuous_rotation &&
+        !mc2.continuous_rotation) {
+        return;
+    }
+    g_hold_release_requested = false;  // motion commanded: cancel any pending Z-hold release
     for (int i = 0; i < 2; i++) {
         motors[i]->target_velocity = rpm * 2.0f * PI / 60.0f * motors[i]->direction;
         motors[i]->velocity_mode   = true;
