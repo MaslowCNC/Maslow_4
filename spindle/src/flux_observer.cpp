@@ -10,8 +10,8 @@ void FluxObserver::reset() {
     first = true;
 }
 
-void FluxObserver::update(float i_alpha, float i_beta, float v_alpha, float v_beta, float dt) {
-    if (!ready() || dt <= 0.0f) return;
+void FluxObserver::update(float i_alpha, float i_beta, float vs_alpha, float vs_beta, float is_alpha, float is_beta) {
+    if (!ready()) return;
     if (first) {   // no previous current for the inductive term yet
         i_alpha_prev = i_alpha;
         i_beta_prev  = i_beta;
@@ -27,13 +27,13 @@ void FluxObserver::update(float i_alpha, float i_beta, float v_alpha, float v_be
     // to David Molony as the original author must be noted.
 
     // MXLEMMING Flux Observer
-    float resistive_term_a = R * i_alpha;
-    float resistive_term_b = R * i_beta;
+    float resistive_term_a = R * is_alpha;   // integrated over the step, like the voltage
+    float resistive_term_b = R * is_beta;
     float inductive_term_a = L * (i_alpha - i_alpha_prev);
     float inductive_term_b = L * (i_beta - i_beta_prev);
 
-    flux_alpha = constrain(flux_alpha + (v_alpha - resistive_term_a) * dt - inductive_term_a, -flux_linkage, flux_linkage);
-    flux_beta  = constrain(flux_beta  + (v_beta  - resistive_term_b) * dt - inductive_term_b, -flux_linkage, flux_linkage);
+    flux_alpha = constrain(flux_alpha + (vs_alpha - resistive_term_a) - inductive_term_a, -flux_linkage, flux_linkage);
+    flux_beta  = constrain(flux_beta  + (vs_beta  - resistive_term_b) - inductive_term_b, -flux_linkage, flux_linkage);
 
     // Electrical angle
     electrical_angle = atan2f(flux_beta, flux_alpha);

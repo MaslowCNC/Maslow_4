@@ -382,6 +382,8 @@ static void checkOvercurrent() {
             char why[64];
             snprintf(why, sizeof(why), "current sensing lost on%s%s", s1 ? " M1" : "", s2 ? " M2" : "");
             Serial.printf("OVERCURRENT: %s\n", why);
+            if (s1) syncSenseDescribe(0);
+            if (s2) syncSenseDescribe(1);
             stopForOverCurrent(why);
             return;
         }
@@ -1383,6 +1385,11 @@ void setup() {
     // Bench build: measure synchronised SOx sampling with the drivers asleep, before any motor
     // task exists, and skip the power-up Z homing so the motors stay idle (home with 'G').
     adcTimingTestRun(emitAdcTestLine);
+    g_tool_state = MachineState::NeedsHoming;
+#endif
+#ifdef SYNC_BENCH_NO_HOMING
+    // Bench build: no power-up Z homing, so a firmware under test never moves anything by itself
+    // at boot (home with 'G' when wanted).
     g_tool_state = MachineState::NeedsHoming;
 #endif
 

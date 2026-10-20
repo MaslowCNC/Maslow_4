@@ -88,7 +88,9 @@ static inline uint16_t IRAM_ATTR adc2End() {
 }
 
 // Motor m's phase k: ADC channel (motor 0 on ADC1, motor 1 on ADC2).
-static const int ADC_CH[2][3] = { { CURA - 1, CURB - 1, CURC - 1 },
+// DRAM_ATTR: the interrupt runs while flash writes (NVS) have the cache off, so nothing it reads may
+// live in flash.  In .rodata this table made every OTA request (which writes NVS) panic.
+static DRAM_ATTR const int ADC_CH[2][3] = { { CURA - 1, CURB - 1, CURC - 1 },
                                   { CURA2 - 11, CURB2 - 11, CURC2 - 11 } };
 
 // --- Timer used to schedule the interrupt ---
@@ -126,7 +128,8 @@ static volatile int32_t  s_lead_ticks   = 0;
 static volatile int32_t  s_mid_ticks    = 0;
 static volatile int32_t  s_settle_ticks = 0;
 static volatile int32_t  s_hold_ticks   = 0;
-static const int32_t     PRE_TICKS      = 400;    // alarm this early (2.5 us) and spin the rest
+static const int32_t     PRE_TICKS      = 640;    // alarm this early (4 us) and spin the rest:
+                                                  // at 2.5 us the entry averaged right on target
 static const int32_t     SPIN_MAX_TICKS = 1600;   // never spin longer than 10 us
 static const int32_t     LATE_TICKS     = 160;    // > 1 us after the target counts as late
 static uint32_t          s_seq          = 0;
@@ -139,7 +142,8 @@ static uint64_t          s_zero_sumsq[2][3];
 
 // Statistics (cycles at 240 MHz, ticks at 160 MHz)
 static volatile uint32_t s_st_periods, s_st_late;
-static volatile uint32_t s_st_isr_sum, s_st_isr_max;
+static volatile uint64_t s_st_isr_sum;   // cycles: a uint32 overflows after ~40 s
+static volatile uint32_t s_st_isr_max;
 static volatile int32_t  s_st_entry_min, s_st_entry_max;
 static volatile int64_t  s_st_entry_sum;
 static volatile int64_t  s_st_start_sum;
@@ -393,61 +397,86 @@ bool  samplerRunning()       { return s_running; }
 float samplerZeroVolts(int motor, int phase)    { return s_zero_v[motor & 1][phase % 3]; }
 float samplerZeroNoiseLsb(int motor, int phase) { return s_zero_sd[motor & 1][phase % 3]; }
 
+static inline int32_t posOf(uint32_t st) {
+    int32_t val = (int32_t)(st & 0xFFFF);
+    return (st & (1u << 16)) ? 2 * s_P - val : val;
+}
+
+// Phase of each of the six timers relative to unit 0 timer 0, in ticks (+ = ahead), each read
+// bracketed by two reads of unit 0 timer 0 so the read time cancels.  Average of 64 brackets.
+static void measureOffsets(int32_t off[6]) {
+    volatile mcpwm_dev_t* units[2] = { &MCPWM0, &MCPWM1 };
+    for (int i = 0; i < 6; i++) {
+        int64_t sum = 0;
+        int     n   = 0;
+        for (int k = 0; k < 200 && n < 64; k++) {
+            portDISABLE_INTERRUPTS();
+            uint32_t a = MCPWM0.timer[0].timer_status.val;
+            uint32_t x = units[i / 3]->timer[i % 3].timer_status.val;
+            uint32_t b = MCPWM0.timer[0].timer_status.val;
+            portENABLE_INTERRUPTS();
+            int32_t pa = posOf(a), px = posOf(x), pb = posOf(b);
+            if (pb < pa) continue;                       // unit 0 wrapped between the reads
+            int32_t d = px - (pa + pb) / 2;
+            while (d > s_P) d -= 2 * s_P;
+            while (d < -s_P) d += 2 * s_P;
+            sum += d;
+            n++;
+        }
+        off[i] = n ? (int32_t)(sum / n) : 0;
+    }
+}
+
+static void sayOffsets(void (*say)(const char*), const char* what, const int32_t off[6]) {
+    char line[110];
+    snprintf(line, sizeof(line), "SYNC timer phase %s (us vs U0T0): U0 %+.2f %+.2f  U1 %+.2f %+.2f %+.2f", what,
+             off[1] * TICK_US, off[2] * TICK_US, off[3] * TICK_US, off[4] * TICK_US, off[5] * TICK_US);
+    say(line);
+}
+
 // Align all six MCPWM timers (both units) to count from zero together.  Both units run from the
 // same clock with the same prescaler and period, so this holds from then on.  It makes the
 // counters jump once, so only call it with every motor output off.
 static void alignTimers(void (*say)(const char*)) {
-    volatile mcpwm_dev_t* units[2] = { &MCPWM0, &MCPWM1 };
-    for (int u = 0; u < 2; u++) {
-        for (int t = 0; t < 3; t++) {
-            units[u]->timer[t].timer_sync.timer_phase           = 0;
-            units[u]->timer[t].timer_sync.timer_phase_direction = 0;   // count up after the sync
-            units[u]->timer[t].timer_sync.timer_synci_en        = 1;
-        }
-    }
-    portDISABLE_INTERRUPTS();
-    for (int u = 0; u < 2; u++)
-        for (int t = 0; t < 3; t++)
-            units[u]->timer[t].timer_sync.timer_sync_sw = ~units[u]->timer[t].timer_sync.timer_sync_sw;
-    portENABLE_INTERRUPTS();
-    delayMicroseconds(200);
+    int32_t off[6];
+    measureOffsets(off);
+    sayOffsets(say, "before", off);
 
-    // Measure: the six positions read back to back, many times.  Reads take ~6 APB accesses, so a
-    // perfect alignment still shows a few ticks of spread; the read-order skew is measured too by
-    // reading unit 0 timer 0 at both ends.
-    int32_t worst = 0, skew = 0;
-    for (int k = 0; k < 200; k++) {
-        uint32_t v[7];
+    // How SimpleFOC wires each unit: timer 0's sync output fires on every timer zero, and all
+    // three timers (0 too) reload their sync phase from it.  That is what keeps a motor's three
+    // phases locked, and it means every phase value must stay 0: anything else is reloaded every
+    // period and shortens the PWM period.  So the only free variable between the units is WHEN
+    // unit 1 is synced: a software sync on unit 1 timer 0 restarts unit 1 from zero.  Fire it as
+    // unit 0 reaches zero, less the time the write takes to land (`d`, learned from the residual).
+    int32_t d = 160;
+    bool    fired = false;
+    for (int iter = 0; iter < 8; iter++) {
+        const int32_t target = (2 * s_P - d) % (2 * s_P);   // unit 0 position to fire at
         portDISABLE_INTERRUPTS();
-        v[0] = units[0]->timer[0].timer_status.val;
-        v[1] = units[0]->timer[1].timer_status.val;
-        v[2] = units[0]->timer[2].timer_status.val;
-        v[3] = units[1]->timer[0].timer_status.val;
-        v[4] = units[1]->timer[1].timer_status.val;
-        v[5] = units[1]->timer[2].timer_status.val;
-        v[6] = units[0]->timer[0].timer_status.val;
+        fired = false;
+        for (int k = 0; k < 20000; k++) {       // bounded: the target comes round every 50 us
+            int32_t q    = posOf(MCPWM0.timer[0].timer_status.val);
+            int32_t past = (q - target + 2 * s_P) % (2 * s_P);
+            if (past < 120) { fired = true; break; }
+        }
+        MCPWM1.timer[0].timer_sync.timer_sync_sw = ~MCPWM1.timer[0].timer_sync.timer_sync_sw;
         portENABLE_INTERRUPTS();
-        int32_t p[7];
-        for (int i = 0; i < 7; i++) {
-            int32_t val = (int32_t)(v[i] & 0xFFFF);
-            p[i] = (v[i] & (1u << 16)) ? 2 * s_P - val : val;
-        }
-        int32_t lo = p[0], hi = p[0];
-        bool wrapped = false;
-        for (int i = 0; i < 7; i++) {
-            if (abs(p[i] - p[0]) > s_P) wrapped = true;
-            lo = min(lo, p[i]); hi = max(hi, p[i]);
-        }
-        if (wrapped) continue;   // read straddled the period wrap
-        worst = max(worst, hi - lo);
-        skew  = max(skew, p[6] - p[0]);
+        delayMicroseconds(200);
+        measureOffsets(off);
+        int32_t err = (off[3] + off[4] + off[5]) / 3;   // = d - actual write delay
+        if (abs(err) <= 4) break;
+        d = (d - err) % (2 * s_P);
+        if (d < 0) d += 2 * s_P;
     }
+    sayOffsets(say, "after", off);
+    char line[64];
+    snprintf(line, sizeof(line), "SYNC unit 1 sync fired %.2f us before unit 0's zero%s", d * TICK_US,
+             fired ? "" : " (TIMED OUT)");
+    say(line);
+    int32_t worst = 0;
+    for (int i = 1; i < 6; i++) worst = max(worst, abs(off[i]));
     s_align_spread_us = worst * TICK_US;
     s_aligned         = true;
-    char line[96];
-    snprintf(line, sizeof(line), "SYNC timers aligned: 6-counter spread %.3f us (read skew %.3f us)",
-             s_align_spread_us, skew * TICK_US);
-    say(line);
 }
 
 static bool startTimerAndIsr(void (*say)(const char*)) {
@@ -566,7 +595,9 @@ int samplerRead(int motor, CurrentSample* out, int max) {
     Ring&    q     = s_ring[motor & 1];
     uint32_t head  = q.head;
     int      n     = 0;
-    const float to_v = 3.3f / 4095.0f;
+    const float to_v   = 3.3f / 4095.0f;
+    const float inv_p  = 1.0f / (float)s_P;
+    const float inv_g  = 1.0f / CSA_GAIN_V_PER_A;
     while (q.tail != head && n < max) {
         const RawSample& r = q.buf[q.tail % RING_SIZE];
         CurrentSample&   s = out[n++];
@@ -575,11 +606,11 @@ int samplerRead(int motor, CurrentSample* out, int max) {
         s.ph_lo  = r.ph_lo;
         s.ph_mid = r.ph_mid;
         for (int k = 0; k < 3; k++) {
-            s.duty[k] = (float)r.cmp[k] / (float)s_P;
+            s.duty[k] = (float)r.cmp[k] * inv_p;
             s.i[k]    = 0.0f;
         }
-        float i_lo  = ((r.raw_lo == 0xFFFF ? 0 : r.raw_lo) * to_v - s_zero_v[motor][r.ph_lo]) / CSA_GAIN_V_PER_A;
-        float i_mid = ((r.raw_mid == 0xFFFF ? 0 : r.raw_mid) * to_v - s_zero_v[motor][r.ph_mid]) / CSA_GAIN_V_PER_A;
+        float i_lo  = ((r.raw_lo == 0xFFFF ? 0 : r.raw_lo) * to_v - s_zero_v[motor][r.ph_lo]) * inv_g;
+        float i_mid = ((r.raw_mid == 0xFFFF ? 0 : r.raw_mid) * to_v - s_zero_v[motor][r.ph_mid]) * inv_g;
         s.i[r.ph_lo]  = i_lo;
         s.i[r.ph_mid] = i_mid;
         int hi = 3 - r.ph_lo - r.ph_mid;

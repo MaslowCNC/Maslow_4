@@ -39,6 +39,10 @@ static float        s_r_ohm[2]   = { LOAD_R_OHM, LOAD_R_OHM };
 // Electrical offsets of phases A, B, C as used by SimpleFOC's inverse Clarke: the commanded phase-k
 // voltage is  -Uq * sin(theta_e - phi_k)  with phi = 0, +120, -120 deg.
 static const float PHASE_PHI[3] = { 0.0f, 2.0943951f, -2.0943951f };
+#ifdef SYNC_CURRENT_SENSE
+static const float PHASE_COS[3] = { 1.0f, -0.5f, -0.5f };
+static const float PHASE_SIN[3] = { 0.0f, 0.8660254f, -0.8660254f };
+#endif
 
 // No-load baseline (LOADREF), indexed by speed: point i is (i+1) * step RPM.
 static constexpr uint32_t REF_MAGIC = 0x4C524546UL;  // 'LREF'
@@ -553,10 +557,11 @@ void loadSenseUpdate(MotorController& mc1, MotorController& mc2, float dt, bool 
         int             npts = 0;
         const FitPoint* pts  = syncFitPoints(m, &npts);
         for (int j = 0; j < npts; j++) {
-            float th = pts[j].theta_e;
             int   k  = pts[j].phase;
-            float u  = -sinf(th - PHASE_PHI[k]);
-            float w  =  cosf(th - PHASE_PHI[k]);
+            float c  = pts[j].cos_th, sn = pts[j].sin_th;
+            // sin/cos(th - phi) by rotation: no trig per reading (this runs ~80 times a pass).
+            float u  = -(sn * PHASE_COS[k] - c * PHASE_SIN[k]);
+            float w  =   c * PHASE_COS[k] + sn * PHASE_SIN[k];
             float i  = pts[j].i;
             f.suu += u * u; f.suw += u * w; f.sww += w * w;
             f.siu += i * u; f.siw += i * w; f.n   += 1.0f;

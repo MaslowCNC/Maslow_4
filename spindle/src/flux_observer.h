@@ -11,7 +11,12 @@
 //     motor, and the time step from the PWM period count instead of micros();
 //   - R, L and the flux linkage are fields set by the caller;
 //   - the shaft-angle bookkeeping (full_rotations, angle_track) is replaced by an unwrapped
-//     electrical angle, which is what the load-angle and slip checks need.
+//     electrical angle, which is what the load-angle and slip checks need;
+//   - one step may span several PWM periods: it takes the integrals of voltage and current over
+//     the step (volt-seconds, amp-seconds) instead of one sample times dt.  The inductive term is
+//     a difference of currents, so this is the same flux as stepping every period - only the
+//     angle (atan2) is computed less often, which keeps it affordable on core 0;
+//   - the angle wrap uses +/-pi instead of 0.8 x 2pi.
 
 struct FluxObserver {
     // Motor parameters (phase values, alpha/beta amplitude-invariant frame).
@@ -32,6 +37,7 @@ struct FluxObserver {
     bool ready() const { return R > 0.0f && L > 0.0f && flux_linkage > 0.0f; }
     void reset();
 
-    // One step: currents (A) and the average applied voltages (V) over the last dt seconds.
-    void update(float i_alpha, float i_beta, float v_alpha, float v_beta, float dt);
+    // One step: currents now (A), and the integrals since the previous step of the applied
+    // voltages (V s) and of the currents (A s).
+    void update(float i_alpha, float i_beta, float vs_alpha, float vs_beta, float is_alpha, float is_beta);
 };

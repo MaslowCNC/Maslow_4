@@ -17,9 +17,9 @@
 #ifdef SYNC_CURRENT_SENSE
 
 // One reading for the load-sense fit: a phase current (sense polarity corrected) and the
-// commanded electrical angle in force when it was sampled.
+// commanded electrical angle in force when it was sampled, as its cosine and sine.
 struct FitPoint {
-    float   theta_e;
+    float   cos_th, sin_th;
     float   i;
     uint8_t phase;
 };
@@ -57,6 +57,9 @@ const ObserverEstimate& syncObserver(int motor);
 // Over-current protection must not run blind: true once a motor that is enabled has had no
 // valid sample for SYNC_STALE_MS.
 bool syncSenseStale(const MotorController& mc, int motor);
+
+// Send what the last samples looked like to the link (after a stale-sensing stop).
+void syncSenseDescribe(int motor);
 
 // Periodic output (log lines, capture dump).  Call once per pass.
 void syncSenseService(MotorController& mc1, MotorController& mc2);

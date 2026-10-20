@@ -397,3 +397,5 @@ const float    SYNC_OBS_MIN_RPM = 1000.0f;   // observer results ignored below t
 const float    SYNC_DT_COMP_KNEE_A = 0.2f;   // dead-time compensation sign is smoothed below this current
 const float    SYNC_SLIP_DEG     = 180.0f;   // rotor this far behind the commanded angle = pole slip
 const float    SYNC_LOAD_WARN_DEG = 70.0f;   // logged as approaching pull-out (shadow mode only)
+const int      SYNC_OBS_DECIM    = 4;        // observer angle step every 4th full sample (5 kHz)
+const int      SYNC_MAX_PER_PASS = 128;      // samples per motor per housekeeping pass (one ring)
