@@ -38,6 +38,7 @@
 #include <soc/mcpwm_struct.h>
 #include <soc/sens_reg.h>
 #include <esp_intr_alloc.h>
+#include <esp_ipc.h>
 #include "current_sampler.h"
 #include "config.h"
 #include "pins.h"
@@ -69,6 +70,7 @@ static inline void IRAM_ATTR adcSelect(int ch1, int ch2) {
 
 static volatile int32_t s_stagger_ticks = 0;   // ADC2 starts this long after ADC1 (MCPWM ticks)
 static volatile bool    s_lo_twice      = true; // read the lowest-duty phase again after the peak
+static volatile int32_t s_every         = SYNC_EVERY_N_PERIODS;   // sample every Nth PWM period
 
 static inline void IRAM_ATTR adcStartPair(int ch1, int ch2) {
     WRITE_PERI_REG(SENS_SAR_MEAS1_CTRL2_REG,
@@ -180,14 +182,16 @@ static volatile int64_t  s_st_entry_sum;
 static volatile int64_t  s_st_start_sum;
 static volatile int32_t  s_st_start_max;
 static volatile uint32_t s_st_lo_ok[2], s_st_mid_ok[2], s_st_full[2], s_st_off[2];
-static volatile uint32_t s_alive[2];   // never reset: periods with a usable sample (or outputs off)
+static volatile uint32_t s_alive[2];
+static portMUX_TYPE      s_stats_mux = portMUX_INITIALIZER_UNLOCKED;   // statistics, across cores   // never reset: periods with a usable sample (or outputs off)
 
 static float s_zero_v[2][3]     = { { CSA_VREF, CSA_VREF, CSA_VREF }, { CSA_VREF, CSA_VREF, CSA_VREF } };
 static float s_zero_raw[2][3]   = { { 2048, 2048, 2048 }, { 2048, 2048, 2048 } };
 static float s_zero_sd[2][3];
 static float s_align_spread_us  = NAN;
 static bool  s_aligned          = false;
-static SamplerTiming s_timing   = { SYNC_LEAD_US, SYNC_MID_US, SYNC_SETTLE_US, SYNC_HOLD_US, SYNC_STAGGER_US, true };
+static SamplerTiming s_timing   = { SYNC_LEAD_US, SYNC_MID_US, SYNC_SETTLE_US, SYNC_HOLD_US, SYNC_STAGGER_US, true,
+                                     SYNC_EVERY_N_PERIODS };
 
 static const float TICK_US = 1.0f / 160.0f;   // MCPWM tick: 160 MHz, no prescaler (SimpleFOC sets 0)
 
@@ -219,6 +223,7 @@ static inline void IRAM_ATTR pushSample(int m, const RawSample& r) {
     uint32_t head = q.head;
     if (head - q.tail >= RING_SIZE) { q.dropped++; return; }
     q.buf[head % RING_SIZE] = r;
+    asm volatile("memw" ::: "memory");   // the entry is written before the other core sees head move
     q.head = head + 1;
 }
 
@@ -248,6 +253,7 @@ static inline void IRAM_ATTR armAt(int32_t pos_target, bool next_period) {
     int32_t  delta = pos_target - now;
     if (next_period) {
         while (delta <= 2 * PRE_TICKS) delta += 2 * P;
+        delta += (s_every - 1) * 2 * P;           // skip periods between samples
     } else if (delta < 2 * TICKS_PER_GPT) {
         delta = 2 * TICKS_PER_GPT;
     }
@@ -394,7 +400,8 @@ static void IRAM_ATTR samplerIsr(void*) {
     }
 
     const int32_t  t_lo  = s_t_lo, t_mid = s_t_mid, t_lo2 = s_t_lo2;
-    const uint32_t seq   = s_seq++;
+    const uint32_t seq   = s_seq;
+    s_seq += s_every;   // PWM periods, so a sample's seq difference is time
     const bool     late  = (t_lo - (target - P)) > LATE_TICKS;
 
     if (s_zero_mode) {
@@ -460,7 +467,8 @@ static void IRAM_ATTR samplerIsr(void*) {
         for (int k = 0; k < 3; k++) s_prev_cmp[m][k] = s_cmp[m][k];
 
     g_sync_prof[6] += ccount() - c0;               // stage 2 up to stats
-    // Statistics.
+    // Statistics (under the lock samplerResetStats() takes from the other core).
+    portENTER_CRITICAL_ISR(&s_stats_mux);
     int32_t start_err = t_lo - (target - P);
     s_st_periods++;
     if (late) s_st_late++;
@@ -469,6 +477,7 @@ static void IRAM_ATTR samplerIsr(void*) {
     if (s_entry > s_st_entry_max) s_st_entry_max = s_entry;
     s_st_start_sum += start_err;
     if (start_err > s_st_start_max) s_st_start_max = start_err;
+    portEXIT_CRITICAL_ISR(&s_stats_mux);
 
     // Next period: PRE_TICKS before the next first-pair target, computed from where the PWM
     // counter is now, so the schedule follows the MCPWM timer exactly.
@@ -490,12 +499,13 @@ static void applyTiming() {
     s_hold_ticks   = usToTicks(s_timing.hold_us);
     s_stagger_ticks = constrain(usToTicks(s_timing.stagger_us), 0, 800);
     s_lo_twice      = s_timing.lo_twice;
+    s_every         = constrain(s_timing.every, 1, 4);
 }
 
 void samplerResetStats() {
-    // The interrupt runs on this core and can preempt this task, so mask it while resetting.
+    // The interrupt runs on the other core: take the same lock it takes around its statistics.
     // (Clearing s_running instead would stop the sampler: a skipped interrupt does not re-arm.)
-    portDISABLE_INTERRUPTS();
+    portENTER_CRITICAL(&s_stats_mux);
     s_st_periods = s_st_late = 0;
     s_st_isr_sum = s_st_isr_max = 0;
     s_st_entry_min = INT32_MAX; s_st_entry_max = INT32_MIN; s_st_entry_sum = 0;
@@ -504,7 +514,7 @@ void samplerResetStats() {
         s_st_lo_ok[m] = s_st_mid_ok[m] = s_st_full[m] = s_st_off[m] = 0;
         s_ring[m].dropped = 0;
     }
-    portENABLE_INTERRUPTS();
+    portEXIT_CRITICAL(&s_stats_mux);
 }
 
 SamplerStats samplerStats() {
@@ -640,8 +650,26 @@ static bool startTimerAndIsr(void (*say)(const char*)) {
     if (err == ESP_OK) err = timer_set_counter_value(GPT_GROUP, GPT_IDX, 0);
     if (err == ESP_OK) err = timer_set_alarm_value(GPT_GROUP, GPT_IDX, 2000);   // first: 50 us
     if (err == ESP_OK) err = timer_enable_intr(GPT_GROUP, GPT_IDX);
-    if (err == ESP_OK && !s_isr_handle)
-        err = timer_isr_register(GPT_GROUP, GPT_IDX, samplerIsr, nullptr, ESP_INTR_FLAG_IRAM, &s_isr_handle);
+    if (err == ESP_OK && !s_isr_handle) {
+        // Allocate the interrupt on core 1 (an interrupt is allocated on the core that registers
+        // it, so run the registration there through the IPC task).  On core 0 it took ~45-55% of
+        // the core with its four stages and dispatch overhead, and the housekeeping task - over-
+        // current check, load fit, observer - fell behind and dropped samples.  Core 1 runs only
+        // the open-loop commutation, which at one pole pair (200 Hz electrical at 12,000 RPM)
+        // needs far less than its loop rate; and a closed current loop would live there anyway.
+        // This build runs the IPC task at the CALLER's priority (CONFIG_ESP_IPC_USES_CALLERS_PRIORITY),
+        // and the FOC task on core 1 never blocks: called at the housekeeping priority the IPC
+        // never ran and the task watchdog fired.  So call it from above the FOC task's priority.
+        static esp_err_t reg_err;
+        reg_err = ESP_FAIL;
+        UBaseType_t prio = uxTaskPriorityGet(nullptr);
+        vTaskPrioritySet(nullptr, configMAX_PRIORITIES - 2);
+        esp_err_t ipc = esp_ipc_call_blocking(SYNC_ISR_CORE, [](void*) {
+            reg_err = timer_isr_register(GPT_GROUP, GPT_IDX, samplerIsr, nullptr, ESP_INTR_FLAG_IRAM, &s_isr_handle);
+        }, nullptr);
+        vTaskPrioritySet(nullptr, prio);
+        err = (ipc == ESP_OK) ? reg_err : ipc;
+    }
     if (err == ESP_OK) err = timer_start(GPT_GROUP, GPT_IDX);
     if (err != ESP_OK) {
         char line[80];
@@ -747,12 +775,15 @@ void samplerEnd() {
     s_running = false;
     timer_pause(GPT_GROUP, GPT_IDX);
     timer_disable_intr(GPT_GROUP, GPT_IDX);
-    // The interrupt runs on this core, so it is not mid-flight while this task runs.
+    // The interrupt runs on the other core and may be mid-stage: give it time to finish (a stage
+    // waits at most for one conversion) before the caller touches the ADCs or WiFi.
+    delayMicroseconds(200);
 }
 
 int samplerRead(int motor, CurrentSample* out, int max) {
     Ring&    q     = s_ring[motor & 1];
     uint32_t head  = q.head;
+    asm volatile("memw" ::: "memory");
     int      n     = 0;
     const float to_v   = 3.3f / 4095.0f;
     const float inv_p  = 1.0f / (float)s_P;

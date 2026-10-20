@@ -407,5 +407,14 @@ const uint32_t SYNC_OBS_MAX_GAP = 4;         // more periods than this unsampled
 const float    SYNC_DT_COMP_KNEE_A = 0.2f;   // dead-time compensation sign is smoothed below this current
 const float    SYNC_SLIP_DEG     = 180.0f;   // rotor this far behind the commanded angle = pole slip
 const float    SYNC_LOAD_WARN_DEG = 70.0f;   // logged as approaching pull-out (shadow mode only)
+// Core for the sampling interrupt.  Measured at 12,000 RPM (2026-10-20): on core 1 it cut the FOC
+// loop from 18,300 to 5,500 iterations/s and peak phase current rose from ~3.7 A to 12-15 A
+// (13 deg commutation steps); on core 0 it competes with the housekeeping task instead, which
+// SYNC_EVERY_N_PERIODS = 2 leaves room for.
+const int      SYNC_ISR_CORE     = 0;
+// Sample every Nth PWM period.  Every period (20 kHz) with the four-stage interrupt took ~45-55% of
+// core 0 and the housekeeping task dropped 18-33% of samples at 12,000 RPM; every second period is
+// 10 kHz, 50 samples per electrical cycle at 12,000 RPM.
+const int      SYNC_EVERY_N_PERIODS = 2;
 const int      SYNC_OBS_DECIM    = 4;        // observer angle step every 4th full sample (5 kHz)
 const int      SYNC_MAX_PER_PASS = 256;      // samples per motor per housekeeping pass (one ring)

@@ -950,6 +950,7 @@ static void updateReportedState() {
 // anything that held core 1 off between iterations (ISRs, preemption, an enable()'s tPUD wait).
 static volatile uint32_t g_foc_loops      = 0;
 static volatile uint32_t g_foc_max_period_us = 0;
+float g_foc_rate_hz = 0.0f;   // FOC loop iterations per second, updated each housekeeping pass
 
 // The Z is moving: a phase ramp in progress, or the phase changed within Z_MOVE_HOLD_MS (see
 // there).  Set by the housekeeping task, read by the FOC task for the Z-move voltage boost.
@@ -1032,6 +1033,11 @@ static void recordTripSample(uint32_t now_ms) {
     // the read and the reset.
     uint32_t loops  = __atomic_exchange_n(&g_foc_loops, 0, __ATOMIC_RELAXED);
     uint32_t max_us = __atomic_exchange_n(&g_foc_max_period_us, 0, __ATOMIC_RELAXED);
+    {   // FOC iteration rate, for the SYNC report (the sampling interrupt shares core 1 with it)
+        static uint32_t prev_ms = 0;
+        if (prev_ms && now_ms > prev_ms) g_foc_rate_hz = loops * 1000.0f / (float)(now_ms - prev_ms);
+        prev_ms = now_ms;
+    }
     s.foc_loops  = (uint16_t)min<uint32_t>(loops, 65535);
     s.foc_max_us = (uint16_t)min<uint32_t>(max_us, 65535);
     s.phase_cur  = phase_offset.current;

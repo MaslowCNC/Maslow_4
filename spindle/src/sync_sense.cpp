@@ -593,8 +593,9 @@ static void reportHealth(uint32_t now) {
     next++;
     SamplerStats s = samplerStats();
     uint32_t     n = s.periods ? s.periods : 1;
-    out(true, "SYNC health: %u periods, isr %.1f/%.1f us avg/max (%.0f%% core 0), late %u, dropped %u/%u",
-        (unsigned)s.periods, s.isr_us_avg, s.isr_us_max, 100.0f * s.isr_us_avg / samplerPeriodUs(),
+    out(true, "SYNC health: %u samples, isr %.1f/%.1f us avg/max (%.0f%% core %d), late %u, dropped %u/%u",
+        (unsigned)s.periods, s.isr_us_avg, s.isr_us_max,
+        100.0f * s.isr_us_avg / (samplerPeriodUs() * samplerTiming().every), SYNC_ISR_CORE,
         (unsigned)s.late, (unsigned)s.dropped[0], (unsigned)s.dropped[1]);
     out(true, "SYNC entry ahead %.2f/%.2f/%.2f us min/avg/max; start err avg %+.3f max %+.3f us; off %.0f%%/%.0f%%",
         s.entry_us_min, s.entry_us_avg, s.entry_us_max, s.start_us_avg, s.start_us_max,
@@ -636,10 +637,11 @@ static void printStats() {
     uint32_t      n = s.periods ? s.periods : 1;
     out(false, "[SYNC] %s, period %.2f us, dead time %.3f us, timer spread %.3f us\n",
         samplerRunning() ? "running" : "STOPPED", samplerPeriodUs(), samplerDeadTimeUs(), samplerAlignSpreadUs());
-    out(false, "[SYNC] timing: lead %.2f us, mid %+.2f us, settle %.2f us, hold %.2f us, stagger %.2f us, lo read %s\n",
-        t.lead_us, t.mid_us, t.settle_us, t.hold_us, t.stagger_us, t.lo_twice ? "twice" : "once");
-    out(false, "[SYNC] %u periods, isr %.2f avg / %.2f max us (%.0f%% of core 0), late %u\n",
-        (unsigned)s.periods, s.isr_us_avg, s.isr_us_max, 100.0f * s.isr_us_avg / samplerPeriodUs(), (unsigned)s.late);
+    out(false, "[SYNC] timing: lead %.2f us, mid %+.2f us, settle %.2f us, hold %.2f us, stagger %.2f us, lo read %s, every %d period(s)\n",
+        t.lead_us, t.mid_us, t.settle_us, t.hold_us, t.stagger_us, t.lo_twice ? "twice" : "once", t.every);
+    out(false, "[SYNC] %u samples, isr %.2f avg / %.2f max us per sample (%.0f%% of core %d), late %u\n",
+        (unsigned)s.periods, s.isr_us_avg, s.isr_us_max, 100.0f * s.isr_us_avg / (samplerPeriodUs() * t.every),
+        SYNC_ISR_CORE, (unsigned)s.late);
     out(false, "[SYNC] entry ahead of target %.2f/%.2f/%.2f us (min/avg/max), start error avg %+.3f max %+.3f us\n",
         s.entry_us_min, s.entry_us_avg, s.entry_us_max, s.start_us_avg, s.start_us_max);
     for (int m = 0; m < 2; m++) {
@@ -650,6 +652,8 @@ static void printStats() {
             samplerZeroVolts(m, 0), samplerZeroVolts(m, 1), samplerZeroVolts(m, 2),
             samplerZeroNoiseLsb(m, 0), samplerZeroNoiseLsb(m, 1), samplerZeroNoiseLsb(m, 2));
     }
+    extern float g_foc_rate_hz;
+    out(false, "[SYNC] FOC loop %.0f per second (shares core %d with the sampling interrupt)\n", g_foc_rate_hz, SYNC_ISR_CORE);
     out(false, "[SYNC] housekeeping: processing %.0f us avg / %u us max per pass, longest gap between passes %u us\n",
         s_pass_n ? (float)s_pass_us_sum / s_pass_n : 0.0f, (unsigned)s_pass_us_max, (unsigned)s_gap_us_max);
     out(false, "[SYNC] observer: R %.3f/%.3f ohm, L %.1f uH, flux %.5f Wb%s\n", s_m[0].obs.R, s_m[1].obs.R,
@@ -688,6 +692,7 @@ static bool parseTiming(const char* args, SamplerTiming& t) {
         else if (!strcasecmp(tok, "hold"))   t.hold_us   = v;
         else if (!strcasecmp(tok, "stagger")) t.stagger_us = v;
         else if (!strcasecmp(tok, "twice"))   t.lo_twice   = v != 0.0f;
+        else if (!strcasecmp(tok, "every"))   t.every      = (int)v;
         else return false;
     }
     return true;

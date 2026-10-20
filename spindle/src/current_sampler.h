@@ -54,6 +54,7 @@ struct SamplerTiming {
     float hold_us;     // ...and must start this long before its low side turns off
     float stagger_us;  // ADC2 (motor 2) starts this long after ADC1 (motor 1)
     bool  lo_twice;    // read the lowest-duty phase before AND after the peak (mean of the two)
+    int   every;       // sample every Nth PWM period
 };
 
 // Health and timing statistics since the last samplerResetStats().
