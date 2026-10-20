@@ -1,0 +1,441 @@
+{
+  "schematic": "Unified Control Board.kicad_sch",
+  "last_sync": "2026-09-18T20:28:33.844124+00:00",
+  "parts": {
+    "1uF/16V": {
+      "file": "CGA0402X5R105K160GT_1uF_\u00b110%_16V_Ceramic_Capacitor_X5R_0402.pdf",
+      "manufacturer": "HRE",
+      "description": "1uF \u00b110% 16V Ceramic Capacitor X5R 0402",
+      "value": "1uF/16V",
+      "datasheet_url": "https://datasheet.lcsc.com/datasheet/pdf/0057d3fe609b1aa0a40fc6382d6825cd.pdf?productCode=C6119792",
+      "downloaded_date": "2026-09-18T20:28:11.963378+00:00",
+      "source": "lcsc",
+      "lcsc": "C6119792",
+      "status": "ok",
+      "references": [
+        "C217",
+        "C236"
+      ],
+      "size_bytes": 1279894,
+      "verification": "verified"
+    },
+    "22uF/16V": {
+      "file": "CL10A226MO7JZNC_22uF_\u00b120%_16V_Ceramic_Capacitor_X5R_0603.pdf",
+      "manufacturer": "Samsung Electro-Mechanics",
+      "description": "22uF \u00b120% 16V Ceramic Capacitor X5R 0603",
+      "value": "22uF/16V",
+      "datasheet_url": "https://datasheet.lcsc.com/datasheet/pdf/87d0acef8cffa00b4e07bf454fd6d5d6.pdf?productCode=C2762594",
+      "downloaded_date": "2026-09-18T20:28:11.964133+00:00",
+      "source": "lcsc",
+      "lcsc": "C2762594",
+      "status": "ok",
+      "references": [
+        "C225",
+        "C232"
+      ],
+      "size_bytes": 1547097,
+      "verification": "verified"
+    },
+    "100nF/50V": {
+      "file": "CC0603KRX7R9BB104_100nF_\u00b110%_50V_Ceramic_Capacitor_X7R_0603.pdf",
+      "manufacturer": "YAGEO",
+      "description": "100nF \u00b110% 50V Ceramic Capacitor X7R 0603",
+      "value": "100nF/50V",
+      "datasheet_url": "https://datasheet.lcsc.com/datasheet/pdf/23ccee80ee542e7cf156a772bb589942.pdf?productCode=C14663",
+      "downloaded_date": "2026-09-18T20:28:11.964329+00:00",
+      "source": "lcsc",
+      "lcsc": "C14663",
+      "status": "ok",
+      "references": [
+        "C237",
+        "C218"
+      ],
+      "size_bytes": 1131214,
+      "verification": "likely"
+    },
+    "IR12-21C/TR8": {
+      "file": "IR12-21C_TR8.pdf",
+      "manufacturer": "EVERLIGHT(\u4ebf\u5149)",
+      "description": "",
+      "value": "IR12-21C/TR8",
+      "datasheet_url": "https://en.everlight.com/wp-content/plugins/ItemRelationship/product_files/pdf/IR12-21C-TR8.pdf",
+      "downloaded_date": "2026-09-18T20:28:15.966688+00:00",
+      "source": "schematic",
+      "status": "ok",
+      "references": [
+        "CGQ201"
+      ],
+      "size_bytes": 312406,
+      "verification": "verified"
+    },
+    "B3B-XH-2(LF)(SN)": {
+      "file": "B3B-XH-2(LF)(SN).pdf",
+      "manufacturer": "JST",
+      "description": "",
+      "value": "B3B-XH-2(LF)(SN)",
+      "datasheet_url": "https://atta.szlcsc.com/upload/public/pdf/source/20180928/C265283_F9DFEEBDB2CF642B6BDFAB4B77BD2680.pdf",
+      "downloaded_date": "2026-09-18T20:28:17.164372+00:00",
+      "source": "schematic",
+      "status": "ok",
+      "references": [
+        "CN201",
+        "CN203",
+        "CN202"
+      ],
+      "size_bytes": 193920,
+      "verification": "unverified"
+    },
+    "B4B-PH-K-S(LF)(SN)": {
+      "file": "B4B-PH-K-S(LF)(SN)_Connector_Header_4_position_2mm_Pitch_2A_Through_Hole_-25\u2103~+85\u2103.pdf",
+      "manufacturer": "JST",
+      "description": "Connector Header 4 position 2mm Pitch 2A Through Hole -25\u2103~+85\u2103",
+      "value": "B4B-PH-K-S(LF)(SN)",
+      "datasheet_url": "https://datasheet.lcsc.com/datasheet/pdf/6324c8615b21464c92f0a46fe6f6545c.pdf?productCode=C131334",
+      "downloaded_date": "2026-09-18T20:28:16.685285+00:00",
+      "source": "lcsc",
+      "lcsc": "C131334",
+      "status": "ok",
+      "references": [
+        "CN11",
+        "CN12",
+        "CN9",
+        "CN5"
+      ],
+      "size_bytes": 229376,
+      "verification": "likely"
+    },
+    "4.7uF/10V": {
+      "file": "CL05A475MP5NRNC_4.7uF_\u00b120%_10V_Ceramic_Capacitor_X5R_0402.pdf",
+      "manufacturer": "Samsung Electro-Mechanics",
+      "description": "4.7uF \u00b120% 10V Ceramic Capacitor X5R 0402",
+      "value": "4.7uF/10V",
+      "datasheet_url": "https://datasheet.lcsc.com/datasheet/pdf/02336ea48ea44ca18c72517dd3cb7b47.pdf?productCode=C23733",
+      "downloaded_date": "2026-09-18T20:28:15.728061+00:00",
+      "source": "lcsc",
+      "lcsc": "C23733",
+      "status": "ok",
+      "references": [
+        "C238",
+        "C219"
+      ],
+      "size_bytes": 7856403,
+      "verification": "unverified"
+    },
+    "B2B-PH-K-S(LF)(SN)": {
+      "file": "B2B-PH-K-S(LF)(SN)_Connector_Header_2_position_2mm_Pitch_2A_Through_Hole_-25\u2103~+85\u2103.pdf",
+      "manufacturer": "JST",
+      "description": "Connector Header 2 position 2mm Pitch 2A Through Hole -25\u2103~+85\u2103",
+      "value": "B2B-PH-K-S(LF)(SN)",
+      "datasheet_url": "https://datasheet.lcsc.com/datasheet/pdf/6324c8615b21464c92f0a46fe6f6545c.pdf?productCode=C131337",
+      "downloaded_date": "2026-09-18T20:28:17.979344+00:00",
+      "source": "lcsc",
+      "lcsc": "C131337",
+      "status": "ok",
+      "references": [
+        "CN4",
+        "CN3",
+        "CN10",
+        "CN1"
+      ],
+      "size_bytes": 229376,
+      "verification": "likely"
+    },
+    "SMCJ24A": {
+      "file": "SMCJ24A.pdf",
+      "manufacturer": "RUILON(\u745e\u9686\u6e90)",
+      "description": "",
+      "value": "SMCJ24A",
+      "datasheet_url": "https://atta.szlcsc.com/upload/public/pdf/source/20180105/C10241_15151360826471233568.pdf",
+      "downloaded_date": "2026-09-18T20:28:19.194413+00:00",
+      "source": "schematic",
+      "status": "ok",
+      "references": [
+        "D202"
+      ],
+      "size_bytes": 1065148,
+      "verification": "verified"
+    },
+    "SS14": {
+      "file": "SS14_Diode_Independent_40V_1A_Surface_Mount_SMA(DO-214AC).pdf",
+      "manufacturer": "MDD(Microdiode Semiconductor)",
+      "description": "Diode Independent 40V 1A Surface Mount SMA(DO-214AC)",
+      "value": "SS14",
+      "datasheet_url": "https://datasheet.lcsc.com/datasheet/pdf/9977bb85cd7e349115b7bcb7054cfa0d.pdf?productCode=C2480",
+      "downloaded_date": "2026-09-18T20:28:18.725391+00:00",
+      "source": "lcsc",
+      "lcsc": "C2480",
+      "status": "ok",
+      "references": [
+        "D2",
+        "D3"
+      ],
+      "size_bytes": 1903102,
+      "verification": "verified"
+    },
+    "PT12-21C/TR8": {
+      "file": "PT12-21C_TR8.pdf",
+      "manufacturer": "EVERLIGHT(\u4ebf\u5149)",
+      "description": "",
+      "value": "PT12-21C/TR8",
+      "datasheet_url": "https://www.everlight.com.cn/wp-content/plugins/ItemRelationship/product_files/pdf/DPT-0000509_PT12-21C-TR8_Datasheet_Rev5.pdf",
+      "downloaded_date": "2026-09-18T20:28:20.732627+00:00",
+      "source": "schematic",
+      "status": "ok",
+      "references": [
+        "IR201"
+      ],
+      "size_bytes": 527205,
+      "verification": "verified"
+    },
+    "RB050L-60TE25": {
+      "file": "RB050L-60TE25_Diode_60V_3A_Surface_Mount_DO-214AC(SMA).pdf",
+      "manufacturer": "ROHM",
+      "description": "Diode 60V 3A Surface Mount DO-214AC(SMA)",
+      "value": "RB050L-60TE25",
+      "datasheet_url": "https://datasheet.lcsc.com/datasheet/pdf/ed86f939d30227ee071faf3bf68a0284.pdf?productCode=C209642",
+      "downloaded_date": "2026-09-18T20:28:20.019034+00:00",
+      "source": "lcsc",
+      "lcsc": "C209642",
+      "status": "ok",
+      "references": [
+        "D5"
+      ],
+      "size_bytes": 2244071,
+      "verification": "likely"
+    },
+    "SS36": {
+      "file": "SS36_Diode_Independent_60V_3A_Surface_Mount_SMA(DO-214AC).pdf",
+      "manufacturer": "MDD(Microdiode Semiconductor)",
+      "description": "Diode Independent 60V 3A Surface Mount SMA(DO-214AC)",
+      "value": "SS36",
+      "datasheet_url": "https://datasheet.lcsc.com/datasheet/pdf/dfa1ff67dea875d0135103ba9ada713a.pdf?productCode=C16015",
+      "downloaded_date": "2026-09-18T20:28:19.793137+00:00",
+      "source": "lcsc",
+      "lcsc": "C16015",
+      "status": "ok",
+      "references": [
+        "D204"
+      ],
+      "size_bytes": 1300729,
+      "verification": "verified"
+    },
+    "LED-0603_R": {
+      "file": "KT-0603R_Red_645nm_LED_Indication_-_Discrete_2.4V_0603.pdf",
+      "manufacturer": "Hubei KENTO Elec",
+      "description": "Red 645nm LED Indication - Discrete 2.4V 0603",
+      "value": "LED-0603_R",
+      "datasheet_url": "https://datasheet.lcsc.com/datasheet/pdf/011ec3e8cb1e825f6961d29bc4db4c7a.pdf?productCode=C2286",
+      "downloaded_date": "2026-09-18T20:28:22.888516+00:00",
+      "source": "lcsc",
+      "lcsc": "C2286",
+      "status": "ok",
+      "references": [
+        "LED2"
+      ],
+      "size_bytes": 610865,
+      "verification": "unverified"
+    },
+    "FC-DA1608BK-470H10": {
+      "manufacturer": "\u56fd\u661f\u5149\u7535",
+      "description": "",
+      "value": "FC-DA1608BK-470H10",
+      "references": [
+        "LED3"
+      ],
+      "status": "not_found",
+      "error": "No LCSC results for 'FC-DA1608BK-470H10'",
+      "last_attempt": "2026-09-18T20:28:23.470210+00:00"
+    },
+    "TSA002A3512A02": {
+      "file": "TSA002A3512A02.pdf",
+      "manufacturer": "BZCN(\u535a\u4f17\u7535\u6c14)",
+      "description": "",
+      "value": "TSA002A3512A02",
+      "datasheet_url": "https://atta.szlcsc.com/upload/public/pdf/source/20210906/C2888934_00F92C3C1E81DFF4D013879388FD13EF.pdf",
+      "downloaded_date": "2026-09-18T20:28:25.134837+00:00",
+      "source": "schematic",
+      "status": "ok",
+      "references": [
+        "SW202",
+        "SW201"
+      ],
+      "size_bytes": 139960,
+      "verification": "unverified"
+    },
+    "DTSL-61N-V-T/R": {
+      "file": "DTSL-61N-V-T_R_Tactile_Switch_SPST_2.5mm_6.2mm_x_6.4mm_Surface_Mount.pdf",
+      "manufacturer": "Diptronics",
+      "description": "Tactile Switch SPST 2.5mm 6.2mm x 6.4mm Surface Mount",
+      "value": "DTSL-61N-V-T/R",
+      "datasheet_url": "https://datasheet.lcsc.com/datasheet/pdf/2c15e89cb8ed82db650dbdaf94d3d6b7.pdf?productCode=C495902",
+      "downloaded_date": "2026-09-18T20:28:23.526341+00:00",
+      "source": "lcsc",
+      "lcsc": "C495902",
+      "status": "ok",
+      "references": [
+        "SW1"
+      ],
+      "size_bytes": 898097,
+      "verification": "wrong",
+      "verification_details": "No MPN, manufacturer, or description keywords found in PDF (0/8 keywords)"
+    },
+    "XT60PB-M.G.Y": {
+      "file": "XT60PB-M.G.Y_-_Power_connector_plug_connector_ROHS.pdf",
+      "manufacturer": "Changzhou Amass Elec",
+      "description": "- Power connector / plug connector ROHS",
+      "value": "XT60PB-M.G.Y",
+      "datasheet_url": "https://datasheet.lcsc.com/datasheet/pdf/ac3e984e4e880d174bc8bce4a23dd7f9.pdf?productCode=C19268037",
+      "downloaded_date": "2026-09-18T20:28:25.970210+00:00",
+      "source": "lcsc",
+      "lcsc": "C19268037",
+      "status": "ok",
+      "references": [
+        "U1"
+      ],
+      "size_bytes": 3909940,
+      "verification": "wrong",
+      "verification_details": "No MPN, manufacturer, or description keywords found in PDF (0/5 keywords)"
+    },
+    "ESP32-S3-WROOM-1": {
+      "file": "ESP32-S3-WROOM-1-N16R8_-103.5dBm_-40\u2103~+65\u2103_2.4GHz_20.5dBm_355mA_3V~3.6V_95mA_ESP32-S3R8_On-board.pdf",
+      "manufacturer": "ESPRESSIF",
+      "description": "-103.5dBm -40\u2103~+65\u2103 2.4GHz 20.5dBm 355mA 3V~3.6V 95mA ESP32-S3R8 On-board PCB Antenna UART\u3001SPI\u3001I2C\u3001GPIO\u3001I2S\u3001USB SMD,25.5x18mm WiFi Modules ROHS",
+      "value": "ESP32-S3-WROOM-1",
+      "datasheet_url": "https://datasheet.lcsc.com/datasheet/pdf/24a44651a4767a6582addcdaa9cab2ca.pdf?productCode=C2913202",
+      "downloaded_date": "2026-09-18T20:28:26.818434+00:00",
+      "source": "lcsc",
+      "lcsc": "C2913202",
+      "status": "ok",
+      "references": [
+        "U10"
+      ],
+      "size_bytes": 1596331,
+      "verification": "verified"
+    },
+    "LM2596R-3.3": {
+      "file": "LM2596R-3.3_-40\u2103~+125\u2103_1_150kHz_3.3V_3A_40V_5mA_Buck_Buck_Built-in_Fixed_No_TO-263-5.pdf",
+      "manufacturer": "HTC",
+      "description": "-40\u2103~+125\u2103 1 150kHz 3.3V 3A 40V 5mA Buck Buck Built-in Fixed No TO-263-5 DC-DC Converters ROHS",
+      "value": "LM2596R-3.3",
+      "datasheet_url": "https://datasheet.lcsc.com/datasheet/pdf/a11be599896b4edfa160807cc8c6b836.pdf?productCode=C90690",
+      "downloaded_date": "2026-09-18T20:28:26.940551+00:00",
+      "source": "lcsc",
+      "lcsc": "C90690",
+      "status": "ok",
+      "references": [
+        "U16"
+      ],
+      "size_bytes": 649357,
+      "verification": "likely"
+    },
+    "2.4GHz": {
+      "file": "2.4GHz.pdf",
+      "manufacturer": "ESPRESSIF(\u4e50\u946b)",
+      "description": "",
+      "value": "2.4GHz",
+      "datasheet_url": "https://atta.szlcsc.com/upload/public/pdf/source/20241030/6A412B13087E1327DF6279F5735253CA.pdf",
+      "downloaded_date": "2026-09-18T20:28:28.562631+00:00",
+      "source": "schematic",
+      "status": "ok",
+      "references": [
+        "U201"
+      ],
+      "size_bytes": 1596331,
+      "verification": "unverified"
+    },
+    "MP6541A": {
+      "manufacturer": "MPS",
+      "description": "",
+      "value": "MP6541A",
+      "references": [
+        "U202",
+        "U203"
+      ],
+      "status": "failed",
+      "error": "No datasheet URL or all download methods failed",
+      "last_attempt": "2026-09-18T20:28:28.999485+00:00"
+    },
+    "TCA9546A": {
+      "file": "TCA9546APWR(UMW)_TSSOP-16_Signal_Switches_Multiplexers_Decoders_ROHS.pdf",
+      "manufacturer": "UMW",
+      "description": "TSSOP-16 Signal Switches, Multiplexers, Decoders ROHS",
+      "value": "TCA9546A",
+      "datasheet_url": "https://datasheet.lcsc.com/datasheet/pdf/9a46559d911f965876d13e4bf2c7e50f.pdf?productCode=C42420613",
+      "downloaded_date": "2026-09-18T20:28:29.403941+00:00",
+      "source": "lcsc",
+      "lcsc": "C42420613",
+      "status": "ok",
+      "references": [
+        "U7"
+      ],
+      "size_bytes": 360655,
+      "verification": "unverified"
+    },
+    "DRV8876PWPR": {
+      "file": "DRV8876PWPR_-40\u2103~+125\u2103_1_3.5A_700m\u03a9_750nA_Yes_HTSSOP-16-EP_Brushed_DC_Motor_Drivers_ROHS.pdf",
+      "manufacturer": "TI",
+      "description": "-40\u2103~+125\u2103 1 3.5A 700m\u03a9 750nA Yes HTSSOP-16-EP Brushed DC Motor Drivers ROHS",
+      "value": "DRV8876PWPR",
+      "datasheet_url": "https://datasheet.lcsc.com/datasheet/pdf/cc923761a1d1e3b2cbea2f1052b1776c.pdf?productCode=C575551",
+      "downloaded_date": "2026-09-18T20:28:29.374443+00:00",
+      "source": "lcsc",
+      "lcsc": "C575551",
+      "status": "ok",
+      "references": [
+        "U6",
+        "U5",
+        "U3",
+        "U2"
+      ],
+      "size_bytes": 2663483,
+      "verification": "verified"
+    },
+    "ZDSD01GLGEAG": {
+      "file": "ZDSD01GLGEAG_-30\u2103~+85\u2103_1Gbit_2.7V~3.6V_200uA_50MHz_SPI\u3001SD_interface_LGA-8(6x8)_NAND_FLASH.pdf",
+      "manufacturer": "Zetta",
+      "description": "-30\u2103~+85\u2103 1Gbit 2.7V~3.6V 200uA 50MHz SPI\u3001SD interface LGA-8(6x8) NAND FLASH ROHS",
+      "value": "ZDSD01GLGEAG",
+      "datasheet_url": "https://datasheet.lcsc.com/datasheet/pdf/62d31cd4f403e892e0031ce1cdfb0dc7.pdf?productCode=C2830323",
+      "downloaded_date": "2026-09-18T20:28:30.458410+00:00",
+      "source": "lcsc",
+      "lcsc": "C2830323",
+      "status": "ok",
+      "references": [
+        "U9"
+      ],
+      "size_bytes": 1084607,
+      "verification": "verified"
+    },
+    "KH-TYPE-C-16P": {
+      "file": "KH-TYPE-C-16P_USB-C_(USB_TYPE-C)_Receptacle_Connector_16_Position_Surface_Mount_Right_Angle.pdf",
+      "manufacturer": "kinghelm",
+      "description": "USB-C (USB TYPE-C) Receptacle Connector 16 Position Surface Mount, Right Angle",
+      "value": "KH-TYPE-C-16P",
+      "datasheet_url": "https://datasheet.lcsc.com/datasheet/pdf/f81b4927a4ee2be0830446b63c7a6631.pdf?productCode=C709357",
+      "downloaded_date": "2026-09-18T20:28:31.401806+00:00",
+      "source": "lcsc",
+      "lcsc": "C709357",
+      "status": "ok",
+      "references": [
+        "USB2"
+      ],
+      "size_bytes": 2991066,
+      "verification": "verified"
+    },
+    "TYPE-C 16PIN": {
+      "file": "TYPE-C_16PIN.pdf",
+      "manufacturer": "SHOU HAN(\u9996\u97e9)",
+      "description": "",
+      "value": "TYPE-C 16PIN",
+      "datasheet_url": "https://atta.szlcsc.com/upload/public/pdf/source/20211123/39B17C16241EAC15C5E277BDA434118E.pdf",
+      "downloaded_date": "2026-09-18T20:28:31.723661+00:00",
+      "source": "schematic",
+      "status": "ok",
+      "references": [
+        "USB201"
+      ],
+      "size_bytes": 630484,
+      "verification": "verified"
+    }
+  }
+}
