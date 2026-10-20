@@ -27688,7 +27688,7 @@
 			)
 		)
 	)
-	(global_label "BH1"
+	(global_label "CURB2"
 		(shape input)
 		(at 467.36 -8.89 180)
 		(effects
@@ -28216,7 +28216,7 @@
 			)
 		)
 	)
-	(global_label "AL2"
+	(global_label "CURA2"
 		(shape input)
 		(at 467.36 -29.21 180)
 		(effects
@@ -30834,7 +30834,7 @@
 			)
 		)
 	)
-	(global_label "AL1"
+	(global_label "CURC2"
 		(shape input)
 		(at 480.06 8.89 270)
 		(effects
@@ -31208,7 +31208,7 @@
 			)
 		)
 	)
-	(global_label "CURA2"
+	(global_label "AL2"
 		(shape input)
 		(at 467.36 -19.05 180)
 		(effects
@@ -31978,7 +31978,7 @@
 			)
 		)
 	)
-	(global_label "CURC2"
+	(global_label "AL1"
 		(shape input)
 		(at 467.36 -13.97 180)
 		(effects
@@ -32440,7 +32440,7 @@
 			)
 		)
 	)
-	(global_label "CURB2"
+	(global_label "BH1"
 		(shape input)
 		(at 467.36 -16.51 180)
 		(effects
