@@ -363,18 +363,20 @@ const int SERIOUS_CONSEC_LIMIT = 3;  // 3 x 100ms = 300ms sustained OT -> latch
 // Only used by the sync-sense builds.  The default build keeps the unsynchronised analogRead path.
 //
 // Sample timing.  The first ADC1+ADC2 pair (each motor's lowest-duty phase) starts SYNC_LEAD_US
-// before the PWM peak and takes ~8.4 us, so the second pair (middle-duty phase) starts at about
-// the peak.  The settle and hold margins are the sense output's settling time after the low side
-// turns on and the conversion's sampling time before it turns off.  UNVERIFIED: the 330R/1nF
-// filter alone is 0.33 us; 2 us allows for the MP6541A's own response.  Measure with SYNCSET +
-// SETTLE and update.
+// before the PWM peak; the second (middle-duty phase) at the peak; the lowest-duty phase is read
+// again SYNC_LEAD_US after the peak.  A read counts only if it starts SYNC_SETTLE_US after its
+// phase's low-side FET turns on and SYNC_HOLD_US before it turns off.  Measured 2026-10-20 at
+// 12,000 RPM (sweep of the middle-phase read, SETTLE): reading/true reaches 0.9 at +2.8 us (ADC1)
+// and +3.3 us (ADC2) after turn-on, 0.95 at +4.2 / +4.7 us; and stays above 0.9 until 3.0 us
+// (ADC1) / 1.8 us (ADC2) before turn-off.  ADC1 samples ~1.5 us later in its conversion than ADC2.
+// 3.0 / 3.0 us passed 98% / 95.5% of samples at 12,000 RPM unloaded; 4.5 / 3.5 us passed 89-90%.
 // ADC1 converts in 7.2 us; ADC2 (started SYNC_STAGGER_US = 1 us later) in 6.2 us, so a pair is
 // done 7.2 us after it starts and pair 1 ends 1.2 us before the peak: time for pair 2's pads to
 // settle before it starts.
 const float    SYNC_LEAD_US   = 8.4f;
 const float    SYNC_MID_US    = 0.0f;
-const float    SYNC_SETTLE_US = 2.0f;
-const float    SYNC_HOLD_US   = 0.5f;
+const float    SYNC_SETTLE_US = 3.0f;
+const float    SYNC_HOLD_US   = 3.0f;
 // ADC2 (motor 2) starts this long after ADC1.  Measured at zero current (2026-10-20): ADC2 reads
 // ~20 LSB (~0.1 A) high and noisier when started less than ~1 us after ADC1 (0: +22 LSB, 0.5 us:
 // +16 LSB sd 3-5); 1 us and 2 us read normally (sd 1.3-1.5).  The two converters couple.
