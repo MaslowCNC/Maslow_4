@@ -54,16 +54,41 @@ static inline uint32_t IRAM_ATTR ccount() {
     return c;
 }
 
-static inline void IRAM_ATTR adc1Start(int ch) {
-    CLEAR_PERI_REG_MASK(SENS_SAR_MEAS1_CTRL2_REG, SENS_MEAS1_START_SAR_M);
-    SET_PERI_REG_BITS(SENS_SAR_MEAS1_CTRL2_REG, SENS_SAR1_EN_PAD, (1 << ch), SENS_SAR1_EN_PAD_S);
-    SET_PERI_REG_MASK(SENS_SAR_MEAS1_CTRL2_REG, SENS_MEAS1_START_SAR_M);
+// Start a conversion: two plain writes of the control register (pad select with start low, then
+// start high).  The register's other bits are captured once at samplerBegin (nothing else writes
+// it while the sampler runs); read-modify-writes of these RTC-domain registers cost ~0.6 us per
+// access, which made each start ~1.9 us.
+static uint32_t s_meas1_base = 0, s_meas2_base = 0;   // CTRL2 with start = 0 and no pad selected
+
+// Select the pad (start low) well before the start: with the pad switched right before the
+// start, ADC2's zero-current noise rose from ~1 to 4-6 LSB (the input had no time to settle).
+static inline void IRAM_ATTR adcSelect(int ch1, int ch2) {
+    WRITE_PERI_REG(SENS_SAR_MEAS1_CTRL2_REG, s_meas1_base | ((uint32_t)(1 << ch1) << SENS_SAR1_EN_PAD_S));
+    WRITE_PERI_REG(SENS_SAR_MEAS2_CTRL2_REG, s_meas2_base | ((uint32_t)(1 << ch2) << SENS_SAR2_EN_PAD_S));
 }
 
-static inline void IRAM_ATTR adc2Start(int ch) {
-    CLEAR_PERI_REG_MASK(SENS_SAR_MEAS2_CTRL2_REG, SENS_MEAS2_START_SAR_M);
-    SET_PERI_REG_BITS(SENS_SAR_MEAS2_CTRL2_REG, SENS_SAR2_EN_PAD, (1 << ch), SENS_SAR2_EN_PAD_S);
-    SET_PERI_REG_MASK(SENS_SAR_MEAS2_CTRL2_REG, SENS_MEAS2_START_SAR_M);
+static volatile int32_t s_stagger_ticks = 0;   // ADC2 starts this long after ADC1 (MCPWM ticks)
+
+static inline int32_t IRAM_ATTR pwmPosition();
+
+static inline void IRAM_ATTR adcStartPair(int ch1, int ch2) {
+    WRITE_PERI_REG(SENS_SAR_MEAS1_CTRL2_REG,
+                   s_meas1_base | ((uint32_t)(1 << ch1) << SENS_SAR1_EN_PAD_S) | SENS_MEAS1_START_SAR_M);
+    if (s_stagger_ticks > 0) {
+        int32_t t0 = pwmPosition();
+        while (pwmPosition() - t0 < s_stagger_ticks) {}
+    }
+    WRITE_PERI_REG(SENS_SAR_MEAS2_CTRL2_REG,
+                   s_meas2_base | ((uint32_t)(1 << ch2) << SENS_SAR2_EN_PAD_S) | SENS_MEAS2_START_SAR_M);
+}
+
+static void captureAdcControl() {
+    s_meas1_base = READ_PERI_REG(SENS_SAR_MEAS1_CTRL2_REG) &
+                   ~(SENS_MEAS1_START_SAR_M | (SENS_SAR1_EN_PAD_V << SENS_SAR1_EN_PAD_S) |
+                     (SENS_MEAS1_DATA_SAR_V << SENS_MEAS1_DATA_SAR_S) | SENS_MEAS1_DONE_SAR_M);
+    s_meas2_base = READ_PERI_REG(SENS_SAR_MEAS2_CTRL2_REG) &
+                   ~(SENS_MEAS2_START_SAR_M | (SENS_SAR2_EN_PAD_V << SENS_SAR2_EN_PAD_S) |
+                     (SENS_MEAS2_DATA_SAR_V << SENS_MEAS2_DATA_SAR_S) | SENS_MEAS2_DONE_SAR_M);
 }
 
 static volatile uint32_t s_timeouts = 0;
@@ -110,7 +135,8 @@ struct RawSample {
     uint8_t  ph_lo, ph_mid, flags;
 };
 
-static const uint32_t RING_SIZE = 128;   // 6.4 ms of periods; the housekeeping pass is 2 ms
+static const uint32_t RING_SIZE = 256;   // 12.8 ms; a housekeeping pass takes ~2.5 ms + 2 ms wait
+                                         // with the motors on, and has been seen 7 ms apart
 struct Ring {
     RawSample         buf[RING_SIZE];
     volatile uint32_t head = 0;          // written by the interrupt
@@ -128,8 +154,9 @@ static volatile int32_t  s_lead_ticks   = 0;
 static volatile int32_t  s_mid_ticks    = 0;
 static volatile int32_t  s_settle_ticks = 0;
 static volatile int32_t  s_hold_ticks   = 0;
-static const int32_t     PRE_TICKS      = 640;    // alarm this early (4 us) and spin the rest:
-                                                  // at 2.5 us the entry averaged right on target
+static const int32_t     PRE_TICKS      = 512;    // alarm this early (3.2 us) and spin the rest:
+                                                  // alarm-to-entry is ~2.6 us, measured
+static const int32_t     CONV_PAIR_TICKS = 1344;  // ADC1+ADC2 started together: 8.4 us, measured
 static const int32_t     SPIN_MAX_TICKS = 1600;   // never spin longer than 10 us
 static const int32_t     LATE_TICKS     = 160;    // > 1 us after the target counts as late
 static uint32_t          s_seq          = 0;
@@ -155,7 +182,7 @@ static float s_zero_raw[2][3]   = { { 2048, 2048, 2048 }, { 2048, 2048, 2048 } }
 static float s_zero_sd[2][3];
 static float s_align_spread_us  = NAN;
 static bool  s_aligned          = false;
-static SamplerTiming s_timing   = { SYNC_LEAD_US, SYNC_MID_US, SYNC_SETTLE_US, SYNC_HOLD_US };
+static SamplerTiming s_timing   = { SYNC_LEAD_US, SYNC_MID_US, SYNC_SETTLE_US, SYNC_HOLD_US, SYNC_STAGGER_US };
 
 static const float TICK_US = 1.0f / 160.0f;   // MCPWM tick: 160 MHz, no prescaler (SimpleFOC sets 0)
 
@@ -190,109 +217,183 @@ static inline void IRAM_ATTR pushSample(int m, const RawSample& r) {
     q.head = head + 1;
 }
 
+// Arm the alarm for when the PWM counter reaches `pos_target` (0..2P).  next_period: the target
+// is in the next period (always in the future); otherwise it is later in this one, and an alarm
+// that is already due fires at once.
+//
+// Reading the timer-group counter means latching it and waiting (~1 us), so it is read once per
+// period (next_period = true) and the alarms within the period are placed relative to the last
+// alarm: s_alarm_g fired when the PWM counter was at s_alarm_pos (both timers run from the same
+// PLL).  If the target is less than 1 us away (this stage ran late) the counter is read anyway.
+static uint64_t s_alarm_g   = 0;
+static int32_t  s_alarm_pos = 0;
+
+static inline void IRAM_ATTR armAt(int32_t pos_target, bool next_period) {
+    const int32_t P   = s_P;
+    int32_t       now = pwmPosition();
+    if (!next_period && pos_target - now >= 160 && pos_target > s_alarm_pos) {
+        s_alarm_g  += (uint64_t)((pos_target - s_alarm_pos) / TICKS_PER_GPT);
+        s_alarm_pos = pos_target;
+        timer_group_set_alarm_value_in_isr(GPT_GROUP, GPT_IDX, s_alarm_g);
+        timer_group_enable_alarm_in_isr(GPT_GROUP, GPT_IDX);
+        return;
+    }
+    uint64_t g     = timer_group_get_counter_value_in_isr(GPT_GROUP, GPT_IDX);
+    now            = pwmPosition();
+    int32_t  delta = pos_target - now;
+    if (next_period) {
+        while (delta <= 2 * PRE_TICKS) delta += 2 * P;
+    } else if (delta < 2 * TICKS_PER_GPT) {
+        delta = 2 * TICKS_PER_GPT;
+    }
+    s_alarm_g   = g + (uint64_t)(delta / TICKS_PER_GPT);
+    s_alarm_pos = pos_target % (2 * P);   // next period: the same position, one period on
+    timer_group_set_alarm_value_in_isr(GPT_GROUP, GPT_IDX, s_alarm_g);
+    timer_group_enable_alarm_in_isr(GPT_GROUP, GPT_IDX);
+}
+
+// State carried between the three stages of one period.
+static int      s_stage = 0;
+static uint16_t s_cmp[2][3];
+static uint8_t  s_lo[2], s_mid[2], s_flags[2];
+static int32_t  s_t_lo, s_t_mid, s_entry;
+static uint16_t s_raw_lo[2];
+static uint32_t s_cycles;   // CPU cycles spent in this period's stages so far
+volatile uint32_t g_sync_prof[8];   // profiling: cycle sums of selected steps (SYNCPROF)
+
+// The sampling interrupt, in three short stages per PWM period so the CPU does not sit waiting
+// for conversions (one stage that waited for both pairs took ~24 us of every 50 us of core 0,
+// and the housekeeping task could not keep up):
+//   stage 0, just before peak - lead: read the duties, spin to peak - lead, start pair 1;
+//   stage 1, just before the peak:    spin to the peak, collect pair 1, start pair 2;
+//   stage 2, ~8 us later:             collect pair 2, check windows, push the samples.
 static void IRAM_ATTR samplerIsr(void*) {
     timer_group_clr_intr_status_in_isr(GPT_GROUP, GPT_IDX);
-    if (!s_running) return;
+    if (!s_running) { s_stage = 0; return; }
     uint32_t c0 = ccount();
-
     const int32_t P      = s_P;
     const int32_t target = P - s_lead_ticks;   // first pair's start, on the rising slope
 
-    // Compare values written for this period.  They are the shadow registers: SimpleFOC's writes
-    // take effect at the next timer zero, so a write since the last zero is not in force yet.
-    // That is handled as slack in the window check (the duty moves a little per period).
-    uint16_t cmp[2][3];
-    uint8_t  lo[2], mid[2], flags[2];
-    for (int m = 0; m < 2; m++) {
-        volatile mcpwm_dev_t& dev = m ? MCPWM1 : MCPWM0;
-        for (int k = 0; k < 3; k++) cmp[m][k] = (uint16_t)dev.operators[k].timestamp[0].gen;
-        int a = cmp[m][0], b = cmp[m][1], c = cmp[m][2];
-        // Sort: lowest compare = lowest duty = widest low-side window.
-        int l = 0, h = 0;
-        if (b < a) l = 1;
-        if (c < (l == 0 ? a : b)) l = 2;
-        if (b > a) h = 1;
-        if (c > (h == 0 ? a : b)) h = 2;
-        if (h == l) h = (l + 1) % 3;              // all equal
-        lo[m]    = (uint8_t)l;
-        mid[m]   = (uint8_t)(3 - l - h);
-        flags[m] = (a == 0 && b == 0 && c == 0) ? SAMPLE_OUTPUTS_OFF : 0;
-        for (int k = 0; k < 3; k++)
-            if (cmp[m][k] != s_prev_cmp[m][k]) flags[m] |= SAMPLE_DUTY_MOVED;
+    if (s_stage == 0) {
+        // Compare values written for this period.  They are the shadow registers: SimpleFOC's
+        // writes take effect at the next timer zero, so a write since the last zero is not in
+        // force yet.  That is handled as slack in the window check (duty moves a little per period).
+        for (int m = 0; m < 2; m++) {
+            volatile mcpwm_dev_t& dev = m ? MCPWM1 : MCPWM0;
+            for (int k = 0; k < 3; k++) s_cmp[m][k] = (uint16_t)dev.operators[k].timestamp[0].gen;
+            int a = s_cmp[m][0], b = s_cmp[m][1], c = s_cmp[m][2];
+            // Sort: lowest compare = lowest duty = widest low-side window.
+            int l = 0, h = 0;
+            if (b < a) l = 1;
+            if (c < (l == 0 ? a : b)) l = 2;
+            if (b > a) h = 1;
+            if (c > (h == 0 ? a : b)) h = 2;
+            if (h == l) h = (l + 1) % 3;              // all equal
+            s_lo[m]    = (uint8_t)l;
+            s_mid[m]   = (uint8_t)(3 - l - h);
+            s_flags[m] = (a == 0 && b == 0 && c == 0) ? SAMPLE_OUTPUTS_OFF : 0;
+            for (int k = 0; k < 3; k++)
+                if (s_cmp[m][k] != s_prev_cmp[m][k]) s_flags[m] |= SAMPLE_DUTY_MOVED;
+        }
+        if (s_zero_mode) {   // drivers asleep: read every channel in rotation
+            s_lo[0] = s_lo[1] = (uint8_t)(s_seq % 3);
+            s_mid[0] = s_mid[1] = (uint8_t)((s_seq + 1) % 3);
+        }
+
+        adcSelect(ADC_CH[0][s_lo[0]], ADC_CH[1][s_lo[1]]);   // settles during the spin
+        uint32_t p0 = ccount();
+        g_sync_prof[0] += p0 - c0;                  // duty reads + sort
+        // Spin to the first pair's target and start it: lowest-duty phase of each motor.
+        int32_t pos = pwmPosition();
+        s_entry     = target - pos;                 // ticks early (+) or late (-) at entry
+        while (target - pos > 0 && target - pos < SPIN_MAX_TICKS) pos = pwmPosition();
+        s_t_lo = pos - P;
+        uint32_t p1 = ccount();
+        g_sync_prof[1] += p1 - p0;                  // spin
+        adcStartPair(ADC_CH[0][s_lo[0]], ADC_CH[1][s_lo[1]]);
+        uint32_t p2 = ccount();
+        g_sync_prof[2] += p2 - p1;                  // two ADC starts
+
+        s_stage  = 1;
+        armAt(P + s_mid_ticks - PRE_TICKS, false);
+        g_sync_prof[3] += ccount() - p2;            // armAt
+        s_cycles = ccount() - c0;
+        return;
     }
 
-    if (s_zero_mode) {   // drivers asleep: read every channel in rotation
-        lo[0] = lo[1] = (uint8_t)(s_seq % 3);
-        mid[0] = mid[1] = (uint8_t)((s_seq + 1) % 3);
+    if (s_stage == 1) {
+        // Collect pair 1, select pair 2's pads, spin to the second pair's target, start pair 2:
+        // the middle-duty phase.
+        const int32_t target2 = P + s_mid_ticks;
+        uint32_t q0 = ccount();
+        s_raw_lo[0] = adc1End();
+        s_raw_lo[1] = adc2End();
+        adcSelect(ADC_CH[0][s_mid[0]], ADC_CH[1][s_mid[1]]);
+        g_sync_prof[5] += ccount() - q0;            // two ADC collects + select
+        int32_t pos = pwmPosition();
+        while (target2 - pos > 0 && target2 - pos < SPIN_MAX_TICKS) pos = pwmPosition();
+        g_sync_prof[4] += ccount() - q0;            // stage 1 up to the start
+        s_t_mid = pos - P;
+        adcStartPair(ADC_CH[0][s_mid[0]], ADC_CH[1][s_mid[1]]);
+
+        s_stage   = 2;
+        s_cycles += ccount() - c0;
+        armAt(pos + CONV_PAIR_TICKS - PRE_TICKS, false);
+        return;
     }
 
-    // Spin to the first pair's target.
-    int32_t pos   = pwmPosition();
-    int32_t entry = target - pos;                 // ticks early (+) or late (-) at entry
-    while (target - pos > 0 && target - pos < SPIN_MAX_TICKS) pos = pwmPosition();
+    // Stage 2: collect pair 2, check windows, push.
+    s_stage = 0;
+    uint16_t raw_mid[2];
+    raw_mid[0] = adc1End();
+    raw_mid[1] = adc2End();
+    const uint16_t* raw_lo = s_raw_lo;
 
-    // Pair 1: lowest-duty phase of each motor.
-    int32_t t_lo = pos - P;
-    adc1Start(ADC_CH[0][lo[0]]);
-    adc2Start(ADC_CH[1][lo[1]]);
-    uint16_t r1_lo = adc1End();
-    uint16_t r2_lo = adc2End();
-
-    // Pair 2: middle-duty phase, at the peak (or later, if mid_ticks > 0).
-    const int32_t target2 = P + s_mid_ticks;
-    pos = pwmPosition();
-    while (target2 - pos > 0 && target2 - pos < SPIN_MAX_TICKS) pos = pwmPosition();
-    int32_t t_mid = pos - P;
-    adc1Start(ADC_CH[0][mid[0]]);
-    adc2Start(ADC_CH[1][mid[1]]);
-    uint16_t r1_mid = adc1End();
-    uint16_t r2_mid = adc2End();
-
-    // A wedged ADC would make every period take ~120 us and starve core 0.  Stop instead; the
-    // housekeeping task's stale check then stops the motors.
-    if (r1_lo == 0xFFFF || r2_lo == 0xFFFF || r1_mid == 0xFFFF || r2_mid == 0xFFFF) {
+    // A wedged ADC would make every period wait out its timeouts and starve core 0.  Stop instead;
+    // the housekeeping task's stale check then stops the motors.
+    if (raw_lo[0] == 0xFFFF || raw_lo[1] == 0xFFFF || raw_mid[0] == 0xFFFF || raw_mid[1] == 0xFFFF) {
         if (++s_wedged >= WEDGED_STOP) { s_running = false; return; }
     } else {
         s_wedged = 0;
     }
 
+    const int32_t  t_lo  = s_t_lo, t_mid = s_t_mid;
     const uint32_t seq   = s_seq++;
     const bool     late  = (t_lo - (target - P)) > LATE_TICKS;
-    const uint16_t raw_lo[2]  = { r1_lo, r2_lo };
-    const uint16_t raw_mid[2] = { r1_mid, r2_mid };
 
     if (s_zero_mode) {
         for (int m = 0; m < 2; m++) {
             if (raw_lo[m] != 0xFFFF) {
-                s_zero_sum[m][lo[m]] += raw_lo[m];
-                s_zero_sumsq[m][lo[m]] += (uint64_t)raw_lo[m] * raw_lo[m];
-                s_zero_cnt[m][lo[m]]++;
+                s_zero_sum[m][s_lo[m]] += raw_lo[m];
+                s_zero_sumsq[m][s_lo[m]] += (uint64_t)raw_lo[m] * raw_lo[m];
+                s_zero_cnt[m][s_lo[m]]++;
             }
             if (raw_mid[m] != 0xFFFF) {
-                s_zero_sum[m][mid[m]] += raw_mid[m];
-                s_zero_sumsq[m][mid[m]] += (uint64_t)raw_mid[m] * raw_mid[m];
-                s_zero_cnt[m][mid[m]]++;
+                s_zero_sum[m][s_mid[m]] += raw_mid[m];
+                s_zero_sumsq[m][s_mid[m]] += (uint64_t)raw_mid[m] * raw_mid[m];
+                s_zero_cnt[m][s_mid[m]]++;
             }
         }
     } else {
         for (int m = 0; m < 2; m++) {
             RawSample r = {};
             r.seq     = seq;
-            r.cmp[0]  = cmp[m][0]; r.cmp[1] = cmp[m][1]; r.cmp[2] = cmp[m][2];
+            r.cmp[0]  = s_cmp[m][0]; r.cmp[1] = s_cmp[m][1]; r.cmp[2] = s_cmp[m][2];
             r.raw_lo  = raw_lo[m];
             r.raw_mid = raw_mid[m];
-            r.t_lo    = (int16_t)t_lo;
-            r.t_mid   = (int16_t)t_mid;
-            r.ph_lo   = lo[m];
-            r.ph_mid  = mid[m];
-            uint8_t f = flags[m] | (late ? SAMPLE_LATE : 0);
+            const int32_t st = m ? s_stagger_ticks : 0;   // ADC2 (motor 2) starts later
+            r.t_lo    = (int16_t)(t_lo + st);
+            r.t_mid   = (int16_t)(t_mid + st);
+            r.ph_lo   = s_lo[m];
+            r.ph_mid  = s_mid[m];
+            uint8_t f = s_flags[m] | (late ? SAMPLE_LATE : 0);
             int32_t slack_lo  = 0, slack_mid = 0;
             if (f & SAMPLE_DUTY_MOVED) {
-                slack_lo  = abs((int32_t)cmp[m][lo[m]]  - (int32_t)s_prev_cmp[m][lo[m]]);
-                slack_mid = abs((int32_t)cmp[m][mid[m]] - (int32_t)s_prev_cmp[m][mid[m]]);
+                slack_lo  = abs((int32_t)s_cmp[m][s_lo[m]]  - (int32_t)s_prev_cmp[m][s_lo[m]]);
+                slack_mid = abs((int32_t)s_cmp[m][s_mid[m]] - (int32_t)s_prev_cmp[m][s_mid[m]]);
             }
-            windowPosition(t_lo, cmp[m][lo[m]], &r.on_lo, &r.off_lo);
-            windowPosition(t_mid, cmp[m][mid[m]], &r.on_mid, &r.off_mid);
+            windowPosition(r.t_lo, s_cmp[m][s_lo[m]], &r.on_lo, &r.off_lo);
+            windowPosition(r.t_mid, s_cmp[m][s_mid[m]], &r.on_mid, &r.off_mid);
             if (!(f & SAMPLE_OUTPUTS_OFF)) {
                 if (raw_lo[m] != 0xFFFF && inWindow(r.on_lo, r.off_lo, slack_lo)) f |= SAMPLE_LO_OK;
                 if (raw_mid[m] != 0xFFFF && inWindow(r.on_mid, r.off_mid, slack_mid)) f |= SAMPLE_MID_OK;
@@ -307,28 +408,24 @@ static void IRAM_ATTR samplerIsr(void*) {
         }
     }
     for (int m = 0; m < 2; m++)
-        for (int k = 0; k < 3; k++) s_prev_cmp[m][k] = cmp[m][k];
+        for (int k = 0; k < 3; k++) s_prev_cmp[m][k] = s_cmp[m][k];
 
+    g_sync_prof[6] += ccount() - c0;               // stage 2 up to stats
     // Statistics.
     int32_t start_err = t_lo - (target - P);
     s_st_periods++;
     if (late) s_st_late++;
-    s_st_entry_sum += entry;
-    if (entry < s_st_entry_min) s_st_entry_min = entry;
-    if (entry > s_st_entry_max) s_st_entry_max = entry;
+    s_st_entry_sum += s_entry;
+    if (s_entry < s_st_entry_min) s_st_entry_min = s_entry;
+    if (s_entry > s_st_entry_max) s_st_entry_max = s_entry;
     s_st_start_sum += start_err;
     if (start_err > s_st_start_max) s_st_start_max = start_err;
 
-    // Re-arm for the next period: PRE_TICKS before the next target, computed from where the PWM
+    // Next period: PRE_TICKS before the next first-pair target, computed from where the PWM
     // counter is now, so the schedule follows the MCPWM timer exactly.
-    uint64_t g     = timer_group_get_counter_value_in_isr(GPT_GROUP, GPT_IDX);
-    int32_t  now   = pwmPosition();
-    int32_t  delta = (target - PRE_TICKS) - now;
-    while (delta <= 2 * PRE_TICKS) delta += 2 * P;   // never re-fire within this period
-    timer_group_set_alarm_value_in_isr(GPT_GROUP, GPT_IDX, g + (uint64_t)(delta / TICKS_PER_GPT));
-    timer_group_enable_alarm_in_isr(GPT_GROUP, GPT_IDX);
+    armAt(target - PRE_TICKS, true);
 
-    uint32_t dur = ccount() - c0;
+    uint32_t dur = s_cycles + (ccount() - c0);
     s_st_isr_sum += dur;
     if (dur > s_st_isr_max) s_st_isr_max = dur;
 }
@@ -342,6 +439,7 @@ static void applyTiming() {
     s_mid_ticks    = constrain(usToTicks(s_timing.mid_us), -1600, 1600);
     s_settle_ticks = usToTicks(s_timing.settle_us);
     s_hold_ticks   = usToTicks(s_timing.hold_us);
+    s_stagger_ticks = constrain(usToTicks(s_timing.stagger_us), 0, 800);
 }
 
 void samplerResetStats() {
@@ -549,6 +647,7 @@ bool samplerBegin(void (*say)(const char*)) {
         say("SYNC FAILED: MCPWM units not set up as expected (period/prescalers differ)");
         return false;
     }
+    captureAdcControl();
     int32_t fed = (int32_t)MCPWM0.operators[0].dt_fed_cfg.dt_fed;
     s_dt_ticks  = fed > 0 ? fed : 81;
     applyTiming();
@@ -568,6 +667,7 @@ bool samplerBegin(void (*say)(const char*)) {
     }
     samplerResetStats();
     s_wedged  = 0;
+    s_stage   = 0;   // an earlier stop may have left it mid-period
     s_running = true;   // before the timer starts: an interrupt that finds it false does not re-arm
     if (!startTimerAndIsr(say)) {
         s_running = false;
@@ -581,6 +681,14 @@ bool samplerBegin(void (*say)(const char*)) {
         }
     }
     samplerResetStats();
+    return true;
+}
+
+static void sayUsb(const char* line) { if (Serial) Serial.println(line); }
+
+bool samplerRezero() {
+    if (!s_running || driversAwake()) return false;
+    measureZero(sayUsb);
     return true;
 }
 

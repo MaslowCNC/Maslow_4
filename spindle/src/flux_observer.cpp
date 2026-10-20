@@ -37,15 +37,15 @@ void FluxObserver::update(float i_alpha, float i_beta, float vs_alpha, float vs_
 
     // Electrical angle
     electrical_angle = atan2f(flux_beta, flux_alpha);
-    if (electrical_angle < 0.0f) electrical_angle += 2.0f * PI;
+    if (electrical_angle < 0.0f) electrical_angle += 6.28318531f;   // (Arduino's PI is a double)
 
     // Electrical angle difference, unwrapped
     if (first) {
         first = false;
     } else {
         float d = electrical_angle - electrical_angle_prev;
-        if (d > PI) d -= 2.0f * PI;
-        else if (d < -PI) d += 2.0f * PI;
+        if (d > 3.14159265f) d -= 6.28318531f;
+        else if (d < -3.14159265f) d += 6.28318531f;
         angle_unwrapped += d;
     }
 

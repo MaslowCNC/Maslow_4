@@ -29,11 +29,16 @@ static const float SYNC_T_S  = 1.0f / PWM_FREQUENCY;   // one PWM period (s)
 static float       s_dt_v    = 0.0f;                   // dead-time voltage error (V), set at start
 static const float PHASE_COS[3] = { 1.0f, -0.5f, -0.5f };          // phase offsets 0, +120, -120 deg
 static const float PHASE_SIN[3] = { 0.0f, 0.8660254f, -0.8660254f };
-static const int   FIT_MAX   = 256;   // 2 readings x the sampler's 128-period ring
+static const int   FIT_MAX   = 512;   // 2 readings x the sampler's 256-period ring
+
+// Arduino's PI is a double: in float code it silently turns the arithmetic into (software) double.
+static const float PI_F     = 3.14159265f;
+static const float TWO_PI_F = 6.28318531f;
+static const float SLIP_RAD = SYNC_SLIP_DEG * (PI_F / 180.0f);
 
 static inline float wrapPi(float a) {
-    while (a > PI) a -= 2.0f * PI;
-    while (a <= -PI) a += 2.0f * PI;
+    while (a > PI_F) a -= TWO_PI_F;
+    while (a <= -PI_F) a += TWO_PI_F;
     return a;
 }
 
@@ -80,6 +85,9 @@ struct MotorState {
 
     // Lowest-duty-only sinusoid (for the settling histogram): i = a cos(th - phi) + b sin(th - phi)
     float m_uu = 0, m_uw = 0, m_ww = 0, m_iu = 0, m_iw = 0, m_n = 0;
+    float m_a = 0, m_b = 0, m_inv_amp = 0;   // last solve
+    bool  m_ok = false;
+    int   m_solve_n = 0;
     Hist  h_on, h_off;
 
     // Log window
@@ -92,6 +100,8 @@ struct MotorState {
     float    w_vmag = 0;
 };
 static MotorState s_m[2];
+static uint32_t s_prof[6];   // cycles: read, protection+fit, histogram, observer, total, samples
+static inline uint32_t cyc() { uint32_t c; asm volatile("rsr %0, ccount" : "=a"(c)); return c; }
 
 static bool     s_usb_log      = false;
 static uint32_t s_started_ms   = 0;
@@ -210,11 +220,11 @@ static void processSample(MotorController& mc, int m, const CurrentSample& s, ui
     }
 
     // Applied voltages from the duties in force (no bus divider on this board: nominal bus).
-    float d_mean = (s.duty[0] + s.duty[1] + s.duty[2]) / 3.0f;
+    float d_mean = (s.duty[0] + s.duty[1] + s.duty[2]) * (1.0f / 3.0f);
     float va0 = (s.duty[0] - d_mean) * SUPPLY_VOLTAGE;
     float vb0 = (s.duty[1] - d_mean) * SUPPLY_VOLTAGE;
     float vc0 = (s.duty[2] - d_mean) * SUPPLY_VOLTAGE;
-    float valpha0 = (2.0f * va0 - vb0 - vc0) / 3.0f;
+    float valpha0 = (2.0f * va0 - vb0 - vc0) * (1.0f / 3.0f);
     float vbeta0  = (vb0 - vc0) * INV_SQRT3;
     float vmag    = sqrtf(valpha0 * valpha0 + vbeta0 * vbeta0);
     // SimpleFOC: U_alpha = -sin(th) Uq, U_beta = cos(th) Uq (Ud = 0).
@@ -257,10 +267,12 @@ static void processSample(MotorController& mc, int m, const CurrentSample& s, ui
         if (mid_ok && st.fit_n < FIT_MAX) st.fit[st.fit_n++] = { c_th, s_th, it[s.ph_mid], s.ph_mid };
     }
 
+    uint32_t pc1 = cyc();
     // Settling histogram: lowest-duty-only sinusoid, then the middle phase's residual.
-    // cos/sin(th - phi) = rotation of (c_th, s_th) by phi.
+    // cos/sin(th - phi) = rotation of (c_th, s_th) by phi.  No division per sample (software
+    // float division is ~100+ cycles here): the 2x2 solve runs every 16th sample.
     if (have_th) {
-        const float lam = 1.0f - T / 0.02f;   // ~20 ms memory
+        const float lam = 1.0f - SYNC_T_S * (1.0f / 0.02f);   // ~20 ms memory
         st.m_uu *= lam; st.m_uw *= lam; st.m_ww *= lam; st.m_iu *= lam; st.m_iw *= lam; st.m_n *= lam;
         if (lo_ok) {
             int   k = s.ph_lo;
@@ -269,23 +281,31 @@ static void processSample(MotorController& mc, int m, const CurrentSample& s, ui
             float i = it[k];
             st.m_uu += u * u; st.m_uw += u * w; st.m_ww += w * w; st.m_iu += i * u; st.m_iw += i * w; st.m_n += 1;
         }
-        float det = st.m_uu * st.m_ww - st.m_uw * st.m_uw;
-        if (st.m_n > 200 && det > 1e-3f * st.m_uu * st.m_ww && s.ph_mid != s.ph_lo) {
-            float a   = (st.m_iu * st.m_ww - st.m_iw * st.m_uw) / det;
-            float b   = (st.m_iw * st.m_uu - st.m_iu * st.m_uw) / det;
-            float amp = sqrtf(a * a + b * b);
-            if (amp > 0.3f) {
-                int   k     = s.ph_mid;
-                float model = a * (c_th * PHASE_COS[k] + s_th * PHASE_SIN[k]) + b * (s_th * PHASE_COS[k] - c_th * PHASE_SIN[k]);
-                float r     = (it[k] - model) / amp;
-                int   bon   = (int)floorf((s.on_mid_us - H_ON_MIN) / H_STEP);
-                int   boff  = (int)floorf((s.off_mid_us - H_OFF_MIN) / H_STEP);
-                if (bon >= 0 && bon < H_BINS)  { st.h_on.sum[bon] += r;  st.h_on.sumsq[bon] += r * r;  st.h_on.n[bon]++; }
-                if (boff >= 0 && boff < H_BINS){ st.h_off.sum[boff] += r; st.h_off.sumsq[boff] += r * r; st.h_off.n[boff]++; }
+        if (++st.m_solve_n >= 16) {
+            st.m_solve_n = 0;
+            st.m_ok      = false;
+            float det    = st.m_uu * st.m_ww - st.m_uw * st.m_uw;
+            if (st.m_n > 200 && det > 1e-3f * st.m_uu * st.m_ww) {
+                float inv = 1.0f / det;
+                st.m_a    = (st.m_iu * st.m_ww - st.m_iw * st.m_uw) * inv;
+                st.m_b    = (st.m_iw * st.m_uu - st.m_iu * st.m_uw) * inv;
+                float amp = sqrtf(st.m_a * st.m_a + st.m_b * st.m_b);
+                if (amp > 0.3f) { st.m_inv_amp = 1.0f / amp; st.m_ok = true; }
             }
         }
+        if (st.m_ok && s.ph_mid != s.ph_lo) {
+            int   k     = s.ph_mid;
+            float model = st.m_a * (c_th * PHASE_COS[k] + s_th * PHASE_SIN[k]) +
+                          st.m_b * (s_th * PHASE_COS[k] - c_th * PHASE_SIN[k]);
+            float r     = (it[k] - model) * st.m_inv_amp;
+            int   bon   = (int)floorf((s.on_mid_us - H_ON_MIN) * (1.0f / H_STEP));
+            int   boff  = (int)floorf((s.off_mid_us - H_OFF_MIN) * (1.0f / H_STEP));
+            if (bon >= 0 && bon < H_BINS)  { st.h_on.sum[bon] += r;  st.h_on.sumsq[bon] += r * r;  st.h_on.n[bon]++; }
+            if (boff >= 0 && boff < H_BINS){ st.h_off.sum[boff] += r; st.h_off.sumsq[boff] += r * r; st.h_off.n[boff]++; }
+        }
     }
-
+    uint32_t pc2 = cyc();
+    s_prof[2] += pc2 - pc1;
     // Observer.  Integrate the applied voltage (dead-time corrected with the last known current
     // signs) and the current every period; step the observer every SYNC_OBS_DECIM full samples.
     {
@@ -293,19 +313,19 @@ static void processSample(MotorController& mc, int m, const CurrentSample& s, ui
         float v[3];
         for (int k = 0; k < 3; k++) {
             float ik = st.i_true[k];
-            float sg = ik / (fabsf(ik) + SYNC_DT_COMP_KNEE_A);   // smooth sign
+            float sg = constrain(ik * (1.0f / SYNC_DT_COMP_KNEE_A), -1.0f, 1.0f);   // sign, ramped near 0
             v[k] = (s.duty[k] - d_mean) * SUPPLY_VOLTAGE - dt_v * sg;
         }
         float dt = gap * T;
-        st.vs_a += (2.0f * v[0] - v[1] - v[2]) / 3.0f * dt;
+        st.vs_a += (2.0f * v[0] - v[1] - v[2]) * (1.0f / 3.0f) * dt;
         st.vs_b += (v[1] - v[2]) * INV_SQRT3 * dt;
-        st.is_a += (2.0f * st.i_true[0] - st.i_true[1] - st.i_true[2]) / 3.0f * dt;
+        st.is_a += (2.0f * st.i_true[0] - st.i_true[1] - st.i_true[2]) * (1.0f / 3.0f) * dt;
         st.is_b += (st.i_true[1] - st.i_true[2]) * INV_SQRT3 * dt;
         st.step_n++;
     }
     float th = NAN;   // computed only where needed
     if (full && st.obs.ready() && st.step_n >= SYNC_OBS_DECIM) {
-        float ialpha = (2.0f * it[0] - it[1] - it[2]) / 3.0f;
+        float ialpha = (2.0f * it[0] - it[1] - it[2]) * (1.0f / 3.0f);
         float ibeta  = (it[1] - it[2]) * INV_SQRT3;
         st.obs.update(ialpha, ibeta, st.vs_a, st.vs_b, st.is_a, st.is_b);
         st.vs_a = st.vs_b = st.is_a = st.is_b = 0;
@@ -338,22 +358,23 @@ static void processSample(MotorController& mc, int m, const CurrentSample& s, ui
             }
             float delta = dir * (float)(diff - st.track_offset);
             // A pole slip: the rotor fell a whole electrical turn behind.  Count it and re-base.
-            if (delta > SYNC_SLIP_DEG * PI / 180.0f) {
+            if (delta > SLIP_RAD) {
                 st.est.slips++;
-                st.track_offset += dir * 2.0 * PI;
+                st.track_offset += dir * TWO_PI_F;
                 out(true, "SYNC SLIP M%d at %.0f rpm: observed rotor fell >%.0f deg behind (slip #%u)",
                     m + 1, fabsf(mc.current_velocity) * 60.0f / (2.0f * PI), SYNC_SLIP_DEG, (unsigned)st.est.slips);
-                delta -= 2.0f * PI;
-            } else if (delta < -SYNC_SLIP_DEG * PI / 180.0f) {
-                st.track_offset -= dir * 2.0 * PI;   // rotor ahead (e.g. coasting down): re-base silently
-                delta += 2.0f * PI;
+                delta -= TWO_PI_F;
+            } else if (delta < -SLIP_RAD) {
+                st.track_offset -= dir * TWO_PI_F;   // rotor ahead (e.g. coasting down): re-base silently
+                delta += TWO_PI_F;
             }
             float a = T * SYNC_OBS_DECIM / 0.01f;   // ~10 ms filter
             st.delta_filt += (delta - st.delta_filt) * (a > 1.0f ? 1.0f : a);
-            st.delta_max = fmaxf(st.delta_max, delta * (180.0f / (float)PI));
+            st.delta_max = fmaxf(st.delta_max, delta * (180.0f / PI_F));
         }
     }
 
+    s_prof[3] += cyc() - pc2;
     // Capture.
     if (s_cap_on && s_cap_n < s_cap_size) {
         if (isnan(th)) th = atan2f(s_th, c_th);
@@ -376,10 +397,13 @@ static void processSample(MotorController& mc, int m, const CurrentSample& s, ui
 }
 
 static uint32_t s_pass_us_max = 0, s_pass_us_sum = 0, s_pass_n = 0;
+static uint32_t s_gap_us_max  = 0, s_last_pass_us = 0;   // time between passes
 
 void syncSenseUpdate(MotorController& mc1, MotorController& mc2) {
     MotorController* motors[2] = { &mc1, &mc2 };
     uint32_t t0 = micros();
+    if (s_last_pass_us && t0 - s_last_pass_us > s_gap_us_max) s_gap_us_max = t0 - s_last_pass_us;
+    s_last_pass_us = t0;
     applyObserverParams();
     for (int m = 0; m < 2; m++) {
         MotorController& mc = *motors[m];
@@ -393,8 +417,14 @@ void syncSenseUpdate(MotorController& mc1, MotorController& mc2) {
         // slower than the interrupt produces (it starved core 0 into the task watchdog).
         CurrentSample buf[16];
         int n, total = 0;
-        while (total < SYNC_MAX_PER_PASS && (n = samplerRead(m, buf, 16)) > 0) {
+        for (;;) {
+            uint32_t r0 = cyc();
+            if (total >= SYNC_MAX_PER_PASS || (n = samplerRead(m, buf, 16)) <= 0) break;
+            uint32_t r1 = cyc();
+            s_prof[0] += r1 - r0;
             for (int i = 0; i < n; i++) processSample(mc, m, buf[i], now_ms);
+            s_prof[4] += cyc() - r1;
+            s_prof[5] += n;
             total += n;
         }
 
@@ -563,8 +593,8 @@ static void printStats() {
     uint32_t      n = s.periods ? s.periods : 1;
     out(false, "[SYNC] %s, period %.2f us, dead time %.3f us, timer spread %.3f us\n",
         samplerRunning() ? "running" : "STOPPED", samplerPeriodUs(), samplerDeadTimeUs(), samplerAlignSpreadUs());
-    out(false, "[SYNC] timing: lead %.2f us, mid %+.2f us, settle %.2f us, hold %.2f us\n",
-        t.lead_us, t.mid_us, t.settle_us, t.hold_us);
+    out(false, "[SYNC] timing: lead %.2f us, mid %+.2f us, settle %.2f us, hold %.2f us, stagger %.2f us\n",
+        t.lead_us, t.mid_us, t.settle_us, t.hold_us, t.stagger_us);
     out(false, "[SYNC] %u periods, isr %.2f avg / %.2f max us (%.0f%% of core 0), late %u\n",
         (unsigned)s.periods, s.isr_us_avg, s.isr_us_max, 100.0f * s.isr_us_avg / samplerPeriodUs(), (unsigned)s.late);
     out(false, "[SYNC] entry ahead of target %.2f/%.2f/%.2f us (min/avg/max), start error avg %+.3f max %+.3f us\n",
@@ -577,6 +607,8 @@ static void printStats() {
             samplerZeroVolts(m, 0), samplerZeroVolts(m, 1), samplerZeroVolts(m, 2),
             samplerZeroNoiseLsb(m, 0), samplerZeroNoiseLsb(m, 1), samplerZeroNoiseLsb(m, 2));
     }
+    out(false, "[SYNC] housekeeping: processing %.0f us avg / %u us max per pass, longest gap between passes %u us\n",
+        s_pass_n ? (float)s_pass_us_sum / s_pass_n : 0.0f, (unsigned)s_pass_us_max, (unsigned)s_gap_us_max);
     out(false, "[SYNC] observer: R %.3f/%.3f ohm, L %.1f uH, flux %.5f Wb%s\n", s_m[0].obs.R, s_m[1].obs.R,
         s_obs_l * 1e6f, s_obs_flux, (s_m[0].obs.ready() && s_m[1].obs.ready()) ? "" : " (NOT READY: set with OBS)");
 }
@@ -616,6 +648,7 @@ static bool parseTiming(const char* args, SamplerTiming& t) {
         else if (!strcasecmp(tok, "mid"))    t.mid_us    = v;
         else if (!strcasecmp(tok, "settle")) t.settle_us = v;
         else if (!strcasecmp(tok, "hold"))   t.hold_us   = v;
+        else if (!strcasecmp(tok, "stagger")) t.stagger_us = v;
         else return false;
     }
     return true;
@@ -626,7 +659,27 @@ bool syncSenseCommand(const char* line) {
         printStats();
         return true;
     }
+    if (!strcmp(line, "SYNCZERO")) {
+        if (!samplerRezero()) out(false, "[SYNC] SYNCZERO refused: drivers must be asleep (motors off)\n");
+        return true;
+    }
+    if (!strcmp(line, "SYNCPROF")) {
+        float ns = s_prof[5] ? s_prof[5] : 1;
+        out(false, "[SYNCPROF] per sample (us CPU): read %.2f, process %.2f (histogram %.2f, observer %.2f), %u samples\n",
+            s_prof[0] / ns / 240, s_prof[4] / ns / 240, s_prof[2] / ns / 240, s_prof[3] / ns / 240, (unsigned)s_prof[5]);
+        extern volatile uint32_t g_sync_prof[8];
+        SamplerStats st = samplerStats();
+        float n = st.periods ? st.periods : 1;
+        out(false, "[SYNCPROF] us/period: duties %.2f spin0 %.2f starts %.2f arm %.2f spin1 %.2f collects %.2f stage2 %.2f\n",
+            g_sync_prof[0] / n / 240, g_sync_prof[1] / n / 240, g_sync_prof[2] / n / 240, g_sync_prof[3] / n / 240,
+            g_sync_prof[4] / n / 240, g_sync_prof[5] / n / 240, g_sync_prof[6] / n / 240);
+        return true;
+    }
     if (!strcmp(line, "SYNCRESET")) {
+        s_pass_us_max = s_pass_us_sum = s_pass_n = s_gap_us_max = 0;
+        for (int i = 0; i < 6; i++) s_prof[i] = 0;
+        extern volatile uint32_t g_sync_prof[8];
+        for (int i = 0; i < 8; i++) g_sync_prof[i] = 0;
         samplerResetStats();
         for (int m = 0; m < 2; m++) { resetHist(s_m[m].h_on); resetHist(s_m[m].h_off); }
         out(false, "[SYNC] statistics and settling histogram reset\n");
@@ -644,18 +697,18 @@ bool syncSenseCommand(const char* line) {
     if (!strncmp(line, "SYNCSET", 7)) {
         SamplerTiming t = samplerTiming();
         if (line[7] && !parseTiming(line + 8, t)) {
-            out(false, "[SYNC] usage: SYNCSET lead=<us> mid=<us> settle=<us> hold=<us>\n");
+            out(false, "[SYNC] usage: SYNCSET lead=<us> mid=<us> settle=<us> hold=<us> stagger=<us>\n");
             return true;
         }
-        if (t.lead_us < 0.0f || t.lead_us > 24.0f || fabsf(t.mid_us) > 10.0f) {
-            out(false, "[SYNC] refused: lead 0..24 us, mid -10..10 us\n");
+        if (t.lead_us < 0.0f || t.lead_us > 24.0f || fabsf(t.mid_us) > 10.0f || t.stagger_us < 0.0f || t.stagger_us > 5.0f) {
+            out(false, "[SYNC] refused: lead 0..24 us, mid -10..10 us, stagger 0..5 us\n");
             return true;
         }
         samplerSetTiming(t);
         for (int m = 0; m < 2; m++) { resetHist(s_m[m].h_on); resetHist(s_m[m].h_off); }
         samplerResetStats();
-        out(false, "[SYNC] lead %.2f us, mid %+.2f us, settle %.2f us, hold %.2f us (histogram reset)\n",
-            t.lead_us, t.mid_us, t.settle_us, t.hold_us);
+        out(false, "[SYNC] lead %.2f us, mid %+.2f us, settle %.2f us, hold %.2f us, stagger %.2f us (histogram reset)\n",
+            t.lead_us, t.mid_us, t.settle_us, t.hold_us, t.stagger_us);
         return true;
     }
     if (!strncmp(line, "SYNCCAP", 7)) {

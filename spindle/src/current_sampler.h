@@ -48,6 +48,7 @@ struct SamplerTiming {
     float mid_us;      // second pair starts no earlier than this long after the peak
     float settle_us;   // a sample needs this long after its low side turns on
     float hold_us;     // ...and must start this long before its low side turns off
+    float stagger_us;  // ADC2 (motor 2) starts this long after ADC1 (motor 1)
 };
 
 // Health and timing statistics since the last samplerResetStats().
@@ -79,6 +80,9 @@ int samplerRead(int motor, CurrentSample* out, int max);
 // Zero-current output of each sense input, volts (measured at begin, drivers asleep).
 float samplerZeroVolts(int motor, int phase);
 float samplerZeroNoiseLsb(int motor, int phase);   // standard deviation at the zero measurement
+
+// Measure the zero again (USB "SYNCZERO").  Only with the drivers asleep; false otherwise.
+bool samplerRezero();
 
 SamplerTiming samplerTiming();
 void          samplerSetTiming(const SamplerTiming& t);

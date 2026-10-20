@@ -372,6 +372,9 @@ const float    SYNC_LEAD_US   = 8.4f;
 const float    SYNC_MID_US    = 0.0f;
 const float    SYNC_SETTLE_US = 2.0f;
 const float    SYNC_HOLD_US   = 0.5f;
+// ADC2 (motor 2) starts this long after ADC1.  Started within the same few ns, ADC2 read 21 LSB
+// (~0.11 A) high at zero current - the two converters couple; 0.5 us and up read normally.
+const float    SYNC_STAGGER_US = 0.5f;
 // Over-current trip on the synchronised samples.  These are TRUE phase currents; the analogRead
 // path's OVERCURRENT_THRESHOLD (6 A) applies to chopped reads that average well under the true
 // value, so it does not carry over.  10 A phase RMS = 14 A peak: below the MP6541A's 16-20 A
@@ -398,4 +401,4 @@ const float    SYNC_DT_COMP_KNEE_A = 0.2f;   // dead-time compensation sign is s
 const float    SYNC_SLIP_DEG     = 180.0f;   // rotor this far behind the commanded angle = pole slip
 const float    SYNC_LOAD_WARN_DEG = 70.0f;   // logged as approaching pull-out (shadow mode only)
 const int      SYNC_OBS_DECIM    = 4;        // observer angle step every 4th full sample (5 kHz)
-const int      SYNC_MAX_PER_PASS = 128;      // samples per motor per housekeeping pass (one ring)
+const int      SYNC_MAX_PER_PASS = 256;      // samples per motor per housekeeping pass (one ring)
