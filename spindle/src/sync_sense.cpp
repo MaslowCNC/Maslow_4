@@ -85,6 +85,7 @@ struct MotorState {
 static MotorState s_m[2];
 
 static bool     s_usb_log      = false;
+static uint32_t s_started_ms   = 0;
 static uint32_t s_last_usb_log = 0;
 static uint32_t s_last_link_log= 0;
 static float    s_obs_r[2]     = { SYNC_OBS_R_OHM, SYNC_OBS_R_OHM };
@@ -131,6 +132,7 @@ bool syncSenseStart() {
     applyObserverParams();
     bool ok = samplerBegin(sayBoth);
     if (ok) {
+        s_started_ms = millis();
         SamplerTiming t = samplerTiming();
         out(true, "SYNC sampling on: period %.2f us, dead time %.3f us, lead %.1f us, settle %.1f, hold %.1f",
             samplerPeriodUs(), samplerDeadTimeUs(), t.lead_us, t.settle_us, t.hold_us);
@@ -457,9 +459,30 @@ static void serviceCapture() {
     }
 }
 
+// Sampler health to the XY board's log 5, 25 and 65 s after start (the XY board may not be
+// listening at first), so the idle numbers are available without USB.
+static void reportHealth(uint32_t now) {
+    static const uint32_t AT_MS[] = { 5000, 25000, 65000 };
+    static int next = 0;
+    if (!s_started_ms || next >= 3 || now - s_started_ms < AT_MS[next]) return;
+    next++;
+    SamplerStats s = samplerStats();
+    uint32_t     n = s.periods ? s.periods : 1;
+    out(true, "SYNC health: %u periods, isr %.1f/%.1f us avg/max (%.0f%% core 0), late %u, dropped %u/%u",
+        (unsigned)s.periods, s.isr_us_avg, s.isr_us_max, 100.0f * s.isr_us_avg / samplerPeriodUs(),
+        (unsigned)s.late, (unsigned)s.dropped[0], (unsigned)s.dropped[1]);
+    out(true, "SYNC entry ahead %.2f/%.2f/%.2f us min/avg/max; start err avg %+.3f max %+.3f us; off %.0f%%/%.0f%%",
+        s.entry_us_min, s.entry_us_avg, s.entry_us_max, s.start_us_avg, s.start_us_max,
+        100.0f * s.off[0] / n, 100.0f * s.off[1] / n);
+    out(true, "SYNC timer spread %.3f us; zero sd M1 %.1f %.1f %.1f M2 %.1f %.1f %.1f LSB", samplerAlignSpreadUs(),
+        samplerZeroNoiseLsb(0, 0), samplerZeroNoiseLsb(0, 1), samplerZeroNoiseLsb(0, 2),
+        samplerZeroNoiseLsb(1, 0), samplerZeroNoiseLsb(1, 1), samplerZeroNoiseLsb(1, 2));
+}
+
 void syncSenseService(MotorController& mc1, MotorController& mc2) {
     MotorController* motors[2] = { &mc1, &mc2 };
     uint32_t now = millis();
+    reportHealth(now);
     bool spinning = mc1.enabled || mc2.enabled;
 
     if (s_usb_log && now - s_last_usb_log >= 250) {
