@@ -1,4 +1,7 @@
 #include "load_sense.h"
+#ifdef SYNC_CURRENT_SENSE
+#include "sync_sense.h"
+#endif
 #include "config.h"
 #include <Preferences.h>
 #include <stdarg.h>
@@ -526,6 +529,10 @@ const LoadEstimate& loadEstimate(int motor_idx) {
     return s_est[motor_idx & 1];
 }
 
+float loadSenseResistance(int motor_idx) {
+    return s_r_ohm[motor_idx & 1];
+}
+
 void loadSenseUpdate(MotorController& mc1, MotorController& mc2, float dt, bool allow_warn, bool z_moving) {
     MotorController* motors[2] = { &mc1, &mc2 };
     s_motors[0] = &mc1; s_motors[1] = &mc2;
@@ -540,6 +547,21 @@ void loadSenseUpdate(MotorController& mc1, MotorController& mc2, float dt, bool 
         }
         f.suu *= lambda; f.suw *= lambda; f.sww *= lambda;
         f.siu *= lambda; f.siw *= lambda; f.n   *= lambda;
+#ifdef SYNC_CURRENT_SENSE
+        // Synchronised samples (sync_sense.cpp): true phase currents, each tagged with the exact
+        // commanded angle of its PWM period, so every reading has full weight (g = 1).
+        int             npts = 0;
+        const FitPoint* pts  = syncFitPoints(m, &npts);
+        for (int j = 0; j < npts; j++) {
+            float th = pts[j].theta_e;
+            int   k  = pts[j].phase;
+            float u  = -sinf(th - PHASE_PHI[k]);
+            float w  =  cosf(th - PHASE_PHI[k]);
+            float i  = pts[j].i;
+            f.suu += u * u; f.suw += u * w; f.sww += w * w;
+            f.siu += i * u; f.siw += i * w; f.n   += 1.0f;
+        }
+#else
         // The three reads updateCurrent() just made.  Each one lands at an effectively random
         // point in the PWM period, so it reads the phase current with probability g = the
         // low-side fraction, and ~0 otherwise: its expected value is i * g.  Fitting against the
@@ -558,6 +580,7 @@ void loadSenseUpdate(MotorController& mc1, MotorController& mc2, float dt, bool 
             f.suu += u * u; f.suw += u * w; f.sww += w * w;
             f.siu += i * u; f.siw += i * w; f.n   += 1.0f;
         }
+#endif
         solve(m, *motors[m]);
     }
 

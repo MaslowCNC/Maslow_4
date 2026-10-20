@@ -69,3 +69,6 @@ bool  adaptEnabled();
 float adaptTrim(int motor_idx);   // currently applied trim (V)
 
 const LoadEstimate& loadEstimate(int motor_idx);
+
+// Phase resistance in use for motor 0/1 (LOAD_R_OHM, or RTEST's measurement); 0 = unknown.
+float loadSenseResistance(int motor_idx);

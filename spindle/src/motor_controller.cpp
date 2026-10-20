@@ -1,6 +1,7 @@
 #include "motor_controller.h"
 #include "pins.h"
 #include "adc_timing_test.h"
+#include "current_sampler.h"
 #include <driver/mcpwm.h>
 #include "drivers/hardware_specific/esp32/esp32_driver_mcpwm.h"
 
@@ -131,6 +132,10 @@ void MotorController::initDriver() {
     calibrateCurrentZero();
 }
 
+// In the SYNC_CURRENT_SENSE build this still runs once at boot: these analogReads also set up the
+// sense pins and the ADCs' attenuation, which the sampler's raw register reads rely on.  The
+// sampler then measures the zero again through its own path (samplerZeroVolts).  It runs before
+// the sampler starts, so analogRead never shares an ADC with it.
 void MotorController::calibrateCurrentZero() {
     const int N = 64;
     uint32_t sum_a = 0, sum_b = 0, sum_c = 0;
@@ -162,6 +167,9 @@ void MotorController::enable() {
     if (enabled) return;
 #ifdef ADC_TIMING_TEST
     if (g_adc_test_lockout) return;   // the test left analogRead untrustworthy: no protection
+#endif
+#ifdef SYNC_CURRENT_SENSE
+    if (!samplerRunning()) return;    // no synchronised samples = no over-current protection
 #endif
     resetFilterState();
     // Wake the (shared) drivers and give them tPUD ~1ms to come up before driving the inputs.

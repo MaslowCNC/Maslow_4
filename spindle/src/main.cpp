@@ -15,6 +15,8 @@
 #include "load_sense.h"
 #include "usb_console.h"
 #include "adc_timing_test.h"
+#include "current_sampler.h"
+#include "sync_sense.h"
 #include "esp32s3/rom/rtc.h"
 #include "esp_task_wdt.h"
 #include "soc/usb_serial_jtag_struct.h"   // rtc_get_reset_reason: the chip-level reset cause
@@ -154,6 +156,33 @@ static void reportEvent(const char* level, const char* fmt, ...) {
     }
     usbWriteIfRoom(line, n);
 }
+
+#ifdef SYNC_CURRENT_SENSE
+// Line sinks for sync_sense: the USB console (waits briefly for room, core 0 only) and the link.
+static void syncUsbLine(const char* text) {
+    int n = strlen(text);
+    if (n == 0) return;
+    bool nl = text[n - 1] == '\n';
+    for (int i = 0; i < 20 && Serial; i++) {
+        if (Serial.availableForWrite() >= n + (nl ? 0 : 1)) {
+            Serial.write(reinterpret_cast<const uint8_t*>(text), n);
+            if (!nl) Serial.write('\n');
+            return;
+        }
+        vTaskDelay(pdMS_TO_TICKS(1));
+    }
+}
+
+static void syncLinkLine(const char* text) {
+    char line[128];
+    int  n = snprintf(line, sizeof(line), "MSG:%s", text);
+    if (n <= 0) return;
+    if (n >= (int)sizeof(line)) n = sizeof(line) - 1;
+    while (n > 0 && line[n - 1] == '\n') n--;
+    line[n++] = '\n';
+    if (Serial1.availableForWrite() >= n) Serial1.write(reinterpret_cast<const uint8_t*>(line), n);
+}
+#endif
 
 // Tell the XY board that the spindle has (re)established its Z zero (phase offset 0) so it
 // can reset its own Z-axis machine position to 0 and keep the two boards' Z origins aligned.
@@ -343,7 +372,23 @@ static void checkOvercurrent() {
         last_cal_motor_idx = -1;
     }
 
+#ifdef SYNC_CURRENT_SENSE
+    // Synchronised samples are true phase currents (see SYNC_OVERCURRENT_THRESHOLD).  And the
+    // protection must not run blind: a motor with no valid sample for SYNC_STALE_MS stops.
+    float oc_threshold = SYNC_OVERCURRENT_THRESHOLD;
+    {
+        bool s1 = syncSenseStale(mc1, 0), s2 = syncSenseStale(mc2, 1);
+        if (s1 || s2) {
+            char why[64];
+            snprintf(why, sizeof(why), "current sensing lost on%s%s", s1 ? " M1" : "", s2 ? " M2" : "");
+            Serial.printf("OVERCURRENT: %s\n", why);
+            stopForOverCurrent(why);
+            return;
+        }
+    }
+#else
     float oc_threshold = OVERCURRENT_THRESHOLD;
+#endif
 
     bool m1_trip = mc1.enabled && mc1.reached_speed && (mc1.protection_current > oc_threshold);
     bool m2_trip = mc2.enabled && mc2.reached_speed && (mc2.protection_current > oc_threshold);
@@ -1056,6 +1101,16 @@ static void housekeepingTask(void* arg) {
     esp_task_wdt_init(HOUSEKEEPING_WDT_TIMEOUT_S, true);
     esp_task_wdt_add(nullptr);
 
+#ifdef SYNC_CURRENT_SENSE
+    // Synchronised current sampling: its interrupt is allocated on the calling core, so it is
+    // started here (core 0) rather than in setup() (core 1).  The drivers are still asleep, which
+    // the one-time timer alignment and the zero-current measurement need.
+    syncSenseInit(syncUsbLine, syncLinkLine);
+    syncSenseStart();
+    mc1.cur_zero_a = samplerZeroVolts(0, 0); mc1.cur_zero_b = samplerZeroVolts(0, 1); mc1.cur_zero_c = samplerZeroVolts(0, 2);
+    mc2.cur_zero_a = samplerZeroVolts(1, 0); mc2.cur_zero_b = samplerZeroVolts(1, 1); mc2.cur_zero_c = samplerZeroVolts(1, 2);
+#endif
+
     for (;;) {
         esp_task_wdt_reset();
         // OTA: stop touching the ADC and signal otaTask that it is now safe to bring the WiFi
@@ -1063,12 +1118,21 @@ static void housekeepingTask(void* arg) {
         // the drivers.  The board reboots into the new firmware when an update completes.
         if (g_ota_active) {
             setMachineState(MachineState::OtaUpdate);  // announce the transition before we park
+#ifdef SYNC_CURRENT_SENSE
+            if (samplerRunning()) syncSenseStop();     // no ADC use once WiFi may come up
+#endif
             g_motor_in_ota_standby = true;
             last_hk_time           = millis();
             vTaskDelay(pdMS_TO_TICKS(10));
             continue;
         }
         g_motor_in_ota_standby = false;
+#ifdef SYNC_CURRENT_SENSE
+        if (!samplerRunning()) {   // an OTA that ended without a reboot: resume sampling
+            static uint32_t last_try = 0;
+            if (millis() - last_try > 1000) { last_try = millis(); syncSenseStart(); }
+        }
+#endif
 
         uint32_t now_ms = millis();
         float    hk_dt  = (now_ms - last_hk_time) / 1000.0f;
@@ -1076,8 +1140,12 @@ static void housekeepingTask(void* arg) {
 
         // Current sensing (six analogReads, ~0.5 ms) - feeds protection, telemetry and cal.
         // Dithered: the always-on load-sense fit needs reads at random points in the PWM cycle.
+#ifdef SYNC_CURRENT_SENSE
+        syncSenseUpdate(mc1, mc2);
+#else
         mc1.updateCurrent(true);
         mc2.updateCurrent(true);
+#endif
         calibration.accumulateCurrentSample(mc1.last_instantaneous_current, 0);
         calibration.accumulateCurrentSample(mc2.last_instantaneous_current, 1);
         // Load-sense fit over the reads above (no extra ADC reads) and the advisory stall warning.
@@ -1111,6 +1179,9 @@ static void housekeepingTask(void* arg) {
         // calibration and spindle commands have all been applied, logging any transition.
         updateReportedState();
         tripRecorderService();  // stream a captured trip recording to USB, a few lines per pass
+#ifdef SYNC_CURRENT_SENSE
+        syncSenseService(mc1, mc2);
+#endif
         reportResetReasonOnce();
 #ifdef ADC_TIMING_TEST
         repeatAdcTestResults(now_ms);

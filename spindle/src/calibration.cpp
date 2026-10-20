@@ -199,6 +199,14 @@ void Calibration::startMotor2Sweep(MotorController& mc2) {
     state = CAL_RAMP;
 }
 
+// The current CAL hunts to.  CAL_TARGET_CURRENT is in the units of the chopped analogRead path;
+// the synchronised path reads true current (see SYNC_CAL_TARGET_SCALE).
+#ifdef SYNC_CURRENT_SENSE
+static const float CAL_TARGET = CAL_TARGET_CURRENT * SYNC_CAL_TARGET_SCALE;
+#else
+static const float CAL_TARGET = CAL_TARGET_CURRENT;
+#endif
+
 void Calibration::accumulateCurrentSample(float instantaneous_current, int motor_idx) {
     if (state == CAL_HUNT && active_motor_idx == motor_idx) {
         current_sum += instantaneous_current;
@@ -214,8 +222,12 @@ void Calibration::startAuto(MotorController& mc1, MotorController& mc2) {
     Serial.println(F("Starting voltage calibration on Motor 1..."));
     Serial.printf("Stepping 100-%.0f RPM in 100 RPM increments.\n",
                   CAL_MAX_RAD * 60.0f / (2.0f * PI));
-    Serial.printf("Voltage is adjusted at each step until I_phase_rms = %.1f A.\n",
-                  CAL_TARGET_CURRENT);
+    Serial.printf("Voltage is adjusted at each step until I_phase_rms = %.2f A.\n",
+                  CAL_TARGET);
+#ifdef SYNC_CURRENT_SENSE
+    Serial.printf("NOTE: synchronised current sensing - target is %.3f A x %.1f (chopped-to-true "
+                  "ratio, UNVERIFIED; see SYNC_CAL_TARGET_SCALE)\n", CAL_TARGET_CURRENT, SYNC_CAL_TARGET_SCALE);
+#endif
 
     stopAllMotors(mc1, mc2);
     active_motor_idx = 0;
@@ -420,7 +432,7 @@ void Calibration::update(MotorController& mc1, MotorController& mc2) {
         current_sum = 0.0f;
         current_count = 0;
 
-        float err = CAL_TARGET_CURRENT - I;
+        float err = CAL_TARGET - I;
         float dV = constrain(err * 0.2f, -0.08f, 0.08f);
         hunt_voltage = constrain(hunt_voltage + dV, v_floor, hunt_ceiling);
         Serial.printf("[CAL] %5.0f RPM  V=%5.3f  I_rms=%5.3f A\n",

@@ -12,6 +12,9 @@
 // units.  It runs once from setup() with the drivers asleep, before any motor task exists.
 
 #ifdef ADC_TIMING_TEST
+#ifdef SYNC_CURRENT_SENSE
+#error "ADC_TIMING_TEST and SYNC_CURRENT_SENSE both drive the SAR ADCs from interrupts; build one or the other"
+#endif
 
 // Run the test.  Call after both drivers are initialised (MCPWM timers running, outputs off) and
 // before the housekeeping and FOC tasks start.  emit() receives each result line.

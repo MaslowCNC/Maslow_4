@@ -358,3 +358,42 @@ const int SERIOUS_CONSEC_LIMIT = 3;  // 3 x 100ms = 300ms sustained OT -> latch
 // already slipped.  There is nothing to retry - the spindle stops at 0 RPM, latches fault
 // code 2 (which alarms the XY board and stops a running job), and invalidates the Z reference
 // until a homing cycle re-establishes it.  A fresh speed command is the deliberate restart.
+
+// --- PWM-synchronised current sensing (build flag SYNC_CURRENT_SENSE; see current_sampler.h) ---
+// Only used by the sync-sense builds.  The default build keeps the unsynchronised analogRead path.
+//
+// Sample timing.  The first ADC1+ADC2 pair (each motor's lowest-duty phase) starts SYNC_LEAD_US
+// before the PWM peak and takes ~8.4 us, so the second pair (middle-duty phase) starts at about
+// the peak.  The settle and hold margins are the sense output's settling time after the low side
+// turns on and the conversion's sampling time before it turns off.  UNVERIFIED: the 330R/1nF
+// filter alone is 0.33 us; 2 us allows for the MP6541A's own response.  Measure with SYNCSET +
+// SETTLE and update.
+const float    SYNC_LEAD_US   = 8.4f;
+const float    SYNC_MID_US    = 0.0f;
+const float    SYNC_SETTLE_US = 2.0f;
+const float    SYNC_HOLD_US   = 0.5f;
+// Over-current trip on the synchronised samples.  These are TRUE phase currents; the analogRead
+// path's OVERCURRENT_THRESHOLD (6 A) applies to chopped reads that average well under the true
+// value, so it does not carry over.  10 A phase RMS = 14 A peak: below the MP6541A's 16-20 A
+// hardware limit, above the ~11 A peak (fitted Iq/Ip) seen in the heaviest 12k cuts so far.
+const float    SYNC_OVERCURRENT_THRESHOLD = 10.0f;
+// No valid sample for this long with a motor enabled = protection is blind: stop.
+const uint32_t SYNC_STALE_MS  = 20;
+// CAL hunts to CAL_TARGET_CURRENT as read by the CHOPPED analogRead path.  The synchronised path
+// reads true current, so CAL's target is scaled by this.  Bench data (2026-10-06) put the chopped
+// reading at roughly half the true value - UNVERIFIED, re-measure (phase 2) before relying on CAL.
+const float    SYNC_CAL_TARGET_SCALE = 2.0f;
+// Bench build: one SYNC summary line per motor to the XY board's log this often while spinning.
+const uint32_t SYNC_LINK_LOG_MS = 1000;
+
+// Shadow-mode flux observer (flux_observer.h).  0 = unknown; set at run time with USB "OBS".
+// R: RTEST measures it (used when SYNC_OBS_R_OHM is 0).  L: not measured yet.  Flux linkage: the
+// calibration LUT fits ~1.4 V + 0.79 V per 1000 RPM, i.e. ~0.79 / (1000 * 2 pi / 60) = 7.5 mWb
+// if the LUT voltage is mostly back-EMF - UNVERIFIED, measure on a coast-down.
+const float    SYNC_OBS_R_OHM   = 0.0f;
+const float    SYNC_OBS_L_H     = 0.0f;
+const float    SYNC_OBS_FLUX_WB = 0.0075f;
+const float    SYNC_OBS_MIN_RPM = 1000.0f;   // observer results ignored below this speed
+const float    SYNC_DT_COMP_KNEE_A = 0.2f;   // dead-time compensation sign is smoothed below this current
+const float    SYNC_SLIP_DEG     = 180.0f;   // rotor this far behind the commanded angle = pole slip
+const float    SYNC_LOAD_WARN_DEG = 70.0f;   // logged as approaching pull-out (shadow mode only)
