@@ -14,6 +14,7 @@
 #include "trip_recorder.h"
 #include "load_sense.h"
 #include "usb_console.h"
+#include "adc_timing_test.h"
 #include "esp32s3/rom/rtc.h"
 #include "esp_task_wdt.h"
 #include "soc/usb_serial_jtag_struct.h"   // rtc_get_reset_reason: the chip-level reset cause
@@ -1013,6 +1014,31 @@ static void recordTripSample(uint32_t now_ms) {
     tripRecorderPush(s);
 }
 
+#ifdef ADC_TIMING_TEST
+static void emitAdcTestLine(const char* line) {
+    reportEvent("MSG", "%s", line);
+}
+
+// Send the test results again at 20 s and 60 s after boot, one line per 100 ms so the link's TX
+// buffer never overflows (reportEvent drops a line that does not fit).
+static void repeatAdcTestResults(uint32_t now_ms) {
+    static const uint32_t REPEAT_AT_MS[] = { 20000, 60000 };
+    static int      round     = 0;
+    static int      next_line = -1;
+    static uint32_t last_ms   = 0;
+    if (next_line < 0) {
+        if (round >= 2 || now_ms < REPEAT_AT_MS[round]) return;
+        round++;
+        next_line = 0;
+    }
+    if (now_ms - last_ms < 100) return;
+    last_ms = now_ms;
+    int sent = 0;
+    adcTimingTestRepeatLine(next_line, emitAdcTestLine, &sent);
+    next_line = sent ? next_line + 1 : -1;
+}
+#endif
+
 // Housekeeping task (core 0).  Owns everything that is not time-critical for commutation:
 // current sensing (the six analogReads), the calibration sweep, serial command dispatch, fault
 // monitoring, the Z tool state machine, fan control, telemetry and status reporting.  Keeping all
@@ -1086,6 +1112,9 @@ static void housekeepingTask(void* arg) {
         updateReportedState();
         tripRecorderService();  // stream a captured trip recording to USB, a few lines per pass
         reportResetReasonOnce();
+#ifdef ADC_TIMING_TEST
+        repeatAdcTestResults(now_ms);
+#endif
         watchUsbOutput();
 
         // Report status to the XY board over the inter-board link.  Only send when the whole
@@ -1278,6 +1307,13 @@ void setup() {
     loadDefaultLUT(mc1, 0, MC1_DEFAULT_LUT, sizeof(MC1_DEFAULT_LUT) / sizeof(MC1_DEFAULT_LUT[0]));
     loadDefaultLUT(mc2, 1, MC2_DEFAULT_LUT, sizeof(MC2_DEFAULT_LUT) / sizeof(MC2_DEFAULT_LUT[0]));
     loadSenseInit();  // no-load baseline for the load-sense diagnostic (NVS)
+
+#ifdef ADC_TIMING_TEST
+    // Bench build: measure synchronised SOx sampling with the drivers asleep, before any motor
+    // task exists, and skip the power-up Z homing so the motors stay idle (home with 'G').
+    adcTimingTestRun(emitAdcTestLine);
+    g_tool_state = MachineState::NeedsHoming;
+#endif
 
     // Start the housekeeping task on core 0: current sensing, calibration, serial commands, fault
     // monitoring, the Z tool state machine, fan, telemetry and status reporting - everything that

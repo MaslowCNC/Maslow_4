@@ -1,5 +1,6 @@
 #include "motor_controller.h"
 #include "pins.h"
+#include "adc_timing_test.h"
 #include <driver/mcpwm.h>
 #include "drivers/hardware_specific/esp32/esp32_driver_mcpwm.h"
 
@@ -159,6 +160,9 @@ void MotorController::initMotor() {
 
 void MotorController::enable() {
     if (enabled) return;
+#ifdef ADC_TIMING_TEST
+    if (g_adc_test_lockout) return;   // the test left analogRead untrustworthy: no protection
+#endif
     resetFilterState();
     // Wake the (shared) drivers and give them tPUD ~1ms to come up before driving the inputs.
     if (acquireDriverWake()) delay(2);
