@@ -45,12 +45,15 @@ static inline float wrapPi(float a) {
 // --- Settling histogram (USB "SETTLE") ---
 // Middle-phase readings binned by time since that phase's low-side FET turned on (and, separately,
 // by time left before it turns off), each compared with a sinusoid fitted to the lowest-duty
-// readings alone (which are well inside their window).  Inside the settled window the normalised
-// residual is ~0; where the sense output has not settled it is pulled towards -1 (reads ~0).
+// readings alone (which are well inside their window).  Per bin: the gain sum(meas x model) /
+// sum(model^2) - 1 where the sense output has settled, 0 where it reads nothing - and the RMS
+// residual as a fraction of the amplitude.
 static const int   H_BINS   = 36;
 static const float H_ON_MIN = -2.0f, H_OFF_MIN = -4.0f, H_STEP = 0.5f;
 struct Hist {
-    float    sum[H_BINS], sumsq[H_BINS];
+    float    im[H_BINS];    // sum of measured x model
+    float    mm[H_BINS];    // sum of model^2
+    float    rr[H_BINS];    // sum of (measured - model)^2 / amplitude^2
     uint32_t n[H_BINS];
 };
 
@@ -98,6 +101,8 @@ struct MotorState {
     float    w_id = 0, w_iq = 0;
     uint32_t w_dq = 0;
     float    w_vmag = 0;
+    float    w_dlo_sum = 0, w_dlo_sq = 0;   // lowest-duty phase: after-peak minus before-peak read
+    uint32_t w_dlo_n = 0;
 };
 static MotorState s_m[2];
 static uint32_t s_prof[6];   // cycles: read, protection+fit, histogram, observer, total, samples
@@ -183,9 +188,20 @@ void syncSenseDescribe(int motor) {
 }
 
 bool syncSenseStale(const MotorController& mc, int motor) {
+    // Judged from the interrupt's own count, not from when this task last processed a sample:
+    // a long console print holds this task up for tens of ms (it stopped the spindle at 4,000 RPM
+    // while printing SETTLE) without anything being wrong with the sensing.
+    static uint32_t last_count[2]   = { 0, 0 };
+    static uint32_t last_change[2]  = { 0, 0 };
+    uint32_t now   = millis();
+    uint32_t count = samplerAliveCount(motor);
+    if (count != last_count[motor & 1]) {
+        last_count[motor & 1]  = count;
+        last_change[motor & 1] = now;
+    }
     if (!mc.enabled) return false;
-    uint32_t since = max(s_m[motor & 1].last_valid_ms, mc.start_time + 50);
-    return (int32_t)(millis() - since) > (int32_t)SYNC_STALE_MS;
+    uint32_t since = max(last_change[motor & 1], mc.start_time + 50);
+    return (int32_t)(now - since) > (int32_t)SYNC_STALE_MS;
 }
 
 // One sample: protection sums, fit readings, settle histogram, observer.  This runs ~40 times per
@@ -198,6 +214,18 @@ static void processSample(MotorController& mc, int m, const CurrentSample& s, ui
 
     uint32_t gap = st.have_seq ? (s.seq - st.prev_seq) : 1;
     if (gap == 0 || gap > 1000) gap = 1;
+    if (gap > SYNC_OBS_MAX_GAP) {
+        // Periods were not sampled (dropped while this task was held up): their voltages are
+        // unknown, so integrating across the gap would throw the observer's angle off (it showed
+        // as false slips).  Start it again.
+        st.obs.reset();
+        st.track_init = false;
+        st.obs_updates = 0;
+        st.cmd_init = false;
+        st.vs_a = st.vs_b = st.is_a = st.is_b = 0;
+        st.step_n = 0;
+        gap = 1;
+    }
     st.prev_seq = s.seq;
     st.have_seq = true;
     if (!(s.flags & SAMPLE_LO_OK)) st.last = s;   // the stale report wants the failing ones
@@ -242,6 +270,12 @@ static void processSample(MotorController& mc, int m, const CurrentSample& s, ui
 
     if (lo_ok) { st.w_lo++; st.last_valid_ms = now_ms; }
     if (mid_ok) st.w_mid++;
+
+    if (s.flags & SAMPLE_LO_PAIR) {
+        // In the direction of that phase's current, so a decay towards zero shows as negative.
+        float d = (s.i_lo_after - s.i_lo_before) * (s.i[s.ph_lo] >= 0.0f ? 1.0f : -1.0f);
+        st.w_dlo_sum += d; st.w_dlo_sq += d * d; st.w_dlo_n++;
+    }
 
     // Protection: phase RMS over every valid reading (lo alone, if that is all there is).
     if (full) {
@@ -298,10 +332,11 @@ static void processSample(MotorController& mc, int m, const CurrentSample& s, ui
             float model = st.m_a * (c_th * PHASE_COS[k] + s_th * PHASE_SIN[k]) +
                           st.m_b * (s_th * PHASE_COS[k] - c_th * PHASE_SIN[k]);
             float r     = (it[k] - model) * st.m_inv_amp;
+            float im    = it[k] * model, mm = model * model;
             int   bon   = (int)floorf((s.on_mid_us - H_ON_MIN) * (1.0f / H_STEP));
             int   boff  = (int)floorf((s.off_mid_us - H_OFF_MIN) * (1.0f / H_STEP));
-            if (bon >= 0 && bon < H_BINS)  { st.h_on.sum[bon] += r;  st.h_on.sumsq[bon] += r * r;  st.h_on.n[bon]++; }
-            if (boff >= 0 && boff < H_BINS){ st.h_off.sum[boff] += r; st.h_off.sumsq[boff] += r * r; st.h_off.n[boff]++; }
+            if (bon >= 0 && bon < H_BINS)  { Hist& h = st.h_on;  h.im[bon] += im;  h.mm[bon] += mm;  h.rr[bon] += r * r;  h.n[bon]++; }
+            if (boff >= 0 && boff < H_BINS){ Hist& h = st.h_off; h.im[boff] += im; h.mm[boff] += mm; h.rr[boff] += r * r; h.n[boff]++; }
         }
     }
     uint32_t pc2 = cyc();
@@ -323,6 +358,14 @@ static void processSample(MotorController& mc, int m, const CurrentSample& s, ui
         st.is_b += (st.i_true[1] - st.i_true[2]) * INV_SQRT3 * dt;
         st.step_n++;
     }
+    // d/q in the commanded frame (d along th, the angle SimpleFOC treats as the rotor's).
+    if (full && have_th) {
+        float ia = (2.0f * it[0] - it[1] - it[2]) * (1.0f / 3.0f);
+        float ib = (it[1] - it[2]) * INV_SQRT3;
+        st.w_id += ia * c_th + ib * s_th;
+        st.w_iq += -ia * s_th + ib * c_th;
+        st.w_dq++;
+    }
     float th = NAN;   // computed only where needed
     if (full && st.obs.ready() && st.step_n >= SYNC_OBS_DECIM) {
         float ialpha = (2.0f * it[0] - it[1] - it[2]) * (1.0f / 3.0f);
@@ -334,11 +377,6 @@ static void processSample(MotorController& mc, int m, const CurrentSample& s, ui
         st.obs_seq = s.seq;
 
         if (have_th) {
-            // d/q in the commanded frame (d along th, the angle SimpleFOC treats as the rotor's).
-            st.w_id += ialpha * c_th + ibeta * s_th;
-            st.w_iq += -ialpha * s_th + ibeta * c_th;
-            st.w_dq++;
-
             th = atan2f(s_th, c_th);
             if (st.cmd_init) st.cmd_unwrapped += wrapPi(th - st.cmd_prev);
             st.cmd_prev = th;
@@ -346,12 +384,15 @@ static void processSample(MotorController& mc, int m, const CurrentSample& s, ui
         }
 
         // Load angle = commanded - observed, in the direction of rotation.
-        if (have_th && st.obs_updates > 50) {
+        if (have_th && st.obs_updates > 50 &&
+            fabsf(mc.current_velocity) * (60.0f / TWO_PI_F) >= SYNC_OBS_MIN_RPM) {
             float dir   = (mc.current_velocity < 0.0f) ? -1.0f : 1.0f;
             double diff = st.cmd_unwrapped - st.obs.angle_unwrapped;
             if (!st.track_init) {
-                // Start the unwrapped track at the wrapped angle, so it begins inside +/-180.
-                float wrapped   = wrapPi(th - st.obs.electrical_angle);
+                // Start the unwrapped track at the wrapped angle, so it begins inside +/-180.  In
+                // reverse, SimpleFOC still applies +Uq (90 deg AHEAD of th in the +angle sense), so
+                // the rotor flux sits ~180 deg from th: measured +172 deg on motor 1 vs -8 on motor 2.
+                float wrapped   = wrapPi(th - st.obs.electrical_angle + (dir < 0.0f ? PI_F : 0.0f));
                 st.track_offset = diff - wrapped;
                 st.track_init   = true;
                 st.delta_filt   = dir * wrapped;
@@ -498,10 +539,11 @@ static void logLine(MotorController& mc, int m, bool to_link) {
             m + 1, rpm, v, rms, id, iq, 100.0f * st.w_full / n, e.load_deg,
             st.delta_max > -1e8f ? st.delta_max : NAN, e.speed_rpm, e.flux_ratio, (unsigned)e.slips);
     } else {
+        float dlo = st.w_dlo_n ? st.w_dlo_sum / st.w_dlo_n : NAN;
         out(false, "[SYNC] M%d %5.0f rpm %5.2f V | n %u full %.0f%% lo %.0f%% mid %.0f%% late %u | rms %.2f pk %.2f "
-                   "Id %+.2f Iq %+.2f | obs ld %+.1f max %+.1f spd %.0f flux %.2f slips %u\n",
+                   "Id %+.2f Iq %+.2f dlo %+.2f | obs ld %+.1f max %+.1f spd %.0f flux %.2f slips %u\n",
             m + 1, rpm, v, (unsigned)st.w_n, 100.0f * st.w_full / n, 100.0f * st.w_lo / n, 100.0f * st.w_mid / n,
-            (unsigned)st.w_late, rms, st.w_peak, id, iq, e.load_deg,
+            (unsigned)st.w_late, rms, st.w_peak, id, iq, dlo, e.load_deg,
             st.delta_max > -1e8f ? st.delta_max : NAN, e.speed_rpm, e.flux_ratio, (unsigned)e.slips);
     }
 }
@@ -510,6 +552,7 @@ static void resetWindow(MotorState& st) {
     st.w_n = st.w_full = st.w_lo = st.w_mid = st.w_late = st.w_off = 0;
     st.w_sumsq = 0; st.w_cnt = 0; st.w_peak = 0;
     st.w_id = st.w_iq = 0; st.w_dq = 0; st.w_vmag = 0;
+    st.w_dlo_sum = st.w_dlo_sq = 0; st.w_dlo_n = 0;
     st.delta_max = -1e9f;
 }
 
@@ -593,8 +636,8 @@ static void printStats() {
     uint32_t      n = s.periods ? s.periods : 1;
     out(false, "[SYNC] %s, period %.2f us, dead time %.3f us, timer spread %.3f us\n",
         samplerRunning() ? "running" : "STOPPED", samplerPeriodUs(), samplerDeadTimeUs(), samplerAlignSpreadUs());
-    out(false, "[SYNC] timing: lead %.2f us, mid %+.2f us, settle %.2f us, hold %.2f us, stagger %.2f us\n",
-        t.lead_us, t.mid_us, t.settle_us, t.hold_us, t.stagger_us);
+    out(false, "[SYNC] timing: lead %.2f us, mid %+.2f us, settle %.2f us, hold %.2f us, stagger %.2f us, lo read %s\n",
+        t.lead_us, t.mid_us, t.settle_us, t.hold_us, t.stagger_us, t.lo_twice ? "twice" : "once");
     out(false, "[SYNC] %u periods, isr %.2f avg / %.2f max us (%.0f%% of core 0), late %u\n",
         (unsigned)s.periods, s.isr_us_avg, s.isr_us_max, 100.0f * s.isr_us_avg / samplerPeriodUs(), (unsigned)s.late);
     out(false, "[SYNC] entry ahead of target %.2f/%.2f/%.2f us (min/avg/max), start error avg %+.3f max %+.3f us\n",
@@ -615,21 +658,16 @@ static void printStats() {
 
 static void printHist() {
     for (int m = 0; m < 2; m++) {
-        out(false, "[SETTLE] M%d middle-phase residual vs time since its low side turned on (us: mean sd n)\n", m + 1);
-        for (int b = 0; b < H_BINS; b++) {
-            const Hist& h = s_m[m].h_on;
-            if (!h.n[b]) continue;
-            float mean = h.sum[b] / h.n[b];
-            float sd   = sqrtf(fmaxf(h.sumsq[b] / h.n[b] - mean * mean, 0.0f));
-            out(false, "[SETTLE] M%d on %+5.1f %+.3f %.3f %u\n", m + 1, H_ON_MIN + (b + 0.5f) * H_STEP, mean, sd, (unsigned)h.n[b]);
-        }
-        out(false, "[SETTLE] M%d middle-phase residual vs time left before its low side turns off\n", m + 1);
-        for (int b = 0; b < H_BINS; b++) {
-            const Hist& h = s_m[m].h_off;
-            if (!h.n[b]) continue;
-            float mean = h.sum[b] / h.n[b];
-            float sd   = sqrtf(fmaxf(h.sumsq[b] / h.n[b] - mean * mean, 0.0f));
-            out(false, "[SETTLE] M%d off %+5.1f %+.3f %.3f %u\n", m + 1, H_OFF_MIN + (b + 0.5f) * H_STEP, mean, sd, (unsigned)h.n[b]);
+        for (int pass = 0; pass < 2; pass++) {
+            const Hist& h  = pass ? s_m[m].h_off : s_m[m].h_on;
+            const float t0 = pass ? H_OFF_MIN : H_ON_MIN;
+            out(false, "[SETTLE] M%d middle phase vs time %s (us: gain rms-residual n)\n", m + 1,
+                pass ? "left before its low side turns OFF" : "since its low side turned ON");
+            for (int b = 0; b < H_BINS; b++) {
+                if (h.n[b] < 20 || h.mm[b] <= 0.0f) continue;
+                out(false, "[SETTLE] M%d %s %+5.2f %.3f %.3f %u\n", m + 1, pass ? "off" : "on", t0 + (b + 0.5f) * H_STEP,
+                    h.im[b] / h.mm[b], sqrtf(h.rr[b] / h.n[b]), (unsigned)h.n[b]);
+            }
         }
     }
 }
@@ -649,6 +687,7 @@ static bool parseTiming(const char* args, SamplerTiming& t) {
         else if (!strcasecmp(tok, "settle")) t.settle_us = v;
         else if (!strcasecmp(tok, "hold"))   t.hold_us   = v;
         else if (!strcasecmp(tok, "stagger")) t.stagger_us = v;
+        else if (!strcasecmp(tok, "twice"))   t.lo_twice   = v != 0.0f;
         else return false;
     }
     return true;

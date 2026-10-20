@@ -163,7 +163,7 @@ static void syncUsbLine(const char* text) {
     int n = strlen(text);
     if (n == 0) return;
     bool nl = text[n - 1] == '\n';
-    for (int i = 0; i < 20 && Serial; i++) {
+    for (int i = 0; i < 3 && Serial; i++) {   // brief: a long print must not hold up protection
         if (Serial.availableForWrite() >= n + (nl ? 0 : 1)) {
             Serial.write(reinterpret_cast<const uint8_t*>(text), n);
             if (!nl) Serial.write('\n');

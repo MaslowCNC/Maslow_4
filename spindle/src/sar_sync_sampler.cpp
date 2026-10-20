@@ -68,15 +68,16 @@ static inline void IRAM_ATTR adcSelect(int ch1, int ch2) {
 }
 
 static volatile int32_t s_stagger_ticks = 0;   // ADC2 starts this long after ADC1 (MCPWM ticks)
-
-static inline int32_t IRAM_ATTR pwmPosition();
+static volatile bool    s_lo_twice      = true; // read the lowest-duty phase again after the peak
 
 static inline void IRAM_ATTR adcStartPair(int ch1, int ch2) {
     WRITE_PERI_REG(SENS_SAR_MEAS1_CTRL2_REG,
                    s_meas1_base | ((uint32_t)(1 << ch1) << SENS_SAR1_EN_PAD_S) | SENS_MEAS1_START_SAR_M);
     if (s_stagger_ticks > 0) {
-        int32_t t0 = pwmPosition();
-        while (pwmPosition() - t0 < s_stagger_ticks) {}
+        // CPU cycles, not PWM position: a position difference never ends if the counter wraps
+        // (that hung this interrupt into the watchdog once).  240 MHz / 160 MHz = 3/2.
+        uint32_t c0 = ccount(), wait = (uint32_t)s_stagger_ticks * 3 / 2;
+        while (ccount() - c0 < wait) {}
     }
     WRITE_PERI_REG(SENS_SAR_MEAS2_CTRL2_REG,
                    s_meas2_base | ((uint32_t)(1 << ch2) << SENS_SAR2_EN_PAD_S) | SENS_MEAS2_START_SAR_M);
@@ -128,11 +129,13 @@ static const int32_t       TICKS_PER_GPT = 4;     // MCPWM ticks (160 MHz) per G
 struct RawSample {
     uint32_t seq;
     uint16_t cmp[3];
-    uint16_t raw_lo, raw_mid;
-    int16_t  t_lo, t_mid;        // conversion start, ticks relative to the peak
+    uint16_t raw_lo, raw_mid, raw_lo2;
+    int16_t  t_lo, t_mid, t_lo2; // conversion start, ticks relative to the peak
     int16_t  on_lo, off_lo;      // ticks since that phase's low side turned on / until it turns off,
     int16_t  on_mid, off_mid;    // at the conversion start
+    int16_t  on_lo2, off_lo2;
     uint8_t  ph_lo, ph_mid, flags;
+    uint8_t  lo_which;           // bit 0: first lowest-duty read valid, bit 1: second
 };
 
 static const uint32_t RING_SIZE = 256;   // 12.8 ms; a housekeeping pass takes ~2.5 ms + 2 ms wait
@@ -156,7 +159,8 @@ static volatile int32_t  s_settle_ticks = 0;
 static volatile int32_t  s_hold_ticks   = 0;
 static const int32_t     PRE_TICKS      = 512;    // alarm this early (3.2 us) and spin the rest:
                                                   // alarm-to-entry is ~2.6 us, measured
-static const int32_t     CONV_PAIR_TICKS = 1344;  // ADC1+ADC2 started together: 8.4 us, measured
+static const int32_t     CONV_PAIR_TICKS = 1152;  // a pair is done 7.2 us after ADC1 starts (ADC2: 1 us
+                                                  // later, 6.2 us long); measured
 static const int32_t     SPIN_MAX_TICKS = 1600;   // never spin longer than 10 us
 static const int32_t     LATE_TICKS     = 160;    // > 1 us after the target counts as late
 static uint32_t          s_seq          = 0;
@@ -176,13 +180,14 @@ static volatile int64_t  s_st_entry_sum;
 static volatile int64_t  s_st_start_sum;
 static volatile int32_t  s_st_start_max;
 static volatile uint32_t s_st_lo_ok[2], s_st_mid_ok[2], s_st_full[2], s_st_off[2];
+static volatile uint32_t s_alive[2];   // never reset: periods with a usable sample (or outputs off)
 
 static float s_zero_v[2][3]     = { { CSA_VREF, CSA_VREF, CSA_VREF }, { CSA_VREF, CSA_VREF, CSA_VREF } };
 static float s_zero_raw[2][3]   = { { 2048, 2048, 2048 }, { 2048, 2048, 2048 } };
 static float s_zero_sd[2][3];
 static float s_align_spread_us  = NAN;
 static bool  s_aligned          = false;
-static SamplerTiming s_timing   = { SYNC_LEAD_US, SYNC_MID_US, SYNC_SETTLE_US, SYNC_HOLD_US, SYNC_STAGGER_US };
+static SamplerTiming s_timing   = { SYNC_LEAD_US, SYNC_MID_US, SYNC_SETTLE_US, SYNC_HOLD_US, SYNC_STAGGER_US, true };
 
 static const float TICK_US = 1.0f / 160.0f;   // MCPWM tick: 160 MHz, no prescaler (SimpleFOC sets 0)
 
@@ -257,7 +262,8 @@ static int      s_stage = 0;
 static uint16_t s_cmp[2][3];
 static uint8_t  s_lo[2], s_mid[2], s_flags[2];
 static int32_t  s_t_lo, s_t_mid, s_entry;
-static uint16_t s_raw_lo[2];
+static uint16_t s_raw_lo[2], s_raw_mid[2];
+static int32_t  s_t_lo2;
 static uint32_t s_cycles;   // CPU cycles spent in this period's stages so far
 volatile uint32_t g_sync_prof[8];   // profiling: cycle sums of selected steps (SYNCPROF)
 
@@ -342,22 +348,52 @@ static void IRAM_ATTR samplerIsr(void*) {
         return;
     }
 
-    // Stage 2: collect pair 2, check windows, push.
+    if (s_stage == 2 && s_lo_twice) {
+        // Collect pair 2, then read the lowest-duty phase again as far after the peak as the
+        // first read was before it.  In the zero vector (all low sides on) the windings are
+        // shorted and each phase current slopes at -(R i + e) / L, ~0.12 A/us at 12,000 RPM, so a
+        // read 8.4 us early is up to ~1 A off its value at the peak; the mean of two symmetric
+        // reads cancels the slope.
+        s_raw_mid[0] = adc1End();
+        s_raw_mid[1] = adc2End();
+        adcSelect(ADC_CH[0][s_lo[0]], ADC_CH[1][s_lo[1]]);
+        const int32_t target3 = P - s_t_lo;          // mirror of the first read about the peak
+        int32_t pos = pwmPosition();
+        while (target3 - pos > 0 && target3 - pos < SPIN_MAX_TICKS) pos = pwmPosition();
+        s_t_lo2 = pos - P;
+        adcStartPair(ADC_CH[0][s_lo[0]], ADC_CH[1][s_lo[1]]);
+
+        s_stage   = 3;
+        s_cycles += ccount() - c0;
+        armAt(pos + CONV_PAIR_TICKS - PRE_TICKS, false);
+        return;
+    }
+
+    // Stage 3 (or 2 without the second read): collect, check windows, push.
+    uint16_t raw_lo2[2] = { 0xFFFF, 0xFFFF };
+    bool     did_lo2    = (s_stage == 3);
     s_stage = 0;
-    uint16_t raw_mid[2];
-    raw_mid[0] = adc1End();
-    raw_mid[1] = adc2End();
-    const uint16_t* raw_lo = s_raw_lo;
+    if (did_lo2) {
+        raw_lo2[0] = adc1End();
+        raw_lo2[1] = adc2End();
+    } else {
+        s_raw_mid[0] = adc1End();
+        s_raw_mid[1] = adc2End();
+        s_t_lo2      = 0;
+    }
+    const uint16_t* raw_lo  = s_raw_lo;
+    const uint16_t* raw_mid = s_raw_mid;
 
     // A wedged ADC would make every period wait out its timeouts and starve core 0.  Stop instead;
     // the housekeeping task's stale check then stops the motors.
-    if (raw_lo[0] == 0xFFFF || raw_lo[1] == 0xFFFF || raw_mid[0] == 0xFFFF || raw_mid[1] == 0xFFFF) {
+    if (raw_lo[0] == 0xFFFF || raw_lo[1] == 0xFFFF || raw_mid[0] == 0xFFFF || raw_mid[1] == 0xFFFF ||
+        (did_lo2 && (raw_lo2[0] == 0xFFFF || raw_lo2[1] == 0xFFFF))) {
         if (++s_wedged >= WEDGED_STOP) { s_running = false; return; }
     } else {
         s_wedged = 0;
     }
 
-    const int32_t  t_lo  = s_t_lo, t_mid = s_t_mid;
+    const int32_t  t_lo  = s_t_lo, t_mid = s_t_mid, t_lo2 = s_t_lo2;
     const uint32_t seq   = s_seq++;
     const bool     late  = (t_lo - (target - P)) > LATE_TICKS;
 
@@ -366,6 +402,11 @@ static void IRAM_ATTR samplerIsr(void*) {
             if (raw_lo[m] != 0xFFFF) {
                 s_zero_sum[m][s_lo[m]] += raw_lo[m];
                 s_zero_sumsq[m][s_lo[m]] += (uint64_t)raw_lo[m] * raw_lo[m];
+                s_zero_cnt[m][s_lo[m]]++;
+            }
+            if (raw_lo2[m] != 0xFFFF) {
+                s_zero_sum[m][s_lo[m]] += raw_lo2[m];
+                s_zero_sumsq[m][s_lo[m]] += (uint64_t)raw_lo2[m] * raw_lo2[m];
                 s_zero_cnt[m][s_lo[m]]++;
             }
             if (raw_mid[m] != 0xFFFF) {
@@ -381,9 +422,11 @@ static void IRAM_ATTR samplerIsr(void*) {
             r.cmp[0]  = s_cmp[m][0]; r.cmp[1] = s_cmp[m][1]; r.cmp[2] = s_cmp[m][2];
             r.raw_lo  = raw_lo[m];
             r.raw_mid = raw_mid[m];
+            r.raw_lo2 = raw_lo2[m];
             const int32_t st = m ? s_stagger_ticks : 0;   // ADC2 (motor 2) starts later
             r.t_lo    = (int16_t)(t_lo + st);
             r.t_mid   = (int16_t)(t_mid + st);
+            r.t_lo2   = (int16_t)(t_lo2 + st);
             r.ph_lo   = s_lo[m];
             r.ph_mid  = s_mid[m];
             uint8_t f = s_flags[m] | (late ? SAMPLE_LATE : 0);
@@ -394,8 +437,13 @@ static void IRAM_ATTR samplerIsr(void*) {
             }
             windowPosition(r.t_lo, s_cmp[m][s_lo[m]], &r.on_lo, &r.off_lo);
             windowPosition(r.t_mid, s_cmp[m][s_mid[m]], &r.on_mid, &r.off_mid);
+            windowPosition(r.t_lo2, s_cmp[m][s_lo[m]], &r.on_lo2, &r.off_lo2);
             if (!(f & SAMPLE_OUTPUTS_OFF)) {
-                if (raw_lo[m] != 0xFFFF && inWindow(r.on_lo, r.off_lo, slack_lo)) f |= SAMPLE_LO_OK;
+                bool lo1 = raw_lo[m] != 0xFFFF && inWindow(r.on_lo, r.off_lo, slack_lo);
+                bool lo2 = raw_lo2[m] != 0xFFFF && inWindow(r.on_lo2, r.off_lo2, slack_lo);
+                if (lo1 || lo2) f |= SAMPLE_LO_OK;
+                if (lo1 && lo2) f |= SAMPLE_LO_PAIR;
+                r.lo_which = (uint8_t)((lo1 ? 1 : 0) | (lo2 ? 2 : 0));
                 if (raw_mid[m] != 0xFFFF && inWindow(r.on_mid, r.off_mid, slack_mid)) f |= SAMPLE_MID_OK;
                 if ((f & SAMPLE_LO_OK) && (f & SAMPLE_MID_OK)) f |= SAMPLE_FULL;
             }
@@ -405,6 +453,7 @@ static void IRAM_ATTR samplerIsr(void*) {
             if (f & SAMPLE_MID_OK)      s_st_mid_ok[m]++;
             if (f & SAMPLE_FULL)        s_st_full[m]++;
             if (f & SAMPLE_OUTPUTS_OFF) s_st_off[m]++;
+            if (f & (SAMPLE_LO_OK | SAMPLE_OUTPUTS_OFF)) s_alive[m]++;
         }
     }
     for (int m = 0; m < 2; m++)
@@ -440,6 +489,7 @@ static void applyTiming() {
     s_settle_ticks = usToTicks(s_timing.settle_us);
     s_hold_ticks   = usToTicks(s_timing.hold_us);
     s_stagger_ticks = constrain(usToTicks(s_timing.stagger_us), 0, 800);
+    s_lo_twice      = s_timing.lo_twice;
 }
 
 void samplerResetStats() {
@@ -491,6 +541,7 @@ float samplerAlignSpreadUs() { return s_align_spread_us; }
 float samplerPeriodUs()      { return 2.0f * s_P * TICK_US; }
 float samplerDeadTimeUs()    { return s_dt_ticks * TICK_US; }
 bool  samplerRunning()       { return s_running; }
+uint32_t samplerAliveCount(int motor) { return s_alive[motor & 1]; }
 
 float samplerZeroVolts(int motor, int phase)    { return s_zero_v[motor & 1][phase % 3]; }
 float samplerZeroNoiseLsb(int motor, int phase) { return s_zero_sd[motor & 1][phase % 3]; }
@@ -717,7 +768,15 @@ int samplerRead(int motor, CurrentSample* out, int max) {
             s.duty[k] = (float)r.cmp[k] * inv_p;
             s.i[k]    = 0.0f;
         }
-        float i_lo  = ((r.raw_lo == 0xFFFF ? 0 : r.raw_lo) * to_v - s_zero_v[motor][r.ph_lo]) * inv_g;
+        // The lowest-duty phase: the mean of its two reads (symmetric about the peak) when both
+        // were in their windows, else whichever was.
+        float raw_lo;
+        if (r.lo_which == 3)      raw_lo = 0.5f * ((float)r.raw_lo + (float)r.raw_lo2);
+        else if (r.lo_which == 2) raw_lo = r.raw_lo2;
+        else                      raw_lo = (r.raw_lo == 0xFFFF ? 0 : r.raw_lo);
+        float i_lo  = (raw_lo * to_v - s_zero_v[motor][r.ph_lo]) * inv_g;
+        s.i_lo_before = (r.lo_which & 1) ? ((float)r.raw_lo * to_v - s_zero_v[motor][r.ph_lo]) * inv_g : NAN;
+        s.i_lo_after  = (r.lo_which & 2) ? ((float)r.raw_lo2 * to_v - s_zero_v[motor][r.ph_lo]) * inv_g : NAN;
         float i_mid = ((r.raw_mid == 0xFFFF ? 0 : r.raw_mid) * to_v - s_zero_v[motor][r.ph_mid]) * inv_g;
         s.i[r.ph_lo]  = i_lo;
         s.i[r.ph_mid] = i_mid;

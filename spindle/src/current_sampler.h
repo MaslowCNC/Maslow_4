@@ -21,13 +21,15 @@
 struct CurrentSample {
     uint32_t seq;          // PWM period number, shared by both motors (gaps = periods not sampled)
     float    i[3];         // phase currents A, B, C (A, sense polarity as read); see flags
+    float    i_lo_before;  // the lowest-duty phase's two reads (A; NAN if out of window)
+    float    i_lo_after;
     float    duty[3];      // duties in force this period (0..1; see SAMPLE_DUTY_MOVED)
     float    t_lo_us;      // sample instants relative to the PWM peak (us, negative = before)
     float    t_mid_us;
     float    on_lo_us;     // time since that phase's low-side FET turned on, at the sample instant
     float    on_mid_us;
     float    off_mid_us;   // time left before the middle phase's low side turns off
-    uint8_t  ph_lo;        // phase read first: lowest duty (widest window), ~8 us before the peak
+    uint8_t  ph_lo;        // lowest duty (widest window): read ~8 us before AND after the peak
     uint8_t  ph_mid;       // phase read second: middle duty, at the peak
     uint8_t  flags;
 };
@@ -40,6 +42,8 @@ const uint8_t SAMPLE_OUTPUTS_OFF= 0x08;  // all duties 0 (outputs off): currents
 const uint8_t SAMPLE_LATE       = 0x10;  // the interrupt started more than 1 us after its target
 const uint8_t SAMPLE_DUTY_MOVED = 0x20;  // a duty changed since the previous period: windows
                                          // were checked with that change as extra margin
+const uint8_t SAMPLE_LO_PAIR    = 0x40;  // ph_lo was read before AND after the peak, both in their
+                                         // windows: i[ph_lo] is their mean (centred on the peak)
 
 // Tunable timing, all in microseconds.  Defaults come from config.h; USB "SYNCSET" changes them
 // until reboot for the settling sweep.
@@ -49,6 +53,7 @@ struct SamplerTiming {
     float settle_us;   // a sample needs this long after its low side turns on
     float hold_us;     // ...and must start this long before its low side turns off
     float stagger_us;  // ADC2 (motor 2) starts this long after ADC1 (motor 1)
+    bool  lo_twice;    // read the lowest-duty phase before AND after the peak (mean of the two)
 };
 
 // Health and timing statistics since the last samplerResetStats().
@@ -73,6 +78,10 @@ bool samplerBegin(void (*say)(const char* line));
 void samplerEnd();
 
 bool samplerRunning();
+
+// Counts periods in which motor 0/1 had a usable sample (or its outputs were off), incremented by
+// the interrupt itself: it shows the sampler is alive even while the housekeeping task is held up.
+uint32_t samplerAliveCount(int motor);
 
 // Copy out up to `max` new samples for motor 0/1, oldest first.  Returns the number copied.
 int samplerRead(int motor, CurrentSample* out, int max);
