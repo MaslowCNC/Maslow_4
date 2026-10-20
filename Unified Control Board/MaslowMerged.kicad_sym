@@ -1919,4 +1919,716 @@
 	)
 	(embedded_fonts no)
 	)
+	(symbol "TLV9064"
+	(pin_names
+		(offset 1.016)
+	)
+	(exclude_from_sim no)
+	(in_bom yes)
+	(on_board yes)
+	(property "Reference" "U"
+		(at 0 13.97 0)
+		(show_name no)
+		(do_not_autoplace no)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+		)
+	)
+	(property "Value" "TLV9064IDR"
+		(at 0 -13.97 0)
+		(show_name no)
+		(do_not_autoplace no)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+		)
+	)
+	(property "Footprint" "Package_SO:SOIC-14_3.9x8.7mm_P1.27mm"
+		(at 0 0 0)
+		(show_name no)
+		(do_not_autoplace no)
+		(hide yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+		)
+	)
+	(property "Datasheet" "https://www.ti.com/lit/ds/symlink/tlv9064.pdf"
+		(at 0 0 0)
+		(show_name no)
+		(do_not_autoplace no)
+		(hide yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+		)
+	)
+	(property "Description" "Quad 10MHz rail-to-rail I/O op-amp, 1.8-5.5V"
+		(at 0 0 0)
+		(show_name no)
+		(do_not_autoplace no)
+		(hide yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+		)
+	)
+	(symbol "TLV9064_0_1"
+		(rectangle
+			(start -10.16 10.16)
+			(end 10.16 -10.16)
+			(stroke
+				(width 0.254)
+				(type default)
+			)
+			(fill
+				(type background)
+			)
+		)
+	)
+	(symbol "TLV9064_1_1"
+		(pin input line
+			(at -12.7 8.89 0)
+			(length 2.54)
+			(name "IN1+"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(number "3"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+		)
+		(pin input line
+			(at -12.7 6.35 0)
+			(length 2.54)
+			(name "IN1-"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(number "2"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+		)
+		(pin input line
+			(at -12.7 3.81 0)
+			(length 2.54)
+			(name "IN2+"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(number "5"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+		)
+		(pin input line
+			(at -12.7 1.27 0)
+			(length 2.54)
+			(name "IN2-"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(number "6"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+		)
+		(pin input line
+			(at -12.7 -1.27 0)
+			(length 2.54)
+			(name "IN3+"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(number "10"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+		)
+		(pin input line
+			(at -12.7 -3.81 0)
+			(length 2.54)
+			(name "IN3-"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(number "9"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+		)
+		(pin input line
+			(at -12.7 -6.35 0)
+			(length 2.54)
+			(name "IN4+"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(number "12"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+		)
+		(pin input line
+			(at -12.7 -8.89 0)
+			(length 2.54)
+			(name "IN4-"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(number "13"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+		)
+		(pin output line
+			(at 12.7 7.62 180)
+			(length 2.54)
+			(name "OUT1"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(number "1"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+		)
+		(pin output line
+			(at 12.7 2.54 180)
+			(length 2.54)
+			(name "OUT2"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(number "7"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+		)
+		(pin output line
+			(at 12.7 -2.54 180)
+			(length 2.54)
+			(name "OUT3"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(number "8"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+		)
+		(pin output line
+			(at 12.7 -7.62 180)
+			(length 2.54)
+			(name "OUT4"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(number "14"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+		)
+		(pin power_in line
+			(at 0 12.7 270)
+			(length 2.54)
+			(name "V+"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(number "4"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+		)
+		(pin power_in line
+			(at 0 -12.7 90)
+			(length 2.54)
+			(name "V-"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(number "11"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+		)
+	)
+	(embedded_fonts no)
+	)
+	(symbol "ADS7038"
+	(pin_names
+		(offset 1.016)
+	)
+	(exclude_from_sim no)
+	(in_bom yes)
+	(on_board yes)
+	(property "Reference" "U"
+		(at 0 13.97 0)
+		(show_name no)
+		(do_not_autoplace no)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+		)
+	)
+	(property "Value" "ADS7038QRTERQ1"
+		(at 0 -13.97 0)
+		(show_name no)
+		(do_not_autoplace no)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+		)
+	)
+	(property "Footprint" "Package_DFN_QFN:WQFN-16-1EP_3x3mm_P0.5mm_EP1.68x1.68mm"
+		(at 0 0 0)
+		(show_name no)
+		(do_not_autoplace no)
+		(hide yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+		)
+	)
+	(property "Datasheet" "https://www.ti.com/lit/ds/symlink/ads7038-q1.pdf"
+		(at 0 0 0)
+		(show_name no)
+		(do_not_autoplace no)
+		(hide yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+		)
+	)
+	(property "Description" "8-ch 12-bit 1MSPS SAR ADC, SPI, reference = AVDD"
+		(at 0 0 0)
+		(show_name no)
+		(do_not_autoplace no)
+		(hide yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+		)
+	)
+	(symbol "ADS7038_0_1"
+		(rectangle
+			(start -10.16 10.16)
+			(end 10.16 -10.16)
+			(stroke
+				(width 0.254)
+				(type default)
+			)
+			(fill
+				(type background)
+			)
+		)
+	)
+	(symbol "ADS7038_1_1"
+		(pin input line
+			(at -12.7 8.89 0)
+			(length 2.54)
+			(name "AIN0"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(number "15"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+		)
+		(pin input line
+			(at -12.7 6.35 0)
+			(length 2.54)
+			(name "AIN1"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(number "16"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+		)
+		(pin input line
+			(at -12.7 3.81 0)
+			(length 2.54)
+			(name "AIN2"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(number "1"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+		)
+		(pin input line
+			(at -12.7 1.27 0)
+			(length 2.54)
+			(name "AIN3"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(number "2"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+		)
+		(pin input line
+			(at -12.7 -1.27 0)
+			(length 2.54)
+			(name "AIN4"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(number "3"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+		)
+		(pin input line
+			(at -12.7 -3.81 0)
+			(length 2.54)
+			(name "AIN5"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(number "4"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+		)
+		(pin bidirectional line
+			(at -12.7 -6.35 0)
+			(length 2.54)
+			(name "AIN6"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(number "5"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+		)
+		(pin bidirectional line
+			(at -12.7 -8.89 0)
+			(length 2.54)
+			(name "AIN7"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(number "6"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+		)
+		(pin input line
+			(at 12.7 8.89 180)
+			(length 2.54)
+			(name "~{CS}"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(number "11"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+		)
+		(pin input line
+			(at 12.7 6.35 180)
+			(length 2.54)
+			(name "SCLK"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(number "13"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+		)
+		(pin input line
+			(at 12.7 3.81 180)
+			(length 2.54)
+			(name "SDI"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(number "14"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+		)
+		(pin tri_state line
+			(at 12.7 1.27 180)
+			(length 2.54)
+			(name "SDO"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(number "12"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+		)
+		(pin passive line
+			(at 12.7 -6.35 180)
+			(length 2.54)
+			(name "DECAP"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(number "8"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+		)
+		(pin power_in line
+			(at -2.54 12.7 270)
+			(length 2.54)
+			(name "AVDD"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(number "7"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+		)
+		(pin power_in line
+			(at 2.54 12.7 270)
+			(length 2.54)
+			(name "DVDD"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(number "10"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+		)
+		(pin power_in line
+			(at -2.54 -12.7 90)
+			(length 2.54)
+			(name "GND"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(number "9"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+		)
+		(pin power_in line
+			(at 2.54 -12.7 90)
+			(length 2.54)
+			(name "EP"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(number "17"
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+		)
+	)
+	(embedded_fonts no)
+	)
 )

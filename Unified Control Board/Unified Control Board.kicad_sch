@@ -21931,6 +21931,718 @@
 		)
 		(embedded_fonts no)
 	)
+		(symbol "MaslowMerged:TLV9064"
+		(pin_names
+			(offset 1.016)
+		)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(property "Reference" "U"
+			(at 0 13.97 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "TLV9064IDR"
+			(at 0 -13.97 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "Package_SO:SOIC-14_3.9x8.7mm_P1.27mm"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" "https://www.ti.com/lit/ds/symlink/tlv9064.pdf"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Quad 10MHz rail-to-rail I/O op-amp, 1.8-5.5V"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(symbol "TLV9064_0_1"
+			(rectangle
+				(start -10.16 10.16)
+				(end 10.16 -10.16)
+				(stroke
+					(width 0.254)
+					(type default)
+				)
+				(fill
+					(type background)
+				)
+			)
+		)
+		(symbol "TLV9064_1_1"
+			(pin input line
+				(at -12.7 8.89 0)
+				(length 2.54)
+				(name "IN1+"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "3"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin input line
+				(at -12.7 6.35 0)
+				(length 2.54)
+				(name "IN1-"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "2"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin input line
+				(at -12.7 3.81 0)
+				(length 2.54)
+				(name "IN2+"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "5"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin input line
+				(at -12.7 1.27 0)
+				(length 2.54)
+				(name "IN2-"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "6"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin input line
+				(at -12.7 -1.27 0)
+				(length 2.54)
+				(name "IN3+"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "10"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin input line
+				(at -12.7 -3.81 0)
+				(length 2.54)
+				(name "IN3-"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "9"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin input line
+				(at -12.7 -6.35 0)
+				(length 2.54)
+				(name "IN4+"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "12"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin input line
+				(at -12.7 -8.89 0)
+				(length 2.54)
+				(name "IN4-"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "13"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin output line
+				(at 12.7 7.62 180)
+				(length 2.54)
+				(name "OUT1"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "1"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin output line
+				(at 12.7 2.54 180)
+				(length 2.54)
+				(name "OUT2"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "7"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin output line
+				(at 12.7 -2.54 180)
+				(length 2.54)
+				(name "OUT3"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "8"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin output line
+				(at 12.7 -7.62 180)
+				(length 2.54)
+				(name "OUT4"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "14"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin power_in line
+				(at 0 12.7 270)
+				(length 2.54)
+				(name "V+"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "4"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin power_in line
+				(at 0 -12.7 90)
+				(length 2.54)
+				(name "V-"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "11"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+		)
+		(embedded_fonts no)
+	)
+		(symbol "MaslowMerged:ADS7038"
+		(pin_names
+			(offset 1.016)
+		)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(property "Reference" "U"
+			(at 0 13.97 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "ADS7038QRTERQ1"
+			(at 0 -13.97 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "Package_DFN_QFN:WQFN-16-1EP_3x3mm_P0.5mm_EP1.68x1.68mm"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" "https://www.ti.com/lit/ds/symlink/ads7038-q1.pdf"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "8-ch 12-bit 1MSPS SAR ADC, SPI, reference = AVDD"
+			(at 0 0 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(symbol "ADS7038_0_1"
+			(rectangle
+				(start -10.16 10.16)
+				(end 10.16 -10.16)
+				(stroke
+					(width 0.254)
+					(type default)
+				)
+				(fill
+					(type background)
+				)
+			)
+		)
+		(symbol "ADS7038_1_1"
+			(pin input line
+				(at -12.7 8.89 0)
+				(length 2.54)
+				(name "AIN0"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "15"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin input line
+				(at -12.7 6.35 0)
+				(length 2.54)
+				(name "AIN1"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "16"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin input line
+				(at -12.7 3.81 0)
+				(length 2.54)
+				(name "AIN2"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "1"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin input line
+				(at -12.7 1.27 0)
+				(length 2.54)
+				(name "AIN3"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "2"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin input line
+				(at -12.7 -1.27 0)
+				(length 2.54)
+				(name "AIN4"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "3"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin input line
+				(at -12.7 -3.81 0)
+				(length 2.54)
+				(name "AIN5"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "4"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin bidirectional line
+				(at -12.7 -6.35 0)
+				(length 2.54)
+				(name "AIN6"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "5"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin bidirectional line
+				(at -12.7 -8.89 0)
+				(length 2.54)
+				(name "AIN7"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "6"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin input line
+				(at 12.7 8.89 180)
+				(length 2.54)
+				(name "~{CS}"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "11"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin input line
+				(at 12.7 6.35 180)
+				(length 2.54)
+				(name "SCLK"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "13"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin input line
+				(at 12.7 3.81 180)
+				(length 2.54)
+				(name "SDI"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "14"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin tri_state line
+				(at 12.7 1.27 180)
+				(length 2.54)
+				(name "SDO"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "12"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin passive line
+				(at 12.7 -6.35 180)
+				(length 2.54)
+				(name "DECAP"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "8"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin power_in line
+				(at -2.54 12.7 270)
+				(length 2.54)
+				(name "AVDD"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "7"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin power_in line
+				(at 2.54 12.7 270)
+				(length 2.54)
+				(name "DVDD"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "10"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin power_in line
+				(at -2.54 -12.7 90)
+				(length 2.54)
+				(name "GND"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "9"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+			(pin power_in line
+				(at 2.54 -12.7 90)
+				(length 2.54)
+				(name "EP"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+				(number "17"
+					(effects
+						(font
+							(size 1.27 1.27)
+						)
+					)
+				)
+			)
+		)
+		(embedded_fonts no)
+	)
 	)
 	(rectangle
 		(start 57.15 -102.87)
@@ -22863,10 +23575,6 @@
 		(uuid "13308bc7-a631-4d2c-9cf5-f27ff3f0b1d4")
 	)
 	(no_connect
-		(at 510.54 -11.43)
-		(uuid "1a419008-0649-4ced-bc8f-4bdc3c9cb213")
-	)
-	(no_connect
 		(at 703.58 -57.15)
 		(uuid "3a0da4f6-e921-4646-996f-80ec3e0e7a48")
 	)
@@ -22899,10 +23607,6 @@
 		(uuid "5e71758e-6eb8-4015-9ade-4c746bbe32c6")
 	)
 	(no_connect
-		(at 510.54 -21.59)
-		(uuid "754f50d2-3a19-4ff9-81f8-2e8118ee1474")
-	)
-	(no_connect
 		(at -654.05 127)
 		(uuid "7b5681d3-af6f-434c-8bb2-d7cacc3156a5")
 	)
@@ -22911,16 +23615,8 @@
 		(uuid "7dc9bedf-fcb3-460a-b98a-ffaaaef919b4")
 	)
 	(no_connect
-		(at 510.54 -24.13)
-		(uuid "8b77e39c-f0cb-4edb-9c23-c3d1756bd8d6")
-	)
-	(no_connect
 		(at 505.46 269.24)
 		(uuid "9c9a0f0d-494b-4d64-94b9-2cf747e62cb8")
-	)
-	(no_connect
-		(at 477.52 8.89)
-		(uuid "aca01650-30a4-4294-97c8-9e063196afd5")
 	)
 	(no_connect
 		(at 502.92 8.89)
@@ -26808,7 +27504,7 @@
 			)
 		)
 	)
-	(global_label "SOA"
+	(global_label "SOA_BUF"
 		(shape input)
 		(at 496.57 146.05 0)
 		(effects
@@ -28260,7 +28956,7 @@
 			)
 		)
 	)
-	(global_label "SOB"
+	(global_label "SOB_BUF"
 		(shape input)
 		(at 495.3 160.02 270)
 		(effects
@@ -29602,7 +30298,7 @@
 			)
 		)
 	)
-	(global_label "SOC2"
+	(global_label "SOC2_BUF"
 		(shape input)
 		(at 817.88 157.48 270)
 		(effects
@@ -29932,7 +30628,7 @@
 			)
 		)
 	)
-	(global_label "SOB2"
+	(global_label "SOB2_BUF"
 		(shape input)
 		(at 829.31 152.4 270)
 		(effects
@@ -31054,7 +31750,7 @@
 			)
 		)
 	)
-	(global_label "SOA2"
+	(global_label "SOA2_BUF"
 		(shape input)
 		(at 842.01 149.86 0)
 		(effects
@@ -31560,7 +32256,7 @@
 			)
 		)
 	)
-	(global_label "SOC"
+	(global_label "SOC_BUF"
 		(shape input)
 		(at 477.52 158.75 270)
 		(effects
@@ -40244,7 +40940,7 @@
 				(justify left bottom)
 			)
 		)
-		(property "Value" "330Ω"
+		(property "Value" "2kΩ"
 			(at 463.7 154.18 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -40277,7 +40973,7 @@
 				)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "ESP32 ADC filter (2k/1nF, tau ~2us) driven from the TLV9064 buffer"
 			(at 472.59 154.18 0)
 			(hide yes)
 			(show_name no)
@@ -40288,7 +40984,7 @@
 				)
 			)
 		)
-		(property "MPN" "0402WGF3300TCE"
+		(property "MPN" "0402WGF2001TCE"
 			(at 472.59 154.18 0)
 			(hide yes)
 			(show_name no)
@@ -40310,7 +41006,7 @@
 				)
 			)
 		)
-		(property "Supplier Part" "C25104"
+		(property "Supplier Part" "C4109"
 			(at 472.59 154.18 0)
 			(hide yes)
 			(show_name no)
@@ -40332,7 +41028,7 @@
 				)
 			)
 		)
-		(property "LCSC Part Name" "330Ω ±1% 62.5mW 厚膜电阻"
+		(property "LCSC Part Name" "2kΩ ±1% 1/16W 0402 Chip Resistor"
 			(at 472.59 154.18 0)
 			(hide yes)
 			(show_name no)
@@ -46414,7 +47110,7 @@
 				(justify left bottom)
 			)
 		)
-		(property "Value" "330Ω"
+		(property "Value" "2kΩ"
 			(at 814.578 152.146 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -46447,7 +47143,7 @@
 				)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "ESP32 ADC filter (2k/1nF, tau ~2us) driven from the TLV9064 buffer"
 			(at 824.23 152.4 0)
 			(hide yes)
 			(show_name no)
@@ -46458,7 +47154,7 @@
 				)
 			)
 		)
-		(property "MPN" "0402WGF3300TCE"
+		(property "MPN" "0402WGF2001TCE"
 			(at 824.23 152.4 0)
 			(hide yes)
 			(show_name no)
@@ -46480,7 +47176,7 @@
 				)
 			)
 		)
-		(property "Supplier Part" "C25104"
+		(property "Supplier Part" "C4109"
 			(at 824.23 152.4 0)
 			(hide yes)
 			(show_name no)
@@ -46502,7 +47198,7 @@
 				)
 			)
 		)
-		(property "LCSC Part Name" "330Ω ±1% 62.5mW 厚膜电阻"
+		(property "LCSC Part Name" "2kΩ ±1% 1/16W 0402 Chip Resistor"
 			(at 824.23 152.4 0)
 			(hide yes)
 			(show_name no)
@@ -47544,7 +48240,7 @@
 				(justify left bottom)
 			)
 		)
-		(property "Value" "330Ω"
+		(property "Value" "2kΩ"
 			(at 468.884 150.368 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -47577,7 +48273,7 @@
 				)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "ESP32 ADC filter (2k/1nF, tau ~2us) driven from the TLV9064 buffer"
 			(at 478.79 151.13 0)
 			(hide yes)
 			(show_name no)
@@ -47588,7 +48284,7 @@
 				)
 			)
 		)
-		(property "MPN" "0402WGF3300TCE"
+		(property "MPN" "0402WGF2001TCE"
 			(at 478.79 151.13 0)
 			(hide yes)
 			(show_name no)
@@ -47610,7 +48306,7 @@
 				)
 			)
 		)
-		(property "Supplier Part" "C25104"
+		(property "Supplier Part" "C4109"
 			(at 478.79 151.13 0)
 			(hide yes)
 			(show_name no)
@@ -47632,7 +48328,7 @@
 				)
 			)
 		)
-		(property "LCSC Part Name" "330Ω ±1% 62.5mW 厚膜电阻"
+		(property "LCSC Part Name" "2kΩ ±1% 1/16W 0402 Chip Resistor"
 			(at 478.79 151.13 0)
 			(hide yes)
 			(show_name no)
@@ -49254,7 +49950,7 @@
 				(justify left bottom)
 			)
 		)
-		(property "Value" "330Ω"
+		(property "Value" "2kΩ"
 			(at 825.5 149.86 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -49287,7 +49983,7 @@
 				)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "ESP32 ADC filter (2k/1nF, tau ~2us) driven from the TLV9064 buffer"
 			(at 834.39 149.86 0)
 			(hide yes)
 			(show_name no)
@@ -49298,7 +49994,7 @@
 				)
 			)
 		)
-		(property "MPN" "0402WGF3300TCE"
+		(property "MPN" "0402WGF2001TCE"
 			(at 834.39 149.86 0)
 			(hide yes)
 			(show_name no)
@@ -49320,7 +50016,7 @@
 				)
 			)
 		)
-		(property "Supplier Part" "C25104"
+		(property "Supplier Part" "C4109"
 			(at 834.39 149.86 0)
 			(hide yes)
 			(show_name no)
@@ -49342,7 +50038,7 @@
 				)
 			)
 		)
-		(property "LCSC Part Name" "330Ω ±1% 62.5mW 厚膜电阻"
+		(property "LCSC Part Name" "2kΩ ±1% 1/16W 0402 Chip Resistor"
 			(at 834.39 149.86 0)
 			(hide yes)
 			(show_name no)
@@ -55170,7 +55866,7 @@
 				(justify left bottom)
 			)
 		)
-		(property "Value" "330Ω"
+		(property "Value" "2kΩ"
 			(at 802.64 154.94 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -55203,7 +55899,7 @@
 				)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "ESP32 ADC filter (2k/1nF, tau ~2us) driven from the TLV9064 buffer"
 			(at 811.53 154.94 0)
 			(hide yes)
 			(show_name no)
@@ -55214,7 +55910,7 @@
 				)
 			)
 		)
-		(property "MPN" "0402WGF3300TCE"
+		(property "MPN" "0402WGF2001TCE"
 			(at 811.53 154.94 0)
 			(hide yes)
 			(show_name no)
@@ -55236,7 +55932,7 @@
 				)
 			)
 		)
-		(property "Supplier Part" "C25104"
+		(property "Supplier Part" "C4109"
 			(at 811.53 154.94 0)
 			(hide yes)
 			(show_name no)
@@ -55258,7 +55954,7 @@
 				)
 			)
 		)
-		(property "LCSC Part Name" "330Ω ±1% 62.5mW 厚膜电阻"
+		(property "LCSC Part Name" "2kΩ ±1% 1/16W 0402 Chip Resistor"
 			(at 811.53 154.94 0)
 			(hide yes)
 			(show_name no)
@@ -60870,7 +61566,7 @@
 				(justify left bottom)
 			)
 		)
-		(property "Value" "330Ω"
+		(property "Value" "2kΩ"
 			(at 477.52 146.05 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -60903,7 +61599,7 @@
 				)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "ESP32 ADC filter (2k/1nF, tau ~2us) driven from the TLV9064 buffer"
 			(at 486.41 146.05 0)
 			(hide yes)
 			(show_name no)
@@ -60914,7 +61610,7 @@
 				)
 			)
 		)
-		(property "MPN" "0402WGF3300TCE"
+		(property "MPN" "0402WGF2001TCE"
 			(at 486.41 146.05 0)
 			(hide yes)
 			(show_name no)
@@ -60936,7 +61632,7 @@
 				)
 			)
 		)
-		(property "Supplier Part" "C25104"
+		(property "Supplier Part" "C4109"
 			(at 486.41 146.05 0)
 			(hide yes)
 			(show_name no)
@@ -60958,7 +61654,7 @@
 				)
 			)
 		)
-		(property "LCSC Part Name" "330Ω ±1% 62.5mW 厚膜电阻"
+		(property "LCSC Part Name" "2kΩ ±1% 1/16W 0402 Chip Resistor"
 			(at 486.41 146.05 0)
 			(hide yes)
 			(show_name no)
@@ -62998,6 +63694,4263 @@
 			(justify left top)
 		)
 		(uuid "d9cefe29-803d-4169-b523-deb4ff7738ff")
+	)
+	(symbol
+		(lib_id "MaslowMerged:TLV9064")
+		(at 482.60 345.44 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "83d5aced-730c-4a21-bff4-e1816ec7996e")
+		(property "Reference" "U13"
+			(at 479.60 333.44 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "TLV9064IDR"
+			(at 479.60 357.44 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "Package_SO:SOIC-14_3.9x8.7mm_P1.27mm"
+			(at 482.60 345.44 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" "https://www.ti.com/lit/ds/symlink/tlv9064.pdf"
+			(at 482.60 345.44 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Quad 10MHz RRIO op-amp: unity-gain buffers for the MP6540HA SOx outputs"
+			(at 482.60 345.44 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "MPN" "TLV9064IDR"
+			(at 482.60 345.44 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Manufacturer" "Texas Instruments"
+			(at 482.60 345.44 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Supplier Part" "C388176"
+			(at 482.60 345.44 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Supplier" "LCSC"
+			(at 482.60 345.44 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "3"
+			(uuid "cd36441b-d910-4f16-87e8-698d3bfdee6d")
+		)
+		(pin "2"
+			(uuid "bdfac49d-9ddd-4e48-a161-fe31bd9a39dc")
+		)
+		(pin "5"
+			(uuid "2d46dd74-f2cf-47e4-b79e-636ebfaf245d")
+		)
+		(pin "6"
+			(uuid "0d03f3a5-aeba-463e-a03e-6992891f8e59")
+		)
+		(pin "10"
+			(uuid "290dd57b-a5b6-471c-9a40-ab9d9ef17d34")
+		)
+		(pin "9"
+			(uuid "1a1644eb-3ab7-4aa1-a3f8-c846029967a6")
+		)
+		(pin "12"
+			(uuid "284cc548-40b3-44eb-8d5e-9268f7eb91b6")
+		)
+		(pin "13"
+			(uuid "2089d2dc-324f-475c-a771-d8b32e9dd7a7")
+		)
+		(pin "1"
+			(uuid "a5fd740c-e66e-4665-b5dd-73deddec45f5")
+		)
+		(pin "7"
+			(uuid "a3e49117-c500-46e9-a4ee-23f1e873aeb7")
+		)
+		(pin "8"
+			(uuid "49a73611-a15d-452c-b647-e06e86371989")
+		)
+		(pin "14"
+			(uuid "baef071c-a08e-4faa-8a5f-9a08dea08ba1")
+		)
+		(pin "4"
+			(uuid "55236eb3-45f1-46a3-8cdc-ca2445dae33d")
+		)
+		(pin "11"
+			(uuid "f2234249-0719-4339-8941-95a1acac49be")
+		)
+		(instances
+			(project "Unified Control Board"
+				(path "/dfafd8b3-c553-40fe-89ed-f7586d7cf6a1"
+					(reference "U13")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(global_label "SOA"
+		(shape passive)
+		(at 469.90 336.55 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "d5c70513-8a45-41f0-bbde-5000dcf3eed4")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 469.90 336.55 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "SOA_BUF"
+		(shape passive)
+		(at 469.90 339.09 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "11378414-4a4b-4ff9-8c9f-d65008931267")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 469.90 339.09 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "SOB"
+		(shape passive)
+		(at 469.90 341.63 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "bd1cb195-5573-4bd3-83f5-e90b97658d7f")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 469.90 341.63 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "SOB_BUF"
+		(shape passive)
+		(at 469.90 344.17 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "5400be02-9454-4156-8ad9-c175ed46e585")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 469.90 344.17 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "SOC"
+		(shape passive)
+		(at 469.90 346.71 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "927709d5-9731-4990-b51f-9b429100e111")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 469.90 346.71 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "SOC_BUF"
+		(shape passive)
+		(at 469.90 349.25 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "74852377-e9ff-4e0b-8e97-7660fcb5245f")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 469.90 349.25 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "GND"
+		(shape passive)
+		(at 469.90 351.79 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "520d1213-f24f-4a08-9ae3-cf65dd89296b")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 469.90 351.79 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "U13_SPARE"
+		(shape passive)
+		(at 469.90 354.33 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "68138738-3ab8-4b02-912a-9a996a356411")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 469.90 354.33 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "SOA_BUF"
+		(shape passive)
+		(at 495.30 337.82 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "9826f14b-4eaa-4c72-bccd-ef72091b2012")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 495.30 337.82 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "SOB_BUF"
+		(shape passive)
+		(at 495.30 342.90 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "e8e24488-1739-4fd8-a902-6af1417c3cf8")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 495.30 342.90 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "SOC_BUF"
+		(shape passive)
+		(at 495.30 347.98 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "9261761e-9ff5-434e-9464-f5b006dc0f09")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 495.30 347.98 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "U13_SPARE"
+		(shape passive)
+		(at 495.30 353.06 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "023b048e-92ca-44e3-924e-bf1ef252c973")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 495.30 353.06 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "3V3"
+		(shape passive)
+		(at 482.60 332.74 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "593a29df-d57f-41fd-b62b-ea9d88ff0d9e")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 482.60 332.74 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "GND"
+		(shape passive)
+		(at 482.60 358.14 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "b66ba60b-b651-4e29-8aa2-f503c8e49496")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 482.60 358.14 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "MaslowMerged:TLV9064")
+		(at 558.80 345.44 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "ad5771e0-0b3d-4e15-ad47-985fb0e9aa3e")
+		(property "Reference" "U14"
+			(at 555.80 333.44 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "TLV9064IDR"
+			(at 555.80 357.44 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "Package_SO:SOIC-14_3.9x8.7mm_P1.27mm"
+			(at 558.80 345.44 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" "https://www.ti.com/lit/ds/symlink/tlv9064.pdf"
+			(at 558.80 345.44 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Quad 10MHz RRIO op-amp: unity-gain buffers for the MP6540HA SOx outputs"
+			(at 558.80 345.44 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "MPN" "TLV9064IDR"
+			(at 558.80 345.44 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Manufacturer" "Texas Instruments"
+			(at 558.80 345.44 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Supplier Part" "C388176"
+			(at 558.80 345.44 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Supplier" "LCSC"
+			(at 558.80 345.44 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "3"
+			(uuid "578f84e9-d80b-440f-84e5-159927b22da0")
+		)
+		(pin "2"
+			(uuid "9b169d73-e7c4-419f-b4a6-591c26758249")
+		)
+		(pin "5"
+			(uuid "8f259c57-5066-4a16-9d69-21ae4316e008")
+		)
+		(pin "6"
+			(uuid "9c2d7c89-8b21-4a59-8824-bd365e113e99")
+		)
+		(pin "10"
+			(uuid "002a9752-7bd2-4af4-b2d3-64147a12f683")
+		)
+		(pin "9"
+			(uuid "fdaef149-e71a-4193-83d2-9f08f2280a34")
+		)
+		(pin "12"
+			(uuid "5a37f90d-6fc9-4554-afaa-75287860b76a")
+		)
+		(pin "13"
+			(uuid "f79bb675-4bf0-42c5-89d5-06bef83f81bb")
+		)
+		(pin "1"
+			(uuid "7341585d-0cc3-441d-b821-891d00d2e866")
+		)
+		(pin "7"
+			(uuid "3fea939a-763a-4525-b844-b9b336706bbc")
+		)
+		(pin "8"
+			(uuid "3bf5a23e-0550-4404-ac9a-8ab3b4095186")
+		)
+		(pin "14"
+			(uuid "abdea576-e6e9-4bbd-8ca1-46916931a6a1")
+		)
+		(pin "4"
+			(uuid "3821dca5-eeb5-4bd3-9573-401bd09a495d")
+		)
+		(pin "11"
+			(uuid "e3c35146-8271-4572-9122-45bd3be3b939")
+		)
+		(instances
+			(project "Unified Control Board"
+				(path "/dfafd8b3-c553-40fe-89ed-f7586d7cf6a1"
+					(reference "U14")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(global_label "SOA2"
+		(shape passive)
+		(at 546.10 336.55 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "2a16726e-9cd9-4284-86b1-0fc721990bc8")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 546.10 336.55 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "SOA2_BUF"
+		(shape passive)
+		(at 546.10 339.09 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "c81d1032-2db8-45f6-9b44-d37f1cdc86df")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 546.10 339.09 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "SOB2"
+		(shape passive)
+		(at 546.10 341.63 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "e2791988-d205-4ddc-9c3f-fafed6cd5d74")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 546.10 341.63 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "SOB2_BUF"
+		(shape passive)
+		(at 546.10 344.17 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "b0511a6d-dafd-437b-857b-e065bff937de")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 546.10 344.17 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "SOC2"
+		(shape passive)
+		(at 546.10 346.71 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "9298fccd-3585-4536-b9d8-0cbae9c260f8")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 546.10 346.71 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "SOC2_BUF"
+		(shape passive)
+		(at 546.10 349.25 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "c0567976-a7f4-4cca-b3c3-b61abe3194f2")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 546.10 349.25 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "GND"
+		(shape passive)
+		(at 546.10 351.79 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "c6406e54-f965-441f-9c9a-390be11ead25")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 546.10 351.79 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "U14_SPARE"
+		(shape passive)
+		(at 546.10 354.33 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "655fb4a1-cf66-4ebe-8bb8-b64ed18bea4f")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 546.10 354.33 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "SOA2_BUF"
+		(shape passive)
+		(at 571.50 337.82 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "2cc42d25-e444-4b54-9ce7-f47b305c2ac9")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 571.50 337.82 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "SOB2_BUF"
+		(shape passive)
+		(at 571.50 342.90 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "c0fa57a9-bff6-49ad-830f-dd6507e8a278")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 571.50 342.90 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "SOC2_BUF"
+		(shape passive)
+		(at 571.50 347.98 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "4c61a0ee-4178-4521-946b-eb98c874bd28")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 571.50 347.98 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "U14_SPARE"
+		(shape passive)
+		(at 571.50 353.06 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "df4ec03e-e346-479b-8be7-df31443694d5")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 571.50 353.06 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "3V3"
+		(shape passive)
+		(at 558.80 332.74 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "b0c98b29-931f-43c5-ba96-adecdfc3e5c5")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 558.80 332.74 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "GND"
+		(shape passive)
+		(at 558.80 358.14 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "8cb33055-ff37-45c0-ad37-87a2fcc2ddf8")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 558.80 358.14 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "ProPrj_Dri-easyedapro:CL05B104KB54PNC")
+		(at 482.60 381.00 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "925d6fd0-618c-4fd7-b4dd-306745c916f6")
+		(property "Reference" "C76"
+			(at 479.60 377.50 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "100nF"
+			(at 479.60 384.50 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "ProPrj_Dri-easyedapro:C0603"
+			(at 482.60 381.00 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "MPN" "CC0603KRX7R9BB104"
+			(at 482.60 381.00 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Manufacturer" "YAGEO(国巨)"
+			(at 482.60 381.00 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Supplier Part" "C14663"
+			(at 482.60 381.00 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Supplier" "LCSC"
+			(at 482.60 381.00 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "3538a448-3753-4eac-adc1-897498e8c9f5")
+		)
+		(pin "2"
+			(uuid "aec6f81d-ed5f-4e8e-9044-88ad1bed3cc2")
+		)
+		(instances
+			(project "Unified Control Board"
+				(path "/dfafd8b3-c553-40fe-89ed-f7586d7cf6a1"
+					(reference "C76")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(global_label "3V3"
+		(shape passive)
+		(at 477.52 381.00 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "70b01226-77a4-4873-9b16-4f594bfbee20")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 477.52 381.00 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "GND"
+		(shape passive)
+		(at 487.68 381.00 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "9820e643-4fdb-44d9-b8b2-adf499f17956")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 487.68 381.00 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "ProPrj_Dri-easyedapro:CL05B104KB54PNC")
+		(at 558.80 381.00 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "fa7ca98d-7c86-4933-9dda-3a5c7d59faae")
+		(property "Reference" "C77"
+			(at 555.80 377.50 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "100nF"
+			(at 555.80 384.50 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "ProPrj_Dri-easyedapro:C0603"
+			(at 558.80 381.00 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "MPN" "CC0603KRX7R9BB104"
+			(at 558.80 381.00 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Manufacturer" "YAGEO(国巨)"
+			(at 558.80 381.00 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Supplier Part" "C14663"
+			(at 558.80 381.00 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Supplier" "LCSC"
+			(at 558.80 381.00 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "cc471511-5a12-40a6-abdb-1e0ea39b94f1")
+		)
+		(pin "2"
+			(uuid "51f04fee-00d9-4fc8-96e2-e2513fa219cf")
+		)
+		(instances
+			(project "Unified Control Board"
+				(path "/dfafd8b3-c553-40fe-89ed-f7586d7cf6a1"
+					(reference "C77")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(global_label "3V3"
+		(shape passive)
+		(at 553.72 381.00 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "a0264e10-2d12-4066-82cf-1f294a4cd547")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 553.72 381.00 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "GND"
+		(shape passive)
+		(at 563.88 381.00 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "9ca68ff2-42a0-450b-920c-cef6481baa15")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 563.88 381.00 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "ProPrj_Dri-easyedapro:0402WGF1002TCE")
+		(at 615.95 320.04 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "86656f6d-e200-4592-844f-7ae6f2f40b7f")
+		(property "Reference" "R61"
+			(at 612.95 316.54 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "47Ω"
+			(at 612.95 323.54 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "ProPrj_Dri-easyedapro:R0402"
+			(at 615.95 320.04 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "MPN" "0402WGF470JTCE"
+			(at 615.95 320.04 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Manufacturer" "UNI-ROYAL(厚声)"
+			(at 615.95 320.04 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Supplier Part" "C25118"
+			(at 615.95 320.04 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Supplier" "LCSC"
+			(at 615.95 320.04 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "fc7d5521-e7a9-4637-91f3-efc821fd26c9")
+		)
+		(pin "2"
+			(uuid "25bc0d75-47dd-46d0-a412-f8de87c98f73")
+		)
+		(instances
+			(project "Unified Control Board"
+				(path "/dfafd8b3-c553-40fe-89ed-f7586d7cf6a1"
+					(reference "R61")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(global_label "SOA_BUF"
+		(shape passive)
+		(at 610.87 320.04 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "8256adc5-a8bd-48d0-a801-e333ea11c927")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 610.87 320.04 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "ADC_A1"
+		(shape passive)
+		(at 621.03 320.04 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "0889656d-2d97-42b1-a273-ac50edb6b05a")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 621.03 320.04 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "ProPrj_Dri-easyedapro:CL05B104KB54PNC")
+		(at 647.70 320.04 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "28ed5040-548c-4dae-b211-d4017dbfb46c")
+		(property "Reference" "C78"
+			(at 644.70 316.54 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "1nF C0G"
+			(at 644.70 323.54 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "ProPrj_Dri-easyedapro:C0402"
+			(at 647.70 320.04 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "MPN" "GRM1555C1H102JA01D"
+			(at 647.70 320.04 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Manufacturer" "muRata"
+			(at 647.70 320.04 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Supplier Part" "C76947"
+			(at 647.70 320.04 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Supplier" "LCSC"
+			(at 647.70 320.04 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "ADC charge-bucket cap, C0G"
+			(at 647.70 320.04 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "517ec12f-40cc-4c1d-afc0-84b479d11793")
+		)
+		(pin "2"
+			(uuid "f4daf1f9-98b7-4f8c-b8e6-e2859afd2ac9")
+		)
+		(instances
+			(project "Unified Control Board"
+				(path "/dfafd8b3-c553-40fe-89ed-f7586d7cf6a1"
+					(reference "C78")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(global_label "ADC_A1"
+		(shape passive)
+		(at 642.62 320.04 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "0a3d21fd-f20c-4ed6-8512-433861dd4c84")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 642.62 320.04 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "GND"
+		(shape passive)
+		(at 652.78 320.04 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "52381241-6367-48be-8cd4-97be35aad912")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 652.78 320.04 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "ProPrj_Dri-easyedapro:0402WGF1002TCE")
+		(at 615.95 327.66 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "e9f161ac-3347-4b0b-a292-684e96dc21e2")
+		(property "Reference" "R62"
+			(at 612.95 324.16 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "47Ω"
+			(at 612.95 331.16 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "ProPrj_Dri-easyedapro:R0402"
+			(at 615.95 327.66 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "MPN" "0402WGF470JTCE"
+			(at 615.95 327.66 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Manufacturer" "UNI-ROYAL(厚声)"
+			(at 615.95 327.66 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Supplier Part" "C25118"
+			(at 615.95 327.66 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Supplier" "LCSC"
+			(at 615.95 327.66 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "56fa65cc-e6cb-42d0-a84a-58497ba3fc96")
+		)
+		(pin "2"
+			(uuid "b732ae2f-3503-44a5-b1ad-e3e72dc7786b")
+		)
+		(instances
+			(project "Unified Control Board"
+				(path "/dfafd8b3-c553-40fe-89ed-f7586d7cf6a1"
+					(reference "R62")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(global_label "SOB_BUF"
+		(shape passive)
+		(at 610.87 327.66 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "9863eda6-387a-4717-a651-d9fa7e397130")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 610.87 327.66 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "ADC_B1"
+		(shape passive)
+		(at 621.03 327.66 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "bdb8b11b-62aa-451c-b10a-b5310f30e552")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 621.03 327.66 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "ProPrj_Dri-easyedapro:CL05B104KB54PNC")
+		(at 647.70 327.66 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "f47a60c2-e37a-48ed-ba47-2d8f6cc1068e")
+		(property "Reference" "C79"
+			(at 644.70 324.16 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "1nF C0G"
+			(at 644.70 331.16 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "ProPrj_Dri-easyedapro:C0402"
+			(at 647.70 327.66 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "MPN" "GRM1555C1H102JA01D"
+			(at 647.70 327.66 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Manufacturer" "muRata"
+			(at 647.70 327.66 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Supplier Part" "C76947"
+			(at 647.70 327.66 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Supplier" "LCSC"
+			(at 647.70 327.66 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "ADC charge-bucket cap, C0G"
+			(at 647.70 327.66 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "b82c2488-34a9-43dc-ae03-e0bd9f30405a")
+		)
+		(pin "2"
+			(uuid "130432f3-a758-4642-940a-c7c0ffa7635e")
+		)
+		(instances
+			(project "Unified Control Board"
+				(path "/dfafd8b3-c553-40fe-89ed-f7586d7cf6a1"
+					(reference "C79")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(global_label "ADC_B1"
+		(shape passive)
+		(at 642.62 327.66 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "45b47b68-8e68-4c6e-a9e6-3c393dae8b72")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 642.62 327.66 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "GND"
+		(shape passive)
+		(at 652.78 327.66 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "1917cc8e-76af-45da-bf53-3413bf9f31fd")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 652.78 327.66 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "ProPrj_Dri-easyedapro:0402WGF1002TCE")
+		(at 615.95 335.28 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "b7649009-88be-408d-b472-c1c1cf3ebba0")
+		(property "Reference" "R63"
+			(at 612.95 331.78 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "47Ω"
+			(at 612.95 338.78 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "ProPrj_Dri-easyedapro:R0402"
+			(at 615.95 335.28 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "MPN" "0402WGF470JTCE"
+			(at 615.95 335.28 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Manufacturer" "UNI-ROYAL(厚声)"
+			(at 615.95 335.28 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Supplier Part" "C25118"
+			(at 615.95 335.28 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Supplier" "LCSC"
+			(at 615.95 335.28 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "b4de5484-5e7c-4516-a5d6-590ccac3fcd8")
+		)
+		(pin "2"
+			(uuid "697b4c32-bf62-445d-bc76-5f8f9a507c1b")
+		)
+		(instances
+			(project "Unified Control Board"
+				(path "/dfafd8b3-c553-40fe-89ed-f7586d7cf6a1"
+					(reference "R63")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(global_label "SOC_BUF"
+		(shape passive)
+		(at 610.87 335.28 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "294d2f3b-47d8-4f43-b0ec-4a24e52b7eda")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 610.87 335.28 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "ADC_C1"
+		(shape passive)
+		(at 621.03 335.28 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "50ac12cd-36e1-4431-ac3c-53e8f75d8eae")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 621.03 335.28 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "ProPrj_Dri-easyedapro:CL05B104KB54PNC")
+		(at 647.70 335.28 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "75d366d9-5721-49d1-88aa-2669eeabe93a")
+		(property "Reference" "C80"
+			(at 644.70 331.78 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "1nF C0G"
+			(at 644.70 338.78 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "ProPrj_Dri-easyedapro:C0402"
+			(at 647.70 335.28 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "MPN" "GRM1555C1H102JA01D"
+			(at 647.70 335.28 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Manufacturer" "muRata"
+			(at 647.70 335.28 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Supplier Part" "C76947"
+			(at 647.70 335.28 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Supplier" "LCSC"
+			(at 647.70 335.28 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "ADC charge-bucket cap, C0G"
+			(at 647.70 335.28 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "4a2e1d2f-9b11-4974-a07d-06b244111221")
+		)
+		(pin "2"
+			(uuid "8bc498cc-641f-42ed-8482-2c9cb3bec5cb")
+		)
+		(instances
+			(project "Unified Control Board"
+				(path "/dfafd8b3-c553-40fe-89ed-f7586d7cf6a1"
+					(reference "C80")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(global_label "ADC_C1"
+		(shape passive)
+		(at 642.62 335.28 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "24d625a4-bf5b-4a84-9e0c-e8819641c240")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 642.62 335.28 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "GND"
+		(shape passive)
+		(at 652.78 335.28 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "1c397bb6-45d1-491f-a270-9f491634c76d")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 652.78 335.28 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "ProPrj_Dri-easyedapro:0402WGF1002TCE")
+		(at 615.95 342.90 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "e31b0200-c285-4830-af42-6f11a8aa8b4e")
+		(property "Reference" "R64"
+			(at 612.95 339.40 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "47Ω"
+			(at 612.95 346.40 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "ProPrj_Dri-easyedapro:R0402"
+			(at 615.95 342.90 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "MPN" "0402WGF470JTCE"
+			(at 615.95 342.90 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Manufacturer" "UNI-ROYAL(厚声)"
+			(at 615.95 342.90 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Supplier Part" "C25118"
+			(at 615.95 342.90 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Supplier" "LCSC"
+			(at 615.95 342.90 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "5d23bcbf-7374-4ed9-b2aa-6efe1a2b76b7")
+		)
+		(pin "2"
+			(uuid "6be4069c-cc34-4fde-bb57-0448e53d0900")
+		)
+		(instances
+			(project "Unified Control Board"
+				(path "/dfafd8b3-c553-40fe-89ed-f7586d7cf6a1"
+					(reference "R64")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(global_label "SOA2_BUF"
+		(shape passive)
+		(at 610.87 342.90 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "d74822af-dfdf-4671-a1e2-d33c904707bf")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 610.87 342.90 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "ADC_A2"
+		(shape passive)
+		(at 621.03 342.90 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "7eade989-bbf3-4172-8d43-8d6eabaccb62")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 621.03 342.90 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "ProPrj_Dri-easyedapro:CL05B104KB54PNC")
+		(at 647.70 342.90 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "6b902d10-1936-4bc7-aca7-6dffcad1ab29")
+		(property "Reference" "C81"
+			(at 644.70 339.40 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "1nF C0G"
+			(at 644.70 346.40 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "ProPrj_Dri-easyedapro:C0402"
+			(at 647.70 342.90 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "MPN" "GRM1555C1H102JA01D"
+			(at 647.70 342.90 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Manufacturer" "muRata"
+			(at 647.70 342.90 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Supplier Part" "C76947"
+			(at 647.70 342.90 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Supplier" "LCSC"
+			(at 647.70 342.90 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "ADC charge-bucket cap, C0G"
+			(at 647.70 342.90 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "08ee9597-4045-4c8c-bee0-f7362656fdb8")
+		)
+		(pin "2"
+			(uuid "7c1c3dce-1492-4949-95cc-ba1b5ddb9d1a")
+		)
+		(instances
+			(project "Unified Control Board"
+				(path "/dfafd8b3-c553-40fe-89ed-f7586d7cf6a1"
+					(reference "C81")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(global_label "ADC_A2"
+		(shape passive)
+		(at 642.62 342.90 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "be03aa30-9dae-4e0f-9289-1f2413301590")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 642.62 342.90 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "GND"
+		(shape passive)
+		(at 652.78 342.90 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "7af83f6c-d7e0-425d-9b4b-3c1cb71d41f9")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 652.78 342.90 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "ProPrj_Dri-easyedapro:0402WGF1002TCE")
+		(at 615.95 350.52 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "3fd6d9b2-d44d-452d-afed-5ddef817100f")
+		(property "Reference" "R65"
+			(at 612.95 347.02 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "47Ω"
+			(at 612.95 354.02 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "ProPrj_Dri-easyedapro:R0402"
+			(at 615.95 350.52 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "MPN" "0402WGF470JTCE"
+			(at 615.95 350.52 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Manufacturer" "UNI-ROYAL(厚声)"
+			(at 615.95 350.52 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Supplier Part" "C25118"
+			(at 615.95 350.52 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Supplier" "LCSC"
+			(at 615.95 350.52 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "7371fbed-7492-4bca-804f-bcf08a35ac1a")
+		)
+		(pin "2"
+			(uuid "526c4744-b556-4542-be0c-718b63f8b483")
+		)
+		(instances
+			(project "Unified Control Board"
+				(path "/dfafd8b3-c553-40fe-89ed-f7586d7cf6a1"
+					(reference "R65")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(global_label "SOB2_BUF"
+		(shape passive)
+		(at 610.87 350.52 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "10a24535-30d5-4b32-ab39-f3338504829c")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 610.87 350.52 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "ADC_B2"
+		(shape passive)
+		(at 621.03 350.52 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "aafbf9b6-e17d-4da1-91e3-77f7029285c2")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 621.03 350.52 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "ProPrj_Dri-easyedapro:CL05B104KB54PNC")
+		(at 647.70 350.52 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "589c1d07-2c9c-4909-b5e1-a34a3a7bc63d")
+		(property "Reference" "C82"
+			(at 644.70 347.02 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "1nF C0G"
+			(at 644.70 354.02 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "ProPrj_Dri-easyedapro:C0402"
+			(at 647.70 350.52 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "MPN" "GRM1555C1H102JA01D"
+			(at 647.70 350.52 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Manufacturer" "muRata"
+			(at 647.70 350.52 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Supplier Part" "C76947"
+			(at 647.70 350.52 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Supplier" "LCSC"
+			(at 647.70 350.52 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "ADC charge-bucket cap, C0G"
+			(at 647.70 350.52 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "22644958-7aa0-4dbd-b770-23704a08fddd")
+		)
+		(pin "2"
+			(uuid "3a40add7-9cdc-4722-9463-030cbba76a9b")
+		)
+		(instances
+			(project "Unified Control Board"
+				(path "/dfafd8b3-c553-40fe-89ed-f7586d7cf6a1"
+					(reference "C82")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(global_label "ADC_B2"
+		(shape passive)
+		(at 642.62 350.52 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "889f41ce-2761-4669-a672-c9f390146a46")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 642.62 350.52 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "GND"
+		(shape passive)
+		(at 652.78 350.52 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "81178c24-41dd-471e-ad49-ac54c0c9426d")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 652.78 350.52 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "ProPrj_Dri-easyedapro:0402WGF1002TCE")
+		(at 615.95 358.14 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "ad96ae20-2d3d-45a3-b1ef-7b501bd68385")
+		(property "Reference" "R66"
+			(at 612.95 354.64 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "47Ω"
+			(at 612.95 361.64 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "ProPrj_Dri-easyedapro:R0402"
+			(at 615.95 358.14 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "MPN" "0402WGF470JTCE"
+			(at 615.95 358.14 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Manufacturer" "UNI-ROYAL(厚声)"
+			(at 615.95 358.14 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Supplier Part" "C25118"
+			(at 615.95 358.14 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Supplier" "LCSC"
+			(at 615.95 358.14 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "d9ca58f2-2fab-4304-b40b-c1b707a321d0")
+		)
+		(pin "2"
+			(uuid "4703db3e-0a54-4f8e-8224-98643e7a44c4")
+		)
+		(instances
+			(project "Unified Control Board"
+				(path "/dfafd8b3-c553-40fe-89ed-f7586d7cf6a1"
+					(reference "R66")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(global_label "SOC2_BUF"
+		(shape passive)
+		(at 610.87 358.14 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "28e93236-06ef-4fee-bf44-7331c2514eb9")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 610.87 358.14 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "ADC_C2"
+		(shape passive)
+		(at 621.03 358.14 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "0361bfc7-690f-402d-94a1-e86047d56e5d")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 621.03 358.14 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "ProPrj_Dri-easyedapro:CL05B104KB54PNC")
+		(at 647.70 358.14 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "2c24a123-aba6-48cf-b8c4-37d48bd87f9d")
+		(property "Reference" "C83"
+			(at 644.70 354.64 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "1nF C0G"
+			(at 644.70 361.64 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "ProPrj_Dri-easyedapro:C0402"
+			(at 647.70 358.14 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "MPN" "GRM1555C1H102JA01D"
+			(at 647.70 358.14 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Manufacturer" "muRata"
+			(at 647.70 358.14 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Supplier Part" "C76947"
+			(at 647.70 358.14 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Supplier" "LCSC"
+			(at 647.70 358.14 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "ADC charge-bucket cap, C0G"
+			(at 647.70 358.14 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "d82d341c-914a-4633-98c7-18f0da89e7c6")
+		)
+		(pin "2"
+			(uuid "55d594d1-c1e6-483a-8d1d-5789b8b094c1")
+		)
+		(instances
+			(project "Unified Control Board"
+				(path "/dfafd8b3-c553-40fe-89ed-f7586d7cf6a1"
+					(reference "C83")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(global_label "ADC_C2"
+		(shape passive)
+		(at 642.62 358.14 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "fbdaadcc-1956-4ca0-9997-788fec329699")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 642.62 358.14 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "GND"
+		(shape passive)
+		(at 652.78 358.14 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "fb66d6bd-7176-41e7-b97d-4d5c33f052de")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 652.78 358.14 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "MaslowMerged:ADS7038")
+		(at 692.15 345.44 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "58f39b32-9cf4-4b35-96b2-f1fc823d1d6f")
+		(property "Reference" "U15"
+			(at 689.15 333.44 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "ADS7038QRTERQ1"
+			(at 689.15 357.44 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "Package_DFN_QFN:WQFN-16-1EP_3x3mm_P0.5mm_EP1.68x1.68mm"
+			(at 692.15 345.44 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" "https://www.ti.com/lit/ds/symlink/ads7038-q1.pdf"
+			(at 692.15 345.44 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "8-ch 12-bit 1MSPS SPI ADC for phase currents (AIN0-2 motor 1, AIN3-5 motor 2)"
+			(at 692.15 345.44 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "MPN" "ADS7038QRTERQ1"
+			(at 692.15 345.44 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Manufacturer" "Texas Instruments"
+			(at 692.15 345.44 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Supplier Part" "C2876384"
+			(at 692.15 345.44 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Supplier" "LCSC"
+			(at 692.15 345.44 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "15"
+			(uuid "f26d2f6d-7a95-4d58-9c86-241e9d5d14b4")
+		)
+		(pin "16"
+			(uuid "d7ede498-c169-4bcd-aa76-3300fa369299")
+		)
+		(pin "1"
+			(uuid "aa4bb4f0-b58a-4421-96d3-e8df7a0220c3")
+		)
+		(pin "2"
+			(uuid "5c603fd7-c334-44ed-a537-b4229a656fb4")
+		)
+		(pin "3"
+			(uuid "b2ec4635-b3c5-470e-98bd-12e8f3b7c0d3")
+		)
+		(pin "4"
+			(uuid "e086878c-90fd-4998-a75f-40d4767c41fa")
+		)
+		(pin "5"
+			(uuid "69ab98d2-2b3d-4651-9961-9986b9c3b262")
+		)
+		(pin "6"
+			(uuid "9b08c6cc-8f00-4551-9866-9f4384204be0")
+		)
+		(pin "11"
+			(uuid "459cc5a0-12a4-4ef3-9924-09a87a118f0a")
+		)
+		(pin "13"
+			(uuid "2f3c74c6-4313-490e-8e5c-39b586db5d16")
+		)
+		(pin "14"
+			(uuid "3b8ea1e4-de3c-431e-800d-1b4c745a4f9a")
+		)
+		(pin "12"
+			(uuid "79f0d56f-5563-4972-9b11-ae4ba261d4a4")
+		)
+		(pin "8"
+			(uuid "c84e0c78-88a6-406b-a570-b6cb99d0df72")
+		)
+		(pin "7"
+			(uuid "448b50a9-4d3d-4a71-8e55-c7a500469c77")
+		)
+		(pin "10"
+			(uuid "1b09b14a-74de-439d-b3ac-fc79cf8d4dd1")
+		)
+		(pin "9"
+			(uuid "5360fb18-d4bb-451c-afa8-0456fecba974")
+		)
+		(pin "17"
+			(uuid "698d2ab3-d7d8-46b0-966b-377042606d0f")
+		)
+		(instances
+			(project "Unified Control Board"
+				(path "/dfafd8b3-c553-40fe-89ed-f7586d7cf6a1"
+					(reference "U15")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(global_label "ADC_A1"
+		(shape passive)
+		(at 679.45 336.55 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "affd318c-2648-41b2-ba7b-c651714c8168")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 679.45 336.55 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "ADC_B1"
+		(shape passive)
+		(at 679.45 339.09 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "4a093a65-2fae-4258-bad2-f59797db2a98")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 679.45 339.09 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "ADC_C1"
+		(shape passive)
+		(at 679.45 341.63 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "ffd1a952-addf-4ec2-8542-4704df779d24")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 679.45 341.63 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "ADC_A2"
+		(shape passive)
+		(at 679.45 344.17 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "050d8a2b-aa3f-473f-a026-fc007470082d")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 679.45 344.17 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "ADC_B2"
+		(shape passive)
+		(at 679.45 346.71 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "6d97dd85-5e33-49ea-99f1-4ce265a107af")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 679.45 346.71 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "ADC_C2"
+		(shape passive)
+		(at 679.45 349.25 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "e8706c38-5af3-4056-8ceb-4c461f1ae7b9")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 679.45 349.25 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(no_connect
+		(at 679.45 351.79)
+		(uuid "fb31e535-5968-4d28-9edc-3f2c61464ee3")
+	)
+	(no_connect
+		(at 679.45 354.33)
+		(uuid "87f546f4-87f5-4761-b99d-5f4edf5d79eb")
+	)
+	(global_label "ADC_CS"
+		(shape passive)
+		(at 704.85 336.55 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "625ca569-451b-4cfd-aaad-545e7230ace4")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 704.85 336.55 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "ADC_SCLK"
+		(shape passive)
+		(at 704.85 339.09 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "2d8a93cb-e1fb-4d92-99ed-c2a67d27f7f9")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 704.85 339.09 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "ADC_SDI"
+		(shape passive)
+		(at 704.85 341.63 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "a421abd5-15a9-401c-8dc7-f317f3a1c57b")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 704.85 341.63 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "ADC_SDO"
+		(shape passive)
+		(at 704.85 344.17 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "f1d54686-83ac-4670-9063-49a89d77d666")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 704.85 344.17 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "ADC_DECAP"
+		(shape passive)
+		(at 704.85 351.79 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "21678728-b0e3-4d67-8c20-9a52df6611b0")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 704.85 351.79 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "3V3"
+		(shape passive)
+		(at 689.61 332.74 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "b4f51f00-b48c-4ccc-a984-a3bdbfb3db78")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 689.61 332.74 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "3V3"
+		(shape passive)
+		(at 694.69 332.74 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "8ed4b28a-61d9-4c9f-8514-7d64317503ec")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 694.69 332.74 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "GND"
+		(shape passive)
+		(at 689.61 358.14 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "956c8208-0b9a-4b2b-baf4-27c34fc1b4f1")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 689.61 358.14 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "GND"
+		(shape passive)
+		(at 694.69 358.14 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "3c3c5ee2-b222-4059-a3fd-20f23d1aca52")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 694.69 358.14 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "ProPrj_Dri-easyedapro:CL05B104KB54PNC")
+		(at 679.45 381.00 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "be027c58-6482-4331-a6e3-182d780c0ce5")
+		(property "Reference" "C84"
+			(at 676.45 377.50 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "1uF"
+			(at 676.45 384.50 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "ProPrj_Dri-easyedapro:C0402"
+			(at 679.45 381.00 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "MPN" "CL05A105KA5NQNC"
+			(at 679.45 381.00 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Manufacturer" "SAMSUNG(三星)"
+			(at 679.45 381.00 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Supplier Part" "C52923"
+			(at 679.45 381.00 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Supplier" "LCSC"
+			(at 679.45 381.00 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "bf97778e-3675-44fc-b6a7-6833eb7ad783")
+		)
+		(pin "2"
+			(uuid "ef69b03c-dcaf-4e53-8e0e-309b094e9fff")
+		)
+		(instances
+			(project "Unified Control Board"
+				(path "/dfafd8b3-c553-40fe-89ed-f7586d7cf6a1"
+					(reference "C84")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(global_label "3V3"
+		(shape passive)
+		(at 674.37 381.00 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "b4ffa6f4-04f1-4ce6-b6aa-04d6e6ed471a")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 674.37 381.00 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "GND"
+		(shape passive)
+		(at 684.53 381.00 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "ef98821a-2f51-4bda-bbf7-435245afd5be")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 684.53 381.00 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "ProPrj_Dri-easyedapro:CL05B104KB54PNC")
+		(at 704.85 381.00 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "d42f1e52-4631-449b-8fb4-d3463e79a77c")
+		(property "Reference" "C85"
+			(at 701.85 377.50 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "1uF"
+			(at 701.85 384.50 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "ProPrj_Dri-easyedapro:C0402"
+			(at 704.85 381.00 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "MPN" "CL05A105KA5NQNC"
+			(at 704.85 381.00 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Manufacturer" "SAMSUNG(三星)"
+			(at 704.85 381.00 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Supplier Part" "C52923"
+			(at 704.85 381.00 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Supplier" "LCSC"
+			(at 704.85 381.00 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "62054e2b-720b-4d68-bfa4-6c421c7b703f")
+		)
+		(pin "2"
+			(uuid "d54f57bb-df33-4620-b9ab-c03a433e1392")
+		)
+		(instances
+			(project "Unified Control Board"
+				(path "/dfafd8b3-c553-40fe-89ed-f7586d7cf6a1"
+					(reference "C85")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(global_label "3V3"
+		(shape passive)
+		(at 699.77 381.00 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "224ce782-2f34-4b20-971d-6f26bc201c33")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 699.77 381.00 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "GND"
+		(shape passive)
+		(at 709.93 381.00 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "37ef0456-db97-4715-a031-3b3796ea90ff")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 709.93 381.00 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "ProPrj_Dri-easyedapro:CL05B104KB54PNC")
+		(at 730.25 381.00 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "43944937-3196-47e5-b6ac-3abaf7fde019")
+		(property "Reference" "C86"
+			(at 727.25 377.50 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "1uF"
+			(at 727.25 384.50 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "ProPrj_Dri-easyedapro:C0402"
+			(at 730.25 381.00 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "MPN" "CL05A105KA5NQNC"
+			(at 730.25 381.00 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Manufacturer" "SAMSUNG(三星)"
+			(at 730.25 381.00 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Supplier Part" "C52923"
+			(at 730.25 381.00 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Supplier" "LCSC"
+			(at 730.25 381.00 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "8e6666ae-7747-4749-b5a2-3f22e9dad14b")
+		)
+		(pin "2"
+			(uuid "bd8237ce-00b0-4064-8d66-811d2e3f6593")
+		)
+		(instances
+			(project "Unified Control Board"
+				(path "/dfafd8b3-c553-40fe-89ed-f7586d7cf6a1"
+					(reference "C86")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(global_label "ADC_DECAP"
+		(shape passive)
+		(at 725.17 381.00 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "fd73e224-5937-4c69-8a2a-1f1c904edacc")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 725.17 381.00 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "GND"
+		(shape passive)
+		(at 735.33 381.00 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "4528a229-a028-4e27-8241-90ffa19bef4a")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 735.33 381.00 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "ProPrj_Dri-easyedapro:0402WGF1002TCE")
+		(at 730.25 323.85 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "2ea7e44d-8e7f-4c5b-b4d4-1b391e2bfac9")
+		(property "Reference" "R67"
+			(at 727.25 320.35 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Value" "10kΩ"
+			(at 727.25 327.35 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
+			)
+		)
+		(property "Footprint" "ProPrj_Dri-easyedapro:R0402"
+			(at 730.25 323.85 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "MPN" "0402WGF1002TCE"
+			(at 730.25 323.85 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Manufacturer" "UNI-ROYAL(厚声)"
+			(at 730.25 323.85 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Supplier Part" "C25744"
+			(at 730.25 323.85 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Supplier" "LCSC"
+			(at 730.25 323.85 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "e113822b-1259-4f90-861e-22685db43077")
+		)
+		(pin "2"
+			(uuid "dbfccf55-cd19-4c9f-abc4-f6d1aed2d2f5")
+		)
+		(instances
+			(project "Unified Control Board"
+				(path "/dfafd8b3-c553-40fe-89ed-f7586d7cf6a1"
+					(reference "R67")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(global_label "3V3"
+		(shape passive)
+		(at 725.17 323.85 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "3e72c1fc-3b76-488d-ab0a-4fb360437c49")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 725.17 323.85 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "ADC_CS"
+		(shape passive)
+		(at 735.33 323.85 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "420e079c-7654-434d-9a42-0fcdb965b8f8")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 735.33 323.85 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(text "PHASE-CURRENT ADC (36V branch)\nSOx -> TLV9064 follower -> (a) 2.0k/1nF -> ESP32 ADC (same ~2us response as before)\n                       -> (b) 47R/1nF C0G -> ADS7038 (settles <0.3us, 12pF kickback recovered in tACQ)\nADS7038 ref = AVDD = 3V3: 0-3.3V span, ratiometric with the 3.3k/3.3k SOx bias (1.65V = 0A, 0.179 V/A).\nSPI on U10: IO37 CS (10k pull-up)  IO41 SCLK  IO42 SDI  IO46 SDO. IO46 is a strapping pin: SDO is\nhi-Z while CS is high, so the internal pull-down still sets it at reset. AIN6/AIN7 spare."
+		(exclude_from_sim no)
+		(at 457.20 289.56 0)
+		(effects
+			(font
+				(size 1.8 1.8)
+			)
+			(justify left top)
+		)
+		(uuid "fba8524a-bb05-4b9b-b7b9-1384b8130144")
+	)
+	(global_label "ADC_CS"
+		(shape passive)
+		(at 510.54 -11.43 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "837e9b44-def6-4e0f-a36e-f8efbaab7169")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 510.54 -11.43 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "ADC_SCLK"
+		(shape passive)
+		(at 510.54 -21.59 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "d86f4a7c-fe70-4c5c-b54c-060407a8827b")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 510.54 -21.59 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "ADC_SDI"
+		(shape passive)
+		(at 510.54 -24.13 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left)
+		)
+		(uuid "526db602-7044-407f-82b8-673a6a53315e")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 510.54 -24.13 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "ADC_SDO"
+		(shape passive)
+		(at 477.52 8.89 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "59cbe7de-2172-4ecb-9742-62656b5175c2")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 477.52 8.89 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 	)
 	(sheet_instances
 		(path "/"
