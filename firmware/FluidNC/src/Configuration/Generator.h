@@ -17,9 +17,12 @@ namespace Configuration {
         Generator(const Generator&)            = delete;
         Generator& operator=(const Generator&) = delete;
 
-        int      indent_;
-        Channel& dst_;
-        bool     lastIsNewline_ = false;
+        int          indent_;
+        Channel*     dst_  = nullptr;
+        std::string* sink_ = nullptr;  // When set, lines are appended here instead of sent to dst_
+        bool         lastIsNewline_ = false;
+
+        void emit(const std::string& line);
 
         void enter(const char* name);
         void add(Configuration::Configurable* configurable);
@@ -33,15 +36,17 @@ namespace Configuration {
     public:
         Generator(Channel& dst, int indent = 0);
 
+        // Builds the YAML in memory, in the calling task.  Used to save the config file without
+        // queueing every line for the output task (see save_config_file() in ProcessSettings.cpp).
+        Generator(std::string& sink, int indent = 0);
+
         void send_item(const char* name, const std::string& value) {
-            LogStream s(dst_, "");
             lastIsNewline_ = false;
-            for (int i = 0; i < indent_ * 2; ++i) {
-                s << ' ';
-            }
-            s << name;
-            s << ": ";
-            s << value;
+            std::string line(indent_ * 2, ' ');
+            line += name;
+            line += ": ";
+            line += value;
+            emit(line);
         }
 
         void item(const char* name, int& value, int32_t minValue, int32_t maxValue) override { send_item(name, std::to_string(value)); }

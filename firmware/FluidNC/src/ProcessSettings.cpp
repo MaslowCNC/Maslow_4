@@ -912,6 +912,68 @@ static Error maslow_start_calibration(const char* value, WebUI::AuthenticationLe
     return Error::Ok;
 }
 
+// Save the running config to `filename` without going through the output task.
+//
+// dump_config() queues every line through send_line(), and that queue is drained by the task
+// that also writes to the telnet and WebSocket clients.  When a client stalled, the main loop sat
+// waiting for queue space, stopped feeding the 5 s task watchdog, and the board reset with the
+// config file opened but never written - leaving an empty maslow.yaml (end of Find Anchors,
+// 2026-10-19).  Here the YAML is built in memory, written to a temporary file and renamed over
+// the old one, so a save never waits on a network client and a failure leaves the old file intact.
+static Error save_config_file(const char* filename) {
+    std::string yaml;
+    yaml.reserve(8192);
+    try {
+        Configuration::Generator generator(yaml);
+        config->group(generator);
+    } catch (std::exception& ex) {
+        log_error("Config save: could not generate config: " << ex.what());
+        return Error::ConfigurationInvalid;
+    }
+    if (yaml.empty()) {
+        log_error("Config save: generated config is empty; " << filename << " not changed");
+        return Error::ConfigurationInvalid;
+    }
+
+    std::error_code ec;
+    FluidPath       target(filename, "", ec);
+    if (ec) {
+        return Error::FsFailedOpenFile;
+    }
+    FluidPath temp(std::string(filename) + ".tmp", "", ec);
+    if (ec) {
+        return Error::FsFailedOpenFile;
+    }
+
+    FILE* fd = fopen(temp.c_str(), "w");
+    if (!fd) {
+        log_error("Config save: cannot create " << temp.c_str());
+        return Error::FsFailedCreateFile;
+    }
+    bool ok = fwrite(yaml.data(), 1, yaml.size(), fd) == yaml.size();
+    ok      = fclose(fd) == 0 && ok;
+    if (!ok || stdfs::file_size(temp, ec) != yaml.size()) {
+        log_error("Config save: writing " << temp.c_str() << " failed; " << filename << " not changed");
+        stdfs::remove(temp, ec);
+        return Error::FsFailedCreateFile;
+    }
+
+    stdfs::rename(temp, target, ec);
+    if (ec) {
+        // Not every filesystem renames over an existing file.  This leaves a moment with no
+        // config file, but the complete new one is already on flash as the .tmp file.
+        std::error_code removeEc;
+        stdfs::remove(target, removeEc);
+        ec.clear();
+        stdfs::rename(temp, target, ec);
+    }
+    if (ec) {
+        log_error("Config save: cannot rename " << temp.c_str() << " to " << filename << ": " << ec.message());
+        return Error::FsFailedCreateFile;
+    }
+    return Error::Ok;
+}
+
 static Error overwrite_config(const char* value, WebUI::AuthenticationLevel auth_level, Channel& out) {
     if (Maslow.using_default_config) {
         return Error::ConfigurationInvalid;
@@ -919,7 +981,7 @@ static Error overwrite_config(const char* value, WebUI::AuthenticationLevel auth
     // Writing to LittleFS can block the main loop for hundreds of milliseconds.
     // Reset the update watchdog before and after to prevent a false emergency stop.
     Maslow.resetUpdateWatchdog();
-    Error result = dump_config(config_filename->get(), auth_level, out);
+    Error result = save_config_file(config_filename->get());
     Maslow.resetUpdateWatchdog();
     return result;
 }
