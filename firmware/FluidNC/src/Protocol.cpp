@@ -197,11 +197,24 @@ void send_line(Print& channel, const std::string& line) {
     }
 }
 
+// A message with no line marks a killed channel: every message queued for it before the marker
+// has been sent, so the output task hands it back to AllChannels to be freed (tagged as released).
+bool queue_channel_release(Channel* channel) {
+    if (!outputTask) {
+        delete channel;  // Nothing is queued
+        return true;
+    }
+    LogMessage msg { channel, nullptr, false };
+    return xQueueSend(message_queue, &msg, 0) == pdTRUE;
+}
+
 void output_loop(void* unused) {
     while (true) {
         LogMessage message;
         if (xQueueReceive(message_queue, &message, 0)) {
-            if (message.isString) {
+            if (message.line == nullptr) {
+                allChannels.killReleased(static_cast<Channel*>(message.channel));
+            } else if (message.isString) {
                 std::string* s = static_cast<std::string*>(message.line);
                 message.channel->println(s->c_str());
                 delete s;

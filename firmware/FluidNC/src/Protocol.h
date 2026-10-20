@@ -119,10 +119,18 @@ inline void protocol_send_event(Event* evt, int arg) {
 
 void protocol_send_event_from_ISR(Event* evt, void* arg = 0);
 
+class Channel;
 void send_line(Print& channel, const char* message);
 void send_line(Print& channel, const std::string* message);
 void send_line(Print& channel, const std::string& message);
 
 void drain_messages();
+
+// Queue a marker behind every message already sent to a killed channel; when the output task
+// reaches it, it hands the channel back to AllChannels to be freed (see AllChannels::pollLine).
+// Returns false if the output queue had no room; try again later.
+bool queue_channel_release(Channel* channel);
+
+extern Channel* activeChannel;  // Channel of the line the main loop is executing, or nullptr
 
 extern uint32_t heapLowWater;

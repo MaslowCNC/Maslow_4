@@ -6,8 +6,6 @@
 #include "../Config.h"  // ENABLE_*
 #include "../Channel.h"
 #include <queue>
-#include <list>
-#include <utility>
 
 #ifdef ENABLE_WIFI
 
@@ -40,12 +38,6 @@ namespace WebUI {
 
         std::queue<TelnetClient*> _disconnected;
 
-        // Clients the board cut off for not reading wait here before being deleted: replies
-        // already queued for the output task may still name them, and writing to a deleted client
-        // crashes the board.  Their sockets are already released, so each holds only the small
-        // client object.  Clients that disconnect normally are deleted at once, as before.
-        static const uint32_t                      CLIENT_DELETE_DELAY_MS = 5000;
-        std::list<std::pair<TelnetClient*, uint32_t>> _closing;
 
         ~TelnetServer();
 

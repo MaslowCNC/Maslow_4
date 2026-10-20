@@ -13,6 +13,8 @@ private:
     std::string _messages;
     bool        _active;
 
+    static const size_t MAX_BYTES = 4096;
+
 public:
     StartupLog(const char* name) : Channel(name), _active(true) {}
     virtual ~StartupLog();

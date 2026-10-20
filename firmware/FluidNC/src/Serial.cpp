@@ -193,6 +193,12 @@ void AllChannels::init() {
 void AllChannels::kill(Channel* channel) {
     xQueueSend(_killQueue, &channel, 0);
 }
+void AllChannels::killReleased(Channel* channel) {
+    // Wait for room rather than drop it (that would leak the channel); pollLine() always drains
+    // the queue without waiting on the output task, so this cannot deadlock.
+    channel = released(channel);
+    xQueueSend(_killQueue, &channel, portMAX_DELAY);
+}
 
 void AllChannels::registration(Channel* channel) {
     _mutex.lock();
@@ -278,10 +284,35 @@ size_t AllChannels::write(const uint8_t* buffer, size_t length) {
     return length;
 }
 Channel* AllChannels::pollLine(char* line) {
+    // Killed channels stop being polled at once, but are freed only when nothing can still use
+    // them: not while the main loop is executing (and will ack) a line from one, and only after the
+    // output task has sent every message already queued for it, which it signals by handing the
+    // channel back tagged as released.  Freeing a stopped job's file while its "ok" replies were
+    // still queued crashed the board (2026-10-19, spindle-fault stop).
     Channel* deadChannel;
     while (xQueueReceive(_killQueue, &deadChannel, 0)) {
+        if (isReleased(deadChannel)) {
+            delete unreleased(deadChannel);
+            continue;
+        }
         deregistration(deadChannel);
-        delete deadChannel;
+        bool held = false;
+        for (auto& w : _waiting) {
+            if (!w || w == deadChannel) {
+                w    = deadChannel;
+                held = true;
+                break;
+            }
+        }
+        if (!held) {
+            xQueueSend(_killQueue, &deadChannel, 0);  // All slots busy; keep it queued for the next poll
+            break;
+        }
+    }
+    for (auto& w : _waiting) {
+        if (w && *static_cast<Channel* volatile*>(&activeChannel) != w && queue_channel_release(w)) {
+            w = nullptr;
+        }
     }
 
     // To avoid starving other channels when one has a lot

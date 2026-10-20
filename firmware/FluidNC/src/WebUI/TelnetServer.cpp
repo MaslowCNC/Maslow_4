@@ -79,19 +79,10 @@ namespace WebUI {
                 log_debug("Telnet client disconnected");
             }
             _disconnected.pop();
-            allChannels.deregistration(client);
-            if (client->_outputClosed) {
-                // The board cut this client off with replies to it possibly still queued.  Free
-                // the socket and its buffers now; the small object waits until they are gone.
-                client->releaseSocket();
-                _closing.emplace_back(client, millis());
-            } else {
-                delete client;
-            }
-        }
-        while (!_closing.empty() && millis() - _closing.front().second >= CLIENT_DELETE_DELAY_MS) {
-            delete _closing.front().first;
-            _closing.pop_front();
+            // Free the socket and its buffers now; kill() frees the object once nothing can still
+            // write to it (replies to it may still be queued for the output task).
+            client->releaseSocket();
+            allChannels.kill(client);
         }
 
         //check if there are any new clients

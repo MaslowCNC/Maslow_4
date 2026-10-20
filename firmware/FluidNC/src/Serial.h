@@ -75,13 +75,21 @@ class AllChannels : public Channel {
 
     Channel*     _lastChannel = nullptr;
     xQueueHandle _killQueue;
+    Channel*     _waiting[3]  = {};  // Killed channels still in use; retried on every poll
 
     static std::mutex _mutex;
 
 public:
+    // A killed channel handed back by the output task once its queued messages are sent is tagged
+    // in the pointer's low bit (channels are word-aligned), so the kill queue carries both kinds.
+    static Channel* released(Channel* c) { return reinterpret_cast<Channel*>(reinterpret_cast<uintptr_t>(c) | 1); }
+    static bool     isReleased(Channel* c) { return reinterpret_cast<uintptr_t>(c) & 1; }
+    static Channel* unreleased(Channel* c) { return reinterpret_cast<Channel*>(reinterpret_cast<uintptr_t>(c) & ~uintptr_t(1)); }
+
     AllChannels() : Channel("all") { _killQueue = xQueueCreate(3, sizeof(Channel*)); }
 
     void kill(Channel* channel);
+    void killReleased(Channel* channel);  // Output task: hand back a channel whose messages are sent
 
     void registration(Channel* channel);
     void registrationFront(Channel* channel);
