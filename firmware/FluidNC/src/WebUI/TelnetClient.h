@@ -38,6 +38,15 @@ namespace WebUI {
         static const uint32_t NEGOTIATION_GRACE_PERIOD_MS = 2000;
 
         uint32_t _connectionTime = 0;
+
+        // Output waiting to be sent by handle().  Together with the socket's own ~5.7 KB buffer
+        // this holds more than a full $CD dump for a client that is slow to read.
+        static constexpr size_t TX_BUFFER_SIZE = 6144;
+        uint8_t                 _tx[TX_BUFFER_SIZE];
+        size_t                  _txHead = 0;  // Index of the first unsent byte
+        size_t                  _txLen  = 0;
+        uint8_t                 _lastTx = '\0';
+        portMUX_TYPE            _txLock = portMUX_INITIALIZER_UNLOCKED;
         
         enum TelnetState {
             TELNET_NORMAL,
@@ -64,6 +73,9 @@ namespace WebUI {
         bool realtimeOkay(char c) override;
 
         void closeOnDisconnect();
+
+        volatile bool _stalled      = false;  // Closed because it stopped reading output
+        volatile bool _outputClosed = false;  // No more output; read() then closes the socket
 
         void handle() override;
 

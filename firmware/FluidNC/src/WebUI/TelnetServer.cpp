@@ -72,11 +72,19 @@ namespace WebUI {
         }
 
         while (_disconnected.size()) {
-            log_debug("Telnet client disconnected");
             TelnetClient* client = _disconnected.front();
+            if (client->_stalled) {
+                log_warn("Telnet client closed: it stopped reading output");
+            } else {
+                log_debug("Telnet client disconnected");
+            }
             _disconnected.pop();
             allChannels.deregistration(client);
-            delete client;
+            _closing.emplace_back(client, millis());
+        }
+        while (!_closing.empty() && millis() - _closing.front().second >= CLIENT_DELETE_DELAY_MS) {
+            delete _closing.front().first;
+            _closing.pop_front();
         }
 
         //check if there are any new clients

@@ -119,6 +119,27 @@ struct LogMessage {
     bool   isString;
 };
 
+// Longest send_line() waits for room in the output queue.  Lines normally leave within
+// milliseconds; a long wait means the output task is stuck on a channel.  The caller is often
+// the main loop, which feeds the 5 s task watchdog, so after this the line is dropped instead of
+// waiting until the watchdog resets the board.  Drops are reported once the queue has room again.
+static const TickType_t      SEND_LINE_MAX_WAIT = pdMS_TO_TICKS(2000);
+static std::atomic<uint32_t> droppedLines { 0 };
+
+static void queue_message(LogMessage& msg) {
+    if (xQueueSend(message_queue, &msg, SEND_LINE_MAX_WAIT) == pdTRUE) {
+        uint32_t dropped = droppedLines.exchange(0);
+        if (dropped) {
+            log_warn("Output queue was stuck; dropped " << dropped << " line(s)");
+        }
+        return;
+    }
+    droppedLines++;
+    if (msg.isString) {
+        delete static_cast<std::string*>(msg.line);
+    }
+}
+
 void drain_messages() {
     while (uxQueueMessagesWaiting(message_queue)) {
         vTaskDelay(1);  // Let the output task finish sending data
@@ -133,7 +154,7 @@ void drain_messages() {
 void send_line(Print& channel, const char* line) {
     if (outputTask) {
         LogMessage msg { &channel, (void*)line, false };
-        while (!xQueueSend(message_queue, &msg, 10)) {}
+        queue_message(msg);
     } else {
         channel.println(line);
     }
@@ -150,7 +171,7 @@ void send_line(Print& channel, const char* line) {
 void send_line(Print& channel, const std::string* line) {
     if (outputTask) {
         LogMessage msg { &channel, (void*)line, true };
-        while (!xQueueSend(message_queue, &msg, 10)) {}
+        queue_message(msg);
     } else {
         channel.println(line->c_str());
         delete line;
