@@ -918,23 +918,10 @@ static Error maslow_start_calibration(const char* value, WebUI::AuthenticationLe
 // that also writes to the telnet and WebSocket clients.  When a client stalled, the main loop sat
 // waiting for queue space, stopped feeding the 5 s task watchdog, and the board reset with the
 // config file opened but never written - leaving an empty maslow.yaml (end of Find Anchors,
-// 2026-10-19).  Here the YAML is built in memory, written to a temporary file and renamed over
-// the old one, so a save never waits on a network client and a failure leaves the old file intact.
+// 2026-10-19).  Here each line is written straight to a temporary file, which is then renamed
+// over the old one, so a save never waits on a network client and a failure leaves the old file
+// intact.  Lines go to the file as they are generated: the whole YAML is never held in memory.
 static Error save_config_file(const char* filename) {
-    std::string yaml;
-    yaml.reserve(8192);
-    try {
-        Configuration::Generator generator(yaml);
-        config->group(generator);
-    } catch (std::exception& ex) {
-        log_error("Config save: could not generate config: " << ex.what());
-        return Error::ConfigurationInvalid;
-    }
-    if (yaml.empty()) {
-        log_error("Config save: generated config is empty; " << filename << " not changed");
-        return Error::ConfigurationInvalid;
-    }
-
     std::error_code ec;
     FluidPath       target(filename, "", ec);
     if (ec) {
@@ -945,14 +932,22 @@ static Error save_config_file(const char* filename) {
         return Error::FsFailedOpenFile;
     }
 
-    FILE* fd = fopen(temp.c_str(), "w");
-    if (!fd) {
+    bool ok = true;
+    try {
+        FileStream                file(temp, "w");
+        Configuration::Generator generator(file, 0, true);
+        config->group(generator);
+        ok = generator.allWritten();
+    } catch (Error err) {
         log_error("Config save: cannot create " << temp.c_str());
-        return Error::FsFailedCreateFile;
+        return err;
+    } catch (std::exception& ex) {
+        log_error("Config save: could not generate config: " << ex.what());
+        ok = false;
     }
-    bool ok = fwrite(yaml.data(), 1, yaml.size(), fd) == yaml.size();
-    ok      = fclose(fd) == 0 && ok;
-    if (!ok || stdfs::file_size(temp, ec) != yaml.size()) {
+    // The FileStream is closed here, so the size on flash is final
+    auto size = stdfs::file_size(temp, ec);
+    if (!ok || ec || size == 0) {
         log_error("Config save: writing " << temp.c_str() << " failed; " << filename << " not changed");
         stdfs::remove(temp, ec);
         return Error::FsFailedCreateFile;

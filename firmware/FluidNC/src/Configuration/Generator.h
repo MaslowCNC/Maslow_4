@@ -17,10 +17,12 @@ namespace Configuration {
         Generator(const Generator&)            = delete;
         Generator& operator=(const Generator&) = delete;
 
-        int          indent_;
-        Channel*     dst_  = nullptr;
-        std::string* sink_ = nullptr;  // When set, lines are appended here instead of sent to dst_
-        bool         lastIsNewline_ = false;
+        int      indent_;
+        Channel& dst_;
+        bool     direct_        = false;  // Write to dst_ in the calling task, not via send_line()
+        size_t   expected_      = 0;      // Bytes direct writes should have produced
+        size_t   written_       = 0;      // Bytes dst_ accepted
+        bool     lastIsNewline_ = false;
 
         void emit(const std::string& line);
 
@@ -36,9 +38,12 @@ namespace Configuration {
     public:
         Generator(Channel& dst, int indent = 0);
 
-        // Builds the YAML in memory, in the calling task.  Used to save the config file without
-        // queueing every line for the output task (see save_config_file() in ProcessSettings.cpp).
-        Generator(std::string& sink, int indent = 0);
+        // direct: write each line to dst straight from the calling task instead of queueing it for
+        // the output task.  Used to save the config file (see save_config_file() in
+        // ProcessSettings.cpp).
+        Generator(Channel& dst, int indent, bool direct);
+
+        bool allWritten() const { return written_ == expected_; }
 
         void send_item(const char* name, const std::string& value) {
             lastIsNewline_ = false;

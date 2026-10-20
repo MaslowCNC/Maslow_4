@@ -10,20 +10,21 @@
 #include <atomic>
 
 namespace Configuration {
-    Generator::Generator(Channel& dst, int indent) : indent_(indent), dst_(&dst) {
+    Generator::Generator(Channel& dst, int indent) : indent_(indent), dst_(dst) {
         std::atomic_thread_fence(std::memory_order::memory_order_seq_cst);
     }
 
-    Generator::Generator(std::string& sink, int indent) : indent_(indent), sink_(&sink) {
+    Generator::Generator(Channel& dst, int indent, bool direct) : indent_(indent), dst_(dst), direct_(direct) {
         std::atomic_thread_fence(std::memory_order::memory_order_seq_cst);
     }
 
     void Generator::emit(const std::string& line) {
-        if (sink_) {
-            *sink_ += line;
-            *sink_ += '\n';
+        if (direct_) {
+            expected_ += line.size() + 1;
+            written_ += dst_.write(reinterpret_cast<const uint8_t*>(line.data()), line.size());
+            written_ += dst_.write('\n');
         } else {
-            send_line(*dst_, line);
+            send_line(dst_, line);
         }
     }
 

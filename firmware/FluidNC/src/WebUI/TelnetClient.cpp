@@ -11,53 +11,26 @@
 
 #    include <WiFi.h>
 #    include <lwip/sockets.h>
-#    include <algorithm>
 #    include <cerrno>
 
 namespace WebUI {
-    TelnetClient::TelnetClient(WiFiClient* wifiClient) : Channel("telnet"), _wifiClient(wifiClient) {
+    TelnetClient::TelnetClient(WiFiClient* wifiClient) : Channel("telnet"), _wifiClient(wifiClient), _fd(wifiClient->fd()) {
         _connectionTime = millis();
     }
 
-    // Output is queued in _tx by write() and sent from here, in the polling task, with
-    // non-blocking sends.  WiFiClient::write() waits up to 10 x 1 s for each chunk a peer does not
-    // read; write() runs in the output task, so a stuck client used to stall every log line, and
-    // whoever logs - usually the main loop - blocked in send_line() until the task watchdog reset
-    // the board.
-    void TelnetClient::handle() {
-        if (_state == -1 || _outputClosed) {
-            return;
-        }
-        int fd = _wifiClient->fd();
-        while (true) {
-            size_t start, chunk;
-            portENTER_CRITICAL(&_txLock);
-            start = _txHead;
-            chunk = std::min(_txLen, TX_BUFFER_SIZE - start);
-            portEXIT_CRITICAL(&_txLock);
-            if (chunk == 0) {
-                return;
-            }
-            // write() only fills the free part of the ring, so this region is stable while unlocked
-            int res = fd < 0 ? -1 : send(fd, _tx + start, chunk, MSG_DONTWAIT);
-            if (res <= 0) {
-                if (res < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
-                    _outputClosed = true;  // read() closes the socket
-                }
-                return;  // Socket buffer full; try again on the next poll
-            }
-            portENTER_CRITICAL(&_txLock);
-            _txHead = (_txHead + res) % TX_BUFFER_SIZE;
-            _txLen -= res;
-            portEXIT_CRITICAL(&_txLock);
-        }
-    }
+    void TelnetClient::handle() {}
 
     void TelnetClient::closeOnDisconnect() {
         if (_state != -1 && !_wifiClient->connected()) {
             _state = -1;
             telnetServer._disconnected.push(this);
         }
+    }
+
+    void TelnetClient::releaseSocket() {
+        // sendAll() only uses _fd, so it stops sending once this is -1; read() is no longer called
+        _fd = -1;
+        _wifiClient->stop();
     }
 
     void TelnetClient::flushRx() {
@@ -68,31 +41,68 @@ namespace WebUI {
         return write(&data, 1);
     }
 
-    // Never blocks: it may run in the output task.  Nothing here may log, or the output task would
-    // wait on its own queue.
     size_t TelnetClient::write(const uint8_t* buffer, size_t length) {
         if (_state == -1 || _outputClosed) {
             return length;  // Closing; output is dropped
         }
-        portENTER_CRITICAL(&_txLock);
-        for (size_t i = 0; i < length; i++) {
-            uint8_t c = buffer[i];
-            // Replace \n with \r\n
-            size_t needed = (c == '\n' && _lastTx != '\r') ? 2 : 1;
-            if (TX_BUFFER_SIZE - _txLen < needed) {
-                // The client has stopped reading: the socket buffer and _tx are both full.
-                _stalled      = true;
-                _outputClosed = true;  // read() closes the socket
+        // Replace \n with \r\n
+        size_t  rem      = length;
+        uint8_t lastchar = '\0';
+        size_t  j        = 0;
+        while (rem) {
+            const int bufsize = 128;
+            uint8_t   modbuf[bufsize];
+            // bufsize-1 in case the last character is \n
+            size_t k = 0;
+            while (rem && k < (bufsize - 1)) {
+                uint8_t c = buffer[j++];
+                if (c == '\n' && lastchar != '\r') {
+                    modbuf[k++] = '\r';
+                }
+                lastchar    = c;
+                modbuf[k++] = c;
+                --rem;
+            }
+            if (k && !sendAll(modbuf, k)) {
                 break;
             }
-            if (needed == 2) {
-                _tx[(_txHead + _txLen++) % TX_BUFFER_SIZE] = '\r';
-            }
-            _tx[(_txHead + _txLen++) % TX_BUFFER_SIZE] = c;
-            _lastTx                                     = c;
         }
-        portEXIT_CRITICAL(&_txLock);
         return length;
+    }
+
+    // Send without WiFiClient::write(), which waits up to 10 x 1 s for every chunk a peer does
+    // not read.  This runs in the output task: while it waits, log lines back up and whoever
+    // logs - usually the main loop, which feeds the 5 s task watchdog - blocks in send_line().
+    // The socket's own send buffer absorbs normal bursts; a client that drains none of it for
+    // STALL_TIMEOUT_MS gets no more output, and read() - which owns the socket - closes it.
+    // Nothing here may log: the output task would wait on its own queue.
+    bool TelnetClient::sendAll(const uint8_t* buffer, size_t length) {
+        uint32_t lastProgress = millis();
+        while (length) {
+            int fd = _fd;
+            if (fd < 0) {
+                _outputClosed = true;
+                return false;
+            }
+            int res = send(fd, buffer, length, MSG_DONTWAIT);
+            if (res > 0) {
+                buffer += res;
+                length -= res;
+                lastProgress = millis();
+                continue;
+            }
+            if (res < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
+                _outputClosed = true;
+                return false;
+            }
+            if (millis() - lastProgress >= STALL_TIMEOUT_MS) {
+                _stalled      = true;
+                _outputClosed = true;
+                return false;
+            }
+            vTaskDelay(1);
+        }
+        return true;
     }
 
     int TelnetClient::peek(void) {
@@ -112,7 +122,7 @@ namespace WebUI {
             return -1;
         }
         if (_outputClosed) {
-            // write() or handle() gave up on this client; close it here, in the task that reads the socket.
+            // sendAll() gave up on this client; close it here, in the task that reads the socket.
             _wifiClient->stop();
             closeOnDisconnect();
             return -1;

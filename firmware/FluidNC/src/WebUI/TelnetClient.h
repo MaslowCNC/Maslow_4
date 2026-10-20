@@ -11,7 +11,8 @@
 
 namespace WebUI {
     class TelnetClient : public Channel {
-        WiFiClient* _wifiClient;
+        WiFiClient*  _wifiClient;
+        volatile int _fd;  // The socket, for sendAll(); -1 once releaseSocket() closed it
 
         // The default value of the rx buffer in WiFiClient.cpp is 1436 which is
         // related to the network frame size minus TCP/IP header sizes.
@@ -39,14 +40,12 @@ namespace WebUI {
 
         uint32_t _connectionTime = 0;
 
-        // Output waiting to be sent by handle().  Together with the socket's own ~5.7 KB buffer
-        // this holds more than a full $CD dump for a client that is slow to read.
-        static constexpr size_t TX_BUFFER_SIZE = 6144;
-        uint8_t                 _tx[TX_BUFFER_SIZE];
-        size_t                  _txHead = 0;  // Index of the first unsent byte
-        size_t                  _txLen  = 0;
-        uint8_t                 _lastTx = '\0';
-        portMUX_TYPE            _txLock = portMUX_INITIALIZER_UNLOCKED;
+        // A client whose socket buffer stays full for this long is closed (see sendAll()).  It
+        // bounds how long one stuck client can hold up all output - and, once the output queue
+        // fills, the main loop - while leaving room for WiFi retransmits to a client that reads.
+        static constexpr uint32_t STALL_TIMEOUT_MS = 200;
+
+        bool sendAll(const uint8_t* buffer, size_t length);
         
         enum TelnetState {
             TELNET_NORMAL,
@@ -73,6 +72,7 @@ namespace WebUI {
         bool realtimeOkay(char c) override;
 
         void closeOnDisconnect();
+        void releaseSocket();  // After closeOnDisconnect(): closes the socket and frees its buffers
 
         volatile bool _stalled      = false;  // Closed because it stopped reading output
         volatile bool _outputClosed = false;  // No more output; read() then closes the socket
