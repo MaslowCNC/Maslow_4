@@ -285,6 +285,8 @@ const checkLoadedJobWithinWorkArea = (homeX, homeY, sourceLabel, showPopup = fal
   return false;
 }
 
+const parseNumericInput = (value) => Number.parseFloat(String(value ?? "").replace(/,/g, "."));
+
 const resetLoadBoundsWarningState = () => {
   lastLoadBoundsWarning = "";
 }
@@ -293,6 +295,7 @@ if (typeof globalThis !== "undefined") {
   globalThis.__tabletBoundsTestApi = {
     checkLoadedJobWithinWorkArea,
     getCurrentHomeInMm,
+    parseNumericInput,
     resetLoadBoundsWarningState,
   };
 }
@@ -357,8 +360,8 @@ const confirmSetHome = () => {
   const { toDisplay } = getUnitInfo();
 
   // Clamp entered values to work area boundary (values are in current display units)
-  const rawX = parseFloat(id("setHomeX").value);
-  const rawY = parseFloat(id("setHomeY").value);
+  const rawX = parseNumericInput(id("setHomeX").value);
+  const rawY = parseNumericInput(id("setHomeY").value);
   const dispMinX = toDisplay(bounds.minX);
   const dispMaxX = toDisplay(bounds.maxX);
   const dispMinY = toDisplay(bounds.minY);
@@ -1406,7 +1409,7 @@ const moveToZHome = () => {
 
 const confirmSetZHome = () => {
   const zInput = id("setHomeZ");
-  const rawZ = zInput ? parseFloat(zInput.value) : NaN;
+  const rawZ = zInput ? parseNumericInput(zInput.value) : NaN;
   const zVal = isNaN(rawZ) ? 0 : Math.max(Z_HOME_MIN_SAFE_MM, Math.min(Z_HOME_MAX_SAFE_MM, rawZ));
 
   if (!isNaN(rawZ) && zVal !== rawZ) {
