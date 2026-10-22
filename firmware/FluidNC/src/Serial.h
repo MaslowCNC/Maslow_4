@@ -85,7 +85,9 @@ public:
 
     void registration(Channel* channel);
     void registrationFront(Channel* channel);
-    void deregistration(Channel* channel);
+    // Returns true if the channel was registered and has now been removed.
+    // Callers that own the channel use this to decide whether to delete it.
+    bool deregistration(Channel* channel);
     void init();
 
     size_t write(uint8_t data) override;
@@ -97,6 +99,11 @@ public:
     void notifyNgc(CoordIndex coord);
 
     void listChannels(Channel& out);
+
+    // Logs how many channels are registered and how much input each has buffered.
+    // A channel count that climbs over a session means channels are being created
+    // and not reclaimed; a climbing queue means input is outrunning the machine.
+    void listChannelStats();
 
     Channel* pollLine(char* line) override;
 

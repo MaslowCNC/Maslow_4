@@ -6,8 +6,10 @@
 #include "Report.h"
 #include "GCode.h"
 
+#include <cstdio>
+
 InputFile::InputFile(const char* defaultFs, const char* path, WebUI::AuthenticationLevel auth_level, Channel& out) :
-    FileStream(path, "r", defaultFs), _auth_level(auth_level), _out(out), _line_num(0) {}
+    FileStream(path, "r", defaultFs), _auth_level(auth_level), _out(out), _line_num(0), _pathCache(FileStream::path()) {}
 /*
   Read a line from the file
   Returns Error::Ok if a line was read, even if the line was empty.
@@ -53,11 +55,8 @@ void InputFile::ack(Error status) {
     _readyNext = true;
 }
 
-std::string InputFile::_progress      = "";
-int32_t     InputFile::_current_line_num = 0;
-
-#include <sstream>
-#include <iomanip>
+char    InputFile::_progress[128]    = "";
+int32_t InputFile::_current_line_num = 0;
 
 Channel* InputFile::pollLine(char* line) {
     // File input never returns realtime characters, so we do nothing
@@ -68,20 +67,21 @@ Channel* InputFile::pollLine(char* line) {
     switch (auto err = readLine(line, Channel::maxLine)) {
         case Error::Ok: {
             _current_line_num = _line_num;
-            std::ostringstream s;
-            s << "SD:" << std::fixed << std::setprecision(2) << percent_complete() << "," << path().c_str();
-            _progress = s.str();
+            // Runs once per GCode line.  The ostringstream version this replaces
+            // allocated a stringbuf, a path() string and two more std::strings on
+            // every single line of the job.
+            snprintf(_progress, sizeof(_progress), "SD:%.2f,%s", percent_complete(), _pathCache.c_str());
         }
             return &allChannels;
         case Error::Eof:
-            _progress         = "";
+            _progress[0]      = '\0';
             _current_line_num = 0;
             _notifyf("File job done", "%s file job succeeded", path());
             log_msg(path() << " file job succeeded");
             allChannels.kill(this);
             return nullptr;
         default:
-            _progress         = "";
+            _progress[0]      = '\0';
             _current_line_num = 0;
             log_error(static_cast<int>(err) << " (" << errorString(err) << ") in " << path() << " at line " << getLineNumber());
             allChannels.kill(this);
@@ -121,6 +121,6 @@ const char* InputFile::getMotionCommandString() {
 }
 
 InputFile::~InputFile() {
-    _progress         = "";
+    _progress[0]      = '\0';
     _current_line_num = 0;
 }

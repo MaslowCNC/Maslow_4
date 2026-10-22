@@ -49,35 +49,58 @@ namespace {
         bool   converged;       // true if step-norm < threshold within iteration cap
     };
 
-    void bundleResiduals(const std::vector<CalibrationMeasurement>& measurements, const std::vector<double>& params, std::vector<double>& residuals) {
+    // Read one waypoint out of the raw calibration_data block.  The solver reads
+    // measurements straight from that array rather than copying them into a
+    // vector, which keeps 32 bytes per waypoint off the heap during the fit.
+    inline CalibrationMeasurement measurementAt(const float (*data)[4], int index) {
+        return { data[index][0], data[index][1], data[index][2], data[index][3] };
+    }
+
+    // Everything the solver and the fitness gates need to know about the
+    // residuals, accumulated in a single streaming pass.  Materializing the
+    // 4*N residual vector instead would cost several KB of heap at exactly the
+    // moment the ESP32-S3 has the least of it to spare.
+    struct ResidualStats {
+        double ssr                  = 0.0;
+        double maxAbs               = 0.0;
+        int    worstPoint           = 0;
+        int    worstAnchor          = 0;
+        double sumSqPerAnchor[4]    = { 0.0, 0.0, 0.0, 0.0 };
+    };
+
+    ResidualStats computeResidualStats(const float (*data)[4], int count, const std::vector<double>& params) {
+        ResidualStats stats;
+
         const double tlX = params[0], tlY = params[1];
         const double trX = params[2], trY = params[3];
         const double brX = params[4];
 
-        residuals.assign(measurements.size() * 4, 0.0);
-        for (size_t i = 0; i < measurements.size(); i++) {
+        for (int i = 0; i < count; i++) {
             const double sx = params[5 + 2 * i];
             const double sy = params[5 + 2 * i + 1];
-            const auto&  m  = measurements[i];
+            const auto   m  = measurementAt(data, i);
 
             const double dTl = std::sqrt((sx - tlX) * (sx - tlX) + (sy - tlY) * (sy - tlY));
             const double dTr = std::sqrt((sx - trX) * (sx - trX) + (sy - trY) * (sy - trY));
             const double dBl = std::sqrt((sx) * (sx) + (sy) * (sy));
             const double dBr = std::sqrt((sx - brX) * (sx - brX) + (sy) * (sy));
 
-            residuals[4 * i + 0] = dTl - m.tl;
-            residuals[4 * i + 1] = dTr - m.tr;
-            residuals[4 * i + 2] = dBl - m.bl;
-            residuals[4 * i + 3] = dBr - m.br;
-        }
-    }
+            const double r[4] = { dTl - m.tl, dTr - m.tr, dBl - m.bl, dBr - m.br };
 
-    double sumSquaredResiduals(const std::vector<double>& residuals) {
-        double sum = 0.0;
-        for (const double r : residuals) {
-            sum += r * r;
+            for (int j = 0; j < 4; j++) {
+                stats.ssr += r[j] * r[j];
+                stats.sumSqPerAnchor[j] += r[j] * r[j];
+
+                const double ar = std::abs(r[j]);
+                if (ar > stats.maxAbs) {
+                    stats.maxAbs      = ar;
+                    stats.worstPoint  = i;
+                    stats.worstAnchor = j;
+                }
+            }
         }
-        return sum;
+
+        return stats;
     }
 
     void estimateSledPosition(const CalibrationMeasurement& measurement, double tlX, double tlY, double trX, double trY, double brX, double& sx, double& sy) {
@@ -580,6 +603,10 @@ bool Calibration::requestStateChange(int newState) {
                 sys.set_state(State::Idle);
                 // Explicitly save belt positions now that calibration/take-slack is complete and belts are tight
                 Maslow.saveBeltPositions();
+                // saveBeltPositions() commits to NVS.  A flash erase/write stalls both cores with
+                // the cache disabled, which can hold off Maslow.update() for longer than
+                // UPDATE_WATCHDOG_MS and trip the emergency stop right as a job is starting.
+                serviceCalibrationWatchdogs();
                 success = true;
                 break;
             } else {
@@ -778,11 +805,8 @@ bool Calibration::recomputeAnchorsWithLevenbergMarquardt(int measurementCount) {
             return false;
         }
 
-        std::vector<CalibrationMeasurement> measurements;
-        measurements.reserve(measurementCount);
-        for (int i = 0; i < measurementCount; i++) {
-            measurements.push_back({ calibration_data[i][0], calibration_data[i][1], calibration_data[i][2], calibration_data[i][3] });
-        }
+        // Measurements are read directly out of calibration_data; no copy is made.
+        const float (*measurements)[4] = calibration_data;
 
         // Capture initial anchor estimates for retry perturbations
         const double tlX0 = kinematics->getTlX();
@@ -831,25 +855,28 @@ bool Calibration::recomputeAnchorsWithLevenbergMarquardt(int measurementCount) {
             params.push_back(trY0 + py);
             params.push_back(brX0);
 
-            for (const auto& measurement : measurements) {
+            for (int i = 0; i < measurementCount; i++) {
                 serviceCalibrationWatchdogs(true);
                 double sx = 0.0;
                 double sy = 0.0;
-                estimateSledPosition(measurement, params[0], params[1], params[2], params[3], params[4], sx, sy);
+                estimateSledPosition(measurementAt(measurements, i), params[0], params[1], params[2], params[3], params[4], sx, sy);
                 params.push_back(sx);
                 params.push_back(sy);
             }
 
-            std::vector<double> residuals;
-            bundleResiduals(measurements, params, residuals);
-            double currentSSR = sumSquaredResiduals(residuals);
+            double currentSSR = computeResidualStats(measurements, measurementCount, params).ssr;
 
-            std::vector<double> bestParams = params;
+            // The best parameter set is tracked only in globalBestParams; keeping a
+            // second per-attempt copy would double the largest vector in the solver.
+            if (currentSSR < globalBestSSR) {
+                globalBestSSR    = currentSSR;
+                globalBestParams = params;
+            }
+
             double              bestSSR    = currentSSR;
             double              lambda     = LM_INITIAL_LAMBDA;
             int                 rejections = 0;
             std::vector<double> nextParams;
-            std::vector<double> nextResiduals;
             int                 iterationCount = 0;
 
         for (int iteration = 0; iteration < LM_MAX_ITERATIONS; iteration++) {
@@ -865,15 +892,28 @@ bool Calibration::recomputeAnchorsWithLevenbergMarquardt(int measurementCount) {
             double schurSub[5][5] = {};
             double schurGain[5] = {};
 
-            for (size_t i = 0; i < measurements.size(); i++) {
+            for (int i = 0; i < measurementCount; i++) {
                 const size_t sxIndex = 5 + 2 * i;
                 const size_t syIndex = sxIndex + 1;
 
                 double w[5][2];
                 double gi[2];
                 double v00 = 0.0, v01 = 0.0, v11 = 0.0;
-                accumulatePointBlocks(
-                    measurements[i], tlX, tlY, trX, trY, brX, params[sxIndex], params[syIndex], u, ga, w, gi, v00, v01, v11);
+                accumulatePointBlocks(measurementAt(measurements, i),
+                                      tlX,
+                                      tlY,
+                                      trX,
+                                      trY,
+                                      brX,
+                                      params[sxIndex],
+                                      params[syIndex],
+                                      u,
+                                      ga,
+                                      w,
+                                      gi,
+                                      v00,
+                                      v01,
+                                      v11);
 
                 double invV[2][2];
                 if (!invertDamped2x2(v00, v01, v11, lambda, invV)) {
@@ -919,7 +959,7 @@ bool Calibration::recomputeAnchorsWithLevenbergMarquardt(int measurementCount) {
                 nextParams[i] += anchorStep[i];
             }
 
-            for (size_t i = 0; i < measurements.size(); i++) {
+            for (int i = 0; i < measurementCount; i++) {
                 const size_t sxIndex = 5 + 2 * i;
                 const size_t syIndex = sxIndex + 1;
                 const double sx      = params[sxIndex];
@@ -928,7 +968,7 @@ bool Calibration::recomputeAnchorsWithLevenbergMarquardt(int measurementCount) {
                 double jia[4][5];
                 double jis[4][2];
                 double ri[4];
-                measurementJacobiansAndResiduals(measurements[i], tlX, tlY, trX, trY, brX, sx, sy, jia, jis, ri);
+                measurementJacobiansAndResiduals(measurementAt(measurements, i), tlX, tlY, trX, trY, brX, sx, sy, jia, jis, ri);
 
                 double v00 = 0.0, v01 = 0.0, v11 = 0.0;
                 double gi[2] = {};
@@ -966,19 +1006,23 @@ bool Calibration::recomputeAnchorsWithLevenbergMarquardt(int measurementCount) {
                 nextParams[syIndex] += syStep;
             }
 
-            bundleResiduals(measurements, nextParams, nextResiduals);
-            const double nextSSR = sumSquaredResiduals(nextResiduals);
+            const double nextSSR = computeResidualStats(measurements, measurementCount, nextParams).ssr;
 
             if (nextSSR < currentSSR) {
-                params = std::move(nextParams);
-                residuals = std::move(nextResiduals);
+                // Swap rather than move: nextParams keeps the old buffer, so the
+                // "nextParams = params" copy at the top of the next iteration reuses
+                // it instead of reallocating on every accepted step.
+                std::swap(params, nextParams);
                 currentSSR = nextSSR;
                 lambda = std::max(lambda * LM_LAMBDA_DECREASE, 1e-12);
                 rejections = 0;
 
                 if (currentSSR < bestSSR) {
                     bestSSR = currentSSR;
-                    bestParams = params;
+                }
+                if (currentSSR < globalBestSSR) {
+                    globalBestSSR    = currentSSR;
+                    globalBestParams = params;
                 }
 
                 double anchorStepNorm = 0.0;
@@ -1001,11 +1045,6 @@ bool Calibration::recomputeAnchorsWithLevenbergMarquardt(int measurementCount) {
             log_debug("Find Anchors LM attempt=" << attempt << " iterations=" << iterationCount
                                                  << " bestSSR=" << bestSSR << " converged=" << thisConverged);
 
-            if (bestSSR < globalBestSSR) {
-                globalBestSSR    = bestSSR;
-                globalBestParams = bestParams;
-            }
-
             if (thisConverged) {
                 anyConverged = true;
                 break;
@@ -1014,29 +1053,23 @@ bool Calibration::recomputeAnchorsWithLevenbergMarquardt(int measurementCount) {
 
         serviceCalibrationWatchdogs(true);
 
-        // ── Fitness computation ────────────────────────────────────────────────
-        std::vector<double> finalRes;
-        bundleResiduals(measurements, globalBestParams, finalRes);
-
-        CalibrationFitness fit;
-        fit.rms       = std::sqrt(globalBestSSR / (4.0 * measurementCount));
-        fit.converged = anyConverged;
-
-        fit.maxResidual = 0.0;
-        for (const double r : finalRes) {
-            const double ar = std::abs(r);
-            if (ar > fit.maxResidual) {
-                fit.maxResidual = ar;
-            }
+        // globalBestParams stays empty only if every SSR came back NaN, in which
+        // case there is nothing to report or persist.
+        if (globalBestParams.empty()) {
+            log_error("Find Anchors recompute failed: no usable solution at points=" << measurementCount);
+            return false;
         }
 
+        // ── Fitness computation ────────────────────────────────────────────────
+        const ResidualStats finalStats = computeResidualStats(measurements, measurementCount, globalBestParams);
+
+        CalibrationFitness fit;
+        fit.rms         = std::sqrt(globalBestSSR / (4.0 * measurementCount));
+        fit.converged   = anyConverged;
+        fit.maxResidual = finalStats.maxAbs;
+
         for (int j = 0; j < 4; j++) {
-            double sumSq = 0.0;
-            for (int i = 0; i < measurementCount; i++) {
-                const double r = finalRes[4 * i + j];
-                sumSq += r * r;
-            }
-            fit.rmsPerAnchor[j] = std::sqrt(sumSq / measurementCount);
+            fit.rmsPerAnchor[j] = std::sqrt(finalStats.sumSqPerAnchor[j] / measurementCount);
         }
 
         // ── Fitness gates ──────────────────────────────────────────────────────
@@ -1053,22 +1086,12 @@ bool Calibration::recomputeAnchorsWithLevenbergMarquardt(int measurementCount) {
             return false;
         }
 
-        // Gate 3: max residual — find worst anchor/measurement index for the log
+        // Gate 3: max residual — the worst anchor/measurement index came out of the
+        // same streaming pass that produced maxResidual.
         if (fit.maxResidual > FITNESS_MAX_RES_FAIL_MM) {
-            int    worstI = 0, worstJ = 0;
-            double worstVal = 0.0;
-            for (int i = 0; i < measurementCount; i++) {
-                for (int j = 0; j < 4; j++) {
-                    const double ar = std::abs(finalRes[4 * i + j]);
-                    if (ar > worstVal) {
-                        worstVal = ar;
-                        worstI   = i;
-                        worstJ   = j;
-                    }
-                }
-            }
-            log_error("Find Anchors fit failed: maxResidual=" << fit.maxResidual << "mm at anchor=" << worstJ
-                                                              << " measurement=" << worstI << " (limit " << FITNESS_MAX_RES_FAIL_MM << "mm)");
+            log_error("Find Anchors fit failed: maxResidual=" << fit.maxResidual << "mm at anchor=" << finalStats.worstAnchor
+                                                              << " measurement=" << finalStats.worstPoint << " (limit "
+                                                              << FITNESS_MAX_RES_FAIL_MM << "mm)");
             return false;
         }
 
@@ -1279,7 +1302,7 @@ bool Calibration::takeSlackFunc() {
             }
 
             log_warn("Maslow Apply Tension retraction warning: Belt "
-                     << Maslow.axis_id_to_label(arm).c_str() << " retracted " << retractedAmount
+                     << Maslow.axis_id_to_label(arm) << " retracted " << retractedAmount
                      << "mm while applying tension (limit " << applyTensionBeltRetractionLimitMm
                      << "mm). A belt may not be anchored. Continue to keep retracting or Cancel to stop. Reduce Extend Dist or extend Belt Retraction Limit (Options) if Belts Attached to Anchors. Release Tension will allow Approx. 10mm of belt to be released.");
 
@@ -1545,10 +1568,13 @@ bool Calibration::take_measurement(float result[4], int dir, int run, int curren
             float brTotalZ = (currentZ + kinematics->getBrZ() + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
 
             //take measurement and record it to the calibration data array.
-            result[0] = measurementToXYPlane(Maslow.axis[_TL].getPosition(), tlTotalZ);
-            result[1] = measurementToXYPlane(Maslow.axis[_TR].getPosition(), trTotalZ);
-            result[2] = measurementToXYPlane(Maslow.axis[_BL].getPosition(), blTotalZ);
-            result[3] = measurementToXYPlane(Maslow.axis[_BR].getPosition(), brTotalZ);
+            //Correct the measured (paid-out) belt lengths for elastic stretch under the Find Anchors
+            //pull tension so the stored data reflects the true geometric span (no-op when disabled).
+            const float pullForce = kinematics->getCalibrationPullForce();
+            result[0] = measurementToXYPlane(kinematics->paidOutToGeometric(Maslow.axis[_TL].getPosition(), pullForce), tlTotalZ);
+            result[1] = measurementToXYPlane(kinematics->paidOutToGeometric(Maslow.axis[_TR].getPosition(), pullForce), trTotalZ);
+            result[2] = measurementToXYPlane(kinematics->paidOutToGeometric(Maslow.axis[_BL].getPosition(), pullForce), blTotalZ);
+            result[3] = measurementToXYPlane(kinematics->paidOutToGeometric(Maslow.axis[_BR].getPosition(), pullForce), brTotalZ);
             BR_tight  = false;
             BL_tight  = false;
             return true;
@@ -1643,10 +1669,12 @@ bool Calibration::take_measurement(float result[4], int dir, int run, int curren
                 float brTotalZ = (currentZ + kinematics->getBrZ() + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
 
                 //take measurement and record it to the calibration data array.
-                result[0] = measurementToXYPlane(Maslow.axis[_TL].getPosition(), tlTotalZ);
-                result[1] = measurementToXYPlane(Maslow.axis[_TR].getPosition(), trTotalZ);
-                result[2] = measurementToXYPlane(Maslow.axis[_BL].getPosition(), blTotalZ);
-                result[3] = measurementToXYPlane(Maslow.axis[_BR].getPosition(), brTotalZ);
+                //Correct measured (paid-out) belt lengths for elastic stretch under the pull tension.
+                const float pullForce = kinematics->getCalibrationPullForce();
+                result[0] = measurementToXYPlane(kinematics->paidOutToGeometric(Maslow.axis[_TL].getPosition(), pullForce), tlTotalZ);
+                result[1] = measurementToXYPlane(kinematics->paidOutToGeometric(Maslow.axis[_TR].getPosition(), pullForce), trTotalZ);
+                result[2] = measurementToXYPlane(kinematics->paidOutToGeometric(Maslow.axis[_BL].getPosition(), pullForce), blTotalZ);
+                result[3] = measurementToXYPlane(kinematics->paidOutToGeometric(Maslow.axis[_BR].getPosition(), pullForce), brTotalZ);
                 // Reset all flags for next measurement
                 tight[_TL]               = false;
                 tight[_TR]               = false;
@@ -1737,10 +1765,12 @@ bool Calibration::take_measurement(float result[4], int dir, int run, int curren
                 float brTotalZ = (currentZ + kinematics->getBrZ() + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
 
                 //take measurement and record it to the calibration data array.
-                result[0]   = measurementToXYPlane(Maslow.axis[_TL].getPosition(), tlTotalZ);
-                result[1]   = measurementToXYPlane(Maslow.axis[_TR].getPosition(), trTotalZ);
-                result[2]   = measurementToXYPlane(Maslow.axis[_BL].getPosition(), blTotalZ);
-                result[3]   = measurementToXYPlane(Maslow.axis[_BR].getPosition(), brTotalZ);
+                //Correct measured (paid-out) belt lengths for elastic stretch under the pull tension.
+                const float pullForce = kinematics->getCalibrationPullForce();
+                result[0]   = measurementToXYPlane(kinematics->paidOutToGeometric(Maslow.axis[_TL].getPosition(), pullForce), tlTotalZ);
+                result[1]   = measurementToXYPlane(kinematics->paidOutToGeometric(Maslow.axis[_TR].getPosition(), pullForce), trTotalZ);
+                result[2]   = measurementToXYPlane(kinematics->paidOutToGeometric(Maslow.axis[_BL].getPosition(), pullForce), blTotalZ);
+                result[3]   = measurementToXYPlane(kinematics->paidOutToGeometric(Maslow.axis[_BR].getPosition(), pullForce), brTotalZ);
                 pull1_tight = false;
                 pull2_tight = false;
                 return true;
@@ -1751,22 +1781,11 @@ bool Calibration::take_measurement(float result[4], int dir, int run, int curren
     return false;
 }
 
-static float** measurements = nullptr;
-
-void allocateMeasurements() {
-    measurements = new float*[4];
-    for (int i = 0; i < 4; ++i) {
-        measurements[i] = new float[4];
-    }
-}
-
-void freeMeasurements() {
-    for (int i = 0; i < 4; ++i) {
-        delete[] measurements[i];
-    }
-    delete[] measurements;
-    measurements = nullptr;
-}
+// Scratch space for the repeated readings taken at a single waypoint, structured
+// [[tl],[tr],[bl],[br]] x 4 runs.  This was five separate heap blocks allocated and
+// freed on every waypoint; 64 bytes of static storage holds it without churning
+// the heap between the large transient allocations the recompute makes.
+static float measurements[4][4];
 
 // Takes a series of measurements, calculates average and records calibration data;  Returns true when it's done and the result has been stored
 // There is way too much being done in this function. It needs to be split apart and cleaned up
@@ -1776,10 +1795,6 @@ bool Calibration::take_measurement_avg_with_check(int waypoint, int dir) {
     static float avg         = 0;
     static float sum         = 0;
     static bool  measureFlex = false;
-
-    if (measurements == nullptr) {
-        allocateMeasurements();  //This is structured [[tl],[tr],[bl],[br]],[[tl],[tr],[bl],[br]],[[tl],[tr],[bl],[br]],[[tl],[tr],[bl],[br]]
-    }
 
     int howHardToPull = retractCurrentThreshold;
     if (measureFlex) {
@@ -1819,7 +1834,7 @@ bool Calibration::take_measurement_avg_with_check(int waypoint, int dir) {
                 for (int i = 0; i < 4; i++) {
                     for (int j = 0; j < 4; j++) {
                         //use axis id to label:
-                        log_info(Maslow.axis_id_to_label(i).c_str() << " " << measurements[j][i]);
+                        log_info(Maslow.axis_id_to_label(i) << " " << measurements[j][i]);
                     }
                 }
                 //reset the run counter to run the measurements again
@@ -1827,11 +1842,9 @@ bool Calibration::take_measurement_avg_with_check(int waypoint, int dir) {
                     log_error("Critical error, measurements are not within 1.5mm of each other 8 times in a row, stopping Find Anchors");
                     resetCalibrationState();
                     criticalCounter = 0;
-                    freeMeasurements();
                     requestStateChange(EXTENDEDOUT);
                     return false;
                 }
-                freeMeasurements();
                 return false;
             }
 
@@ -1852,7 +1865,7 @@ bool Calibration::take_measurement_avg_with_check(int waypoint, int dir) {
 
                 measureFlex = false;
 
-                freeMeasurements();  //We have completed this measurement, but we don't want to store anything this time
+                //We have completed this measurement, but we don't want to store anything this time
                 return true;
             }
             */
@@ -1896,7 +1909,6 @@ bool Calibration::take_measurement_avg_with_check(int waypoint, int dir) {
                         Maslow.eStop("Unable to find a valid frame size to match the first measurement");
                         resetCalibrationState();
                         criticalCounter = 0;
-                        freeMeasurements();
                         requestStateChange(EXTENDEDOUT);
                         return false;
                     }
@@ -1907,7 +1919,6 @@ bool Calibration::take_measurement_avg_with_check(int waypoint, int dir) {
                     Maslow.eStop("Unable to find machine position from measurements");
                     resetCalibrationState();
                     criticalCounter = 0;
-                    freeMeasurements();
                     requestStateChange(EXTENDEDOUT);
                     return false;
                 }
@@ -1929,9 +1940,6 @@ bool Calibration::take_measurement_avg_with_check(int waypoint, int dir) {
                 calibrationGrid[5][0] = x - 150;
                 calibrationGrid[5][1] = y;
             }
-
-            //This is the exit to indicate that the measurement was successful
-            freeMeasurements();
 
             //Special case where we have a good measurement but we need to take another at this point to measure the flex of the frame
             //Frame flex should only be measured during calibration process, not during "Apply Tension"
@@ -2416,10 +2424,7 @@ void Calibration::allocateCalibrationMemory() {
         calibrationGrid = new float[CALIBRATION_GRID_SIZE_MAX][2];
     }
     if (calibration_data == nullptr) {
-        calibration_data = new float*[CALIBRATION_GRID_SIZE_MAX];
-        for (int i = 0; i < CALIBRATION_GRID_SIZE_MAX; ++i) {
-            calibration_data[i] = new float[4];
-        }
+        calibration_data = new float[CALIBRATION_GRID_SIZE_MAX][4];
     }
 }
 
@@ -2427,9 +2432,6 @@ void Calibration::allocateCalibrationMemory() {
 void Calibration::deallocateCalibrationMemory() {
     delete[] calibrationGrid;
     calibrationGrid = nullptr;
-    for (int i = 0; i < CALIBRATION_GRID_SIZE_MAX; ++i) {
-        delete[] calibration_data[i];
-    }
     delete[] calibration_data;
     calibration_data = nullptr;
 }

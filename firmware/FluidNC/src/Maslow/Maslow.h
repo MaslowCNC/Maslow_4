@@ -3,6 +3,7 @@
 // following exception: it may not be used for any reason by MakerMade or anyone with a business or personal connection to MakerMade
 
 #pragma once
+#include <cstring>  // strncpy for the watchdog activity breadcrumb
 #include <Arduino.h>
 #include "MaslowEnums.h"
 #include "MotorUnit.h"
@@ -125,7 +126,40 @@ public:
     // Flash write operations stall both CPU cores; without this flag the 100 ms
     // watchdog fires spuriously and latches the red LED until a power cycle.
     volatile bool uploadInProgress = false;
-    String axis_id_to_label(int axis_id);
+
+    // Breadcrumb for diagnosing update-loop watchdog trips.  The protocol task is
+    // the only caller of update(), so a gap means that task was blocked somewhere.
+    // markActivity() records what it was about to do and when, and the watchdog
+    // reports it, turning "something stalled" into "this stalled".
+    volatile const char*   lastActivity      = "startup";
+    volatile unsigned long lastActivityStart = 0;
+    // The phase that ended when the current one began, and how long it took.
+    // update() runs at the end of a phase, so the phase that consumed the time
+    // is the *previous* one; reporting only the current one erases the evidence.
+    // One level of history is not enough - several phases run between the one
+    // that stalls and the watchdog check, so the interesting duration gets
+    // overwritten.  Track the longest phase seen since the last update() call.
+    char                   worstActivity[120] = "startup";
+    volatile unsigned long worstActivityMs    = 0;
+    void markActivity(const char* what) {
+        unsigned long now      = millis();
+        unsigned long duration = now - lastActivityStart;
+        if (duration > worstActivityMs) {
+            worstActivityMs = duration;
+            // Copy rather than alias: line buffers are reused by the polling task.
+            strncpy(worstActivity, lastActivity ? (const char*)lastActivity : "?", sizeof(worstActivity) - 1);
+            worstActivity[sizeof(worstActivity) - 1] = '\0';
+        }
+        lastActivity      = what;
+        lastActivityStart = now;
+    }
+    void clearWorstActivity() {
+        worstActivityMs = 0;
+        worstActivity[0] = '\0';
+    }
+    // Returns a string literal, not a String.  This is called on every encoder
+    // read, and an Arduino String would heap-allocate and free each time.
+    const char* axis_id_to_label(int axis_id);
     void   safety_control();
     bool   axis_homed[4] = { false, false, false, false };
 

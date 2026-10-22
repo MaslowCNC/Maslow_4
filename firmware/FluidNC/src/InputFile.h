@@ -30,9 +30,17 @@ private:
     uint32_t _line_num;  // the most recent line number read
     bool     _readyNext = true;
 
+    // path() builds a std::string every call and the path never changes for the
+    // life of the file, so it is captured once instead of once per GCode line.
+    std::string _pathCache;
+
 public:
-    static std::string _progress;
-    static int32_t     _current_line_num;  // SD file line being processed (for planner threading)
+    // A fixed buffer, not a std::string.  This is rewritten once per GCode line by
+    // the polling task and read by the status reporter, which may run on the other
+    // core; a std::string reallocating under that reader is a use-after-free.  A
+    // fixed buffer also keeps the per-line path free of heap allocation entirely.
+    static char    _progress[128];
+    static int32_t _current_line_num;  // SD file line being processed (for planner threading)
 
     // fsname is the default file system on which the file is located, in case the path does not specify
     // path is the full path to the file

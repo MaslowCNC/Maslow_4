@@ -120,4 +120,13 @@ void send_line(Print& channel, const std::string& message);
 
 void drain_messages();
 
+// Creates the telemetry task if it does not exist yet, otherwise resumes it.
+// Called when telemetry is switched on so the task's stack is not allocated
+// on machines that never use telemetry.
+void ensure_telemetry_task();
+
+// Logs free heap, fragmentation, per-task stack headroom and per-channel input
+// backlog.  Backs the $Heap command.
+void report_memory_diagnostics();
+
 extern uint32_t heapLowWater;
