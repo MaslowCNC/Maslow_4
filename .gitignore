@@ -32,3 +32,6 @@ dist/
 *.hx
 firmware-package/
 firmware/release/
+
+# Personal Claude Code notes (not shared)
+CLAUDE.local.md
