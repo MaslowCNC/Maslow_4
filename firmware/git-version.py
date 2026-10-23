@@ -3,9 +3,12 @@ import filecmp, tempfile, shutil, os
 
 # Thank you https://docs.platformio.org/en/latest/projectconf/section_env_build.html !
 
+# os.devnull rather than subprocess.DEVNULL so the script also runs under Python 2
+DEVNULL = open(os.devnull, "w")
+
 gitFail = False
 try:
-    subprocess.check_call(["git", "status"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.check_call(["git", "status"], stdout=DEVNULL, stderr=DEVNULL)
 except:
     gitFail = True
 
@@ -16,7 +19,7 @@ if gitFail:
 else:
     try:
         tag = (
-            subprocess.check_output(["git", "describe", "--tags", "--abbrev=0"], stderr=subprocess.DEVNULL)
+            subprocess.check_output(["git", "describe", "--tags", "--abbrev=0"], stderr=DEVNULL)
             .strip()
             .decode("utf-8")
         )
@@ -33,7 +36,7 @@ else:
     # Check to see if the head commit exactly matches a tag.
     # If so, the revision is "release", otherwise it is BRANCH-COMMIT
     try:
-        subprocess.check_call(["git", "describe", "--tags", "--exact"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.check_call(["git", "describe", "--tags", "--exact"], stdout=DEVNULL, stderr=DEVNULL)
         rev = dirty
     except:
         branchname = (
@@ -69,7 +72,7 @@ compile_warning = ""
 if not gitFail:
     try:
         VERSION_NUMBER = (
-            subprocess.check_output(["git", "describe", "--tags", "--always", "--dirty"], stderr=subprocess.DEVNULL)
+            subprocess.check_output(["git", "describe", "--tags", "--always", "--dirty"], stderr=DEVNULL)
             .strip()
             .decode("utf-8")
         )

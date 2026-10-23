@@ -73,7 +73,7 @@ namespace WebUI {
     public:
         NetSettingsModule(const char* name) : Module(name) {}
         void init() override {
-            _hostname     = new HostnameSetting("Hostname", "ESP112", "Hostname", "fluidnc");
+            _hostname     = new HostnameSetting("Hostname", "ESP112", "Hostname", "maslow");
             _network_type = new EnumSetting("Network type", WEBSET, WA, NULL, "network/type", NetworkTypeWiFi, &networkTypeOptions);
         }
     };
