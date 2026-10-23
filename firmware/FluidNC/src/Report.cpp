@@ -499,7 +499,10 @@ void report_realtime_status(Channel& channel) {
 
     // Report position
 
-    float* print_position = state_is(State::Homing) ? get_motor_pos() : get_mpos();
+    // Maslow: always report the kinematic position.  Upstream reports raw motor positions while
+    // Homing, but Maslow runs Apply Tension, retract, extend and calibration in the Homing state,
+    // and the raw positions are belt lengths that the WebUI then shows as X, Y and Z.
+    float* print_position = get_mpos();
     if (bits_are_true(status_mask->get(), RtStatus::Position)) {
         msg << "|MPos:";
     } else {
