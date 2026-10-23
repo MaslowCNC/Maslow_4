@@ -2,6 +2,7 @@
 #include "Debug.h"
 #include "Link.h"
 #include "Machine.h"
+#include "Power.h"
 #include "Views.h"
 
 #include <Preferences.h>
@@ -42,6 +43,7 @@ namespace {
     bool     holdFired    = false;
     bool     dragging     = false;
     bool     stopTouched  = false;
+    bool     swallow      = false;  // touch that only woke the screen
     uint32_t lastPoll     = 0;
 
     // What the top bar last showed
@@ -193,6 +195,15 @@ namespace {
         stopTouched   = false;
         downView      = nullptr;
         downButton    = -1;
+        swallow       = false;
+        bool wasOff   = Power::screenOff();
+        Power::activity();
+        // With the screen off a touch only turns it on, except STOP, which
+        // works blind.
+        if (wasOff && !(y < TOP_H && x >= STOP_X)) {
+            swallow = true;
+            return;
+        }
         if (y < TOP_H) {
             if (x >= STOP_X) {
                 // STOP acts on touch-down: no waiting for release.
@@ -215,6 +226,7 @@ namespace {
     }
 
     void touchMove(int x, int y) {
+        if (swallow) return;
         lastX = x;
         lastY = y;
         if (!downView || downView != top()) {
@@ -236,6 +248,10 @@ namespace {
     }
 
     void touchUp() {
+        if (swallow) {
+            swallow = false;
+            return;
+        }
         if (stopTouched) {
             stopFlash = false;
             topChanges = 0xFFFFFFFF;  // redraw
@@ -622,7 +638,7 @@ namespace Ui {
             tabs[i] = makeTab(i);
         }
         lcd.fillScreen(C::bg);
-        if (!haveCal) {
+        if (!haveCal && !Power::wokeFromSleep()) {
             // First boot: offer touch calibration; carry on with the defaults
             // if nobody touches the screen.
             lcd.setFont(F_BTN);
@@ -738,6 +754,7 @@ namespace Ui {
         if (*t && toastAt != toastShown) {
             toastShown  = toastAt;
             toastActive = true;
+            Power::wakeScreen();
             drawToast();
         } else if (toastActive && now - toastShown > 3500) {
             toastActive = false;
@@ -751,6 +768,7 @@ namespace Ui {
         }
         Machine::Alert a;
         if (Machine::takeAlert(a)) {
+            Power::wakeScreen();
             if (a.confirmCommand.empty()) {
                 alert(a.title, a.text);
             } else {
@@ -884,7 +902,12 @@ namespace Ui {
         redrawAll();
     }
 
+    static uint8_t currentBrightness = 200;
+
+    uint8_t brightness() { return currentBrightness; }
+
     void setBrightness(uint8_t level) {
+        currentBrightness = level;
         lcd.setBrightness(level);
         Preferences p;
         p.begin("ui", false);

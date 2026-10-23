@@ -2,6 +2,7 @@
 #include "Debug.h"
 #include "Link.h"
 #include "Machine.h"
+#include "Power.h"
 
 #include <Preferences.h>
 
@@ -1046,6 +1047,52 @@ namespace {
         alert("Link", t);
     }
 
+    std::string secText(uint16_t s) {
+        if (s == 0) return "never";
+        return s % 60 ? std::to_string(s) + " s" : std::to_string(s / 60) + " min";
+    }
+
+    void displayMenu() {
+        menu("Display & power",
+             { "Brightness " + std::to_string(Ui::brightness() * 100 / 255) + "%",
+               "Screen off: " + secText(Power::screenTimeoutSec()),
+               "Sleep: " + secText(Power::sleepTimeoutMin() * 60), "Sleep now" },
+             [](int i) {
+                 switch (i) {
+                     case 0: {
+                         uint8_t b = Ui::brightness();
+                         setBrightness(b >= 255 ? 40 : b >= 200 ? 255 : b >= 120 ? 200 : 120);
+                         displayMenu();
+                         break;
+                     }
+                     case 1: {
+                         static const uint16_t opts[] = { 30, 60, 120, 300, 0 };
+                         menu("Screen off after", { "30 s", "1 min", "2 min", "5 min", "Never" }, [](int j) {
+                             Power::setScreenTimeoutSec(opts[j]);
+                             displayMenu();
+                         });
+                         break;
+                     }
+                     case 2: {
+                         static const uint16_t opts[] = { 5, 10, 30, 60, 0 };
+                         menu("Sleep after (not during a job)", { "5 min", "10 min", "30 min", "1 hour", "Never" },
+                              [](int j) {
+                                  Power::setSleepTimeoutMin(opts[j]);
+                                  displayMenu();
+                              });
+                         break;
+                     }
+                     case 3:
+                         if (Power::canSleep()) {
+                             Power::sleepNow();
+                         } else {
+                             Machine::toast("Not while a job or belt operation is running");
+                         }
+                         break;
+                 }
+             });
+    }
+
     class MoreView : public View {
     public:
         void build() override {
@@ -1055,17 +1102,13 @@ namespace {
                 std::function<void()> fn;
                 uint16_t              color;
             };
-            static uint8_t brightness = 200;
             Def defs[] = {
                 { "Unlock ($X)", [] { Machine::send("$X"); }, C::button },
                 { "Spindle off", [] { Machine::send("M5"); }, C::button },
                 { "Overrides", [] { push(new OverridesView()); }, C::button },
                 { "Macros", macrosMenu, C::button },
                 { "Jog speeds", jogSpeeds, C::button },
-                { "Brightness", [] {
-                     brightness = brightness >= 255 ? 40 : brightness >= 200 ? 255 : brightness >= 120 ? 200 : 120;
-                     setBrightness(brightness);
-                 }, C::button },
+                { "Display &\npower", displayMenu, C::button },
                 { "Calibrate\ntouch", [] { calibrateTouch(); }, C::button },
                 { "Link info", linkInfo, C::button },
                 { "Pair\nmachine", showPairing, C::select },

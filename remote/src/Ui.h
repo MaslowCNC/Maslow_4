@@ -101,5 +101,6 @@ namespace Ui {
     std::string fmt(float v, int decimals);  // trims trailing zeros
     void drawArrow(LovyanGFX& g, int cx, int cy, Icon dir, int size, uint16_t color);
     void calibrateTouch();
-    void setBrightness(uint8_t level);
+    void setBrightness(uint8_t level);  // saved
+    uint8_t brightness();
 }

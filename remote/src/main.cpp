@@ -6,6 +6,7 @@
 #include "Display.h"
 #include "Link.h"
 #include "Machine.h"
+#include "Power.h"
 #include "Ui.h"
 #include "Views.h"
 
@@ -31,6 +32,8 @@ static void debugCommand(const char* c) {
         Machine::realtime((uint8_t)strtol(c + 3, nullptr, 16));
     } else if (!strncmp(c, "tab ", 4)) {
         Ui::showTab(atoi(c + 4));
+    } else if (!strcmp(c, "sleep")) {
+        Power::sleepNow();
     } else if (!strcmp(c, "redraw")) {
         Ui::redrawAll();
     } else if (!strcmp(c, "link")) {
@@ -48,11 +51,12 @@ static void debugCommand(const char* c) {
 }
 
 void setup() {
+    Debug::begin();
+    Power::begin();  // releases the pins held through deep sleep
     pinMode(LED_R, OUTPUT);
     pinMode(LED_G, OUTPUT);
     pinMode(LED_B, OUTPUT);
     setLed(false, false, false);
-    Debug::begin();
     Debug::setHandler(debugCommand);
     Ui::begin();
     Link::begin();
@@ -69,11 +73,15 @@ void loop() {
     Machine::loop();
     Ui::loop();
     viewsLoop();
+    Power::loop();
 
     static uint32_t ledAt = 0;
     if (millis() - ledAt > 250) {
         ledAt = millis();
-        switch (Link::state()) {
+        bool alarm = Machine::connected() && Machine::stateIs("Alarm");
+        if (Power::screenOff()) {
+            setLed(alarm, false, false);  // dark, except an alarm
+        } else switch (Link::state()) {
             case Link::State::Connected:
                 setLed(Machine::stateIs("Alarm"), !Machine::stateIs("Alarm"), false);
                 break;
