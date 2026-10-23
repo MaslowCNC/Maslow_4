@@ -1104,3 +1104,19 @@ Ui::View* makeTab(int index) {
 }
 
 void showPairing() { push(new PairView()); }
+
+// Like the WebUI's startup check: once per connection, as soon as the
+// position is known, warn if machine Z is already outside the safe range.
+void viewsLoop() {
+    static bool wasConnected = false, checked = false;
+    bool        c = Machine::connected();
+    if (c != wasConnected) {
+        wasConnected = c;
+        checked      = false;
+        zLowAck = zHighAck = false;
+    }
+    if (c && !checked && st.havePos && st.haveWco) {
+        checked = true;
+        zCheck(0, [] {});
+    }
+}

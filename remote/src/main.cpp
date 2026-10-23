@@ -68,6 +68,7 @@ void loop() {
     Link::loop();
     Machine::loop();
     Ui::loop();
+    viewsLoop();
 
     static uint32_t ledAt = 0;
     if (millis() - ledAt > 250) {
