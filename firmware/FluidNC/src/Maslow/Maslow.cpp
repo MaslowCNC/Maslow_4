@@ -488,6 +488,7 @@ void Maslow_::saveZPos() {
     ret = nvs_get_i32(nvsHandle, "zPos", &currentZPos);
     if (ret != ESP_OK && ret != ESP_ERR_NVS_NOT_FOUND) {
         log_info("Error " + std::string(esp_err_to_name(ret)) + " reading from NVS!\n");
+        nvs_close(nvsHandle);
         return;
     }
 
@@ -512,6 +513,11 @@ void Maslow_::saveZPos() {
             }
         }
     }
+    nvs_close(nvsHandle);
+
+    // An NVS write that has to erase a flash sector can block for longer than the update
+    // watchdog.  This is only called with the machine stopped, so the wait is intentional.
+    resetUpdateWatchdog();
 }
 
 //This function loads the z-axis position from the non-volitle storage
@@ -730,6 +736,10 @@ void Maslow_::saveBeltPositions() {
     }
 
     nvs_close(nvsHandle);
+
+    // Up to nine NVS writes; one that has to erase a flash sector can block for longer than the
+    // update watchdog.  This is only called with the machine stopped, so the wait is intentional.
+    resetUpdateWatchdog();
 
     // Log the save operation
     char* buffer = getLogBuffer();
