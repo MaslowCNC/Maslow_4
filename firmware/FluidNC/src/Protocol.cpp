@@ -162,6 +162,23 @@ bool cmd_queue_defer(const char* line, Channel& channel) {
 
 TaskHandle_t pollingTask = nullptr;
 
+// Maslow emergency-stops when Maslow.update() is not called for 100 ms, and its message says only
+// how long the gap was.  Name the step that took the time: anything on the update task (or a
+// command the polling task runs inline - flash writes there stall both cores) that takes longer
+// than this is logged with what it was.
+static const uint32_t SLOW_STEP_MS = 50;
+
+static void report_slow_step(const char* step, uint32_t startMs, const char* detail = nullptr) {
+    uint32_t elapsed = millis() - startMs;
+    if (elapsed > SLOW_STEP_MS) {
+        if (detail) {
+            log_warn("Slow " << step << " took " << elapsed << " ms: " << detail);
+        } else {
+            log_warn("Slow " << step << " took " << elapsed << " ms");
+        }
+    }
+}
+
 // Poll the registered serial-style channels for one line and route it through
 // execute_line() on the polling task.  When no job runs this feeds cmd_queue;
 // during a job it services interloper commands (run inline or rejected in
@@ -170,7 +187,9 @@ TaskHandle_t pollingTask = nullptr;
 static void poll_input_channel() {
     char buf[Channel::maxLine];
     if (Channel* ch = pollChannels(buf)) {
-        Error rc = execute_line(buf, *ch, AuthenticationLevel::LEVEL_GUEST, false);
+        uint32_t start = millis();
+        Error    rc    = execute_line(buf, *ch, AuthenticationLevel::LEVEL_GUEST, false);
+        report_slow_step("inline command", start, buf);
         if (rc != Error::Deferred) {
             // Ran inline or was rejected - the polling task still holds the ref.
             ch->ack(rc);
@@ -356,7 +375,9 @@ void protocol_main_loop() {
                 Channel* ldr         = Job::leader_channel();
                 Channel* out_channel = ldr ? ldr : channel;
 
-                Error status_code = execute_line(item.line, *out_channel, AuthenticationLevel::LEVEL_GUEST, true);
+                uint32_t start       = millis();
+                Error    status_code = execute_line(item.line, *out_channel, AuthenticationLevel::LEVEL_GUEST, true);
+                report_slow_step("command", start, item.line);
 
                 // If the line was aborted, the channel could be invalid.
                 if (!sys.abort()) {
@@ -368,8 +389,12 @@ void protocol_main_loop() {
 
         protocol_execute_realtime();  // Runtime command check point.
         // Auto-cycle start any queued moves.
+        uint32_t start = millis();
         protocol_auto_cycle_start();
+        report_slow_step("auto cycle start", start);
+        start = millis();
         sys.process_changes();
+        report_slow_step("process_changes", start);
 
         if (sys.abort()) {
             sys.set_abort(false);
@@ -1039,10 +1064,14 @@ void protocol_exec_rt_system() {
 
     //Maslow.recomputePID(); //This one works as an alternative to having recomputePID called in DCServo.cpp
 
+    uint32_t start = millis();
     protocol_handle_events();
+    report_slow_step("event handling", start);
 
     //do all the Maslow stuff here
+    start = millis();
     Maslow.update();
+    report_slow_step("Maslow.update", start);
     // Reload step segment buffer
     switch (sys.state()) {
         case State::ConfigAlarm:
