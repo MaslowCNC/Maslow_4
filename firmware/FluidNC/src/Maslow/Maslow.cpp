@@ -17,7 +17,6 @@
 #include "esp_task_wdt.h"
 #include "../Machine/MachineConfig.h"  // config
 
-extern void bootTrace(const char*);  // TEMPORARY bring-up diagnostics
 // Replacement for the pre-merge set_motor_steps_from_mpos(): convert a
 // cartesian machine position into motor space via kinematics and set the
 // stepping engine positions accordingly.
@@ -84,18 +83,12 @@ int ENCODER_READ_FREQUENCY_HZ = 1000;  //max frequency for polling the encoders
 
 // Initialization function
 void Maslow_::begin(void (*sys_rt)()) {
-    bootTrace("MB wire.begin");
     Wire.begin(5, 4, 200000);
-    bootTrace("MB mux.begin");
     I2CMux.begin(TCAADDR, Wire);
 
-    bootTrace("MB axis TL");
     axis[_TL].begin(tlIn1Pin, tlIn2Pin, tlADCPin, TLEncoderLine, tlIn1Channel, tlIn2Channel);
-    bootTrace("MB axis TR");
     axis[_TR].begin(trIn1Pin, trIn2Pin, trADCPin, TREncoderLine, trIn1Channel, trIn2Channel);
-    bootTrace("MB axis BL");
     axis[_BL].begin(blIn1Pin, blIn2Pin, blADCPin, BLEncoderLine, blIn1Channel, blIn2Channel);
-    bootTrace("MB axis BR");
     axis[_BR].begin(brIn1Pin, brIn2Pin, brADCPin, BREncoderLine, brIn1Channel, brIn2Channel);
 
     calibration.axisHomed[_BL] = false;
@@ -104,7 +97,6 @@ void Maslow_::begin(void (*sys_rt)()) {
     calibration.axisHomed[_TL] = false;
 
     //Recompute the center XY
-    bootTrace("MB centerXY");
     calibration.updateCenterXY();
 
     pinMode(coolingFanPin, OUTPUT);
@@ -123,9 +115,7 @@ void Maslow_::begin(void (*sys_rt)()) {
     // Subsequent calls (e.g., after soft reset) should not reload stale NVS data
     static bool positionsLoaded = false;
     if (!positionsLoaded) {
-        bootTrace("MB loadZPos");
         loadZPos();           //Loads the z-axis position from EEPROM
-        bootTrace("MB loadBelts");
         loadBeltPositions();  //Loads the belt positions from EEPROM
         positionsLoaded = true;
     }
@@ -141,7 +131,6 @@ void Maslow_::begin(void (*sys_rt)()) {
         log_info("Maslow_Retract_Current_Threshold: " << calibration.retractCurrentThreshold);
     }
 
-    bootTrace("MB begin done");
     initialized = true;
 }
 

@@ -29,27 +29,6 @@
 
 extern void make_user_commands();
 
-// TEMPORARY boot diagnostics: record milestones and echo the most recent one
-// every 2s from a watchdog task, so the stall point is visible whenever a
-// terminal attaches.  Remove after bring-up.
-#    include "USBCDC.h"
-extern USBCDC TUSBCDCSerial;
-static volatile const char* lastBootMark = "none";
-void bootTrace(const char* m) {
-    lastBootMark = m;  // recorded only; the heartbeat task is the sole CDC writer
-}
-static void bootTraceTask(void*) {
-    while (true) {
-        vTaskDelay(pdMS_TO_TICKS(2000));
-        TUSBCDCSerial.print("[TRACE last=");
-        TUSBCDCSerial.print((const char*)lastBootMark);
-        TUSBCDCSerial.println("]");
-    }
-}
-static void startBootTrace() {
-    xTaskCreate(bootTraceTask, "boottrace", 4096, nullptr, 1, nullptr);
-}
-#    define BOOTMARK(x) bootTrace(x)
 
 
 #    ifdef BOARD_HAS_PSRAM
@@ -87,17 +66,14 @@ void setup() {
         settings_init();
 
         Console.init();  // Setup main interaction channel
-        startBootTrace();
 
         // Setup input polling loop after loading the configuration,
         // because the polling may depend on the config
         allChannels.init();
-        BOOTMARK("A allChannels.init done");
 
         // WebUI::WiFiConfig::reset();
 
         protocol_init();
-        BOOTMARK("B protocol_init done");
 
         make_coordinates();
 
@@ -108,10 +84,8 @@ void setup() {
         }
 
         config->load();
-        BOOTMARK("C config->load done");
 
         make_user_commands();
-        BOOTMARK("D make_user_commands done");
 
         log_info("Machine " << config->_name);
         log_info("Board " << config->_board);
@@ -168,7 +142,6 @@ void setup() {
 #    endif
 
         Stepping::init();  // Configure stepper interrupt timers
-        BOOTMARK("E Stepping::init done");
 
         plan_init();
 
@@ -177,12 +150,10 @@ void setup() {
         config->_userInputs->init();
 
         Axes::init();
-        BOOTMARK("F Axes::init done");
 
         config->_control->init();
 
         config->_kinematics->init();
-        BOOTMARK("G kinematics init done");
 
         limits_init();
 
@@ -212,7 +183,6 @@ void setup() {
         }
 
         make_proxies();
-        BOOTMARK("H make_proxies done");
 
     } catch (std::exception& ex) {
         // Log exception:
@@ -224,7 +194,6 @@ void setup() {
     allChannels.ready();
     allChannels.deregistration(&startupLog);
     protocol_send_event(&startEvent);
-    BOOTMARK("I setup complete");
 }
 
 void loop() {

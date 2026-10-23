@@ -12,7 +12,6 @@
 
 #include "esp_adc/adc_oneshot.h"
 
-extern void bootTrace(const char*);  // TEMPORARY bring-up diagnostics
 
 // ADC access via the IDF oneshot driver.  Arduino core 3's analogRead() can
 // wedge on ADC2 pins (the TL current sense is GPIO18 = ADC2_CH7) while WiFi
@@ -64,13 +63,10 @@ void DCMotor::begin(uint8_t forwardPin, uint8_t backwardPin, int readbackPin, in
     ledcAttach(_back, motorPWMFreq, motorPWMRes);
     ledcWrite(_back, 0);
 
-    bootTrace("DC adc map");
     //Set up the current-sense ADC channel through the oneshot driver
     _adcValid = false;
     if (adc_oneshot_io_to_channel(_readback, &_adcUnit, &_adcChannel) == ESP_OK) {
-        bootTrace("DC adc unit");
         if (auto handle = adcUnitHandle(_adcUnit)) {
-            bootTrace("DC adc cfg");
             adc_oneshot_chan_cfg_t ch_cfg = {};
             ch_cfg.atten                  = ADC_ATTEN_DB_12;
             ch_cfg.bitwidth               = ADC_BITWIDTH_12;
