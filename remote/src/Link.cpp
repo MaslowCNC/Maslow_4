@@ -121,6 +121,7 @@ namespace {
     uint32_t lastAuthRx  = 0;
     uint32_t lastHello   = 0;
     uint32_t lastKeepalive = 0;
+    int      unanswered    = 0;  // keepalives sent since the last authenticated packet
     uint32_t lastPrompt  = 0;
     uint32_t searchStart = 0;
     uint32_t scanStepAt  = 0;
@@ -287,10 +288,12 @@ namespace {
         pkt[1 + 4 + TAG_SIZE] = 0;
         send(peerMacBytes, pkt, sizeof(pkt));
         lastKeepalive = millis();
+        ++unanswered;
     }
 
     void noteAuthenticated(int8_t rssi) {
         lastAuthRx = millis();
+        unanswered = 0;
         lastRssi   = rssi;
         if (savedChannel != curChannel) {
             savedChannel = curChannel;
@@ -395,7 +398,9 @@ namespace {
     void sessionTick() {
         uint32_t now = millis();
         if (linkState == Link::State::Connected) {
-            if ((uint32_t)(now - lastAuthRx) > LINK_LOST_MS) {
+            // Silence alone is not enough: if this loop stalled (a long redraw)
+            // we sent nothing to answer.  Require unanswered keepalives too.
+            if ((uint32_t)(now - lastAuthRx) > LINK_LOST_MS && unanswered >= 3) {
                 DLOG("LINK lost (no reply for %u ms)\n", (unsigned)(now - lastAuthRx));
                 startSearching();
                 return;
