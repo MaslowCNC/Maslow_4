@@ -1,14 +1,14 @@
 {
-  "tag_name": "v1.25.0",
-  "published_at": "2026-09-10T18:46:50Z",
+  "tag_name": "v1.26.0",
+  "published_at": "2026-10-09T23:02:59Z",
   "files": {
     "firmware.bin": {
-      "sha256": "f749c5479e6a813fae70c6ea6666c7b9c45277203a5c632d0bc3254f63d7f1d8",
+      "sha256": "bcb814948ba282cc3923a6a4e7a0fc427dacf4cdd01b965b9a00ce8d43db5ad1",
       "size_bytes": 1997296
     },
     "index.html.gz": {
-      "sha256": "3f12f1800eeeaa989393631c6067e25ed9faefba5f83775f677e3577e1bf177b",
-      "size_bytes": 142860
+      "sha256": "440aa0b5bd18190f9a86f20d3b02a92d293d050824e584064fca485dfe4989ab",
+      "size_bytes": 143706
     }
   }
 }

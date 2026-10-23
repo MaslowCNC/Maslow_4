@@ -4,7 +4,7 @@ This document explains how the relay comments to copilot workflow works.
 
 ## Purpose
 
-The `relay-comments-to-copilot.yml` workflow enables users to get help from @copilot by mentioning @MaslowBot in their comments. Since copilot only responds to comments from users who have the subscription (MaslowBot), this workflow automatically relays user requests to copilot.
+The `relay-comments-to-copilot.yml` workflow enables users to get help from @copilot by mentioning @MaslowBot in their comments. Since Copilot only responds to comments from users who have the subscription (MaslowBot), this workflow automatically relays user requests to @copilot.
 
 ## How It Works
 
@@ -17,7 +17,7 @@ The `relay-comments-to-copilot.yml` workflow enables users to get help from @cop
    - The commenter is NOT MaslowBot itself (prevents infinite loops)
 
 3. **Processing**: Before relaying, the workflow checks:
-   - If the comment already mentions `@copilot` (skips to avoid duplicates)
+   - If the comment already mentions `@copilot` or `@copilot-swe-agent` (skips to avoid duplicates)
    - If the comment is too short (< 10 characters, skips minimal mentions)
 
 4. **Relay**: If all conditions pass, MaslowBot posts a new comment that:

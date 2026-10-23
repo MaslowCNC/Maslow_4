@@ -24,8 +24,8 @@ jobs:
             const originalAuthor = originalComment.user.login;
             const originalBody = originalComment.body;
             
-            if (originalBody.includes('@copilot-swe-agent')) {
-              console.log('Comment already mentions @copilot-swe-agent, skipping relay');
+            if (/@copilot(?:-swe-agent)?/i.test(originalBody)) {
+              console.log('Comment already mentions Copilot, skipping relay');
               return;
             }
             
@@ -50,7 +50,7 @@ jobs:
             }
             
             const divider = '━'.repeat(80);
-            const relayComment = '@copilot-swe-agent\n\nUser @' + originalAuthor + ' mentioned @MaslowBot with the following request:\n\n' + divider + '\n\n' + originalBody + '\n\n' + divider + '\n\n_This comment was automatically relayed by MaslowBot so that @copilot-swe-agent can respond to the request._';
+            const relayComment = '@copilot\n\nUser @' + originalAuthor + ' mentioned @MaslowBot with the following request:\n\n' + divider + '\n\n' + originalBody + '\n\n' + divider + '\n\n_This comment was automatically relayed by MaslowBot so that @copilot can respond to the request._';
             
             let issueNumber;
             if (context.eventName === 'issue_comment') {
@@ -68,7 +68,7 @@ jobs:
                 body: relayComment
               });
               
-              console.log('Successfully relayed comment from @' + originalAuthor + ' to @copilot-swe-agent on issue/PR #' + issueNumber);
+              console.log('Successfully relayed comment from @' + originalAuthor + ' to @copilot on issue/PR #' + issueNumber);
             } catch (error) {
               console.error('Failed to relay comment:', error);
               core.setFailed('Failed to relay comment: ' + error.message);
