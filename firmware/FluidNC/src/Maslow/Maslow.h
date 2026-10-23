@@ -219,6 +219,10 @@ private:
     unsigned int  panicCount       = 0;
     bool          watchdogFired    = false;
 
+    //Servo fault pin state, so the fault is reported when it starts and ends rather than every PID cycle
+    bool          servoFaultActive  = false;
+    unsigned long servoFaultStartMs = 0;
+
     //Stores a reference to the global system runtime function to be called when blocking operations are needed
     void (*_sys_rt)() = nullptr;
 

@@ -458,10 +458,16 @@ void Maslow_::recomputePID() {
 
     digitalWrite(coolingFanPin, HIGH);  //keep the cooling fan on
 
-    if (digitalRead(SERVOFAULT) ==
-        1) {  //The servo drives have a fault pin that goes high when there is a fault (ie one over heats). We should probably call panic here. Also this should probably be read in the main loop
-        log_info("Servo fault!");
+    //The servo drives have a fault pin that goes high when there is a fault (ie one over heats). We should probably call panic here. Also this should probably be read in the main loop
+    //Report the fault when it starts and when it clears; this runs every PID cycle, so logging each read floods the console
+    bool servoFault = digitalRead(SERVOFAULT) == 1;
+    if (servoFault && !servoFaultActive) {
+        servoFaultStartMs = millis();
+        log_warn("Servo fault!");
+    } else if (!servoFault && servoFaultActive) {
+        log_info("Servo fault cleared after " << (millis() - servoFaultStartMs) << " ms");
     }
+    servoFaultActive = servoFault;
 }
 
 //------------
