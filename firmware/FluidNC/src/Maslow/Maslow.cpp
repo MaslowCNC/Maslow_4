@@ -458,9 +458,9 @@ void Maslow_::recomputePID() {
 
     digitalWrite(coolingFanPin, HIGH);  //keep the cooling fan on
 
-    //The servo drives have a fault pin that goes high when there is a fault (ie one over heats). We should probably call panic here. Also this should probably be read in the main loop
+    //The DRV8876 nFAULT outputs are open-drain, tied together with a 10k pull-up to 3V3, so the line reads LOW when any driver faults (ie one over heats). We should probably call panic here. Also this should probably be read in the main loop
     //Report the fault when it starts and when it clears; this runs every PID cycle, so logging each read floods the console
-    bool servoFault = digitalRead(SERVOFAULT) == 1;
+    bool servoFault = digitalRead(SERVOFAULT) == 0;
     if (servoFault && !servoFaultActive) {
         servoFaultStartMs = millis();
         log_warn("Servo fault!");
