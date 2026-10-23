@@ -1791,7 +1791,10 @@ Error execute_line(const char* line, Channel& channel, AuthenticationLevel auth_
     Error result = gc_execute_line(line);
     if (result != Error::Ok && result != Error::Reset) {
         log_error_to(channel, "Bad GCode: " << line);
-        if (Job::active()) {
+        // Maslow: skip unsupported commands rather than stopping the job, as Maslow-Main did and
+        // InputFile::ack() intends - CAM posts emit things like G37 (tool setter) that most
+        // senders ignore.  Any other error still alarms and stops the job.
+        if (Job::active() && result != Error::GcodeUnsupportedCommand) {
             send_alarm(ExecAlarm::GCodeError);
         }
     }
