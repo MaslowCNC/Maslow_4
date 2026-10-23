@@ -2,6 +2,8 @@
 // Use of this source code is governed by a GPLv3 license that can be found in the LICENSE file.
 
 #include "Job.h"
+#include "Serial.h"   // allChannels
+#include "Logging.h"  // log_error
 #include <map>
 #include <vector>
 #include <freertos/FreeRTOS.h>
@@ -10,6 +12,19 @@
 std::vector<JobSource*> job;
 
 Channel* Job::leader = nullptr;
+
+// The job's channel cannot be deleted here.  unnest() runs on the polling task as soon as the file
+// reaches EOF, while protocol_main_loop is usually still executing the last line, holding a
+// processing ref and about to call ack() on this channel; abort() can likewise race a queued line.
+// Deleting it then sent ack() through a freed vtable (a panic at the end of every job).  Hand it to
+// the reaper, which deletes it once no queued line or log message refers to it.  If the kill queue
+// is full, leak it rather than risk the use-after-free; never wait for the refs here, because
+// Maslow.stop() aborts the job from the task that may hold them.
+JobSource::~JobSource() {
+    if (!allChannels.kill(_channel)) {
+        log_error("Could not queue job channel " << _channel->name() << " for deletion, leaking it");
+    }
+}
 
 // Guards `job` and `leader`.  See the note in Job.h.
 static SemaphoreHandle_t s_job_mutex = xSemaphoreCreateMutex();

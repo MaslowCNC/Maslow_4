@@ -145,7 +145,9 @@ void Maslow_::update() {
     // watchdog will reset the device, stopping all PWM outputs.
     static bool wdt_registered = false;
     if (!wdt_registered) {
-        if (esp_task_wdt_add(NULL) == ESP_OK) {
+        // protocol_main_loop() normally subscribes this task already (add_watchdog_to_task()),
+        // and esp_task_wdt_add() refuses a second subscription, so check first.
+        if (esp_task_wdt_status(NULL) == ESP_OK || esp_task_wdt_add(NULL) == ESP_OK) {
             log_info("Maslow update loop registered with hardware watchdog");
         } else {
             log_warn("Could not register Maslow update loop with hardware watchdog");

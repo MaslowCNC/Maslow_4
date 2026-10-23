@@ -824,6 +824,11 @@ static Error showCoredump(const char* value, AuthenticationLevel auth_level, Cha
         btLine += " (corrupted)";
     }
     log_stream(out, btLine.c_str());
+    String regs = "Registers:";
+    for (int i = 0; i < 16; i++) {
+        regs += " a" + String(i) + "=0x" + String(summary->ex_info.exc_a[i], HEX);
+    }
+    log_stream(out, regs.c_str());
     delete summary;
 #else
     log_stream(out, "Core dumps to flash are not enabled in this build");
