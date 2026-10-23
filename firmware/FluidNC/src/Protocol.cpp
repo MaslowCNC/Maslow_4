@@ -375,9 +375,18 @@ void protocol_main_loop() {
                 Channel* ldr         = Job::leader_channel();
                 Channel* out_channel = ldr ? ldr : channel;
 
-                uint32_t start       = millis();
-                Error    status_code = execute_line(item.line, *out_channel, AuthenticationLevel::LEVEL_GUEST, true);
+                // Commands run on the task that calls Maslow.update(), and some of them block well
+                // past its 100 ms watchdog - $SD/Run mounts the card and opens the file (650 ms
+                // measured for $SD/List).  In Idle and Alarm, update() holds the motors stopped,
+                // so a slow command there is harmless; only keep the watchdog strict when the
+                // machine is moving.
+                bool     stoppedBefore = state_is(State::Idle) || state_is(State::Alarm);
+                uint32_t start         = millis();
+                Error    status_code   = execute_line(item.line, *out_channel, AuthenticationLevel::LEVEL_GUEST, true);
                 report_slow_step("command", start, item.line);
+                if (stoppedBefore && (state_is(State::Idle) || state_is(State::Alarm))) {
+                    Maslow.resetUpdateWatchdog();
+                }
 
                 // If the line was aborted, the channel could be invalid.
                 if (!sys.abort()) {
