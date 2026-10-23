@@ -160,8 +160,6 @@ bool cmd_queue_defer(const char* line, Channel& channel) {
     return xQueueSend(cmd_queue, &item, 0) == pdTRUE;
 }
 
-TaskHandle_t telemetryTask = nullptr;
-
 TaskHandle_t pollingTask = nullptr;
 
 // Poll the registered serial-style channels for one line and route it through
@@ -178,27 +176,6 @@ static void poll_input_channel() {
             ch->ack(rc);
             ch->release_processing_ref();
         }
-    }
-}
-
-void stop_telemetry() {
-    if (telemetryTask) {
-        vTaskSuspend(telemetryTask);
-    }
-}
-
-void start_telemetry() {
-    if (telemetryTask) {
-        vTaskResume(telemetryTask);
-    } else {
-        xTaskCreatePinnedToCore(telemetry_loop,    // task
-                                "telemetry",       // name for task
-                                16000,             // size of task stack
-                                0,                 // parameters
-                                1,                 // priority
-                                &telemetryTask,    // task handle
-                                SUPPORT_TASK_CORE  // core
-        );
     }
 }
 
@@ -355,7 +332,6 @@ void protocol_main_loop() {
     start_polling();
     Maslow.begin(&protocol_exec_rt_system);
     ::printf("[BOOT] K Maslow.begin done\n");
-    start_telemetry();
 
     // ---------------------------------------------------------------------------------
     // Primary loop! Upon a system abort, this exits back to main() to reset the system.

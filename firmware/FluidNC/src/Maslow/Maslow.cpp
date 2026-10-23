@@ -1392,6 +1392,8 @@ void Maslow_::getInfo() {
     releaseLogBuffer();
 }
 
+static void start_telemetry();
+
 void Maslow_::set_telemetry(bool enabled) {
     if (enabled) {
         // Start off the file with the length of each struct in it.
@@ -1416,6 +1418,9 @@ void Maslow_::set_telemetry(bool enabled) {
         // }
     }
     telemetry_enabled = enabled;
+    if (enabled) {
+        start_telemetry();
+    }
     log_info("Telemetry: " << (enabled ? "enabled" : "disabled"));
 }
 
@@ -1591,6 +1596,14 @@ void Maslow_::dump_telemetry(const char* file) {
     delete f;
 }
 
+// The telemetry task exists only while telemetry is enabled: its 16 KB stack is
+// internal DRAM, and telemetry is off unless someone turns it on.
+// telemetryRunning is claimed by start_telemetry() and released by the task as
+// it exits, both under telemetryMux, so a quick disable/enable either keeps the
+// exiting task alive or starts a fresh one - never neither, never two.
+static portMUX_TYPE telemetryMux     = portMUX_INITIALIZER_UNLOCKED;
+static bool         telemetryRunning = false;
+
 // Called on utility core as a task to gather telemetry and write it to an SD log
 void telemetry_loop(void* unused) {
     const int bufferSize = 5000;
@@ -1599,27 +1612,55 @@ void telemetry_loop(void* unused) {
 
     while (true) {
         if (Maslow.telemetry_enabled) {
-            TelemetryData data = Maslow.get_telemetry_data();
-
-            // Copy the telemetry data into the buffer
-            memcpy(buffer + bufferIndex, reinterpret_cast<uint8_t*>(&data), sizeof(TelemetryData));
-            // increment the index
-            bufferIndex += sizeof(TelemetryData);
-
-            // Check if the buffer is about to overflow
-            if (bufferIndex >= bufferSize) {
+            // Flush first if this record would not fit
+            if (bufferIndex + (int)sizeof(TelemetryData) > bufferSize) {
                 log_debug("!" << bufferIndex);
                 Maslow.write_telemetry_buffer(buffer, bufferIndex);
                 bufferIndex = 0;
             }
+
+            TelemetryData data = Maslow.get_telemetry_data();
+            memcpy(buffer + bufferIndex, reinterpret_cast<uint8_t*>(&data), sizeof(TelemetryData));
+            bufferIndex += sizeof(TelemetryData);
         } else {
             if (bufferIndex > 0) {
                 Maslow.write_telemetry_buffer(buffer, bufferIndex);
                 bufferIndex = 0;
             }
+            bool exiting = false;
+            taskENTER_CRITICAL(&telemetryMux);
+            if (!Maslow.telemetry_enabled) {
+                telemetryRunning = false;
+                exiting          = true;
+            }
+            taskEXIT_CRITICAL(&telemetryMux);
+            if (exiting) {
+                vTaskDelete(nullptr);
+            }
         }
         // Start with 2Hz-ish
         vTaskDelay(500 / portTICK_PERIOD_MS);
+    }
+}
+
+static void start_telemetry() {
+    taskENTER_CRITICAL(&telemetryMux);
+    bool alreadyRunning = telemetryRunning;
+    telemetryRunning    = true;
+    taskEXIT_CRITICAL(&telemetryMux);
+    if (alreadyRunning) {
+        return;
+    }
+    if (xTaskCreatePinnedToCore(telemetry_loop,    // task
+                                "telemetry",       // name for task
+                                16000,             // size of task stack
+                                0,                 // parameters
+                                1,                 // priority
+                                nullptr,           // task handle
+                                SUPPORT_TASK_CORE  // core
+                                ) != pdPASS) {
+        telemetryRunning = false;
+        log_error("Telemetry: could not start task");
     }
 }
 
