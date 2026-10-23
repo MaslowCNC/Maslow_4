@@ -37,14 +37,15 @@ Error InputFile::readLine(char* line, size_t maxlen) {
 }
 
 void InputFile::ack(Error status) {
-    if (status != Error::Ok) {
+    if (status == Error::GcodeUnsupportedCommand) {
+        // Skipped, not fatal - a warning, so the WebUI does not treat it as a fault
+        log_warn(static_cast<int>(status) << " (" << errorString(status) << ") in " << name() << " at line " << lineNumber());
+    } else if (status != Error::Ok) {
         log_error(static_cast<int>(status) << " (" << errorString(status) << ") in " << name() << " at line " << lineNumber());
-        if (status != Error::GcodeUnsupportedCommand) {
-            // Do not stop on unsupported commands because most senders do not stop.
-            // Stop the file job on other errors
-            notifyf("File job error", "Error:%d in %s at line: %d", status, name().c_str(), lineNumber());
-            _pending_error = status;
-        }
+        // Do not stop on unsupported commands because most senders do not stop.
+        // Stop the file job on other errors
+        notifyf("File job error", "Error:%d in %s at line: %d", status, name().c_str(), lineNumber());
+        _pending_error = status;
     }
 }
 
