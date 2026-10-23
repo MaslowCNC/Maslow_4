@@ -164,12 +164,17 @@ TaskHandle_t pollingTask = nullptr;
 
 // Maslow emergency-stops when Maslow.update() is not called for 100 ms, and its message says only
 // how long the gap was.  Name the step that took the time: anything on the update task (or a
-// command the polling task runs inline - flash writes there stall both cores) that takes longer
-// than this is logged with what it was.
+// command the polling task runs inline - flash writes there stall both cores) that kept update()
+// from running for longer than this is logged with what it was.  Time is counted from the later
+// of the step's start and the last update(), so a move that waits in the planner while update()
+// keeps running is not reported.
 static const uint32_t SLOW_STEP_MS = 50;
 
 static void report_slow_step(const char* step, uint32_t startMs, const char* detail = nullptr) {
-    uint32_t elapsed = millis() - startMs;
+    uint32_t now       = millis();
+    uint32_t lastFed   = Maslow.lastUpdateMs();
+    uint32_t sinceFrom = (int32_t)(lastFed - startMs) > 0 ? lastFed : startMs;
+    uint32_t elapsed   = now - sinceFrom;
     if (elapsed > SLOW_STEP_MS) {
         if (detail) {
             log_warn("Slow " << step << " took " << elapsed << " ms: " << detail);

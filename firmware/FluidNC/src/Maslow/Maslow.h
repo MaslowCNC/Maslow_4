@@ -114,6 +114,7 @@ public:
     void   eStop(String message = "Emergency stop triggered.");
     void   panic();
     void   resetUpdateWatchdog();
+    unsigned long lastUpdateMs() const { return lastCallToUpdate; }  // millis() of the last update() or watchdog reset
 
     /** Clears a latched error or watchdog condition and turns the red LED off.
      *  Called when the user clears the alarm with $X.  Returns true if a latched

@@ -791,6 +791,46 @@ static Error showBacktrace(const char* value, AuthenticationLevel auth_level, Ch
     return Error::Ok;
 }
 
+#if __has_include("esp_core_dump.h")
+#    include "esp_core_dump.h"
+#endif
+
+// The framework writes an ELF core dump to the coredump partition on a panic, and OTA flashing
+// leaves it in place.  Print its summary so a panic can be decoded without USB access:
+// xtensa-esp32s3-elf-addr2line -e firmware.elf <PCs> against the build that crashed.
+static Error showCoredump(const char* value, AuthenticationLevel auth_level, Channel& out) {
+#if CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH && CONFIG_ESP_COREDUMP_DATA_FORMAT_ELF
+    if (esp_core_dump_image_check() != ESP_OK) {
+        log_stream(out, "No valid core dump in flash");
+        return Error::Ok;
+    }
+    auto* summary = new esp_core_dump_summary_t;
+    if (esp_core_dump_get_summary(summary) != ESP_OK) {
+        delete summary;
+        log_stream(out, "Core dump summary could not be read");
+        return Error::Ok;
+    }
+    log_stream(out, "Core dump from previous panic:");
+    log_stream(out, "  Task:     " << summary->exc_task);
+    log_stream(out, "  PC:       0x" << String(summary->exc_pc, HEX).c_str());
+    log_stream(out, "  ExcCause: " << summary->ex_info.exc_cause);
+    log_stream(out, "  ExcVAddr: 0x" << String(summary->ex_info.exc_vaddr, HEX).c_str());
+    log_stream(out, "  ELF SHA:  " << reinterpret_cast<const char*>(summary->app_elf_sha256));
+    String btLine = "Backtrace:";
+    for (uint32_t i = 0; i < summary->exc_bt_info.depth && i < 16; i++) {
+        btLine += " 0x" + String(summary->exc_bt_info.bt[i], HEX);
+    }
+    if (summary->exc_bt_info.corrupted) {
+        btLine += " (corrupted)";
+    }
+    log_stream(out, btLine.c_str());
+    delete summary;
+#else
+    log_stream(out, "Core dumps to flash are not enabled in this build");
+#endif
+    return Error::Ok;
+}
+
 #ifdef CRASH_TEST
 static Error forceCrash(const char* value, AuthenticationLevel auth_level, Channel& out) {
     log_stream(out, "Forcing crash by writing to address 0");
@@ -1500,6 +1540,7 @@ void make_user_commands() {
 #endif
     new ReportCommand("SS", "Startup/Show", showStartupLog, anyState);
     new ReportCommand("BS", "Backtrace/Show", showBacktrace, anyState);
+    new ReportCommand("CDS", "Coredump/Show", showCoredump, anyState);
 #ifdef CRASH_TEST
     new UserCommand("CRASH", "Crash/Test", forceCrash, anyState);
 #endif
