@@ -4,12 +4,14 @@
 #include "Protocol.h"  // protocol_buffer_synchronize
 #include "Machine/MachineConfig.h"
 #include "Parameters.h"
+#include "Maslow/Maslow.h"  // Maslow.resetUpdateWatchdog()
 
 #include <map>
 #include <limits>
 #include <cstring>
 #include <vector>
 #include <charconv>
+#include <cmath>
 #include <Driver/NVS.h>
 
 std::vector<Setting*> Setting::List __attribute__((init_priority(101))) = {};
@@ -432,6 +434,14 @@ bool Coordinates::load() {
 };
 
 void Coordinates::set(float value[MAX_N_AXIS]) {
+    // Validate that no NaN values are stored - NaN in coordinate offsets would
+    // permanently corrupt the home position stored in NVS.
+    for (int i = 0; i < MAX_N_AXIS; i++) {
+        if (std::isnan(value[i])) {
+            log_error("Coordinates::set: refusing to store NaN value for axis " << i << " in " << _name);
+            return;
+        }
+    }
     memcpy(&_currentValue, value, sizeof(_currentValue));
     if (!is_saved) {
         return;
@@ -446,6 +456,12 @@ void Coordinates::set(float value[MAX_N_AXIS]) {
         len = (MAX_N_AXIS - U_AXIS) * sizeof(float);
         nvs.set_blob((std::string("UVW") + _name).c_str(), &_currentValue[U_AXIS], len);
     }
+
+    // This runs on the task that calls Maslow.update() (G10 L20 when the WebUI sets home), and an
+    // NVS write that has to erase a flash sector can block for well over the 100 ms update
+    // watchdog, which then emergency-stops the machine as a job starts.  The buffer was synced
+    // above, so nothing is moving and the wait is intentional.
+    Maslow.resetUpdateWatchdog();
 }
 
 IPaddrSetting::IPaddrSetting(

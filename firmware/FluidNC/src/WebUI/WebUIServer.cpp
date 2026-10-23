@@ -27,6 +27,7 @@
 #include "WebClient.h"
 
 #include "Protocol.h"  // protocol_send_event
+#include "Maslow/Maslow.h"  // Maslow.resetUpdateWatchdog()
 #include "FluidPath.h"
 #include "JSONEncoder.h"
 
@@ -1195,6 +1196,9 @@ namespace WebUI {
             }
             //Upload write
             //**************
+            // Flash writes stall both cores, so Maslow.update() misses calls through no fault of
+            // the motion system; keep its watchdog fed while the upload runs.
+            Maslow.resetUpdateWatchdog();
             //check if no error
             if (_upload_status == UploadStatus::ONGOING) {
                 if (((100 * index) / maxSketchSpace) != last_upload_update) {
@@ -1385,6 +1389,8 @@ namespace WebUI {
 
     void WebUI_Server::uploadWrite(AsyncWebServerRequest* request, uint8_t* buffer, size_t length) {
         delay_ms(1);
+        // LocalFS writes stall both cores; keep the Maslow update watchdog fed while uploading
+        Maslow.resetUpdateWatchdog();
         if (_uploadFile && _upload_status == UploadStatus::ONGOING) {
             //no error write post data
             if (length != _uploadFile->write(buffer, length)) {
