@@ -8,9 +8,10 @@
 */
 
 #include "Servo.h"
-#include "../Pin.h"
+#include "Pin.h"
+#include "System.h"
 
-#include "../Uart.h"
+#include "Uart.h"
 
 #include <cstdint>
 
@@ -21,9 +22,9 @@ namespace MotorDrivers {
 
         void set_location();
 
-        uint8_t _id;
+        uint8_t _id = 255;
 
-        static int _timer_ms;
+        static int32_t _timer_ms;  // SdB: TODO FIXME This is asking for trouble; timer_ms is a name in Servo as well.
 
         static uint8_t _tx_message[100];  // outgoing to dynamixel
         static uint8_t _msg_index;
@@ -39,11 +40,10 @@ namespace MotorDrivers {
         void finish_write();
         void show_status();
 
-        bool     test();
-        uint32_t dxl_read_position();
-        void     dxl_read(uint16_t address, uint16_t data_len);
+        bool test();
+        void dxl_read(uint16_t address, uint16_t data_len);
 
-        void dxl_goal_position(int32_t position);  // set one motor
+        void dxl_goal_position(uint32_t position);  // set one motor
         void set_operating_mode(uint8_t mode);
         void LED_on(bool on);
 
@@ -55,11 +55,9 @@ namespace MotorDrivers {
 
         static std::vector<Dynamixel2*> _instances;
 
-        int _axis_index;
-
         static Uart* _uart;
 
-        int _uart_num = -1;
+        int32_t _uart_num = -1;
 
         static bool _uart_started;
 
@@ -99,40 +97,68 @@ namespace MotorDrivers {
         uint32_t _countMin = 1024;
         uint32_t _countMax = 3072;
 
-        bool        _disabled;
+        steps_t _min_steps;
+        steps_t _max_steps;
+
         static bool _has_errors;
 
+        void add_position_to_message();
+
     public:
-        Dynamixel2() : _id(255), _disabled(true) {}
+        Dynamixel2(const char* name) : Servo(name) {}
 
         // Overrides for inherited methods
         void        init() override;
-        void        read_settings() override;
         bool        set_homing_mode(bool isHoming) override;
         void        set_disable(bool disable) override;
         void        update() override;
         static void update_all();
         void        config_motor() override;
 
-        const char* name() override { return "dynamixel2"; }
-
         // Configuration handlers:
         void validate() override {
             Assert(_uart_num != -1, "Dynamixel: Missing uart_num configuration");
-            Assert(_id != 255, "Dynamixel: ID must be configured.");
+            Assert(_id != 255, "Dynamixel: ID must be configured");
         }
 
         void group(Configuration::HandlerBase& handler) override {
+            // Robotis Dynamixel Protocol 2 servo used as a virtual axis. Swap count_min/
+            // count_max to reverse direction. Only one UART can be used for all Dynamixels
+            // on a given machine, as currently written.
+
+            // @config uart_num
+            // @default -1
+            // Which top-level uartN: section this servo's Protocol 2 bus runs over.
+            // Required -- validate() asserts this is actually set. The servo's own
+            // programmed baud should match (1000000 recommended), mode "8N1".
             handler.item("uart_num", _uart_num);
+
+            // @config id
+            // @default 255
+            // This servo's Protocol 2 device ID on the bus. Required to be set to the
+            // servo's real, unique ID -- the default, 255, is Dynamixel's broadcast address
+            // and not a usable per-device value; validate() asserts it was changed.
             handler.item("id", _id);
+
+            // @config count_min
+            // @default 1024
+            // Servo raw position count corresponding to the low end of the axis's mpos
+            // range.
             handler.item("count_min", _countMin);
+
+            // @config count_max
+            // @default 3072
+            // Servo raw position count corresponding to the high end of the axis's mpos
+            // range.
             handler.item("count_max", _countMax);
+
+            // @config timer_ms
+            // @default 50
+            // Update interval, in milliseconds, for refreshing the servo's commanded
+            // position.
             handler.item("timer_ms", _timer_ms);
 
             Servo::group(handler);
         }
-
-        // Name of the configurable. Must match the name registered in the cpp file.
-        const char* name() const override { return "dynamixel2"; }
     };
 }

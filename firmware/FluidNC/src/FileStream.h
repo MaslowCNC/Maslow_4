@@ -12,6 +12,7 @@
 
 #include "Channel.h"
 #include "FluidPath.h"
+#include "Error.h"
 
 extern "C" {
 #include <stdio.h>
@@ -22,12 +23,18 @@ class FileStream : public Channel {
     FILE*     _fd;
     size_t    _size;
 
+    // When another subordinate file is being run, we close the
+    // current file to free up its file descriptor, saving the
+    // position so we can reopen later and restore the position
+    long        _saved_position;  // Used when the
+    const char* _mode;
+
     void setup(const char* mode);
 
 public:
-    FileStream() = default;
-    FileStream(std::string filename, const char* mode, const char* defaultFs = "") : FileStream(filename.c_str(), mode, defaultFs) {}
-    FileStream(const char* filename, const char* mode, const char* defaultFs = "");
+    FileStream() = delete;
+    FileStream(std::string filename, const char* mode, const Volume& defaultFs = LocalFS) : FileStream(filename.c_str(), mode, defaultFs) {}
+    FileStream(const char* filename, const char* mode, const Volume& defaultFs = LocalFS);
     FileStream(FluidPath fpath, const char* mode);
 
     FluidPath fpath() { return _fpath; }
@@ -39,20 +46,24 @@ public:
     int         peek() override;
     void        flush() override;
 
-    size_t readBytes(char* buffer, size_t length) { return read((uint8_t*)buffer, length); }
+    //    size_t readBytes(char* buffer, size_t length) override { return read((uint8_t*)buffer, length); }
 
-    size_t read(char* buffer, size_t length);  // read chars from stream into buffer
-    size_t read(uint8_t* buffer, size_t length) { return read((char*)buffer, length); }
+    int read(char* buffer, size_t length);  // read chars from stream into buffer
+    int read(uint8_t* buffer, size_t length) { return read((char*)buffer, length); }
 
     size_t write(uint8_t c) override;
     size_t write(const uint8_t* buffer, size_t length) override;
 
     size_t size();
-    size_t position();
+    size_t position() override;
+    void   set_position(size_t) override;
 
     // pollLine() is a required method of the Channel class that
     // FileStream implements as a no-op.
-    Channel* pollLine(char* line) override { return nullptr; }
+    Error pollLine(char* line) override { return Error::NoData; }
 
-    ~FileStream();
+    void save() override;
+    void restore() override;
+
+    ~FileStream() override;
 };

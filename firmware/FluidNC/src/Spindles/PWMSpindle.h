@@ -9,15 +9,13 @@
 */
 
 #include "OnOffSpindle.h"
-#include "Driver/PwmPin.h"
 
 #include <cstdint>
 
 namespace Spindles {
-    // This adds support for PWM
     class PWM : public OnOff {
     public:
-        PWM() = default;
+        PWM(const char* name) : OnOff(name) {}
 
         // PWM(Pin&& output, Pin&& enable, Pin&& direction, uint32_t minRpm, uint32_t maxRpm) :
         //     _min_rpm(minRpm), _max_rpm(maxRpm), _output_pin(std::move(output)), _enable_pin(std::move(enable)),
@@ -46,26 +44,36 @@ namespace Spindles {
             // At the other end, the minimum useful precision is 2^2
             // or 4 levels of control, so the max is 80MHz/2^2 = 20MHz.
             // Those might not be practical for many CNC applications,
-            // but the ESP32 hardware can handle them, so we let the
+            // but the hardware can handle them, so we let the
             // user choose.
+            // @config pwm_hz
+            // @default 5000
+            // @tuning typical
+            // PWM signal frequency. Resolution trades off against frequency -- 76Hz or
+            // less gets the full 20-bit duty-cycle resolution, roughly halving for every
+            // doubling of frequency above that, down to 4 levels (2 bits) at the 20MHz
+            // ceiling. Not every value in that range is a practical CNC PWM frequency, but
+            // the hardware supports the whole span, so it's left open.
             handler.item("pwm_hz", _pwm_freq, 1, 20000000);
 
+            // @default_for speed_map
+            // @default 0=0% 10000=100%
+            // @default_note applied by PWM::init() only when speed_map is left unset
+
+            // @pin_attributes_for output_pin
+            // @pin_attributes pwm
             OnOff::group(handler);
         }
-
-        // Name of the configurable. Must match the name registered in the cpp file.
-        const char* name() const override { return "PWM"; }
 
         virtual ~PWM() {}
 
     protected:
         uint32_t _current_pwm_duty = 0;
-        PwmPin*  _pwm              = nullptr;
 
         // Configurable
         uint32_t _pwm_freq = 5000;
 
         void         set_output(uint32_t duty) override;
-        virtual void deinit();
+        void         deinit() override;
     };
 }

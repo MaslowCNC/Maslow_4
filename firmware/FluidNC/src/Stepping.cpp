@@ -1,174 +1,258 @@
-#include "I2SOut.h"
+// #include "Driver/i2s_out.h"
 #include "EnumItem.h"
 #include "Stepping.h"
-#include "Stepper.h"
 #include "Machine/MachineConfig.h"  // config
 
 #include <atomic>
 
+std::vector<step_engine_t*> step_engines;
+
 namespace Machine {
 
-    int Stepping::_engine = TIMED;  // RMT;
+    step_engine_t* Stepping::_engine = nullptr;
 
-    EnumItem stepTypes[] = { { Stepping::TIMED, "Timed" },
-                             // { Stepping::RMT, "RMT" },
-                             { Stepping::I2S_STATIC, "I2S_static" },
-                             { Stepping::I2S_STREAM, "I2S_stream" },
-                             EnumItem(Stepping::TIMED) };
+    AxisMask Stepping::direction_mask = 0;
+
+    bool    Stepping::_switchedStepper = false;
+    int32_t Stepping::_segments        = 12;
+
+    uint32_t Stepping::fStepperTimer        = 0;
+    uint32_t Stepping::_idleMsecs           = 255;
+    uint32_t Stepping::_pulseUsecs          = 4;
+    uint32_t Stepping::_directionDelayUsecs = 0;
+    uint32_t Stepping::_disableDelayUsecs   = 0;
+
+    const EnumItem stepTypes[] = { { Stepping::TIMED, "Timed" },
+#if MAX_N_RMT
+                                   { Stepping::RMT_ENGINE, "RMT" },
+#endif
+#if MAX_N_I2SO
+                                   { Stepping::I2S_STATIC, "I2S_STATIC" }, { Stepping::I2S_STREAM, "I2S_STREAM" },
+#endif
+#if MAX_N_SIMULATOR
+                                   { Stepping::SIMULATOR, "Simulator" },
+#endif
+#if defined(MAX_N_PIO) && MAX_N_PIO
+                                   { Stepping::PIO_ENGINE, "PIO" },
+#endif
+                                   EnumItem(DEFAULT_STEPPING_ENGINE) };
+
+    void Stepping::afterParse() {
+        if (!_engine) {
+            _engine = step_engines[0];
+        }
+#if MAX_N_I2SO
+        Assert(strncmp("I2S", _engine->name, 3) || config->_i2so, "I2SO bus must be configured for this stepping type");
+#endif
+    }
 
     void Stepping::init() {
-        char* buffer = getLogBuffer();
-        snprintf(buffer, 1400, "Stepping:%s Pulse:%dus Dsbl Delay:%dus Dir Delay:%dus Idle Delay:%dms",
-                stepTypes[_engine].name, _pulseUsecs, _disableDelayUsecs, _directionDelayUsecs, _idleMsecs);
-        log_info(buffer);
-        releaseLogBuffer();
+        log_info("Stepping:" << _engine->name << " Pulse:" << _pulseUsecs << "us Dsbl Delay:" << _disableDelayUsecs
+                             << "us Dir Delay:" << _directionDelayUsecs << "us Idle Delay:" << _idleMsecs << "ms");
 
-        // Prepare stepping interrupt callbacks.  The one that is actually
-        // used is determined by timerStart() and timerStop()
-
-        // Setup a timer for direct stepping
-        stepTimerInit(fStepperTimer, Stepper::pulse_func);
-
-        // Register pulse_func with the I2S subsystem
-        // This could be done via the linker.
-        //        i2s_out_set_pulse_callback(Stepper::pulse_func);
+        uint32_t actual = _engine->init(_directionDelayUsecs, _pulseUsecs, fStepperTimer, Stepper::pulse_func);
+        if (actual != _pulseUsecs) {
+            log_warn("stepping/pulse_us adjusted to " << actual);
+        }
 
         Stepper::init();
     }
+}
 
-    void Stepping::reset() {
-        if (_engine == I2S_STREAM) {
-            i2s_out_reset();
-        }
+Stepping::motor_pins_t* Stepping::axis_motors[MAX_N_AXIS][MAX_MOTORS_PER_AXIS] = { nullptr };
+
+void Stepping::assignMotor(axis_t axis, motor_t motor, pinnum_t step_pin, bool step_invert, pinnum_t dir_pin, bool dir_invert) {
+    step_pin = _engine->init_step_pin(step_pin, step_invert);
+
+    auto m                   = new motor_pins_t;
+    axis_motors[axis][motor] = m;
+    m->step_pin              = step_pin;
+    m->step_invert           = step_invert;
+    m->dir_pin               = dir_pin;
+    m->dir_invert            = dir_invert;
+    m->blocked               = false;
+    m->limited               = false;
+
+    if (motor == 0 && dir_invert) {
+        set_bitnum(direction_mask, axis);
     }
-    void Stepping::beginLowLatency() {
-        _switchedStepper = _engine == I2S_STREAM;
-        if (_switchedStepper) {
-            _engine = I2S_STATIC;
-            i2s_out_set_passthrough();
-            i2s_out_delay();  // Wait for a change in mode.
-        }
+}
+
+steps_t Stepping::axis_steps[MAX_N_AXIS] = { 0 };
+
+bool* Stepping::limit_var(axis_t axis, motor_t motor) {
+    auto m = axis_motors[axis][motor];
+    return m ? &(m->limited) : nullptr;
+}
+
+void Stepping::block(axis_t axis, motor_t motor) {
+    auto m = axis_motors[axis][motor];
+    if (m) {
+        m->blocked = true;
     }
-    void Stepping::endLowLatency() {
-        if (_switchedStepper) {
-            if (i2s_out_get_pulser_status() != PASSTHROUGH) {
-                // Called during streaming. Stop streaming.
-                // log_debug("Stop the I2S streaming and switch to the passthrough mode.");
-                i2s_out_set_passthrough();
-                i2s_out_delay();  // Wait for a change in mode.
+}
+
+void Stepping::unblock(axis_t axis, motor_t motor) {
+    auto m = axis_motors[axis][motor];
+    if (m) {
+        m->blocked = false;
+    }
+}
+
+void Stepping::limit(axis_t axis, motor_t motor) {
+    auto m = axis_motors[axis][motor];
+    if (m) {
+        m->limited = true;
+    }
+}
+void Stepping::unlimit(axis_t axis, motor_t motor) {
+    auto m = axis_motors[axis][motor];
+    if (m) {
+        m->limited = false;
+    }
+}
+
+void IRAM_ATTR Stepping::step(AxisMask step_mask, AxisMask dir_mask) {
+    // Set the direction pins, but optimize for the common
+    // situation where the direction bits haven't changed.
+    static AxisMask previous_dir_mask = 65535;  // should never be this value
+    if (previous_dir_mask == 65535) {
+        // Set all the direction bits the first time
+        previous_dir_mask = ~dir_mask;
+    }
+
+    if (dir_mask != previous_dir_mask) {
+        for (axis_t axis = X_AXIS; axis < Axes::_numberAxis; axis++) {
+            bool dir     = bitnum_is_true(dir_mask, axis);
+            bool old_dir = bitnum_is_true(previous_dir_mask, axis);
+            if (dir != old_dir) {
+                for (size_t motor = 0; motor < MAX_MOTORS_PER_AXIS; motor++) {
+                    auto m = axis_motors[axis][motor];
+                    if (m) {
+                        _engine->set_dir_pin(m->dir_pin, dir ^ m->dir_invert);
+                    }
+                }
             }
-            _engine = I2S_STREAM;
+            // Some stepper drivers need time between changing direction and doing a pulse.
+            _engine->finish_dir();
         }
-    }
-    // Called only from Axes::unstep()
-    void IRAM_ATTR Stepping::waitPulse() {
-        if (_engine == I2S_STATIC || _engine == TIMED) {
-            spinUntil(_stepPulseEndTime);
-        }
+        previous_dir_mask = dir_mask;
     }
 
-    // Called only from Axes::step()
-    void IRAM_ATTR Stepping::waitDirection() {
-        if (_directionDelayUsecs) {
-            // Stepper drivers need some time between changing direction and doing a pulse.
-            // Do not use switch() in IRAM
-            if (_engine == stepper_id_t::I2S_STREAM) {
-                // Commit the pin changes to the DMA queue
-                i2s_out_push_sample(_directionDelayUsecs);
-            } else if (_engine == stepper_id_t::I2S_STATIC) {
-                // Commit the pin changes to the hardware immediately
-                config->_i2so->push();
-                delay_us(_directionDelayUsecs);
-            } else if (_engine == stepper_id_t::TIMED) {
-                // If we are using RMT, we can't delay here.
-                delay_us(_directionDelayUsecs);
-            }
-        }
-    }
+    _engine->start_step();
 
-    // Called from Axes::step() and, probably incorrectly, from UnipolarMotor::step()
-    void IRAM_ATTR Stepping::startPulseTimer() {
-        // Do not use switch() in IRAM
-        if (_engine == stepper_id_t::I2S_STREAM) {
-            // Generate the number of pulses needed to span pulse_microseconds
-            i2s_out_push_sample(_pulseUsecs);
-        } else if (_engine == stepper_id_t::I2S_STATIC) {
-            config->_i2so->push();
-            _stepPulseEndTime = usToEndTicks(_pulseUsecs);
-        } else if (_engine == stepper_id_t::TIMED) {
-            _stepPulseEndTime = usToEndTicks(_pulseUsecs);
-        }
-    }
-
-    // Called only from Axes::unstep()
-    void IRAM_ATTR Stepping::finishPulse() {
-        if (_engine == stepper_id_t::I2S_STATIC) {
-            config->_i2so->push();
-        }
-    }
-
-    // Called only from Stepper::pulse_func when a new segment is loaded
-    // The argument is in units of ticks of the timer that generates ISRs
-    void IRAM_ATTR Stepping::setTimerPeriod(uint16_t timerTicks) {
-        if (_engine == I2S_STREAM) {
-            // Pulse ISR is called for each tick of alarm_val.
-            // The argument to i2s_out_set_pulse_period is in units of microseconds
-            i2s_out_set_pulse_period(((uint32_t)timerTicks) / ticksPerMicrosecond);
-        } else {
-            stepTimerSetTicks((uint32_t)timerTicks);
-        }
-    }
-
-    // Called only from Stepper::wake_up which is not used in ISR context
-    void Stepping::startTimer() {
-        if (_engine == I2S_STREAM) {
-            i2s_out_set_stepping();
-        } else {
-            stepTimerStart();
-        }
-    }
-    // Called only from Stepper::stop_stepping, used in both ISR and foreground contexts
-    void IRAM_ATTR Stepping::stopTimer() {
-        if (_engine == I2S_STREAM) {
-            i2s_out_set_passthrough();
-        } else {
-            stepTimerStop();
-        }
-    }
-
-    void Stepping::group(Configuration::HandlerBase& handler) {
-        handler.item("engine", _engine, stepTypes);
-        handler.item("idle_ms", _idleMsecs, 0, 10000000);  // full range
-        handler.item("pulse_us", _pulseUsecs, 0, 30);
-        handler.item("dir_delay_us", _directionDelayUsecs, 0, 10);
-        handler.item("disable_delay_us", _disableDelayUsecs, 0, 10);
-        handler.item("segments", _segments, 6, 20);
-    }
-
-    void Stepping::afterParse() {
-        if (_engine == I2S_STREAM || _engine == I2S_STATIC) {
-            Assert(config->_i2so, "I2SO bus must be configured for this stepping type");
-            if (_pulseUsecs < I2S_OUT_USEC_PER_PULSE) {
-                log_warn("Increasing stepping/pulse_us to the IS2 minimum value " << I2S_OUT_USEC_PER_PULSE);
-                _pulseUsecs = I2S_OUT_USEC_PER_PULSE;
-            }
-            if (_engine == I2S_STREAM && _pulseUsecs > I2S_STREAM_MAX_USEC_PER_PULSE) {
-                log_warn("Decreasing stepping/pulse_us to " << I2S_STREAM_MAX_USEC_PER_PULSE << ", the maximum value for I2S_STREAM");
-                _pulseUsecs = I2S_STREAM_MAX_USEC_PER_PULSE;
+    // Turn on step pulses for motors that are supposed to step now
+    for (axis_t axis = X_AXIS; axis < Axes::_numberAxis; axis++) {
+        if (bitnum_is_true(step_mask, axis)) {
+            auto increment = bitnum_is_true(dir_mask, axis) ? -1 : 1;
+            axis_steps[axis] += increment;
+            for (size_t motor = 0; motor < MAX_MOTORS_PER_AXIS; motor++) {
+                auto m = axis_motors[axis][motor];
+                if (m && !m->blocked && !m->limited) {
+                    _engine->set_step_pin(m->step_pin, !m->step_invert);
+                }
             }
         }
     }
+    _engine->finish_step();
+}
 
-    uint32_t Stepping::maxPulsesPerSec() {
-        switch (_engine) {
-            case stepper_id_t::I2S_STREAM:
-            case stepper_id_t::I2S_STATIC:
-                return i2s_out_max_steps_per_sec;
-            // case stepper_id_t::RMT:
-            //     return 1000000 / (2 * _pulseUsecs + _directionDelayUsecs);
-            case stepper_id_t::TIMED:
-            default:
-                return 80000;  // based on testing
+// Turn all stepper pins off
+void IRAM_ATTR Stepping::unstep() {
+    if (_engine->start_unstep()) {
+        return;
+    }
+    for (axis_t axis = X_AXIS; axis < Axes::_numberAxis; axis++) {
+        for (size_t motor = 0; motor < MAX_MOTORS_PER_AXIS; motor++) {
+            auto m = axis_motors[axis][motor];
+            if (m) {
+                _engine->set_step_pin(m->step_pin, m->step_invert);
+            }
         }
     }
+    _engine->finish_unstep();
+}
+
+void Stepping::reset() {}
+void Stepping::beginLowLatency() {}
+void Stepping::endLowLatency() {}
+
+// Called only from Stepper::pulse_func when a new segment is loaded
+// The argument is in units of ticks of the timer that generates ISRs
+void IRAM_ATTR Stepping::setTimerPeriod(uint32_t ticks) {
+    _engine->set_timer_ticks((uint32_t)ticks);
+}
+
+// Called only from Stepper::wake_up which is not used in ISR context
+void Stepping::startTimer() {
+    _engine->start_timer();
+}
+
+// Called only from Stepper::stop_stepping, used in both ISR and foreground contexts
+void IRAM_ATTR Stepping::stopTimer() {
+    _engine->stop_timer();
+}
+
+void Stepping::group(Configuration::HandlerBase& handler) {
+    // @config engine
+    // @default (none)
+    // @default_note board-dependent (DEFAULT_STEPPING_ENGINE, applied in afterParse())
+    // Method used to generate step pulses in firmware. Controller board hardware is
+    // designed for either RMT or I2S stepping, so this must match what the board
+    // actually wires up -- stepping types cannot be mixed across motors. Choices come
+    // from stepTypes[] below.
+    //
+    // RMT drives native GPIO step/direction pins directly using the ESP32 RMT
+    // peripheral, with no CPU delay loops; typically used on boards with few motors.
+    // TIMED has the same pin requirements as RMT but drives pins from the CPU with
+    // delay loops, so there's no reason to prefer it over RMT.
+    // I2S_STATIC and I2S_STREAM both drive motors over the I2S-output ("I2SO") shift
+    // register bus instead of native GPIOs, to support more motors with fewer pins;
+    // they are functionally identical to each other (two names for historical reasons)
+    // and require a valid i2so: section elsewhere in the config.
+    handler.item("engine", _engine);
+
+    // @config idle_ms
+    // @default 255
+    // @default_note special "never auto-disable" value (Grbl compatibility)
+    // @tuning typical
+    // Milliseconds of inactivity before motors are automatically disabled. Any value
+    // other than 255 (0-254 or 256+) is a real delay. Motors can also be disabled
+    // manually at any time with $MD.
+    handler.item("idle_ms", _idleMsecs, 0, 10000000);  // full range
+
+    // @config pulse_us
+    // @default 4
+    // @tuning typical
+    // Duration, in microseconds, of the "on" part of each step pulse; it typically
+    // needs an equal "off" duration, so this caps the max step rate at roughly
+    // 1000000/(2*pulse_us + dir_delay_us) steps/sec. Too short a pulse won't be
+    // registered by some stepper drivers -- check the driver's datasheet if unsure.
+    handler.item("pulse_us", _pulseUsecs, 0, 30);
+
+    // @config dir_delay_us
+    // @default 0
+    // @tuning typical
+    // Delay, in microseconds, required between a direction change and the next step
+    // pulse. Most drivers don't need this and can leave it at 0.
+    handler.item("dir_delay_us", _directionDelayUsecs, 0, 10);
+
+    // @config disable_delay_us
+    // @default 0
+    // @tuning typical
+    // Delay, in microseconds, some motors need between being enabled and being able
+    // to take their first step.
+    handler.item("disable_delay_us", _disableDelayUsecs, 0, 1000000);  // max 1 second
+
+    // @config segments
+    // @default 12
+    // Number of entries in the step-segment buffer sitting between the step-execution
+    // algorithm and the planner blocks. Governs how much lead time step execution has
+    // for other processing (feedhold/override latency is roughly 10ms * segments);
+    // leave at the default unless fine-tuning a specialized application.
+    handler.item("segments", _segments, 6, 20);
+}
+
+uint32_t Stepping::maxPulsesPerSec() {
+    return _engine->max_pulses_per_sec();
 }

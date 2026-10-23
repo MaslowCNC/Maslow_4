@@ -5,25 +5,24 @@
 
 #include "PinDetail.h"
 #include "PinOptionsParser.h"
+#include <string_view>
 
 namespace Pins {
     class ErrorPinDetail : public PinDetail {
         std::string _description;
 
     public:
-        ErrorPinDetail(const char* descr);
+        explicit ErrorPinDetail(std::string_view descr);
 
         PinCapabilities capabilities() const override;
 
         // I/O will all give an error:
-        void          write(int high) override;
-        int           read() override;
-        void          setAttr(PinAttributes value) override;
+        void          write(bool high) override;
+        bool          read() override;
+        void          setAttr(PinAttributes value, uint32_t frequency) override;
         PinAttributes getAttr() const override;
-
-        std::string toString() override;
 
         ~ErrorPinDetail() override {}
     };
-
+    extern ErrorPinDetail errorPin;
 }

@@ -4,8 +4,8 @@
 #pragma once
 
 #include "TrinamicSpiDriver.h"
-#include "../Pin.h"
-#include "../PinMapper.h"
+#include "Pin.h"
+#include "PinMapper.h"
 
 #include <cstdint>
 
@@ -15,6 +15,7 @@ namespace MotorDrivers {
 
     class TMC5160Driver : public TrinamicSpiDriver {
     public:
+        TMC5160Driver(const char* name) : TrinamicSpiDriver(name) {}
         // Overrides for inherited methods
         void init() override;
         void set_disable(bool disable);
@@ -24,11 +25,14 @@ namespace MotorDrivers {
 
         void group(Configuration::HandlerBase& handler) override {
             TrinamicSpiDriver::group(handler);
+
+            // @config tpfd
+            // @default 4
+            // TMC5160-specific passive fast decay time register value -- affects current
+            // ripple/step smoothness at low microstepping in StealthChop mode. Consult the
+            // TMC5160 datasheet before changing from the default.
             handler.item("tpfd", _tpfd, 0, 15);
         }
-
-        // Name of the configurable. Must match the name registered in the cpp file.
-        const char* name() const override { return "tmc_5160"; }
 
     private:
         TMC5160Stepper* tmc5160 = nullptr;

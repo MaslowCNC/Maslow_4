@@ -4,34 +4,41 @@
 
 #pragma once
 
-#include "../Assert.h"
-#include "../Configuration/GenericFactory.h"
-#include "../Configuration/HandlerBase.h"
-#include "../Configuration/Configurable.h"
-#include "../CoolantControl.h"
-#include "../Kinematics/Kinematics.h"
-#include "../WebUI/BTConfig.h"
-#include "../Extenders/Extenders.h"
-
-#include "../Control.h"
-#include "../Probe.h"
-#include "../Parking.h"
-#include "../SDCard.h"
-#include "../Spindles/Spindle.h"
-#include "../Stepping.h"
-#include "../Stepper.h"
-#include "../Config.h"
-#include "../OLED.h"
-#include "../UartChannel.h"
-#include "../Uart.h"
-#include "../Listeners/SysListener.h"
-
+#include "Platform.h"
+#include "Config.h"
+#include "Configuration/GenericFactory.h"
+#include "Configuration/HandlerBase.h"
+#include "Configuration/Configurable.h"
+#include "CoolantControl.h"
+#include "Kinematics/Kinematics.h"
+#if SUPPORT_PIN_EXTENDERS
+#    include "Extenders/Extenders.h"
+#endif
+#include "Control.h"
+#include "Probe.h"
+#include "Parking.h"
+#include "SDCard.h"
+#if MAX_N_ETH
+#    include "Machine/EthPhy.h"
+#endif
+#include "Spindles/Spindle.h"
+#include "Stepping.h"
+#include "Stepper.h"
+#include "UartChannel.h"
+#include "Driver/Console.h"
+#include "Module.h"
+#if SUPPORT_LISTENERS
+#    include "Listeners/SysListener.h"
+#endif
 #include "Axes.h"
 #include "SPIBus.h"
 #include "I2CBus.h"
 #include "I2SOBus.h"
 #include "UserOutputs.h"
+#include "UserInputs.h"
 #include "Macros.h"
+
+#include <string_view>
 
 namespace Machine {
     using ::Kinematics::Kinematics;
@@ -45,14 +52,33 @@ namespace Machine {
         // to ensure they are not already active. If so, and hard
         // limits are enabled, Alarm state will be entered instead of
         // Idle and the user will be told to check the limits.
-        bool _checkLimits = false;
+        bool _checkLimits = true;
 
     public:
         Start() {}
 
         void group(Configuration::HandlerBase& handler) {
+            // @config must_home
+            // @default true
+            // @tuning typical
+            // Refuses to accept motion commands until $H (home) has been run at least once
+            // since boot. Jogging and settings commands still work while unhomed.
             handler.item("must_home", _mustHome);
+
+            // @config deactivate_parking
+            // @default false
+            // @tuning typical
+            // Sets what the M56 parking-motion override defaults to at boot and after a
+            // program ends (only takes effect when enable_parking_override_control is also
+            // true): false leaves parking motion active by default; true starts with it
+            // disabled until M56 is used to turn it back on.
             handler.item("deactivate_parking", _deactivateParking);
+
+            // @config check_limits
+            // @default true
+            // @tuning typical
+            // Checks limit switches at power-up/reset; if hard limits are enabled and a
+            // switch is already active, the machine enters Alarm state instead of Idle.
             handler.item("check_limits", _checkLimits);
         }
 
@@ -63,32 +89,43 @@ namespace Machine {
     public:
         MachineConfig() = default;
 
-        Axes*           _axes           = nullptr;
-        Kinematics*     _kinematics     = nullptr;
-        SPIBus*         _spi            = nullptr;
-        I2CBus*         _i2c[MAX_N_I2C] = { nullptr };
-        I2SOBus*        _i2so           = nullptr;
-        Stepping*       _stepping       = nullptr;
-        CoolantControl* _coolant        = nullptr;
-        Probe*          _probe          = nullptr;
-        Control*        _control        = nullptr;
-        UserOutputs*    _userOutputs    = nullptr;
-        SDCard*         _sdCard         = nullptr;
-        Macros*         _macros         = nullptr;
-        Start*          _start          = nullptr;
-        Parking*        _parking        = nullptr;
-        OLED*           _oled           = nullptr;
+        Axes*       _axes       = nullptr;
+        Kinematics* _kinematics = nullptr;
+        SPIBus*     _spi        = nullptr;
+#if MAX_N_I2C
+        I2CBus* _i2c[MAX_N_I2C] = { nullptr };
+#endif
+#if MAX_N_I2SO
+        I2SOBus* _i2so = nullptr;
+#endif
+        Stepping*       _stepping    = nullptr;
+        CoolantControl* _coolant     = nullptr;
+        Probe*          _probe       = nullptr;
+        Control*        _control     = nullptr;
+        UserOutputs*    _userOutputs = nullptr;
+        UserInputs*     _userInputs  = nullptr;
+        SDCard*         _sdCard      = nullptr;
+#if MAX_N_ETH
+        EthPhy* _ethernet = nullptr;
+#endif
+        Macros*         _macros      = nullptr;
+        Start*          _start       = nullptr;
+        Parking*        _parking     = nullptr;
 
+#if SUPPORT_LISTENERS
         Listeners::SysListenerList _sysListeners;
-        Spindles::SpindleList      _spindles;
-        Extenders::Extenders*      _extenders = nullptr;
+#endif
+        //        Spindles::SpindleList      _spindles;
+#if SUPPORT_PIN_EXTENDERS
+        Extenders::Extenders* _extenders = nullptr;
+#endif
 
         UartChannel* _uart_channels[MAX_N_UARTS] = { nullptr };
         Uart*        _uarts[MAX_N_UARTS]         = { nullptr };
 
         float _arcTolerance      = 0.002f;
         float _junctionDeviation = 0.01f;
-        bool  _verboseErrors     = false;
+        bool  _verboseErrors     = true;
         bool  _reportInches      = false;
 
         int32_t _planner_blocks = 16;
@@ -120,12 +157,12 @@ namespace Machine {
         void afterParse() override;
         void group(Configuration::HandlerBase& handler) override;
 
-        // Maslow M4 Specific
+        // Maslow M4: machine-level config items (anchors, calibration, work area, ...)
         void groupM4Items(Configuration::HandlerBase& handler);
 
-        static bool load();
-        static bool load_file(const char* filename);
-        static bool load_yaml(StringRange* input);
+        static void load();
+        static void load_file(std::string_view file);
+        static void load_yaml(std::string_view yaml_string);
 
         ~MachineConfig();
     };
@@ -133,10 +170,38 @@ namespace Machine {
 
 extern Machine::MachineConfig* config;
 
-template <typename T>
-void copyAxes(T* dest, T* src) {
-    auto n_axis = config->_axes->_numberAxis;
-    for (size_t axis = 0; axis < n_axis; axis++) {
+template <typename D, typename S>
+void copyAxes(D* dest, S* src, axis_t n_axis) {
+    for (axis_t axis = X_AXIS; axis < n_axis; axis++) {
         dest[axis] = src[axis];
     }
+}
+
+template <typename D, typename S>
+void copyAxes(D* dest, S* src) {
+    copyAxes(dest, src, Axes::_numberAxis);
+}
+
+template <typename D, typename S>
+void addAxes(D* dest, S* src, axis_t n_axis) {
+    for (axis_t axis = X_AXIS; axis < n_axis; axis++) {
+        dest[axis] += src[axis];
+    }
+}
+
+template <typename D, typename S>
+void addAxes(D* dest, S* src) {
+    addAxes(dest, src, Axes::_numberAxis);
+}
+
+template <typename D, typename S>
+void subtractAxes(D* dest, S* src, axis_t n_axis) {
+    for (axis_t axis = X_AXIS; axis < n_axis; axis++) {
+        dest[axis] -= src[axis];
+    }
+}
+
+template <typename D, typename S>
+void subtractAxes(D* dest, S* src) {
+    subtractAxes(dest, src, Axes::_numberAxis);
 }

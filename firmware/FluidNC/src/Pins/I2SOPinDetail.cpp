@@ -1,34 +1,37 @@
 // Copyright (c) 2021 -  Stefan de Bruijn
 // Use of this source code is governed by a GPLv3 license that can be found in the LICENSE file.
 
-#include "I2SOPinDetail.h"
-
-#include "../I2SOut.h"
-#include "../Assert.h"
-#include "../Machine/MachineConfig.h"
+#include "Config.h"
+#if MAX_N_I2SO
+#    include "I2SOPinDetail.h"
+#    include "Driver/i2s_out.h"  // i2s_out_write() etc
 
 namespace Pins {
     std::vector<bool> I2SOPinDetail::_claimed(nI2SOPins, false);
 
     I2SOPinDetail::I2SOPinDetail(pinnum_t index, const PinOptionsParser& options) :
-        PinDetail(index), _capabilities(PinCapabilities::Output | PinCapabilities::I2S), _attributes(Pins::PinAttributes::Undefined),
-        _readWriteMask(0) {
+        PinDetail(index), _capabilities(PinCapabilities::Output | PinCapabilities::I2S), _attributes(Pins::PinAttributes::Undefined) {
         Assert(index < nI2SOPins, "Pin number is greater than max %d", nI2SOPins - 1);
-        Assert(!_claimed[index], "Pin is already used.");
+        Assert(!_claimed[index], "Pin is already used");
+
+        _name = "I2SO.";
+        _name += std::to_string(_index);
+
         // User defined pin capabilities
         for (auto opt : options) {
             if (opt.is("low")) {
                 _attributes = _attributes | PinAttributes::ActiveLow;
+                _name += ":low";
             } else if (opt.is("high")) {
                 // Default: Active HIGH.
             } else {
-                Assert(false, "Unsupported I2SO option '%s'", opt());
+                Assert(false, "Unsupported I2SO option '%.*s'", static_cast<int>(opt().length()), opt().data());
             }
         }
         _claimed[index] = true;
 
         // readWriteMask is xor'ed with the value to invert it if active low
-        _readWriteMask = _attributes.has(PinAttributes::ActiveLow);
+        _inverted = _attributes.has(PinAttributes::ActiveLow);
     }
 
     PinCapabilities I2SOPinDetail::capabilities() const {
@@ -37,43 +40,37 @@ namespace Pins {
 
     // The write will not happen immediately; the data is queued for
     // delivery to the serial shift register chain via DMA and a FIFO
-    void IRAM_ATTR I2SOPinDetail::write(int high) {
+    void IRAM_ATTR I2SOPinDetail::write(bool high) {
         if (high != _lastWrittenValue) {
             _lastWrittenValue = high;
-            _i2soDriver->write(_index, _readWriteMask ^ high);
+            i2s_out_write(_index, _inverted ^ (bool)high);
         }
     }
 
     // Write and wait for completion.  Not suitable for use from an ISR
-    void I2SOPinDetail::synchronousWrite(int high) {
+    // cppcheck-suppress unusedFunction
+    void IRAM_ATTR I2SOPinDetail::synchronousWrite(bool high) {
         if (high != _lastWrittenValue) {
             _lastWrittenValue = high;
 
-            _i2soDriver->write(_index, _readWriteMask ^ high);
-            _i2soDriver->push();
-
-            // Not sure if we need to wait for the write to be reflected; let's just do it:
-            const uint32_t I2S_OUT_USEC_PER_PULSE = 4;
-            delay_us(I2S_OUT_USEC_PER_PULSE * 2);
+            i2s_out_write(_index, _inverted ^ (bool)high);
+            i2s_out_delay();
         }
     }
 
-    int I2SOPinDetail::read() {
-        auto raw = _i2soDriver->read(_index);
-        return raw ^ _readWriteMask;
+    bool I2SOPinDetail::read() {
+        auto raw = i2s_out_read(_index);
+        return (bool)raw ^ _inverted;
     }
 
-    void I2SOPinDetail::setAttr(PinAttributes value) {
-        // Grab bus:
-        _i2soDriver = config->_i2so;
-
+    void I2SOPinDetail::setAttr(PinAttributes value, uint32_t frequency) {
         // The Arduino framework encodes OUTPUT as OUTPUT | INPUT.  We can't do the input part.
         if (value.has(PinAttributes::Output) && value.has(PinAttributes::Input)) {
             value = PinAttributes::Output;
         }
         Assert(!value.has(PinAttributes::Input), "I2SO pins cannot be used as input");
         Assert(value.validateWith(this->_capabilities), "Requested attributes do not match the I2SO pin capabilities");
-        Assert(!_attributes.conflictsWith(value), "Attributes on this pin have been set before, and there's a conflict.");
+        Assert(!_attributes.conflictsWith(value), "Attributes on this pin have been set before, and there's a conflict");
 
         _attributes = _attributes | value;
 
@@ -81,20 +78,13 @@ namespace Pins {
         // is nothing to do here for them. We basically
         // just check for conflicts above...
 
-        // If the pin is ActiveLow, we should take that into account here:
-        _i2soDriver->write(_index, value.has(PinAttributes::InitialOn) ^ _readWriteMask);
+        // Set the initial value of the pin per the configuration
+        i2s_out_write(_index, value.has(PinAttributes::InitialOn) ^ _inverted);
     }
 
     PinAttributes I2SOPinDetail::getAttr() const {
         return _attributes;
     }
-
-    std::string I2SOPinDetail::toString() {
-        std::string s("I2SO.");
-        s += std::to_string(_index);
-        if (_attributes.has(PinAttributes::ActiveLow)) {
-            s += ":low";
-        }
-        return s;
-    }
 }
+
+#endif

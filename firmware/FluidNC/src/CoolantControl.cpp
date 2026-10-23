@@ -53,9 +53,11 @@ void CoolantControl::write(CoolantState state) {
         bool pinState = state.Mist;
         _mist.synchronousWrite(pinState);
     }
+
+    _previous_state = state;
 }
 
-// Directly called by coolant_init(), coolant_set_state(), and mc_reset(), which can be at
+// Directly called by coolant_init(), coolant_set_state(), which can be at
 // an interrupt-level. No report flag set, but only called by routines that don't need it.
 void CoolantControl::stop() {
     CoolantState disable = {};
@@ -68,11 +70,13 @@ void CoolantControl::stop() {
 // parser program end, and g-code parser CoolantControl::sync().
 
 void CoolantControl::set_state(CoolantState state) {
-    if (sys.abort()) {
-        return;  // Block during abort.
+    if (sys.abort() || (_previous_state.Mist == state.Mist && _previous_state.Flood == state.Flood)) {
+        return;  // Block during abort or if no change
     }
     write(state);
-    delay_msec(_delay_ms, DwellMode::SysSuspend);
+
+    if (state.Mist || state.Flood)  // ignore delay on turn off
+        dwell_ms(_delay_ms, DwellMode::SysSuspend);
 }
 
 void CoolantControl::off() {
@@ -81,7 +85,25 @@ void CoolantControl::off() {
 }
 
 void CoolantControl::group(Configuration::HandlerBase& handler) {
+    // @config flood_pin
+    // @default NO_PIN
+    // @pin_attributes output
+    // Controls a flood coolant device (traditionally a liquid coolant, though many machines
+    // repurpose this output for other things, e.g. dust extraction). M8 turns it on, M9
+    // turns it off.
     handler.item("flood_pin", _flood);
+
+    // @config mist_pin
+    // @default NO_PIN
+    // @pin_attributes output
+    // Controls a mist coolant device. M7 turns it on, M9 turns it off.
     handler.item("mist_pin", _mist);
+
+    // @config delay_ms
+    // @default 0
+    // @tuning typical
+    // Delay, in milliseconds, after M7/M8 turns a coolant output on, before motion resumes
+    // -- gives the coolant device time to actually start flowing. Not applied if that
+    // coolant output is already on, and not applied to M9 (turning off).
     handler.item("delay_ms", _delay_ms, 0, 10000);
 }

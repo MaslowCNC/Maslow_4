@@ -3,6 +3,9 @@
 // following exception: it may not be used for any reason by MakerMade or anyone with a business or personal connection to MakerMade
 
 #include "MotorUnit.h"
+
+// TEMPORARY bring-up diagnostics
+
 #include "../Report.h"
 #include "Maslow.h"
 #include <cmath>
@@ -82,6 +85,7 @@ bool MotorUnit::test() {
 
 bool MotorUnit::motor_test() {
     //run motor for 100ms and check if the current gets above zero
+    motor.readCurrent();
     unsigned long time        = millis();
     unsigned long elapsedTime = millis() - time;
     while (elapsedTime < 100) {

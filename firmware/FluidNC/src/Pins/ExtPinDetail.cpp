@@ -4,13 +4,19 @@
 #include "ExtPinDetail.h"
 
 namespace Pins {
-    ExtPinDetail::ExtPinDetail(int device, pinnum_t index, const PinOptionsParser& options) :
+    ExtPinDetail::ExtPinDetail(uint32_t device, pinnum_t index, const PinOptionsParser& options) :
         PinDetail(index), _device(device), _capabilities(PinCapabilities::Output | PinCapabilities::Input | PinCapabilities::ISR),
         _attributes(Pins::PinAttributes::Undefined) {
+        _name = "pinext";
+        _name += std::to_string(_device);
+        _name += ".";
+        _name += std::to_string(_index);
+
         // User defined pin capabilities
         for (auto opt : options) {
             if (opt.is("low")) {
                 _attributes = _attributes | PinAttributes::ActiveLow;
+                _name += ":low";
             } else if (opt.is("high")) {
                 // Default: Active HIGH.
             } else {
@@ -24,34 +30,32 @@ namespace Pins {
     }
 
     // I/O:
-    void ExtPinDetail::write(int high) {
+    void ExtPinDetail::write(bool high) {
         Assert(_owner != nullptr, "Cannot write to uninitialized pin");
         _owner->writePin(_index, high);
     }
 
-    void ExtPinDetail::synchronousWrite(int high) {
+    void ExtPinDetail::synchronousWrite(bool high) {
         Assert(_owner != nullptr, "Cannot write to uninitialized pin");
         _owner->writePin(_index, high);
         _owner->flushWrites();
     }
 
-    int ExtPinDetail::read() {
+    bool ExtPinDetail::read() {
         Assert(_owner != nullptr, "Cannot read from uninitialized pin");
         return _owner->readPin(_index);
     }
 
-    void ExtPinDetail::setAttr(PinAttributes value) {
+    void ExtPinDetail::setAttr(PinAttributes value, uint32_t frequency) {
         // We setup the driver in setAttr. Before this time, the owner might not be valid.
 
         // Check the attributes first:
-        Assert(value.has(PinAttributes::Input) || value.has(PinAttributes::Output), "PCA9539 pins can be used as either input or output.");
-        Assert(value.has(PinAttributes::Input) != value.has(PinAttributes::Output), "PCA9539 pins can be used as either input or output.");
-        Assert(value.validateWith(this->_capabilities), "Requested attributes do not match the PCA9539 pin capabilities.");
-        Assert(!_attributes.conflictsWith(value), "Attributes on this pin have been set before, and there's a conflict.");
+        Assert(value.has(PinAttributes::Input) || value.has(PinAttributes::Output), "PCA9539 pins can be used as either input or output");
+        Assert(value.has(PinAttributes::Input) != value.has(PinAttributes::Output), "PCA9539 pins can be used as either input or output");
+        Assert(value.validateWith(this->_capabilities), "Requested attributes do not match the PCA9539 pin capabilities");
+        Assert(!_attributes.conflictsWith(value), "Attributes on this pin have been set before, and there's a conflict");
 
         _attributes = value;
-
-        bool activeLow = _attributes.has(PinAttributes::ActiveLow);
 
         if (_owner == nullptr) {
             auto ext = config->_extenders;
@@ -72,7 +76,8 @@ namespace Pins {
         return _attributes;
     }
 
-    void ExtPinDetail::attachInterrupt(void (*callback)(void*, bool), void* arg, int mode) {
+#if 0
+    void ExtPinDetail::attachInterrupt(void (*callback)(void*, bool), void* arg, uint8_t mode) {
         Assert(_owner != nullptr, "Cannot attach ISR on uninitialized pin");
         _owner->attachInterrupt(_index, callback, arg, mode);
     }
@@ -80,16 +85,7 @@ namespace Pins {
         Assert(_owner != nullptr, "Cannot detach ISR on uninitialized pin");
         _owner->detachInterrupt(_index);
     }
-
-    std::string ExtPinDetail::toString() {
-        char buf[20];
-        snprintf(buf, 20, "pinext%d.%d", int(_device), int(_index));
-        std::string s(buf);
-        if (_attributes.has(PinAttributes::ActiveLow)) {
-            s += ":low";
-        }
-        return s;
-    }
+#endif
 
     ExtPinDetail::~ExtPinDetail() {
         if (_owner) {

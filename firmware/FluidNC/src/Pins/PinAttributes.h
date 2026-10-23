@@ -4,6 +4,7 @@
 #pragma once
 
 #include <cstdint>
+#include "Driver/fluidnc_gpio.h"
 
 #include "PinCapabilities.h"
 
@@ -20,9 +21,12 @@ namespace Pins {
     class PinAttributes {
         uint32_t _value;
 
-        constexpr PinAttributes(const uint32_t value) : _value(value) {}
+        explicit constexpr PinAttributes(const uint32_t value) : _value(value) {}
 
     public:
+        // Having a default constructor lets us use PinAttributes with std::map
+        PinAttributes() { _value = Undefined; }
+
         PinAttributes(const PinAttributes&)            = default;
         PinAttributes& operator=(const PinAttributes&) = default;
 
@@ -36,10 +40,19 @@ namespace Pins {
         static PinAttributes PullUp;
         static PinAttributes PullDown;
         static PinAttributes ISR;
+        static PinAttributes PWM;
+        static PinAttributes UART;
+        static PinAttributes ADC;
+        static PinAttributes DAC;
 
         static PinAttributes ActiveLow;
         static PinAttributes Exclusive;
         static PinAttributes InitialOn;
+
+        static PinAttributes DS0;
+        static PinAttributes DS1;
+        static PinAttributes DS2;
+        static PinAttributes DS3;
 
         inline PinAttributes operator|(PinAttributes rhs) { return PinAttributes(_value | rhs._value); }
         inline PinAttributes operator&(PinAttributes rhs) { return PinAttributes(_value & rhs._value); }

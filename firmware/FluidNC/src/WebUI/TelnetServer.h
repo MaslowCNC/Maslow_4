@@ -3,20 +3,17 @@
 
 #pragma once
 
-#include "../Config.h"  // ENABLE_*
-#include "../Channel.h"
-#include <queue>
+#include "Module.h"  // Module
 
-#ifdef ENABLE_WIFI
+#include "Settings.h"
 
-#    include "../Settings.h"
-
-#    include <WiFi.h>
-
-class TelnetClient;
+// For the POSIX Arduino-Emulator core, Arduino.h must come before WiFi.h
+// so WiFi symbols are visible without arduino:: qualification.
+#include <Arduino.h>
+#include <WiFi.h>
 
 namespace WebUI {
-    class TelnetServer {
+    class TelnetServer : public Module {
         static const int DEFAULT_TELNET_STATE      = 1;
         static const int DEFAULT_TELNETSERVER_PORT = 23;
 
@@ -28,25 +25,20 @@ namespace WebUI {
         static const int FLUSHTIMEOUT = 500;
 
     public:
-        TelnetServer();
+        TelnetServer(const char* name) : Module(name) {}
 
-        bool begin();
-        void end();
-        void handle();
+        static uint16_t port() { return _port; }
 
-        uint16_t port() { return _port; }
-
-        std::queue<TelnetClient*> _disconnected;
+        void init() override;
+        void deinit() override;
+        void poll() override;
+        void status_report(Channel& out) override;
 
         ~TelnetServer();
 
     private:
-        bool        _setupdone  = false;
-        WiFiServer* _wifiServer = nullptr;
-        uint16_t    _port       = 0;
+        bool            _setupdone  = false;
+        WiFiServer*     _wifiServer = nullptr;
+        static uint16_t _port;
     };
-
-    extern TelnetServer telnetServer;
 }
-
-#endif

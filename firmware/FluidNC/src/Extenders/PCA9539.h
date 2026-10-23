@@ -10,7 +10,7 @@
 namespace Extenders {
     class PCA9539 : public I2CPinExtenderBase {
     public:
-        PCA9539();
+        PCA9539(const char* name);
 
         const char* name() const override;
     };

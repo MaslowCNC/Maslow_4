@@ -1,0 +1,104 @@
+// Copyright (c) 2020 -	Bart Dring
+// Use of this source code is governed by a GPLv3 license that can be found in the LICENSE file.
+
+#pragma once
+
+/*
+	Experimental Plasma Spindle
+*/
+
+#include "Spindle.h"
+#include "MotionControl.h"  // mc_critical
+
+namespace Spindles {
+    // This is for an on/off spindle all RPMs above 0 are on
+    class PlasmaSpindle : public Spindle {
+    private:
+        class ArcOkEventPin : public InputPin {
+        private:
+            PlasmaSpindle* _parent;
+
+        public:
+            ArcOkEventPin(PlasmaSpindle* parent) : InputPin("ArcOK"), _parent(parent) {}
+
+            void trigger(bool active) override {
+                update(active);
+                if (!active && _parent->_arc_on) {
+                    _parent->_arc_on = false;
+                    send_alarm(ExecAlarm::AbortCycle);
+                }
+            }
+        };
+
+    private:
+        ArcOkEventPin _arcOkEventPin;
+
+    protected:
+        // This includes all items except direction_pin.  direction_pin applies
+        // to most but not all of OnOff's derived classes.  Derived classes that
+        // do not support direction_pin can invoke OnOff::groupCommon() instead
+        // of OnOff::group()
+        void groupCommon(Configuration::HandlerBase& handler) {
+            // @config enable_pin
+            // @default NO_PIN
+            // @pin_attributes output
+            // Enables the plasma cutter's torch/arc-start signal.
+            handler.item("enable_pin", _enable_pin);
+
+            // @config arc_ok_pin
+            // @default NO_PIN
+            // @pin_attributes input
+            // Input signaling that the plasma arc has successfully started (transferred).
+            // If this goes inactive while the arc was on, motion is aborted with an alarm.
+            handler.item("arc_ok_pin", _arcOkEventPin);
+
+            // @config arc_wait_ms
+            // @default 1000
+            // @tuning typical
+            // How long to wait for arc_ok_pin to confirm the arc has started before giving
+            // up.
+            handler.item("arc_wait_ms", _max_arc_wait, 0, 3000);
+
+            // @default_for speed_map
+            // @default 0=0% 1=100%
+            // @default_note applied by PlasmaSpindle::init() only when unset -- step function: 0 is off, any nonzero S is full on
+            Spindle::group(handler);
+        }
+
+    public:
+        PlasmaSpindle(const char* name) : Spindle(name), _arcOkEventPin(this) {}
+
+        PlasmaSpindle(const PlasmaSpindle&)            = delete;
+        PlasmaSpindle(PlasmaSpindle&&)                 = delete;
+        PlasmaSpindle& operator=(const PlasmaSpindle&) = delete;
+        PlasmaSpindle& operator=(PlasmaSpindle&&)      = delete;
+
+        void init() override;
+
+        void setSpeedfromISR(uint32_t dev_speed) override;
+        void setState(SpindleState state, SpindleSpeed speed) override;
+        void config_message() override;
+
+        // Methods introduced by this base clase
+        void set_direction(bool Clockwise);
+        void set_enable(bool enable);
+
+        bool wait_for_arc_ok();
+
+        // Configuration handlers:
+        void validate() override { Spindle::validate(); }
+
+        void group(Configuration::HandlerBase& handler) override { groupCommon(handler); }
+
+        virtual ~PlasmaSpindle() {}
+
+    protected:
+        Pin _enable_pin;
+
+        uint32_t _max_arc_wait = 1000;
+
+        bool         _arc_on = false;
+        virtual void set_output(uint32_t speed);
+        virtual void deinit();
+    };
+}
