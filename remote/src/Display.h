@@ -63,8 +63,8 @@ public:
             auto cfg            = _touch.config();
             cfg.x_min           = 300;
             cfg.x_max           = 3900;
-            cfg.y_min           = 200;
-            cfg.y_max           = 3800;
+            cfg.y_min           = 3800;
+            cfg.y_max           = 200;
             cfg.pin_int         = 36;
             cfg.bus_shared      = false;
             cfg.offset_rotation = 0;
