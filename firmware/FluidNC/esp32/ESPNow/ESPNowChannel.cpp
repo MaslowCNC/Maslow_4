@@ -9,6 +9,9 @@
 #include "RealtimeCmd.h"
 
 #include <WiFi.h>
+#include <esp_heap_caps.h>
+#include <freertos/idf_additions.h>  // xQueueCreateWithCaps
+#include <new>
 #include <esp_now.h>
 #include <esp_wifi.h>
 #include <string.h>
@@ -117,7 +120,7 @@ namespace {
         if (value && *value) {
             return Error::InvalidValue;
         }
-        if (!espnowChannel.startPairingWindow(PAIRING_WINDOW_MS)) {
+        if (!espnowChannel().startPairingWindow(PAIRING_WINDOW_MS)) {
             log_error_to(out, "ESP-NOW: pairing is not available");
             return Error::InvalidValue;
         }
@@ -129,7 +132,7 @@ namespace {
         if (value && *value) {
             return Error::InvalidValue;
         }
-        espnowChannel.cancelPairingWindow();
+        espnowChannel().cancelPairingWindow();
         log_info_to(out, "ESP-NOW: pairing cancelled");
         return Error::Ok;
     }
@@ -138,13 +141,13 @@ namespace {
         if (value && *value) {
             return Error::InvalidValue;
         }
-        espnowChannel.listPairings(out);
+        espnowChannel().listPairings(out);
         return Error::Ok;
     }
 
     static Error espnowUnpairCommand(const char* value, AuthenticationLevel, Channel& out) {
         if (!value || !*value) {
-            espnowChannel.listPairings(out);
+            espnowChannel().listPairings(out);
             return Error::Ok;
         }
 
@@ -153,13 +156,13 @@ namespace {
             return Error::NumberRange;
         }
         if (parsed == 0) {
-            espnowChannel.clearPairings();
+            espnowChannel().clearPairings();
             log_info_to(out, "ESP-NOW: whitelist cleared");
             return Error::Ok;
         }
 
         uint8_t removed_mac[6] = {};
-        if (!espnowChannel.removePairingIndex((size_t)parsed, removed_mac)) {
+        if (!espnowChannel().removePairingIndex((size_t)parsed, removed_mac)) {
             return Error::InvalidValue;
         }
         log_info_to(out, "ESP-NOW: removed peripheral " << mac_str(removed_mac));
@@ -178,11 +181,31 @@ static ModuleFactory::InstanceBuilder<ESPNowModule> espnow_module __attribute__(
 
 
 ESPNowChannel* ESPNowChannel::_instance  = nullptr;
-uint8_t        ESPNowChannel::_rx_buf[ESPNowChannel::RX_BUF_SIZE];
 std::atomic<int> ESPNowChannel::_rx_head {0};
 std::atomic<int> ESPNowChannel::_rx_tail {0};
 
-ESPNowChannel espnowChannel;
+// The channel and its buffers are ~21 KB, and internal DRAM is the scarce
+// resource on the Maslow board, so place it in PSRAM.  Nothing here runs from
+// an ISR: the ESP-NOW callbacks run in the WiFi task.  Falls back to internal
+// RAM on boards without PSRAM.
+// Built on first use rather than as a static object: Arduino adds PSRAM to the
+// heap in initArduino(), after static constructors have run.
+ESPNowChannel& espnowChannel() {
+    static ESPNowChannel* channel = [] {
+        void* mem = heap_caps_malloc(sizeof(ESPNowChannel), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        if (!mem) {
+            mem = heap_caps_malloc(sizeof(ESPNowChannel), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+        }
+        return new (mem) ESPNowChannel();
+    }();
+    return *channel;
+}
+
+// The packet queues hold 22 x ~258 B, so put their storage in PSRAM too.
+static QueueHandle_t createPacketQueue(UBaseType_t depth, UBaseType_t itemSize) {
+    QueueHandle_t q = xQueueCreateWithCaps(depth, itemSize, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    return q ? q : xQueueCreate(depth, itemSize);
+}
 
 
 static const char* mac_str(const uint8_t* mac) {
@@ -269,19 +292,19 @@ void ESPNowModule::init() {
         WiFi.disconnect(false, false);
     }
 
-    espnowChannel.init();
+    espnowChannel().init();
 }
 
 void ESPNowModule::poll() {
-    espnowChannel.poll();
+    espnowChannel().poll();
 }
 
 
 ESPNowChannel::ESPNowChannel() : Channel("espnow") {
     _peer_mutex = xSemaphoreCreateRecursiveMutex();
-    _packet_queue = xQueueCreate(RX_PACKET_QUEUE_DEPTH, sizeof(RxPacket));
-    _pairing_queue = xQueueCreate(PAIRING_PACKET_QUEUE_DEPTH, sizeof(RxPacket));
-    _pair_confirm_queue = xQueueCreate(PAIR_CONFIRM_QUEUE_DEPTH, sizeof(RxPacket));
+    _packet_queue = createPacketQueue(RX_PACKET_QUEUE_DEPTH, sizeof(RxPacket));
+    _pairing_queue = createPacketQueue(PAIRING_PACKET_QUEUE_DEPTH, sizeof(RxPacket));
+    _pair_confirm_queue = createPacketQueue(PAIR_CONFIRM_QUEUE_DEPTH, sizeof(RxPacket));
     _instance = this;
     if (!_peer_mutex) {
         log_error("ESP-NOW: failed to create peer mutex");

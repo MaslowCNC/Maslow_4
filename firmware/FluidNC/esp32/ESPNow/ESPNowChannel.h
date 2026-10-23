@@ -155,7 +155,7 @@ private:
 
     // RX
     static constexpr size_t RX_BUF_SIZE = 4096;
-    static uint8_t          _rx_buf[RX_BUF_SIZE];
+    uint8_t                 _rx_buf[RX_BUF_SIZE];  // a member, so it lives in PSRAM with the channel
     static std::atomic<int> _rx_head;
     static std::atomic<int> _rx_tail;
     QueueHandle_t           _packet_queue       = nullptr;
@@ -211,4 +211,4 @@ private:
     uint32_t                  _last_pairing_packet_ms = 0;
 };
 
-extern ESPNowChannel espnowChannel;
+ESPNowChannel& espnowChannel();
