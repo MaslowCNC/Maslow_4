@@ -739,6 +739,14 @@ const maslowMsgHandling = (msg) => {
 	return "";
 }
 
+const processMaslowConfigResponse = (response) => {
+	response.split(/\r?\n/).forEach((msg) => {
+		if (msg.startsWith("$/Maslow_") || msg.startsWith("$/maslow_")) {
+			maslowMsgHandling(msg.substring(9));
+		}
+	});
+};
+
 // Helper functions for setValue and loadedValues
 globalThis.setValue = globalThis.setValue || function(id, value) {
 	const element = document.getElementById(id);
@@ -787,7 +795,10 @@ const loadConfigValues = () => {
 	allConfigKeys().forEach((key) => {
 		const cfgVal = cfgDef[key];
 		const cmd = `$/${cfgVal.cmd || `${M}_${key}`}`;
-		SendPrinterCommand(cmd);
+		SendGetHttp(
+			buildHttpCommandCmd(httpCmdType.commandText, cmd),
+			processMaslowConfigResponse
+		);
 	});
 
 	// Load WiFi settings separately
@@ -922,5 +933,5 @@ const saveWiFiSettings = () => {
 
 //removeIf(production)
 // ESM exports for unit testing - stripped from production builds by the gulp pipeline
-export { MaslowErrMsgKeyValueCantUse, MaslowErrMsgNoKey, MaslowErrMsgNoValue, MaslowErrMsgNoMatchingKey, MaslowErrMsgKeyValueSuffix, maslowMsgHandling };
+export { MaslowErrMsgKeyValueCantUse, MaslowErrMsgNoKey, MaslowErrMsgNoValue, MaslowErrMsgNoMatchingKey, MaslowErrMsgKeyValueSuffix, maslowMsgHandling, processMaslowConfigResponse };
 //endRemoveIf(production)
