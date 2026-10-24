@@ -1,19 +1,60 @@
 #include "WallPlotter.h"
 
-#include "../Machine/MachineConfig.h"
+#include "Machine/MachineConfig.h"
+#include "Limit.h"
 
 #include <cmath>
 
 namespace Kinematics {
     void WallPlotter::group(Configuration::HandlerBase& handler) {
+        // A puck suspended by two cords, positioned by adjusting each cord's length --
+        // e.g. a wall-mounted plotter/drawbot. Each cord is driven by one machine axis,
+        // measured as cord length rather than a cartesian coordinate.
+
+        // @config left_axis
+        // @default 0
+        // @tuning typical
+        // Which machine axis index drives the left cord's length.
+        // NOT bounds-checked against MAX_N_AXIS -- see transform_cartesian_to_motors()
+        // below for why an out-of-range or Z-and-above value here is unsafe.
         handler.item("left_axis", _left_axis);
+
+        // @config left_anchor_x
+        // @default -100
+        // @tuning per-machine
+        // X position of the left cord's fixed anchor point, in the cartesian frame.
         handler.item("left_anchor_x", _left_anchor_x);
+
+        // @config left_anchor_y
+        // @default 100
+        // @tuning per-machine
+        // Y position of the left cord's fixed anchor point.
         handler.item("left_anchor_y", _left_anchor_y);
 
+        // @config right_axis
+        // @default 1
+        // @tuning typical
+        // Which machine axis index drives the right cord's length.
+        // NOT bounds-checked -- see left_axis above.
         handler.item("right_axis", _right_axis);
+
+        // @config right_anchor_x
+        // @default 100
+        // @tuning per-machine
+        // X position of the right cord's fixed anchor point.
         handler.item("right_anchor_x", _right_anchor_x);
+
+        // @config right_anchor_y
+        // @default 100
+        // @tuning per-machine
+        // Y position of the right cord's fixed anchor point.
         handler.item("right_anchor_y", _right_anchor_y);
 
+        // @config segment_length
+        // @default 10
+        // @tuning typical
+        // Maximum length of the small linear segments a cartesian move is broken into
+        // before being converted to cord lengths (the cord-length transform is nonlinear).
         handler.item("segment_length", _segment_length);
     }
 
@@ -26,8 +67,8 @@ namespace Kinematics {
         xy_to_lengths(0, 0, zero_left, zero_right);
         last_motor_segment_end[0] = zero_left;
         last_motor_segment_end[1] = zero_right;
-        auto n_axis               = config->_axes->_numberAxis;
-        for (size_t axis = Z_AXIS; axis < n_axis; axis++) {
+        auto n_axis               = Axes::_numberAxis;
+        for (axis_t axis = Z_AXIS; axis < n_axis; axis++) {
             last_motor_segment_end[axis] = 0.0;
         }
 
@@ -36,10 +77,18 @@ namespace Kinematics {
 
     // Initialize the machine position
     void WallPlotter::init_position() {
-        auto n_axis = config->_axes->_numberAxis;
-        for (size_t axis = 0; axis < n_axis; axis++) {
-            set_motor_steps(axis, 0);  // Set to zeros
+        // Same as cartesian
+        auto  n_axis = Axes::_numberAxis;
+        float min_mpos[MAX_N_AXIS];
+        float max_mpos[MAX_N_AXIS];
+
+        for (axis_t axis = X_AXIS; axis < n_axis; axis++) {
+            set_steps(axis, 0);  // Set to zeros
+            min_mpos[axis] = limitsMinPosition(axis);
+            max_mpos[axis] = limitsMaxPosition(axis);
         }
+        transform_cartesian_to_motors(_min_motor_pos, min_mpos);
+        transform_cartesian_to_motors(_max_motor_pos, max_mpos);
     }
 
     bool WallPlotter::canHome(AxisMask axisMask) {
@@ -47,8 +96,28 @@ namespace Kinematics {
         return false;
     }
 
-    void WallPlotter::transform_cartesian_to_motors(float* cartesian, float* motors) {
-        log_error("WallPlotter::transform_cartesian_to_motors is broken");
+    bool WallPlotter::transform_cartesian_to_motors(float* motors, float* cartesian) {
+        float left_length, right_length;
+        xy_to_lengths(cartesian[X_AXIS], cartesian[Y_AXIS], left_length, right_length);
+
+        // Inverse of the mapping used in motors_to_cartesian() (left motor runs backward).
+        //
+        // KNOWN ISSUE: _left_axis/_right_axis come straight from config with no
+        // validation. An out-of-range value is an out-of-bounds write into motors[];
+        // a value >= Z_AXIS gets silently overwritten by the copy loop below, which
+        // would produce wrong (not crashing) soft-limit bounds. Same unchecked
+        // pattern already existed in motors_to_cartesian()'s reads of motors[_left_axis]/
+        // motors[_right_axis] before this function was implemented -- flagged in PR
+        // review (bdring/FluidNC#1771) as worth a real fix (bounds-check in validate()),
+        // just not folded into that PR.
+        motors[_left_axis]  = 0 - (left_length - zero_left);
+        motors[_right_axis] = 0 + (right_length - zero_right);
+
+        auto n_axis = Axes::_numberAxis;
+        for (axis_t axis = Z_AXIS; axis < n_axis; axis++) {
+            motors[axis] = cartesian[axis];
+        }
+        return true;
     }
 
     /*
@@ -62,10 +131,7 @@ namespace Kinematics {
         position = an n_axis array of where the machine is starting from for this move
     */
     bool WallPlotter::cartesian_to_motors(float* target, plan_line_data_t* pl_data, float* position) {
-        float    dx, dy, dz;     // segment distances in each cartesian axis
-        uint32_t segment_count;  // number of segments the move will be broken in to.
-
-        auto n_axis = config->_axes->_numberAxis;
+        auto n_axis = Axes::_numberAxis;
 
         float total_cartesian_distance = vector_distance(position, target, n_axis);
         if (total_cartesian_distance == 0) {
@@ -79,7 +145,7 @@ namespace Kinematics {
         // Z axis is the same in both coord systems, so it does not undergo conversion
         float xydist = vector_distance(target, position, 2);  // Only compute distance for both axes. X and Y
         // Segment our G1 and G0 moves based on yaml file. If we choose a small enough _segment_length we can hide the nonlinearity
-        segment_count = xydist / _segment_length;
+        uint32_t segment_count = xydist / _segment_length;
         if (segment_count < 1) {  // Make sure there is at least one segment, even if there is no movement
             // We need to do this to make sure other things like S and M codes get updated properly by
             // the planner even if there is no movement??
@@ -88,25 +154,28 @@ namespace Kinematics {
         float cartesian_segment_length = total_cartesian_distance / segment_count;
 
         // Calc length of each cartesian segment - the same for all segments
-        float cartesian_segment_components[n_axis];
-        for (size_t axis = X_AXIS; axis < n_axis; axis++) {
+        float cartesian_segment_components[MAX_N_AXIS];
+        for (axis_t axis = X_AXIS; axis < n_axis; axis++) {
             cartesian_segment_components[axis] = (target[axis] - position[axis]) / segment_count;
         }
 
-        float cartesian_segment_end[n_axis];
+        float cartesian_segment_end[MAX_N_AXIS];
         copyAxes(cartesian_segment_end, position);
 
         // Calculate desired cartesian feedrate distance ratio. Same for each seg.
         for (uint32_t segment = 1; segment <= segment_count; segment++) {
+            if (sys.abort()) {
+                return true;
+            }
             // calculate the cartesian end point of the next segment
-            for (size_t axis = X_AXIS; axis < n_axis; axis++) {
+            for (axis_t axis = X_AXIS; axis < n_axis; axis++) {
                 cartesian_segment_end[axis] += cartesian_segment_components[axis];
             }
 
             // Convert cartesian space coords to motor space
-            float motor_segment_end[n_axis];
+            float motor_segment_end[MAX_N_AXIS];
             xy_to_lengths(cartesian_segment_end[X_AXIS], cartesian_segment_end[Y_AXIS], motor_segment_end[0], motor_segment_end[1]);
-            for (size_t axis = Z_AXIS; axis < n_axis; axis++) {
+            for (axis_t axis = Z_AXIS; axis < n_axis; axis++) {
                 motor_segment_end[axis] = cartesian_segment_end[axis];
             }
 
@@ -138,10 +207,10 @@ namespace Kinematics {
             // In that case we stop sending segments to the planner.
             // Note that the left motor runs backward.
             // TODO: It might be better to adjust motor direction in .yaml file by inverting direction pin??
-            float cables[n_axis];
+            float cables[MAX_N_AXIS];
             cables[0] = 0 - (motor_segment_end[0] - zero_left);
             cables[1] = 0 + (motor_segment_end[1] - zero_right);
-            for (size_t axis = Z_AXIS; axis < n_axis; axis++) {
+            for (axis_t axis = Z_AXIS; axis < n_axis; axis++) {
                 cables[axis] = cartesian_segment_end[axis];
             }
             if (!mc_move_motors(cables, pl_data)) {
@@ -158,7 +227,7 @@ namespace Kinematics {
 
       Convert the n_axis array of motor positions to cartesian in your code.
     */
-    void WallPlotter::motors_to_cartesian(float* cartesian, float* motors, int n_axis) {
+    void WallPlotter::motors_to_cartesian(float* cartesian, float* motors, axis_t n_axis) {
         // The motors start at zero, but effectively at zero_left, so we need to correct for the computation.
         // Note that the left motor runs backward.
         // TODO: It might be better to adjust motor direction in .yaml file by inverting direction pin??
@@ -168,7 +237,7 @@ namespace Kinematics {
 
         cartesian[X_AXIS] = absolute_x;
         cartesian[Y_AXIS] = absolute_y;
-        for (size_t axis = Z_AXIS; axis < n_axis; axis++) {
+        for (axis_t axis = Z_AXIS; axis < n_axis; axis++) {
             cartesian[axis] = motors[axis];
         }
         // Now we have numbers that if fed back into the system should produce the same values.
@@ -227,6 +296,10 @@ namespace Kinematics {
         float right_dy = _right_anchor_y - y;
         float right_dx = _right_anchor_x - x;
         right_length   = hypot_f(right_dx, right_dy);
+    }
+
+    bool WallPlotter::kinematics_homing(AxisMask& axisMask) {
+        return false;  // kinematics does not do the homing for catesian systems
     }
 
     // Configuration registration

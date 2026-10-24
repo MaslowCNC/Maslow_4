@@ -6,18 +6,14 @@
 namespace Extenders {
     PinExtender::PinExtender() : _driver(nullptr) {}
 
-    void PinExtender::group(Configuration::HandlerBase& handler) {
-        PinExtenderFactory::factory(handler, _driver);
-    }
+    void PinExtender::group(Configuration::HandlerBase& handler) { PinExtenderFactory::factory(handler, _driver); }
     void PinExtender::init() {
         if (_driver) {
             _driver->init();
         }
     }
 
-    PinExtender::~PinExtender() {
-        delete _driver;
-    }
+    PinExtender::~PinExtender() { delete _driver; }
 
     Extenders::Extenders() {
         for (int i = 0; i < 16; ++i) {

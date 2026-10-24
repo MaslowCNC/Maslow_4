@@ -30,12 +30,12 @@ namespace Spindles {
     class BESC : public PWM {
     private:
         // Fixed
-        const uint32_t besc_pwm_min_freq = 50;    // 50 Hz
-        const uint32_t besc_pwm_max_freq = 2000;  // 50 Hz
+        static constexpr uint32_t besc_pwm_min_freq = 50;    // 50 Hz
+        static constexpr uint32_t besc_pwm_max_freq = 2000;  // 50 Hz
 
         // Calculated
-        uint32_t _pulse_span_counts;  // In counts of a 32-bit counter. ESP32 uses up to 20bits
-        uint32_t _min_pulse_counts;   // In counts of a 32-bit counter  ESP32 uses up to 20bits
+        uint32_t _pulse_span_counts;  // In counts of a 32-bit counter
+        uint32_t _min_pulse_counts;   // In counts of a 32-bit counter
 
     protected:
         // Configurable
@@ -43,7 +43,7 @@ namespace Spindles {
         uint32_t _max_pulse_us = 2200;  // microseconds
 
     public:
-        BESC() = default;
+        BESC(const char* name) : PWM(name) {}
 
         BESC(const BESC&)            = delete;
         BESC(BESC&&)                 = delete;
@@ -59,16 +59,34 @@ namespace Spindles {
         void validate() override { PWM::validate(); }
 
         void group(Configuration::HandlerBase& handler) override {
+            // @default_for speed_map
+            // @default 0=0% 0=20% 4000=20% 20000=100%
+            // @default_note applied by BESC::init() only when unset -- shelf: flat 20% to 4000, then linear to 20000=100%
             PWM::group(handler);
 
+            // A BESC (Brushless ESC, as used for RC-plane/drone motors) is driven like an
+            // RC servo, not an ordinary PWM duty cycle: a short pulse means off, a long
+            // pulse means full power, and the pulse is always a small fraction of the full
+            // period. Set pwm_hz (inherited from PWM) to the ESC's expected repetition
+            // rate -- commonly 50Hz, though some ESCs tolerate higher rates.
+
+            // @config min_pulse_us
+            // @default 900
+            // @tuning per-machine
+            // Pulse width, in microseconds, corresponding to the ESC's "off" signal.
+            // Determine your ESC's actual min pulse from its datasheet/documentation --
+            // typically around 1ms (1000us) or less.
             handler.item("min_pulse_us", _min_pulse_us, 500, 3000);
+
+            // @config max_pulse_us
+            // @default 2200
+            // @tuning per-machine
+            // Pulse width, in microseconds, corresponding to the ESC's full-power signal.
+            // Typically around 2ms (2000us) or more -- check your ESC's documentation.
             handler.item("max_pulse_us", _max_pulse_us, 500, 3000);
         }
 
         void afterParse() override {}
-
-        // Name of the configurable. Must match the name registered in the cpp file.
-        const char* name() const override { return "BESC"; }
 
         ~BESC() {}
     };

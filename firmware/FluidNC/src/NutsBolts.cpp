@@ -9,95 +9,19 @@
 #include <cstring>
 #include <cstdint>
 #include <cmath>
+#include <cstdio>
+#include <string_view>
 
-const int MAX_INT_DIGITS = 8;  // Maximum number of digits in int32 (and float)
-
-// Extracts a floating point value from a string. The following code is based loosely on
-// the avr-libc strtod() function by Michael Stumpf and Dmitry Xmelkov and many freely
-// available conversion method examples, but has been highly optimized for Grbl. For known
-// CNC applications, the typical decimal value is expected to be in the range of E0 to E-4.
-// Scientific notation is officially not supported by g-code, and the 'E' character may
-// be a g-code word on some CNC systems. So, 'E' notation will not be recognized.
-// NOTE: Thanks to Radu-Eosif Mihailescu for identifying the issues with using strtod().
-bool read_float(const char* line, size_t* char_counter, float* float_ptr) {
-    const char*   ptr = line + *char_counter;
-    unsigned char c;
-    // Grab first character and increment pointer. No spaces assumed in line.
-    c = *ptr++;
-    // Capture initial positive/minus character
-    bool isnegative = false;
-    if (c == '-') {
-        isnegative = true;
-        c          = *ptr++;
-    } else if (c == '+') {
-        c = *ptr++;
-    }
-
-    // Extract number into fast integer. Track decimal in terms of exponent value.
-    uint32_t intval    = 0;
-    int8_t   exp       = 0;
-    size_t   ndigit    = 0;
-    bool     isdecimal = false;
-    while (1) {
-        c -= '0';
-        if (c <= 9) {
-            ndigit++;
-            if (ndigit <= MAX_INT_DIGITS) {
-                if (isdecimal) {
-                    exp--;
-                }
-                intval = intval * 10 + c;
-            } else {
-                if (!(isdecimal)) {
-                    exp++;  // Drop overflow digits
-                }
-            }
-        } else if (c == (('.' - '0') & 0xff) && !(isdecimal)) {
-            isdecimal = true;
-        } else {
-            break;
-        }
-        c = *ptr++;
-    }
-    // Return if no digits have been read.
-    if (!ndigit) {
-        return false;
-    }
-
-    // Convert integer into floating point.
-    float fval;
-    fval = (float)intval;
-    // Apply decimal. Should perform no more than two floating point multiplications for the
-    // expected range of E0 to E-4.
-    if (fval != 0) {
-        while (exp <= -2) {
-            fval *= 0.01f;
-            exp += 2;
-        }
-        if (exp < 0) {
-            fval *= 0.1f;
-        } else if (exp > 0) {
-            do {
-                fval *= 10.0;
-            } while (--exp > 0);
-        }
-    }
-    // Assign floating point value with correct sign.
-    if (isnegative) {
-        *float_ptr = -fval;
-    } else {
-        *float_ptr = fval;
-    }
-    *char_counter = ptr - line - 1;  // Set char_counter to next statement
-    return true;
+uint32_t get_ms() {
+    return xTaskGetTickCount() * (1000 / configTICK_RATE_HZ);
 }
 
-void delay_ms(uint16_t ms) {
+void delay_ms(uint32_t ms) {
     vTaskDelay(ms / portTICK_PERIOD_MS);
 }
 
 // Non-blocking delay function used for general operation and suspend features.
-bool delay_msec(uint32_t milliseconds, DwellMode mode) {
+bool dwell_ms(uint32_t milliseconds, DwellMode mode) {
     while (milliseconds--) {
         if (mode == DwellMode::Dwell) {
             protocol_execute_realtime();
@@ -111,7 +35,7 @@ bool delay_msec(uint32_t milliseconds, DwellMode mode) {
         if (sys.abort()) {
             return false;
         }
-        vTaskDelay(1 / portTICK_PERIOD_MS);
+        delay_ms(1);
     }
     return true;
 }
@@ -146,7 +70,7 @@ void scale_vector(float* v, float scale, size_t n) {
 }
 
 float convert_delta_vector_to_unit_vector(float* v) {
-    auto  n_axis    = config->_axes->_numberAxis;
+    auto  n_axis    = Axes::_numberAxis;
     float magnitude = vector_length(v, n_axis);
     scale_vector(v, 1.0f / magnitude, n_axis);
     return magnitude;
@@ -156,11 +80,11 @@ const float secPerMinSq = 60.0 * 60.0;  // Seconds Per Minute Squared, for accel
 
 float limit_acceleration_by_axis_maximum(float* unit_vec) {
     float limit_value = SOME_LARGE_VALUE;
-    auto  n_axis      = config->_axes->_numberAxis;
-    for (size_t idx = 0; idx < n_axis; idx++) {
-        auto axisSetting = config->_axes->_axis[idx];
-        if (unit_vec[idx] != 0) {  // Avoid divide by zero.
-            limit_value = MIN(limit_value, fabsf(axisSetting->_acceleration / unit_vec[idx]));
+    auto  n_axis      = Axes::_numberAxis;
+    for (axis_t axis = X_AXIS; axis < n_axis; axis++) {
+        auto axisSetting = Axes::_axis[axis];
+        if (unit_vec[axis] != 0) {  // Avoid divide by zero.
+            limit_value = MIN(limit_value, fabsf(axisSetting->_acceleration / unit_vec[axis]));
         }
     }
     // The acceleration setting is stored and displayed in units of mm/sec^2,
@@ -172,11 +96,11 @@ float limit_acceleration_by_axis_maximum(float* unit_vec) {
 
 float limit_rate_by_axis_maximum(float* unit_vec) {
     float limit_value = SOME_LARGE_VALUE;
-    auto  n_axis      = config->_axes->_numberAxis;
-    for (size_t idx = 0; idx < n_axis; idx++) {
-        auto axisSetting = config->_axes->_axis[idx];
-        if (unit_vec[idx] != 0) {  // Avoid divide by zero.
-            limit_value = MIN(limit_value, fabsf(axisSetting->_maxRate / unit_vec[idx]));
+    auto  n_axis      = Axes::_numberAxis;
+    for (axis_t axis = X_AXIS; axis < n_axis; axis++) {
+        auto axisSetting = Axes::_axis[axis];
+        if (unit_vec[axis] != 0) {  // Avoid divide by zero.
+            limit_value = MIN(limit_value, fabsf(axisSetting->_maxRate / unit_vec[axis]));
         }
     }
     return limit_value;
@@ -186,23 +110,14 @@ bool char_is_numeric(char value) {
     return value >= '0' && value <= '9';
 }
 
-char* trim(char* str) {
-    char* end;
+void trim(std::string_view& sv) {
     // Trim leading space
-    while (::isspace((unsigned char)*str)) {
-        str++;
+    while (sv.size() && ::isspace(sv.front())) {
+        sv.remove_prefix(1);
     }
-    if (*str == 0) {  // All spaces?
-        return str;
+    while (sv.size() && ::isspace(sv.back())) {
+        sv.remove_suffix(1);
     }
-    // Trim trailing space
-    end = str + ::strlen(str) - 1;
-    while (end > str && ::isspace((unsigned char)*end)) {
-        end--;
-    }
-    // Write new null terminator character
-    end[1] = '\0';
-    return str;
 }
 
 bool multiple_bits_set(uint32_t val) {
@@ -215,47 +130,49 @@ bool multiple_bits_set(uint32_t val) {
 
 const char* to_hex(uint32_t n) {
     static char hexstr[12];
-    snprintf(hexstr, 11, "0x%x", n);
+    snprintf(hexstr, 11, "0x%x", static_cast<unsigned int>(n));
     return hexstr;
 }
 
+// Lightweight fixed-precision float formatting.  Uses snprintf instead of
+// std::ostringstream/<iomanip> to reduce reliance on libstdc++, which is quite large
+std::string formatFloat(double value, int decimals) {
+    char buf[32];
+    snprintf(buf, sizeof(buf), "%.*f", decimals, value);
+    return std::string(buf);
+}
+
 std::string formatBytes(uint64_t bytes) {
-    char buffer[32];
     if (bytes < 1024) {
-        snprintf(buffer, sizeof(buffer), "%u B", (uint16_t)bytes);
-        return buffer;
+        return std::to_string((uint16_t)bytes) + " B";
     }
-    float b = bytes / 1024.0f;
+    float b = bytes;
+    b /= 1024;
     if (b < 1024) {
-        snprintf(buffer, sizeof(buffer), "%.2f KB", b);
-        return buffer;
+        return formatFloat(b, 2) + " KB";
     }
     b /= 1024;
     if (b < 1024) {
-        snprintf(buffer, sizeof(buffer), "%.2f MB", b);
-        return buffer;
+        return formatFloat(b, 2) + " MB";
     }
     b /= 1024;
     if (b < 1024) {
-        snprintf(buffer, sizeof(buffer), "%.2f GB", b);
-        return buffer;
+        return formatFloat(b, 2) + " GB";
     }
     b /= 1024;
     if (b > 99999) {
         b = 99999;
     }
-    snprintf(buffer, sizeof(buffer), "%.2f TB", b);
-    return buffer;
+    return formatFloat(b, 2) + " TB";
 }
 
 std::string IP_string(uint32_t ipaddr) {
-    char buffer[16];
-    snprintf(buffer, sizeof(buffer), "%u.%u.%u.%u",
-        uint8_t((ipaddr >> 0) & 0xff),
-        uint8_t((ipaddr >> 8) & 0xff),
-        uint8_t((ipaddr >> 16) & 0xff),
-        uint8_t((ipaddr >> 24) & 0xff));
-    return buffer;
+    std::string retval;
+    retval += std::to_string(uint8_t((ipaddr >> 00) & 0xff)) + ".";
+    retval += std::to_string(uint8_t((ipaddr >> 8) & 0xff)) + ".";
+    retval += std::to_string(uint8_t((ipaddr >> 16) & 0xff)) + ".";
+    retval += std::to_string(uint8_t((ipaddr >> 24) & 0xff));
+    return retval;
 }
 
 void replace_string_in_place(std::string& subject, const std::string& search, const std::string& replace) {

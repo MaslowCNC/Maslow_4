@@ -6,7 +6,8 @@
 */
 
 #include "TrinamicSpiDriver.h"
-#include "../Machine/MachineConfig.h"
+#include "Machine/MachineConfig.h"
+#include <cstdint>       // MUST be before TMCStepper.h
 #include <TMCStepper.h>  // https://github.com/teemuatlut/TMCStepper
 #include <atomic>
 
@@ -15,16 +16,18 @@ namespace MotorDrivers {
     pinnum_t TrinamicSpiDriver::daisy_chain_cs_id = 255;
     uint8_t  TrinamicSpiDriver::spi_index_mask    = 0;
 
-    void TrinamicSpiDriver::init() {}
+    void TrinamicSpiDriver::init() {
+        TrinamicBase::init();
+    }
 
-    uint8_t TrinamicSpiDriver::setupSPI() {
+    pinnum_t TrinamicSpiDriver::setupSPI() {
         _has_errors = false;
 
         auto spiConfig = config->_spi;
-        Assert(spiConfig && spiConfig->defined(), "SPI bus is not configured. Cannot initialize TMC driver.");
+        Assert(spiConfig && spiConfig->defined(), "SPI bus is not configured. Cannot initialize TMC driver");
 
-        uint8_t cs_id;
-        if (daisy_chain_cs_id != 255) {
+        pinnum_t cs_id;
+        if (daisy_chain_cs_id != INVALID_PINNUM) {
             cs_id = daisy_chain_cs_id;
         } else {
             _cs_pin.setAttr(Pin::Attr::Output | Pin::Attr::InitialOn);
@@ -39,12 +42,8 @@ namespace MotorDrivers {
     This is the startup message showing the basic definition
     */
     void TrinamicSpiDriver::config_message() {
-        char* buffer = getLogBuffer();
-        snprintf(buffer, 1400, "    %s Step:%s Dir:%s CS:%s Disable:%s Index:%d R:%g",
-                name(), _step_pin.name().c_str(), _dir_pin.name().c_str(), _cs_pin.name().c_str(),
-                _disable_pin.name().c_str(), _spi_index, _r_sense);
-        log_info(buffer);
-        releaseLogBuffer();
+        log_info("    " << name() << " Step:" << _step_pin.name() << " Dir:" << _dir_pin.name() << " CS:" << _cs_pin.name()
+                        << " Disable:" << _disable_pin.name() << " Index:" << _spi_index << " R:" << _r_sense);
     }
 
     uint8_t TrinamicSpiDriver::toffValue() {

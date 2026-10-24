@@ -50,6 +50,11 @@ public:
     void   update();
     bool   onTarget(double precision);
 
+    /** Passthrough to DCMotor::probeADC for the $MADC diagnostic. */
+    void probeADC(int& unit, int& channel, bool& valid, int& raw, int& err, int& viaArduino) {
+        motor.probeADC(unit, channel, valid, raw, err, viaArduino);
+    }
+
 private:
     int     _encoderAddress;
     AS5600  encoder;

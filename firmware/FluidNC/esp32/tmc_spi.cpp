@@ -12,7 +12,7 @@
 // work properly for TMC devices that have a 5-byte input packet length;
 // The last few bytes get stuck somewhere and do not make it into the
 // input buffer.  I tried to switch back and forth between DMA mode
-// and non-DMA mode, but that turned out to be extraordinarly difficult
+// and non-DMA mode, but that turned out to be extraordinarily difficult
 // since the mode is applied at the very top level of SPI bus driver setup.
 // In order to switch modes, it was necessary to completely tear down
 // the various levels of the SD-on-SPI driver, reinit everything, then
@@ -35,15 +35,15 @@
 // This code assumes that the SPI bus has already been initialized,
 // with SCK, MOSI, and MISO pins assigned, via SPIBus.cpp
 
-#include "src/Config.h"
-#include "esp32/tmc_spi_support.h"
+#include "Config.h"
+#include "tmc_spi_support.h"
 #include <TMCStepper.h>  // https://github.com/teemuatlut/TMCStepper
 
 // Replace the library's weak definition of TMC2130Stepper::write()
 // This is executed in the object context so it has access to class
 // data such as the CS pin that switchCSpin() uses
 void TMC2130Stepper::write(uint8_t reg, uint32_t data) {
-    log_verbose("TMC reg 0x" << to_hex(reg) << " write 0x" << to_hex(data));
+    log_verbose("TMC reg " << to_hex(reg) << " write " << to_hex(data));
     tmc_spi_bus_setup();
 
     switchCSpin(0);
@@ -88,7 +88,7 @@ uint32_t TMC2130Stepper::read(uint8_t reg) {
     data += (uint32_t)in[dummy_in_bytes + 4];
     switchCSpin(1);
 
-    log_verbose("TMC reg 0x" << to_hex(reg) << " read 0x" << to_hex(data) << " status 0x" << to_hex(status));
+    log_verbose("TMC reg " << to_hex(reg) << " read " << to_hex(data) << " status " << to_hex(status));
 
     return data;
 }

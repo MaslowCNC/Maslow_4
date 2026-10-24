@@ -3,21 +3,6 @@
 
 #pragma once
 
-/*
- * Connect the SD card to the following pins:
- *
- * SD Card | ESP32
- *    D2       -
- *    D3       SS
- *    CMD      MOSI
- *    VSS      GND
- *    VDD      3.3V
- *    CLK      SCK
- *    VSS      GND
- *    D0       MISO
- *    D1       -
- */
-
 #include "Configuration/Configurable.h"
 #include "WebUI/Authentication.h"
 #include "Pin.h"
@@ -52,14 +37,33 @@ public:
     void afterParse() override;
 
     const char* filename();
+    bool        config_ok = false;
 
     // Initializes pins.
     void init();
 
     // Configuration handlers.
     void group(Configuration::HandlerBase& handler) override {
+        // @config cs_pin
+        // @default NO_PIN
+        // @pin_attributes output
+        // SPI chip-select pin for the SD card. Must be a native MCU pin with output
+        // capability. Required (non-NO_PIN) for the SD card to function -- an spi: section
+        // must also be configured.
         handler.item("cs_pin", _cs);
+
+        // @config card_detect_pin
+        // @default NO_PIN
+        // @pin_attributes input
+        // Optional card-detect switch input. Purely informational -- shown in the startup
+        // log, with no other feature attached to it.
         handler.item("card_detect_pin", _cardDetect);
+
+        // @config frequency_hz
+        // @default 8000000
+        // @tuning typical
+        // SPI clock speed used for the SD card. Try a lower value if the card has
+        // consistent read/write problems.
         handler.item("frequency_hz", _frequency_hz, 400000, 20000000);
     }
 

@@ -4,21 +4,19 @@
 
 #pragma once
 
-#include "../Configuration/Configurable.h"
-#include "../GCode.h"       // MaxUserDigitalPin MaxUserAnalogPin
-#include "Driver/PwmPin.h"  // pwm_chan_t
+#include "Configuration/Configurable.h"
+#include "GCode.h"  // MaxUserDigitalPin MaxUserAnalogPin
 
 namespace Machine {
     class UserOutputs : public Configuration::Configurable {
-        PwmPin*  _pwm[MaxUserAnalogPin];
         uint32_t _current_value[MaxUserAnalogPin];
 
     public:
         UserOutputs();
 
-        Pin _analogOutput[MaxUserAnalogPin];
-        int _analogFrequency[MaxUserAnalogPin];
-        Pin _digitalOutput[MaxUserDigitalPin];
+        Pin     _analogOutput[MaxUserAnalogPin];
+        int32_t _analogFrequency[MaxUserAnalogPin];
+        Pin     _digitalOutput[MaxUserDigitalPin];
 
         void init();
         void all_off();
@@ -27,6 +25,6 @@ namespace Machine {
         bool setDigital(size_t io_num, bool isOn);
         bool setAnalogPercent(size_t io_num, float percent);
 
-        ~UserOutputs();
+        virtual ~UserOutputs();
     };
 }

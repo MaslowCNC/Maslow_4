@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 
 # Build FluidNC release bundles (.zip files) for each host platform
 
@@ -6,106 +6,51 @@ from shutil import copy
 from zipfile import ZipFile, ZipInfo
 import subprocess, os, sys, shutil
 import urllib.request
+import io, hashlib
+from pprint import pprint
+
+# Add tools directory to path for addrinfo generation
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'tools', 'stack_trace_decoder'))
+from generate_addrinfo import generate_addrinfo
 
 verbose = '-v' in sys.argv
 
 environ = dict(os.environ)
 
-# ============================================================================
-# User-configurable variables - modify these paths as needed for your system
-# ============================================================================
-
-# Path to platformio executable 
-# If pio is in your PATH, you can use just "pio"
-# Otherwise, specify the full path to the pio or platformio executable
-PLATFORMIO_CMD = "pio"
-
-# Path to PlatformIO home directory (where packages are installed)
-# Typically ~/.platformio on Linux/Mac or %USERPROFILE%\.platformio on Windows
-# Set to None to use default location: os.path.join(os.path.expanduser('~'), '.platformio')
-PLATFORMIO_HOME = None
-
-# ============================================================================
-# End of user-configurable variables
-# ============================================================================
-
-# Set platformio home directory
-if PLATFORMIO_HOME is None:
-    PLATFORMIO_HOME = os.path.join(os.path.expanduser('~'), '.platformio')
-
-# Auto-detect platformio command if the configured one is not found
-def find_platformio_cmd():
-    """Try to find a working platformio command."""
-    # Try the configured command first
-    try:
-        result = subprocess.run([PLATFORMIO_CMD, '--version'],
-                              capture_output=True, timeout=5)
-        if result.returncode == 0:
-            return PLATFORMIO_CMD
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        pass
-
-    # Try common alternatives
-    alternatives = [
-        'pio',
-        'platformio',
-        os.path.join(PLATFORMIO_HOME, 'penv', 'bin', 'platformio'),
-        os.path.join(PLATFORMIO_HOME, 'penv', 'Scripts', 'platformio.exe'),
-    ]
-
-    for cmd in alternatives:
-        try:
-            result = subprocess.run([cmd, '--version'],
-                                  capture_output=True, timeout=5)
-            if result.returncode == 0:
-                print(f"Auto-detected platformio command: {cmd}")
-                return cmd
-        except (FileNotFoundError, subprocess.TimeoutExpired):
-            continue
-
-    # If nothing works, return the configured command and let it fail with a clear error
-    return PLATFORMIO_CMD
-
-# Use the detected or configured command
-PLATFORMIO_CMD = find_platformio_cmd()
-
-# Extract version from git tag
-try:
-    git_tag = (
-        subprocess.check_output(["git", "describe", "--tags", "--abbrev=0"], stderr=subprocess.DEVNULL)
-        .strip()
-        .decode("utf-8")
-    )
-    # Remove 'v' prefix if present (e.g., "v1.13" -> "1.13")
-    version = git_tag.lstrip('v')
-except (subprocess.CalledProcessError, FileNotFoundError):
-    # Fallback to a default version if git command fails (no tags, not a git repo, git not installed, etc.)
-    version = "unknown"
-    print("Warning: Could not determine version from git tags, using 'unknown'")
-
-# Change to the directory where this script is located (project root)
-script_dir = os.path.dirname(os.path.realpath(__file__))
-os.chdir(script_dir)
-
-# Change path to the project folder (the folder with platformio.ini)
-tag = "maslow4-"+version
-sharedPath = 'install_scripts'
-
-
 def buildEmbeddedPage():
     print('Building embedded web page')
-    return subprocess.run(["python3", "build.py"], cwd="embedded").returncode
+    return subprocess.run(["python", "build.py"], cwd="embedded").returncode
 
-def buildEnv(pioEnv, verbose=False, extraArgs=None):
-    cmd = [PLATFORMIO_CMD,'run', '--disable-auto-clean', '-e', pioEnv]
+# esp32 (classic) and esp32s3 platforms disagree about which version of
+# framework-arduinoespressif32 they want, but PlatformIO installs that
+# package into a single shared, unversioned directory under the core dir.
+# Building one family after the other in the same core dir leaves the
+# package mismatched for whichever family didn't build last, which
+# PlatformIO doesn't always recover from cleanly (e.g. crashing with
+# "FRAMEWORK_DIR" resolving to None deep inside SCons). Giving the s3
+# family its own core dir keeps its packages from colliding with the
+# classic esp32 family's.
+s3CoreDir = os.path.join(os.path.expanduser('~'), '.platformio-esp32s3')
+
+def environFor(mcu):
+    if mcu == 'esp32s3':
+        e = dict(environ)
+        e['PLATFORMIO_CORE_DIR'] = s3CoreDir
+        return e
+    return environ
+
+def buildEnv(pioEnv, verbose=True, extraArgs=None, env=None):
+    cmd = ['platformio','run', '--disable-auto-clean', '-e', pioEnv]
     if extraArgs:
         cmd.append(extraArgs)
     displayName = pioEnv
     print('Building firmware for ' + displayName)
+    if env is None:
+        env = environ
     if verbose:
-        app = subprocess.Popen(cmd, env=environ)
+        app = subprocess.Popen(cmd, env=env)
     else:
-        app = subprocess.Popen(cmd, env=environ, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        app = subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         for line in app.stdout:
             line = line.decode('utf8')
             if "Took" in line or 'Uploading' in line or ("error" in line.lower() and "Compiling" not in line):
@@ -114,15 +59,17 @@ def buildEnv(pioEnv, verbose=False, extraArgs=None):
     print()
     return app.returncode
 
-def buildFs(pioEnv, verbose=verbose, extraArgs=None):
-    cmd = [ PLATFORMIO_CMD ,'run', '--disable-auto-clean', '-e', pioEnv, '-t', 'buildfs']
+def buildFs(pioEnv, verbose=verbose, extraArgs=None, env=None):
+    cmd = ['platformio','run', '--disable-auto-clean', '-e', pioEnv, '-t', 'buildfs']
     if extraArgs:
         cmd.append(extraArgs)
     print('Building file system for ' + pioEnv)
+    if env is None:
+        env = environ
     if verbose:
-        app = subprocess.Popen(cmd, env=environ)
+        app = subprocess.Popen(cmd, env=env)
     else:
-        app = subprocess.Popen(cmd, env=environ, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        app = subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         for line in app.stdout:
             line = line.decode('utf8')
             if "Took" in line or 'Uploading' in line or ("error" in line.lower() and "Compiling" not in line):
@@ -131,6 +78,13 @@ def buildFs(pioEnv, verbose=verbose, extraArgs=None):
     print()
     return app.returncode
 
+tag = (
+    subprocess.check_output(["git", "describe", "--tags", "--abbrev=0"])
+    .strip()
+    .decode("utf-8")
+)
+
+sharedPath = 'install_scripts'
 
 def copyToZip(zipObj, platform, fileName, destPath, mode=0o100755):
     sourcePath = os.path.join(sharedPath, platform, fileName)
@@ -142,24 +96,348 @@ def copyToZip(zipObj, platform, fileName, destPath, mode=0o100755):
 
 
 relPath = os.path.join('release')
-print("Creating release directory ", relPath)
 if not os.path.exists(relPath):
     os.makedirs(relPath)
+
+manifestRelPath = os.path.join(relPath, 'current')
+if os.path.exists(manifestRelPath):
+    shutil.rmtree(manifestRelPath)
+
+os.makedirs(manifestRelPath)
+
+# Copy the web application to the release directory
+dataRelPath = os.path.join(manifestRelPath, 'data')
+os.makedirs(dataRelPath)
+shutil.copy(os.path.join("FluidNC", "data", "index.html.gz"), os.path.join(dataRelPath, "index-webui-2.html.gz"))
+urllib.request.urlretrieve("https://github.com/michmela44/ESP3D-WEBUI/releases/latest/download/index.html.gz", os.path.join("release", "current", "data", "index-webui-3.html.gz"))
+urllib.request.urlretrieve("https://github.com/figamore/FigUI/releases/latest/download/index.html.gz", os.path.join("release", "current", "data", "index-figui.html.gz"))
+
+manifest = {
+        "name": "FluidNC",
+        "version": tag,
+        "source_url": "https://github.com/bdring/FluidNC/tree/" + tag,
+        "release_url": "https://github.com/bdring/FluidNC/releases/tag/" + tag,
+        "funding_url": "https://www.paypal.com/donate/?hosted_button_id=8DYLB6ZYYDG7Y",
+        "images": {},
+        "files": {},
+        "addrinfo": {},
+        "docs": {},
+        "upload": {
+            "name": "upload",
+            "description": "Things you can upload to the file system",
+            "choice-name": "Upload group",
+            "choices": []
+        },
+        "installable": {
+            "name": "installable",
+            "description": "Things you can install",
+            "choice-name": "Processor type",
+            "choices": []
+        },
+}
 
 # We avoid doing this every time, instead checking in a new NoFile.h as necessary
 # if buildEmbeddedPage() != 0:
 #    sys.exit(1)
 
-if buildFs('wifi_s3', verbose=verbose) != 0:
-    sys.exit(1)
+# if buildFs('wifi', verbose=verbose) != 0:
+#     sys.exit(1)
 
-for envName in ['wifi_s3']:
-    if buildEnv(envName, verbose=verbose) != 0:
+def addImage(name, offset, filename, srcpath, dstpath):
+    fulldstpath = os.path.join(manifestRelPath,os.path.normpath(dstpath))
+
+    os.makedirs(fulldstpath, exist_ok=True)
+
+    fulldstfile = os.path.join(fulldstpath, filename)
+
+    shutil.copy(os.path.join(srcpath, filename), fulldstfile)
+
+    print("image ", name)
+
+    with open(fulldstfile, "rb") as f:
+        data = f.read()
+    image = {
+        # "name": name,
+        "size": os.path.getsize(fulldstfile),
+        "offset": offset,
+        "path": dstpath + '/' + filename,
+        "signature": {
+            "algorithm": "SHA2-256",
+            "value": hashlib.sha256(data).hexdigest()
+        }
+    }
+    if manifest['images'].get(name) != None:
+        print("Duplicate image name", name)
         sys.exit(1)
-    shutil.copy(os.path.join('.pio', 'build', envName, 'firmware.elf'), os.path.join(relPath, envName + '-' + 'firmware.elf'))
+    manifest['images'][name] = image
+    # manifest['images'].append(image)
+
+def addFile(name, controllerpath, filename, srcpath, dstpath):
+    fulldstpath = os.path.join(manifestRelPath,os.path.normpath(dstpath))
+
+    os.makedirs(fulldstpath, exist_ok=True)
+
+    fulldstfile = os.path.join(fulldstpath, filename)
+
+    # Only copy files that are not already in the directory
+    if os.path.join(srcpath, filename) != fulldstfile:
+        shutil.copy(os.path.join(srcpath, filename), fulldstfile)
+
+    print("file ", name)
+
+    with open(fulldstfile, "rb") as f:
+        data = f.read()
+    file = {
+        "size": os.path.getsize(fulldstfile),
+        "controller-path": controllerpath,
+        "path": dstpath + '/' + filename,
+        "signature": {
+            "algorithm": "SHA2-256",
+            "value": hashlib.sha256(data).hexdigest()
+        }
+    }
+    if manifest['files'].get(name) != None:
+        print("Duplicate file name", name)
+        sys.exit(1)
+    manifest['files'][name] = file
+    # manifest['images'].append(image)
+
+def addAddrinfo(name, filepath):
+    """Register an .addrinfo file in the manifest."""
+    if not os.path.exists(filepath):
+        return
+
+    print("addrinfo", name)
+
+    with open(filepath, "rb") as f:
+        data = f.read()
+
+    # path relative to manifestRelPath
+    relpath = os.path.relpath(filepath, manifestRelPath).replace(os.sep, '/')
+
+    entry = {
+        "size": len(data),
+        "path": relpath,
+        "signature": {
+            "algorithm": "SHA2-256",
+            "value": hashlib.sha256(data).hexdigest()
+        }
+    }
+    if manifest['addrinfo'].get(name) != None:
+        print("Duplicate addrinfo name", name)
+        sys.exit(1)
+    manifest['addrinfo'][name] = entry
+
+def addDoc(name, filepath):
+    """Register a reference/metadata file (not installed on the controller,
+    unlike 'files') in the manifest -- e.g. config_items.yaml. Same shape as
+    addAddrinfo, but unlike addrinfo generation (best-effort per board), a doc
+    is expected to always exist by the time this is called -- a missing file
+    here means the generation step itself should have already failed loudly."""
+    if not os.path.exists(filepath):
+        print("Missing doc file", filepath)
+        sys.exit(1)
+
+    print("doc", name)
+
+    with open(filepath, "rb") as f:
+        data = f.read()
+
+    # path relative to manifestRelPath
+    relpath = os.path.relpath(filepath, manifestRelPath).replace(os.sep, '/')
+
+    entry = {
+        "size": len(data),
+        "path": relpath,
+        "signature": {
+            "algorithm": "SHA2-256",
+            "value": hashlib.sha256(data).hexdigest()
+        }
+    }
+    if manifest['docs'].get(name) != None:
+        print("Duplicate doc name", name)
+        sys.exit(1)
+    manifest['docs'][name] = entry
+
+# Generate the config-item reference doc (see FluidNC/src/Configuration/ItemDocs.md
+# and tools/build_config_docs.py) and register it in the manifest. Not board-specific,
+# so this runs once, before the per-MCU/variant build loop. A generation failure --
+# e.g. a @config annotation drifted from its handler.item() call -- fails the whole
+# release build, the same as a firmware compile failure would.
+configItemsDir = os.path.join(manifestRelPath, 'docs')
+os.makedirs(configItemsDir, exist_ok=True)
+configItemsPath = os.path.join(configItemsDir, 'config_items.yaml')
+print('Generating config_items.yaml')
+configItemsResult = subprocess.run(
+    ["python", os.path.join("tools", "build_config_docs.py"), "--output", configItemsPath]
+)
+if configItemsResult.returncode != 0:
+    print("Error: failed to generate config_items.yaml", file=sys.stderr)
+    sys.exit(1)
+addDoc('config-items', configItemsPath)
+
+flashsize = "4m"
+
+versions = [
+    { "mcu": "esp32",   "env_suffix": "", "builds":  ["wifi", "bt", "noradio"]},
+    { "mcu": "esp32s3", "env_suffix": "_s3", "builds" : ["wifi", "noradio"]},
+]
+bootapp = 'boot_app0.bin';
+bootloader = 'bootloader.bin'
+
+for version in versions:
+    mcu = version["mcu"]
+    suffix = version["env_suffix"]
+    buildEnviron = environFor(mcu)
+    for buildName in version["builds"]:
+        envName = buildName + suffix
+        if buildEnv(envName, verbose=verbose, env=buildEnviron) != 0:
+            sys.exit(1)
+        buildDir = os.path.join('.pio', 'build', envName)
+        elfRelPath = os.path.join(relPath, mcu + '-' + buildName + '-' + 'firmware.elf')
+        shutil.copy(os.path.join(buildDir, 'firmware.elf'), elfRelPath)
+
+        # Generate .addrinfo file for stack trace decoding, beside firmware.bin
+        addrinfoDir = os.path.join(manifestRelPath, mcu, buildName)
+        os.makedirs(addrinfoDir, exist_ok=True)
+        addrinfoPath = os.path.join(addrinfoDir, 'firmware.addrinfo')
+        print(f'Generating {addrinfoPath}')
+        try:
+            generate_addrinfo(
+                elf_path=elfRelPath,
+                output_path=addrinfoPath,
+                mcu=mcu,
+                build=buildName,
+                tag=tag,
+                verbose=verbose,
+            )
+        except SystemExit:
+            print(f'Warning: Failed to generate .addrinfo for {envName}', file=sys.stderr)
+
+        addAddrinfo(mcu + '-' + buildName + '-addrinfo', addrinfoPath)
+
+        addImage(mcu + '-' + buildName + '-firmware', '0x10000', 'firmware.bin', buildDir, mcu + '/' + buildName)
+
+        if buildName == 'wifi':
+            if buildFs(envName, verbose=verbose, env=buildEnviron) != 0:
+               sys.exit(1)
+
+            # bootapp is a data partition that the bootloader and OTA use to determine which
+            # image to run.  Its initial value is in a file "boot_app0.bin" in the platformio
+            # framework package.  We copy it to the build directory so addImage can find it
+            coreDir = buildEnviron.get('PLATFORMIO_CORE_DIR', os.path.join(os.path.expanduser('~'), '.platformio'))
+            bootappsrc = os.path.join(coreDir,'packages','framework-arduinoespressif32','tools','partitions', bootapp)
+            shutil.copy(bootappsrc, buildDir)
+
+            addImage(mcu + '-' + buildName + '-' + flashsize + '-filesystem', '0x3d0000', 'littlefs.bin', buildDir, mcu + '/' + buildName + '/' + flashsize)
+            addImage(mcu + '-' + flashsize + '-partitions', '0x8000', 'partitions.bin', buildDir, mcu + '/' + flashsize)
+            addImage(mcu + '-bootloader', '0x1000' if mcu == 'esp32' else '0x0', bootloader, buildDir, mcu)
+            addImage(mcu + '-bootapp', '0xe000', bootapp, buildDir, mcu)
+
+installableChoices = manifest['installable']['choices']
+def addSection(node, name, description, choice):
+    section = {
+        "name": name,
+        "description": description,
+    }
+    if choice != None:
+        section['choice-name'] = choice
+        section['choices'] = []
+    node.append(section)
+    return section['choices']
+
+mcuChoices = None
+def addMCU(name, description, choice=None):
+    global mcuChoices
+    mcuChoices = addSection(installableChoices, name, description, choice)
+
+variantChoices = None
+def addVariant(variant, description, choice=None):
+    global variantChoices
+    variantChoices = addSection(mcuChoices, variant, description, choice)
+
+def addInstallable(install_type, erase, images):
+    for image in images:
+        if manifest['images'].get(image) == None:
+            # imagefiles = [obj for obj in manifest['images'] if obj['name'] == image]
+            # if len(imagefiles) == 0:
+            print("Missing image", image)
+            sys.exit(1)
+        # if len(imagefiles) > 1:
+        #    print("Duplicate image", image)
+        #    sys.exit(2)
+                      
+    installable = {
+        "name": install_type["name"],
+        "description": install_type["description"],
+        "erase": erase,
+        "images": images
+    }
+    variantChoices.append(installable)
+
+def addUpload(name, description, files):
+    for file in files:
+        if manifest['files'].get(file) == None:
+            print("Missing file", file)
+            sys.exit(1)
+    upload = {
+        "name": name,
+        "description": description,
+        "files": files
+    }
+    manifest['upload']['choices'].append(upload)
+
+fresh_install = { "name": "fresh-install", "description": "Complete FluidNC installation, erasing all previous data"}
+firmware_update = { "name": "firmware-update", "description": "Update FluidNC to latest firmware version, preserving previous filesystem data."}
+filesystem_update = { "name": "filesystem-update", "description": "Update FluidNC filesystem only, erasing previous filesystem data."}
+
+def makeManifest():
+    mcu = "esp32"
+    addMCU(mcu, "ESP32-WROOM", "Firmware variant")
+
+    addVariant("wifi", "Supports WiFi and WebUI", "Installation type")
+    addInstallable(fresh_install, True, [mcu + "-4m-partitions", mcu + "-bootloader", mcu + "-bootapp", mcu + "-wifi-firmware", mcu + "-wifi-4m-filesystem"])
+    addInstallable(firmware_update, False, [mcu + "-wifi-firmware"])
+
+    addVariant("bt", "Supports Bluetooth serial", "Installation type")
+    addInstallable(fresh_install, True, [mcu + "-4m-partitions", mcu + "-bootloader", mcu + "-bootapp", mcu + "-bt-firmware"])
+    addInstallable(firmware_update, False, [mcu + "-bt-firmware"])
+
+    addVariant("noradio", "Supports neither WiFi nor Bluetooth", "Installation type")
+    addInstallable(fresh_install, True, [mcu + "-4m-partitions", mcu + "-bootloader", mcu + "-bootapp", mcu + "-noradio-firmware"])
+    addInstallable(firmware_update, False, [mcu + "-noradio-firmware"])
+
+    mcu = "esp32s3"
+    addMCU(mcu, "ESP32-S3-WROOM-1", "Firmware variant")
+
+    addVariant("wifi", "Supports WiFi and WebUI", "Installation type")
+    addInstallable(fresh_install, True, [mcu + "-4m-partitions", mcu + "-bootloader", mcu + "-bootapp", mcu + "-wifi-firmware", mcu + "-wifi-4m-filesystem"])
+    addInstallable(firmware_update, False, [mcu + "-wifi-firmware"])
+
+    addVariant("noradio", "Does not support WiFi", "Installation type")
+    addInstallable(fresh_install, True, [mcu + "-4m-partitions", mcu + "-bootloader", mcu + "-bootapp", mcu + "-noradio-firmware"])
+    addInstallable(firmware_update, False, [mcu + "-noradio-firmware"])
+
+    addFile("WebUI-2", "/localfs/index.html.gz", "index-webui-2.html.gz", os.path.join("release", "current", "data"), "data")
+    addFile("WebUI-3", "/localfs/index.html.gz", "index-webui-3.html.gz", os.path.join("release", "current", "data"), "data")
+    addFile("FigUI", "/localfs/index.html.gz", "index-figui.html.gz", os.path.join("release", "current", "data"), "data")
+
+    addUpload("WebUI generation 2", "Add WebUI to local filesystem", ["WebUI-2"])
+    addUpload("WebUI generation 3", "Add WebUI to local filesystem", ["WebUI-3"])
+    addUpload("FigUI", "Add FigUI to local filesystem", ["FigUI"])
+
+makeManifest()
+
+import json
+def printManifest():
+    print(json.dumps(manifest, indent=2))
+
+with open(os.path.join(manifestRelPath, "manifest.json"), "w") as manifest_file:
+    json.dump(manifest, manifest_file, indent=2)
+                 
 
 for platform in ['win64', 'posix']:
-    print("Creating zip file for", platform)
+    print("Creating zip file for ", platform)
     terseOSName = {
         'win64': 'win',
         'posix': 'posix',
@@ -176,33 +454,36 @@ for platform in ['win64', 'posix']:
         'win64': True,
         'posix': False,
     }
+    esptoolBinaryPlatformName = {
+        'win64': 'windows-amd64',
+        'posix': 'posix',
+    }
 
     zipDirName = os.path.join('fluidnc-' + tag + '-' + platform)
     zipFileName = os.path.join(relPath, zipDirName + '.zip')
-    print("Creating zip file ", zipFileName)
+
     with ZipFile(zipFileName, 'w') as zipObj:
         name = 'HOWTO-INSTALL.txt'
         zipObj.write(os.path.join(sharedPath, platform, name), os.path.join(zipDirName, name))
 
         pioPath = os.path.join('.pio', 'build')
 
-        # Put boot_app binary in the archive
-        bootapp = 'boot_app0.bin';
-        tools = os.path.join(PLATFORMIO_HOME,'packages','framework-arduinoespressif32','tools')
+        # Put boot_app binary in the archive.  It is data, and the same for all MCUs and variants
+        tools = os.path.join(os.path.expanduser('~'),'.platformio','packages','framework-arduinoespressif32','tools')
         zipObj.write(os.path.join(tools, "partitions", bootapp), os.path.join(zipDirName, 'common', bootapp))
+
         for secFuses in ['SecurityFusesOK.bin', 'SecurityFusesOK0.bin']:
             zipObj.write(os.path.join(sharedPath, 'common', secFuses), os.path.join(zipDirName, 'common', secFuses))
 
         # Put FluidNC binaries, partition maps, and installers in the archive
-        for envName in ['wifi_s3']:
+        for envName in ['wifi','bt','wifi_s3']:
 
             # Put bootloader binaries in the archive
-            bootloader = 'bootloader.bin'
             zipObj.write(os.path.join(pioPath, envName, bootloader), os.path.join(zipDirName, envName, bootloader))
 
             # Put littlefs.bin and index.html.gz in the archive
             # bt does not need a littlefs.bin because there is no use for index.html.gz
-            if envName == 'wifi_s3':
+            if envName == 'wifi':
                 name = 'littlefs.bin'
                 zipObj.write(os.path.join(pioPath, envName, name), os.path.join(zipDirName, envName, name))
                 name = 'index.html.gz'
@@ -212,15 +493,19 @@ for platform in ['win64', 'posix']:
             for obj in ['firmware.bin','partitions.bin']:
                 zipObj.write(os.path.join(objPath, obj), os.path.join(zipDirName, envName, obj))
 
+            # Add .addrinfo file beside firmware.bin in the zip
+            envMcu = 'esp32s3' if envName.endswith('_s3') else 'esp32'
+            envBuild = envName.removesuffix('_s3')
+            addrinfoSrc = os.path.join(manifestRelPath, envMcu, envBuild, 'firmware.addrinfo')
+            if os.path.exists(addrinfoSrc):
+                zipObj.write(addrinfoSrc, os.path.join(zipDirName, envName, 'firmware.addrinfo'))
+
             # E.g. posix/install-wifi.sh -> install-wifi.sh
             copyToZip(zipObj, platform, 'install-' + envName + scriptExtension[platform], zipDirName)
 
-        for script in ['full-install','install-fs', 'fluidterm', 'checksecurity', 'erase', 'tools']:
+        for script in ['install-fs', 'install-fs_s3', 'fluidterm', 'checksecurity', 'erase', 'erase_s3', 'tools']:
             # E.g. posix/fluidterm.sh -> fluidterm.sh
             copyToZip(zipObj, platform, script + scriptExtension[platform], zipDirName)
-
-        if platform == 'posix':
-            copyToZip(zipObj, platform, 'full-install.command', zipDirName)
 
         # Put the fluidterm code in the archive
         for obj in ['fluidterm.py', 'README-FluidTerm.md']:
@@ -231,13 +516,13 @@ for platform in ['win64', 'posix']:
             obj = 'fluidterm' + exeExtension[platform]
             zipObj.write(os.path.join('fluidterm', obj), os.path.join(zipDirName, platform, obj))
 
-        EsptoolVersion = 'v4.6'
+        EsptoolVersion = 'v5.1.0'
 
         # Put esptool and related tools in the archive
         if withEsptoolBinary[platform]:
             name = 'README-ESPTOOL.txt'
             EspRepo = 'https://github.com/espressif/esptool/releases/download/' + EsptoolVersion + '/'
-            EspDir = 'esptool-' + EsptoolVersion + '-' + platform
+            EspDir = 'esptool-' + EsptoolVersion + '-' + esptoolBinaryPlatformName[platform]
             zipObj.write(os.path.join(sharedPath, platform, name), os.path.join(zipDirName, platform,
                          name.replace('.txt', '-' + EsptoolVersion + '.txt')))
         else:
@@ -250,6 +535,8 @@ for platform in ['win64', 'posix']:
 
         # Download and unzip from ESP repo
         ZipFileName = EspDir + '.zip'
+        ZipFileURL = EspRepo + ZipFileName
+        # https://github.com/espressif/esptool/releases/download/v5.1.0/esptool-v5.1.0-windows-amd64.zip
         if not os.path.isfile(ZipFileName):
             with urllib.request.urlopen(EspRepo + ZipFileName) as u:
                 open(ZipFileName, 'wb').write(u.read())
@@ -257,7 +544,7 @@ for platform in ['win64', 'posix']:
         if withEsptoolBinary[platform]:
             for Binary in ['esptool']:
                 Binary += exeExtension[platform]
-                sourceFileName = EspDir + '/' + Binary
+                sourceFileName = 'esptool-' + esptoolBinaryPlatformName[platform] + '/' + Binary
                 with ZipFile(ZipFileName, 'r') as zipReader:
                     destFileName = os.path.join(zipDirName, platform, Binary)
                     info = ZipInfo(destFileName)
