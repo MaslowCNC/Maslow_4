@@ -98,4 +98,9 @@ describe("tablet work area bounds checks", () => {
     const home = g.__tabletBoundsTestApi.getCurrentHomeInMm();
     expect(home).toEqual({ x: 42, y: -9 });
   });
+
+  test("parses decimal commas as decimal points", () => {
+    expect(g.__tabletBoundsTestApi.parseNumericInput("35,100")).toBe(35.1);
+    expect(g.__tabletBoundsTestApi.parseNumericInput("35.100")).toBe(35.1);
+  });
 });
