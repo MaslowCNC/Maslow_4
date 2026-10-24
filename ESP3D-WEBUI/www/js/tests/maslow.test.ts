@@ -5,7 +5,8 @@ import {
   MaslowErrMsgNoMatchingKey,
   MaslowErrMsgKeyValueCantUse,
   MaslowErrMsgKeyValueSuffix,
-  maslowMsgHandling
+  maslowMsgHandling,
+  processMaslowConfigResponse
 } from "../maslow";
 
 describe('maslowMsgHandling', () => {
@@ -58,6 +59,25 @@ describe('maslowMsgHandling', () => {
   test.each(stdActions)("Key %p sets value %p into %p", (key, value, outputValueName) => {
     noErrorResult(key, value);
     expect(global.loadedValues[outputValueName]).toBe(value);
+  });
+
+  test("processes Maslow config values returned by HTTP queries", () => {
+    processMaslowConfigResponse([
+      "$/Maslow_Scale_X=1.05",
+      "$/Maslow_Scale_Y=0.97",
+      "$/Maslow_Work_Area_X=2400",
+      "$/Maslow_Work_Area_Y=1200",
+      "$/Maslow_Extend_Dist=3100",
+      "ok",
+    ].join("\n"));
+
+    expect(global.loadedValues).toMatchObject({
+      scaleX: "1.05",
+      scaleY: "0.97",
+      workAreaX: "2400",
+      workAreaY: "1200",
+      extendDist: "3100",
+    });
   });
 
   const setDim = (key, value, outDim, outValue) => {
