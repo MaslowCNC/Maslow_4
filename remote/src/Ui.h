@@ -65,36 +65,38 @@ namespace Ui {
         return (uint16_t)(((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3));
     }
 
-    // The Maslow WebUI's palette (tablet.css, tablettab.html, maslow.js).
+    // The Maslow WebUI's palette (tablet.css, tablettab.html, maslow.js), with
+    // the colours given twice the saturation and 75% brightness: the WebUI's
+    // pastels look washed out on these TFTs.
     namespace C {
         constexpr uint16_t bg        = rgb(255, 255, 255);  // page
         constexpr uint16_t panel     = rgb(248, 248, 248);  // navbar
         constexpr uint16_t border    = rgb(231, 231, 231);  // navbar border, list rules
-        constexpr uint16_t button    = rgb(182, 159, 203);  // #b69fcb lavender buttons
-        constexpr uint16_t buttonAlt = rgb(157, 136, 192);  // #9d88c0 alternate jog cells
-        constexpr uint16_t cream     = rgb(242, 240, 228);  // #f2f0e4 info cells
+        constexpr uint16_t button    = rgb(137, 102, 168);  // WebUI #b69fcb lavender buttons
+        constexpr uint16_t buttonAlt = rgb(114, 83, 167);   // WebUI #9d88c0 alternate jog cells
+        constexpr uint16_t cream     = rgb(186, 182, 164);  // WebUI #f2f0e4 info cells
         constexpr uint16_t text      = rgb(51, 51, 51);     // #333 body text
-        constexpr uint16_t dim       = rgb(122, 122, 122);  // #7a7a7a labels
+        constexpr uint16_t dim       = rgb(73, 73, 73);     // WebUI #7a7a7a labels
         constexpr uint16_t white     = rgb(255, 255, 255);
-        constexpr uint16_t green     = rgb(74, 168, 92);    // #4aa85c status, run, available
-        constexpr uint16_t red       = rgb(205, 101, 76);   // #cd654c stop
-        constexpr uint16_t orange    = rgb(245, 177, 41);   // #f5b129 release tension
+        constexpr uint16_t green     = rgb(28, 168, 54);    // WebUI #4aa85c status, run, available
+        constexpr uint16_t red       = rgb(212, 56, 19);    // WebUI #cd654c stop
+        constexpr uint16_t orange    = rgb(252, 150, 0);    // WebUI #f5b129 release tension
         constexpr uint16_t yellow    = orange;
-        constexpr uint16_t blue      = rgb(51, 122, 183);   // #337ab7 links, upload
+        constexpr uint16_t blue      = rgb(0, 94, 186);     // WebUI #337ab7 links, upload
         constexpr uint16_t cyan      = blue;                // accent values
-        constexpr uint16_t grey      = rgb(160, 160, 160);  // #a0a0a0 unavailable
+        constexpr uint16_t grey      = rgb(120, 120, 120);  // WebUI #a0a0a0 unavailable
         constexpr uint16_t select    = blue;
         constexpr uint16_t warnText  = rgb(176, 120, 0);
         // State banner backgrounds (maslow.js updateDynamicButtons)
-        constexpr uint16_t bannerRed    = rgb(248, 215, 218);
-        constexpr uint16_t bannerBlue   = rgb(207, 226, 255);
-        constexpr uint16_t bannerGreen  = rgb(209, 231, 221);
-        constexpr uint16_t bannerYellow = rgb(255, 243, 205);
+        constexpr uint16_t bannerRed    = rgb(247, 187, 192);
+        constexpr uint16_t bannerBlue   = rgb(170, 205, 255);
+        constexpr uint16_t bannerGreen  = rgb(182, 222, 204);
+        constexpr uint16_t bannerYellow = rgb(254, 232, 162);
     }
 
     // Dark text on light backgrounds, white on the coloured ones.
     constexpr bool isLight(uint16_t c) {
-        return ((c >> 11) & 0x1F) * 299 / 31 + ((c >> 5) & 0x3F) * 587 / 63 + (c & 0x1F) * 114 / 31 > 800;
+        return ((c >> 11) & 0x1F) * 299 / 31 + ((c >> 5) & 0x3F) * 587 / 63 + (c & 0x1F) * 114 / 31 > 650;
     }
 
     extern const lgfx::IFont* F_SMALL;  // body text
