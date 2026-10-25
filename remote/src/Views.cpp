@@ -225,7 +225,7 @@ namespace {
                     Button b { (int16_t)(2 + c * 58), (int16_t)(100 + r * 50), 57, 49, "" };
                     b.icon   = icons[r][c];
                     b.color  = (dx == 0) != (dy == 0) ? C::buttonAlt : C::button;
-                    b.dimmed = !ready;
+                    // Always in colour, as in the WebUI; readyToMove() explains a refused jog.
                     if (dx == 0 && dy == 0) {
                         b.color = C::cream;
                         b.fg    = C::buttonAlt;
