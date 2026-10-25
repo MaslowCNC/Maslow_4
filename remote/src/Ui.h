@@ -65,25 +65,43 @@ namespace Ui {
         return (uint16_t)(((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3));
     }
 
+    // The Maslow WebUI's palette (tablet.css, tablettab.html, maslow.js).
     namespace C {
-        constexpr uint16_t bg       = rgb(16, 18, 22);
-        constexpr uint16_t panel    = rgb(34, 38, 46);
-        constexpr uint16_t button   = rgb(58, 66, 80);
-        constexpr uint16_t text     = rgb(240, 240, 240);
-        constexpr uint16_t dim      = rgb(150, 156, 168);
-        constexpr uint16_t green    = rgb(46, 150, 70);
-        constexpr uint16_t red      = rgb(200, 40, 36);
-        constexpr uint16_t yellow   = rgb(230, 180, 30);
-        constexpr uint16_t blue     = rgb(40, 110, 200);
-        constexpr uint16_t orange   = rgb(230, 120, 20);
-        constexpr uint16_t grey     = rgb(90, 92, 98);
-        constexpr uint16_t cyan     = rgb(60, 190, 210);
-        constexpr uint16_t select   = rgb(40, 80, 140);
+        constexpr uint16_t bg        = rgb(255, 255, 255);  // page
+        constexpr uint16_t panel     = rgb(248, 248, 248);  // navbar
+        constexpr uint16_t border    = rgb(231, 231, 231);  // navbar border, list rules
+        constexpr uint16_t button    = rgb(182, 159, 203);  // #b69fcb lavender buttons
+        constexpr uint16_t buttonAlt = rgb(157, 136, 192);  // #9d88c0 alternate jog cells
+        constexpr uint16_t cream     = rgb(242, 240, 228);  // #f2f0e4 info cells
+        constexpr uint16_t text      = rgb(51, 51, 51);     // #333 body text
+        constexpr uint16_t dim       = rgb(122, 122, 122);  // #7a7a7a labels
+        constexpr uint16_t white     = rgb(255, 255, 255);
+        constexpr uint16_t green     = rgb(74, 168, 92);    // #4aa85c status, run, available
+        constexpr uint16_t red       = rgb(205, 101, 76);   // #cd654c stop
+        constexpr uint16_t orange    = rgb(245, 177, 41);   // #f5b129 release tension
+        constexpr uint16_t yellow    = orange;
+        constexpr uint16_t blue      = rgb(51, 122, 183);   // #337ab7 links, upload
+        constexpr uint16_t cyan      = blue;                // accent values
+        constexpr uint16_t grey      = rgb(160, 160, 160);  // #a0a0a0 unavailable
+        constexpr uint16_t select    = blue;
+        constexpr uint16_t warnText  = rgb(176, 120, 0);
+        // State banner backgrounds (maslow.js updateDynamicButtons)
+        constexpr uint16_t bannerRed    = rgb(248, 215, 218);
+        constexpr uint16_t bannerBlue   = rgb(207, 226, 255);
+        constexpr uint16_t bannerGreen  = rgb(209, 231, 221);
+        constexpr uint16_t bannerYellow = rgb(255, 243, 205);
     }
 
-    extern const lgfx::IFont* F_SMALL;  // 16 px bitmap
-    extern const lgfx::IFont* F_BTN;    // FreeSansBold 9pt
-    extern const lgfx::IFont* F_BIG;    // FreeSansBold 12pt
+    // Dark text on light backgrounds, white on the coloured ones.
+    constexpr bool isLight(uint16_t c) {
+        return ((c >> 11) & 0x1F) * 299 / 31 + ((c >> 5) & 0x3F) * 587 / 63 + (c & 0x1F) * 114 / 31 > 800;
+    }
+
+    extern const lgfx::IFont* F_SMALL;  // body text
+    extern const lgfx::IFont* F_BTN;    // button labels (FreeSans, like the WebUI's Arial)
+    extern const lgfx::IFont* F_BTN_SMALL;  // labels that do not fit F_BTN
+    extern const lgfx::IFont* F_BOLD;   // titles
+    extern const lgfx::IFont* F_BIG;    // position readout
 
     enum Icon : uint8_t { NONE = 0, ARROW_N, ARROW_NE, ARROW_E, ARROW_SE, ARROW_S, ARROW_SW, ARROW_W, ARROW_NW, HOME };
 
@@ -96,6 +114,7 @@ namespace Ui {
         Icon                  icon   = NONE;
         bool                  dimmed = false;    // drawn greyed; still tappable
         const lgfx::IFont*    font   = nullptr;
+        uint16_t              fg     = 0;  // label/icon colour; 0 picks by background
         bool contains(int px, int py) const { return px >= x && px < x + w && py >= y && py < y + h; }
     };
 
@@ -116,6 +135,8 @@ namespace Ui {
         void drawButton(const Button& b, bool pressed = false);
         void redraw();  // build + draw + buttons
         Button* find(const char* label);
+        // Give buttons[from..] one font: F_BTN, or F_BTN_SMALL if any label overflows.
+        void fitFont(size_t from = 0);
     };
 
     void begin();
@@ -140,6 +161,8 @@ namespace Ui {
     // Helpers
     std::vector<std::string> wrap(const lgfx::IFont* font, const std::string& text, int width);
     std::string fmt(float v, int decimals);  // trims trailing zeros
+    uint16_t darken(uint16_t c);
+    void     dashedRule(int y);  // dashed separator across the screen
     void drawArrow(Gfx& g, int cx, int cy, Icon dir, int size, uint16_t color);
     void calibrateTouch();
     void setBrightness(uint8_t level);  // saved

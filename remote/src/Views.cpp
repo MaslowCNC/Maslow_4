@@ -221,9 +221,15 @@ namespace {
             for (int r = 0; r < 3; ++r) {
                 for (int c = 0; c < 3; ++c) {
                     int dx = c - 1, dy = 1 - r;
-                    Button b { (int16_t)(2 + c * 58), (int16_t)(100 + r * 50), 56, 48, "" };
+                    // Touching cells, alternating lavenders like the WebUI's jog grid.
+                    Button b { (int16_t)(2 + c * 58), (int16_t)(100 + r * 50), 57, 49, "" };
                     b.icon   = icons[r][c];
+                    b.color  = (dx == 0) != (dy == 0) ? C::buttonAlt : C::button;
                     b.dimmed = !ready;
+                    if (dx == 0 && dy == 0) {
+                        b.color = C::cream;
+                        b.fg    = C::buttonAlt;
+                    }
                     if (dx == 0 && dy == 0) {
                         b.onTap = moveXYHome;
                     } else {
@@ -239,13 +245,14 @@ namespace {
             std::string zs = num(zStep());
             Button zUp { 178, 100, 60, 48, "Z+" };
             zUp.icon  = ARROW_N;
-            zUp.color = C::select;
+            zUp.color = C::cream;
+            zUp.fg    = C::blue;
             zUp.onTap = [] {
                 float s = zStep();
                 zCheck(Machine::fromDisplay(s), [s] { jog(0, 0, s); });
             };
             buttons.push_back(zUp);
-            buttons.push_back({ 178, 150, 60, 48, "Z step\n" + zs, C::panel, [this] {
+            buttons.push_back({ 178, 150, 60, 48, "Z step\n" + zs, C::cream, [this] {
                                    jogPrefs.zIndex = (jogPrefs.zIndex + 1) % STEP_COUNT;
                                    saveJogPrefs();
                                    redraw();
@@ -253,23 +260,25 @@ namespace {
             buttons.back().font = F_SMALL;
             Button zDn { 178, 200, 60, 48, "Z-" };
             zDn.icon  = ARROW_S;
-            zDn.color = C::select;
+            zDn.color = C::cream;
+            zDn.fg    = C::blue;
             zDn.onTap = [] {
                 float s = zStep();
                 zCheck(-Machine::fromDisplay(s), [s] { jog(0, 0, -s); });
             };
             buttons.push_back(zDn);
 
-            buttons.push_back({ 2, 252, 112, 32, "XY step " + num(xyStep()), C::panel, [this] {
+            buttons.push_back({ 2, 252, 112, 32, "XY step " + num(xyStep()), C::cream, [this] {
                                    jogPrefs.xyIndex = (jogPrefs.xyIndex + 1) % STEP_COUNT;
                                    saveJogPrefs();
                                    redraw();
                                } });
-            buttons.push_back({ 118, 252, 54, 32, Machine::unitName(), C::panel, [] {
+            buttons.push_back({ 118, 252, 54, 32, Machine::unitName(), C::cream, [] {
                                    Machine::send(Machine::inches ? "G21" : "G20");
                                    Machine::send("$G");
                                } });
-            buttons.push_back({ 176, 252, 62, 32, "Home", C::button, homeMenu });
+            buttons.push_back({ 176, 252, 62, 32, "Home", C::cream, homeMenu });
+            buttons.back().fg = C::blue;
         }
 
         void drawDro() {
@@ -345,13 +354,13 @@ namespace {
     public:
         void build() override {
             buttons.clear();
-            buttons.push_back({ 166, 31, 72, 25, "Refresh", C::button, [] { Machine::requestFiles(); } });
+            buttons.push_back({ 166, 31, 72, 25, "Refresh", C::blue, [] { Machine::requestFiles(); } });
             buttons.back().font = F_SMALL;
-            buttons.push_back({ 210, LIST_Y, 28, ROW * ROWS / 2 - 1, "", C::panel, [this] {
+            buttons.push_back({ 210, LIST_Y, 28, ROW * ROWS / 2 - 1, "", C::cream, [this] {
                                    scroll = max(0, scroll - ROWS);
                                    drawList();
                                }, nullptr, ARROW_N });
-            buttons.push_back({ 210, LIST_Y + ROW * ROWS / 2 + 1, 28, ROW * ROWS / 2 - 1, "", C::panel, [this] {
+            buttons.push_back({ 210, LIST_Y + ROW * ROWS / 2 + 1, 28, ROW * ROWS / 2 - 1, "", C::cream, [this] {
                                    int n  = (int)Machine::files().size();
                                    scroll = max(0, min(n - ROWS, scroll + ROWS));
                                    drawList();
@@ -374,7 +383,7 @@ namespace {
                 start.onTap  = [this] { startJob(); };
             }
             buttons.push_back(start);
-            buttons.push_back({ 156, 208, 82, 40, "Delete", C::button, [this] {
+            buttons.push_back({ 156, 208, 82, 40, "Delete", C::red, [this] {
                                    if (selected.empty()) {
                                        Machine::toast("Select a file first");
                                        return;
@@ -390,7 +399,7 @@ namespace {
 
             lastOvr = st.ovr[0];
             buttons.push_back({ 2, 252, 52, 32, "F-", C::button, [] { Machine::realtime(0x92); } });
-            buttons.push_back({ 58, 252, 124, 32, "Feed " + std::to_string(st.ovr[0]) + "%", C::panel,
+            buttons.push_back({ 58, 252, 124, 32, "Feed " + std::to_string(st.ovr[0]) + "%", C::cream,
                                 [] { Machine::realtime(0x90); } });
             buttons.push_back({ 186, 252, 52, 32, "F+", C::button, [] { Machine::realtime(0x91); } });
         }
@@ -418,7 +427,7 @@ namespace {
 
         void drawHeader() {
             gfx.fillRect(0, CONTENT_Y, 164, 27, C::bg);
-            gfx.setFont(F_BTN);
+            gfx.setFont(F_BOLD);
             gfx.setTextColor(C::text);
             gfx.setTextDatum(textdatum_t::middle_left);
             std::string h = "SD card";
@@ -432,7 +441,8 @@ namespace {
 
         void drawList() {
             auto& files = Machine::files();
-            gfx.fillRect(0, LIST_Y, LIST_W, ROW * ROWS, C::panel);
+            gfx.fillRect(0, LIST_Y, LIST_W, ROW * ROWS, C::bg);
+            gfx.drawRect(0, LIST_Y, LIST_W, ROW * ROWS, C::border);
             gfx.setFont(F_SMALL);
             gfx.setTextDatum(textdatum_t::middle_left);
             if (files.empty()) {
@@ -448,7 +458,7 @@ namespace {
                 int   y  = LIST_Y + i * ROW;
                 bool  on = f.path == selected;
                 if (on) gfx.fillRect(0, y, LIST_W, ROW, C::select);
-                gfx.setTextColor(C::text);
+                gfx.setTextColor(on ? C::white : C::text);
                 std::string name = f.path;
                 char        size[12];
                 if (f.size >= 1000000) snprintf(size, sizeof(size), "%.1fM", f.size / 1e6);
@@ -456,11 +466,11 @@ namespace {
                 int room = LIST_W - 12 - gfx.textWidth(size) - 6;
                 while (name.size() > 2 && gfx.textWidth(name.c_str()) > room) name.pop_back();
                 gfx.drawString(name.c_str(), 4, y + ROW / 2);
-                gfx.setTextColor(C::dim);
+                gfx.setTextColor(on ? C::white : C::dim);
                 gfx.setTextDatum(textdatum_t::middle_right);
                 gfx.drawString(size, LIST_W - 4, y + ROW / 2);
                 gfx.setTextDatum(textdatum_t::middle_left);
-                gfx.drawFastHLine(0, y + ROW - 1, LIST_W, C::bg);
+                gfx.drawFastHLine(0, y + ROW - 1, LIST_W, C::border);
             }
         }
 
@@ -587,33 +597,36 @@ namespace {
                 { "Settings", true, showSettings },
             };
             for (int i = 0; i < 10; ++i) {
-                Button b { (int16_t)(2 + (i % 2) * 119), (int16_t)(GRID_Y + (i / 2) * 44), 117, 42, defs[i].label };
+                std::string label = defs[i].label;
+                for (auto& ch : label) ch = toupper(ch);
+                Button b { (int16_t)(2 + (i % 2) * 119), (int16_t)(GRID_Y + (i / 2) * 44), 117, 42, label };
                 b.color  = i < 5 ? C::green : C::button;
                 b.dimmed = i < 5 ? !defs[i].on : (i == 7 || i == 8) && !defs[i].on;
                 b.onTap  = defs[i].fn;
                 buttons.push_back(b);
             }
+            fitFont();
         }
 
         void drawBanner() {
             int      s = Machine::maslowState;
-            uint16_t c = C::grey;
+            uint16_t c = C::panel;
             if (Machine::connected()) {
-                if (s == 0 || s < 0) c = C::red;
-                else if (s == 2 || s == 7) c = C::green;
-                else if (s == 4) c = C::yellow;
-                else c = C::blue;
+                if (s == 0 || s < 0) c = C::bannerRed;
+                else if (s == 2 || s == 7) c = C::bannerGreen;
+                else if (s == 4) c = C::bannerYellow;
+                else c = C::bannerBlue;
             }
-            gfx.fillRoundRect(2, 32, W - 4, 28, 6, c);
-            gfx.setFont(F_BTN);
-            gfx.setTextColor(c == C::yellow ? TFT_BLACK : C::text);
+            gfx.fillRect(2, 32, W - 4, 28, c);
+            gfx.setFont(F_BOLD);
+            gfx.setTextColor(C::text);
             gfx.setTextDatum(textdatum_t::middle_center);
             std::string t = Machine::connected() ? std::string("State: ") + Machine::maslowStateName(s) : "Not connected";
             gfx.drawString(t.c_str(), W / 2, 47);
         }
 
         void drawLogTail() {
-            gfx.fillRect(0, GRID_Y, W, TABS_Y - GRID_Y, C::panel);
+            gfx.fillRect(0, GRID_Y, W, TABS_Y - GRID_Y, C::bg);
             auto&                    log = Machine::log();
             std::vector<std::string> lines;
             for (int i = (int)log.size() - 1; i >= 0 && lines.size() < 14; --i) {
@@ -723,8 +736,8 @@ namespace {
             for (int i = 0; i < ROWS && scroll + i < SETTING_COUNT; ++i) {
                 auto& s = SETTINGS[scroll + i];
                 int   y = LIST_Y + i * ROW;
-                gfx.fillRoundRect(2, y + 1, W - 4, ROW - 2, 4, C::panel);
-                gfx.setTextColor(C::text);
+                gfx.drawFastHLine(2, y + ROW - 1, W - 4, C::border);
+                gfx.setTextColor(C::dim);
                 gfx.setTextDatum(textdatum_t::middle_left);
                 gfx.drawString(s.label, 8, y + ROW / 2);
                 const char* v = Machine::setting(s.key);
@@ -738,8 +751,8 @@ namespace {
 
         void draw() override {
             gfx.fillRect(0, CONTENT_Y, W, H - CONTENT_Y, C::bg);
-            gfx.fillRect(0, CONTENT_Y, W, 26, C::panel);
-            gfx.setFont(F_BTN);
+            dashedRule(CONTENT_Y + 26);
+            gfx.setFont(F_BOLD);
             gfx.setTextColor(C::text);
             gfx.setTextDatum(textdatum_t::middle_left);
             gfx.drawString("Maslow settings", 6, CONTENT_Y + 13);
@@ -831,7 +844,8 @@ namespace {
 
         void drawLines() {
             rewrap();
-            gfx.fillRect(0, TOP, W, ROW * ROWS + 4, C::panel);
+            gfx.fillRect(0, TOP, W, ROW * ROWS + 4, C::bg);
+            gfx.drawRect(0, TOP, W, ROW * ROWS + 4, C::border);
             gfx.setFont(F_SMALL);
             gfx.setTextDatum(textdatum_t::top_left);
             int maxBack = max(0, (int)lines.size() - ROWS);
@@ -839,19 +853,19 @@ namespace {
             int first   = max(0, (int)lines.size() - ROWS - back);
             for (int i = 0; i < ROWS && first + i < (int)lines.size(); ++i) {
                 auto&    l = lines[first + i];
-                uint16_t c = C::text;
+                uint16_t c = C::dim;
                 switch (l.kind) {
                     case Machine::LogKind::Sent: c = C::cyan; break;
-                    case Machine::LogKind::Warn: c = C::yellow; break;
-                    case Machine::LogKind::Error: c = rgb(255, 110, 100); break;
+                    case Machine::LogKind::Warn: c = C::warnText; break;
+                    case Machine::LogKind::Error: c = C::red; break;
                     default: break;
                 }
                 gfx.setTextColor(c);
                 gfx.drawString(l.text.c_str(), 4, TOP + 2 + i * ROW);
             }
             if (back > 0) {
-                gfx.fillRoundRect(W - 46, TOP + 2, 42, 16, 4, C::orange);
-                gfx.setTextColor(TFT_BLACK);
+                gfx.fillRect(W - 46, TOP + 2, 42, 16, C::orange);
+                gfx.setTextColor(C::white);
                 gfx.setTextDatum(textdatum_t::middle_center);
                 gfx.drawString("more", W - 25, TOP + 10);
             }
@@ -921,8 +935,8 @@ namespace {
         }
         void draw() override {
             gfx.fillRect(0, CONTENT_Y, W, H - CONTENT_Y, C::bg);
-            gfx.fillRect(0, CONTENT_Y, W, 26, C::panel);
-            gfx.setFont(F_BTN);
+            dashedRule(CONTENT_Y + 26);
+            gfx.setFont(F_BOLD);
             gfx.setTextColor(C::text);
             gfx.setTextDatum(textdatum_t::middle_left);
             gfx.drawString("Overrides", 6, CONTENT_Y + 13);
@@ -967,8 +981,8 @@ namespace {
         }
         void draw() override {
             gfx.fillRect(0, CONTENT_Y, W, H - CONTENT_Y, C::bg);
-            gfx.fillRect(0, CONTENT_Y, W, 26, C::panel);
-            gfx.setFont(F_BTN);
+            dashedRule(CONTENT_Y + 26);
+            gfx.setFont(F_BOLD);
             gfx.setTextColor(C::text);
             gfx.setTextDatum(textdatum_t::middle_left);
             gfx.drawString("Pair with a Maslow", 6, CONTENT_Y + 13);
@@ -994,7 +1008,7 @@ namespace {
             shownStatus = Link::state() == Link::State::Pairing ? Link::pairingStatus() : Link::stateName();
             gfx.fillRect(0, 236, W, 36, C::bg);
             gfx.setFont(F_BTN);
-            gfx.setTextColor(Link::state() == Link::State::Connected ? C::green : C::yellow);
+            gfx.setTextColor(Link::state() == Link::State::Connected ? C::green : C::warnText);
             gfx.setTextDatum(textdatum_t::middle_center);
             gfx.drawString(shownStatus.c_str(), W / 2, 254);
         }

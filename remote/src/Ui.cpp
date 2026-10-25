@@ -11,11 +11,15 @@
 namespace Ui {
 #ifdef BOARD_CYD4
     const lgfx::IFont* F_SMALL = &fonts::DejaVu18;
-    const lgfx::IFont* F_BTN   = &fonts::FreeSansBold12pt7b;
+    const lgfx::IFont* F_BTN   = &fonts::FreeSans12pt7b;
+    const lgfx::IFont* F_BTN_SMALL = &fonts::FreeSans9pt7b;
+    const lgfx::IFont* F_BOLD  = &fonts::FreeSansBold12pt7b;
     const lgfx::IFont* F_BIG   = &fonts::FreeSansBold18pt7b;
 #else
     const lgfx::IFont* F_SMALL = &fonts::Font2;
-    const lgfx::IFont* F_BTN   = &fonts::FreeSansBold9pt7b;
+    const lgfx::IFont* F_BTN   = &fonts::FreeSans9pt7b;
+    const lgfx::IFont* F_BTN_SMALL = &fonts::Font2;
+    const lgfx::IFont* F_BOLD  = &fonts::FreeSansBold9pt7b;
     const lgfx::IFont* F_BIG   = &fonts::FreeSansBold12pt7b;
 #endif
     Gfx gfx(lcd);
@@ -73,7 +77,7 @@ namespace {
         }
         if (!strncmp(s, "Idle", 4)) return C::green;
         if (!strncmp(s, "Run", 3)) return C::blue;
-        if (!strncmp(s, "Jog", 3)) return C::cyan;
+        if (!strncmp(s, "Jog", 3)) return C::buttonAlt;
         if (!strncmp(s, "Hold", 4)) return C::yellow;
         if (!strncmp(s, "Alarm", 5)) return C::red;
         if (!strncmp(s, "Door", 4)) return C::orange;
@@ -88,9 +92,10 @@ namespace {
 
         const char* state = Machine::connected() ? (Machine::st.state[0] ? Machine::st.state : "...") : "--";
         uint16_t    sc    = stateColor(state);
-        g.fillRoundRect(3, 3, 70, 24, 5, sc);
+        g.fillRect(0, TOP_H - 1, W, 1, C::border);
+        g.fillRect(3, 3, 70, 24, sc);
         g.setFont(F_BTN);
-        g.setTextColor(sc == C::yellow || sc == C::cyan ? TFT_BLACK : C::text);
+        g.setTextColor(C::white);
         std::string st(state);
         size_t      colon = st.find(':');
         if (colon != std::string::npos) {
@@ -121,15 +126,15 @@ namespace {
                 break;
         }
         g.fillCircle(83, 15, 4, dot);
-        g.setTextColor(C::text);
+        g.setTextColor(C::dim);
         while (mid.size() > 3 && g.textWidth(mid.c_str()) > STOP_X - 94) {
             mid.pop_back();
         }
         g.drawString(mid.c_str(), 91, 16);
 
-        g.fillRoundRect(STOP_X, 2, STOP_W, 26, 5, stopFlash ? C::orange : C::red);
-        g.setFont(F_BTN);
-        g.setTextColor(C::text);
+        g.fillRect(STOP_X, 2, STOP_W, 26, stopFlash ? C::orange : C::red);
+        g.setFont(F_BOLD);
+        g.setTextColor(C::white);
         g.setTextDatum(textdatum_t::middle_center);
         g.drawString("STOP", STOP_X + STOP_W / 2, 16);
         topBar.pushSprite(0, 0);
@@ -137,17 +142,22 @@ namespace {
     }
 
     void drawTabs() {
+        // Bootstrap nav tabs: the active one is white with blue text.
         gfx.fillRect(0, TABS_Y, W, H - TABS_Y, C::panel);
+        gfx.fillRect(0, TABS_Y, W, 1, C::border);
         // The button font is too wide for five labels on the 4" panel.
-        gfx.setFont(&fonts::FreeSansBold9pt7b);
+        gfx.setFont(&fonts::FreeSans9pt7b);
         gfx.setTextDatum(textdatum_t::middle_center);
         int w = W / TAB_COUNT;
         for (int i = 0; i < TAB_COUNT; ++i) {
             bool on = i == activeTab;
             if (on) {
-                gfx.fillRoundRect(i * w + 2, TABS_Y + 3, w - 4, H - TABS_Y - 6, 5, C::select);
+                gfx.fillRect(i * w, TABS_Y, w, H - TABS_Y, C::bg);
+                gfx.fillRect(i * w, TABS_Y, 1, H - TABS_Y, C::border);
+                gfx.fillRect(i * w + w - 1, TABS_Y, 1, H - TABS_Y, C::border);
+                gfx.fillRect(i * w, TABS_Y, w, 3, C::blue);
             }
-            gfx.setTextColor(on ? C::text : C::dim);
+            gfx.setTextColor(on ? C::blue : C::dim);
             gfx.drawString(TAB_NAMES[i], i * w + w / 2, TABS_Y + (H - TABS_Y) / 2 + 1);
         }
     }
@@ -161,9 +171,11 @@ namespace {
         }
         int h = 8 + 16 * (int)lines.size();
         int y = TABS_Y - h - 4;
-        gfx.fillRoundRect(4, y, W - 8, h, 6, C::orange);
+        // Bootstrap alert-warning
+        gfx.fillRect(4, y, W - 8, h, C::bannerYellow);
+        gfx.drawRect(4, y, W - 8, h, rgb(255, 238, 186));
         gfx.setFont(F_SMALL);
-        gfx.setTextColor(TFT_BLACK);
+        gfx.setTextColor(rgb(133, 100, 4));
         gfx.setTextDatum(textdatum_t::top_left);
         for (size_t i = 0; i < lines.size(); ++i) {
             gfx.drawString(lines[i].c_str(), 10, y + 4 + 16 * i);
@@ -336,9 +348,9 @@ namespace {
         std::string title;
         bool        modal() const override { return true; }
         void        drawFrame() {
+            // Like the WebUI's calibration modal: bold title over a dashed rule.
             gfx.fillRect(0, TOP_H, W, H - TOP_H, C::bg);
-            gfx.fillRect(0, TOP_H, W, 26, C::panel);
-            gfx.setFont(F_BTN);
+            gfx.setFont(F_BOLD);
             gfx.setTextColor(C::text);
             gfx.setTextDatum(textdatum_t::middle_left);
             std::string t = title;
@@ -346,6 +358,7 @@ namespace {
                 t.pop_back();
             }
             gfx.drawString(t.c_str(), 6, TOP_H + 13);
+            dashedRule(TOP_H + 26);
         }
         void draw() override { drawFrame(); }
     };
@@ -569,13 +582,24 @@ namespace {
 namespace Ui {
     // ---- View ------------------------------------------------------------
 
+    uint16_t darken(uint16_t c) {
+        uint16_t r = (c >> 11) & 0x1F, g = (c >> 5) & 0x3F, b = c & 0x1F;
+        return (uint16_t)(((r * 4 / 5) << 11) | ((g * 4 / 5) << 5) | (b * 4 / 5));
+    }
+
+    void dashedRule(int y) {
+        for (int x = 6; x < W - 6; x += 6) {
+            gfx.fillRect(x, y, 3, 1, C::dim);
+        }
+    }
+
     void View::drawButton(const Button& b, bool pressed) {
         uint16_t c = b.dimmed ? C::grey : b.color;
         if (pressed) {
-            c = C::text;
+            c = darken(c);  // the WebUI's hover: brightness(80%)
         }
-        gfx.fillRoundRect(b.x, b.y, b.w, b.h, 6, c);
-        uint16_t fg = pressed ? TFT_BLACK : (b.dimmed ? C::dim : (c == C::yellow || c == C::cyan ? TFT_BLACK : C::text));
+        gfx.fillRect(b.x, b.y, b.w, b.h, c);  // square, as in the WebUI
+        uint16_t fg = b.fg && !b.dimmed ? b.fg : isLight(c) ? C::dim : C::white;
         if (b.icon != NONE) {
             int s = min(b.w, b.h) / (b.label.empty() ? 3 : 4);
             if (b.icon == HOME) {
@@ -593,9 +617,6 @@ namespace Ui {
             }
             return;
         }
-        gfx.setFont(b.font ? b.font : F_BTN);
-        gfx.setTextColor(fg);
-        gfx.setTextDatum(textdatum_t::middle_center);
         // Multi-line labels split on '\n'.
         std::vector<std::string> lines;
         size_t start = 0;
@@ -605,6 +626,16 @@ namespace Ui {
             if (nl == std::string::npos) break;
             start = nl + 1;
         }
+        // Fall back to the small font when a line does not fit.
+        gfx.setFont(b.font ? b.font : F_BTN);
+        for (auto& l : lines) {
+            if (gfx.textWidth(l.c_str()) > b.w - 6) {
+                gfx.setFont(F_BTN_SMALL);
+                break;
+            }
+        }
+        gfx.setTextColor(fg);
+        gfx.setTextDatum(textdatum_t::middle_center);
         int lh = gfx.fontHeight();
         int y0 = b.y + b.h / 2 - (lh * ((int)lines.size() - 1)) / 2;
         for (size_t i = 0; i < lines.size(); ++i) {
@@ -617,6 +648,25 @@ namespace Ui {
         draw();
         for (auto& b : buttons) {
             drawButton(b);
+        }
+    }
+
+    void View::fitFont(size_t from) {
+        gfx.setFont(F_BTN);
+        bool fits = true;
+        for (size_t i = from; i < buttons.size() && fits; ++i) {
+            const std::string& l = buttons[i].label;
+            size_t start = 0;
+            while (fits) {
+                size_t nl = l.find('\n', start);
+                fits = gfx.textWidth(l.substr(start, nl == std::string::npos ? std::string::npos : nl - start).c_str()) <=
+                       buttons[i].w - 6;
+                if (nl == std::string::npos) break;
+                start = nl + 1;
+            }
+        }
+        for (size_t i = from; i < buttons.size(); ++i) {
+            buttons[i].font = fits ? F_BTN : F_BTN_SMALL;
         }
     }
 
