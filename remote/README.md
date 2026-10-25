@@ -1,8 +1,14 @@
 # Maslow 4.1 ESP-NOW remote
 
-Firmware for a handheld remote built on the ESP32-2432S028R "Cheap Yellow
-Display" (sold by ELEGOO and others: ESP32-WROOM, 2.8" 240x320 ILI9341,
-XPT2046 resistive touch, USB-C). It talks to the Maslow over ESP-NOW using
+Firmware for a handheld remote built on ELEGOO's ESP32 touch displays:
+
+| Board | Build env |
+| --- | --- |
+| 2.8" ESP32-2432S028R "Cheap Yellow Display" (240x320 ILI9341, XPT2046) | `cyd` (default) |
+| 4.0" ESP32-32E / E32R40T (320x480 ST7796, XPT2046 on the panel bus) | `cyd4` |
+
+Both use the same layout, drawn for 240x320 and scaled to the panel, with
+larger fonts on the 4". It talks to the Maslow over ESP-NOW using
 the FluidNC `ESPNowChannel` (`firmware/FluidNC/esp32/ESPNow`), so it needs
 no WiFi network and keeps working when the WebUI is closed.
 
@@ -42,7 +48,8 @@ pairing. `$EL` on the Maslow lists paired remotes; `$EU=<n>` removes one.
 
 ```sh
 cd remote
-pio run -t upload
+pio run -e cyd -t upload     # 2.8"
+pio run -e cyd4 -t upload    # 4.0"
 ```
 
 The first boot asks you to touch the screen to calibrate touch (it skips
@@ -56,13 +63,13 @@ owns the port and shares it on localhost:4568, logging to `logs/`:
 
 ```sh
 nohup ~/.platformio/penv/bin/python tools/serial_hub.py > logs/hub.out 2>&1 &
-tools/flash.sh                       # pauses the hub while flashing
+tools/flash.sh -e cyd4              # pauses the hub while flashing
 ~/.platformio/penv/bin/python tools/remote_cli.py shot screen.png
 ~/.platformio/penv/bin/python tools/remote_cli.py cmd "tap 120 200"
 ```
 
-Serial console commands: `shot`, `tap x y`, `hold x y [ms]`, `tab n`,
-`send <line>`, `rt <hex>`, `link`, `state`, `pair`, `forget`, `heap`.
+Serial console commands (coordinates in panel pixels): `shot`, `tap x y`, `hold x y [ms]`, `tab n`,
+`send <line>`, `rt <hex>`, `link`, `state`, `pair`, `forget`, `heap`, `id`, `sleep`.
 
 ## Code
 

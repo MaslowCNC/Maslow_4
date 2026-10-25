@@ -1,4 +1,8 @@
-// Small retained-mode touch UI for the 240x320 portrait display.
+// Small retained-mode touch UI for portrait displays.
+//
+// Layouts are written for a 240x320 logical screen.  Gfx maps them onto the
+// physical panel (240x320 on the 2.8" board, 320x480 on the 4"), and the 4"
+// board uses larger fonts, so one layout serves both.
 //
 // Layout: a 30 px top bar (machine state, Maslow state, link, STOP) that is
 // always visible, a content area, and a 34 px tab bar.  Dialogs cover the
@@ -19,6 +23,43 @@ namespace Ui {
     constexpr int TABS_Y    = 286;
     constexpr int CONTENT_Y = TOP_H;
     constexpr int CONTENT_H = TABS_Y - TOP_H;
+
+    // Drawing in logical coordinates on the panel or a sprite.
+    class Gfx {
+        LovyanGFX* g;
+
+    public:
+        explicit Gfx(LovyanGFX& target) : g(&target) {}
+        static int px(int x) { return (x * LCD_W + (x >= 0 ? 120 : -120)) / 240; }
+        static int py(int y) { return (y * LCD_H + (y >= 0 ? 160 : -160)) / 320; }
+        static int pr(int r) { return min(px(r), py(r)); }  // radii and sizes
+        static int lx(int x) { return x * 240 / LCD_W; }    // physical -> logical
+        static int ly(int y) { return y * 320 / LCD_H; }
+        LovyanGFX& raw() { return *g; }
+
+        void fillScreen(uint16_t c) { g->fillScreen(c); }
+        void fillRect(int x, int y, int w, int h, uint16_t c) {
+            g->fillRect(px(x), py(y), px(x + w) - px(x), py(y + h) - py(y), c);
+        }
+        void drawRect(int x, int y, int w, int h, uint16_t c) {
+            g->drawRect(px(x), py(y), px(x + w) - px(x), py(y + h) - py(y), c);
+        }
+        void fillRoundRect(int x, int y, int w, int h, int r, uint16_t c) {
+            g->fillRoundRect(px(x), py(y), px(x + w) - px(x), py(y + h) - py(y), pr(r), c);
+        }
+        void drawFastHLine(int x, int y, int w, uint16_t c) { g->drawFastHLine(px(x), py(y), px(x + w) - px(x), c); }
+        void fillCircle(int x, int y, int r, uint16_t c) { g->fillCircle(px(x), py(y), pr(r), c); }
+        void fillTriangle(int x0, int y0, int x1, int y1, int x2, int y2, uint16_t c) {
+            g->fillTriangle(px(x0), py(y0), px(x1), py(y1), px(x2), py(y2), c);
+        }
+        void setFont(const lgfx::IFont* f) { g->setFont(f); }
+        void setTextColor(uint16_t fg) { g->setTextColor(fg); }
+        void setTextDatum(textdatum_t d) { g->setTextDatum(d); }
+        void drawString(const char* s, int x, int y) { g->drawString(s, px(x), py(y)); }
+        int  textWidth(const char* s) { return (g->textWidth(s) * 240 + LCD_W - 1) / LCD_W; }
+        int  fontHeight() { return ly(g->fontHeight()); }
+    };
+    extern Gfx gfx;  // the panel
 
     constexpr uint16_t rgb(uint8_t r, uint8_t g, uint8_t b) {
         return (uint16_t)(((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3));
@@ -99,7 +140,7 @@ namespace Ui {
     // Helpers
     std::vector<std::string> wrap(const lgfx::IFont* font, const std::string& text, int width);
     std::string fmt(float v, int decimals);  // trims trailing zeros
-    void drawArrow(LovyanGFX& g, int cx, int cy, Icon dir, int size, uint16_t color);
+    void drawArrow(Gfx& g, int cx, int cy, Icon dir, int size, uint16_t color);
     void calibrateTouch();
     void setBrightness(uint8_t level);  // saved
     uint8_t brightness();

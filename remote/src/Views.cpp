@@ -200,7 +200,7 @@ namespace {
     // ---- Jog --------------------------------------------------------------
 
     class JogView : public View {
-        LGFX_Sprite dro { &lcd };
+        LGFX_Sprite droSprite { &lcd };
         uint32_t    drawn = 0xFFFFFFFF;
         bool        lastReady = false;
         bool        lastInches = false;
@@ -208,8 +208,8 @@ namespace {
 
     public:
         JogView() {
-            dro.setColorDepth(16);
-            dro.createSprite(W, DRO_H);
+            droSprite.setColorDepth(16);
+            droSprite.createSprite(LCD_W, Gfx::py(DRO_H));
         }
 
         void build() override {
@@ -273,6 +273,7 @@ namespace {
         }
 
         void drawDro() {
+            Gfx dro(droSprite);
             dro.fillScreen(C::bg);
             bool ok = Machine::connected() && st.havePos;
             const char* names = "XYZ";
@@ -298,7 +299,7 @@ namespace {
                 dro.setTextColor(C::dim);
                 dro.drawString(m, 236, y);
             }
-            dro.pushSprite(0, DRO_Y);
+            droSprite.pushSprite(0, Gfx::py(DRO_Y));
         }
 
         void draw() override { drawDro(); }
@@ -416,27 +417,27 @@ namespace {
         }
 
         void drawHeader() {
-            lcd.fillRect(0, CONTENT_Y, 164, 27, C::bg);
-            lcd.setFont(F_BTN);
-            lcd.setTextColor(C::text);
-            lcd.setTextDatum(textdatum_t::middle_left);
+            gfx.fillRect(0, CONTENT_Y, 164, 27, C::bg);
+            gfx.setFont(F_BTN);
+            gfx.setTextColor(C::text);
+            gfx.setTextDatum(textdatum_t::middle_left);
             std::string h = "SD card";
             if (Machine::filesLoading()) {
                 h += " ...";
             } else if (!Machine::files().empty()) {
                 h += " (" + std::to_string(Machine::files().size()) + ")";
             }
-            lcd.drawString(h.c_str(), 4, 44);
+            gfx.drawString(h.c_str(), 4, 44);
         }
 
         void drawList() {
             auto& files = Machine::files();
-            lcd.fillRect(0, LIST_Y, LIST_W, ROW * ROWS, C::panel);
-            lcd.setFont(F_SMALL);
-            lcd.setTextDatum(textdatum_t::middle_left);
+            gfx.fillRect(0, LIST_Y, LIST_W, ROW * ROWS, C::panel);
+            gfx.setFont(F_SMALL);
+            gfx.setTextDatum(textdatum_t::middle_left);
             if (files.empty()) {
-                lcd.setTextColor(C::dim);
-                lcd.drawString(Machine::connected() ? (Machine::filesLoading() ? "Loading..." : "No files - tap Refresh")
+                gfx.setTextColor(C::dim);
+                gfx.drawString(Machine::connected() ? (Machine::filesLoading() ? "Loading..." : "No files - tap Refresh")
                                                     : "Not connected",
                                8, LIST_Y + ROW / 2);
                 return;
@@ -446,42 +447,42 @@ namespace {
                 auto& f  = files[scroll + i];
                 int   y  = LIST_Y + i * ROW;
                 bool  on = f.path == selected;
-                if (on) lcd.fillRect(0, y, LIST_W, ROW, C::select);
-                lcd.setTextColor(C::text);
+                if (on) gfx.fillRect(0, y, LIST_W, ROW, C::select);
+                gfx.setTextColor(C::text);
                 std::string name = f.path;
                 char        size[12];
                 if (f.size >= 1000000) snprintf(size, sizeof(size), "%.1fM", f.size / 1e6);
                 else snprintf(size, sizeof(size), "%uk", (unsigned)((f.size + 999) / 1000));
-                int room = LIST_W - 12 - lcd.textWidth(size) - 6;
-                while (name.size() > 2 && lcd.textWidth(name.c_str()) > room) name.pop_back();
-                lcd.drawString(name.c_str(), 4, y + ROW / 2);
-                lcd.setTextColor(C::dim);
-                lcd.setTextDatum(textdatum_t::middle_right);
-                lcd.drawString(size, LIST_W - 4, y + ROW / 2);
-                lcd.setTextDatum(textdatum_t::middle_left);
-                lcd.drawFastHLine(0, y + ROW - 1, LIST_W, C::bg);
+                int room = LIST_W - 12 - gfx.textWidth(size) - 6;
+                while (name.size() > 2 && gfx.textWidth(name.c_str()) > room) name.pop_back();
+                gfx.drawString(name.c_str(), 4, y + ROW / 2);
+                gfx.setTextColor(C::dim);
+                gfx.setTextDatum(textdatum_t::middle_right);
+                gfx.drawString(size, LIST_W - 4, y + ROW / 2);
+                gfx.setTextDatum(textdatum_t::middle_left);
+                gfx.drawFastHLine(0, y + ROW - 1, LIST_W, C::bg);
             }
         }
 
         void drawInfo() {
             int y = LIST_Y + ROW * ROWS + 2;
-            lcd.fillRect(0, y, W, 204 - y + 2, C::bg);
-            lcd.setFont(F_SMALL);
-            lcd.setTextDatum(textdatum_t::middle_left);
+            gfx.fillRect(0, y, W, 204 - y + 2, C::bg);
+            gfx.setFont(F_SMALL);
+            gfx.setTextDatum(textdatum_t::middle_left);
             if (st.sdPercent >= 0) {
                 int bw = W - 8;
-                lcd.drawRect(4, y + 2, bw, 20, C::dim);
-                lcd.fillRect(5, y + 3, (int)((bw - 2) * st.sdPercent / 100), 18, C::blue);
+                gfx.drawRect(4, y + 2, bw, 20, C::dim);
+                gfx.fillRect(5, y + 3, (int)((bw - 2) * st.sdPercent / 100), 18, C::blue);
                 char t[40];
                 snprintf(t, sizeof(t), "%.1f%%", st.sdPercent);
-                lcd.setTextColor(C::text);
-                lcd.setTextDatum(textdatum_t::middle_center);
-                lcd.drawString(t, W / 2, y + 12);
+                gfx.setTextColor(C::text);
+                gfx.setTextDatum(textdatum_t::middle_center);
+                gfx.drawString(t, W / 2, y + 12);
             } else {
-                lcd.setTextColor(selected.empty() ? C::dim : C::text);
+                gfx.setTextColor(selected.empty() ? C::dim : C::text);
                 std::string s = selected.empty() ? "No file selected" : selected;
-                while (s.size() > 2 && lcd.textWidth(s.c_str()) > W - 8) s.pop_back();
-                lcd.drawString(s.c_str(), 4, y + 12);
+                while (s.size() > 2 && gfx.textWidth(s.c_str()) > W - 8) s.pop_back();
+                gfx.drawString(s.c_str(), 4, y + 12);
             }
         }
 
@@ -603,16 +604,16 @@ namespace {
                 else if (s == 4) c = C::yellow;
                 else c = C::blue;
             }
-            lcd.fillRoundRect(2, 32, W - 4, 28, 6, c);
-            lcd.setFont(F_BTN);
-            lcd.setTextColor(c == C::yellow ? TFT_BLACK : C::text);
-            lcd.setTextDatum(textdatum_t::middle_center);
+            gfx.fillRoundRect(2, 32, W - 4, 28, 6, c);
+            gfx.setFont(F_BTN);
+            gfx.setTextColor(c == C::yellow ? TFT_BLACK : C::text);
+            gfx.setTextDatum(textdatum_t::middle_center);
             std::string t = Machine::connected() ? std::string("State: ") + Machine::maslowStateName(s) : "Not connected";
-            lcd.drawString(t.c_str(), W / 2, 47);
+            gfx.drawString(t.c_str(), W / 2, 47);
         }
 
         void drawLogTail() {
-            lcd.fillRect(0, GRID_Y, W, TABS_Y - GRID_Y, C::panel);
+            gfx.fillRect(0, GRID_Y, W, TABS_Y - GRID_Y, C::panel);
             auto&                    log = Machine::log();
             std::vector<std::string> lines;
             for (int i = (int)log.size() - 1; i >= 0 && lines.size() < 14; --i) {
@@ -621,16 +622,16 @@ namespace {
             }
             int maxRows = (TABS_Y - GRID_Y - 4) / 16;
             int first   = max(0, (int)lines.size() - maxRows);
-            lcd.setFont(F_SMALL);
-            lcd.setTextColor(C::text);
-            lcd.setTextDatum(textdatum_t::top_left);
+            gfx.setFont(F_SMALL);
+            gfx.setTextColor(C::text);
+            gfx.setTextDatum(textdatum_t::top_left);
             for (int i = first; i < (int)lines.size(); ++i) {
-                lcd.drawString(lines[i].c_str(), 4, GRID_Y + 2 + (i - first) * 16);
+                gfx.drawString(lines[i].c_str(), 4, GRID_Y + 2 + (i - first) * 16);
             }
         }
 
         void draw() override {
-            lcd.fillRect(0, CONTENT_Y, W, CONTENT_H, C::bg);
+            gfx.fillRect(0, CONTENT_Y, W, CONTENT_H, C::bg);
             drawBanner();
             if (finding()) {
                 drawLogTail();
@@ -717,35 +718,35 @@ namespace {
         }
 
         void drawList() {
-            lcd.fillRect(0, LIST_Y, W, ROW * ROWS, C::bg);
-            lcd.setFont(F_SMALL);
+            gfx.fillRect(0, LIST_Y, W, ROW * ROWS, C::bg);
+            gfx.setFont(F_SMALL);
             for (int i = 0; i < ROWS && scroll + i < SETTING_COUNT; ++i) {
                 auto& s = SETTINGS[scroll + i];
                 int   y = LIST_Y + i * ROW;
-                lcd.fillRoundRect(2, y + 1, W - 4, ROW - 2, 4, C::panel);
-                lcd.setTextColor(C::text);
-                lcd.setTextDatum(textdatum_t::middle_left);
-                lcd.drawString(s.label, 8, y + ROW / 2);
+                gfx.fillRoundRect(2, y + 1, W - 4, ROW - 2, 4, C::panel);
+                gfx.setTextColor(C::text);
+                gfx.setTextDatum(textdatum_t::middle_left);
+                gfx.drawString(s.label, 8, y + ROW / 2);
                 const char* v = Machine::setting(s.key);
                 std::string shown = !strcmp(s.key, "Sta/Password") ? "(set)" : v ? v : "...";
-                while (shown.size() > 2 && lcd.textWidth(shown.c_str()) > 90) shown.pop_back();
-                lcd.setTextColor(v ? C::cyan : C::dim);
-                lcd.setTextDatum(textdatum_t::middle_right);
-                lcd.drawString(shown.c_str(), W - 8, y + ROW / 2);
+                while (shown.size() > 2 && gfx.textWidth(shown.c_str()) > 90) shown.pop_back();
+                gfx.setTextColor(v ? C::cyan : C::dim);
+                gfx.setTextDatum(textdatum_t::middle_right);
+                gfx.drawString(shown.c_str(), W - 8, y + ROW / 2);
             }
         }
 
         void draw() override {
-            lcd.fillRect(0, CONTENT_Y, W, H - CONTENT_Y, C::bg);
-            lcd.fillRect(0, CONTENT_Y, W, 26, C::panel);
-            lcd.setFont(F_BTN);
-            lcd.setTextColor(C::text);
-            lcd.setTextDatum(textdatum_t::middle_left);
-            lcd.drawString("Maslow settings", 6, CONTENT_Y + 13);
-            lcd.setFont(F_SMALL);
-            lcd.setTextColor(C::dim);
-            lcd.setTextDatum(textdatum_t::middle_right);
-            lcd.drawString("mm", W - 6, CONTENT_Y + 13);
+            gfx.fillRect(0, CONTENT_Y, W, H - CONTENT_Y, C::bg);
+            gfx.fillRect(0, CONTENT_Y, W, 26, C::panel);
+            gfx.setFont(F_BTN);
+            gfx.setTextColor(C::text);
+            gfx.setTextDatum(textdatum_t::middle_left);
+            gfx.drawString("Maslow settings", 6, CONTENT_Y + 13);
+            gfx.setFont(F_SMALL);
+            gfx.setTextColor(C::dim);
+            gfx.setTextDatum(textdatum_t::middle_right);
+            gfx.drawString("mm", W - 6, CONTENT_Y + 13);
             drawList();
         }
 
@@ -830,9 +831,9 @@ namespace {
 
         void drawLines() {
             rewrap();
-            lcd.fillRect(0, TOP, W, ROW * ROWS + 4, C::panel);
-            lcd.setFont(F_SMALL);
-            lcd.setTextDatum(textdatum_t::top_left);
+            gfx.fillRect(0, TOP, W, ROW * ROWS + 4, C::panel);
+            gfx.setFont(F_SMALL);
+            gfx.setTextDatum(textdatum_t::top_left);
             int maxBack = max(0, (int)lines.size() - ROWS);
             back        = constrain(back, 0, maxBack);
             int first   = max(0, (int)lines.size() - ROWS - back);
@@ -845,14 +846,14 @@ namespace {
                     case Machine::LogKind::Error: c = rgb(255, 110, 100); break;
                     default: break;
                 }
-                lcd.setTextColor(c);
-                lcd.drawString(l.text.c_str(), 4, TOP + 2 + i * ROW);
+                gfx.setTextColor(c);
+                gfx.drawString(l.text.c_str(), 4, TOP + 2 + i * ROW);
             }
             if (back > 0) {
-                lcd.fillRoundRect(W - 46, TOP + 2, 42, 16, 4, C::orange);
-                lcd.setTextColor(TFT_BLACK);
-                lcd.setTextDatum(textdatum_t::middle_center);
-                lcd.drawString("more", W - 25, TOP + 10);
+                gfx.fillRoundRect(W - 46, TOP + 2, 42, 16, 4, C::orange);
+                gfx.setTextColor(TFT_BLACK);
+                gfx.setTextDatum(textdatum_t::middle_center);
+                gfx.drawString("more", W - 25, TOP + 10);
             }
         }
 
@@ -919,26 +920,26 @@ namespace {
             buttons.push_back({ 60, 282, 120, 34, "Close", C::grey, [] { pop(); } });
         }
         void draw() override {
-            lcd.fillRect(0, CONTENT_Y, W, H - CONTENT_Y, C::bg);
-            lcd.fillRect(0, CONTENT_Y, W, 26, C::panel);
-            lcd.setFont(F_BTN);
-            lcd.setTextColor(C::text);
-            lcd.setTextDatum(textdatum_t::middle_left);
-            lcd.drawString("Overrides", 6, CONTENT_Y + 13);
+            gfx.fillRect(0, CONTENT_Y, W, H - CONTENT_Y, C::bg);
+            gfx.fillRect(0, CONTENT_Y, W, 26, C::panel);
+            gfx.setFont(F_BTN);
+            gfx.setTextColor(C::text);
+            gfx.setTextDatum(textdatum_t::middle_left);
+            gfx.drawString("Overrides", 6, CONTENT_Y + 13);
             drawValues();
         }
         void drawValues() {
             const char* names[3] = { "Feed", "Rapid", "Spindle" };
-            lcd.setFont(F_BTN);
+            gfx.setFont(F_BTN);
             for (int r = 0; r < 3; ++r) {
                 shown[r] = st.ovr[r];
-                lcd.fillRect(0, 60 + r * 74, W, 22, C::bg);
-                lcd.setTextColor(C::text);
-                lcd.setTextDatum(textdatum_t::middle_left);
-                lcd.drawString(names[r], 6, 71 + r * 74);
-                lcd.setTextColor(C::cyan);
-                lcd.setTextDatum(textdatum_t::middle_right);
-                lcd.drawString((std::to_string(st.ovr[r]) + "%").c_str(), W - 6, 71 + r * 74);
+                gfx.fillRect(0, 60 + r * 74, W, 22, C::bg);
+                gfx.setTextColor(C::text);
+                gfx.setTextDatum(textdatum_t::middle_left);
+                gfx.drawString(names[r], 6, 71 + r * 74);
+                gfx.setTextColor(C::cyan);
+                gfx.setTextDatum(textdatum_t::middle_right);
+                gfx.drawString((std::to_string(st.ovr[r]) + "%").c_str(), W - 6, 71 + r * 74);
             }
         }
         void update() override {
@@ -965,37 +966,37 @@ namespace {
             buttons.push_back({ 122, 278, 114, 40, "Close", C::grey, [] { pop(); } });
         }
         void draw() override {
-            lcd.fillRect(0, CONTENT_Y, W, H - CONTENT_Y, C::bg);
-            lcd.fillRect(0, CONTENT_Y, W, 26, C::panel);
-            lcd.setFont(F_BTN);
-            lcd.setTextColor(C::text);
-            lcd.setTextDatum(textdatum_t::middle_left);
-            lcd.drawString("Pair with a Maslow", 6, CONTENT_Y + 13);
+            gfx.fillRect(0, CONTENT_Y, W, H - CONTENT_Y, C::bg);
+            gfx.fillRect(0, CONTENT_Y, W, 26, C::panel);
+            gfx.setFont(F_BTN);
+            gfx.setTextColor(C::text);
+            gfx.setTextDatum(textdatum_t::middle_left);
+            gfx.drawString("Pair with a Maslow", 6, CONTENT_Y + 13);
             std::string text =
                 "1. In the Maslow WebUI terminal, send $EP. Pairing stays open for 60 seconds.\n"
                 "2. Tap Pair below, near the Maslow.";
             auto lines = wrap(F_SMALL, text, W - 12);
-            lcd.setFont(F_SMALL);
-            lcd.setTextDatum(textdatum_t::top_left);
-            for (size_t i = 0; i < lines.size(); ++i) lcd.drawString(lines[i].c_str(), 6, 64 + 18 * i);
+            gfx.setFont(F_SMALL);
+            gfx.setTextDatum(textdatum_t::top_left);
+            for (size_t i = 0; i < lines.size(); ++i) gfx.drawString(lines[i].c_str(), 6, 64 + 18 * i);
             int y = 64 + 18 * (int)lines.size() + 10;
-            lcd.setTextColor(C::dim);
+            gfx.setTextColor(C::dim);
             if (*Link::hostname()) {
-                lcd.drawString((std::string("Paired: ") + Link::hostname()).c_str(), 6, y);
-                lcd.drawString(Link::peerMac(), 6, y + 18);
+                gfx.drawString((std::string("Paired: ") + Link::hostname()).c_str(), 6, y);
+                gfx.drawString(Link::peerMac(), 6, y + 18);
             } else {
-                lcd.drawString("Not paired yet", 6, y);
+                gfx.drawString("Not paired yet", 6, y);
             }
-            lcd.drawString((std::string("This remote: ") + Link::ourMac()).c_str(), 6, y + 36);
+            gfx.drawString((std::string("This remote: ") + Link::ourMac()).c_str(), 6, y + 36);
             drawStatus();
         }
         void drawStatus() {
             shownStatus = Link::state() == Link::State::Pairing ? Link::pairingStatus() : Link::stateName();
-            lcd.fillRect(0, 236, W, 36, C::bg);
-            lcd.setFont(F_BTN);
-            lcd.setTextColor(Link::state() == Link::State::Connected ? C::green : C::yellow);
-            lcd.setTextDatum(textdatum_t::middle_center);
-            lcd.drawString(shownStatus.c_str(), W / 2, 254);
+            gfx.fillRect(0, 236, W, 36, C::bg);
+            gfx.setFont(F_BTN);
+            gfx.setTextColor(Link::state() == Link::State::Connected ? C::green : C::yellow);
+            gfx.setTextDatum(textdatum_t::middle_center);
+            gfx.drawString(shownStatus.c_str(), W / 2, 254);
         }
         void update() override {
             if (shownState != Link::state()) {
@@ -1126,11 +1127,11 @@ namespace {
             }
         }
         void draw() override {
-            lcd.fillRect(0, CONTENT_Y, W, CONTENT_H, C::bg);
-            lcd.setFont(&fonts::Font0);
-            lcd.setTextColor(C::dim);
-            lcd.setTextDatum(textdatum_t::bottom_center);
-            lcd.drawString("Maslow remote " __DATE__, W / 2, TABS_Y - 2);
+            gfx.fillRect(0, CONTENT_Y, W, CONTENT_H, C::bg);
+            gfx.setFont(&fonts::Font0);
+            gfx.setTextColor(C::dim);
+            gfx.setTextDatum(textdatum_t::bottom_center);
+            gfx.drawString("Maslow remote " __DATE__, W / 2, TABS_Y - 2);
         }
     };
 }

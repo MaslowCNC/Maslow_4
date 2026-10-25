@@ -9,12 +9,16 @@
 #include <esp_sleep.h>
 
 namespace {
-    constexpr gpio_num_t PIN_PENIRQ = GPIO_NUM_36;
-    constexpr gpio_num_t PIN_BL     = GPIO_NUM_21;
+    constexpr gpio_num_t PIN_PENIRQ = (gpio_num_t)PIN_TOUCH_IRQ;
+    constexpr gpio_num_t PIN_BL     = (gpio_num_t)PIN_BACKLIGHT;
     // RGB LED, active low
-    constexpr gpio_num_t LEDS[] = { GPIO_NUM_4, GPIO_NUM_16, GPIO_NUM_17 };
+    constexpr gpio_num_t LEDS[] = { (gpio_num_t)PIN_LED_R, (gpio_num_t)PIN_LED_G, (gpio_num_t)PIN_LED_B };
     // XPT2046 bus (bit-banged for the power-down command)
+#ifdef BOARD_CYD4
+    constexpr int T_CLK = 14, T_MOSI = 13, T_MISO = 12, T_CS = 33;  // shared with the panel
+#else
     constexpr int T_CLK = 25, T_MOSI = 32, T_MISO = 39, T_CS = 33;
+#endif
 
     uint16_t screenSec  = 60;
     uint16_t sleepMin   = 10;

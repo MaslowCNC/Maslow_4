@@ -9,9 +9,16 @@
 #include <math.h>
 
 namespace Ui {
+#ifdef BOARD_CYD4
+    const lgfx::IFont* F_SMALL = &fonts::DejaVu18;
+    const lgfx::IFont* F_BTN   = &fonts::FreeSansBold12pt7b;
+    const lgfx::IFont* F_BIG   = &fonts::FreeSansBold18pt7b;
+#else
     const lgfx::IFont* F_SMALL = &fonts::Font2;
     const lgfx::IFont* F_BTN   = &fonts::FreeSansBold9pt7b;
     const lgfx::IFont* F_BIG   = &fonts::FreeSansBold12pt7b;
+#endif
+    Gfx gfx(lcd);
 }
 
 namespace {
@@ -75,7 +82,7 @@ namespace {
     }
 
     void drawTopBar() {
-        auto& g = topBar;
+        Gfx g(topBar);
         g.fillScreen(C::panel);
         g.setTextDatum(textdatum_t::middle_center);
 
@@ -125,22 +132,23 @@ namespace {
         g.setTextColor(C::text);
         g.setTextDatum(textdatum_t::middle_center);
         g.drawString("STOP", STOP_X + STOP_W / 2, 16);
-        g.pushSprite(0, 0);
+        topBar.pushSprite(0, 0);
         topDrawn = millis();
     }
 
     void drawTabs() {
-        lcd.fillRect(0, TABS_Y, W, H - TABS_Y, C::panel);
-        lcd.setFont(F_BTN);
-        lcd.setTextDatum(textdatum_t::middle_center);
+        gfx.fillRect(0, TABS_Y, W, H - TABS_Y, C::panel);
+        // The button font is too wide for five labels on the 4" panel.
+        gfx.setFont(&fonts::FreeSansBold9pt7b);
+        gfx.setTextDatum(textdatum_t::middle_center);
         int w = W / TAB_COUNT;
         for (int i = 0; i < TAB_COUNT; ++i) {
             bool on = i == activeTab;
             if (on) {
-                lcd.fillRoundRect(i * w + 2, TABS_Y + 3, w - 4, H - TABS_Y - 6, 5, C::select);
+                gfx.fillRoundRect(i * w + 2, TABS_Y + 3, w - 4, H - TABS_Y - 6, 5, C::select);
             }
-            lcd.setTextColor(on ? C::text : C::dim);
-            lcd.drawString(TAB_NAMES[i], i * w + w / 2, TABS_Y + (H - TABS_Y) / 2 + 1);
+            gfx.setTextColor(on ? C::text : C::dim);
+            gfx.drawString(TAB_NAMES[i], i * w + w / 2, TABS_Y + (H - TABS_Y) / 2 + 1);
         }
     }
 
@@ -153,12 +161,12 @@ namespace {
         }
         int h = 8 + 16 * (int)lines.size();
         int y = TABS_Y - h - 4;
-        lcd.fillRoundRect(4, y, W - 8, h, 6, C::orange);
-        lcd.setFont(F_SMALL);
-        lcd.setTextColor(TFT_BLACK);
-        lcd.setTextDatum(textdatum_t::top_left);
+        gfx.fillRoundRect(4, y, W - 8, h, 6, C::orange);
+        gfx.setFont(F_SMALL);
+        gfx.setTextColor(TFT_BLACK);
+        gfx.setTextDatum(textdatum_t::top_left);
         for (size_t i = 0; i < lines.size(); ++i) {
-            lcd.drawString(lines[i].c_str(), 10, y + 4 + 16 * i);
+            gfx.drawString(lines[i].c_str(), 10, y + 4 + 16 * i);
         }
     }
 
@@ -174,16 +182,18 @@ namespace {
     }
 
     bool readTouch(int& x, int& y) {
-        if (Debug::injectedTouch(x, y)) {
-            return true;
-        }
+        // Both the panel and injected taps are in physical pixels.
         int32_t tx, ty;
-        if (lcd.getTouch(&tx, &ty)) {
-            x = tx;
-            y = ty;
-            return x >= 0 && x < W && y >= 0 && y < H;
+        int     ix, iy;
+        if (Debug::injectedTouch(ix, iy)) {
+            tx = ix;
+            ty = iy;
+        } else if (!lcd.getTouch(&tx, &ty)) {
+            return false;
         }
-        return false;
+        x = Gfx::lx(tx);
+        y = Gfx::ly(ty);
+        return x >= 0 && x < W && y >= 0 && y < H;
     }
 
     void touchDown(int x, int y) {
@@ -326,16 +336,16 @@ namespace {
         std::string title;
         bool        modal() const override { return true; }
         void        drawFrame() {
-            lcd.fillRect(0, TOP_H, W, H - TOP_H, C::bg);
-            lcd.fillRect(0, TOP_H, W, 26, C::panel);
-            lcd.setFont(F_BTN);
-            lcd.setTextColor(C::text);
-            lcd.setTextDatum(textdatum_t::middle_left);
+            gfx.fillRect(0, TOP_H, W, H - TOP_H, C::bg);
+            gfx.fillRect(0, TOP_H, W, 26, C::panel);
+            gfx.setFont(F_BTN);
+            gfx.setTextColor(C::text);
+            gfx.setTextDatum(textdatum_t::middle_left);
             std::string t = title;
-            while (t.size() > 3 && lcd.textWidth(t.c_str()) > W - 12) {
+            while (t.size() > 3 && gfx.textWidth(t.c_str()) > W - 12) {
                 t.pop_back();
             }
-            lcd.drawString(t.c_str(), 6, TOP_H + 13);
+            gfx.drawString(t.c_str(), 6, TOP_H + 13);
         }
         void draw() override { drawFrame(); }
     };
@@ -350,7 +360,7 @@ namespace {
         int textTop() const { return TOP_H + 32; }
         int maxLines() const { return (H - 50 - textTop()) / 18; }
         void build() override {
-            lcd.setFont(F_SMALL);
+            gfx.setFont(F_SMALL);
             lines = wrap(F_SMALL, text, W - 16);
             buttons.clear();
             if (yes) {
@@ -366,12 +376,12 @@ namespace {
         }
         void draw() override {
             drawFrame();
-            lcd.setFont(F_SMALL);
-            lcd.setTextColor(C::text);
-            lcd.setTextDatum(textdatum_t::top_left);
+            gfx.setFont(F_SMALL);
+            gfx.setTextColor(C::text);
+            gfx.setTextDatum(textdatum_t::top_left);
             int n = maxLines();
             for (int i = 0; i < n && scroll + i < (int)lines.size(); ++i) {
-                lcd.drawString(lines[scroll + i].c_str(), 8, textTop() + 18 * i);
+                gfx.drawString(lines[scroll + i].c_str(), 8, textTop() + 18 * i);
             }
         }
         bool drag(int, int, int dy, bool done) override {
@@ -390,12 +400,12 @@ namespace {
         bool                                    fresh = true;  // first key replaces the initial value
 
         void drawValue() {
-            lcd.fillRect(4, TOP_H + 30, W - 8, 36, C::panel);
-            lcd.drawRect(4, TOP_H + 30, W - 8, 36, C::dim);
-            lcd.setFont(F_BIG);
-            lcd.setTextColor(fresh ? C::dim : C::text);
-            lcd.setTextDatum(textdatum_t::middle_right);
-            lcd.drawString(value.c_str(), W - 12, TOP_H + 49);
+            gfx.fillRect(4, TOP_H + 30, W - 8, 36, C::panel);
+            gfx.drawRect(4, TOP_H + 30, W - 8, 36, C::dim);
+            gfx.setFont(F_BIG);
+            gfx.setTextColor(fresh ? C::dim : C::text);
+            gfx.setTextDatum(textdatum_t::middle_right);
+            gfx.drawString(value.c_str(), W - 12, TOP_H + 49);
         }
         void key(char c) {
             if (fresh) {
@@ -464,16 +474,16 @@ namespace {
             return L[layer][r];
         }
         void drawValue() {
-            lcd.fillRect(4, TOP_H + 30, W - 8, 32, C::panel);
-            lcd.drawRect(4, TOP_H + 30, W - 8, 32, C::dim);
-            lcd.setFont(F_SMALL);
-            lcd.setTextColor(C::text);
-            lcd.setTextDatum(textdatum_t::middle_left);
+            gfx.fillRect(4, TOP_H + 30, W - 8, 32, C::panel);
+            gfx.drawRect(4, TOP_H + 30, W - 8, 32, C::dim);
+            gfx.setFont(F_SMALL);
+            gfx.setTextColor(C::text);
+            gfx.setTextDatum(textdatum_t::middle_left);
             std::string shown = value + "_";
-            while (shown.size() > 1 && lcd.textWidth(shown.c_str()) > W - 18) {
+            while (shown.size() > 1 && gfx.textWidth(shown.c_str()) > W - 18) {
                 shown.erase(0, 1);
             }
-            lcd.drawString(shown.c_str(), 9, TOP_H + 46);
+            gfx.drawString(shown.c_str(), 9, TOP_H + 46);
         }
         void build() override {
             buttons.clear();
@@ -564,28 +574,28 @@ namespace Ui {
         if (pressed) {
             c = C::text;
         }
-        lcd.fillRoundRect(b.x, b.y, b.w, b.h, 6, c);
+        gfx.fillRoundRect(b.x, b.y, b.w, b.h, 6, c);
         uint16_t fg = pressed ? TFT_BLACK : (b.dimmed ? C::dim : (c == C::yellow || c == C::cyan ? TFT_BLACK : C::text));
         if (b.icon != NONE) {
             int s = min(b.w, b.h) / (b.label.empty() ? 3 : 4);
             if (b.icon == HOME) {
                 int cx = b.x + b.w / 2, cy = b.y + b.h / 2;
-                lcd.fillTriangle(cx - s, cy, cx + s, cy, cx, cy - s, fg);
-                lcd.fillRect(cx - s * 2 / 3, cy, s * 4 / 3, s * 2 / 3 + 2, fg);
+                gfx.fillTriangle(cx - s, cy, cx + s, cy, cx, cy - s, fg);
+                gfx.fillRect(cx - s * 2 / 3, cy, s * 4 / 3, s * 2 / 3 + 2, fg);
             } else {
-                drawArrow(lcd, b.x + b.w / 2, b.y + b.h / 2 - (b.label.empty() ? 0 : 6), b.icon, s, fg);
+                drawArrow(gfx, b.x + b.w / 2, b.y + b.h / 2 - (b.label.empty() ? 0 : 6), b.icon, s, fg);
             }
             if (!b.label.empty()) {
-                lcd.setFont(F_SMALL);
-                lcd.setTextColor(fg);
-                lcd.setTextDatum(textdatum_t::bottom_center);
-                lcd.drawString(b.label.c_str(), b.x + b.w / 2, b.y + b.h - 1);
+                gfx.setFont(F_SMALL);
+                gfx.setTextColor(fg);
+                gfx.setTextDatum(textdatum_t::bottom_center);
+                gfx.drawString(b.label.c_str(), b.x + b.w / 2, b.y + b.h - 1);
             }
             return;
         }
-        lcd.setFont(b.font ? b.font : F_BTN);
-        lcd.setTextColor(fg);
-        lcd.setTextDatum(textdatum_t::middle_center);
+        gfx.setFont(b.font ? b.font : F_BTN);
+        gfx.setTextColor(fg);
+        gfx.setTextDatum(textdatum_t::middle_center);
         // Multi-line labels split on '\n'.
         std::vector<std::string> lines;
         size_t start = 0;
@@ -595,10 +605,10 @@ namespace Ui {
             if (nl == std::string::npos) break;
             start = nl + 1;
         }
-        int lh = lcd.fontHeight();
+        int lh = gfx.fontHeight();
         int y0 = b.y + b.h / 2 - (lh * ((int)lines.size() - 1)) / 2;
         for (size_t i = 0; i < lines.size(); ++i) {
-            lcd.drawString(lines[i].c_str(), b.x + b.w / 2, y0 + lh * (int)i + 1);
+            gfx.drawString(lines[i].c_str(), b.x + b.w / 2, y0 + lh * (int)i + 1);
         }
     }
 
@@ -633,22 +643,22 @@ namespace Ui {
         }
         setBrightness(bright);
         topBar.setColorDepth(16);
-        topBar.createSprite(W, TOP_H);
+        topBar.createSprite(LCD_W, Gfx::py(TOP_H));
         for (int i = 0; i < TAB_COUNT; ++i) {
             tabs[i] = makeTab(i);
         }
-        lcd.fillScreen(C::bg);
+        gfx.fillScreen(C::bg);
         if (!haveCal && !Power::wokeFromSleep()) {
             // First boot: offer touch calibration; carry on with the defaults
             // if nobody touches the screen.
-            lcd.setFont(F_BTN);
-            lcd.setTextColor(C::text);
-            lcd.setTextDatum(textdatum_t::middle_center);
-            lcd.drawString("Touch the screen to", W / 2, 130);
-            lcd.drawString("calibrate touch", W / 2, 152);
-            lcd.setFont(F_SMALL);
-            lcd.setTextColor(C::dim);
-            lcd.drawString("(skips in 6 s)", W / 2, 180);
+            gfx.setFont(F_BTN);
+            gfx.setTextColor(C::text);
+            gfx.setTextDatum(textdatum_t::middle_center);
+            gfx.drawString("Touch the screen to", W / 2, 130);
+            gfx.drawString("calibrate touch", W / 2, 152);
+            gfx.setFont(F_SMALL);
+            gfx.setTextColor(C::dim);
+            gfx.drawString("(skips in 6 s)", W / 2, 180);
             uint32_t t0 = millis();
             int32_t  x, y;
             bool     touched = false;
@@ -670,7 +680,7 @@ namespace Ui {
     }
 
     void redrawAll() {
-        lcd.fillScreen(C::bg);
+        gfx.fillScreen(C::bg);
         topChanges = 0xFFFFFFFF;
         drawTopBar();
         if (modals.empty()) {
@@ -690,7 +700,7 @@ namespace Ui {
             modals.pop_back();
         }
         activeTab = index;
-        lcd.fillRect(0, CONTENT_Y, W, CONTENT_H, C::bg);
+        gfx.fillRect(0, CONTENT_Y, W, CONTENT_H, C::bg);
         drawTabs();
         tabs[activeTab]->redraw();
         toastActive = false;
@@ -710,7 +720,7 @@ namespace Ui {
         modals.pop_back();
         after(0, [v] { delete v; });
         if (modals.empty()) {
-            lcd.fillRect(0, CONTENT_Y, W, H - CONTENT_Y, C::bg);
+            gfx.fillRect(0, CONTENT_Y, W, H - CONTENT_Y, C::bg);
             drawTabs();
             tabs[activeTab]->redraw();
         } else {
@@ -762,7 +772,7 @@ namespace Ui {
             if (v->modal()) {
                 v->redraw();
             } else {
-                lcd.fillRect(0, CONTENT_Y, W, CONTENT_H, C::bg);
+                gfx.fillRect(0, CONTENT_Y, W, CONTENT_H, C::bg);
                 v->redraw();
             }
         }
@@ -819,7 +829,7 @@ namespace Ui {
     }
 
     std::vector<std::string> wrap(const lgfx::IFont* font, const std::string& text, int width) {
-        lcd.setFont(font);
+        gfx.setFont(font);
         std::vector<std::string> out;
         size_t                   pos = 0;
         while (pos < text.size()) {
@@ -827,13 +837,13 @@ namespace Ui {
             size_t end = nl == std::string::npos ? text.size() : nl;
             std::string para = text.substr(pos, end - pos);
             while (!para.empty()) {
-                if (lcd.textWidth(para.c_str()) <= width) {
+                if (gfx.textWidth(para.c_str()) <= width) {
                     out.push_back(para);
                     break;
                 }
                 // Longest prefix that fits, preferring a break at a space.
                 size_t fit = 1;
-                while (fit < para.size() && lcd.textWidth(para.substr(0, fit + 1).c_str()) <= width) {
+                while (fit < para.size() && gfx.textWidth(para.substr(0, fit + 1).c_str()) <= width) {
                     ++fit;
                 }
                 size_t sp = para.rfind(' ', fit);
@@ -861,7 +871,10 @@ namespace Ui {
         return s;
     }
 
-    void drawArrow(LovyanGFX& g, int cx, int cy, Icon dir, int size, uint16_t color) {
+    void drawArrow(Gfx& gx, int lcx, int lcy, Icon dir, int lsize, uint16_t color) {
+        // Drawn in physical pixels so the arrow keeps its shape on either panel.
+        LovyanGFX& g    = gx.raw();
+        int        cx   = Gfx::px(lcx), cy = Gfx::py(lcy), size = Gfx::pr(lsize);
         float a  = (dir - ARROW_N) * (float)M_PI / 4;  // 0 = up, clockwise
         float dx = sinf(a), dy = -cosf(a);
         float px = -dy, py = dx;  // perpendicular
@@ -887,12 +900,12 @@ namespace Ui {
 
     void calibrateTouch() {
         uint16_t cal[8];
-        lcd.fillScreen(C::bg);
-        lcd.setFont(F_BTN);
-        lcd.setTextColor(C::text);
-        lcd.setTextDatum(textdatum_t::middle_center);
-        lcd.drawString("Touch the arrow tips", W / 2, H / 2 - 12);
-        lcd.drawString("in each corner", W / 2, H / 2 + 12);
+        gfx.fillScreen(C::bg);
+        gfx.setFont(F_BTN);
+        gfx.setTextColor(C::text);
+        gfx.setTextDatum(textdatum_t::middle_center);
+        gfx.drawString("Touch the arrow tips", W / 2, H / 2 - 12);
+        gfx.drawString("in each corner", W / 2, H / 2 + 12);
         lcd.calibrateTouch(cal, C::text, C::bg, 24);
         Preferences p;
         p.begin("ui", false);

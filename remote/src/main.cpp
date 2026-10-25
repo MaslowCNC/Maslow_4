@@ -13,7 +13,7 @@
 LGFX lcd;
 
 // RGB LED (active low): green connected, blue pairing, red otherwise.
-static constexpr int LED_R = 4, LED_G = 16, LED_B = 17;
+static constexpr int LED_R = PIN_LED_R, LED_G = PIN_LED_G, LED_B = PIN_LED_B;
 
 static void setLed(bool r, bool g, bool b) {
     digitalWrite(LED_R, !r);
@@ -34,6 +34,9 @@ static void debugCommand(const char* c) {
         Ui::showTab(atoi(c + 4));
     } else if (!strcmp(c, "sleep")) {
         Power::sleepNow();
+    } else if (!strcmp(c, "id")) {
+        DLOG("PANEL 04=%06x D3=%06x %dx%d\n", (unsigned)lcd.panel()->readCommand(0x04, 1, 3),
+             (unsigned)lcd.panel()->readCommand(0xD3, 1, 3), (int)lcd.width(), (int)lcd.height());
     } else if (!strcmp(c, "redraw")) {
         Ui::redrawAll();
     } else if (!strcmp(c, "link")) {
