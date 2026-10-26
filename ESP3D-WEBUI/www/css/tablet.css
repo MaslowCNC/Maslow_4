@@ -919,3 +919,19 @@ width: 100%;
   -webkit-appearance: none;
   margin: 0;
 }
+
+/* Connection health dot in the navbar (connindicator.js) */
+.conn-dot {
+  display: inline-block;
+  width: 0.8em;
+  height: 0.8em;
+  margin-left: 0.4em;
+  border-radius: 50%;
+  vertical-align: middle;
+  cursor: pointer;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25);
+}
+.conn-dot.conn-ok { background-color: #2e9e44; }
+.conn-dot.conn-quiet { background-color: #e0a100; animation: conn-blink 1s step-start infinite; }
+.conn-dot.conn-down { background-color: #d23b2c; animation: conn-blink 1s step-start infinite; }
+@keyframes conn-blink { 50% { opacity: 0.35; } }

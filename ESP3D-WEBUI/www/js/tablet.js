@@ -677,7 +677,11 @@ const jogWithUnitsSafeguard = (feedrate, axisAndDistance) => {
   const unitsLabel = uiExpectedUnits === 'G20' ? 'inch' : 'mm';
   const cmd = `$J=G91${uiExpectedUnits}F${feedrate}${axisAndDistance}`;
   addMessage(`JogTo: ${cmd} (${unitsLabel})`);
-  sendCommand(cmd + '\n');
+  // Over the WebSocket, so jogs stay in order with STOP and the jog-cancel flush catches
+  // every jog sent before it. No HTTP fallback: it routes to this same socket and would fail.
+  if (!wsCommands.send(cmd)) {
+    addMessage(`Jog not sent: connection to the machine is ${wsCommands.socketStatus()}`);
+  }
 }
 
 /** Peform a move command */
@@ -1488,19 +1492,10 @@ const confirmSetZHome = () => {
 }
 // Button event handlers - Fifth Row - nothing special here, move on
 
-// Send a command directly via WebSocket to bypass PAGEID routing.
+// Send a command line over the WebSocket (wscommands.js), bypassing PAGEID routing and
+// keeping it in order with everything else sent there.
 // Returns true if the command was sent, false if the WebSocket is not open.
-const sendViaWS = (cmd) => {
-  if (ws_source && ws_source.readyState === WebSocket.OPEN) {
-    try {
-      ws_source.send(cmd);
-      return true;
-    } catch (e) {
-      console.warn("WebSocket send failed:", e);
-    }
-  }
-  return false;
-};
+const sendViaWS = (cmd) => wsCommands.send(cmd);
 
 // True when a stop has been requested but not yet confirmed delivered.
 // onWSOpenCallback sends $STOP on every WebSocket (re)connect while this
@@ -1525,12 +1520,8 @@ const onWSOpenCallback = () => {
   zHomeLastAcknowledgedResultZ = null;
   zLowWarningAcknowledged = false;
   zLowLastAcknowledgedResultZ = null;
-  if (_stopPending) {
-    try {
-      ws_source.send("$STOP\n");
-    } catch (e) {
-      console.warn("Failed to send pending $STOP on connect:", e);
-    }
+  if (_stopPending && !wsCommands.send("$STOP")) {
+    console.warn("Failed to send pending $STOP on connect");
   }
   // Refresh park settings after reconnect (e.g. after firmware restart with new maslow.yaml).
   // A short delay lets the firmware send CURRENT_ID so PAGEID is established before querying.
@@ -1561,6 +1552,10 @@ const sendStopCommand = () => {
   const RETRY_INTERVAL_MS = 300;
   const MAX_RETRY_ATTEMPTS = 33; // 33 * 300ms ≈ 10 seconds
   _stopPending = true;
+  // Jog cancel (0x85) is a realtime byte, so it acts at once instead of waiting behind the
+  // jog line. The firmware ignores it unless a jog is running, and then also drops jog lines
+  // still waiting to be read. Sent on the same socket just before $STOP so $STOP survives.
+  wsCommands.sendRealtime(wsCommands.JOG_CANCEL);
   sendViaWS("$STOP\n"); // Try immediately; keep _stopPending for retries
   let attempts = 0;
   const retryTimer = setInterval(() => {
