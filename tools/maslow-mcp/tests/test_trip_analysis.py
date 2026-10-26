@@ -21,15 +21,17 @@ def check(name, cond, detail):
 
 
 OBS = ["ok", "ld", "ldmx", "orpm", "slip", "sn", "sf", "slo", "soff"]
+CORR = ["lr", "lrmx"]   # resistance-corrected load angle, newer recordings
 
 
-def recording(obs, spike_t=-300, load_climb=False, obs_valid=True, full=20, split_header=False):
+def recording(obs, spike_t=-300, load_climb=False, obs_valid=True, full=20, split_header=False, corrected=False):
     """M2 jumps to 11.9 A at spike_t and faults 3 ms later; M1 follows 50 ms after.  With obs, each
     motor also has observer columns: its load angle climbs to 85 deg over the 200 ms before the spike
-    when load_climb, else stays at 15 deg."""
+    when load_climb, else stays at 15 deg.  With corrected, that climb is in the corrected angle
+    (lr) and the raw one (ld) reads a steady -15 deg, as an over-driven open loop does."""
     def motor_cols(m):
         cols = ["m%d_%s" % (m, f) for f in ta.MOTOR_FIELDS]
-        return cols + (["m%d_%s" % (m, f) for f in OBS] if obs else [])
+        return cols + (["m%d_%s" % (m, f) for f in OBS + (CORR if corrected else [])] if obs else [])
 
     hdr1 = "TRIPCSV,t_ms,foc_loops,foc_max_us,z_phase_deg,z_target_deg," + ",".join(motor_cols(1)) + ","
     hdr2 = ",".join(motor_cols(2))
@@ -50,8 +52,12 @@ def recording(obs, spike_t=-300, load_climb=False, obs_valid=True, full=20, spli
                 if load_climb and t_spike - 200 <= t < t_spike:
                     ld = 15.0 + 70.0 * (t - (t_spike - 200)) / 200.0
                 ok = 1 if obs_valid and not faulted else 0
-                row += [ok, ld if ok else float("nan"), ld + 3 if ok else float("nan"), 12010 if ok else float("nan"),
+                nan = float("nan")
+                raw = -15.0 if corrected else ld
+                row += [ok, raw if ok else nan, raw + 3 if ok else nan, 12010 if ok else nan,
                         0, 20, 0 if faulted else full, 0 if faulted else 20, 20 if faulted else 0]
+                if corrected:
+                    row += [ld if ok else nan, ld + 3 if ok else nan]
         lines.append("TRIPCSV," + ",".join("%g" % v for v in row))
     lines.append("[TRIP] ===== end of trip recording =====")
     if split_header:
@@ -91,6 +97,14 @@ check("steady observer reported", "M2: the observer's load angle stayed at 15 ->
 recs, warn, rep = run("blind", recording(obs=True, obs_valid=False, full=5))
 check("invalid observer reported", "M2: the observer was not valid" in rep and "could not have warned" in rep, rep)
 check("poor sampling reported", "only 25% of synchronised samples" in rep, rep)
+
+# Corrected load angle present: the climb shows only in it, and the report judges on it.
+recs, warn, rep = run("corrected", recording(obs=True, load_climb=True, corrected=True))
+check("corrected columns parse", recs and "m2_lrmx" in recs[0]["rows"][0] and not warn, str(warn))
+check("corrected warning in the timeline", "M2 observer corrected load angle" in rep, rep)
+check("corrected climb reported, raw shown alongside",
+      "M2: the observer's corrected load angle climbed" in rep and "[against V alone -15 -> -15]" in rep, rep)
+check("obslr row shown", "obslr:" in rep, rep)
 
 print("\n%d failure(s)" % len(failures))
 sys.exit(1 if failures else 0)

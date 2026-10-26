@@ -79,6 +79,10 @@ struct MotorState {
     float    delta_filt    = 0;
     float    delta_max     = -1e9f;
     float    pass_delta_max = -1e9f;              // delta_max for this pass only (deg)
+    // The same against V - R*I instead of V (see the observer step): delta_r*.
+    float    delta_r_filt   = 0;
+    float    delta_r_max    = -1e9f;
+    float    pass_delta_r_max = -1e9f;
     double   spd_angle     = 0;
     uint32_t spd_seq       = 0;
     bool     spd_init      = false;
@@ -344,6 +348,7 @@ static void processSample(MotorController& mc, int m, const CurrentSample& s, ui
     s_prof[2] += pc2 - pc1;
     // Observer.  Integrate the applied voltage (dead-time corrected with the last known current
     // signs) and the current every period; step the observer every SYNC_OBS_DECIM full samples.
+    float v_a, v_b;   // this period's dead-time corrected voltage, also for the corrected load angle
     {
         const float dt_v = s_dt_v;   // dead-time voltage error, ~0.24 V
         float v[3];
@@ -353,8 +358,10 @@ static void processSample(MotorController& mc, int m, const CurrentSample& s, ui
             v[k] = (s.duty[k] - d_mean) * SUPPLY_VOLTAGE - dt_v * sg;
         }
         float dt = gap * T;
-        st.vs_a += (2.0f * v[0] - v[1] - v[2]) * (1.0f / 3.0f) * dt;
-        st.vs_b += (v[1] - v[2]) * INV_SQRT3 * dt;
+        v_a = (2.0f * v[0] - v[1] - v[2]) * (1.0f / 3.0f);
+        v_b = (v[1] - v[2]) * INV_SQRT3;
+        st.vs_a += v_a * dt;
+        st.vs_b += v_b * dt;
         st.is_a += (2.0f * st.i_true[0] - st.i_true[1] - st.i_true[2]) * (1.0f / 3.0f) * dt;
         st.is_b += (st.i_true[1] - st.i_true[2]) * INV_SQRT3 * dt;
         st.step_n++;
@@ -389,7 +396,8 @@ static void processSample(MotorController& mc, int m, const CurrentSample& s, ui
             fabsf(mc.current_velocity) * (60.0f / TWO_PI_F) >= SYNC_OBS_MIN_RPM) {
             float dir   = (mc.current_velocity < 0.0f) ? -1.0f : 1.0f;
             double diff = st.cmd_unwrapped - st.obs.angle_unwrapped;
-            if (!st.track_init) {
+            const bool first_track = !st.track_init;
+            if (first_track) {
                 // Start the unwrapped track at the wrapped angle, so it begins inside +/-180.  In
                 // reverse, SimpleFOC still applies +Uq (90 deg AHEAD of th in the +angle sense), so
                 // the rotor flux sits ~180 deg from th: measured +172 deg on motor 1 vs -8 on motor 2.
@@ -414,6 +422,18 @@ static void processSample(MotorController& mc, int m, const CurrentSample& s, ui
             st.delta_filt += (delta - st.delta_filt) * (a > 1.0f ? 1.0f : a);
             st.delta_max = fmaxf(st.delta_max, delta * (180.0f / PI_F));
             st.pass_delta_max = fmaxf(st.pass_delta_max, delta * (180.0f / PI_F));
+
+            // Resistance-corrected: the same angle measured against V - R*I (dead-time corrected
+            // V, the observer's R) instead of V, i.e. against the back-EMF plus the inductive
+            // drop - the classical load angle, pull-out near 90 deg.  Against V alone the R*Id
+            // drop of an over-driven open loop reads ~-10 to -30 deg and falls as Id rises.
+            float R      = s_obs_r[m];
+            float th_r   = atan2f(-(v_a - R * ialpha), v_b - R * ibeta);   // as th = atan2(-Va, Vb)
+            float dr_deg = (delta + dir * wrapPi(th_r - th)) * (180.0f / PI_F);
+            if (first_track) st.delta_r_filt = dr_deg;
+            st.delta_r_filt += (dr_deg - st.delta_r_filt) * (a > 1.0f ? 1.0f : a);
+            st.delta_r_max = fmaxf(st.delta_r_max, dr_deg);
+            st.pass_delta_r_max = fmaxf(st.pass_delta_r_max, dr_deg);
         }
     }
 
@@ -456,6 +476,7 @@ void syncSenseUpdate(MotorController& mc1, MotorController& mc2) {
         uint32_t cnt0   = st.w_cnt;
         uint32_t n0 = st.w_n, full0 = st.w_full, lo0 = st.w_lo, off0 = st.w_off;
         st.pass_delta_max = -1e9f;
+        st.pass_delta_r_max = -1e9f;
 
         const uint32_t now_ms = millis();
         // At most one ring's worth per pass.  Reading "until empty" never ends if processing is
@@ -502,6 +523,7 @@ void syncSenseUpdate(MotorController& mc1, MotorController& mc2) {
         e.pass_lo       = (uint16_t)min<uint32_t>(st.w_lo - lo0, 65535);
         e.pass_off      = (uint16_t)min<uint32_t>(st.w_off - off0, 65535);
         e.pass_load_max = st.pass_delta_max > -1e8f ? st.pass_delta_max : NAN;
+        e.pass_load_r_max = st.pass_delta_r_max > -1e8f ? st.pass_delta_r_max : NAN;
         float rpm_cmd = fabsf(mc.current_velocity) * 60.0f / (2.0f * PI);
         if (st.obs.ready() && !st.obs.first) {
             if (st.spd_init && st.obs_seq != st.spd_seq) {
@@ -521,6 +543,7 @@ void syncSenseUpdate(MotorController& mc1, MotorController& mc2) {
         }
         e.valid    = mc.enabled && st.obs.ready() && st.track_init && rpm_cmd >= SYNC_OBS_MIN_RPM;
         e.load_deg = st.track_init ? st.delta_filt * 180.0f / PI : NAN;
+        e.load_r_deg = st.track_init ? st.delta_r_filt : NAN;
 
         // Advisory: near pull-out (shadow mode: logged only).
         if (e.valid && e.load_deg > SYNC_LOAD_WARN_DEG && millis() - st.last_warn_ms > 1000) {
@@ -546,16 +569,19 @@ static void logLine(MotorController& mc, int m, bool to_link) {
     float    iq  = st.w_dq ? st.w_iq / st.w_dq : NAN;
     float    v   = st.w_vmag / n;
     if (to_link) {
-        out(true, "SYNC M%d %.0frpm %.1fV rms %.2f d%+.2f q%+.2f full %.0f%% ld %+.0f mx %+.0f sp %.0f fx %.2f sl %u",
+        out(true, "SYNC M%d %.0frpm %.1fV rms %.2f d%+.2f q%+.2f full %.0f%% ld %+.0f mx %+.0f sp %.0f fx %.2f sl %u"
+                  " lr %+.0f lrmx %+.0f",
             m + 1, rpm, v, rms, id, iq, 100.0f * st.w_full / n, e.load_deg,
-            st.delta_max > -1e8f ? st.delta_max : NAN, e.speed_rpm, e.flux_ratio, (unsigned)e.slips);
+            st.delta_max > -1e8f ? st.delta_max : NAN, e.speed_rpm, e.flux_ratio, (unsigned)e.slips,
+            e.load_r_deg, st.delta_r_max > -1e8f ? st.delta_r_max : NAN);
     } else {
         float dlo = st.w_dlo_n ? st.w_dlo_sum / st.w_dlo_n : NAN;
         out(false, "[SYNC] M%d %5.0f rpm %5.2f V | n %u full %.0f%% lo %.0f%% mid %.0f%% late %u | rms %.2f pk %.2f "
-                   "Id %+.2f Iq %+.2f dlo %+.2f | obs ld %+.1f max %+.1f spd %.0f flux %.2f slips %u\n",
+                   "Id %+.2f Iq %+.2f dlo %+.2f | obs ld %+.1f max %+.1f lr %+.1f max %+.1f spd %.0f flux %.2f slips %u\n",
             m + 1, rpm, v, (unsigned)st.w_n, 100.0f * st.w_full / n, 100.0f * st.w_lo / n, 100.0f * st.w_mid / n,
             (unsigned)st.w_late, rms, st.w_peak, id, iq, dlo, e.load_deg,
-            st.delta_max > -1e8f ? st.delta_max : NAN, e.speed_rpm, e.flux_ratio, (unsigned)e.slips);
+            st.delta_max > -1e8f ? st.delta_max : NAN, e.load_r_deg,
+            st.delta_r_max > -1e8f ? st.delta_r_max : NAN, e.speed_rpm, e.flux_ratio, (unsigned)e.slips);
     }
 }
 
@@ -565,6 +591,7 @@ static void resetWindow(MotorState& st) {
     st.w_id = st.w_iq = 0; st.w_dq = 0; st.w_vmag = 0;
     st.w_dlo_sum = st.w_dlo_sq = 0; st.w_dlo_n = 0;
     st.delta_max = -1e9f;
+    st.delta_r_max = -1e9f;
 }
 
 static void serviceCapture() {

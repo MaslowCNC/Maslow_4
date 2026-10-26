@@ -30,11 +30,14 @@ struct ObserverEstimate {
     float load_deg    = NAN;     // commanded minus observed electrical angle, in the direction
                                  // of rotation (rotor lag), filtered over ~10 ms
     float load_max    = NAN;     // largest unfiltered value since the last log line
+    float load_r_deg  = NAN;     // load_deg measured against V - R*I instead of V: the classical
+                                 // load angle (pull-out near 90), free of the R*Id drop
     float speed_rpm   = NAN;     // observer's own speed estimate
     float flux_ratio  = NAN;     // |flux| / flux_linkage (1.0 = clamped: parameters are off)
     uint32_t slips    = 0;       // pole slips seen since boot
     // The last syncSenseUpdate() pass, for the trip recorder:
     float    pass_load_max = NAN;  // largest unfiltered load angle (deg); NaN if none was computed
+    float    pass_load_r_max = NAN;  // the same for the resistance-corrected angle
     uint16_t pass_n    = 0;        // samples read
     uint16_t pass_full = 0;        // ... with all three phases valid
     uint16_t pass_lo   = 0;        // ... with the lowest-duty phase valid

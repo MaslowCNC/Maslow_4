@@ -1069,6 +1069,8 @@ static void recordTripSample(uint32_t now_ms) {
         auto deg = [](float d) { return isnan(d) ? INT16_MIN : (int16_t)constrain(lroundf(d), -32767L, 32767L); };
         m.load_deg = deg(oe.load_deg);
         m.load_max = deg(oe.pass_load_max);
+        m.load_r     = deg(oe.load_r_deg);
+        m.load_r_max = deg(oe.pass_load_r_max);
         m.obs_rpm  = isnan(oe.speed_rpm) ? UINT16_MAX : (uint16_t)constrain(lroundf(oe.speed_rpm), 0L, 65534L);
         m.obs_ok   = oe.valid ? 1 : 0;
         m.slips    = (uint8_t)min<uint32_t>(oe.slips - prev_slips[i], 255);

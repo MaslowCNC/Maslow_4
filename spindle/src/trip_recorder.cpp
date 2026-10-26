@@ -157,9 +157,11 @@ void tripRecorderLinkTest() {
 // are sent as one line (-2 carries both, -1 is never asked for); the USB console has to split it
 // because its TX ring buffer is only 256 bytes.  Returns the length, truncated to fit.
 // The sync-sense build adds the shadow observer's columns after each motor's own.  Short names keep
-// the link's one-line header under the XY board's 400-byte line buffer and each USB half under 256.
+// the link's one-line header under the XY board's 400-byte line buffer (388 chars now) and each USB
+// half under 256.
 #ifdef SYNC_CURRENT_SENSE
-#define OBS_COLS(m) ",m" m "_ok,m" m "_ld,m" m "_ldmx,m" m "_orpm,m" m "_slip,m" m "_sn,m" m "_sf,m" m "_slo,m" m "_soff"
+#define OBS_COLS(m) ",m" m "_ok,m" m "_ld,m" m "_ldmx,m" m "_orpm,m" m "_slip,m" m "_sn,m" m "_sf,m" m "_slo,m" m "_soff" \
+                    ",m" m "_lr,m" m "_lrmx"
 #else
 #define OBS_COLS(m) ""
 #endif
@@ -171,13 +173,15 @@ static int formatMotor(char* line, size_t size, const TripMotorSample& m) {
                      (unsigned)m.nf_edges, (unsigned)m.nf_low, m.ip, m.iq, m.lag);
 #ifdef SYNC_CURRENT_SENSE
     if (n >= 0 && n < (int)size) {
-        char ld[8], mx[8], rpm[8];
+        char ld[8], mx[8], rpm[8], lr[8], lrmx[8];
         if (m.load_deg == INT16_MIN) strcpy(ld, "nan"); else snprintf(ld, sizeof(ld), "%d", m.load_deg);
         if (m.load_max == INT16_MIN) strcpy(mx, "nan"); else snprintf(mx, sizeof(mx), "%d", m.load_max);
         if (m.obs_rpm == UINT16_MAX) strcpy(rpm, "nan"); else snprintf(rpm, sizeof(rpm), "%u", (unsigned)m.obs_rpm);
-        n += snprintf(line + n, size - n, ",%u,%s,%s,%s,%u,%u,%u,%u,%u", (unsigned)m.obs_ok, ld, mx, rpm,
+        if (m.load_r == INT16_MIN) strcpy(lr, "nan"); else snprintf(lr, sizeof(lr), "%d", m.load_r);
+        if (m.load_r_max == INT16_MIN) strcpy(lrmx, "nan"); else snprintf(lrmx, sizeof(lrmx), "%d", m.load_r_max);
+        n += snprintf(line + n, size - n, ",%u,%s,%s,%s,%u,%u,%u,%u,%u,%s,%s", (unsigned)m.obs_ok, ld, mx, rpm,
                       (unsigned)m.slips, (unsigned)m.smp_n, (unsigned)m.smp_full, (unsigned)m.smp_lo,
-                      (unsigned)m.smp_off);
+                      (unsigned)m.smp_off, lr, lrmx);
     }
 #endif
     if (n < 0) n = 0;

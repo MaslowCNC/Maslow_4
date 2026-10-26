@@ -28,6 +28,8 @@ struct TripMotorSample {
     // Kept small: 1000 samples x 2 motors.  INT16_MIN / UINT16_MAX mean "no value".
     int16_t  load_deg;     // filtered load angle (rotor lag behind the commanded angle), whole degrees
     int16_t  load_max;     // largest unfiltered load angle this pass, whole degrees
+    int16_t  load_r;       // the same two, resistance-corrected (against V - R*I: pull-out near 90)
+    int16_t  load_r_max;
     uint16_t obs_rpm;      // observer's own speed estimate
     uint8_t  obs_ok;       // 1 = the observer's estimate is valid (see ObserverEstimate::valid)
     uint8_t  slips;        // pole slips the observer counted since the previous sample

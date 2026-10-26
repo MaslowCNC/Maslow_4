@@ -13,6 +13,8 @@ driver's own over-current protection (nFAULT retries), or a Z move at the wrong 
 Recordings from the sync-sense build also carry the shadow flux observer's view of each motor
 (m<n>_ok, _ld, _ldmx, _orpm, _slip) and how many PWM-synchronised samples were valid each pass
 (_sn, _sf, _slo, _soff); the report then says whether the observer saw the trouble coming.
+Newer ones add the resistance-corrected load angle (_lr, _lrmx: measured against V - R*I, so
+pull-out is near 90 deg); where it is present the warning and the climb are judged on it.
 """
 
 import math
@@ -143,9 +145,11 @@ def _events(pre, m):
     if prot:
         ev.append((prot["t_ms"], "filtered current over %.0f A" % OVERCURRENT_THRESHOLD_A))
     if _has_observer(pre, m):
-        warn = next((r for r in pre if r[k("ok")] and r[k("ldmx")] > SYNC_LOAD_WARN_DEG), None)
+        mx = "lrmx" if _has_corrected(pre, m) else "ldmx"
+        warn = next((r for r in pre if r[k("ok")] and r[k(mx)] > SYNC_LOAD_WARN_DEG), None)
         if warn:
-            ev.append((warn["t_ms"], "observer load angle %.0f deg (pull-out near 90)" % warn[k("ldmx")]))
+            ev.append((warn["t_ms"], "observer %sload angle %.0f deg (pull-out near 90)" % (
+                "corrected " if mx == "lrmx" else "", warn[k(mx)])))
         slip = next((r for r in pre if r[k("slip")] > 0), None)
         if slip:
             ev.append((slip["t_ms"], "observer pole slip"))
@@ -156,6 +160,10 @@ def _has_observer(rows, m):
     return bool(rows) and ("m%d_ok" % m) in rows[0]
 
 
+def _has_corrected(rows, m):
+    return bool(rows) and ("m%d_lr" % m) in rows[0]
+
+
 def _observer_findings(m, rows, pre, clean, t_on, out):
     """The shadow observer's view of motor m up to its first event: was it valid, did its load
     angle climb, did it count a slip, and were the synchronised samples it runs on good."""
@@ -163,14 +171,19 @@ def _observer_findings(m, rows, pre, clean, t_on, out):
     findings, climbed = [], False
     early = _window(clean, t_on - 2000, t_on - 500)
     late = _window(clean, t_on - 100, t_on)
+    # Judge on the resistance-corrected angle where the recording has it; keep the raw one for show.
+    corr = _has_corrected(rows, m)
+    ld_f, mx_f = ("lr", "lrmx") if corr else ("ld", "ldmx")
+    what = "corrected load angle" if corr else "load angle"
 
     def stats(win):
         ok = [r for r in win if r[k("ok")]]
         n = sum(r[k("sn")] for r in win)
         return {
             "ok": len(ok) / len(win) if win else float("nan"),
-            "ld": _mean([r[k("ld")] for r in ok]),
-            "mx": max((r[k("ldmx")] for r in ok if not _nan(r[k("ldmx")])), default=float("nan")),
+            "ld": _mean([r[k(ld_f)] for r in ok]),
+            "raw": _mean([r[k("ld")] for r in ok]),
+            "mx": max((r[k(mx_f)] for r in ok if not _nan(r[k(mx_f)])), default=float("nan")),
             "rpm": _mean([r[k("orpm")] for r in ok]),
             "cmd": _mean([abs(r[k("rpm")]) for r in ok]),
             "full": sum(r[k("sf")] for r in win) / n if n else float("nan"),
@@ -178,9 +191,10 @@ def _observer_findings(m, rows, pre, clean, t_on, out):
 
     e, l = stats(early), stats(late)
     slips = [r["t_ms"] for r in pre if r[k("slip")] > 0]
-    out.append("  observer: valid %s -> %s of samples, load angle %s -> %s deg (peak %s), speed %s vs %s "
+    out.append("  observer: valid %s -> %s of samples, %s %s -> %s deg (peak %s)%s, speed %s vs %s "
                "commanded, all three phases read in %s -> %s of samples (mean %+d..%+d ms -> %+d..%+d ms)." % (
-                   _pct(e["ok"]), _pct(l["ok"]), _fmt(e["ld"], 0), _fmt(l["ld"], 0), _fmt(l["mx"], 0),
+                   _pct(e["ok"]), _pct(l["ok"]), what, _fmt(e["ld"], 0), _fmt(l["ld"], 0), _fmt(l["mx"], 0),
+                   " [against V alone %s -> %s]" % (_fmt(e["raw"], 0), _fmt(l["raw"], 0)) if corr else "",
                    _fmt(e["rpm"], 0), _fmt(e["cmd"], 0), _pct(e["full"]), _pct(l["full"]),
                    t_on - 2000, t_on - 500, t_on - 100, t_on))
     if slips:
@@ -197,12 +211,12 @@ def _observer_findings(m, rows, pre, clean, t_on, out):
     elif (not _nan(l["mx"]) and l["mx"] > SYNC_LOAD_WARN_DEG) or (
             not _nan(e["ld"]) and not _nan(l["ld"]) and l["ld"] - e["ld"] > 20):
         climbed = True
-        findings.append("M%d: the observer's load angle climbed from %s to %s deg (peak %s) before its first event - "
+        findings.append("M%d: the observer's %s climbed from %s to %s deg (peak %s) before its first event - "
                         "it saw the slip coming (shadow mode: nothing acted on it)." % (
-                            m, _fmt(e["ld"], 0), _fmt(l["ld"], 0), _fmt(l["mx"], 0)))
+                            m, what, _fmt(e["ld"], 0), _fmt(l["ld"], 0), _fmt(l["mx"], 0)))
     else:
-        findings.append("M%d: the observer's load angle stayed at %s -> %s deg (peak %s) up to its first event - no "
-                        "warning from the observer either." % (m, _fmt(e["ld"], 0), _fmt(l["ld"], 0), _fmt(l["mx"], 0)))
+        findings.append("M%d: the observer's %s stayed at %s -> %s deg (peak %s) up to its first event - no "
+                        "warning from the observer either." % (m, what, _fmt(e["ld"], 0), _fmt(l["ld"], 0), _fmt(l["mx"], 0)))
     if not _nan(e["full"]) and e["full"] < 0.5:
         findings.append("M%d: only %s of synchronised samples read all three phases before the event - the "
                         "sampling window was too short or samples were dropped." % (m, _pct(e["full"])))
@@ -318,6 +332,9 @@ def summarise(rec):
                 cells.append("%7s" % (_fmt(r[k("ld")], 0) if r[k("ok")] else "-"))
                 full.append("%7s" % ("%.0f%%" % (100.0 * r[k("sf")] / r[k("sn")]) if r[k("sn")] else "-"))
             out.append("  obsld: " + " ".join(cells))
+            if _has_corrected(rows, m):
+                out.append("  obslr: " + " ".join("%7s" % (_fmt(_at(rows, t)[k("lr")], 0) if _at(rows, t)[k("ok")]
+                                                           else "-") for t in marks))
             out.append("  full : " + " ".join(full))
         if nf:
             out.append("  nFAULT: %d falling edge(s), first at %+d ms; held low in %d pre-trigger sample(s). "
