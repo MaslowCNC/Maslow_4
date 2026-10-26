@@ -115,6 +115,28 @@ margin: 10px 0px;
   margin-top: 2px;
 }
 
+/* Right-hand panel: state + setup buttons, jog, job, serial */
+.tablettab-section {
+  border: 1px solid #d6d6d6;
+  border-radius: 4px;
+  background-color: #fafafa;
+  padding: 3px;
+  margin: 0 0 6px 4px;
+}
+.tablettab-machine-btn {
+  aspect-ratio: 1 / .55;
+  padding: 4px;
+}
+/* Upload/Delete have a fixed height; a forced aspect ratio would make them wider than their column */
+#tablettab-file-controls .maslow-grid-item-btn {
+  aspect-ratio: auto;
+}
+.tablettab-machine-btn svg {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+}
+
 .tablettab-canvas-wrapper {
 display: grid;
 grid-template-columns: 100%;
@@ -134,6 +156,9 @@ grid-template-columns: 100%;
 .maslow-grid-item, #filelist, #messages {
   font-size: 24px;
 }
+.tablettab-machine-btn {
+  font-size: 16px !important; /* beats the inline 1vw, which is unreadable on phones */
+}
 
 .tablettab-controls-wrapper {
     width: 100%;
@@ -141,25 +166,6 @@ grid-template-columns: 100%;
     grid-template-columns: 100%;
 }
 
-.tablettab-controls-item:nth-child(1) {
-    order: 2;
-}
-
-.tablettab-controls-item:nth-child(2) {
-    order: 1;
-}
-
-.tablettab-controls-item:nth-child(3) {
-    order: 2;
-}
-
-.tablettab-controls-item:nth-child(4) {
-    order: 2;
-}
-
-.tablettab-controls-item:nth-child(5) {
-    order: 2;
-}
 }
 
 
