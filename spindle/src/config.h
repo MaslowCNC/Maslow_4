@@ -331,19 +331,30 @@ const float    VSWEEP_ABORT_IQ_A    = 0.5f;    // abort mid-step if Iq falls bel
 const uint32_t VSWEEP_SETTLE_MS     = 300;
 const uint32_t VSWEEP_MEASURE_MS    = 500;
 
-// Bench slip test (sync-sense-sliptest build only: the link's "T!" starts it, M1 and M2 in turn).
+// Bench slip test (sync-sense-sliptest build only: the link's "T!" runs the next SLIP_SCHEDULE entry).
 // One motor, the other off and the tool out: spin up, settle, then lower the voltage until the
 // rotor pulls out, and stop that motor itself at the first sign - the observer counting a slip,
 // the observer losing lock, the current, or the floor - so nobody has to stop it by hand.  The
 // trip recording of the 2 s before the stop goes to the XY board as usual.
-const float    SLIPTEST_RPM         = 4000.0f;
 const uint32_t SLIPTEST_SETTLE_MS   = 2000;    // at speed before stepping (observer locks)
 const float    SLIPTEST_STEP_V      = 0.05f;   // voltage taken off per step
 const uint32_t SLIPTEST_STEP_MS     = 250;
 const float    SLIPTEST_MIN_DV      = -6.0f;   // give up (no slip) past this offset
 const float    SLIPTEST_MAX_A       = 8.0f;    // phase RMS (this pass) that stops the motor
 const uint32_t SLIPTEST_LOST_MS     = 150;     // observer invalid this long while stepping = stop
-const uint32_t SLIPTEST_TIMEOUT_MS  = 60000;
+const uint32_t SLIPTEST_TIMEOUT_MS  = 90000;
+// Speeds, sudden drops and rescues: SLIP_SCHEDULE in load_sense.cpp.  The sudden drop goes to
+// back-EMF + dead-time loss + friction drop - SLIPTEST_DROP_BELOW_V (10-26 at 4k: pull-out at
+// 3.37/3.32 V against 3.05 V back-EMF, i.e. ~0.24 V dead time + ~0.1 V).
+const float    SLIPTEST_DT_V          = 0.24f;   // 24 V x 0.5 us / 50 us
+const float    SLIPTEST_FRICTION_V    = 0.10f;
+const float    SLIPTEST_DROP_BELOW_V  = 0.15f;
+// Detector (see detectorPass): ld this far over its own average, this many passes in a row.
+const float    SLIPTEST_DET_DEG       = 10.0f;
+const int      SLIPTEST_DET_N         = 3;
+const float    SLIPTEST_DET_TAU_MS    = 200.0f;
+const uint32_t SLIPTEST_DET_REBASE_MS = 20;      // after a sudden drop, before the average restarts
+const uint32_t SLIPTEST_HOLD_MS       = 1500;    // rescue: hold at the restored voltage, then judge
 // Phase resistance (ohm, including the driver) and inductance (H) for the load-angle estimate.
 // 0 = unknown.  RTEST measures R at standstill and uses it until reboot; L must be measured
 // separately (LCR meter, phase-to-phase / 2).  Without both, no load angle is reported.
