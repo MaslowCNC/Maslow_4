@@ -2,7 +2,7 @@
 name: flash-maslow
 description: Build and flash firmware (and optionally the filesystem / web UI) onto a Maslow 4 / 4.1 machine, over WiFi by default with a USB fallback, then verify it booted.
 disable-model-invocation: true
-argument-hint: "[wifi [host] | usb [port]] [--fs] [--erase]"
+argument-hint: "[wifi [host] | usb [port]] [--fs] [--erase] [--reset-config]"
 ---
 
 # Flash a Maslow
@@ -23,27 +23,45 @@ Get these from the arguments, or ask if they're missing:
   - When the machine hosts its own `maslow` access point, the computer has to join that
     network, and the address is `192.168.0.1`.
 - **Firmware only, or `--fs` too?**
-  - `--fs` rebuilds the web UI and replaces the whole filesystem.
-  - **This overwrites `maslow.yaml` with the repo default, and the machine's calibration
-    (anchor positions) is lost.** Say so plainly and get a yes before using `--fs`.
+  - `--fs` rebuilds the web UI and updates the machine's files.
+  - **Over WiFi the calibration is kept.** The script uploads the data files one at a time
+    (`index.html.gz`, `favicon.ico`, ...) and skips every `*.yaml`. It still downloads the
+    `*.yaml` files to `.maslow-backups/<host>-<time>/` first, as a safety copy.
+    `--reset-config` also uploads the repo default `maslow.yaml` (calibration lost): only
+    when the user asks for it.
+  - **Over USB the whole filesystem image is written, so the `*.yaml` files are replaced.**
+    If the machine is on the network, run `scripts/flash-maslow.sh backup HOST` first and
+    `restore HOST DIR` once it is back on the network. Otherwise say plainly that calibration
+    will be lost and get a yes.
 - **`--erase`** (USB only) wipes all flash, including NVS: WiFi credentials, saved belt
   positions and Z position. Use it only for an explicit factory reset.
 
 ## 2. Safety check before anything is written
 
 Ask the user to confirm the belts are retracted, or that the sled is otherwise safe. On boot
-the firmware spins each motor briefly at full power as a self-test.
+the firmware spins each motor briefly at full power as a self-test. A firmware update always
+reboots the machine, and the belt positions saved in NVS are restored (e.g. "State: Extended").
 
 ## 3. Run it
 
 ```bash
-scripts/flash-maslow.sh wifi [HOST] [--fs]
+scripts/flash-maslow.sh wifi [HOST] [--fs] [--reset-config]
 scripts/flash-maslow.sh usb [PORT] [--fs] [--erase]
+scripts/flash-maslow.sh backup [HOST]          # just save the *.yaml files
+scripts/flash-maslow.sh restore [HOST] DIR     # upload them again and restart
 ```
+
+How WiFi works: firmware goes to `POST /updatefw` and files to `POST /files`, the same
+endpoints the web UI's update and file pages use. Each uploaded file is read back and
+compared. Exit codes: 3 not reachable, 4 firmware upload or reboot failed (the old firmware
+keeps running: a failed update only writes the spare slot), 6 a file upload failed. Backups
+in `.maslow-backups/` are never deleted by the script. Don't delete them.
 
 - Run it in the background:
   - The first build after a fresh PlatformIO install takes about 7 minutes (toolchain download).
   - Rebuilds take about 2 minutes. An erase takes about 15 s and a USB write about 20 s.
+  - A WiFi firmware upload plus reboot takes about 40 s.
+  - Don't pipe the script into `tail` or `grep`: that hides its exit code.
 - If PlatformIO is missing, the script prints the install command
   (a venv at `~/.platformio-venv`). Ask before installing it.
 
@@ -62,23 +80,29 @@ with `ls /dev/ttyACM*` (or `lsusb | grep 303a`, Espressif USB-Serial/JTAG) and r
   - `Z Axis driver test passed` and `Z2 Axis driver test passed`
   - either `AP SSID maslow IP 192.168.0.1` + `AP started`, or a joined network
     (STA, the machine joined to an existing WiFi network) with its IP
-- **WiFi:** the machine reboots after an OTA update. Wait for `http://HOST/` to respond, then
-  ask the user to check the version shown in the web UI. Or verify over USB if it's plugged in.
+- **WiFi:** the script prints `$I` after the reboot; check the commit in it. For the boot log
+  use `curl -s "http://HOST/command?plain=%24SS"`. Over HTTP it ends at the network lines,
+  so the arm encoder/motor self-test lines don't appear there (USB only). `$MINFO` replies
+  only over the WebSocket, so it returns nothing over HTTP. For `--fs`, check the `*.yaml`
+  files on the machine still match the backup (`curl http://HOST/maslow.yaml | cmp - DIR/maslow.yaml`).
 
 Expected noise, not failures:
 - about 16 `ledc: LEDC is not initialized` lines in the first 100 ms of boot
 - `Ignored key MaslowAutoUpdate` / `MaslowUpdateURL`
 - `ESP_ERR_NVS_NOT_FOUND` + "No saved belt positions" after an erase
 
-Report what was flashed (commit, transport, firmware-only vs filesystem), the self-test
-results, and anything unexpected. After a `--fs` or `--erase` flash, remind the user that
-calibration has to be redone.
+Report what was flashed (commit, transport, firmware-only vs filesystem, config kept or reset), the self-test
+results, and anything unexpected. If the config was reset (USB `--fs`, `--erase`,
+`--reset-config`), remind the user that calibration has to be redone.
 
 ## Traps (learned the hard way)
 
 - **Changing `PLATFORMIO_DATA_DIR` between builds wipes `.pio/build`.** The script always uses
   `firmware/.pio/fsdata`. A plain `pio run` from a shell without that variable rebuilds from
   scratch once. That's harmless, but it's the cause if the firmware binaries "disappear".
+- **Don't use ArduinoOTA / espota (`pio run -t upload --upload-port HOST`).** It runs the
+  transfer inside FluidNC's polling loop without feeding Maslow's update watchdog. On
+  2026-10-26 the connection was reset at 7%. `/updatefw` feeds the watchdog.
 - **Never use `pio run -t nobuild -t uploadfs`.** With the pinned platform it OTA-writes
   `firmware.bin` into the filesystem partition.
 - **`firmware/install_scripts/*/install-wifi_s3.sh` is wrong for this board.** It's an unedited
