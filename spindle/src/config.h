@@ -359,6 +359,11 @@ const float    SLIPTEST_DET_MX_DEG    = 20.0f;   // one pass's max ld this far o
 const float    SLIPTEST_RESTORE_STEP  = 0.5f;    // rescue: share of the offset kept after the first step
 const uint32_t SLIPTEST_RESTORE_MS    = 30;      // ... then ramped back to the calibrated voltage over this
 const uint32_t SLIPTEST_HOLD_MS       = 1500;    // rescue: hold at the restored voltage, then judge
+// Shadow slip guard (sync builds, load_sense.cpp guardUpdate): the four SLIPTEST_DET_* rules on every
+// spinning motor, logged only.  A rule that stays clear this long starts a new would-fire episode;
+// would-fire lines per rule and motor at most one per GUARD_EVENT_GAP_MS (the rest are counted).
+const uint32_t GUARD_REARM_MS         = 100;
+const uint32_t GUARD_EVENT_GAP_MS     = 250;
 // Phase resistance (ohm, including the driver) and inductance (H) for the load-angle estimate.
 // 0 = unknown.  RTEST measures R at standstill and uses it until reboot; L must be measured
 // separately (LCR meter, phase-to-phase / 2).  Without both, no load angle is reported.

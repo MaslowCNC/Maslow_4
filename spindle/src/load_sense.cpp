@@ -814,6 +814,126 @@ float loadSenseResistance(int motor_idx) {
     return s_r_ohm[motor_idx & 1];
 }
 
+#ifdef SYNC_CURRENT_SENSE
+// ------------------- Shadow slip guard -------------------
+// The four slip-detector rules from the 10-26 bench slip tests, run on every motor that is spinning,
+// taking NO action: each would-fire is logged over the link, and once a second the worst margin of
+// each rule, so real cuts show how often they would fire falsely.  Thresholds: SLIPTEST_DET_* and
+// GUARD_* in config.h.  Context flags: Z = Z moving, R = ramping (speed not yet at its target).
+//   ld   : filtered ld SLIPTEST_DET_DEG over its own ~200 ms average, SLIPTEST_DET_N passes
+//   iq   : load-sense Iq < 0, SLIPTEST_DET_N passes
+//   sp   : observer speed SLIPTEST_DET_SPEED below the command, SLIPTEST_DET_N passes
+//   mx   : one pass's unfiltered max ld SLIPTEST_DET_MX_DEG over the ~200 ms average of ld
+struct GuardState {
+    float    base = NAN;                 // ~200 ms average of ld (held while the ld rule is over)
+    int      n_ld = 0, n_iq = 0, n_sp = 0;
+    bool     on[4] = { false, false, false, false };   // condition currently met (ld, iq, sp, mx)
+    uint32_t clear_ms[4] = { 0, 0, 0, 0 };            // last pass it was not met
+    uint32_t last_event_ms[4] = { 0, 0, 0, 0 };
+    uint16_t fires[4] = { 0, 0, 0, 0 };               // this second
+    uint16_t quiet[4] = { 0, 0, 0, 0 };               // fires not logged (rate limit) this second
+    // Worst margins this second
+    float    w_ld = -1e9f, w_mx = -1e9f, w_iq = 1e9f, w_sp = -1e9f;
+    bool     w_z = false, w_r = false;
+    uint32_t sec_ms = 0;
+    uint32_t total[4] = { 0, 0, 0, 0 };               // since boot
+};
+static GuardState s_guard[2];
+static const char* const GUARD_RULE[4] = { "ld", "iq", "sp", "mx" };
+
+static void guardReset(GuardState& g) {
+    g.base = NAN;
+    g.n_ld = g.n_iq = g.n_sp = 0;
+    for (int r = 0; r < 4; r++) g.on[r] = false;
+}
+
+static void guardFire(int m, GuardState& g, int r, uint32_t now, const char* detail, bool z, bool ramp) {
+    g.fires[r]++;
+    g.total[r]++;
+    if (now - g.last_event_ms[r] < GUARD_EVENT_GAP_MS) { g.quiet[r]++; return; }
+    g.last_event_ms[r] = now;
+    char line[150];
+    snprintf(line, sizeof(line), "GUARD M%d would fire %s: %s%s%s (#%lu)", m + 1, GUARD_RULE[r], detail,
+             z ? " Z" : "", ramp ? " R" : "", (unsigned long)g.total[r]);
+    syncSenseSay(line);
+}
+
+static void guardUpdate(MotorController* motors[2], uint32_t now, float dt, bool z_moving) {
+    for (int m = 0; m < 2; m++) {
+        MotorController&        mc = *motors[m];
+        GuardState&             g  = s_guard[m];
+        const ObserverEstimate& e  = syncObserver(m);
+        const LoadEstimate&     le = s_est[m];
+        float cmd  = fabsf(mc.target_velocity) * 60.0f / (2.0f * PI);
+        float rpm  = fabsf(mc.current_velocity) * 60.0f / (2.0f * PI);
+        bool  spin = mc.enabled && mc.velocity_mode && rpm >= SYNC_OBS_MIN_RPM && e.valid && !isnan(e.load_deg);
+        if (!spin) {
+            guardReset(g);
+            g.sec_ms = 0;
+            continue;
+        }
+        bool ramp = fabsf(mc.current_velocity - mc.target_velocity) > 0.5f;
+        if (isnan(g.base)) g.base = e.load_deg;
+        if (g.sec_ms == 0) g.sec_ms = now;
+
+        bool  cond[4];
+        float d_ld = e.load_deg - g.base;
+        g.n_ld  = d_ld > SLIPTEST_DET_DEG ? g.n_ld + 1 : 0;
+        cond[0] = g.n_ld >= SLIPTEST_DET_N;
+        bool iq_ok = le.valid && !isnan(le.iq);
+        g.n_iq  = iq_ok && le.iq < 0.0f ? g.n_iq + 1 : 0;
+        cond[1] = g.n_iq >= SLIPTEST_DET_N;
+        float sp_def = (!isnan(e.speed_rpm) && rpm > 0.0f) ? (rpm - e.speed_rpm) / rpm : NAN;
+        g.n_sp  = !isnan(sp_def) && sp_def > SLIPTEST_DET_SPEED ? g.n_sp + 1 : 0;
+        cond[2] = g.n_sp >= SLIPTEST_DET_N;
+        float d_mx = isnan(e.pass_load_max) ? NAN : e.pass_load_max - g.base;
+        cond[3] = !isnan(d_mx) && d_mx > SLIPTEST_DET_MX_DEG;
+
+        // The average follows ld except while the ld rule is over its threshold.
+        if (d_ld <= SLIPTEST_DET_DEG) g.base += d_ld * fminf(dt * 1000.0f / SLIPTEST_DET_TAU_MS, 1.0f);
+
+        // Worst margins this second.
+        g.w_ld = fmaxf(g.w_ld, d_ld);
+        if (!isnan(d_mx)) g.w_mx = fmaxf(g.w_mx, d_mx);
+        if (iq_ok) g.w_iq = fminf(g.w_iq, le.iq);
+        if (!isnan(sp_def)) g.w_sp = fmaxf(g.w_sp, sp_def);
+        g.w_z |= z_moving;
+        g.w_r |= ramp;
+
+        // A would-fire is the condition becoming true after it was clear for GUARD_REARM_MS.
+        for (int r = 0; r < 4; r++) {
+            if (!cond[r]) {
+                if (g.on[r]) g.clear_ms[r] = now;
+                g.on[r] = false;
+                continue;
+            }
+            if (g.on[r]) continue;
+            g.on[r] = true;
+            if (g.clear_ms[r] && now - g.clear_ms[r] < GUARD_REARM_MS) continue;   // same episode
+            char detail[96];
+            snprintf(detail, sizeof(detail), "ld %+.0f avg %+.0f mx %+.0f iq %+.2f sp %.0f/%.0f, %.1f V", e.load_deg,
+                     g.base, e.pass_load_max, iq_ok ? le.iq : NAN, e.speed_rpm, cmd, mc.motor.voltage_limit);
+            guardFire(m, g, r, now, detail, z_moving, ramp);
+        }
+
+        if (now - g.sec_ms >= 1000) {
+            char line[180];
+            snprintf(line, sizeof(line),
+                     "GUARD M%d %.0frpm worst: ld %+.0f/%+.0f mx %+.0f/%+.0f iq %+.2f sp %.1f/%.1f%% | fires ld%u iq%u sp%u mx%u%s%s",
+                     m + 1, cmd, g.w_ld, SLIPTEST_DET_DEG, g.w_mx, SLIPTEST_DET_MX_DEG, g.w_iq,
+                     100.0f * g.w_sp, 100.0f * SLIPTEST_DET_SPEED, g.fires[0], g.fires[1], g.fires[2], g.fires[3],
+                     g.w_z ? " Z" : "", g.w_r ? " R" : "");
+            syncSenseSay(line);
+            for (int r = 0; r < 4; r++) g.fires[r] = g.quiet[r] = 0;
+            g.w_ld = g.w_mx = g.w_sp = -1e9f;
+            g.w_iq = 1e9f;
+            g.w_z = g.w_r = false;
+            g.sec_ms = now;
+        }
+    }
+}
+#endif
+
 void loadSenseUpdate(MotorController& mc1, MotorController& mc2, float dt, bool allow_warn, bool z_moving) {
     MotorController* motors[2] = { &mc1, &mc2 };
     s_motors[0] = &mc1; s_motors[1] = &mc2;
@@ -983,6 +1103,9 @@ void loadSenseUpdate(MotorController& mc1, MotorController& mc2, float dt, bool 
 
     for (int m = 0; m < 2; m++) updateWarning(m, *motors[m], allow_warn, now);
     updateAdaptive(motors, allow_warn, dt, now, z_moving);
+#ifdef SYNC_CURRENT_SENSE
+    guardUpdate(motors, now, dt, z_moving);
+#endif
 
     // ---- Periodic console line ----
     if (!g_load_print) return;
