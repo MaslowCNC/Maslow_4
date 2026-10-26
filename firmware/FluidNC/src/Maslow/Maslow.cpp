@@ -522,8 +522,6 @@ void Maslow_::recomputePID() {
 //------------
 
 //This function saves the current z-axis position to the non-volitle storage
-// TODO: never calls nvs_close(nvsHandle), so each call leaks an NVS handle (called on every Jog/Cycle -> Idle).
-//       Close it on every return path.
 void Maslow_::saveZPos() {
     nvs_handle_t nvsHandle;
     esp_err_t    ret = nvs_open("maslow", NVS_READWRITE, &nvsHandle);
@@ -576,7 +574,6 @@ float Maslow_::currentZHome() const {
     return zHome;
 }
 
-// TODO: never calls nvs_close(nvsHandle), so each call leaks an NVS handle. Close it on every return path.
 void Maslow_::loadZPos() {
     static constexpr float MIN_VALID_Z_MM = 0.0f;
     static constexpr float MAX_VALID_Z_MM = 72.0f;
@@ -591,6 +588,7 @@ void Maslow_::loadZPos() {
     // Read
     int32_t value2;
     ret = nvs_get_i32(nvsHandle, "zPos", &value2);
+    nvs_close(nvsHandle);
     if (ret != ESP_OK) {
         log_info("Error " + std::string(esp_err_to_name(ret)) + " reading from NVS!");
     } else {
