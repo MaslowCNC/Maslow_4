@@ -83,11 +83,9 @@ static RefTable s_new_ref;
 struct SlipRun { uint8_t motor; float rpm; bool sudden; bool rescue; };
 // 10-26 runs: at 4k and 8k a ramp slips (8 A ~10 ms later); at 12k lowering the voltage first runs
 // up the current (past the V-curve minimum) and hits 8 A before any slip, so rescues stay at 4k/8k.
+// Rescues with the voltage ramped back (SLIPTEST_RESTORE_MS): a stepped restore at 8k spiked 9.8 A.
 static const SlipRun SLIP_SCHEDULE[] = {
-    { 0,  4000, true,  false }, { 0,  8000, true,  false }, { 0, 12000, true,  false },
-    { 0,  4000, false, true  }, { 0,  8000, false, true  },
-    { 0,  4000, true,  true  }, { 0,  8000, true,  true  },
-    { 1, 12000, false, false },
+    { 0,  4000, false, true  }, { 0,  8000, false, true  }, { 0,  8000, true,  true  },
 };
 static const int SLIP_RUNS = sizeof(SLIP_SCHEDULE) / sizeof(SLIP_SCHEDULE[0]);
 static int      s_st_idx   = 0;          // next schedule entry
@@ -102,12 +100,17 @@ static uint32_t s_st_valid_ms = 0;       // last pass the observer was valid
 //    SLIPTEST_DET_REBASE_MS after a sudden drop, which moves ld by itself (less voltage = less Id =
 //    less R*Id tilt).
 //  - the load-sense fit's Iq below zero (current no longer lagging the voltage: under-excited).
-//    Earliest signal in every 10-26 run: 32-73 ms before 8 A at 4k/8k, ~900 ms at 12k.
+//    Earliest signal on the 10-26 ramps: 32-73 ms before 8 A at 4k/8k, ~900 ms at 12k.
+//  - the observer's speed SLIPTEST_DET_SPEED below the command: the only one fast enough for a
+//    sudden drop (2% within 6-10 ms on 10-26).  Not held off after a drop like the ld rule.
 static float    s_det_base    = NAN;
 static int      s_det_count   = 0;
 static int      s_det_iq_count = 0;
+static int      s_det_sp_count = 0;
 static uint32_t s_det_ld_ms   = 0;       // when each rule fired (0 = not yet)
 static uint32_t s_det_iq_ms   = 0;
+static uint32_t s_det_sp_ms   = 0;
+static float    s_restore_from = 0.0f;   // rescue: offset the voltage is ramped back from
 static uint32_t s_det_ms      = 0;       // when the first one fired (0 = not yet)
 static float    s_det_ld = NAN, s_det_v = NAN;
 static uint32_t s_det_arm_ms  = 0;       // detector ignores passes before this
@@ -497,11 +500,12 @@ static void finishSlipTest(const char* why) {
     s_mode = M_IDLE;
     stSay("SLIPTEST run %d M%d stopped at %.2f V (dV %+.2f) after %.1f s: %s; recording follows", s_st_run,
           s_st_motor + 1, v, dv, (now - s_st_start_ms) / 1000.0f, why);
-    char ld_t[24] = "never", iq_t[24] = "never";
+    char ld_t[24] = "never", iq_t[24] = "never", sp_t[24] = "never";
     if (s_det_ld_ms) snprintf(ld_t, sizeof(ld_t), "%lu ms", (unsigned long)(now - s_det_ld_ms));
     if (s_det_iq_ms) snprintf(iq_t, sizeof(iq_t), "%lu ms", (unsigned long)(now - s_det_iq_ms));
-    stSay("SLIPTEST run %d detector before this stop: ld rule %s, Iq<0 rule %s (first at %.2f V)", s_st_run, ld_t,
-          iq_t, s_det_v);
+    if (s_det_sp_ms) snprintf(sp_t, sizeof(sp_t), "%lu ms", (unsigned long)(now - s_det_sp_ms));
+    stSay("SLIPTEST run %d detector before this stop: ld rule %s, Iq<0 rule %s, speed rule %s (first at %.2f V)",
+          s_st_run, ld_t, iq_t, sp_t, s_det_v);
 }
 #endif
 
@@ -626,9 +630,12 @@ bool loadSenseStartSlipTest(MotorController& mc1, MotorController& mc2) {
     s_det_base   = NAN;
     s_det_count  = 0;
     s_det_iq_count = 0;
+    s_det_sp_count = 0;
     s_det_ld_ms  = 0;
     s_det_iq_ms  = 0;
+    s_det_sp_ms  = 0;
     s_det_ms     = 0;
+    s_det_v      = NAN;
     s_det_arm_ms = 0;
     s_hold_max_a = 0.0f;
     mc.target_velocity     = s_st.rpm * 2.0f * PI / 60.0f * mc.direction;
@@ -646,8 +653,11 @@ bool loadSenseStartSlipTest(MotorController& mc1, MotorController& mc2) {
 // The slip detector, every pass while the voltage is coming down.  Both rules keep running so each
 // one's time is reported; true on the pass the first of them fires.
 static bool detectorPass(const ObserverEstimate& e, const LoadEstimate& le, float v, uint32_t now, float dt) {
-    if (now < s_det_arm_ms) return false;
-    if (!s_det_ld_ms && e.valid && !isnan(e.load_deg)) {
+    if (!s_det_sp_ms && e.valid && !isnan(e.speed_rpm)) {
+        s_det_sp_count = e.speed_rpm < (1.0f - SLIPTEST_DET_SPEED) * s_st.rpm ? s_det_sp_count + 1 : 0;
+        if (s_det_sp_count >= SLIPTEST_DET_N) s_det_sp_ms = now;
+    }
+    if (now >= s_det_arm_ms && !s_det_ld_ms && e.valid && !isnan(e.load_deg)) {
         if (isnan(s_det_base)) {
             s_det_base = e.load_deg;
         } else if (e.load_deg - s_det_base > SLIPTEST_DET_DEG) {
@@ -658,11 +668,11 @@ static bool detectorPass(const ObserverEstimate& e, const LoadEstimate& le, floa
             s_det_base += (e.load_deg - s_det_base) * fminf(dt * 1000.0f / SLIPTEST_DET_TAU_MS, 1.0f);
         }
     }
-    if (!s_det_iq_ms && le.valid && !isnan(le.iq)) {
+    if (now >= s_det_arm_ms && !s_det_iq_ms && le.valid && !isnan(le.iq)) {
         s_det_iq_count = le.iq < 0.0f ? s_det_iq_count + 1 : 0;
         if (s_det_iq_count >= SLIPTEST_DET_N) s_det_iq_ms = now;
     }
-    if (!s_det_ms && (s_det_ld_ms || s_det_iq_ms)) {
+    if (!s_det_ms && (s_det_ld_ms || s_det_iq_ms || s_det_sp_ms)) {
         s_det_ms = now;
         s_det_v  = v;
         return true;
@@ -721,12 +731,13 @@ static void updateSlipTest(uint32_t now) {
             if (e.slips != s_st_slips0) { finishSlipTest("observer counted a pole slip"); break; }
             if (now - s_st_valid_ms > SLIPTEST_LOST_MS) { finishSlipTest("observer lost lock"); break; }
             if (detectorPass(e, s_est[s_st_motor], mc.motor.voltage_limit, now, dt)) {
-                stSay("SLIPTEST run %d M%d DETECTOR (%s) at %.2f V: ld %+.0f vs average %+.0f, Iq %+.2f%s", s_st_run,
-                      s_st_motor + 1, s_det_ld_ms ? "ld rule" : "Iq<0 rule", mc.motor.voltage_limit, e.load_deg,
-                      s_det_base, s_est[s_st_motor].iq, s_st.rescue ? " - restoring the voltage" : "");
+                stSay("SLIPTEST run %d M%d DETECTOR (%s) at %.2f V: ld %+.0f vs average %+.0f, Iq %+.2f, %.0f RPM%s",
+                      s_st_run, s_st_motor + 1, s_det_sp_ms ? "speed rule" : s_det_ld_ms ? "ld rule" : "Iq<0 rule",
+                      mc.motor.voltage_limit, e.load_deg, s_det_base, s_est[s_st_motor].iq, e.speed_rpm,
+                      s_st.rescue ? " - ramping the voltage back" : "");
                 if (s_st.rescue) {
-                    s_vs_offset = 0.0f;   // back to the calibrated voltage
-                    s_timer     = now;
+                    s_restore_from = s_vs_offset;   // ramped back to 0 (calibrated) in M_ST_HOLD
+                    s_timer        = now;
                     s_mode      = M_ST_HOLD;
                     break;
                 }
@@ -744,6 +755,9 @@ static void updateSlipTest(uint32_t now) {
         case M_ST_HOLD: {
             // Rescue: did the restored voltage pull it back?  The stops above still apply.
             s_hold_max_a = fmaxf(s_hold_max_a, mc.last_instantaneous_current);
+            // Back to the calibrated voltage over SLIPTEST_RESTORE_MS: a step spiked 9.8 A at 8k.
+            float f     = fminf((now - s_timer) / (float)SLIPTEST_RESTORE_MS, 1.0f);
+            s_vs_offset = s_restore_from * (1.0f - f);
             if (e.slips != s_st_slips0) { finishSlipTest("rescue FAILED: observer counted a pole slip"); break; }
             if (now - s_st_valid_ms > SLIPTEST_LOST_MS) { finishSlipTest("rescue FAILED: observer lost lock"); break; }
             if (now - s_timer < SLIPTEST_HOLD_MS) break;
