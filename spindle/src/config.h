@@ -355,7 +355,9 @@ const int      SLIPTEST_DET_N         = 3;
 const float    SLIPTEST_DET_TAU_MS    = 200.0f;
 const uint32_t SLIPTEST_DET_REBASE_MS = 20;      // after a sudden drop, before the average restarts
 const float    SLIPTEST_DET_SPEED     = 0.02f;   // observer speed this far below the command
-const uint32_t SLIPTEST_RESTORE_MS    = 40;      // rescue: ramp back to the calibrated voltage over this
+const float    SLIPTEST_DET_MX_DEG    = 20.0f;   // one pass's max ld this far over the average of ld
+const float    SLIPTEST_RESTORE_STEP  = 0.5f;    // rescue: share of the offset kept after the first step
+const uint32_t SLIPTEST_RESTORE_MS    = 30;      // ... then ramped back to the calibrated voltage over this
 const uint32_t SLIPTEST_HOLD_MS       = 1500;    // rescue: hold at the restored voltage, then judge
 // Phase resistance (ohm, including the driver) and inductance (H) for the load-angle estimate.
 // 0 = unknown.  RTEST measures R at standstill and uses it until reboot; L must be measured
