@@ -124,6 +124,10 @@ stage_fs() {
 if [[ $SKIP_BUILD == 0 ]]; then
     mkdir -p "$PLATFORMIO_DATA_DIR"
     [[ $FS == 1 ]] && stage_fs
+elif [[ $FS == 1 && $MODE == wifi ]]; then
+    # WiFi uploads the staged files directly, so always stage the current UI build;
+    # otherwise --skip-build would send whatever was staged last time.
+    stage_fs
     echo "== Building firmware"
     (cd "$FW" && "$PIO" run -e "$ENV_NAME")
     [[ $FS == 1 && $MODE != wifi ]] && (cd "$FW" && "$PIO" run -e "$ENV_NAME" -t buildfs)
