@@ -105,7 +105,7 @@ static uint32_t s_st_start_ms = 0;
 static uint32_t s_st_slips0   = 0;       // observer slip count when stepping began
 static uint32_t s_st_valid_ms = 0;       // last pass the observer was valid
 // Detection is the shadow guard's (see guardUpdate): stepping arms it, the run's own sudden drop is
-// marked deliberate, and a rescue run acts on G (iq or sp or confirmed m2).  The finish line reports
+// marked deliberate, and a rescue run acts on G (iq or sp or raw mx).  The finish line reports
 // when each of the guard's rules first fired.
 static float    s_restore_from = 0.0f;   // rescue: offset the voltage is ramped back from
 static uint32_t s_det_ms      = 0;       // when G fired (0 = not yet)
@@ -693,7 +693,7 @@ static void updateSlipTest(uint32_t now) {
             if (!s_det_ms && guardFirstMs(s_st_motor, GR_G)) {
                 s_det_ms = now;
                 s_det_v  = mc.motor.voltage_limit;
-                int via  = guardFirstMs(s_st_motor, GR_CM) ? GR_CM : guardFirstMs(s_st_motor, GR_SP) ? GR_SP : GR_IQ;
+                int via  = guardFirstMs(s_st_motor, GR_MX) ? GR_MX : guardFirstMs(s_st_motor, GR_SP) ? GR_SP : GR_IQ;
                 stSay("SLIPTEST run %d M%d GUARD G (via %s) at %.2f V: ld %+.0f, Iq %+.2f, %.0f RPM, %.1f A%s",
                       s_st_run, s_st_motor + 1, GUARD_RULE[via], mc.motor.voltage_limit, e.load_deg,
                       s_est[s_st_motor].iq, e.speed_rpm, mc.last_instantaneous_current,
@@ -762,10 +762,10 @@ float loadSenseResistance(int motor_idx) {
 #ifdef SYNC_CURRENT_SENSE
 // ------------------- Shadow slip guard -------------------
 // Design choice (10-26, for this board): when the guard acts, Iq<0 and speed are the primary rules
-// (wide margins in cuts, but blind to sudden slips), and ldmx covers fast events only when confirmed
-// within ~5 ms (current climbing or the next pass's ldmx also high), with its noise reduced.  ldmx is
-// the only rule that caught a sudden bench slip in time, but on M2 it came within 1 deg of firing in
-// a clean cut.  On a board with a faster, simultaneous current ADC this should shift towards the
+// (wide margins in cuts, but blind to sudden slips), and raw single-pass ldmx covers fast events.
+// ldmx is the only rule that caught a sudden bench slip in time; on M2 it fired once in ~200 s of a
+// clean cut (+23 vs 20), acceptable when the action is to restore voltage.  Filtering it (second-
+// largest, confirmation) cost 5-10 ms on the bench and removed almost nothing in cuts.  On a board with a faster, simultaneous current ADC this should shift towards the
 // observer (cleaner ldmx, shorter ld/speed filters, then closed-loop control) - provided the samples
 // are always valid: the SOx outputs settle in ~3 us and the low-side window is ~1.9 us at 24k on 36 V.
 // The slip-detector rules from the 10-26 bench slip tests, run on every motor that is spinning,
@@ -780,11 +780,14 @@ float loadSenseResistance(int motor_idx) {
 //   ld   : filtered ld SLIPTEST_DET_DEG over its own ~200 ms average, SLIPTEST_DET_N passes
 //   iq   : load-sense Iq < 0, SLIPTEST_DET_N passes                                   (primary)
 //   sp   : observer speed SLIPTEST_DET_SPEED below the command, SLIPTEST_DET_N passes (primary)
-//   mx   : one pass's unfiltered max ld SLIPTEST_DET_MX_DEG over the ~200 ms average of ld
-//   m2   : the same with the pass's SECOND-largest ld (less noise: one outlier is not enough)
+//   mx   : one pass's unfiltered max ld SLIPTEST_DET_MX_DEG over the ~200 ms average of ld  (fast)
+//   m2   : the same with the pass's SECOND-largest ld                         (reference only)
 //   cm   : an m2 candidate confirmed within GUARD_CONFIRM_MS, by a second m2 pass or by the pass
-//          RMS current rising GUARD_CONFIRM_RISE_A over its lowest since the candidate (fast events)
-//   G    : the combined decision, iq or sp or cm - what the guard would act on
+//          RMS current rising GUARD_CONFIRM_RISE_A over its lowest since the candidate (reference only)
+//   G    : the combined decision, iq or sp or mx - what the guard would act on.  m2 and cm were the
+//          first fast rule (481a7fdd), but in the 10-26 cut m2 ran only ~1 deg below mx and the
+//          confirmation rejected nothing, while on the bench they cost 5-10 ms and lost the 4k ramp
+//          and 8k drop rescues that raw mx had held.
 // The slip-test build arms the guard (guardArm) and rescues on G; the bench run's own voltage drop is
 // marked deliberate (guardDeliberateStep) so it does not start a voltage-step hold.
 
@@ -939,7 +942,7 @@ static void guardUpdate(MotorController* motors[2], uint32_t now, float dt, bool
                 g.cand_i_min = i_now;
             }
             cond[GR_CM] = (int32_t)(g.cm_until - now) > 0;
-            cond[GR_G]  = cond[GR_IQ] || cond[GR_SP] || cond[GR_CM];
+            cond[GR_G]  = cond[GR_IQ] || cond[GR_SP] || cond[GR_MX];
 
             // The average follows ld except while the ld rule is over its threshold, and then only for
             // GUARD_HOLD_MAX_MS: a lasting shift (10-26: a spin-up value held all cut) is taken as the
