@@ -128,5 +128,9 @@ void drain_messages();
 class Channel;
 bool cmd_queue_defer(const char* line, Channel& channel);
 
+// Drop lines from `channel` that are waiting on cmd_queue (read but not yet started).
+// Used by jog cancel.  Safe to call from any task.
+void cmd_queue_drop_channel(Channel& channel);
+
 extern uint32_t heapLowWater;
 extern uint32_t maxBlockLowWater;  // largest-free-block low-water; UINT_MAX where unavailable

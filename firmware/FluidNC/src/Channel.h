@@ -153,6 +153,11 @@ public:
     // after a reset, so that anything already sent will not be processed.
     virtual void flushRx();
 
+    // flushQueuedLines() discards complete or partial lines waiting in the input queue,
+    // without touching the line the main loop may be assembling.  Safe to call from the
+    // polling task.  Used by jog cancel so queued $J= lines do not run after the cancel.
+    void flushQueuedLines();
+
     // realtimeOkay() returns true if the channel can currently interpret the character as
     // a Grbl realtime character.  Some situations where it might return false are when
     // the channel is being used for file upload or if the channel is doing line editing

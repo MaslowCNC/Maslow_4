@@ -112,6 +112,19 @@ void Channel::flushRx() {
     xSemaphoreGive(_queue_mutex);
 }
 
+void Channel::flushQueuedLines() {
+    xSemaphoreTake(_queue_mutex, portMAX_DELAY);
+    bool midLine = !_queue.empty() && !_queue_at_line_start;
+    while (_queue.size()) {
+        _queue.pop();
+    }
+    // If the flush cut a line in half, drop the rest of it as it arrives; otherwise its
+    // tail would run as a line of its own.
+    _queue_discarding    = _queue_discarding || midLine;
+    _queue_at_line_start = !_queue_discarding;
+    xSemaphoreGive(_queue_mutex);
+}
+
 // Enqueue one non-realtime byte.  Drop policy is whole-line: if a new line
 // starts while _queue is already at _queue_limit, the whole line is discarded
 // through its newline.  A line already in progress finishes, so _queue never
