@@ -2,7 +2,8 @@
 #include "usb_console.h"
 #include <stdarg.h>
 
-// 1000 samples x ~2 ms housekeeping period = ~2 s of history (~70 KB of RAM).
+// 1000 samples x ~2 ms housekeeping period = ~2 s of history (~96 KB of RAM, ~120 KB in the
+// sync-sense build with the observer columns).
 static constexpr int TRIP_REC_SAMPLES = 1000;
 // Samples kept after the trigger, so the decay after the motors are stopped is visible too.
 static constexpr int TRIP_REC_POST_SAMPLES = 50;
@@ -153,10 +154,41 @@ void tripRecorderLinkTest() {
 // Format dump line `idx` (see s_dump_line) into `line`.  For the link the two CSV header halves
 // are sent as one line (-2 carries both, -1 is never asked for); the USB console has to split it
 // because its TX ring buffer is only 256 bytes.  Returns the length, truncated to fit.
+// The sync-sense build adds the shadow observer's columns after each motor's own.  Short names keep
+// the link's one-line header under the XY board's 400-byte line buffer and each USB half under 256.
+#ifdef SYNC_CURRENT_SENSE
+#define OBS_COLS(m) ",m" m "_ok,m" m "_ld,m" m "_ldmx,m" m "_orpm,m" m "_slip,m" m "_sn,m" m "_sf,m" m "_slo,m" m "_soff"
+#else
+#define OBS_COLS(m) ""
+#endif
+
+// One motor's columns, starting with the separating comma.  Returns the length, truncated to fit.
+static int formatMotor(char* line, size_t size, const TripMotorSample& m) {
+    int n = snprintf(line, size, ",%u,%.0f,%.2f,%.2f,%.2f,%.2f,%.2f,%u,%u,%.2f,%.2f,%.0f",
+                     (unsigned)m.enabled, m.rpm, m.vlim, m.ia, m.ib, m.ic, m.prot,
+                     (unsigned)m.nf_edges, (unsigned)m.nf_low, m.ip, m.iq, m.lag);
+#ifdef SYNC_CURRENT_SENSE
+    if (n >= 0 && n < (int)size) {
+        char ld[8], mx[8], rpm[8];
+        if (m.load_deg == INT16_MIN) strcpy(ld, "nan"); else snprintf(ld, sizeof(ld), "%d", m.load_deg);
+        if (m.load_max == INT16_MIN) strcpy(mx, "nan"); else snprintf(mx, sizeof(mx), "%d", m.load_max);
+        if (m.obs_rpm == UINT16_MAX) strcpy(rpm, "nan"); else snprintf(rpm, sizeof(rpm), "%u", (unsigned)m.obs_rpm);
+        n += snprintf(line + n, size - n, ",%u,%s,%s,%s,%u,%u,%u,%u,%u", (unsigned)m.obs_ok, ld, mx, rpm,
+                      (unsigned)m.slips, (unsigned)m.smp_n, (unsigned)m.smp_full, (unsigned)m.smp_lo,
+                      (unsigned)m.smp_off);
+    }
+#endif
+    if (n < 0) n = 0;
+    if (n >= (int)size) n = size - 1;
+    return n;
+}
+
 static int formatLine(int idx, char* line, size_t size, bool link) {
     static const char HDR1[] = "TRIPCSV,t_ms,foc_loops,foc_max_us,z_phase_deg,z_target_deg,"
-                               "m1_en,m1_rpm,m1_vlim,m1_ia,m1_ib,m1_ic,m1_prot,m1_nf_edges,m1_nf_low,m1_ip,m1_iq,m1_lag,";
-    static const char HDR2[] = "m2_en,m2_rpm,m2_vlim,m2_ia,m2_ib,m2_ic,m2_prot,m2_nf_edges,m2_nf_low,m2_ip,m2_iq,m2_lag\n";
+                               "m1_en,m1_rpm,m1_vlim,m1_ia,m1_ib,m1_ic,m1_prot,m1_nf_edges,m1_nf_low,m1_ip,m1_iq,m1_lag"
+                               OBS_COLS("1") ",";
+    static const char HDR2[] = "m2_en,m2_rpm,m2_vlim,m2_ia,m2_ib,m2_ic,m2_prot,m2_nf_edges,m2_nf_low,m2_ip,m2_iq,m2_lag"
+                               OBS_COLS("2") "\n";
     int n;
     if (idx == -4) {
         // The USB copy starts with a blank line to set it apart; the link has no use for one.
@@ -172,18 +204,14 @@ static int formatLine(int idx, char* line, size_t size, bool link) {
     } else if (idx < s_count) {
         int                    oldest = (s_head - s_count + TRIP_REC_SAMPLES) % TRIP_REC_SAMPLES;
         const TripSample&      s      = s_buf[(oldest + idx) % TRIP_REC_SAMPLES];
-        const TripMotorSample& a      = s.m[0];
-        const TripMotorSample& b      = s.m[1];
-        n = snprintf(line, size,
-                     "TRIPCSV,%ld,%u,%u,%.2f,%.2f,"
-                     "%u,%.0f,%.2f,%.2f,%.2f,%.2f,%.2f,%u,%u,%.2f,%.2f,%.0f,"
-                     "%u,%.0f,%.2f,%.2f,%.2f,%.2f,%.2f,%u,%u,%.2f,%.2f,%.0f\n",
+        n = snprintf(line, size, "TRIPCSV,%ld,%u,%u,%.2f,%.2f",
                      (long)(s.t_ms - s_trigger_ms), (unsigned)s.foc_loops, (unsigned)s.foc_max_us,
-                     s.phase_cur * 180.0f / PI, s.phase_tgt * 180.0f / PI,
-                     (unsigned)a.enabled, a.rpm, a.vlim, a.ia, a.ib, a.ic, a.prot,
-                     (unsigned)a.nf_edges, (unsigned)a.nf_low, a.ip, a.iq, a.lag,
-                     (unsigned)b.enabled, b.rpm, b.vlim, b.ia, b.ib, b.ic, b.prot,
-                     (unsigned)b.nf_edges, (unsigned)b.nf_low, b.ip, b.iq, b.lag);
+                     s.phase_cur * 180.0f / PI, s.phase_tgt * 180.0f / PI);
+        if (n < 0) n = 0;
+        if (n >= (int)size - 1) n = size - 2;   // room for the newline
+        for (int m = 0; m < 2; m++) n += formatMotor(line + n, size - 1 - n, s.m[m]);
+        line[n++] = '\n';
+        line[n]   = '\0';
     } else {
         n = snprintf(line, size, "[TRIP] ===== end of trip recording =====\n");
     }
@@ -209,7 +237,7 @@ static void serviceUsb() {
         s_dumping = false;
         return;
     }
-    char line[200];
+    char line[256];
     // A handful of lines per pass keeps each pass short; the whole dump takes a few seconds.
     for (int budget = 8; budget > 0 && s_dumping; budget--) {
         int n = formatLine(s_dump_line, line, sizeof(line), false);

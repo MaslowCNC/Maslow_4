@@ -78,6 +78,7 @@ struct MotorState {
     uint32_t obs_updates   = 0;
     float    delta_filt    = 0;
     float    delta_max     = -1e9f;
+    float    pass_delta_max = -1e9f;              // delta_max for this pass only (deg)
     double   spd_angle     = 0;
     uint32_t spd_seq       = 0;
     bool     spd_init      = false;
@@ -412,6 +413,7 @@ static void processSample(MotorController& mc, int m, const CurrentSample& s, ui
             float a = T * SYNC_OBS_DECIM / 0.01f;   // ~10 ms filter
             st.delta_filt += (delta - st.delta_filt) * (a > 1.0f ? 1.0f : a);
             st.delta_max = fmaxf(st.delta_max, delta * (180.0f / PI_F));
+            st.pass_delta_max = fmaxf(st.pass_delta_max, delta * (180.0f / PI_F));
         }
     }
 
@@ -452,6 +454,8 @@ void syncSenseUpdate(MotorController& mc1, MotorController& mc2) {
         st.fit_n = 0;
         float    sumsq0 = st.w_sumsq;
         uint32_t cnt0   = st.w_cnt;
+        uint32_t n0 = st.w_n, full0 = st.w_full, lo0 = st.w_lo, off0 = st.w_off;
+        st.pass_delta_max = -1e9f;
 
         const uint32_t now_ms = millis();
         // At most one ring's worth per pass.  Reading "until empty" never ends if processing is
@@ -491,6 +495,11 @@ void syncSenseUpdate(MotorController& mc1, MotorController& mc2) {
 
         // Observer speed and validity, once per pass.
         ObserverEstimate& e = st.est;
+        e.pass_n        = (uint16_t)min<uint32_t>(st.w_n - n0, 65535);
+        e.pass_full     = (uint16_t)min<uint32_t>(st.w_full - full0, 65535);
+        e.pass_lo       = (uint16_t)min<uint32_t>(st.w_lo - lo0, 65535);
+        e.pass_off      = (uint16_t)min<uint32_t>(st.w_off - off0, 65535);
+        e.pass_load_max = st.pass_delta_max > -1e8f ? st.pass_delta_max : NAN;
         float rpm_cmd = fabsf(mc.current_velocity) * 60.0f / (2.0f * PI);
         if (st.obs.ready() && !st.obs.first) {
             if (st.spd_init && st.obs_seq != st.spd_seq) {

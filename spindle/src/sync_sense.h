@@ -33,6 +33,12 @@ struct ObserverEstimate {
     float speed_rpm   = NAN;     // observer's own speed estimate
     float flux_ratio  = NAN;     // |flux| / flux_linkage (1.0 = clamped: parameters are off)
     uint32_t slips    = 0;       // pole slips seen since boot
+    // The last syncSenseUpdate() pass, for the trip recorder:
+    float    pass_load_max = NAN;  // largest unfiltered load angle (deg); NaN if none was computed
+    uint16_t pass_n    = 0;        // samples read
+    uint16_t pass_full = 0;        // ... with all three phases valid
+    uint16_t pass_lo   = 0;        // ... with the lowest-duty phase valid
+    uint16_t pass_off  = 0;        // ... taken with the outputs off (driver asleep or in fault)
 };
 
 // Line sinks: USB console and the inter-board link (MSG: lines in the XY board's log).

@@ -23,6 +23,17 @@ struct TripMotorSample {
     uint8_t nf_low;       // nFAULT pin level at sample time (1 = low = fault asserted)
     float   ip, iq;       // load-sense fit: in-phase / lagging current (A peak); NaN unless LOAD is on
     float   lag;          // load-sense fit: current lag behind the applied voltage (deg)
+#ifdef SYNC_CURRENT_SENSE
+    // Shadow observer (sync_sense.h) and the synchronised samples behind it, for this pass.
+    // Kept small: 1000 samples x 2 motors.  INT16_MIN / UINT16_MAX mean "no value".
+    int16_t  load_deg;     // filtered load angle (rotor lag behind the commanded angle), whole degrees
+    int16_t  load_max;     // largest unfiltered load angle this pass, whole degrees
+    uint16_t obs_rpm;      // observer's own speed estimate
+    uint8_t  obs_ok;       // 1 = the observer's estimate is valid (see ObserverEstimate::valid)
+    uint8_t  slips;        // pole slips the observer counted since the previous sample
+    uint8_t  smp_n, smp_full, smp_lo, smp_off;   // samples this pass: all / all phases valid /
+                                                 // lowest-duty phase valid / outputs off (255 = 255+)
+#endif
 };
 
 struct TripSample {

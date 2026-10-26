@@ -1063,6 +1063,21 @@ static void recordTripSample(uint32_t now_ms) {
         m.iq       = le.iq;
         m.lag      = le.lag_deg;
         prev_nf_total[i] = nf_total[i];
+#ifdef SYNC_CURRENT_SENSE
+        static uint32_t prev_slips[2] = { 0, 0 };
+        const ObserverEstimate& oe = syncObserver(i);
+        auto deg = [](float d) { return isnan(d) ? INT16_MIN : (int16_t)constrain(lroundf(d), -32767L, 32767L); };
+        m.load_deg = deg(oe.load_deg);
+        m.load_max = deg(oe.pass_load_max);
+        m.obs_rpm  = isnan(oe.speed_rpm) ? UINT16_MAX : (uint16_t)constrain(lroundf(oe.speed_rpm), 0L, 65534L);
+        m.obs_ok   = oe.valid ? 1 : 0;
+        m.slips    = (uint8_t)min<uint32_t>(oe.slips - prev_slips[i], 255);
+        m.smp_n    = (uint8_t)min<uint16_t>(oe.pass_n, 255);
+        m.smp_full = (uint8_t)min<uint16_t>(oe.pass_full, 255);
+        m.smp_lo   = (uint8_t)min<uint16_t>(oe.pass_lo, 255);
+        m.smp_off  = (uint8_t)min<uint16_t>(oe.pass_off, 255);
+        prev_slips[i] = oe.slips;
+#endif
     }
     tripRecorderPush(s);
 }
