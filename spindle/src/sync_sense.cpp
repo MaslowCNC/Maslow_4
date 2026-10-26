@@ -474,6 +474,8 @@ void syncSenseUpdate(MotorController& mc1, MotorController& mc2) {
         }
 
         if (!mc.enabled) {
+            // Outputs off: no full samples arrive, so these would hold the last running value.
+            mc.last_current_a = mc.last_current_b = mc.last_current_c = 0.0f;
             st.e_n = st.e_lo = st.e_off = 0;
             st.obs.reset();
             st.track_init = false;

@@ -181,10 +181,16 @@ void MotorController::enable() {
 }
 
 void MotorController::disable() {
+    // Stop new FOC passes first, then wait out one already past its enabled check.  Otherwise
+    // its setPwm() can land after the zeros below (disable() runs on core 0 too) and leave a
+    // high side switching with the dead-time pairing already off.  Seen on the board 10-26: M2
+    // kept non-zero duties after boot homing until its next enable.
+    bool was_enabled = __atomic_exchange_n(&enabled, false, __ATOMIC_SEQ_CST);
+    uint32_t t0 = micros();
+    while (__atomic_load_n(&in_motor_loop, __ATOMIC_SEQ_CST) && micros() - t0 < 1000) {}
     motor.disable();
     driverOutputsOff(driver);  // HSx and LSx both low -> outputs Hi-Z, no braking
-    if (enabled) releaseDriverWake();
-    enabled = false;
+    if (was_enabled) releaseDriverWake();
     reached_speed = false;
 }
 
@@ -305,9 +311,12 @@ void MotorController::updateCurrent(bool dither) {
 }
 
 void MotorController::runMotorLoop() {
-    if (!enabled) return;
-    motor.loopFOC();
-    motor.move();
+    __atomic_store_n(&in_motor_loop, true, __ATOMIC_SEQ_CST);   // before the check: see disable()
+    if (__atomic_load_n(&enabled, __ATOMIC_SEQ_CST)) {
+        motor.loopFOC();
+        motor.move();
+    }
+    __atomic_store_n(&in_motor_loop, false, __ATOMIC_SEQ_CST);
 }
 
 float MotorController::lutVoltageForSpeed(float speed_rad) const {
