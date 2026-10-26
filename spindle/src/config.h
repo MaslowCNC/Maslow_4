@@ -364,6 +364,8 @@ const uint32_t SLIPTEST_HOLD_MS       = 1500;    // rescue: hold at the restored
 // would-fire lines per rule and motor at most one per GUARD_EVENT_GAP_MS (the rest are counted).
 const uint32_t GUARD_REARM_MS         = 100;
 const uint32_t GUARD_EVENT_GAP_MS     = 250;
+const uint32_t GUARD_SETTLE_MS        = 500;     // rules skipped this long after the speed arrives
+const uint32_t GUARD_HOLD_MAX_MS      = 300;     // longest the ld average is held, then taken from ld
 // Phase resistance (ohm, including the driver) and inductance (H) for the load-angle estimate.
 // 0 = unknown.  RTEST measures R at standstill and uses it until reboot; L must be measured
 // separately (LCR meter, phase-to-phase / 2).  Without both, no load angle is reported.
