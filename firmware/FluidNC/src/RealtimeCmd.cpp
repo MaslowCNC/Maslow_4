@@ -27,6 +27,11 @@ void execute_realtime_command(Cmd command, Channel& channel) {
             break;
         case Cmd::JogCancel:
             if (state_is(State::Jog)) {  // Block all other states from invoking motion cancel.
+                // Maslow: also drop jog lines this channel sent that have not been read yet,
+                // so they don't start moving again after the cancel.  Bytes sent after 0x85
+                // (e.g. a following $STOP) arrive later and are kept.
+                channel.flushQueuedLines();
+                cmd_queue_drop_channel(channel);
                 protocol_send_event(&motionCancelEvent);
             }
             break;

@@ -165,6 +165,27 @@ bool cmd_queue_defer(const char* line, Channel& channel) {
     return xQueueSend(cmd_queue, &item, 0) == pdTRUE;
 }
 
+void cmd_queue_drop_channel(Channel& channel) {
+    if (!cmd_queue) {
+        return;
+    }
+    // The queue is tiny (CMD_QUEUE_DEPTH), so take each waiting item off and put back any
+    // that belong to another channel, front first so their order is kept.
+    LineItem keep[CMD_QUEUE_DEPTH];
+    size_t   nkeep = 0;
+    LineItem item;
+    while (nkeep < CMD_QUEUE_DEPTH && xQueueReceive(cmd_queue, &item, 0) == pdTRUE) {
+        if (item.channel == &channel) {
+            channel.release_processing_ref();  // dropped: it will never run or be acked
+        } else {
+            keep[nkeep++] = item;
+        }
+    }
+    for (size_t i = 0; i < nkeep; i++) {
+        xQueueSend(cmd_queue, &keep[i], 0);
+    }
+}
+
 TaskHandle_t pollingTask = nullptr;
 
 // Maslow emergency-stops when Maslow.update() is not called for 100 ms, and its message says only
