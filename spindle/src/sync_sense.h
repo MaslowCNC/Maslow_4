@@ -58,6 +58,9 @@ void syncSenseStop();
 // updateCurrent() used to be called.
 void syncSenseUpdate(MotorController& mc1, MotorController& mc2);
 
+// One line to the USB console and the link (an MSG line in the XY board's log).
+void syncSenseSay(const char* line);
+
 // The fit readings gathered by the last syncSenseUpdate() for motor 0/1.
 const FitPoint* syncFitPoints(int motor, int* count);
 

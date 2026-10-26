@@ -194,7 +194,7 @@ static void notifyZHomed() {
 
 // Defined with the tool state machine below: drop the Z reference and park the sub-machine in
 // NeedsHoming, so nothing moves the Z until a homing cycle re-establishes the zero.
-static void requireRehome();
+void requireRehome();   // also used by the bench slip test (load_sense.cpp)
 
 // Stop for an over-current.  The motors run OPEN-LOOP, so an over-current means the rotor has
 // already lost synchronisation with the commanded field - resuming the commanded speed cannot
@@ -684,7 +684,7 @@ static void finishZMove() {
 // Drop the Z reference after a slip.  Deliberately parks in NeedsHoming rather than Booting:
 // Booting auto-starts a homing cycle after BOOT_HOMING_DELAY_MS, and the Z must not move on its
 // own immediately after a fault - the operator (or the XY board's 'G') asks for it.
-static void requireRehome() {
+void requireRehome() {
     g_z_reference_valid = false;
     g_tool_state        = MachineState::NeedsHoming;
 }

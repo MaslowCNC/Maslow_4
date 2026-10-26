@@ -49,6 +49,10 @@ void loadSenseStartRTest(MotorController& mc1, MotorController& mc2);     // RTE
 void loadSenseStartBaseline(MotorController& mc1, MotorController& mc2);  // LOADREF
 void loadSenseStartVSweep(MotorController& mc1, MotorController& mc2);    // VSWEEP
 void loadSenseAbort(const char* why);                           // e.g. emergency stop
+#ifdef SLIP_TEST
+// Bench slip test on M1, then M2 next time (the link's "T!" in SLIP_TEST builds; config.h SLIPTEST_*).
+bool loadSenseStartSlipTest(MotorController& mc1, MotorController& mc2);
+#endif
 
 // True while RTEST, LOADREF or VSWEEP is driving the motors (link motion commands must be ignored).
 bool loadSenseBusy();

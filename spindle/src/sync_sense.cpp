@@ -23,6 +23,8 @@ static void out(bool to_link, const char* fmt, ...) {
 
 static void sayBoth(const char* line) { out(true, "%s", line); }
 
+void syncSenseSay(const char* line) { sayBoth(line); }
+
 static const float SQRT3     = 1.7320508f;
 static const float INV_SQRT3 = 0.57735027f;
 static const float SYNC_T_S  = 1.0f / PWM_FREQUENCY;   // one PWM period (s)

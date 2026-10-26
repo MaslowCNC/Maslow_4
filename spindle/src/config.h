@@ -330,6 +330,20 @@ const float    VSWEEP_STOP_IQ_A     = 1.5f;    // stop after a step whose mean I
 const float    VSWEEP_ABORT_IQ_A    = 0.5f;    // abort mid-step if Iq falls below this
 const uint32_t VSWEEP_SETTLE_MS     = 300;
 const uint32_t VSWEEP_MEASURE_MS    = 500;
+
+// Bench slip test (sync-sense-sliptest build only: the link's "T!" starts it, M1 and M2 in turn).
+// One motor, the other off and the tool out: spin up, settle, then lower the voltage until the
+// rotor pulls out, and stop that motor itself at the first sign - the observer counting a slip,
+// the observer losing lock, the current, or the floor - so nobody has to stop it by hand.  The
+// trip recording of the 2 s before the stop goes to the XY board as usual.
+const float    SLIPTEST_RPM         = 4000.0f;
+const uint32_t SLIPTEST_SETTLE_MS   = 2000;    // at speed before stepping (observer locks)
+const float    SLIPTEST_STEP_V      = 0.05f;   // voltage taken off per step
+const uint32_t SLIPTEST_STEP_MS     = 250;
+const float    SLIPTEST_MIN_DV      = -6.0f;   // give up (no slip) past this offset
+const float    SLIPTEST_MAX_A       = 8.0f;    // phase RMS (this pass) that stops the motor
+const uint32_t SLIPTEST_LOST_MS     = 150;     // observer invalid this long while stepping = stop
+const uint32_t SLIPTEST_TIMEOUT_MS  = 60000;
 // Phase resistance (ohm, including the driver) and inductance (H) for the load-angle estimate.
 // 0 = unknown.  RTEST measures R at standstill and uses it until reboot; L must be measured
 // separately (LCR meter, phase-to-phase / 2).  Without both, no load angle is reported.
