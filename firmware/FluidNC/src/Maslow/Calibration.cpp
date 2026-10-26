@@ -1227,13 +1227,22 @@ bool Calibration::takeSlackFunc() {
 
             float x = 0;
             float y = 0;
+            // Returning true alone would leave the state stuck in TAKING_SLACK, so fall back to EXTENDEDOUT
             if (!computeXYfromLengths(calibration_data[0][0], calibration_data[0][1], x, y)) {
+                log_error("Apply Tension failed: the measured belt lengths (TL: " << calibration_data[0][0] << " TR: " << calibration_data[0][1]
+                                                                                 << ") do not fit the anchor locations, maybe try running Find Anchors again?");
+                takeSlackState = 0;
+                requestStateChange(EXTENDEDOUT);
                 return true;
             }
 
             auto kinematics = getKinematics();
-            if (!kinematics)
+            if (!kinematics) {
+                log_error("Apply Tension failed: no Maslow kinematics");
+                takeSlackState = 0;
+                requestStateChange(EXTENDEDOUT);
                 return true;
+            }
 
             // Get current Z position to accurately compute expected belt lengths
             float* mpos     = get_mpos();
