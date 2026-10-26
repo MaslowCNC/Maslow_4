@@ -27,6 +27,7 @@ scripts/flash-maslow.sh build --fs       # + web UI and filesystem image
 # firmware unit tests (pio test -e native) currently do not build on Linux: missing Queue.h in X86TestSupport
 cd ESP3D-WEBUI && npm ci && npm run build:en   # web UI -> dist/index.html.gz
 cd ESP3D-WEBUI && bun test               # web UI tests (www/js/tests, needs bun)
+cd ESP3D-WEBUI && npm run dev            # UI at http://localhost:8484, proxied to maslow.local; rebuilds on refresh
 ```
 
 - Build through `scripts/flash-maslow.sh`, or with `PLATFORMIO_DATA_DIR=firmware/.pio/fsdata`. Changing

@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "webui-dev",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["ESP3D-WEBUI/dev-server.js", "maslow.local", "8484"],
+      "port": 8484
+    }
+  ]
+}
