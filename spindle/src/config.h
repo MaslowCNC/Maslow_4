@@ -366,6 +366,9 @@ const uint32_t GUARD_REARM_MS         = 100;
 const uint32_t GUARD_EVENT_GAP_MS     = 250;
 const uint32_t GUARD_SETTLE_MS        = 500;     // rules skipped this long after the speed arrives
 const uint32_t GUARD_HOLD_MAX_MS      = 300;     // longest the ld average is held, then taken from ld
+const float    GUARD_VSTEP_V          = 0.3f;    // voltage limit this far off its recent average = a step
+const float    GUARD_VSTEP_TAU_MS     = 20.0f;   // ... that average
+const uint32_t GUARD_VSTEP_HOLD_MS    = 30;      // ld and mx rules held this long after a step
 // Phase resistance (ohm, including the driver) and inductance (H) for the load-angle estimate.
 // 0 = unknown.  RTEST measures R at standstill and uses it until reboot; L must be measured
 // separately (LCR meter, phase-to-phase / 2).  Without both, no load angle is reported.

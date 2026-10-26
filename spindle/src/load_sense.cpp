@@ -821,7 +821,10 @@ float loadSenseResistance(int motor_idx) {
 // each rule, so real cuts show how often they would fire falsely.  Thresholds: SLIPTEST_DET_* and
 // GUARD_* in config.h.  Context flag: Z = Z moving.  The rules are skipped while the speed ramps
 // and for GUARD_SETTLE_MS after it arrives (10-26: every would-fire of the first cut came in the
-// spin-up, as the observer locked at ~800 RPM), and the ld average then starts afresh.
+// spin-up, as the observer locked at ~800 RPM), and the ld average then starts afresh.  A step in
+// the applied voltage moves ld by itself (~10 deg per volt), so when the voltage limit steps by more
+// than GUARD_VSTEP_V the ld and mx rules are held for GUARD_VSTEP_HOLD_MS and their average restarts
+// (10-26: every ld/mx would-fire of the second cut was the Z-move boost of +1 V dropping off).
 //   ld   : filtered ld SLIPTEST_DET_DEG over its own ~200 ms average, SLIPTEST_DET_N passes
 //   iq   : load-sense Iq < 0, SLIPTEST_DET_N passes
 //   sp   : observer speed SLIPTEST_DET_SPEED below the command, SLIPTEST_DET_N passes
@@ -833,6 +836,9 @@ struct GuardState {
     uint32_t steady_since = 0;           // when the speed last arrived at its target (0 = ramping)
     uint32_t resyncs      = 0;           // average taken from ld after a hold ran out, this second
     uint32_t samples      = 0;           // passes judged this second
+    float    v_avg        = NAN;         // ~GUARD_VSTEP_TAU_MS average of the voltage limit
+    uint32_t vhold_until  = 0;           // ld and mx rules held until then after a voltage step
+    uint32_t vsteps       = 0;           // voltage steps this second
     int      n_ld = 0, n_iq = 0, n_sp = 0;
     bool     on[4] = { false, false, false, false };   // condition currently met (ld, iq, sp, mx)
     uint32_t clear_ms[4] = { 0, 0, 0, 0 };            // last pass it was not met
@@ -851,6 +857,8 @@ static const char* const GUARD_RULE[4] = { "ld", "iq", "sp", "mx" };
 static void guardReset(GuardState& g) {
     g.base = NAN;
     g.hold_since = 0;
+    g.v_avg = NAN;
+    g.vhold_until = 0;
     g.n_ld = g.n_iq = g.n_sp = 0;
     for (int r = 0; r < 4; r++) g.on[r] = false;
 }
@@ -893,12 +901,28 @@ static void guardUpdate(MotorController* motors[2], uint32_t now, float dt, bool
         if (!judge) {
             guardReset(g);   // the average starts afresh once settled
         } else {
-            if (isnan(g.base)) g.base = e.load_deg;
+            float v = mc.motor.voltage_limit;
+            if (isnan(g.v_avg)) g.v_avg = v;
+            if (fabsf(v - g.v_avg) > GUARD_VSTEP_V) {
+                g.vhold_until = now + GUARD_VSTEP_HOLD_MS;
+                g.v_avg       = v;
+                g.vsteps++;
+            } else {
+                g.v_avg += (v - g.v_avg) * fminf(dt * 1000.0f / GUARD_VSTEP_TAU_MS, 1.0f);
+            }
+            bool vhold = (int32_t)(g.vhold_until - now) > 0;
+            if (vhold) {   // ld and mx wait; their average restarts from ld once the hold ends
+                g.base       = NAN;
+                g.n_ld       = 0;
+                g.hold_since = 0;
+            } else if (isnan(g.base)) {
+                g.base = e.load_deg;
+            }
             g.samples++;
 
             bool  cond[4];
-            float d_ld = e.load_deg - g.base;
-            g.n_ld  = d_ld > SLIPTEST_DET_DEG ? g.n_ld + 1 : 0;
+            float d_ld = vhold ? NAN : e.load_deg - g.base;
+            g.n_ld  = !vhold && d_ld > SLIPTEST_DET_DEG ? g.n_ld + 1 : 0;
             cond[0] = g.n_ld >= SLIPTEST_DET_N;
             bool iq_ok = le.valid && !isnan(le.iq);
             g.n_iq  = iq_ok && le.iq < 0.0f ? g.n_iq + 1 : 0;
@@ -906,13 +930,15 @@ static void guardUpdate(MotorController* motors[2], uint32_t now, float dt, bool
             float sp_def = (!isnan(e.speed_rpm) && rpm > 0.0f) ? (rpm - e.speed_rpm) / rpm : NAN;
             g.n_sp  = !isnan(sp_def) && sp_def > SLIPTEST_DET_SPEED ? g.n_sp + 1 : 0;
             cond[2] = g.n_sp >= SLIPTEST_DET_N;
-            float d_mx = isnan(e.pass_load_max) ? NAN : e.pass_load_max - g.base;
+            float d_mx = (vhold || isnan(e.pass_load_max)) ? NAN : e.pass_load_max - g.base;
             cond[3] = !isnan(d_mx) && d_mx > SLIPTEST_DET_MX_DEG;
 
             // The average follows ld except while the ld rule is over its threshold, and then only for
             // GUARD_HOLD_MAX_MS: a lasting shift (10-26: a spin-up value held all cut) is taken as the
             // new level.
-            if (d_ld <= SLIPTEST_DET_DEG) {
+            if (vhold) {
+                // nothing to follow
+            } else if (d_ld <= SLIPTEST_DET_DEG) {
                 g.hold_since = 0;
                 g.base += d_ld * fminf(dt * 1000.0f / SLIPTEST_DET_TAU_MS, 1.0f);
             } else if (g.hold_since == 0) {
@@ -925,7 +951,7 @@ static void guardUpdate(MotorController* motors[2], uint32_t now, float dt, bool
             }
 
             // Worst margins this second.
-            g.w_ld = fmaxf(g.w_ld, d_ld);
+            if (!isnan(d_ld)) g.w_ld = fmaxf(g.w_ld, d_ld);
             if (!isnan(d_mx)) g.w_mx = fmaxf(g.w_mx, d_mx);
             if (iq_ok) g.w_iq = fminf(g.w_iq, le.iq);
             if (!isnan(sp_def)) g.w_sp = fmaxf(g.w_sp, sp_def);
@@ -952,14 +978,15 @@ static void guardUpdate(MotorController* motors[2], uint32_t now, float dt, bool
             if (g.samples) {   // nothing to report for a second spent ramping or settling
                 char line[180];
                 snprintf(line, sizeof(line),
-                         "GUARD M%d %.0frpm worst: ld %+.0f/%+.0f mx %+.0f/%+.0f iq %+.2f sp %.1f/%.1f%% | fires ld%u iq%u sp%u mx%u rs%lu%s",
+                         "GUARD M%d %.0frpm worst: ld %+.0f/%+.0f mx %+.0f/%+.0f iq %+.2f sp %.1f/%.1f%% | fires ld%u iq%u sp%u mx%u rs%lu vs%lu%s",
                          m + 1, cmd, g.w_ld, SLIPTEST_DET_DEG, g.w_mx, SLIPTEST_DET_MX_DEG, g.w_iq,
                          100.0f * g.w_sp, 100.0f * SLIPTEST_DET_SPEED, g.fires[0], g.fires[1], g.fires[2], g.fires[3],
-                         (unsigned long)g.resyncs, g.w_z ? " Z" : "");
+                         (unsigned long)g.resyncs, (unsigned long)g.vsteps, g.w_z ? " Z" : "");
                 syncSenseSay(line);
             }
             g.samples = 0;
             g.resyncs = 0;
+            g.vsteps  = 0;
             for (int r = 0; r < 4; r++) g.fires[r] = g.quiet[r] = 0;
             g.w_ld = g.w_mx = g.w_sp = -1e9f;
             g.w_iq = 1e9f;
