@@ -218,6 +218,8 @@ const startSocket = () => {
 			http_communication_locked = false;
 			closeModal("Reconnected");
 		}
+		// A new socket is a new firmware channel: replies to lines sent on the old one won't come.
+		wsCommands.reset();
 		// Fire the open callback first so that critical commands (e.g. $STOP)
 		// are sent before any auto-reports start filling the TX buffer.
 		if (typeof onWSOpenCallback === 'function') {
@@ -240,6 +242,11 @@ const startSocket = () => {
 		console.log("ws error", e);
 	};
 	ws_source.onmessage = (e) => {
+		wsCommands.noteActivity();
+		// Any traffic proves the link is alive. The firmware sends a bare "PING" (no ":id"),
+		// which the parsing below never matched, so the watchdog used to close the socket
+		// every 20-30 s.
+		last_ping = Date.now();
 		let msg = "";
 		//bin
 		if (e.data instanceof ArrayBuffer) {
@@ -252,6 +259,7 @@ const startSocket = () => {
 					wsmsg = "";
 					msg = "";
 					Monitor_output_Update(thismsg);
+					wsCommands.handleLine(thismsg);
 					process_socket_response(thismsg);
 					const noNeedToShowMsg = ["<", "ok T:", "X:", "FR:", "echo:E0 Flow"].some((msgStart) => thismsg.startsWith(msgStart));
 					if (!noNeedToShowMsg && thismsg !== "ok") {
