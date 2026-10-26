@@ -68,6 +68,11 @@ Format: **title** — what goes wrong, where, and how we found it.
 
 ## Tooling
 
+- [ ] **`flash-maslow.sh` never builds firmware unless `--skip-build` is passed.** The
+  `echo "== Building firmware"` / `pio run` lines sit inside the `elif` (skip-build + wifi
+  + `--fs`) branch instead of the normal build path, so `build`, `wifi` and `usb` stop with
+  "missing .../bootloader.bin (build first)" in a fresh checkout or worktree, and flash a
+  stale `firmware.bin` otherwise. Found 2026-10-26 flashing from the ui-polish worktree.
 - [ ] **Native unit tests don't build on Linux** (missing `Queue.h` in X86TestSupport).
 - [ ] **One UI test fails: `maslowInfoMsgHandling is not defined`** (`maslow.test.ts:167`).
   The test calls it as a global, but `maslow.js:327` declares it as a module `const` and
