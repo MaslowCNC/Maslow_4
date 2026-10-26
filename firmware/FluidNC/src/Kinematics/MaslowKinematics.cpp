@@ -214,9 +214,7 @@ namespace Kinematics {
                     // This is similar to how arc segmentation works - use mc_linear()
                     // which will call cartesian_to_motors() for proper kinematics transformation
                     if (!mc_linear(intermediate_target, &segment_pl_data, segment_position)) {
-                        // TODO: _isSegmenting is left true on this early return (e.g. a jog cancelled by '!' or 0x85
-                        //       while segments are being queued). Every later move then skips segmentation until
-                        //       reboot. Clear _isSegmenting before returning.
+                        _isSegmenting = false;
                         return false;  // If any segment fails, fail the whole move
                     }
 
