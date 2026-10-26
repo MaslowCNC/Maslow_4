@@ -5,7 +5,8 @@
     "build": "gulp package",
     "build:en": "gulp package -en",
     "serve": "python fluidnc-web-sim.py maslow.local",
-    "start": "npm run build:en && npm run serve"
+    "start": "npm run build:en && npm run serve",
+    "dev": "node dev-server.js"
   },
   "devDependencies": {
     "@happy-dom/global-registrator": "^15.11.0",
