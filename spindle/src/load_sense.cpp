@@ -816,6 +816,13 @@ float loadSenseResistance(int motor_idx) {
 
 #ifdef SYNC_CURRENT_SENSE
 // ------------------- Shadow slip guard -------------------
+// Design choice (10-26, for this board): when the guard acts, Iq<0 and speed are the primary rules
+// (wide margins in cuts, but blind to sudden slips), and ldmx covers fast events only when confirmed
+// within ~5 ms (current climbing or the next pass's ldmx also high), with its noise reduced.  ldmx is
+// the only rule that caught a sudden bench slip in time, but on M2 it came within 1 deg of firing in
+// a clean cut.  On a board with a faster, simultaneous current ADC this should shift towards the
+// observer (cleaner ldmx, shorter ld/speed filters, then closed-loop control) - provided the samples
+// are always valid: the SOx outputs settle in ~3 us and the low-side window is ~1.9 us at 24k on 36 V.
 // The four slip-detector rules from the 10-26 bench slip tests, run on every motor that is spinning,
 // taking NO action: each would-fire is logged over the link, and once a second the worst margin of
 // each rule, so real cuts show how often they would fire falsely.  Thresholds: SLIPTEST_DET_* and
