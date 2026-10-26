@@ -1,12 +1,14 @@
 board: Maslow
 name: Maslow S3 Board
-meta: 
+meta:
 Maslow_vertical: false
 Maslow_calibration_grid_width_mm_X: 0.000000
 Maslow_calibration_grid_height_mm_Y: 0.000000
 Maslow_calibration_grid_size: 9
 Maslow_Retract_Current_Threshold: 1300
 Maslow_Acceptable_Calibration_Threshold: 0.450000
+Maslow_Apply_Tension_Belt_Retraction_Limit: 300.000000
+Maslow_Apply_Tension_Allow_Limiting: true
 Maslow_Extend_Dist: 2600.000000
 Maslow_Scale_X: 1.000000
 Maslow_Scale_Y: 1.000000
@@ -19,7 +21,7 @@ Maslow_Park_Z: 2.000000
 Maslow_Park_X: 0.000000
 Maslow_Park_Y: 0.000000
 Maslow_Dust_Fan_Speed: 100
-stepping: 
+stepping:
   engine: Timed
   idle_ms: 240
   pulse_us: 4
@@ -27,7 +29,7 @@ stepping:
   disable_delay_us: 0
   segments: 12
 
-uart1: 
+uart1:
   txd_pin: gpio.1
   rxd_pin: gpio.2
   rts_pin: NO_PIN
@@ -35,18 +37,18 @@ uart1:
   baud: 115200
   mode: 8N1
 
-spi: 
+spi:
   miso_pin: gpio.13
   mosi_pin: gpio.11
   sck_pin: gpio.12
 
-sdcard: 
+sdcard:
   cs_pin: gpio.10
   card_detect_pin: NO_PIN
   frequency_hz: 8000000
 
-kinematics: 
-  MaslowKinematics: 
+kinematics:
+  MaslowKinematics:
     tlX: 139.199997
     tlY: 3230.600098
     tlZ: 100.000000
@@ -66,16 +68,16 @@ kinematics:
     maxSegmentLength: 5.000000
     fixedZ: false
 
-axes: 
+axes:
   shared_stepper_disable_pin: NO_PIN
   shared_stepper_reset_pin: NO_PIN
-  a: 
+  a:
     steps_per_mm: 80.000000
     max_rate_mm_per_min: 2000.000000
     acceleration_mm_per_sec2: 50.000000
     max_travel_mm: 4000.000000
     soft_limits: false
-    homing: 
+    homing:
       cycle: -1
       allow_single_axis: true
       positive_direction: true
@@ -86,21 +88,21 @@ axes:
       seek_scaler: 1.100000
       feed_scaler: 1.100000
 
-    motor0: 
+    motor0:
       limit_neg_pin: NO_PIN
       limit_pos_pin: NO_PIN
       limit_all_pin: NO_PIN
       hard_limits: false
       pulloff_mm: 1.000000
-      null_motor: 
+      null_motor:
 
-  b: 
+  b:
     steps_per_mm: 80.000000
     max_rate_mm_per_min: 2000.000000
     acceleration_mm_per_sec2: 50.000000
     max_travel_mm: 4000.000000
     soft_limits: false
-    homing: 
+    homing:
       cycle: -1
       allow_single_axis: true
       positive_direction: true
@@ -111,21 +113,21 @@ axes:
       seek_scaler: 1.100000
       feed_scaler: 1.100000
 
-    motor0: 
+    motor0:
       limit_neg_pin: NO_PIN
       limit_pos_pin: NO_PIN
       limit_all_pin: NO_PIN
       hard_limits: false
       pulloff_mm: 1.000000
-      null_motor: 
+      null_motor:
 
-  c: 
+  c:
     steps_per_mm: 80.000000
     max_rate_mm_per_min: 2000.000000
     acceleration_mm_per_sec2: 50.000000
     max_travel_mm: 4000.000000
     soft_limits: false
-    homing: 
+    homing:
       cycle: -1
       allow_single_axis: true
       positive_direction: true
@@ -136,21 +138,21 @@ axes:
       seek_scaler: 1.100000
       feed_scaler: 1.100000
 
-    motor0: 
+    motor0:
       limit_neg_pin: NO_PIN
       limit_pos_pin: NO_PIN
       limit_all_pin: NO_PIN
       hard_limits: false
       pulloff_mm: 1.000000
-      null_motor: 
+      null_motor:
 
-  d: 
+  d:
     steps_per_mm: 80.000000
     max_rate_mm_per_min: 2000.000000
     acceleration_mm_per_sec2: 50.000000
     max_travel_mm: 4000.000000
     soft_limits: false
-    homing: 
+    homing:
       cycle: -1
       allow_single_axis: true
       positive_direction: true
@@ -161,21 +163,21 @@ axes:
       seek_scaler: 1.100000
       feed_scaler: 1.100000
 
-    motor0: 
+    motor0:
       limit_neg_pin: NO_PIN
       limit_pos_pin: NO_PIN
       limit_all_pin: NO_PIN
       hard_limits: false
       pulloff_mm: 1.000000
-      null_motor: 
+      null_motor:
 
-  z: 
+  z:
     steps_per_mm: 100.000000
     max_rate_mm_per_min: 400.000000
     acceleration_mm_per_sec2: 10.000000
     max_travel_mm: 100.000000
     soft_limits: false
-    homing: 
+    homing:
       cycle: -1
       allow_single_axis: true
       positive_direction: true
@@ -186,7 +188,7 @@ axes:
       seek_scaler: 1.100000
       feed_scaler: 1.100000
 
-    motor0: 
+    motor0:
       limit_neg_pin: NO_PIN
       limit_pos_pin: NO_PIN
       limit_all_pin: NO_PIN
@@ -194,7 +196,7 @@ axes:
       pulloff_mm: 1.000000
       null_motor:
 
-    motor1: 
+    motor1:
       limit_neg_pin: NO_PIN
       limit_pos_pin: NO_PIN
       limit_all_pin: NO_PIN
@@ -202,7 +204,7 @@ axes:
       pulloff_mm: 1.000000
       null_motor:
 
-control: 
+control:
   safety_door_pin: NO_PIN
   reset_pin: NO_PIN
   feed_hold_pin: NO_PIN
@@ -212,29 +214,29 @@ control:
   macro2_pin: NO_PIN
   macro3_pin: NO_PIN
 
-coolant: 
+coolant:
   flood_pin: NO_PIN
   mist_pin: NO_PIN
   delay_ms: 0
 
-probe: 
+probe:
   pin: NO_PIN
   check_mode_start: true
 
-macros: 
-  startup_line0: 
-  startup_line1: 
-  macro0: 
-  macro1: 
-  macro2: 
-  macro3: 
+macros:
+  startup_line0:
+  startup_line1:
+  macro0:
+  macro1:
+  macro2:
+  macro3:
 
-start: 
+start:
   must_home: true
   deactivate_parking: false
   check_limits: false
 
-parking: 
+parking:
   enable: false
   axis: Z
   target_mpos_mm: -5.000000
@@ -242,7 +244,7 @@ parking:
   pullout_distance_mm: 5.000000
   pullout_rate_mm_per_min: 250.000000
 
-user_outputs: 
+user_outputs:
   analog0_pin: NO_PIN
   analog1_pin: NO_PIN
   analog2_pin: NO_PIN

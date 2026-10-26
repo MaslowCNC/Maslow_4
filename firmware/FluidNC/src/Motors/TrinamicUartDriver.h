@@ -5,8 +5,8 @@
 #pragma once
 
 #include "TrinamicBase.h"
-#include "../Pin.h"
-#include "../Uart.h"
+#include "Pin.h"
+#include "Uart.h"
 
 #include <cstdint>
 
@@ -14,16 +14,9 @@ namespace MotorDrivers {
 
     class TrinamicUartDriver : public TrinamicBase {
     public:
-        TrinamicUartDriver() = default;
+        TrinamicUartDriver(const char* name) : TrinamicBase(name) {}
 
         void init() override;
-        //void read_settings() override;
-        //bool set_homing_mode(bool is_homing) override;
-        void set_disable(bool disable) override;
-
-        void debug_message();
-
-        bool hw_serial_init();
 
         // TMC2208 and TMC2225 have a fixed addr = 0
         // TMC2209 and TMC2226 configure these through MS1/MS2.
@@ -38,14 +31,40 @@ namespace MotorDrivers {
         }
 
         void group(Configuration::HandlerBase& handler) override {
+            // @config addr
+            // @default 0
+            // @tuning per-machine
+            // Hardware UART address of the chip. TMC2208/TMC2225 have a fixed address of 0
+            // (this field has no effect on them); TMC2209/TMC2226 set their real address
+            // via their MS1/MS2 pins, making them individually addressable (up to 4 chips
+            // per UART bus).
+            handler.item("addr", _addr);
+
+            // @config cs_pin
+            // @default NO_PIN
+            // @pin_attributes output
+            // Rarely used -- present because this base class is shared with the SPI driver
+            // family, but a UART-mode chip doesn't need a chip-select pin. Only relevant
+            // for a cs_pin-based UART switching setup, and required to be NO_PIN if
+            // shared_address_write_only is used (TMC2209 only, see TMC2209Driver).
+            handler.item("cs_pin", _cs_pin);
+
+            // @config uart_num
+            // @default -1
+            // @tuning per-machine
+            // Which top-level uartN: section this chip's UART register interface runs
+            // over. Required -- afterParse() asserts this is actually set.
             handler.item("uart_num", _uart_num);
+
             TrinamicBase::group(handler);
         }
 
     protected:
         Uart* _uart = nullptr;
 
-        int _uart_num = -1;
+        Pin _cs_pin;
+
+        int32_t _uart_num = -1;
 
         static bool _uart_started;
         void        config_message() override;
@@ -53,8 +72,6 @@ namespace MotorDrivers {
         uint8_t toffValue();  // TO DO move to Base?
 
     private:
-        bool test();
-        void set_mode(bool isHoming);
     };
 
 }

@@ -4,6 +4,7 @@
 /** Maslow Status */
 let maslowStatus = { homed: false, extended: false, state: 0 };
 const APPLY_TENSION_WARNING_PREFIX = "Maslow Apply Tension deviation warning:";
+const APPLY_TENSION_RETRACTION_WARNING_PREFIX = "Maslow Apply Tension retraction warning:";
 const Z_HOME_RESET_WARNING_PREFIX = "Maslow Z home reset warning:";
 const ZM_INVALID_WARNING_PREFIX = "Maslow Zm invalid warning:";
 
@@ -270,6 +271,9 @@ const updateDynamicButtons = () => {
 
 	// Show or hide status fields based on whether Find Anchors is running
 	updateFindAnchorsView();
+	if (typeof updateJobBoundsDisplay === 'function') {
+		updateJobBoundsDisplay();
+	}
 }
 
 /**
@@ -334,6 +338,9 @@ const maslowInfoMsgHandling = (msg) => {
 					}
 				}
 			}
+			if (typeof updateJobBoundsDisplay === 'function') {
+				updateJobBoundsDisplay();
+			}
 		} catch (error) {
 			console.error("Parsing the 'MINFO' message failed, the maslow status has not been changed. This is probably a programmer error.");
 		}
@@ -388,6 +395,10 @@ const maslowInfoMsgHandling = (msg) => {
 
 	if (msg.startsWith(`[MSG:WARN: ${APPLY_TENSION_WARNING_PREFIX}`)) {
 		showApplyTensionWarningMessage(msg);
+	}
+
+	if (msg.startsWith(`[MSG:WARN: ${APPLY_TENSION_RETRACTION_WARNING_PREFIX}`)) {
+		showApplyTensionRetractionWarningMessage(msg);
 	}
 
 	if (msg.startsWith(`[MSG:WARN: ${Z_HOME_RESET_WARNING_PREFIX}`)) {
@@ -486,6 +497,78 @@ function showApplyTensionWarningMessage(msg) {
 	);
 }
 
+function showApplyTensionRetractionWarningMessage(msg) {
+	const warningMatch = msg.match(/^\[MSG:WARN:\s*(.*)\]$/);
+	if (!warningMatch) {
+		return;
+	}
+
+	const warningText = warningMatch[1].trim();
+	if (!warningText.startsWith(APPLY_TENSION_RETRACTION_WARNING_PREFIX)) {
+		return;
+	}
+
+	const modalId = "apply-tension-retraction-warning-modal";
+	const existingModal = document.getElementById(modalId);
+	if (existingModal) {
+		existingModal.remove();
+	}
+
+	const modal = document.createElement("div");
+	modal.id = modalId;
+	modal.style.cssText = `
+		position: fixed;
+		inset: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background-color: rgba(0, 0, 0, 0.45);
+		z-index: 2000;
+		padding: 20px;
+	`;
+
+	const dialog = document.createElement("div");
+	dialog.style.cssText = `
+		background-color: white;
+		padding: 20px;
+		border: 1px solid black;
+		box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+		max-width: 520px;
+		width: 100%;
+	`;
+
+	const heading = document.createElement("h3");
+	heading.textContent = "Apply Tension Warning";
+	heading.style.marginTop = "0";
+
+	const messageElement = document.createElement("p");
+	messageElement.textContent = warningText.substring(APPLY_TENSION_RETRACTION_WARNING_PREFIX.length).trim();
+
+	const actions = document.createElement("div");
+	actions.style.cssText = "display: flex; gap: 10px; justify-content: flex-end;";
+
+	const cancelButton = document.createElement("button");
+	cancelButton.textContent = "Cancel";
+	cancelButton.style.cssText = "padding: 5px 10px; cursor: pointer;";
+	cancelButton.onclick = () => modal.remove();
+
+	const continueButton = document.createElement("button");
+	continueButton.textContent = "Continue";
+	continueButton.style.cssText = "padding: 5px 10px; cursor: pointer;";
+	continueButton.onclick = () => {
+		sendCommand("$TKSLK");
+		modal.remove();
+	};
+
+	actions.appendChild(cancelButton);
+	actions.appendChild(continueButton);
+	dialog.appendChild(heading);
+	dialog.appendChild(messageElement);
+	dialog.appendChild(actions);
+	modal.appendChild(dialog);
+	document.body.appendChild(modal);
+}
+
 function showZHomeResetWarningMessage(msg) {
 	if (typeof maslowFixedZEnabled === "function" && maslowFixedZEnabled()) {
 		return;
@@ -552,6 +635,8 @@ const cfgDef = {
 	spoilboardThickness: { name: "spoilboardThickness", type: "A", cmd: "Maslow_spoilboardThickness" },
 	workThickness: { name: "workThickness", type: "A", cmd: "Maslow_workThickness" },
 	Acceptable_Calibration_Threshold: { name: "acceptableCalibrationThreshold", type: "A", cmd: "Maslow_Acceptable_Calibration_Threshold" },
+	Apply_Tension_Belt_Retraction_Limit: { name: "applyTensionBeltRetractionLimit", type: "A", cmd: "Maslow_Apply_Tension_Belt_Retraction_Limit" },
+	Apply_Tension_Allow_Limiting: { name: "applyTensionAllowLimiting", type: "A", cmd: "Maslow_Apply_Tension_Allow_Limiting" },
 	Extend_Dist: { name: "extendDist", type: "A", cmd: "Maslow_Extend_Dist" },
 	Scale_X: { name: "scaleX", type: "A", cmd: "Maslow_Scale_X" },
 	Scale_Y: { name: "scaleY", type: "A", cmd: "Maslow_Scale_Y" },
@@ -598,7 +683,14 @@ const maslowMsgHandling = (msg) => {
 
 	const stdAction = (id, value) => {
 		const val = ("fnDisp" in cfgVal && typeof cfgVal.fnDisp === "function") ? cfgVal.fnDisp(value) : value;
-		globalThis.setValue(id, val);
+		// Update all elements with this id, not just the first one.
+		// This handles duplicate ids across different popups (e.g. spoilboardThickness and
+		// workThickness appear in both scale-thickness-popup and configuration-popup).
+		if (typeof document !== "undefined" && document.querySelectorAll) {
+			document.querySelectorAll(`[id="${id}"]`).forEach(el => { el.value = val; });
+		} else {
+			globalThis.setValue(id, val);
+		}
 		// Handle loadedValues as an object for compatibility with tests
 		if (!globalThis.loadedValues) {
 			globalThis.loadedValues = {};
@@ -655,6 +747,14 @@ const maslowMsgHandling = (msg) => {
 	return "";
 }
 
+const processMaslowConfigResponse = (response) => {
+	response.split(/\r?\n/).forEach((msg) => {
+		if (msg.startsWith("$/Maslow_") || msg.startsWith("$/maslow_")) {
+			maslowMsgHandling(msg.substring(9));
+		}
+	});
+};
+
 // Helper functions for setValue and loadedValues
 globalThis.setValue = globalThis.setValue || function(id, value) {
 	const element = document.getElementById(id);
@@ -703,7 +803,10 @@ const loadConfigValues = () => {
 	allConfigKeys().forEach((key) => {
 		const cfgVal = cfgDef[key];
 		const cmd = `$/${cfgVal.cmd || `${M}_${key}`}`;
-		SendPrinterCommand(cmd);
+		SendGetHttp(
+			buildHttpCommandCmd(httpCmdType.commandText, cmd),
+			processMaslowConfigResponse
+		);
 	});
 
 	// Load WiFi settings separately
@@ -731,10 +834,14 @@ const loadParkSettings = () => {
 };
 
 const saveConfigValues = () => {
+	// Get the configuration popup container so we can target its inputs specifically.
+	// This avoids reading from duplicate-id elements in other popups (e.g. scale-thickness-popup).
+	const configPopup = typeof document !== "undefined" ? document.getElementById("configuration-popup") : null;
 	// Get all of the config data as entered, and as already loaded
 	for (const key of allConfigKeys()) {
 		const cfgVal = cfgDef[key];
-		cfgVal.val = getValue(cfgVal.name);
+		const el = configPopup ? configPopup.querySelector(`[id="${cfgVal.name}"]`) : null;
+		cfgVal.val = el ? el.value : getValue(cfgVal.name);
 		cfgVal.loadedVal = globalThis.loadedValues ? globalThis.loadedValues[cfgVal.name] : undefined;
 	};
 
@@ -831,3 +938,8 @@ const saveWiFiSettings = () => {
 		SendGetHttp(cmd);
 	}
 };
+
+//removeIf(production)
+// ESM exports for unit testing - stripped from production builds by the gulp pipeline
+export { MaslowErrMsgKeyValueCantUse, MaslowErrMsgNoKey, MaslowErrMsgNoValue, MaslowErrMsgNoMatchingKey, MaslowErrMsgKeyValueSuffix, maslowMsgHandling, processMaslowConfigResponse };
+//endRemoveIf(production)

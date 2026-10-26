@@ -4,6 +4,7 @@
 var interval_status = -1
 var probe_progress_status = 0
 var grbl_error_msg = ''
+var serialLogSavedForCurrentAlarm = false
 var WCO = undefined
 var OVR = { feed: undefined, rapid: undefined, spindle: undefined }
 var MPOS = [0, 0, 0]
@@ -151,6 +152,7 @@ function init_grbl_panel() {
 function grbl_clear_status() {
   grbl_set_probe_detected(false)
   grbl_error_msg = ''
+  serialLogSavedForCurrentAlarm = false
   setHTML('grbl_status_text', grbl_error_msg)
   setHTML('grbl_status', '')
 }
@@ -684,9 +686,16 @@ function grblGetProbeResult(response) {
     const status = tab1[2].replace(']', '')
     if (Number.parseInt(status.trim()) === 1) {
       if (probe_progress_status !== 0) {
-        const cmd =
-          `$J=G90 G21 F1000 Z${getValueFloat("probetouchplatethickness") + getValueFloat("grblpanel_proberetract")}`
-        SendPrinterCommand(cmd, true, null, null, 0, 1)
+        // The probe was sent as G38.2 ... P<plate thickness>, so the firmware has already
+        // offset the work coordinate system: work Z at the contact point is the plate
+        // thickness.  Retracting to thickness + retract distance therefore lifts the bit
+        // exactly `retract` mm above the top of the plate.
+        // Use the values StartProbeProcess() validated and sent rather than re-reading the
+        // input fields, so the retract always matches the P word that was probed with.
+        const retractZ = probeValues.plateThickness.value + probeValues.retract.value
+        if (Number.isFinite(retractZ)) {
+          SendPrinterCommand(`$J=G90 G21 F1000 Z${retractZ}`, true, null, null, 0, 1)
+        }
         finalize_probing()
       }
     } else {
@@ -845,7 +854,9 @@ const grblHandleMessage = (msg) => {
     if (typeof parseMotorCurrentMessage === 'function' && parseMotorCurrentMessage(msg)) {
       return;
     }
-    return;
+    if (!valueStartsWith(msg, ["[MSG:ERR:"])) {
+      return;
+    }
   }
   if (valueStartsWith(msg, ["error:"])) {
     if (grbl_errorfn) {
@@ -854,12 +865,16 @@ const grblHandleMessage = (msg) => {
       grbl_processfn = null;
     }
   }
-  if (valueStartsWith(msg, ["error:", "ALARM:", "Hold:", "Door:"])) {
+  if (valueStartsWith(msg, ["error:", "ALARM:", "Hold:", "Door:", "[MSG:ERR:"])) {
     if (probe_progress_status !== 0) {
       probe_failed_notification();
     }
     if (grbl_error_msg.length === 0) {
       grbl_error_msg = translate_text_item(msg.trim());
+      if (!serialLogSavedForCurrentAlarm && typeof saveSerialMessages === 'function') {
+        saveSerialMessages();
+        serialLogSavedForCurrentAlarm = true;
+      }
     }
     return;
   }
@@ -870,14 +885,14 @@ const grblHandleMessage = (msg) => {
 };
 
 const checkProbeValue = (pv) => {
-  if (!("value" in pv)) {
-    if (pv.valType === "int" && typeof getValueInt === "function") {
-      pv.value = getValueInt(pv.fldId);
-    } else if (pv.valType === "float" && typeof getValueFloat === "function") {
-      pv.value = getValueFloat(pv.fldId);
-    } else {
-      return;
-    }
+  // Always re-read the field: the value is edited between probes, and a previously
+  // rejected (NaN) value must not stick around and block every later probe.
+  if (pv.valType === "int" && typeof getValueInt === "function") {
+    pv.value = getValueInt(pv.fldId);
+  } else if (pv.valType === "float" && typeof getValueFloat === "function") {
+    pv.value = getValueFloat(pv.fldId);
+  } else {
+    return;
   }
   if (Number.isNaN(pv.value) || pv.value > pv.maxVal || pv.value < pv.minVal) {
     alertdlgOOR(pv.valTitle, pv.minVal, pv.maxVal, pv.units);

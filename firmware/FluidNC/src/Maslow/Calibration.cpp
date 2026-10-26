@@ -359,7 +359,7 @@ bool Calibration::requestStateChange(int newState) {
             if (currentState == RETRACTING) {
                 currentState = RETRACTED;
                 for (int axis = 0; axis < ARM_COUNT; axis++) {
-                    set_motor_steps(axis, mpos_to_steps(0.0f, axis));
+                    set_steps(static_cast<axis_t>(axis), motor_pos_to_steps(0.0f, axis));
                 }
                 gc_sync_position();
                 plan_sync_position();
@@ -527,11 +527,11 @@ bool Calibration::requestStateChange(int newState) {
 
                     // Set motor positions directly from hardware readings
                     // Axis mapping: A=TL(0), B=TR(1), C=BL(2), D=BR(3), Z=router(4)
-                    set_motor_steps(0, mpos_to_steps(beltLength[_TL], 0));  // A axis = TL belt
-                    set_motor_steps(1, mpos_to_steps(beltLength[_TR], 1));  // B axis = TR belt
-                    set_motor_steps(2, mpos_to_steps(beltLength[_BL], 2));  // C axis = BL belt
-                    set_motor_steps(3, mpos_to_steps(beltLength[_BR], 3));  // D axis = BR belt
-                    set_motor_steps(4, mpos_to_steps(0.0, 4));              // Z axis = 0 (surface level) during calibration
+                    set_steps(static_cast<axis_t>(0), motor_pos_to_steps(beltLength[_TL], 0));  // A axis = TL belt
+                    set_steps(static_cast<axis_t>(1), motor_pos_to_steps(beltLength[_TR], 1));  // B axis = TR belt
+                    set_steps(static_cast<axis_t>(2), motor_pos_to_steps(beltLength[_BL], 2));  // C axis = BL belt
+                    set_steps(static_cast<axis_t>(3), motor_pos_to_steps(beltLength[_BR], 3));  // D axis = BR belt
+                    set_steps(static_cast<axis_t>(4), motor_pos_to_steps(0.0, 4));              // Z axis = 0 (surface level) during calibration
 
                     gc_sync_position();  //This updates the Gcode engine with the new position from the stepping engine that we set with set_motor_steps
                     plan_sync_position();
@@ -573,10 +573,10 @@ bool Calibration::requestStateChange(int newState) {
 
                 // Set motor positions directly from hardware readings to ensure motion system accuracy
                 // Axis mapping: A=TL(0), B=TR(1), C=BL(2), D=BR(3), Z=router(4)
-                set_motor_steps(0, mpos_to_steps(beltLength[_TL], 0));  // A axis = TL belt
-                set_motor_steps(1, mpos_to_steps(beltLength[_TR], 1));  // B axis = TR belt
-                set_motor_steps(2, mpos_to_steps(beltLength[_BL], 2));  // C axis = BL belt
-                set_motor_steps(3, mpos_to_steps(beltLength[_BR], 3));  // D axis = BR belt
+                set_steps(static_cast<axis_t>(0), motor_pos_to_steps(beltLength[_TL], 0));  // A axis = TL belt
+                set_steps(static_cast<axis_t>(1), motor_pos_to_steps(beltLength[_TR], 1));  // B axis = TR belt
+                set_steps(static_cast<axis_t>(2), motor_pos_to_steps(beltLength[_BL], 2));  // C axis = BL belt
+                set_steps(static_cast<axis_t>(3), motor_pos_to_steps(beltLength[_BR], 3));  // D axis = BR belt
                 // Z axis position is preserved during transition to READY_TO_CUT
 
                 gc_sync_position();   // Update GCode engine with synchronized position
@@ -592,8 +592,8 @@ bool Calibration::requestStateChange(int newState) {
             }
         case RELEASE_TENSION:  //We can enter release tension from any stable state (the machine is not currently performing an action)
             if (currentState == READY_TO_CUT || currentState == UNKNOWN || currentState == EXTENDEDOUT ||
-                currentState == CALIBRATION_COMPUTING) {
-                previousState   = currentState;  // Store the previous state
+                currentState == CALIBRATION_COMPUTING || currentState == RELEASE_TENSION) {
+                previousState   = (currentState != RELEASE_TENSION) ? currentState : previousState;
                 currentState    = RELEASE_TENSION;
                 complyCallTimer = millis();
                 retracting[_TL] = false;
@@ -623,6 +623,15 @@ bool Calibration::requestStateChange(int newState) {
 }
 
 // -Maslow homing loop. This is used whenver any of the homing funcitons are active (belts extending or retracting)
+void Calibration::printDiagnostics() {
+    log_info("  calibration.currentState = " << currentState << " (" << stateNames[currentState].name << ")");
+    log_info("  holding = " << (holding ? "YES" : "no") << "  holdTime = " << holdTime
+                            << "  since holdTimer = " << (millis() - holdTimer));
+    log_info("  retracting TL/TR/BL/BR = " << retracting[_TL] << retracting[_TR] << retracting[_BL] << retracting[_BR]);
+    log_info("  extended   TL/TR/BL/BR = " << extended[_TL] << extended[_TR] << extended[_BL] << extended[_BR]);
+    log_info("  axisHomed  TL/TR/BL/BR = " << axisHomed[_TL] << axisHomed[_TR] << axisHomed[_BL] << axisHomed[_BR]);
+}
+
 void Calibration::home() {
     switch (currentState) {
         case RETRACTING:
@@ -761,8 +770,8 @@ void Calibration::home() {
     handleMotorOverides();
 
     //if we are done with all the homing moves, switch system state back to Idle?
-    if (currentState != RETRACTING && currentState != EXTENDING && currentState != RELEASE_TENSION && 
-        currentState != CALIBRATION_COMPUTING && currentState != READY_TO_CUT && !calibrationInProgress && 
+    if (currentState != RETRACTING && currentState != EXTENDING && currentState != RELEASE_TENSION &&
+        currentState != CALIBRATION_COMPUTING && !calibrationInProgress &&
         !takeSlack && !checkOverides()) {
         sys.set_state(State::Idle);
     }
@@ -1131,6 +1140,54 @@ void Calibration::logClbmMeasurements(int measurementCount) const {
     log_info(clbm.c_str());
 }
 
+bool Calibration::updateExtendDistanceFromAnchors() {
+    auto kinematics = getKinematics();
+    if (!kinematics) {
+        log_error("Find Anchors completed, but MaslowKinematics is unavailable for updating " << M << "_Extend_Dist");
+        return false;
+    }
+
+    constexpr float safetyMargin = 100.0f;
+    const float     extension    = kinematics->getBeltEndExtension() + kinematics->getArmLength();
+    const float     xPos         = Maslow.x;
+    const float     yPos         = Maslow.y;
+    const float     zPos         = get_mpos()[2];
+
+    const float zTotal[ARM_COUNT] = { zPos + kinematics->getTlZ() + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness(),
+                                      zPos + kinematics->getTrZ() + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness(),
+                                      zPos + kinematics->getBlZ() + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness(),
+                                      zPos + kinematics->getBrZ() + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness() };
+
+    const float beltLength[ARM_COUNT] = { kinematics->computeTL(xPos, yPos, zPos),
+                                          kinematics->computeTR(xPos, yPos, zPos),
+                                          kinematics->computeBL(xPos, yPos, zPos),
+                                          kinematics->computeBR(xPos, yPos, zPos) };
+
+    float distanceToAnchor[ARM_COUNT] = {};
+    for (int arm = 0; arm < ARM_COUNT; arm++) {
+        distanceToAnchor[arm] = measurementToXYPlane(beltLength[arm], fabsf(zTotal[arm]));
+        if (!std::isfinite(distanceToAnchor[arm])) {
+            log_error("Find Anchors completed, but invalid anchor distance prevented updating " << M << "_Extend_Dist");
+            return false;
+        }
+    }
+
+    const float trBlDiagonalAverage   = 0.5f * (distanceToAnchor[_TR] + distanceToAnchor[_BL]);
+    const float tlBrDiagonalAverage   = 0.5f * (distanceToAnchor[_TL] + distanceToAnchor[_BR]);
+    const float longestDiagonalAverage = std::max(trBlDiagonalAverage, tlBrDiagonalAverage);
+
+    const float computedExtendDistance = longestDiagonalAverage + safetyMargin - extension;
+    if (!std::isfinite(computedExtendDistance)) {
+        log_error("Find Anchors completed, but computed " << M << "_Extend_Dist is invalid");
+        return false;
+    }
+
+    extendDist = std::max(0.0f, computedExtendDistance);
+    log_info("Find Anchors set " << M << "_Extend_Dist=" << extendDist << " (TR-BL avg=" << trBlDiagonalAverage
+                                 << ", TL-BR avg=" << tlBrDiagonalAverage << ", extension=" << extension << ")");
+    return true;
+}
+
 // --Maslow calibration loop
 void Calibration::calibration_loop() {
     serviceCalibrationWatchdogs(false);
@@ -1141,8 +1198,12 @@ void Calibration::calibration_loop() {
         // after all fitness gates pass; it is reset to false by resetCalibrationState().
         // Calibration always performs at least one recompute before reaching waypoint > pointCount.
         if (lastRecomputePassed) {
+            if (!updateExtendDistanceFromAnchors()) {
+                log_error("Find Anchors completed, but failed to update " << M << "_Extend_Dist");
+            }
+
             char saveCommand[] = "$CO";
-            Error saveResult   = execute_line(saveCommand, allChannels, WebUI::AuthenticationLevel::LEVEL_ADMIN);
+            Error saveResult   = execute_line(saveCommand, allChannels, AuthenticationLevel::LEVEL_ADMIN, false);
             if (saveResult != Error::Ok) {
                 log_error("Find Anchors completed, but saving configuration failed: " << static_cast<int>(saveResult));
             }
@@ -1217,8 +1278,35 @@ void Calibration::calibration_loop() {
 bool Calibration::takeSlackFunc() {
     static int takeSlackState = 0;  //0 -> Starting, 1-> Moving to (0,0), 2-> Taking a measurement. Where should this be defined correctly?
     static unsigned long holdTimer = millis();
-    static float         startingX = 0;
-    static float         startingY = 0;
+    static bool          retractionMonitorInitialized = false;
+    static float         startBeltPosition[ARM_COUNT] = { 0 };
+
+    if (!retractionMonitorInitialized) {
+        for (int arm = _TL; arm < ARM_COUNT; arm++) {
+            startBeltPosition[arm] = Maslow.axis[arm].getPosition();
+        }
+        retractionMonitorInitialized = true;
+    }
+
+    for (int arm = _TL; arm < ARM_COUNT; arm++) {
+        const float retractedAmount = startBeltPosition[arm] - Maslow.axis[arm].getPosition();
+        if (applyTensionAllowLimiting && retractedAmount > applyTensionBeltRetractionLimitMm) {
+            for (int stopArm = _TL; stopArm < ARM_COUNT; stopArm++) {
+                Maslow.axis[stopArm].setTarget(Maslow.axis[stopArm].getPosition());
+                Maslow.axis[stopArm].stop();
+            }
+
+            log_warn("Maslow Apply Tension retraction warning: Belt "
+                     << Maslow.axis_id_to_label(arm).c_str() << " retracted " << retractedAmount
+                     << "mm while applying tension (limit " << applyTensionBeltRetractionLimitMm
+                     << "mm). A belt may not be anchored. Continue to keep retracting or Cancel to stop. Reduce Extend Dist or extend Belt Retraction Limit (Options) if Belts Attached to Anchors. Release Tension will allow Approx. 10mm of belt to be released.");
+
+            takeSlackState                = 0;
+            retractionMonitorInitialized  = false;
+            requestStateChange(EXTENDEDOUT);
+            return true;
+        }
+    }
 
     //Take a measurement
     if (takeSlackState == 0) {
@@ -1231,7 +1319,8 @@ bool Calibration::takeSlackFunc() {
             if (!computeXYfromLengths(calibration_data[0][0], calibration_data[0][1], x, y)) {
                 log_error("Apply Tension failed: the measured belt lengths (TL: " << calibration_data[0][0] << " TR: " << calibration_data[0][1]
                                                                                  << ") do not fit the anchor locations, maybe try running Find Anchors again?");
-                takeSlackState = 0;
+                takeSlackState               = 0;
+                retractionMonitorInitialized = false;
                 requestStateChange(EXTENDEDOUT);
                 return true;
             }
@@ -1239,7 +1328,8 @@ bool Calibration::takeSlackFunc() {
             auto kinematics = getKinematics();
             if (!kinematics) {
                 log_error("Apply Tension failed: no Maslow kinematics");
-                takeSlackState = 0;
+                takeSlackState               = 0;
+                retractionMonitorInitialized = false;
                 requestStateChange(EXTENDEDOUT);
                 return true;
             }
@@ -1274,6 +1364,7 @@ bool Calibration::takeSlackFunc() {
 
                 //Reset
                 takeSlackState = 0;
+                retractionMonitorInitialized = false;
                 requestStateChange(EXTENDEDOUT);
                 return true;
             } else {
@@ -1286,6 +1377,7 @@ bool Calibration::takeSlackFunc() {
                 }
                 takeSlackState = 0;
                 holdTimer      = millis();
+                retractionMonitorInitialized = false;
 
                 // Instead of setting cartesian position and letting kinematics recalculate motor positions,
                 // we need to set the motor positions directly from the measured belt lengths to avoid
@@ -1311,10 +1403,10 @@ bool Calibration::takeSlackFunc() {
 
                 // Set motor positions directly from measured belt lengths
                 // Axis mapping: A=TL(0), B=TR(1), C=BL(2), D=BR(3), Z=router(4)
-                set_motor_steps(0, mpos_to_steps(beltLength[_TL], 0));  // A axis = TL belt
-                set_motor_steps(1, mpos_to_steps(beltLength[_TR], 1));  // B axis = TR belt
-                set_motor_steps(2, mpos_to_steps(beltLength[_BL], 2));  // C axis = BL belt
-                set_motor_steps(3, mpos_to_steps(beltLength[_BR], 3));  // D axis = BR belt
+                set_steps(static_cast<axis_t>(0), motor_pos_to_steps(beltLength[_TL], 0));  // A axis = TL belt
+                set_steps(static_cast<axis_t>(1), motor_pos_to_steps(beltLength[_TR], 1));  // B axis = TR belt
+                set_steps(static_cast<axis_t>(2), motor_pos_to_steps(beltLength[_BL], 2));  // C axis = BL belt
+                set_steps(static_cast<axis_t>(3), motor_pos_to_steps(beltLength[_BR], 3));  // D axis = BR belt
                 // Z axis is left unchanged during Apply Tension process
 
                 // Verify that the position was set correctly by reading back from motors
@@ -1333,6 +1425,7 @@ bool Calibration::takeSlackFunc() {
     if (takeSlackState == 1) {
         if (millis() - holdTimer > 2000) {
             takeSlackState = 0;
+            retractionMonitorInitialized = false;
             return true;
         }
     }

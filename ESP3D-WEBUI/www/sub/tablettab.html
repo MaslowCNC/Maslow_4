@@ -89,12 +89,9 @@
             style="background-color: #f2f0e4;" title="Toggle Units">mm</div>
           <div id="tablettab_set_xy_home" class="maslow-grid-item maslow-grid-item-btn"
             style="background-color: #f2f0e4;" title="Set XY home position">Define XY Home</div>
-          <div id="dynamic_button_3" class="maslow-grid-item maslow-grid-item-btn" style="background-color: #f2f0e4;">
-            <div id="tablettab_trace_boundary" class="maslow-grid-item maslow-grid-item-btn"
-                 style="background-color: #f2f0e4; cursor: pointer;"
-                 title="Move around the job boundary to check positioning">
-              Trace Boundary
-            </div>
+          <div id="tablettab_release_tension" class="maslow-grid-item maslow-grid-item-btn"
+            style="background-color: #F5B129; color: white; font-size: 1vw;">
+            Release Tension
           </div>
         </div>
         <!-- Controls row 5 -->
@@ -150,7 +147,12 @@
             </table>
           </div>
         </div>
-        <div id="tablettab-job-bounds-container" class="maslow-grid-container tablettab-controls-item" style="grid-template-columns: auto;">
+        <div id="tablettab-job-bounds-container" class="maslow-grid-container tablettab-controls-item" style="grid-template-columns: 30% 70%;">
+          <div id="tablettab_trace_boundary" class="maslow-grid-item maslow-grid-item-btn"
+            style="background-color: #f2f0e4; cursor: pointer; display: none;"
+            title="Move around the job boundary to check positioning">
+            Trace Boundary
+          </div>
           <div class="maslow-grid-item">
             <div id="job-bounds-info" style="padding: 5px; background-color: #f8f9fa; border: 1px solid #ddd; border-radius: 3px; font-size: 12px; display: none;">
               <strong>Job Bounds:</strong><br>
@@ -212,6 +214,10 @@
           <button id="tablettab_cal_scale_thickness" class="calibration-modal-button green-button"
             title="Set scale factors and material thickness">Set Scale and Thickness</button>
         </div>
+        <div class="buttons-row">
+          <button id="tablettab_cal_apply_tension_limit" class="calibration-modal-button green-button"
+            title="Configure Apply Tension belt retraction monitoring">Apply Tension Belt Limit</button>
+        </div>
         <hr style="border-top: 1px dashed;">
         <div class="buttons-row">
           <button id="tablettab_spindle_toggle" class="calibration-modal-button green-button"
@@ -261,7 +267,7 @@
   </div>
 
   <div id="set-z-home-popup" class="calibration-modal-container">
-    <div id="set_z_home_popup_content" class="calibration-modal-content">
+    <div id="set_z_home_popup_content" class="calibration-modal-content" tabindex="-1">
       <div class="calibration-modal-button-container">
         <div class="input-row">
           <div style="display: flex; justify-content: center;">
@@ -279,12 +285,46 @@
           <div class="input-row">
             <input id="setHomeZ" type="number" step="any" class="calibration-modal-input" placeholder="0">
           </div>
+          <div class="input-row">
+            <label for="setHomeZStep" class="input-label">Z Step Value <span id="setHomeZStepUnit" style="font-size: 0.85em; color: #666;"></span></label>
+          </div>
+          <div class="input-row">
+            <input id="setHomeZStep" type="number" min="0.0001" step="any" class="calibration-modal-input" placeholder="5">
+          </div>
+        </div>
+        <svg aria-hidden="true" style="display: none; position: absolute; width: 0; height: 0;">
+          <symbol id="set-z-home-jog-up-icon" viewBox="0 0 38 38">
+            <polygon fill="currentColor" points="10.319 5.525 17.833 13.039 2.805 13.039 10.319 5.525" />
+            <rect fill="currentColor" height="2.5" transform="translate(31.899 11.262) rotate(90)" width="21.79"
+              x="-0.576" y="20.33" />
+          </symbol>
+          <symbol id="set-z-home-jog-down-icon" viewBox="0 0 38 38">
+            <polygon transform="rotate(180) translate(-21 -44)" fill="currentColor"
+              points="10.319 5.525 17.833 13.039 2.805 13.039 10.319 5.525"></polygon>
+            <rect fill="currentColor" height="2.5" transform="translate(32 10) rotate(90)" width="21.79" x="-0.576"
+              y="20.33">
+            </rect>
+          </symbol>
+        </svg>
+        <div class="buttons-row set-z-home-jog-row">
+          <button id="tablettab_set_z_home_up" class="calibration-modal-button set-z-home-jog-button" aria-label="Jog Z up">
+            <svg class="set-z-home-jog-icon" viewBox="0 0 38 38" aria-hidden="true">
+              <use href="#set-z-home-jog-up-icon"></use>
+            </svg>
+            Z Up
+          </button>
+          <button id="tablettab_set_z_home_down" class="calibration-modal-button set-z-home-jog-button" aria-label="Jog Z down">
+            <svg class="set-z-home-jog-icon" viewBox="0 0 38 38" aria-hidden="true">
+              <use href="#set-z-home-jog-down-icon"></use>
+            </svg>
+            Z Down
+          </button>
         </div>
         <hr style="border-top: 1px dashed;">
         <div class="buttons-row">
           <button id="tablettab_set_z_home_cancel" class="calibration-modal-button stop-button">Cancel</button>
-          <button id="tablettab_set_z_home_confirm" class="calibration-modal-button">Set Z Home</button>
-          <button id="tablettab_move_to_z_home" class="calibration-modal-button green-button">Z Home</button>
+          <button id="tablettab_set_z_home_confirm" class="calibration-modal-button">Define Z Home</button>
+          <button id="tablettab_move_to_z_home" class="calibration-modal-button green-button">Go to Z Home</button>
         </div>
       </div>
     </div>
@@ -354,19 +394,19 @@
             <label for="parkX" class="input-label">Park X (mm)</label>
           </div>
           <div class="input-row">
-            <input id="parkX" type="number" min="-10000" max="10000" step="any" class="calibration-modal-input" placeholder="0">
+            <input id="parkX" type="number" min="-10000" max="10000" step="any" class="calibration-modal-input" placeholder="0" title="Park X absolute position (Centre 0)">
           </div>
           <div class="input-row">
             <label for="parkY" class="input-label">Park Y (mm)</label>
           </div>
           <div class="input-row">
-            <input id="parkY" type="number" min="-10000" max="10000" step="any" class="calibration-modal-input" placeholder="0">
+            <input id="parkY" type="number" min="-10000" max="10000" step="any" class="calibration-modal-input" placeholder="0" title="Park Y absolute position (Centre 0)">
           </div>
           <div class="input-row">
             <label for="parkZ" class="input-label">Park Z (mm)</label>
           </div>
           <div class="input-row">
-            <input id="parkZ" type="number" min="-100" max="100" step="any" class="calibration-modal-input" placeholder="2">
+            <input id="parkZ" type="number" min="-100" max="100" step="any" class="calibration-modal-input" placeholder="2" title="Adds to Home Z">
           </div>
         </div>
         <hr style="border-top: 1px dashed;">
@@ -420,6 +460,41 @@
         <div class="buttons-row">
           <button id="tablettab_scale_thickness_cancel" class="calibration-modal-button stop-button">Cancel</button>
           <button id="tablettab_scale_thickness_save" class="calibration-modal-button">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="apply-tension-limit-popup" class="calibration-modal-container">
+    <div id="apply_tension_limit_popup_content" class="calibration-modal-content">
+      <div class="calibration-modal-button-container">
+        <div class="input-row">
+          <div style="display: flex; justify-content: center;">
+            <label style="text-align: center; font-weight: bold;">Apply Tension Belt Limit</label>
+          </div>
+        </div>
+        <div class="input-row">
+          <div id="apply-tension-limit-current-values" style="text-align: center; font-size: 0.85em; color: #555;"></div>
+        </div>
+        <hr style="border-top: 1px dashed;">
+        <div class="grid-container">
+          <div class="input-row">
+            <label for="applyTensionBeltRetractionLimit" class="input-label" title="Distance Retraction moves before Confirmation Request Generated">Belt Retraction Limit (mm)</label>
+          </div>
+          <div class="input-row">
+            <input id="applyTensionBeltRetractionLimit" type="number" min="0" max="4250" step="1" class="calibration-modal-input" placeholder="300">
+          </div>
+          <div class="input-row">
+            <label for="applyTensionExtendDist" class="input-label" title="Distance Belts Extend to connect to Anchors, Max 4250 mm. ">Extend Dist (mm)</label>
+          </div>
+          <div class="input-row" title="Max 4,250mm">
+            <input id="applyTensionExtendDist" type="text" class="calibration-modal-input">
+          </div>
+        </div>
+        <hr style="border-top: 1px dashed;">
+        <div class="buttons-row">
+          <button id="tablettab_apply_tension_limit_cancel" class="calibration-modal-button stop-button">Cancel</button>
+          <button id="tablettab_apply_tension_limit_save" class="calibration-modal-button">Save</button>
         </div>
       </div>
     </div>

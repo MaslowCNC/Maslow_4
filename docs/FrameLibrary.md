@@ -22,7 +22,7 @@ geertdoornbos has made a cool one where you can simulate the movement of the rob
 <https://maslowcnc.nl/frame>
 
 Bar's frame simulator here: 
-<https://maslowcnc.github.io/Layout-Simulator/>
+[Layout Simulator](layout-simulator/) ([documentation](layout-simulator/README.md))
 
 Bar's Calibration point tester:
 <https://barboursmith.github.io/Calibration-Simulation/>

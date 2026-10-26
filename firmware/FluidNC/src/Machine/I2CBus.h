@@ -3,22 +3,17 @@
 
 #pragma once
 
-#include "../Configuration/Configurable.h"
-
-#include "../Platform.h"
-
-class TwoWire;
+#include "Configuration/Configurable.h"
 
 namespace Machine {
     class I2CBus : public Configuration::Configurable {
     protected:
-        TwoWire* i2c = nullptr;
-        // bool _error = false;
+        bool _error = false;
 
     public:
-        I2CBus(int bus);
+        I2CBus(objnum_t busNumber);
 
-        int      _busNumber = 0;
+        objnum_t _busNumber = 0;
         Pin      _sda;
         Pin      _scl;
         uint32_t _frequency = 100000;
@@ -27,10 +22,8 @@ namespace Machine {
         void validate() override;
         void group(Configuration::HandlerBase& handler) override;
 
-        static const char* ErrorDescription(int code);
-
-        int IRAM_ATTR write(uint8_t address, const uint8_t* data, size_t count);
-        int IRAM_ATTR read(uint8_t address, uint8_t* data, size_t count);
+        int write(uint8_t address, const uint8_t* data, size_t count);
+        int read(uint8_t address, uint8_t* data, size_t count);
 
         ~I2CBus() = default;
     };

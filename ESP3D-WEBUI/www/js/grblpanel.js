@@ -1,6 +1,8 @@
 // import - id, opentab, SendPrinterCommand, grbl_reset, reportNone, tryAutoReport, reportPolled, onAutoReportIntervalChange, onstatusIntervalChange, onprobemaxtravelChange, onprobefeedrateChange, onproberetractChange, onprobetouchplatethicknessChange, SendRealtimeCmd, StartProbeProcess
 
-const grblPanelClearStatus = () => SendPrinterCommand("$X", true, null, null, 114, 1);
+const grblPanelClearStatus = () => {
+  SendPrinterCommand("$X", true, showAlarmRecoveryWarning, null, 114, 1);
+};
 const grblPanelPause = () => SendRealtimeCmd(0x21);
 const grblPanelResume = () => SendRealtimeCmd(0x7e);
 

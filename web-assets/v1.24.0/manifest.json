@@ -1,0 +1,14 @@
+{
+  "tag_name": "v1.24.0",
+  "published_at": "2026-08-03T15:02:57Z",
+  "files": {
+    "firmware.bin": {
+      "sha256": "47de87e3054b57d76785320af5cf4a2a67e504ac24a1967e2eebbe660dcc4f73",
+      "size_bytes": 1996672
+    },
+    "index.html.gz": {
+      "sha256": "60a0111f449a74897f4351a47f9499de3b9f6e37c0e28f4b8401271d9f45b224",
+      "size_bytes": 149657
+    }
+  }
+}

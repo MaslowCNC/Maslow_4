@@ -1,0 +1,50 @@
+{
+  "targets": [
+    {
+      "env": "wifi_s3",
+      "description": "ESP32-S3 WiFi production firmware",
+      "expected_artifact_globs": [
+        "targets/{env}/bootloader.bin",
+        "targets/{env}/firmware.bin",
+        "targets/{env}/partitions.bin",
+        "targets/{env}/littlefs.bin",
+        "common/boot_app0.bin",
+        "webui/index.html.gz"
+      ],
+      "canonical_assets": {
+        "firmware": "maslow4-{version}-{env}-firmware.bin",
+        "webui": "maslow4-{version}-{env}-index.html.gz",
+        "config": "maslow4-{version}-{env}-maslow.yaml"
+      },
+      "release_aliases": {
+        "firmware": ["firmware.bin"],
+        "webui": ["index.html.gz"],
+        "config": ["maslow.yaml"]
+      },
+      "optional_files": [
+        "config/maslow.yaml"
+      ]
+    }
+  ],
+  "host_packages": [
+    {
+      "platform": "posix",
+      "canonical_output": "maslow4-{version}-{env}-posix.zip",
+      "compatibility_output": "fluidnc-maslow4-{version}-posix.zip"
+    },
+    {
+      "platform": "win64",
+      "canonical_output": "maslow4-{version}-{env}-win64.zip",
+      "compatibility_output": "fluidnc-maslow4-{version}-win64.zip"
+    }
+  ],
+  "required_release_assets": [
+    "firmware.bin",
+    "index.html.gz",
+    "fluidnc-maslow4-{version}-posix.zip",
+    "fluidnc-maslow4-{version}-win64.zip"
+  ],
+  "optional_release_assets": [
+    "maslow.yaml"
+  ]
+}

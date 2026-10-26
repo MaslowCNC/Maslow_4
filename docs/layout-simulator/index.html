@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Anchor Point Layout Simulator</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        canvas {
+            border: 1px solid #ccc;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        .controls {
+            display: inline-block;
+            vertical-align: top;
+            margin-left: 20px;
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        .controls label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        .controls input[type="text"],
+        .controls input[type="range"] {
+            display: block;
+            margin-bottom: 15px;
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        .checkbox-container {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        .checkbox-container label {
+            margin-right: 10px;
+            font-weight: normal;
+        }
+        .checkbox-container input[type="checkbox"] {
+            transform: scale(1.2);
+        }
+        .controls .back-link {
+            display: block;
+            margin-bottom: 15px;
+            font-size: 0.9em;
+            text-decoration: none;
+            color: #1d5b4f;
+        }
+        .controls .back-link:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="myCanvas" width="1000" height="900"></canvas>
+    <div class="controls">
+        <a class="back-link" href="../">&larr; Maslow 4 Documentation</a>
+        <p>
+            This tool is designed to help you to understand how large of an area Maslow4 can reasonably cut inside of for a given anchor spacing. <br><br>
+            Enter the height and width of your anchor point spacing to see the area in which the cut quality will be best. <br><br>
+            You can turn on and off different criteria for color coding or hover over each option for a description of what it is.
+        </p>
+        <label for="heightInput">Height:</label>
+        <input type="text" id="heightInput" value="3300" oninput="updateDimensions()">
+        <label for="widthInput">Width:</label>
+        <input type="text" id="widthInput" value="4000" oninput="updateDimensions()">
+        <label for="resolutionSlider">Resolution:</label>
+        <input type="range" id="resolutionSlider" min="10" max="100" value="20" oninput="updateResolution(this.value)">
+        
+        <div class="checkbox-container" title="As the sled approaches the anchor point the angle from the machine to the anchor point gets more aggressive which can lead to issues.">
+            <label for="beltAngleCheckbox">Belt Angle:</label>
+            <input type="checkbox" id="beltAngleCheckbox" checked onchange="updateBeltAngle(this.checked)">
+        </div>
+        <div class="checkbox-container" title="There is a limit to how far the arms can rotate before they contact the machine which reduces acuracy.">
+            <label for="armContactCheckbox">Arm Contact:</label>
+            <input type="checkbox" id="armContactCheckbox" checked onchange="updateArmContact(this.checked)">
+        </div>
+        <div class="checkbox-container" title = "In vertical orientation the tension in the upper belts approaces infintiy as the sled moves directly between them.">
+            <label for="beltTensionCheckbox">Belt Tension:</label>
+            <input type="checkbox" id="beltTensionCheckbox" checked onchange="updateBeltTension(this.checked)">
+        </div>
+        <div class="checkbox-container" title="The length of the belt is finite and cannot reach further.">
+            <label for="beltLengthCheckbox">Belt Length:</label>
+            <input type="checkbox" id="beltLengthCheckbox" checked onchange="updateBeltLength(this.checked)">
+        </div>
+
+        <label for="workAreaWidthInput">Work Area Width:</label>
+        <input type="text" id="workAreaWidthInput" value="2438" oninput="updateWorkAreaDimensions()">
+        <label for="workAreaHeightInput">Work Area Height:</label>
+        <input type="text" id="workAreaHeightInput" value="1219" oninput="updateWorkAreaDimensions()">
+    </div>
+    <script>
+        var canvas = document.getElementById('myCanvas');
+        var tp = canvas.getContext('2d');
+        var tpBbox = { min: { x: Infinity, y: Infinity }, max: { x: -Infinity, y: -Infinity } };
+        var bboxIsSet = false;
+
+        var tlX = 0;
+        var tlY = 3300;
+        var trX = 4000; 
+        var trY = 3300;
+        var blX = 0;
+        var blY = 0;
+        var brX = 4000;
+        var brY = 0;
+
+        var tlZ = 100;
+        var trZ = 56;
+        var blZ = 34;
+        var brZ = 78;
+
+        var scale = .25;
+        var panX = 0;
+        var panY = 0;
+        var isPanning = false;
+        var startX, startY;
+
+        var resolution = 20;
+
+        var beltAngle = true;
+        var armContact = true;
+        var beltTension = true;
+        var beltLength = true;
+
+        var woodWidth = 2438;
+        var woodHeight = 2438 / 2;
+
+        function updateDimensions() {
+            var height = document.getElementById('heightInput').value;
+            var width = document.getElementById('widthInput').value;
+            if (height && width) {
+                let h = parseInt(height);
+                let w = parseInt(width);
+
+                h = Math.min(5000, h);
+                w = Math.min(5000, w);
+                tlY = h;
+                trX = w;
+                trY = h;
+                brX = w;
+                draw();
+            }
+        }
+
+        function updateWorkAreaDimensions() {
+            console.log("Updating work area dimensions");
+            var height = document.getElementById('workAreaHeightInput').value;
+            var width = document.getElementById('workAreaWidthInput').value;
+            if (height && width) {
+                console.log("Width and height are defined");
+                woodHeight = parseInt(height);
+                woodWidth = parseInt(width);
+                draw();
+            }
+        }
+
+        function updateResolution(value) {
+            resolution = value;
+            draw();
+        }
+
+        function updateBeltAngle(checked) {
+            beltAngle = checked;
+            draw();
+        }
+
+        function updateArmContact(checked) {
+            armContact = checked;
+            draw();
+        }
+
+        function updateBeltTension(checked) {
+            beltTension = checked;
+            draw();
+        }
+
+        function updateBeltLength(checked) {
+            beltLength = checked;
+            draw();
+        }
+
+        //Shifts 0,0 to be the center of the canvas and scales the points for zooming
+        function projection(point) {
+            return { x: point.x * scale + canvas.width / 2 + panX, y: -point.y * scale + canvas.height / 2 + panY };
+        }
+
+        // This is the inverse of projection, it shifts a point from the canvas to the original coordinate system
+        function inverseProjection(point) {
+            return { x: (point.x - canvas.width / 2 - panX) / scale, y: -(point.y - canvas.height / 2 - panY) / scale };
+        }
+
+        function draw() {
+            tp.clearRect(0, 0, canvas.width, canvas.height);
+            drawMachineBounds();
+            drawMachineBelts();
+        }
+
+        var drawMachineBounds = function() {
+
+            const p0 = projection({ x: -woodWidth / 2, y: -woodHeight / 2, z: 0 });
+            const p1 = projection({ x: woodWidth / 2, y: -woodHeight / 2, z: 0 });
+            const p2 = projection({ x: woodWidth / 2, y: woodHeight / 2, z: 0 });
+            const p3 = projection({ x: -woodWidth / 2, y: woodHeight / 2, z: 0 });
+
+            tpBbox.min.x = Math.min(tpBbox.min.x, p0.x);
+            tpBbox.min.y = Math.min(tpBbox.min.y, p0.y);
+            tpBbox.max.x = Math.max(tpBbox.max.x, p2.x);
+            tpBbox.max.y = Math.max(tpBbox.max.y, p2.y);
+            bboxIsSet = true;
+
+            tp.beginPath();
+            tp.moveTo(p0.x, p0.y);
+            tp.lineTo(p1.x, p1.y);
+            tp.lineTo(p2.x, p2.y);
+            tp.lineTo(p3.x, p3.y);
+            tp.lineTo(p0.x, p0.y);
+            tp.strokeStyle = "green";
+            tp.stroke();
+        }
+
+        var drawMachineBelts = function() {
+
+            const tl = projection({x: tlX - trX/2, y: tlY/2, z: 0});
+            const tr = projection({x: trX/2, y: trY/2, z: 0});
+            const bl = projection({x: blX - brX/2, y: blY - tlY/2, z: 0});
+            const br = projection({x: brX/2, y: brY - trY/2, z: 0});
+
+            tpBbox.min.x = Math.min(tpBbox.min.x, bl.x);
+            tpBbox.min.y = Math.min(tpBbox.min.y, bl.y);
+            tpBbox.max.x = Math.max(tpBbox.max.x, tr.x);
+            tpBbox.max.y = Math.max(tpBbox.max.y, tr.y);
+
+            //Find the center
+            let c = projection({x: 0, y: 0, z: 0});
+
+            tp.beginPath();
+            tp.strokeStyle = "grey";
+            tp.moveTo(c.x, c.y);
+            tp.lineTo(tl.x, tl.y);
+            tp.moveTo(c.x, c.y);
+            tp.lineTo(tr.x, tr.y);
+            tp.moveTo(c.x, c.y);
+            tp.lineTo(bl.x, bl.y);
+            tp.moveTo(c.x, c.y);
+            tp.lineTo(br.x, br.y);
+            tp.stroke();
+
+            tp.fillStyle = "black";
+            tp.beginPath();
+            tp.arc(tl.x, tl.y, 10, 0, 2 * Math.PI);
+            tp.closePath();
+            tp.fill();
+            tp.beginPath();
+            tp.arc(tr.x, tr.y, 10, 0, 2 * Math.PI);
+            tp.closePath();
+            tp.fill();
+            tp.beginPath();
+            tp.arc(br.x, br.y, 10, 0, 2 * Math.PI);
+            tp.closePath();
+            tp.fill();
+            tp.beginPath();
+            tp.arc(bl.x, bl.y, 10, 0, 2 * Math.PI);
+            tp.closePath();
+            tp.fill();
+
+            const squareSize = resolution * scale;
+
+            //drawARect(tl.x, tl.y, squareSize, computePositionGradient(0, 0, tl, tr, bl, br));
+
+            var i = bl.x;
+            var j = -1*bl.y;
+            while (i <= tr.x) {
+                while (j <= -1*tr.y) {
+                    drawARect(i, -1*j, squareSize, computePositionGradient(i, j, tl, tr, bl, br));
+                    j = j + squareSize;
+                }
+                j = -1*bl.y;
+                i = i + squareSize;
+            }
+        }
+
+        var checkMinBeltLength = function(x1, y1, x2, y2, height) {
+
+            const dist = Math.sqrt((x1 - x2) * (x1 - x2) + (y1 - y2) * (y1 - y2));
+
+            //Hitting the sled
+            if (dist < 100){
+                return 100;
+            }
+
+            if(beltLength){
+                //The belt can't go any further than 14.5 feet or 4419 mm
+                if (dist > 4419){
+                    return 100;
+                }
+            }
+
+            //Compute the angle over the distance
+            const angle = Math.asin(height / dist);
+
+            if (angle > .1) {
+                return 5*angle;
+            } else {
+                return 0;
+            }
+        }
+
+        var checkAnglesBetweenBelts = function(x, y, tl, tr, bl, br) {
+
+            //The dist between tl and tr
+            const a = Math.sqrt((tl.x - tr.x) * (tl.x - tr.x) + (tl.y - tr.y) * (tl.y - tr.y));
+            //The dist between tl and x,y
+            const b = Math.sqrt((tl.x - x) * (tl.x - x) + (tl.y - y) * (tl.y - y));
+            //The dist between tr and x,y
+            const c = Math.sqrt((tr.x - x) * (tr.x - x) + (tr.y - y) * (tr.y - y));
+
+            //Angle between x,y to tl and x,y to tr -- Calculate the angle opposite to side a
+            const topAngle = Math.acos((b*b + c*c - a*a) / (2 * b * c)) * (180 / Math.PI);
+
+            //Repeat for the left side
+            const d = Math.sqrt((tl.x - bl.x) * (tl.x - bl.x) + (tl.y - bl.y) * (tl.y - bl.y));
+            const e = Math.sqrt((tl.x - x) * (tl.x - x) + (tl.y - y) * (tl.y - y));
+            const f = Math.sqrt((bl.x - x) * (bl.x - x) + (bl.y - y) * (bl.y - y));
+
+            const leftAngle = Math.acos((e*e + f*f - d*d) / (2 * e * f)) * (180 / Math.PI);
+
+            //Repeat for the right side
+            const g = Math.sqrt((tr.x - br.x) * (tr.x - br.x) + (tr.y - br.y) * (tr.y - br.y));
+            const h = Math.sqrt((tr.x - x) * (tr.x - x) + (tr.y - y) * (tr.y - y));
+            const i = Math.sqrt((br.x - x) * (br.x - x) + (br.y - y) * (br.y - y));
+
+            const rightAngle = Math.acos((h*h + i*i - g*g) / (2 * h * i)) * (180 / Math.PI);
+
+            //And the bottom
+            const j = Math.sqrt((bl.x - br.x) * (bl.x - br.x) + (bl.y - br.y) * (bl.y - br.y));
+            const k = Math.sqrt((bl.x - x) * (bl.x - x) + (bl.y - y) * (bl.y - y));
+            const l = Math.sqrt((br.x - x) * (br.x - x) + (br.y - y) * (br.y - y));
+
+            const bottomAngle = Math.acos((k*k + l*l - j*j) / (2 * k * l)) * (180 / Math.PI);
+
+            // Now we need to compute the minimum angle for the opposite sides. This can't be less than 130 degrees
+
+            // Angle between x,y to tl and x,y to br
+            const vector1 = { x: tl.x - x, y: tl.y - y };
+            const vector2 = { x: br.x - x, y: br.y - y };
+
+            const dotProduct = vector1.x * vector2.x + vector1.y * vector2.y;
+            const magnitude1 = Math.sqrt(vector1.x * vector1.x + vector1.y * vector1.y);
+            const magnitude2 = Math.sqrt(vector2.x * vector2.x + vector2.y * vector2.y);
+
+            const tlbr = Math.acos(dotProduct / (magnitude1 * magnitude2)) * (180 / Math.PI);
+
+            // Angle between x,y to tr and x,y to bl
+            const vector3 = { x: tr.x - x, y: tr.y - y };
+            const vector4 = { x: bl.x - x, y: bl.y - y };
+
+            const dotProduct2 = vector3.x * vector4.x + vector3.y * vector4.y;
+            const magnitude3 = Math.sqrt(vector3.x * vector3.x + vector3.y * vector3.y);
+            const magnitude4 = Math.sqrt(vector4.x * vector4.x + vector4.y * vector4.y);
+
+            const trbl = Math.acos(dotProduct2 / (magnitude3 * magnitude4)) * (180 / Math.PI);
+
+            const maxAngle = Math.max(topAngle, leftAngle, rightAngle, bottomAngle);
+            const minAngle = Math.min(topAngle, leftAngle, rightAngle, bottomAngle);
+            const minOpposite = Math.min(tlbr, trbl);
+
+            let minAngleVal    = 0;
+            let maxAngleVal    = 0;
+            let minOppositeVal = 0;
+
+            //The minimum allowable angle between opposite arms is 130 degrees or 2.26 radians
+            if(minOpposite < 130){
+                minOppositeVal = .009*(130-minAngle);
+            }
+
+            //The minimum allowable angle is 20 degrees or .35 radians between adjacent arms
+            if(minAngle < 20){
+                minAngleVal =  4*(20-minAngle);
+            }
+
+            //The maximum allowable angle between adjacent arms is is 130 degress or 2.26 radians
+            if(maxAngle > 130){
+                maxAngleVal =  .004*maxAngle;
+            }
+            
+            return Math.max(minAngleVal, maxAngleVal, minOppositeVal);
+        }
+
+        var computePositionGradient = function(x, y, tl, tr, bl, br) {
+            var opacity = 0;
+
+            let posI = inverseProjection({x: x, y: -1*y}); //This is where the calculation is being done
+            let tlI = inverseProjection(tl);
+            let trI = inverseProjection(tr);
+            let blI = inverseProjection(bl);
+            let brI = inverseProjection(br);
+
+            if(beltAngle){
+                opacity = opacity + checkMinBeltLength(posI.x, posI.y, tlI.x, tlI.y, tlZ);
+                opacity = opacity + checkMinBeltLength(posI.x, posI.y, trI.x, trI.y, trZ);
+                opacity = opacity + checkMinBeltLength(posI.x, posI.y, blI.x, blI.y, blZ);
+                opacity = opacity + checkMinBeltLength(posI.x, posI.y, brI.x, brI.y, brZ);
+            }
+
+            if(beltTension){
+                opacity = Math.max(opacity, computeTension(posI.x, posI.y, tlI, trI, blI, brI));
+            }
+
+            if(armContact){
+                opacity = Math.max(opacity, checkAnglesBetweenBelts(posI.x, posI.y, tlI, trI, blI, brI));
+            }
+
+            return opacity;
+        }
+
+        var computeTension = function(x,y, tl, tr, bl, br){
+            const A = Math.atan((y-tl.y)/(tr.x - x));
+            const B = Math.atan((y-tl.y)/(x-tl.x));
+
+            const T1 = 1 / (Math.cos(A) * Math.sin(B) / Math.cos(B) + Math.sin(A));
+            const T2 = 1 / (Math.cos(B) * Math.sin(A) / Math.cos(A) + Math.sin(B));
+
+            const T1Scaled = T1/-3;
+            const T2Scaled = T2/-3; //This is some arbitrary scaling to make it look right in terms of color
+
+            const max = Math.max(T1Scaled, T2Scaled);
+
+            if(max > .15){
+                return max;
+            }
+            else{
+                return 0;
+            }
+        }
+
+
+        // License: MIT - https://opensource.org/licenses/MIT
+        // Author: Michele Locati <michele@locati.it>
+        // Source: https://gist.github.com/mlocati/7210513
+        var perc2color = function(perc) {
+            var r, g, b = 0;
+            if(perc < 50) {
+                r = 255;
+                g = Math.round(5.1 * perc);
+            }
+            else {
+                g = 255;
+                r = Math.round(510 - 5.10 * perc);
+            }
+            var h = r * 0x10000 + g * 0x100 + b * 0x1;
+
+            //onsole.log(r + " " + g + " " + b)
+            return "rgba("+r+", "+g+", "+b+", .3)";//'#' + ('000000' + h.toString(16)).slice(-6);
+        }
+
+        var drawARect = function(x, y, size, opacity) {
+            tp.beginPath();
+            tp.fillStyle = perc2color(100 - 100 * opacity);
+            tp.rect(x - size / 2, y - size / 2, size, size); // Invert y-coordinate
+            tp.fill();
+        }
+
+        canvas.addEventListener('mousedown', function(e) {
+            isPanning = true;
+            startX = e.clientX - panX;
+            startY = e.clientY - panY;
+        });
+
+        canvas.addEventListener('mousemove', function(e) {
+            if (isPanning) {
+                panX = e.clientX - startX;
+                panY = e.clientY - startY;
+                draw();
+            }
+        });
+
+        canvas.addEventListener('mouseup', function() {
+            isPanning = false;
+        });
+
+        canvas.addEventListener('wheel', function(e) {
+            e.preventDefault();
+            var scaleAmount = e.deltaY * -0.002;
+            scale += scaleAmount;
+            scale = Math.min(Math.max(.125, scale), 4);
+            draw();
+        });
+
+        draw();
+    </script>
+</body>
+</html>

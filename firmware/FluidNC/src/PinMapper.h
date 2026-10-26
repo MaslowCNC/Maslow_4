@@ -11,14 +11,14 @@
 #include "Pin.h"
 
 class PinMapper {
-    uint8_t _mappedId;
+    pinnum_t _mappedId;
 
 public:
     // Default constructor. Doesn't map anything
     PinMapper();
 
     // Constructor that maps a pin to some Arduino pin ID
-    PinMapper(Pin& pin);
+    explicit PinMapper(Pin& pin);
 
     // We do not want object copies
     PinMapper(const Pin& o)            = delete;
@@ -32,7 +32,7 @@ public:
     PinMapper& operator=(PinMapper&& o);
 
     // The ID of the pin, as used by digitalWrite, digitalRead and setMode.
-    inline uint8_t pinId() const { return _mappedId; }
+    inline pinnum_t pinId() const { return _mappedId; }
 
     // Destructor. Implicitly removes the mapping.
     ~PinMapper();

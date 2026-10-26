@@ -1,0 +1,14 @@
+{
+  "tag_name": "v1.21.2-test",
+  "published_at": "2026-06-23T22:32:09Z",
+  "files": {
+    "firmware.bin": {
+      "sha256": "1c6bbdf528b712f27fa91fef86e02cb330d51afbf21805fb94e54b19692dc097",
+      "size_bytes": 1996704
+    },
+    "index.html.gz": {
+      "sha256": "5be06cb3a51a7a35962ec9f41b31f65a23c794fff59f5df91fdad48275912e9b",
+      "size_bytes": 148810
+    }
+  }
+}

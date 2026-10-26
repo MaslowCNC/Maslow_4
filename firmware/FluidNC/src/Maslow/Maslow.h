@@ -127,6 +127,22 @@ public:
     void   eStop(String message = "Emergency stop triggered.");
     void   panic();
     void   resetUpdateWatchdog();
+    unsigned long lastUpdateMs() const { return lastCallToUpdate; }  // millis() of the last update() or watchdog reset
+
+    /** Clears a latched error or watchdog condition and turns the red LED off.
+     *  Called when the user clears the alarm with $X.  Returns true if a latched
+     *  condition was actually cleared.  Before this existed both latches were
+     *  permanent and the only recovery was a power cycle. */
+    bool   clearError();
+
+    /** True while a latched error or a fired watchdog is making update() return before the
+     *  motion state machine runs.  Commands that start motion ask this first: without it
+     *  they are accepted, switch the state to Homing, and then sit there forever because
+     *  nothing downstream ever runs. */
+    bool   motionBlocked() const { return error || watchdogFired; }
+
+    /** Why motion is blocked, phrased for the user and ending in the recovery step. */
+    String motionBlockedReason() const;
 
     // Set true during file/firmware uploads to suppress the update-loop watchdog.
     // Flash write operations stall both CPU cores; without this flag the 100 ms
@@ -164,10 +180,26 @@ public:
 
     bool readingFromSD = false;  //Used to turn off reading from the encoders when reading from the - i dont think we need this anymore TODO
     bool using_default_config = false;
+    // Set once begin() has completed; update() is a no-op before that because
+    // protocol_execute_realtime() can pump update() during setup, before the
+    // I2C bus and motor units exist.
+    bool initialized = false;
+    // Diagnostics: how many times update() has run, and how far it got
+    volatile uint32_t updateCount = 0;
+    volatile uint32_t homeCallCount = 0;
+
+    // Consumed by the Maslow web UI / updater; parsed here so the keys in
+    // maslow.yaml are recognized by the config system.
+    bool        autoUpdate = true;
+    std::string updateURL  = "";
     QWIICMUX I2CMux;
 
     bool   error = false;
     String errorMessage;
+    // errorMessage used to be wiped as soon as it was logged, which left nothing to tell the
+    // user why motion was refused minutes later.  Keep the text and track the logging
+    // separately so the reason survives for as long as the latch does.
+    bool errorMessageLogged = false;
 
     void test_();
     void reset_all_axis();
@@ -190,7 +222,7 @@ public:
 
     // Dust collection fan speed (0-100, 0 = off) used whenever the fan runs: during moves and
     // while the spindle is on.  Streamed live to the spindle board, so changes apply at once.
-    int dustFanSpeed = 100;
+    int32_t dustFanSpeed = 100;
 
     bool test         = false;
     bool debugEnabled = false;
@@ -204,6 +236,10 @@ private:
     unsigned long complyCallTimer  = millis();
     unsigned int  panicCount       = 0;
     bool          watchdogFired    = false;
+
+    //Servo fault pin state, so the fault is reported when it starts and ends rather than every PID cycle
+    bool          servoFaultActive  = false;
+    unsigned long servoFaultStartMs = 0;
 
     //Stores a reference to the global system runtime function to be called when blocking operations are needed
     void (*_sys_rt)() = nullptr;
@@ -232,3 +268,9 @@ extern Maslow_& Maslow;
 
 // actual task loop for gathering telemetry data (runs on utility core)
 void telemetry_loop(void* unused);
+
+// Shared scratch buffer for snprintf-style log formatting, protected by a
+// mutex.  Kept from the pre-merge Maslow logging code; upstream FluidNC no
+// longer provides these.
+char* getLogBuffer();
+void  releaseLogBuffer();

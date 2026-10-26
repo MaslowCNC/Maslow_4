@@ -1,5 +1,5 @@
 // Copyright (c) 2014-2016 Sungeun K. Jeon for Gnea Research LLC
-// Copyright (c) 2018 -	Bart Dring This file was modified for use on the ESP32
+// Copyright (c) 2018 -	Bart Dring
 // Use of this source code is governed by a GPLv3 license that can be found in the LICENSE file.
 
 /*
@@ -10,19 +10,27 @@
 #include "Report.h"                 // report_ovr_counter
 #include "Config.h"                 // MAX_N_AXIS
 #include "Machine/MachineConfig.h"  // config
+#include "Stepping.h"               // config
+#include "Serial.h"                 // AllChannels
 
 #include <cstring>  // memset
 #include <cmath>    // roundf
 
 // Declare system global variable structure
 system_t sys;
-int32_t  probe_steps[MAX_N_AXIS];  // Last probe position in steps.
+steps_t  probe_steps[MAX_N_AXIS];  // Last probe position in steps.
 
 void system_reset() {
     // Reset system variables.
+    if (state_is(State::Starting)) {
+        set_state(State::Idle);
+    }
+
     State prior_state = sys.state();
+    bool  prior_abort = sys.abort();
     sys.reset();  // Clear system struct variable.
-    sys.set_state(prior_state);
+    set_state(prior_state);
+    sys.set_abort(prior_abort);
     sys.set_f_override(FeedOverride::Default);                 // Set to 100%
     sys.set_r_override(RapidOverride::Default);                // Set to 100%
     sys.set_spindle_speed_ovr(SpindleSpeedOverride::Default);  // Set to 100%
@@ -31,102 +39,127 @@ void system_reset() {
     report_wco_counter = 0;
 }
 
-float steps_to_mpos(int32_t steps, size_t axis) {
-    return float(steps / config->_axes->_axis[axis]->_stepsPerMm);
+// Individual axis versions
+float steps_to_motor_pos(steps_t steps, size_t motor) {
+    return float(steps / Axes::_axis[axis_t(motor)]->_stepsPerMm);
 }
-int32_t mpos_to_steps(float mpos, size_t axis) {
-    return lroundf(mpos * config->_axes->_axis[axis]->_stepsPerMm);
-}
-
-void motor_steps_to_mpos(float* position, int32_t* steps) {
-    float motor_mpos[MAX_N_AXIS];
-    auto  a      = config->_axes;
-    auto  n_axis = a ? a->_numberAxis : 0;
-    for (size_t idx = 0; idx < n_axis; idx++) {
-        motor_mpos[idx] = steps_to_mpos(steps[idx], idx);
-    }
-    config->_kinematics->motors_to_cartesian(position, motor_mpos, n_axis);
+steps_t motor_pos_to_steps(float mpos, size_t motor) {
+    return lroundf(mpos * Axes::_axis[axis_t(motor)]->_stepsPerMm);
 }
 
-void set_motor_steps(size_t axis, int32_t steps) {
-    auto a = config->_axes->_axis[axis];
-    for (size_t motor = 0; motor < Machine::Axis::MAX_MOTORS_PER_AXIS; motor++) {
-        auto m = a->_motors[motor];
-        if (m) {
-            m->_steps = steps;
-        }
+// Array of axes versions
+void motor_pos_to_steps(steps_t* steps, float* motor_pos) {
+    auto   a      = config->_axes;
+    axis_t n_axis = a ? a->_numberAxis : X_AXIS;
+    for (size_t motor = 0; motor < size_t(n_axis); motor++) {
+        steps[motor] = motor_pos_to_steps(motor_pos[motor], motor);
     }
 }
 
-void set_motor_steps_from_mpos(float* mpos) {
-    auto  n_axis = config->_axes->_numberAxis;
-    float motor_steps[n_axis];
-    config->_kinematics->transform_cartesian_to_motors(motor_steps, mpos);
-    for (size_t axis = 0; axis < n_axis; axis++) {
-        set_motor_steps(axis, mpos_to_steps(motor_steps[axis], axis));
+void steps_to_motor_pos(float* motor_pos, steps_t* steps) {
+    auto   a      = config->_axes;
+    axis_t n_axis = a ? a->_numberAxis : X_AXIS;
+    for (axis_t axis = X_AXIS; axis < n_axis; axis++) {
+        motor_pos[axis] = steps_to_motor_pos(steps[axis], axis);
     }
 }
 
-int32_t get_axis_motor_steps(size_t axis) {
-    auto m = config->_axes->_axis[axis]->_motors[0];
-    return m ? m->_steps : 0;
+// Convert motor step count to mm and transform back to Cartesian (GCode) space
+void steps_to_mpos(float* position, steps_t* steps) {
+    auto   a      = config->_axes;
+    axis_t n_axis = a ? a->_numberAxis : X_AXIS;
+    float  motor_pos[MAX_N_AXIS];
+    steps_to_motor_pos(motor_pos, steps);
+    config->_kinematics->motors_to_cartesian(position, motor_pos, n_axis);
 }
 
-int32_t* get_motor_steps() {
-    static int32_t motor_steps[MAX_N_AXIS];
+void set_steps(axis_t axis, steps_t steps) {
+    Stepping::setSteps(axis, steps);
+}
 
+void set_motor_pos(size_t motor, float motor_pos) {
+    set_steps(axis_t(motor), motor_pos_to_steps(motor_pos, motor));
+}
+
+void set_motor_pos(float* motor_pos, size_t n_motors) {
+    for (size_t motor = 0; motor < n_motors; motor++) {
+        set_steps(axis_t(motor), motor_pos_to_steps(motor_pos[motor], motor));
+    }
+}
+
+// Position in motor steps for one axis
+steps_t get_axis_steps(axis_t axis) {
+    return Stepping::getSteps(axis);
+}
+
+// Position in motor steps for all axes
+void get_steps(steps_t* steps) {
     auto axes   = config->_axes;
     auto n_axis = axes->_numberAxis;
-    for (size_t axis = 0; axis < n_axis; axis++) {
-        auto m            = axes->_axis[axis]->_motors[0];
-        motor_steps[axis] = m ? m->_steps : 0;
+    for (axis_t axis = X_AXIS; axis < n_axis; axis++) {
+        steps[axis] = Stepping::getSteps(axis);
     }
-    return motor_steps;
 }
 
+// Position in motor steps for all axes
+steps_t* get_steps() {
+    static steps_t steps[MAX_N_AXIS];
+
+    get_steps(steps);
+    return steps;
+}
+
+// Position in mm in motor space for all axes
+float* get_motor_pos() {
+    static float motor_pos[MAX_N_AXIS];
+    steps_to_motor_pos(motor_pos, get_steps());
+    return motor_pos;
+}
+
+// Position in mm in Cartesian space for all axes, accounting for kinematics
 float* get_mpos() {
     static float position[MAX_N_AXIS];
 
-    motor_steps_to_mpos(position, get_motor_steps());
+    steps_to_mpos(position, get_steps());
     return position;
 };
 
 float* get_wco() {
     static float wco[MAX_N_AXIS];
-    auto         n_axis = config->_axes->_numberAxis;
-    for (int idx = 0; idx < n_axis; idx++) {
+    auto         n_axis = Axes::_numberAxis;
+    for (axis_t axis = X_AXIS; axis < n_axis; axis++) {
         // Apply work coordinate offsets and tool length offset to current position.
-        wco[idx] = gc_state.coord_system[idx] + gc_state.coord_offset[idx];
-        if (idx == TOOL_LENGTH_OFFSET_AXIS) {
-            wco[idx] += gc_state.tool_length_offset;
-        }
+        wco[axis] = gc_state.coord_system[axis] + gc_state.coord_offset[axis];
+        wco[axis] += gc_state.tool_length_offset[axis];
     }
     return wco;
 }
 
-// Using array instead of std::map for better memory efficiency
-static const char* StateName[] = {
-    "Idle",        // 0
-    "Alarm",       // 1
-    "CheckMode",   // 2
-    "Homing",      // 3
-    "Cycle",       // 4
-    "Hold",        // 5
-    "Jog",         // 6
-    "SafetyDoor",  // 7
-    "Sleep",       // 8
-    "ConfigAlarm", // 9
+const std::map<State, const char*> StateName = {
+    { State::Idle, "Idle" },
+    { State::Alarm, "Alarm" },
+    { State::CheckMode, "CheckMode" },
+    { State::Homing, "Homing" },
+    { State::Cycle, "Cycle" },
+    { State::Hold, "Hold" },
+    { State::Jog, "Jog" },
+    { State::SafetyDoor, "SafetyDoor" },
+    { State::Sleep, "Sleep" },
+    { State::ConfigAlarm, "ConfigAlarm" },
+    { State::Critical, "Critical" },
 };
-static constexpr size_t StateNameCount = sizeof(StateName) / sizeof(StateName[0]);
 
-const char* stateName(State state) {
-    auto stateIndex = static_cast<uint8_t>(state);
-    if (stateIndex < StateNameCount) {
-        return StateName[stateIndex];
+void set_state(State s) {
+    if (!state_is(s)) {
+        sys.set_state(s);
+        allChannels.notifyState();
     }
-    return "Unknown";
+}
+bool state_is(State s) {
+    return sys.state() == s;
 }
 
 bool inMotionState() {
-    return sys.state() == State::Cycle || sys.state() == State::Homing || sys.state() == State::Jog;
+    return state_is(State::Cycle) || state_is(State::Homing) || state_is(State::Jog) ||
+           (state_is(State::Hold) && !sys.suspend().bit.holdComplete);
 }

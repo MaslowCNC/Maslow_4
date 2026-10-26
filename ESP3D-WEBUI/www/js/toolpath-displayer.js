@@ -2054,6 +2054,7 @@ var setGcodeViewerPage = function(pageNumber) {
 
 // Function to update the job bounds display
 var updateJobBoundsDisplay = function() {
+    const boundsContainer = document.getElementById("tablettab-job-bounds-container");
     const boundsInfo = document.getElementById("job-bounds-info");
     const boundsText = document.getElementById("job-bounds-text");
     const traceButton = document.getElementById("tablettab_trace_boundary");
@@ -2062,7 +2063,16 @@ var updateJobBoundsDisplay = function() {
         return;
     }
 
-    if (jobBboxExists()) {
+    const isReadyToCut = typeof maslowStatus !== "undefined" && maslowStatus.state === MASLOW_STATE_READY_TO_CUT;
+    const hasLoadedGCode = typeof gCodeLoaded !== "undefined" && gCodeLoaded &&
+        typeof gCodeFilename !== "undefined" && !!gCodeFilename;
+    const showBounds = isReadyToCut && hasLoadedGCode && jobBboxExists();
+
+    if (boundsContainer) {
+        boundsContainer.style.display = showBounds ? "" : "none";
+    }
+
+    if (showBounds) {
         const bbox = getJobBoundingBox();
         const width = (bbox.max.x - bbox.min.x).toFixed(1);
         const height = (bbox.max.y - bbox.min.y).toFixed(1);
@@ -2070,15 +2080,11 @@ var updateJobBoundsDisplay = function() {
 
         boundsText.innerHTML = `Size: ${width} × ${height} mm<br>Z: ${bbox.min.z.toFixed(1)} to ${bbox.max.z.toFixed(1)} mm (${zRange}mm range)`;
         boundsInfo.style.display = "block";
-        traceButton.style.opacity = "1";
-        traceButton.style.pointerEvents = "auto";
-        traceButton.style.cursor = "pointer";
+        traceButton.style.display = "";
     } else {
         boundsText.innerHTML = "No file loaded";
         boundsInfo.style.display = "none";
-        traceButton.style.opacity = "0.5";
-        traceButton.style.pointerEvents = "none";
-        traceButton.style.cursor = "not-allowed";
+        traceButton.style.display = "none";
     }
 }
 

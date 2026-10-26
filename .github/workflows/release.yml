@@ -1,0 +1,465 @@
+name: Release Firmware
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Semver tag to release (for example v1.21.0)'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref_name || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+      version: ${{ steps.meta.outputs.version }}
+      checkout_ref: ${{ steps.meta.outputs.checkout_ref }}
+      matrix: ${{ steps.meta.outputs.matrix }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Resolve tag and target matrix
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG_INPUT="${{ github.event.inputs.tag }}"
+          if [ -n "$TAG_INPUT" ]; then
+            TAG="$TAG_INPUT"
+            CHECKOUT_REF="refs/tags/$TAG"
+          elif [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            TAG="$GITHUB_REF_NAME"
+            CHECKOUT_REF="$GITHUB_REF"
+          else
+            TAG="$(git describe --tags --exact-match 2>/dev/null || true)"
+            CHECKOUT_REF="$GITHUB_REF"
+          fi
+
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?([+][0-9A-Za-z.-]+)?$ ]]; then
+            echo "A semver tag is required. Got '$TAG'." >&2
+            exit 1
+          fi
+
+          VERSION="${TAG#v}"
+          MATRIX="$(python3 -c "import json, pathlib; manifest = json.loads(pathlib.Path('release-manifest.json').read_text()); print(json.dumps([target['env'] for target in manifest['targets']]))")"
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "checkout_ref=$CHECKOUT_REF" >> "$GITHUB_OUTPUT"
+          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+          echo "Preparing release for $TAG using targets: $MATRIX"
+
+  build:
+    needs: prepare
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        env: ${{ fromJson(needs.prepare.outputs.matrix) }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.checkout_ref }}
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: ${{ runner.os }}-platformio-${{ hashFiles('firmware/platformio.ini') }}
+          restore-keys: |
+            ${{ runner.os }}-platformio-
+
+      - name: Cache npm dependencies (embedded)
+        uses: actions/cache@v4
+        with:
+          path: firmware/embedded/node_modules
+          key: ${{ runner.os }}-npm-embedded-${{ hashFiles('firmware/embedded/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-embedded-
+
+      - name: Cache npm dependencies (ESP3D-WEBUI)
+        uses: actions/cache@v4
+        with:
+          path: ESP3D-WEBUI/node_modules
+          key: ${{ runner.os }}-npm-esp3d-${{ hashFiles('ESP3D-WEBUI/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-esp3d-
+
+      - name: Install PlatformIO
+        run: |
+          python -m pip install --upgrade pip
+          pip install --upgrade platformio
+
+      - name: Install ESP3D-WEBUI dependencies
+        working-directory: ESP3D-WEBUI
+        run: npm install
+
+      - name: Build ESP3D-WEBUI
+        working-directory: ESP3D-WEBUI
+        run: npm run build:en
+
+      - name: Install embedded UI dependencies
+        working-directory: firmware/embedded
+        run: npm install
+
+      - name: Build embedded fallback UI
+        working-directory: firmware/embedded
+        run: python3 build.py
+
+      - name: Sync built web UI into firmware data
+        run: cp ESP3D-WEBUI/dist/index.html.gz firmware/FluidNC/data/index.html.gz
+
+      - name: Build firmware
+        working-directory: firmware
+        run: pio run -e ${{ matrix.env }}
+
+      - name: Build filesystem image
+        working-directory: firmware
+        run: pio run -e ${{ matrix.env }} -t buildfs
+
+      - name: Rebuild firmware artifacts for staging
+        working-directory: firmware
+        run: pio run -e ${{ matrix.env }} -t buildprog
+
+      - name: Stage release inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          ENV_NAME='${{ matrix.env }}'
+          STAGE_DIR="release-staging"
+          BUILD_DIR="firmware/.pio/build/$ENV_NAME"
+
+          copy_first_existing() {
+            local dest="$1"
+            shift
+            local src
+            for src in "$@"; do
+              if [ -f "$src" ]; then
+                cp "$src" "$dest"
+                echo "Staged $(basename "$dest") from $src"
+                return 0
+              fi
+            done
+
+            echo "Failed to find expected source for $dest" >&2
+            echo "Checked:" >&2
+            printf '  - %s\n' "$@" >&2
+            if [ -d "$BUILD_DIR" ]; then
+              echo "Available files under $BUILD_DIR:" >&2
+              find "$BUILD_DIR" -maxdepth 3 -type f | sort >&2
+            else
+              echo "Build directory missing: $BUILD_DIR" >&2
+            fi
+            return 1
+          }
+
+          mkdir -p "$STAGE_DIR/targets/$ENV_NAME" "$STAGE_DIR/common" "$STAGE_DIR/webui" "$STAGE_DIR/config"
+
+          copy_first_existing "$STAGE_DIR/targets/$ENV_NAME/bootloader.bin" \
+            "$BUILD_DIR/bootloader.bin" \
+            "$BUILD_DIR/bootloader/bootloader.bin"
+
+          copy_first_existing "$STAGE_DIR/targets/$ENV_NAME/firmware.bin" \
+            "$BUILD_DIR/firmware.bin"
+
+          copy_first_existing "$STAGE_DIR/targets/$ENV_NAME/partitions.bin" \
+            "$BUILD_DIR/partitions.bin" \
+            "$BUILD_DIR/partition-table.bin"
+
+          copy_first_existing "$STAGE_DIR/targets/$ENV_NAME/littlefs.bin" \
+            "$BUILD_DIR/littlefs.bin"
+
+          cp "$HOME/.platformio/packages/framework-arduinoespressif32/tools/partitions/boot_app0.bin" "$STAGE_DIR/common/"
+          cp ESP3D-WEBUI/dist/index.html.gz "$STAGE_DIR/webui/index.html.gz"
+          if [ -f firmware/FluidNC/data/maslow.yaml ]; then
+            cp firmware/FluidNC/data/maslow.yaml "$STAGE_DIR/config/maslow.yaml"
+          else
+            echo "Optional firmware/FluidNC/data/maslow.yaml not present; continuing without it"
+          fi
+
+      - name: Validate staged inputs listing
+        shell: bash
+        run: |
+          set -euo pipefail
+          find release-staging -type f | sort
+
+      - name: Upload staged release inputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-input-${{ matrix.env }}
+          path: release-staging/
+          if-no-files-found: error
+
+  package:
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.checkout_ref }}
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Download staged artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-input-*
+          path: release-staging
+          merge-multiple: true
+
+      - name: Package release assets
+        run: |
+          python3 scripts/package_release.py \
+            --manifest release-manifest.json \
+            --source-dir release-staging \
+            --dist-dir dist/release \
+            --version '${{ needs.prepare.outputs.version }}' \
+            --tag '${{ needs.prepare.outputs.tag }}'
+
+      - name: List packaged assets
+        run: |
+          ls -lah dist/release
+          echo
+          cat dist/release/SHA256SUMS.txt
+
+      - name: Generate release notes
+        run: |
+          set +e
+          python3 scripts/generate_release_notes.py \
+            --tag '${{ needs.prepare.outputs.tag }}' \
+            --owner '${{ github.repository_owner }}' \
+            --repo '${{ github.event.repository.name }}' \
+            --assets-manifest dist/release/release-assets.json \
+            --output dist/release-notes.md
+          notes_status=$?
+          set -e
+          if [ "$notes_status" -ne 0 ]; then
+            echo "Release notes generation failed with exit code $notes_status; using fallback notes" >&2
+          fi
+          if [ "$notes_status" -ne 0 ] || [ ! -s dist/release-notes.md ]; then
+            printf '%s\n' \
+              '# Release Notes' \
+              '' \
+              'Automated release generated successfully, but custom note generation was incomplete.' \
+              'Please review the attached assets and commit history for full details.' \
+              > dist/release-notes.md
+          fi
+
+      - name: Upload packaged release bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: packaged-release-${{ needs.prepare.outputs.tag }}
+          path: |
+            dist/release/
+            dist/release-notes.md
+          if-no-files-found: error
+
+      - name: Create or update GitHub Release
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG='${{ needs.prepare.outputs.tag }}'
+          TITLE="$TAG - Firmware Release"
+          NOTES_FILE='dist/release-notes.md'
+
+          mapfile -t desired_assets < <(
+            python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          manifest = json.loads(Path('release-manifest.json').read_text())
+          version = '${{ needs.prepare.outputs.version }}'
+          tag = '${{ needs.prepare.outputs.tag }}'
+          targets = manifest.get('targets', [])
+
+          def expand(template: str):
+            if '{env}' in template or '{target}' in template:
+              for target in targets:
+                env = target['env']
+                print(template.format(env=env, target=env, version=version, tag=tag))
+            else:
+              env = targets[0]['env'] if targets else ''
+              print(template.format(env=env, target=env, version=version, tag=tag))
+
+          for template in manifest.get('required_release_assets', []):
+            expand(template)
+          for template in manifest.get('optional_release_assets', []):
+            expand(template)
+          PY
+          )
+
+          files_to_upload=()
+          for asset in "${desired_assets[@]}"; do
+            asset_path="dist/release/$asset"
+            if [ -f "$asset_path" ]; then
+              files_to_upload+=("$asset_path")
+            else
+              echo "Optional or missing asset not uploaded: $asset"
+            fi
+          done
+
+          if [ "${#files_to_upload[@]}" -eq 0 ]; then
+            echo "No release assets resolved for upload" >&2
+            exit 1
+          fi
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Updating existing release $TAG"
+            gh release edit "$TAG" --title "$TITLE" --notes-file "$NOTES_FILE"
+            existing_assets=()
+            existing_assets_output="$(gh release view "$TAG" --json assets --jq '.assets[].name')"
+            if [ -n "$existing_assets_output" ]; then
+              readarray -t existing_assets <<<"$existing_assets_output"
+            fi
+            for asset in "${existing_assets[@]}"; do
+              if ! printf '%s\n' "${desired_assets[@]}" | grep -Fxq "$asset"; then
+                echo "Deleting stale asset $asset"
+                gh release delete-asset "$TAG" "$asset" --yes
+              fi
+            done
+          else
+            echo "Creating release $TAG"
+            gh release create "$TAG" --title "$TITLE" --notes-file "$NOTES_FILE"
+          fi
+
+          gh release upload "$TAG" "${files_to_upload[@]}" --clobber
+
+      # Mirror browser-fetched release files into the repository so raw.githubusercontent.com can serve them with CORS.
+      - name: Checkout default branch for mirrored web assets
+        uses: actions/checkout@v4.2.2
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+          path: mirror-default
+
+      # Publish latest and versioned copies plus hash manifest, and skip no-op commits.
+      - name: Mirror release assets into repository
+        shell: bash
+        working-directory: mirror-default
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          TAG='${{ needs.prepare.outputs.tag }}'
+          SOURCE_DIR='../dist/release'
+          DEFAULT_BRANCH='${{ github.event.repository.default_branch }}'
+
+          for required in firmware.bin index.html.gz; do
+            if [ ! -f "$SOURCE_DIR/$required" ]; then
+              echo "Missing required packaged release asset: $required" >&2
+              ls -lah "$SOURCE_DIR" >&2 || true
+              exit 1
+            fi
+          done
+
+          PUBLISHED_AT="$(gh release view "$TAG" --json publishedAt --jq '.publishedAt // empty')"
+          if [ -z "$PUBLISHED_AT" ]; then
+            echo "Unable to resolve published date for release '$TAG'" >&2
+            exit 1
+          fi
+
+          SAFE_TAG="$(printf '%s' "$TAG" | tr '/ ' '--' | tr -c 'A-Za-z0-9._-' '_')"
+          LATEST_DIR='web-assets/latest'
+          VERSIONED_DIR="web-assets/$SAFE_TAG"
+
+          mkdir -p "$LATEST_DIR" "$VERSIONED_DIR"
+
+          cp "$SOURCE_DIR/firmware.bin" "$LATEST_DIR/firmware.bin"
+          cp "$SOURCE_DIR/index.html.gz" "$LATEST_DIR/index.html.gz"
+          cp "$SOURCE_DIR/firmware.bin" "$VERSIONED_DIR/firmware.bin"
+          cp "$SOURCE_DIR/index.html.gz" "$VERSIONED_DIR/index.html.gz"
+
+          python3 - <<PY
+          import hashlib
+          import json
+          from pathlib import Path
+
+          tag = "${TAG}"
+          published_at = "${PUBLISHED_AT}"
+          versioned_dir = Path("${VERSIONED_DIR}")
+          latest_dir = Path("${LATEST_DIR}")
+
+
+          def sha256(path: Path) -> str:
+              digest = hashlib.sha256()
+              with path.open("rb") as handle:
+                  for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                      digest.update(chunk)
+              return digest.hexdigest()
+
+
+          manifest = {
+              "tag_name": tag,
+              "published_at": published_at,
+              "files": {
+                  "firmware.bin": {
+                      "sha256": sha256(latest_dir / "firmware.bin"),
+                      "size_bytes": (latest_dir / "firmware.bin").stat().st_size,
+                  },
+                  "index.html.gz": {
+                      "sha256": sha256(latest_dir / "index.html.gz"),
+                      "size_bytes": (latest_dir / "index.html.gz").stat().st_size,
+                  },
+              },
+          }
+
+          for out_dir in (latest_dir, versioned_dir):
+              (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+          PY
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+          git add \
+            "$LATEST_DIR/firmware.bin" \
+            "$LATEST_DIR/index.html.gz" \
+            "$LATEST_DIR/manifest.json" \
+            "$VERSIONED_DIR/firmware.bin" \
+            "$VERSIONED_DIR/index.html.gz" \
+            "$VERSIONED_DIR/manifest.json"
+
+          if git diff --cached --quiet; then
+            echo 'No mirrored asset changes detected; skipping commit'
+            exit 0
+          fi
+
+          git commit -m "chore(web-assets): mirror release assets for $TAG"
+          git push origin "HEAD:$DEFAULT_BRANCH"

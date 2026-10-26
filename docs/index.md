@@ -32,6 +32,7 @@ Step-by-step instructions for building your Maslow 4:
 - [Frame Library](FrameLibrary.md) - Frame designs and specifications
 - [Materials Library](MaterialsLibrary.md) - Material cutting recommendations
 - [Router and Spindle Library](RouterAndSpindleLibrary.md) - Router and spindle options
+- [Software Guide](software-guide/) - CAM and CAD software options for use with Maslow
 - [Software Library](SoftwareLibrary.md) - Software tools and resources
 
 ## Interactive Tools
@@ -39,6 +40,11 @@ Step-by-step instructions for building your Maslow 4:
 - [Calibration Simulator](calibration-simulation/) - Interactive calibration simulation tool
   - [Quick Start Guide](calibration-simulation/QUICKSTART.md)
   - [Full Documentation](calibration-simulation/README.md)
+- [Calibration Data Parser](calibration-simulation/data-parser.html) - Analyze real calibration data with the machine's exact solver, and visualize which measurements are causing errors
+  - [Data Parser Documentation](calibration-simulation/DATA-PARSER.md)
+- [Manual Anchor Locator](manual-anchor-locator/) - Compute anchor coordinates and estimate measurement error from four side lengths and two diagonals
+- [Layout Simulator](layout-simulator/) - Try an anchor spacing and see how much of the area inside it Maslow can cut well
+  - [Layout Simulator Documentation](layout-simulator/README.md)
 
 ## Contributing
 

@@ -1,85 +1,53 @@
-# Assembling the Sled 4.1
+# Assembling The Sled
 
-This guide will walk you through assembling the sled for your Maslow 4.1 CNC. The sled is the platform that holds your router and moves across the work surface.
+![The completed Maslow4 sled](images/sled-01.jpg)
 
-![Sled Assembly Overview](images/sled-01.jpg)
+A video walkthrough of this process is available here: [Maslow 4.1 Sled Assembly Video](https://www.youtube.com/watch?v=w39uh0PZ4WY)
 
-## Tools and Parts Needed
+Find any of these steps confusing or get stuck? Don't forget, you aren't alone! Maslow is a community driven open source project. Ask in the [forums](https://forums.maslowcnc.com/) and we'll figure it out together!
 
-- T10 Torx screwdriver (included in kit)
-- Hammer (optional, for seating linear rods)
-- Sled base
-- Two stepper motors
-- Two linear rods
-- Two linear rod clamps
-- Dust cover
-- Eight short bolts (for stepper motors)
-- Six regular bolts (for dust cover)
-- Eight bolts (for linear rod clamps)
-- Assorted nuts
+![The parts needed to build the sled](images/sled-02.jpg)
 
-## Step 1: Attach the Stepper Motors
+Next we are going to assemble the Maslow4 sled. To do that we will need our sled, our stepper motors, our linear rods, our linear rod clamps, and our dust cover.
 
-Use the eight small bolts to attach the stepper motors to the sled. Insert the bolts through the holes in the sled and screw them into the threaded holes in each stepper motor.
+![The eight shorter bolts](images/sled-03.jpg)
 
-![Stepper Motor Parts](images/sled-02.jpg)
+Amongst your hardware are a few bolts which are shorter than the rest. Find eight of these.
 
-![Stepper Motor Installation](images/sled-03.jpg)
+![Attaching the stepper motors to the sled](images/sled-04.jpg)
 
-> **Tip:** Orient each motor so that the cord faces toward the outer edge of the sled for easy cable routing.
+Using those eight smaller bolts attach the stepper motors to the sled by bolting through the sled and into the four threaded holes in each stepper motor. Orient the cords as shown in the next step.
 
-## Step 2: Attach the Dust Cover
+![Orienting the stepper motor cords](images/sled-05.jpg)
 
-Flip the sled upside down. Drop the nuts down from the top and insert the bolts from the bottom to secure the dust cover. Use six regular bolts and nuts for this step.
+Orient the stepper motors so that the cord is facing towards the edge of the sled.
 
-![Dust Cover](images/sled-04.jpg)
+![Attaching the dust cover](images/sled-06.jpg)
 
-![Dust Cover Installation](images/sled-05.jpg)
+Using six of the regular bolts and nuts attach the dust cover. I find it easier to flip the sled upside down for this step and drop the nuts down from the top and insert the bolt from the bottom.
 
-Make sure the dust cover fits snugly over the stepper motors and wiring.
+![The two linear rod clamps](images/sled-07.jpg)
 
-## Step 3: Install Linear Rods
+Find your two linear rod clamps.
 
-If the linear rod clamps are pre-installed due to shipping, remove them first. Insert the linear rods into their openings on either side of the sled.
+Because of our new and improved packing system these will likely be installed on the sled and you will need to take them off.
 
-![Linear Rods](images/sled-06.jpg)
+![Inserting the linear rods](images/sled-08.jpg)
 
-![Linear Rod Installation](images/sled-07.jpg)
+Insert linear rods into the two openings for them on either side of the sled. A GENTLE tap with a hammer can help make sure that they are fully seated.
 
-> **Tip:** A gentle tap with a hammer can help seat them fully, but don't use excessive force.
+![Pressing the linear rod clamps into place](images/sled-09.jpg)
 
-## Step 4: Secure Linear Rods with Clamps
+Press the linear rod clamps into place around each rod.
 
-Place the linear rod clamps around each rod. Attach each clamp with four bolts, for a total of eight bolts.
+![Bolting the clamps in place](images/sled-10.jpg)
 
-![Linear Rod Clamps](images/sled-08.jpg)
+Bolt them in place using eight bolts. Be careful to tighten these evenly going around in a circle and tightening each one gently before moving on to the next. Do not overtighten these. They do not need to be excessively tight and you can break the sled by tightening these too hard.
 
-![Clamps Installed](images/sled-09.jpg)
+![Your completed Maslow4 sled](images/sled-01.jpg)
 
-> **Important:** Tighten bolts evenly, moving around in a circle. Only snug them—do not overtighten, as it can crack the sled or clamp extrusions.
+That's it! You've built your Maslow4's sled!
 
-## Step 5: Final Checks
+## Congratulations! Your sled is complete.
 
-- Double-check the orientation of stepper motors and linear rods.
-- Ensure all bolts are secure but not overtightened.
-- Verify that the cords are properly routed away from moving parts.
-
-![Completed Sled](images/sled-10.jpg)
-
-![Sled Ready](images/sled-11.jpg)
-
-## Tips and Troubleshooting
-
-- Maslow 4.1 uses Torx drive bolts (T10 for most, T8 for gear set screws) to reduce strip risks. Allen-style Torx tools are usually supplied in the kit.
-- If upgrading from Maslow 4.0, the 4.1 kit includes new rods cut to precise lengths. Use them if your original rods were off, otherwise reuse the existing ones.
-- Be gentle with bolt-tightening, especially on clamps and mounting posts—these can crack, especially in tough environments or if overtightened.
-- Some users have opted to 3D print replacement clamp posts for better durability.
-
-## Next Steps
-
-Once the sled is assembled, proceed to [Assembling the Router](../assembling-the-router-4-1/README.md).
-
-## Resources
-
-- [Maslow Sled Assembly Video](https://www.youtube.com/watch?v=WMvcFm7Cb1M)
-- [Maslow CNC Forums](https://forums.maslowcnc.com/)
+Next let's [assemble the router](../assembling-the-router-4-1/README.md).

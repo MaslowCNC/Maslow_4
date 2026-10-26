@@ -1,21 +1,23 @@
 // Copyright (c) 2021 -	Stefan de Bruijn
 // Use of this source code is governed by a GPLv3 license that can be found in the LICENSE file.
 
+#include "Config.h"
 #include "Generator.h"
 
 #include "Configurable.h"
+#include "Machine/Axes.h"  // Axes
 
 #include <cstring>
 #include <cstdio>
 #include <atomic>
 
 namespace Configuration {
-    Generator::Generator(Channel& dst, int indent) : indent_(indent), dst_(dst) {
-        std::atomic_thread_fence(std::memory_order::memory_order_seq_cst);
+    Generator::Generator(Channel& dst, int_fast8_t indent) : indent_(indent), dst_(dst) {
+        std::atomic_thread_fence(std::memory_order_seq_cst);
     }
 
-    Generator::Generator(Channel& dst, int indent, bool direct) : indent_(indent), dst_(dst), direct_(direct) {
-        std::atomic_thread_fence(std::memory_order::memory_order_seq_cst);
+    Generator::Generator(Channel& dst, int_fast8_t indent, bool direct) : indent_(indent), dst_(dst), direct_(direct) {
+        std::atomic_thread_fence(std::memory_order_seq_cst);
     }
 
     void Generator::emit(const std::string& line) {
@@ -24,7 +26,7 @@ namespace Configuration {
             written_ += dst_.write(reinterpret_cast<const uint8_t*>(line.data()), line.size());
             written_ += dst_.write('\n');
         } else {
-            send_line(dst_, line);
+            dst_.sendLine(MsgLevelNone, line);
         }
     }
 
@@ -52,6 +54,10 @@ namespace Configuration {
         enter(name);
         value->group(*this);
         leave();
+    }
+
+    void Generator::item(const char* name, axis_t& value) {
+        send_item(name, Machine::Axes::axisName(value));
     }
 
 }

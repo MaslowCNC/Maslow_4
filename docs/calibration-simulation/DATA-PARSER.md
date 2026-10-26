@@ -85,53 +85,72 @@ These don't need to be perfect - the algorithm will refine them. However, better
 ### 4. Compute
 
 Click "Compute Anchor Positions" to run the optimization algorithm. The tool will:
-- Process all measurements
-- Iteratively refine anchor positions
+- Feed the measurements directly into the firmware-exact Levenberg-Marquardt solver
+- Jointly refine the anchor and sled positions
 - Display progress in the log
-- Show final results with fitness score
-- **Visualize the search process** with a 2D plot showing:
-  - **Red points**: Phase 1 diagonal search for optimal radius
-  - **Blue points**: Phase 2 arc search for best aspect ratio
-  - **Green star**: Final best configuration found
+- Show the final anchor positions, RMS fitness, and whether the machine's quality gates pass
 
 ### 5. Interpret Results
 
 The results show:
 - **Optimized anchor positions**: The computed X,Y coordinates
-- **Fitness score**: How well the solution matches the measurements
-  - Above 0.5: Good result
-  - Below 0.5: May need better initial guess or data quality issues
-- **Search visualization**: A 2D plot showing which points were tested during the rectangular optimization search
+- **Fitness (RMS)**: The RMS belt-length error in mm (lower is better). The machine accepts a
+  calibration only when RMS ≤ 5 mm and the worst single-belt residual ≤ 15 mm; the log notes
+  when a fitness gate fails (the machine would not save those anchors)
+
+### Measurement Map & Error Breakdown
+
+When a computation finishes (especially when a fitness gate fails), a **Measurement Map** is shown:
+
+- **Anchors** are drawn as dark squares at their solved positions.
+- **Each measurement** is a dot at its solved sled position, coloured by its RMS belt error
+  (green = low, red = high). Dots that break a gate get a red outline.
+- **Belt lines** run from each sled toward the four anchors; a line's thickness and colour show
+  how much that individual belt residual contributes, so you can see whether one belt
+  (e.g. bottom-left) is consistently the largest error.
+- **Per-belt RMS cards** summarise which belt drives the overall error.
+- **A per-measurement table** lists the signed residual for every belt, the measurement RMS,
+  and the worst belt, with failing rows highlighted.
+
+The map is interactive: **scroll to zoom**, **drag to pan**, and **click a dot** (or use the
+table checkboxes) to exclude a suspect measurement — the anchors are re-solved from the
+remaining points instantly, so you can see how much a bad point was skewing the fit. Use
+**Exclude failing points** to drop everything that breaks a gate at once, **Include all points**
+to restore them, and **Reset view** to recentre the map.
 
 ## Code Sharing
 
-This tool uses the **exact same calibration computation code** as the ESP3D-WEBUI. The shared library is located at `../../ESP3D-WEBUI/www/js/calibration-computation.js`, ensuring identical behavior between:
-- This data parser
-- The machine simulator (`index.html`)
-- The actual ESP3D-WEBUI calibration
+This tool uses the **exact same Levenberg-Marquardt math that runs on the machine**.
+The function `recomputeAnchorsLM()` in the shared library
+`calibration-computation.js` is a line-for-line port of the
+firmware routine `Calibration::recomputeAnchorsWithLevenbergMarquardt()`
+(`firmware/FluidNC/src/Maslow/Calibration.cpp`). Given the same CLBM measurements and
+the same initial anchor guess, the parser produces the **same anchor positions** the
+machine computes.
 
-The data parser now includes the **retry logic with randomized starting positions**, matching the real machine behavior:
-- If fitness is below 0.5 threshold, the algorithm retries with random perturbations (±50mm) to anchor positions
-- Up to 10 retry attempts are made before giving up
-- The best result across all attempts is displayed if maximum retries are reached
-- This ensures offline testing behaves identically to the machine
+> **Maintainer note:** `calibration-computation.js` in this folder is now the **only**
+> copy of this math in JavaScript, and it exists for development and simulation only.
+> It used to be mirrored at `ESP3D-WEBUI/www/js/calibration-computation.js` and shipped
+> inside `index.html.gz`, but the web UI stopped calling it once calibration moved into
+> the firmware, so that copy was deleted to shrink the bundle. The authority for how
+> calibration actually behaves is `Calibration::recomputeAnchorsWithLevenbergMarquardt()`
+> in `firmware/FluidNC/src/Maslow/Calibration.cpp` — **if you change the firmware routine,
+> update this file to match**, or the parser will quietly disagree with the machine.
 
-## Visualization
+The port reproduces the firmware exactly, including:
+- **Sparse bundle adjustment**: anchor parameters `[tlX, tlY, trX, trY, brX]` and a sled
+  `(x, y)` per waypoint are optimized jointly, solved via a Schur complement (a 5×5
+  reduced system plus 2×2 per-waypoint blocks).
+- **Analytic Jacobians** (not finite differences).
+- **Deterministic retry loop**: up to 10 retries using the firmware's fixed anchor
+  perturbation table (±25 mm then ±50 mm), keeping the best result across attempts.
+- **Fitness gates**: RMS ≤ 5 mm and max single-belt residual ≤ 15 mm, plus convergence —
+  the same gates the machine uses to decide whether to save the anchors.
 
-When the tool runs rectangular optimization to find better starting positions (triggered when initial fitness is low or the frame is nearly square), it displays a **2D visualization** showing:
-
-- **Phase 1 - Diagonal Search** (Red points): Shows points tested along the diagonal to find the optimal radius. The search uses ternary search to efficiently narrow down the best radius between 100mm and 5000mm.
-
-- **Phase 2 - Arc Search** (Blue points): Shows points tested along an arc at the optimal radius to find the best width/height aspect ratio. The search uses ternary search to efficiently find the optimal angle.
-
-- **Best Configuration** (Green star): Marks the optimal rectangular configuration found by the search.
-
-- **Reference Lines**: A faint red diagonal line shows the Phase 1 search path, and a faint blue arc shows the Phase 2 search path.
-
-The visualization updates in real-time as the search progresses, providing visual feedback on how the algorithm explores the solution space. This helps understand:
-- How many points are tested (typically 24 for Phase 1, 26 for Phase 2)
-- The distribution of test points across the search space
-- The location of the optimal solution relative to tested points
+> **Important:** Paste the machine's logged `CLBM:[...]` data directly. Those values are
+> already projected into the XY plane by the firmware, so the parser feeds them straight
+> into the solver **without any additional Z projection** — matching exactly what the
+> machine's solver sees.
 
 ## Differences from Machine Simulator
 
@@ -153,23 +172,27 @@ The visualization updates in real-time as the search progresses, providing visua
 ## Tips
 
 - **More measurements = better results**: The algorithm works better with more data points
-- **Initial guess matters**: Try to get within ~100mm of actual positions
-- **Check fitness score**: Scores above 0.5 indicate reliable results
-- **Look for patterns**: Consistent low fitness may indicate measurement issues
+- **Initial guess matters**: Try to get within ~100mm of actual positions (the input fields
+  default to the anchors in `firmware/FluidNC/data/maslow.yaml`)
+- **Check the RMS**: The reported fitness is the RMS belt-length error in mm (lower is better);
+  the machine requires RMS ≤ 5 mm and max residual ≤ 15 mm to accept a calibration
+- **Look for patterns**: Consistently high RMS may indicate measurement issues
 
 ## Technical Details
 
-The computation uses the "magnetically attracted lines" algorithm:
-1. Draw lines from each anchor with measured lengths
-2. Adjust line angles to make endpoints converge
-3. Move anchors to minimize endpoint distances
-4. Iterate until convergence
+The computation is a **Levenberg-Marquardt sparse bundle adjustment**, ported verbatim from
+the firmware (`Calibration::recomputeAnchorsWithLevenbergMarquardt`):
+1. Estimate each waypoint's sled `(x, y)` from all four belt lengths via 2D Gauss-Newton
+2. Jointly optimize anchor params `[tlX, tlY, trX, trY, brX]` and every sled position,
+   minimizing the sum of squared belt-length residuals
+3. Solve each LM step with a Schur complement (5×5 anchor system + 2×2 sled blocks) using
+   analytic Jacobians and adaptive damping `λ`
+4. Retry up to 10 times from the firmware's fixed perturbation table, keeping the best result
 
-The algorithm uses:
-- Progressive refinement with 8 step sizes (0.1 → 0.00000001)
-- Center-of-mass computation from 3 lines
-- Furthest-anchor adjustment strategy
-- Maximum 200,000 iterations with stagnation detection
+The algorithm uses the firmware constants:
+- Initial `λ = 0.001`, ×10 on rejection, ×0.1 on acceptance
+- Up to 100 iterations per attempt, convergence when the anchor step norm < 1e-4 mm
+- Fitness gates: RMS ≤ 5 mm, max residual ≤ 15 mm
 
 ## Related Tools
 

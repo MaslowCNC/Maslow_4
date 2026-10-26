@@ -66,7 +66,7 @@ function Copy() {
 function concatApptest() {
   return merge(
     gulp
-      .src(['www/js/**/*.js'])
+      .src(['www/js/**/*.js', '!www/js/tests/**'])
       .pipe(concat('app.js'))
       .pipe(removeCode({ production: false }))
       .pipe(removeCode({ cleanheader: true }))
@@ -79,7 +79,7 @@ function concatApptest() {
 function concatApp() {
   return merge(
     gulp
-      .src(['www/js/**/*.js'])
+      .src(['www/js/**/*.js', '!www/js/tests/**'])
       .pipe(concat('app.js'))
       .pipe(removeCode({ production: true }))
       .pipe(removeCode({ cleanheader: true }))

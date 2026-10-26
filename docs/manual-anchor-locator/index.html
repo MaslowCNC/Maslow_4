@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#16332f">
+    <title>Maslow Manual Anchor Locator</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --ink: #18312e;
+            --muted: #66736f;
+            --paper: #f7f5ef;
+            --surface: #fffefa;
+            --line: #d9ddd7;
+            --forest: #1d5b4f;
+            --mint: #bde2d2;
+            --sun: #f2c14e;
+            --coral: #db6c55;
+            --shadow: 0 16px 40px rgba(24, 49, 46, 0.08);
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            color: var(--ink);
+            background-color: var(--paper);
+            background-image: linear-gradient(rgba(29, 91, 79, 0.045) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(29, 91, 79, 0.045) 1px, transparent 1px);
+            background-size: 28px 28px;
+            font-family: "Instrument Sans", sans-serif;
+        }
+
+        button, input { font: inherit; }
+
+        .topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            min-height: 68px;
+            padding: 12px clamp(18px, 4vw, 56px);
+            color: white;
+            background: var(--ink);
+        }
+
+        .brand { font-size: 1.08rem; font-weight: 700; }
+        .brand span { color: var(--sun); }
+        .topbar a { color: #dce9e4; font-size: 0.9rem; }
+
+        main {
+            width: min(1380px, calc(100% - 32px));
+            margin: 0 auto;
+            padding: 42px 0 64px;
+        }
+
+        .intro {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(300px, 0.52fr);
+            align-items: end;
+            gap: 32px;
+            margin-bottom: 32px;
+        }
+
+        .eyebrow {
+            margin: 0 0 10px;
+            color: var(--forest);
+            font-size: 0.78rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        h1 {
+            max-width: 820px;
+            margin: 0;
+            font-size: clamp(2.25rem, 5vw, 4.8rem);
+            line-height: 0.98;
+            letter-spacing: 0;
+        }
+
+        .lede {
+            margin: 0;
+            color: var(--muted);
+            font-size: 1.05rem;
+            line-height: 1.6;
+        }
+
+        .workspace {
+            display: grid;
+            grid-template-columns: minmax(310px, 0.72fr) minmax(420px, 1.28fr);
+            border: 1px solid var(--line);
+            background: var(--surface);
+            box-shadow: var(--shadow);
+        }
+
+        .measurements {
+            padding: clamp(22px, 3vw, 36px);
+            border-right: 1px solid var(--line);
+        }
+
+        .section-heading {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 22px;
+        }
+
+        h2, h3 { margin: 0; letter-spacing: 0; }
+        h2 { font-size: 1.35rem; }
+        h3 { font-size: 1rem; }
+
+        .section-heading span, .hint { color: var(--muted); font-size: 0.8rem; }
+
+        .input-list { display: grid; gap: 13px; }
+
+        .measurement-row {
+            display: grid;
+            grid-template-columns: 30px 1fr minmax(112px, 0.7fr);
+            align-items: center;
+            gap: 11px;
+        }
+
+        .marker {
+            display: grid;
+            width: 28px;
+            height: 28px;
+            place-items: center;
+            color: var(--ink);
+            background: var(--mint);
+            border-radius: 50%;
+            font-family: "IBM Plex Mono", monospace;
+            font-size: 0.72rem;
+        }
+
+        .measurement-row:nth-child(n+5) .marker { background: #f7d9d0; }
+        label { font-size: 0.9rem; font-weight: 600; }
+        label small { display: block; margin-top: 2px; color: var(--muted); font-weight: 400; }
+
+        .input-wrap { position: relative; }
+        input[type="number"] {
+            width: 100%;
+            height: 44px;
+            padding: 0 42px 0 11px;
+            border: 1px solid #c9d0cb;
+            border-radius: 4px;
+            color: var(--ink);
+            background: white;
+            font-family: "IBM Plex Mono", monospace;
+            font-size: 0.88rem;
+        }
+
+        input[type="number"]:focus {
+            border-color: var(--forest);
+            outline: 3px solid rgba(29, 91, 79, 0.13);
+        }
+
+        .unit {
+            position: absolute;
+            top: 50%;
+            right: 10px;
+            color: var(--muted);
+            font-size: 0.72rem;
+            transform: translateY(-50%);
+            pointer-events: none;
+        }
+
+        .actions { display: flex; gap: 10px; margin-top: 24px; }
+
+        button {
+            min-height: 46px;
+            padding: 0 17px;
+            border: 1px solid transparent;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 700;
+        }
+
+        .primary { flex: 1; color: white; background: var(--forest); }
+        .primary:hover { background: #16483f; }
+        .secondary { color: var(--ink); border-color: var(--line); background: transparent; }
+        .secondary:hover { background: #f0f2ed; }
+
+        .privacy-note {
+            display: flex;
+            gap: 8px;
+            margin: 18px 0 0;
+            color: var(--muted);
+            font-size: 0.76rem;
+            line-height: 1.4;
+        }
+
+        .result-area { min-width: 0; }
+
+        .drawing {
+            position: relative;
+            min-height: 470px;
+            border-bottom: 1px solid var(--line);
+            background: #eef3ee;
+        }
+
+        canvas { display: block; width: 100%; height: 470px; }
+
+        .drawing-key {
+            position: absolute;
+            right: 14px;
+            bottom: 12px;
+            padding: 7px 10px;
+            color: var(--muted);
+            background: rgba(255, 254, 250, 0.9);
+            border: 1px solid var(--line);
+            border-radius: 4px;
+            font-size: 0.72rem;
+        }
+
+        .results { padding: clamp(22px, 3vw, 34px); }
+
+        .results.is-invalid .summary-grid,
+        .results.is-invalid .result-grid { opacity: 0.35; }
+
+        .error-banner {
+            display: none;
+            margin-bottom: 20px;
+            padding: 12px 14px;
+            color: #762f24;
+            background: #fbe9e4;
+            border-left: 4px solid var(--coral);
+        }
+
+        .summary-grid {
+            display: grid;
+            grid-template-columns: 1.2fr 1fr 1fr;
+            gap: 1px;
+            margin: 18px 0 26px;
+            background: var(--line);
+            border: 1px solid var(--line);
+        }
+
+        .stat { min-width: 0; padding: 14px; background: var(--surface); }
+        .stat-label { display: block; margin-bottom: 6px; color: var(--muted); font-size: 0.72rem; }
+        .stat strong { font-family: "IBM Plex Mono", monospace; font-size: 1.16rem; }
+        .quality { color: var(--forest); }
+
+        .result-grid {
+            display: grid;
+            grid-template-columns: 1fr 0.9fr;
+            gap: 28px;
+        }
+
+        .coordinate-list { margin-top: 12px; border-top: 1px solid var(--line); }
+        .coordinate {
+            display: grid;
+            grid-template-columns: 42px 1fr 1fr;
+            gap: 9px;
+            padding: 9px 0;
+            border-bottom: 1px solid var(--line);
+            font-family: "IBM Plex Mono", monospace;
+            font-size: 0.8rem;
+        }
+        .coordinate b { color: var(--forest); }
+
+        .copy-button { width: 100%; margin-top: 12px; }
+
+        table { width: 100%; margin-top: 12px; border-collapse: collapse; font-size: 0.78rem; }
+        th, td { padding: 7px 5px; border-bottom: 1px solid var(--line); text-align: right; }
+        th:first-child, td:first-child { text-align: left; }
+        th { color: var(--muted); font-weight: 500; }
+        td { font-family: "IBM Plex Mono", monospace; }
+
+        .method-note {
+            margin: 24px 0 0;
+            padding-top: 18px;
+            border-top: 1px solid var(--line);
+            color: var(--muted);
+            font-size: 0.8rem;
+            line-height: 1.5;
+        }
+
+        @media (max-width: 900px) {
+            .intro, .workspace { grid-template-columns: 1fr; }
+            .intro { gap: 18px; }
+            .measurements { border-right: 0; border-bottom: 1px solid var(--line); }
+            .drawing, canvas { min-height: 390px; height: 390px; }
+        }
+
+        @media (max-width: 570px) {
+            main { width: min(100% - 20px, 1380px); padding-top: 28px; }
+            .topbar { align-items: flex-start; flex-direction: column; }
+            .measurement-row { grid-template-columns: 28px 1fr; }
+            .input-wrap { grid-column: 2; }
+            .summary-grid, .result-grid { grid-template-columns: 1fr; }
+            .actions { flex-direction: column; }
+            h1 { font-size: 2.45rem; }
+            .coordinate { grid-template-columns: 36px 1fr; }
+            .coordinate span:last-child { grid-column: 2; }
+        }
+    </style>
+</head>
+<body>
+    <header class="topbar">
+        <div class="brand">Maslow <span>Manual Anchor Locator</span></div>
+        <a href="../">Documentation</a>
+    </header>
+
+    <main>
+        <section class="intro">
+            <div>
+                <p class="eyebrow">No automatic calibration required</p>
+                <h1>Six measurements. Four anchor locations.</h1>
+            </div>
+            <p class="lede">Measure center-to-center between each pair of anchors. The redundant diagonal measurement lets the solver fit all values and estimate measurement consistency.</p>
+        </section>
+
+        <section class="workspace" aria-label="Manual anchor measurement calculator">
+            <div class="measurements">
+                <div class="section-heading">
+                    <h2>Measurements</h2>
+                    <span>millimeters</span>
+                </div>
+
+                <form id="measurementForm">
+                    <div class="input-list">
+                        <div class="measurement-row"><span class="marker">A</span><label for="top">Top side<small>TL to TR</small></label><div class="input-wrap"><input id="top" name="top" type="number" min="1" step="0.1" required><span class="unit">mm</span></div></div>
+                        <div class="measurement-row"><span class="marker">B</span><label for="right">Right side<small>TR to BR</small></label><div class="input-wrap"><input id="right" name="right" type="number" min="1" step="0.1" required><span class="unit">mm</span></div></div>
+                        <div class="measurement-row"><span class="marker">C</span><label for="bottom">Bottom side<small>BL to BR</small></label><div class="input-wrap"><input id="bottom" name="bottom" type="number" min="1" step="0.1" required><span class="unit">mm</span></div></div>
+                        <div class="measurement-row"><span class="marker">D</span><label for="left">Left side<small>BL to TL</small></label><div class="input-wrap"><input id="left" name="left" type="number" min="1" step="0.1" required><span class="unit">mm</span></div></div>
+                        <div class="measurement-row"><span class="marker">E</span><label for="tlToBr">Diagonal ↘<small>TL to BR</small></label><div class="input-wrap"><input id="tlToBr" name="tlToBr" type="number" min="1" step="0.1" required><span class="unit">mm</span></div></div>
+                        <div class="measurement-row"><span class="marker">F</span><label for="trToBl">Diagonal ↙<small>TR to BL</small></label><div class="input-wrap"><input id="trToBl" name="trToBl" type="number" min="1" step="0.1" required><span class="unit">mm</span></div></div>
+                    </div>
+                    <div class="actions">
+                        <button class="primary" type="submit">Compute anchor locations</button>
+                        <button class="secondary" id="exampleButton" type="button">Load example</button>
+                    </div>
+                </form>
+                <p class="privacy-note"><span aria-hidden="true">●</span><span>Calculations stay in this browser. Measure from the center of each anchor attachment point.</span></p>
+            </div>
+
+            <div class="result-area">
+                <div class="drawing">
+                    <canvas id="frameCanvas" aria-label="Drawing of the computed anchor geometry"></canvas>
+                    <div class="drawing-key">solid: fitted frame &nbsp; dashed: diagonals</div>
+                </div>
+
+                <div class="results" id="results" aria-live="polite">
+                    <div class="error-banner" id="errorBanner" role="alert"></div>
+                    <div class="section-heading">
+                        <h2>Computed result</h2>
+                        <span id="resultState">using all 6 measurements</span>
+                    </div>
+
+                    <div class="summary-grid">
+                        <div class="stat"><span class="stat-label">Measurement quality</span><strong class="quality" id="quality">—</strong></div>
+                        <div class="stat"><span class="stat-label">Estimated 1σ error</span><strong id="estimatedError">—</strong></div>
+                        <div class="stat"><span class="stat-label">Fit RMS</span><strong id="rmsError">—</strong></div>
+                    </div>
+
+                    <div class="result-grid">
+                        <div>
+                            <h3>FluidNC coordinates</h3>
+                            <div class="coordinate-list" id="coordinateList"></div>
+                            <button class="secondary copy-button" id="copyButton" type="button">Copy coordinates</button>
+                        </div>
+                        <div>
+                            <h3>Measurement residuals</h3>
+                            <table>
+                                <thead><tr><th>Line</th><th>Measured</th><th>Fit Δ</th></tr></thead>
+                                <tbody id="residualTable"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <p class="method-note"><strong>About the error estimate:</strong> Four points need five independent planar coordinates after position and rotation are fixed. Six measured distances provide one extra constraint. The reported 1σ value is the least-squares residual estimate from that single degree of freedom, so treat it as a useful consistency check rather than a precision guarantee.</p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script src="anchor-solver.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

@@ -1,8 +1,8 @@
 # Jekyll configuration for Maslow 4 Documentation
 title: Maslow 4 Documentation
 description: Documentation and resources for Maslow 4 CNC machine
-baseurl: "/Maslow_4"
-url: "https://maslowcnc.github.io"
+baseurl: ""
+url: "https://documentation.maslowcnc.com"
 
 # Theme
 theme: jekyll-theme-cayman
@@ -44,6 +44,7 @@ readme_index:
 include:
   - _config.yml
   - calibration-simulation
+  - layout-simulator
 
 # Exclude build artifacts
 exclude:

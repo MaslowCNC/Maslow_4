@@ -114,10 +114,10 @@
     <ClInclude Include="FluidNC\src\Channel.h">
       <Filter>src</Filter>
     </ClInclude>
-    <ClInclude Include="FluidNC\src\WebUI\WebServer.h">
+    <ClInclude Include="FluidNC\src\WebUI\WebUIServer.h">
       <Filter>src\WebUI</Filter>
     </ClInclude>
-    <ClInclude Include="FluidNC\src\Assert.h">
+    <ClInclude Include="FluidNC\src\Assertion.h">
       <Filter>src</Filter>
     </ClInclude>
     <ClInclude Include="FluidNC\src\Spindles\RelaySpindle.h">

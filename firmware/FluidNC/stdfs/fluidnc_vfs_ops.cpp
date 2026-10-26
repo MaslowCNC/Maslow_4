@@ -1,22 +1,23 @@
 #include "fluidnc_vfs_ops.h"
 #include <string.h>
-#include "src/Config.h"
+#include "Config.h"
 
 #include "esp_spiffs.h"
 #include "ff.h"
 #include "esp_littlefs.h"
 #include "Driver/littlefs.h"
 
-bool isSPIFFS(const char* mountpoint) {
-    return !strcmp(mountpoint, "spiffs");
+bool isSPIFFS(const std::string_view mountpoint) {
+    return mountpoint == "spiffs";
 }
-bool isSD(const char* mountpoint) {
-    return !strcmp(mountpoint, "sd");
+bool isSD(const std::string_view mountpoint) {
+    return mountpoint == "sd";
 }
-bool isLittleFS(const char* mountpoint) {
-    return !strcmp(mountpoint, "littlefs");
+bool isLittleFS(const std::string_view mountpoint) {
+    return mountpoint == "littlefs";
 }
-bool fluidnc_vfs_stats(const char* mountpoint, uint64_t& total, uint64_t& used) {
+// cppcheck-suppress unusedFunction
+bool fluidnc_vfs_stats(const std::string_view mountpoint, uint64_t& total, uint64_t& used) {
     if (isSD(mountpoint)) {
         FATFS* fsinfo;
         DWORD  fre_clust;
@@ -33,8 +34,7 @@ bool fluidnc_vfs_stats(const char* mountpoint, uint64_t& total, uint64_t& used) 
     size_t stotal, sused;
 
     if (isSPIFFS(mountpoint)) {
-        esp_err_t err;
-        if ((err = esp_spiffs_info("spiffs", &stotal, &sused)) != ESP_OK) {
+        if (esp_spiffs_info("spiffs", &stotal, &sused) != ESP_OK) {
             return false;
         }
     } else if (isLittleFS(mountpoint)) {

@@ -5,11 +5,12 @@
 
 #pragma once
 
-#include "Types.h"
+#include "State.h"
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
 #include "Config.h"
+#include "Alarm.h"
 
 // Line buffer size from the serial input stream to be executed.Also, governs the size of
 // each of the startup blocks, as they are each stored as a string of this size.
@@ -44,36 +45,24 @@ void protocol_buffer_synchronize();
 void protocol_disable_steppers();
 void protocol_cancel_disable_steppers();
 
-extern volatile bool rtReset;
+void protocol_do_motion_cancel();
+
 extern volatile bool rtCycleStop;
 // Stop the paused job from inside the feed hold.  A $STOP line cannot run while the main loop is
-// suspended in a hold (and the poller reads no new lines then), so the WebSocket channel and the
-// spindle-fault recovery set this instead; protocol_exec_rt_suspend() acts on it once the hold is
-// complete.  Cleared by maslow_stop().
+// suspended in a hold, so the WebSocket channel and the spindle-fault recovery set this instead;
+// protocol_exec_rt_suspend() acts on it once the hold is complete.  Cleared by maslow_stop().
 extern volatile bool rtStopFromHold;
+// Run $STOP on the protocol task at the main loop's next top-level pass.  Set after a
+// stop-from-hold (a $STOP line from another channel is refused while the job is still active)
+// and by the spindle-fault recovery.  Cleared by maslow_stop().
+extern volatile bool rtMaslowStop;
 
 extern volatile bool runLimitLoop;
 
-// Alarm codes.
-enum class ExecAlarm : uint8_t {
-    None                  = 0,
-    HardLimit             = 1,
-    SoftLimit             = 2,
-    AbortCycle            = 3,
-    ProbeFailInitial      = 4,
-    ProbeFailContact      = 5,
-    HomingFailReset       = 6,
-    HomingFailDoor        = 7,
-    HomingFailPulloff     = 8,
-    HomingFailApproach    = 9,
-    SpindleControl        = 10,
-    ControlPin            = 11,
-    HomingAmbiguousSwitch = 12,
-};
+#include <map>
+extern const std::map<ExecAlarm, const char*> AlarmNames;
 
-extern volatile ExecAlarm rtAlarm;  // Global realtime executor variable for setting various alarms.
-
-const char* alarmString(ExecAlarm alarm);
+const char* alarmString(ExecAlarm alarmNumber);
 
 #include "Event.h"
 enum AccessoryOverride {
@@ -82,55 +71,62 @@ enum AccessoryOverride {
     MistToggle     = 3,
 };
 
-extern ArgEvent feedOverrideEvent;
-extern ArgEvent rapidOverrideEvent;
-extern ArgEvent spindleOverrideEvent;
-extern ArgEvent accessoryOverrideEvent;
-extern ArgEvent limitEvent;
+extern const ArgEvent feedOverrideEvent;
+extern const ArgEvent rapidOverrideEvent;
+extern const ArgEvent spindleOverrideEvent;
+extern const ArgEvent accessoryOverrideEvent;
+extern const ArgEvent limitEvent;
+extern const ArgEvent faultPinEvent;
+extern const ArgEvent pinActiveEvent;
+extern const ArgEvent pinInactiveEvent;
 
-extern ArgEvent reportStatusEvent;
+extern const ArgEvent reportStatusEvent;
 
-extern NoArgEvent safetyDoorEvent;
-extern NoArgEvent feedHoldEvent;
-extern NoArgEvent cycleStartEvent;
-extern NoArgEvent cycleStopEvent;
-extern NoArgEvent motionCancelEvent;
-extern NoArgEvent sleepEvent;
-extern NoArgEvent resetEvent;
-extern NoArgEvent debugEvent;
+extern const NoArgEvent safetyDoorEvent;
+extern const NoArgEvent feedHoldEvent;
+extern const NoArgEvent cycleStartEvent;
+extern const NoArgEvent cycleStopEvent;
+extern const NoArgEvent motionCancelEvent;
+extern const NoArgEvent sleepEvent;
+extern const NoArgEvent rtResetEvent;
+extern const NoArgEvent debugEvent;
+extern const NoArgEvent unhomedEvent;
+extern const NoArgEvent startEvent;
+extern const NoArgEvent restartEvent;
+extern const NoArgEvent fullResetEvent;
 
-// extern NoArgEvent statusReportEvent;
+extern const NoArgEvent runStartupLinesEvent;
+extern const NoArgEvent homingButtonEvent;
 
-extern xQueueHandle event_queue;
+// extern const NoArgEvent statusReportEvent;
+
+extern QueueHandle_t event_queue;
 
 extern bool pollingPaused;
 
 struct EventItem {
-    Event* event;
-    void*  arg;
+    const Event* event;
+    void*        arg;
 };
 
-void protocol_send_event(Event*, void* arg = 0);
+void protocol_send_event(const Event*, void* arg = 0);
 void protocol_handle_events();
 
-inline void protocol_send_event(Event* evt, int arg) {
-    protocol_send_event(evt, (void*)arg);
+void send_alarm(ExecAlarm alarm);
+void send_alarm_from_ISR(ExecAlarm alarm);
+
+inline void protocol_send_event(const Event* evt, uint32_t arg) {
+    protocol_send_event(evt, reinterpret_cast<void*>(arg));
 }
 
-void protocol_send_event_from_ISR(Event* evt, void* arg = 0);
-
-class Channel;
-void send_line(Print& channel, const char* message);
-void send_line(Print& channel, const std::string* message);
-void send_line(Print& channel, const std::string& message);
+void protocol_send_event_from_ISR(const Event* evt, void* arg = 0);
 
 void drain_messages();
 
-// Queue a marker behind every message already sent to a killed channel; when the output task
-// reaches it, it hands the channel back to AllChannels to be freed (see AllChannels::pollLine).
-// Returns false if the output queue had no room; try again later.
-bool queue_channel_release(Channel* channel);
-
-extern Channel* activeChannel;  // Channel of the line the main loop is executing, or nullptr
+// Copy a line onto cmd_queue for protocol_main_loop to execute.  Returns false
+// if the queue is full.  Called by execute_line() on the polling task.
+class Channel;
+bool cmd_queue_defer(const char* line, Channel& channel);
 
 extern uint32_t heapLowWater;
+extern uint32_t maxBlockLowWater;  // largest-free-block low-water; UINT_MAX where unavailable

@@ -22,7 +22,7 @@ const {
     LevenbergMarquardtCalibrationComputer,
     lmComputeResiduals,
     lmSSR
-} = require(path.join(__dirname, '../../ESP3D-WEBUI/www/js/calibration-computation.js'));
+} = require(path.join(__dirname, 'calibration-computation.js'));
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Synthetic data generation helpers

@@ -201,9 +201,9 @@ For a full explanation of each error condition see the [Troubleshooting Guide](.
 
 ### Red LED is blinking
 
-The Red LED blinks slowly (300 ms on/off) when the machine has detected an error. Open the web interface console to read the error message. Common causes are a disconnected encoder or motor cable, a belt that has gone slack, or an emergency stop triggered during a job. Power-cycle the machine after fixing the underlying problem.
+The Red LED blinks slowly (300 ms on/off) when the machine has detected an error. Open the web interface console to read the error message. Common causes are a disconnected encoder or motor cable, a belt that has gone slack, or an emergency stop triggered during a job. After fixing the underlying problem, press **Clear** in the web interface (or send `$X`) to turn the LED off and re-enable motion.
 
-If **both** the Red and WiFi LEDs flash together in a rapid double-blink, the motion-control watchdog fired. Power-cycle the machine.
+If **both** the Red and WiFi LEDs flash together in a rapid double-blink, the motion-control watchdog fired. Press **Clear** (or send `$X`) to clear it. If it keeps happening, power-cycle the machine and check for large uploads or heavy WiFi traffic while the machine is running.
 
 ### Cannot Connect to WiFi
 

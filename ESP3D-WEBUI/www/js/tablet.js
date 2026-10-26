@@ -3,11 +3,15 @@
 
 // Constants
 const FILE_LIST_LOAD_DELAY_MS = 500; // Delay to ensure file list is loaded before restoration
+const MM_PER_INCH = 25.4;
 const workAreaDefaults = { x: 2440, y: 1220, offX: 0, offY: 0 };
+const WORK_AREA_BOUNDS_EPSILON_MM = 0.001;
+const OUT_OF_BOUNDS_WARNING_TEXT = "File loaded but out of bounds. Adjust Home position";
 
 var gCodeLoaded = false;
 var gCodeDisplayable = false;
 var _gcodeRaw = "";
+var lastLoadBoundsWarning = "";
 
 var snd = null;
 var sndok = true;
@@ -113,6 +117,17 @@ const clearXYHomeTimer = () => {
 const setXYHome = () => {
   clearXYHomeTimer();
 
+  const currentHome = getCurrentHomeInMm();
+  const workX = WPOS && WPOS.length >= 2 ? parseFloat(WPOS[0]) : NaN;
+  const workY = WPOS && WPOS.length >= 2 ? parseFloat(WPOS[1]) : NaN;
+  // setXYHome zeroes current work position, so resulting home becomes:
+  // home' = currentHome + currentWorkPosition.
+  const proposedHomeX = currentHome.x + (Number.isFinite(workX) ? workX : 0);
+  const proposedHomeY = currentHome.y + (Number.isFinite(workY) ? workY : 0);
+  if (!checkLoadedJobWithinWorkArea(proposedHomeX, proposedHomeY, "Set XY Home warning", false, true)) {
+    alertdlg("Warning", OUT_OF_BOUNDS_WARNING_TEXT);
+  }
+
   // Capture initial WCO values before zeroing
   const oldWCO = WCO ? [WCO[0], WCO[1]] : null;
 
@@ -188,13 +203,105 @@ const zeroAxis = (axis) => {
 
 const getUnitInfo = () => {
   const isInchMode = gCodeModal.units === 'G20';
-  const mmPerInch = 25.4;
   return {
     unitLabel: isInchMode ? 'in' : 'mm',
     decimals: isInchMode ? 4 : 3,
-    toDisplay: (mm) => isInchMode ? mm / mmPerInch : mm,
+    toDisplay: (mm) => isInchMode ? mm / MM_PER_INCH : mm,
   };
 }
+
+const getCurrentHomeInMm = () => {
+  const mposX = MPOS && MPOS.length >= 2 ? parseFloat(MPOS[0]) : NaN;
+  const mposY = MPOS && MPOS.length >= 2 ? parseFloat(MPOS[1]) : NaN;
+  const wposX = WPOS && WPOS.length >= 2 ? parseFloat(WPOS[0]) : NaN;
+  const wposY = WPOS && WPOS.length >= 2 ? parseFloat(WPOS[1]) : NaN;
+  const wcoX = WCO && WCO.length >= 2 ? parseFloat(WCO[0]) : 0;
+  const wcoY = WCO && WCO.length >= 2 ? parseFloat(WCO[1]) : 0;
+
+  const homeX = Number.isFinite(mposX) && Number.isFinite(wposX) ? mposX - wposX : wcoX;
+  const homeY = Number.isFinite(mposY) && Number.isFinite(wposY) ? mposY - wposY : wcoY;
+
+  return {
+    x: Number.isFinite(homeX) ? homeX : 0,
+    y: Number.isFinite(homeY) ? homeY : 0,
+  };
+}
+
+const getLoadedJobBoundsInMachineCoordinates = (homeX, homeY) => {
+  if (typeof getJobBoundingBox !== "function") {
+    return null;
+  }
+  const bbox = getJobBoundingBox();
+  if (!bbox) {
+    return null;
+  }
+
+  return {
+    minX: bbox.min.x + homeX,
+    maxX: bbox.max.x + homeX,
+    minY: bbox.min.y + homeY,
+    maxY: bbox.max.y + homeY,
+  };
+}
+
+const checkLoadedJobWithinWorkArea = (homeX, homeY, sourceLabel, showPopup = false, suppressDuplicateMessage = false) => {
+  const jobBounds = getLoadedJobBoundsInMachineCoordinates(homeX, homeY);
+  if (!jobBounds) {
+    if (suppressDuplicateMessage) {
+      lastLoadBoundsWarning = "";
+    }
+    return true;
+  }
+
+  const workArea = getWorkAreaBounds();
+  const inside =
+    jobBounds.minX >= workArea.minX - WORK_AREA_BOUNDS_EPSILON_MM &&
+    jobBounds.maxX <= workArea.maxX + WORK_AREA_BOUNDS_EPSILON_MM &&
+    jobBounds.minY >= workArea.minY - WORK_AREA_BOUNDS_EPSILON_MM &&
+    jobBounds.maxY <= workArea.maxY + WORK_AREA_BOUNDS_EPSILON_MM;
+
+  if (inside) {
+    if (suppressDuplicateMessage) {
+      lastLoadBoundsWarning = "";
+    }
+    return true;
+  }
+
+  const message =
+    `${sourceLabel}: GCode bounds X:${jobBounds.minX.toFixed(1)}..${jobBounds.maxX.toFixed(1)} ` +
+    `Y:${jobBounds.minY.toFixed(1)}..${jobBounds.maxY.toFixed(1)} mm exceed ` +
+    `work area X:${workArea.minX.toFixed(1)}..${workArea.maxX.toFixed(1)} ` +
+    `Y:${workArea.minY.toFixed(1)}..${workArea.maxY.toFixed(1)} mm`;
+  const shouldNotify = !suppressDuplicateMessage || message !== lastLoadBoundsWarning;
+  if (shouldNotify) {
+    addMessage(message);
+    if (suppressDuplicateMessage) {
+      lastLoadBoundsWarning = message;
+    }
+    if (showPopup) {
+      alertdlg("Home Position Outside Work Area", message);
+    }
+  }
+  return false;
+}
+
+const parseNumericInput = (value) => Number.parseFloat(String(value ?? "").replace(/,/g, "."));
+
+const resetLoadBoundsWarningState = () => {
+  lastLoadBoundsWarning = "";
+}
+
+if (typeof globalThis !== "undefined") {
+  globalThis.__tabletBoundsTestApi = {
+    checkLoadedJobWithinWorkArea,
+    getCurrentHomeInMm,
+    parseNumericInput,
+    resetLoadBoundsWarningState,
+  };
+}
+
+const fromMmToDisplayUnits = (mm) => gCodeModal.units === 'G20' ? mm / MM_PER_INCH : mm;
+const fromDisplayUnitsToMm = (distance) => gCodeModal.units === 'G20' ? distance * MM_PER_INCH : distance;
 
 const getWorkAreaBounds = () => {
   const lv = globalThis.loadedValues || {};
@@ -253,8 +360,8 @@ const confirmSetHome = () => {
   const { toDisplay } = getUnitInfo();
 
   // Clamp entered values to work area boundary (values are in current display units)
-  const rawX = parseFloat(id("setHomeX").value);
-  const rawY = parseFloat(id("setHomeY").value);
+  const rawX = parseNumericInput(id("setHomeX").value);
+  const rawY = parseNumericInput(id("setHomeY").value);
   const dispMinX = toDisplay(bounds.minX);
   const dispMaxX = toDisplay(bounds.maxX);
   const dispMinY = toDisplay(bounds.minY);
@@ -264,6 +371,12 @@ const confirmSetHome = () => {
 
   if (xVal !== rawX || yVal !== rawY) {
     addMessage(`Home position clamped to work area: X=${xVal} Y=${yVal}`);
+  }
+
+  const homeXmm = fromDisplayUnitsToMm(xVal);
+  const homeYmm = fromDisplayUnitsToMm(yVal);
+  if (!checkLoadedJobWithinWorkArea(homeXmm, homeYmm, "Set home warning", false, true)) {
+    alertdlg("Warning", OUT_OF_BOUNDS_WARNING_TEXT);
   }
 
   hideModal("set-home-popup");
@@ -346,7 +459,6 @@ const Z_HOME_MAX_SAFE_MM = 72;
 // Minimum safe machine Z position in mm. Machine Z should never go below 0 (home
 // position); if a movement would push Z below this value it indicates corruption.
 const Z_HOME_MIN_SAFE_MM = 0;
-
 // Tracks whether the user has acknowledged the high Z position warning this session.
 // Reset whenever the resulting Z increases beyond the previously acknowledged level,
 // or when machine Z returns to the safe range.
@@ -362,6 +474,7 @@ let zLowLastAcknowledgedResultZ = null;
 // Whether the one-time startup Z safety check has already fired this connection.
 // Reset on every WebSocket reconnect so the warning re-fires after a firmware restart.
 let startupZCheckDone = false;
+let setZHomeInputTracksMachineZ = false;
 
 // fixedZ makes the reported Z position irrelevant to Maslow kinematics.  Keep safety checks
 // enabled until the firmware setting has been received on this connection.
@@ -560,17 +673,23 @@ const moveTo = (location) => {
 }
 
 /** Perform jog or move commands based on the supplied command */
-const sendMove = (cmd) => {
-  tabletClick();
+const getMoveDistance = (isZMove, options = {}) => {
+  if (options.distance !== undefined) {
+    return options.distance;
+  }
 
-  const distance = cmd.includes('Z')
+  return isZMove
     ? Number(getText('disZ')) || 0
     : Number(getText('disM')) || 0;
+}
+
+const sendMove = (cmd, options = {}) => {
+  tabletClick();
+
+  const distance = getMoveDistance(cmd.includes('Z'), options);
 
   // Convert a display-unit jog distance to mm for the safety threshold check.
   // MPOS is always in mm; jog distances match the current display unit (mm or inch).
-  const toMmDist = (d) => gCodeModal.units === 'G20' ? d * 25.4 : d;
-
   // Current machine Z and work-coordinate origin Z (both always in mm from firmware).
   // Null when position data has not yet arrived from the firmware.
   const machineZ  = MPOS && MPOS.length >= 3 ? MPOS[2] : null;
@@ -605,8 +724,8 @@ const sendMove = (cmd) => {
     'X+':   [() => jog({ X:  distance }),                      0],
     'Y-':   [() => jog({ Y: -distance }),                      0],
     'Y+':   [() => jog({ Y:  distance }),                      0],
-    'Z-':   [() => jog({ Z: -distance }),   -toMmDist(distance)],
-    'Z+':   [() => jog({ Z:  distance }),    toMmDist(distance)],
+    'Z-':   [() => jog({ Z: -distance }),   -fromDisplayUnitsToMm(distance)],
+    'Z+':   [() => jog({ Z:  distance }),    fromDisplayUnitsToMm(distance)],
     'Z_TOP':[() => move({ Z: 70 }),                  deltaToZTop],
   };
 
@@ -708,10 +827,17 @@ function tabletShowMessage(msg, collecting) {
 
 function tabletShowResponse(response) { }
 
+const showAlarmRecoveryWarning = () => alertdlg(
+  "Alarm Reset",
+  "Maslow position may not be accurate. We suggest a Retract, Extend cycle after resetting the alarm.",
+  null,
+  translate_text_item("Continue")
+);
+
 function clearAlarm() {
   if (getText('systemStatus') === 'Alarm') {
     id('systemStatus').classList.remove('system-status-alarm')
-    SendPrinterCommand('$X', true, null, null, 114, 1)
+    SendPrinterCommand('$X', true, showAlarmRecoveryWarning, null, 114, 1)
   }
 }
 
@@ -1061,6 +1187,7 @@ function tabletGrblState(grbl, response) {
       const axisName = axisNames[index].toUpperCase();
       setTextContent(`mpos-${axisNames[index]}`, `|${axisName}m: ${Number(pos * factor).toFixed(index > 2 ? 2 : digits)}|`);
     })
+    syncSetZHomeInputWithMachineZ();
   }
 
   // On the first status update that has both WCO and MPOS data, proactively
@@ -1153,7 +1280,10 @@ const tabletDOMActivate = () => {
 }
 
 // Button event handlers - First Row
-const tabletMoveZUp = () => sendMove("Z+");
+const Z_JOG_UP = "Z+";
+const Z_JOG_DOWN = "Z-";
+
+const tabletMoveZUp = () => sendMove(Z_JOG_UP);
 const tabletMoveTopLeft = () => sendMove("X-Y+");
 const tabletMoveTop = () => sendMove("Y+");
 const tabletMoveTopRight = () => sendMove("X+Y+");
@@ -1165,35 +1295,140 @@ const tabletCalibrationOpen = () => {
 const tabletMoveLeft = () => sendMove("X-");
 const tabletMoveRight = () => sendMove("X+");
 // Button event handlers - Third Row
-const tabletMoveZDown = () => sendMove("Z-");
+const tabletMoveZDown = () => sendMove(Z_JOG_DOWN);
 const tabletMoveBottomLeft = () => sendMove("X-Y-");
 const tabletMoveBottom = () => sendMove("Y-");
 const tabletMoveBottomRight = () => sendMove("X+Y-");
 // Button event handlers - Fourth Row
-const openSetZHomePopup = () => {
-  tabletClick();
+const getMachineZPosition = () => MPOS && MPOS.length >= 3 ? MPOS[2] : null;
+
+/** Report whether the Set Z Home popup is currently visible. */
+const isSetZHomePopupOpen = () => {
+  const popup = id("set-z-home-popup");
+  return !!popup && popup.style.display !== "none";
+}
+
+/** Keep the popup Z input aligned with the current machine Z while tracking is enabled. */
+const syncSetZHomeInputWithMachineZ = () => {
+  const machineZ = getMachineZPosition();
+  if (!setZHomeInputTracksMachineZ || !isSetZHomePopupOpen() || machineZ === null) {
+    return;
+  }
+
   const zInput = id("setHomeZ");
   if (zInput) {
-    // The field is the work-Z value to assign to the CURRENT position.
-    // Default 0 => confirming sets the current position as work-Z zero
-    // (a pure coordinate offset, no motion).
-    zInput.value = "0";
-    zInput.removeAttribute("min");
-    zInput.removeAttribute("max");
-    zInput.title = "Work Z value to assign to the current position (0 = set Z zero here)";
+    zInput.value = machineZ.toFixed(3);
   }
-  // Context label shows the current work Z position for reference.
+}
+
+/** Close the popup and stop live machine-Z tracking for the input field. */
+const closeSetZHomePopup = () => {
+  setZHomeInputTracksMachineZ = false;
+  hideModal("set-z-home-popup");
+}
+
+/** Close the popup after focus leaves it so in-popup actions do not dismiss it. */
+const handleSetZHomePopupFocusOut = () => {
+  scheduleCallback(() => {
+    const popupContent = id("set_z_home_popup_content");
+    if (isSetZHomePopupOpen() && popupContent && !popupContent.contains(document.activeElement)) {
+      closeSetZHomePopup();
+    }
+  }, 0);
+}
+
+/** Backdrop clicks should dismiss the popup by moving focus out of it. */
+const handleSetZHomePopupBackdropClick = (event) => {
+  if (event.target !== event.currentTarget) {
+    return;
+  }
+
+  const popupContent = id("set_z_home_popup_content");
+  if (popupContent && popupContent.contains(document.activeElement)) {
+    document.activeElement.blur();
+    return;
+  }
+
+  closeSetZHomePopup();
+}
+
+/** Let the user keep a manually typed Z home value without live MPOS updates overwriting it. */
+const handleSetZHomeManualInput = () => {
+  setZHomeInputTracksMachineZ = false;
+}
+
+/** Update the popup's context label with the currently defined Z home position. */
+const updateSetZHomeLabel = (zHome = WCO && WCO.length >= 3 ? WCO[2] : 0) => {
   const zHomeLabel = id("currentZHomeLabel");
   if (zHomeLabel) {
-    const zWork = WPOS && WPOS.length >= 3 ? WPOS[2].toFixed(3) : "0";
-    zHomeLabel.textContent = `Current work Z: ${zWork} mm`;
+    const zHomeValue = Number.isFinite(zHome) ? zHome : 0;
+    zHomeLabel.textContent = `Z Home: ${zHomeValue.toFixed(3)} mm`;
   }
+}
+
+/** Return the popup's default Z jog step in current display units. */
+const getDefaultSetZHomeJogDistance = () => {
+  const mainUiDistance = Number(getText("disZ"));
+  return mainUiDistance > 0 ? mainUiDistance : 5;
+}
+
+/** Return the popup-specific Z jog step in the current display units. */
+const getSetZHomeJogDistance = () => {
+  const popupDistance = getValueFloat("setHomeZStep");
+  if (popupDistance > 0) {
+    return popupDistance;
+  }
+
+  return getDefaultSetZHomeJogDistance();
+}
+
+/** Jog Z from the Set Z Home popup using the popup-specific step value. */
+const moveSetZHomePopupZ = (direction) => {
+  const distance = getSetZHomeJogDistance();
+  if (distance <= 0) {
+    return;
+  }
+
+  setZHomeInputTracksMachineZ = true;
+  sendMove(direction, { distance });
+}
+
+const openSetZHomePopup = () => {
+  tabletClick();
+  const { unitLabel } = getUnitInfo();
+  const machineZ = getMachineZPosition();
+  const zCurrent = machineZ === null ? "0" : machineZ.toFixed(3);
+  const zInput = id("setHomeZ");
+  if (zInput) {
+    // Pre-fill with current machine Z position so confirming sets Z zero here.
+    // Maslow Mini: no min/max - the spindle board's Z travel differs from the M4 range.
+    zInput.value = zCurrent;
+    zInput.removeAttribute("min");
+    zInput.removeAttribute("max");
+    zInput.title = "Machine Z to use as Z zero (default: the current position)";
+  }
+  const zStepInput = id("setHomeZStep");
+  if (zStepInput) {
+    zStepInput.value = getDefaultSetZHomeJogDistance();
+    zStepInput.title = `Jog step in ${unitLabel}`;
+  }
+  setTextContent("setHomeZStepUnit", `(${unitLabel})`);
+  setZHomeInputTracksMachineZ = true;
+  // Context label shows the previously defined Z home value (WCO[2]).
+  updateSetZHomeLabel();
   openModal("set-z-home-popup");
+  scheduleCallback(() => {
+    if (zInput) {
+      zInput.focus();
+      zInput.select();
+    } else {
+      id("set_z_home_popup_content")?.focus();
+    }
+  }, 0);
 }
 
 const moveToZHome = () => {
-  hideModal("set-z-home-popup");
-  const machineZ = MPOS && MPOS.length >= 3 ? MPOS[2] : null;
+  const machineZ = getMachineZPosition();
   const workZeroZ = WCO && WCO.length >= 3 ? WCO[2] : null;
   const zDelta = (machineZ !== null && workZeroZ !== null) ? workZeroZ - machineZ : 0;
   checkZHomeAndProceed(() => {
@@ -1204,16 +1439,14 @@ const moveToZHome = () => {
 
 const confirmSetZHome = () => {
   const zInput = id("setHomeZ");
-  const rawZ = zInput ? parseFloat(zInput.value) : NaN;
+  const rawZ = zInput ? parseNumericInput(zInput.value) : NaN;
+  // Maslow Mini: no clamp to the M4 Z range - the spindle board's Z travel is different.
   const zVal = isNaN(rawZ) ? 0 : rawZ;
 
-  hideModal("set-z-home-popup");
-
-  // G10 L20 P0 Z<v> assigns the current machine position the work value <v>,
-  // so the work offset becomes (MPos - v). With v=0 this zeroes Z at the
-  // current position. This only relabels coordinates - it never moves the axis.
-  sendCommand(`G10 L20 P0 Z${zVal}`);
-  addMessage(`Z zero set: current position is now work Z=${zVal}mm`);
+  const mposZ = getMachineZPosition() ?? 0;
+  sendCommand(`G10 L20 P0 Z${mposZ - zVal}`);
+  addMessage(`Z Home pos set: Z=${zVal}mm`);
+  updateSetZHomeLabel(mposZ);
   refreshGcode();
 }
 // Button event handlers - Fifth Row - nothing special here, move on
@@ -1421,8 +1654,16 @@ const handleMaslowActionButtonClick = () => {
       const safeZ = isNaN(parkZ) ? 2.0 : parkZ;
       const targetX = isNaN(parkX) ? 0.0 : parkX;
       const targetY = isNaN(parkY) ? 0.0 : parkY;
-      sendCommand(`G90 G0 Z${safeZ}`);
-      sendCommand(`G53 G0 Y${targetY} X${targetX}`);
+      const selectedUnits = gCodeModal.units;
+      // Park position values are stored in mm. Embed G21 in each command so
+      // the unit mode is set atomically with the move, regardless of current
+      // unit setting (G20 inches mode would otherwise treat mm values as
+      // inches, causing amplified movements).
+      sendCommand(`G21 G90 G0 Z${safeZ}`);
+      sendCommand(`G21 G53 G0 Y${targetY} X${targetX}`);
+      if (selectedUnits === 'G20') {
+        sendCommand('G20');
+      }
       addMessage(`Parking: raising Z to ${safeZ}mm above Z home, then moving to machine X=${targetX}, Y=${targetY}`);
       break;
     }
@@ -1605,6 +1846,7 @@ const tabletSavePark = () => {
 };
 
 const scaleThicknessDefaults = { scaleX: 1.0, scaleY: 1.0, workThickness: 0.0, spoilboardThickness: 0.0 };
+const applyTensionBeltLimitDefaults = { retractionLimit: 300.0, extendDist: 2600.0 };
 
 const getScaleThicknessValues = () => {
   const lv = globalThis.loadedValues || {};
@@ -1666,6 +1908,62 @@ const tabletSaveScaleThickness = () => {
   saveMaslowYaml();
   scheduleCallback(() => {
     hideModal("scale-thickness-popup");
+    hideModal("optional-settings-popup");
+  }, 1000);
+};
+
+const tabletApplyTensionLimitPopupHide = () => hideModal("apply-tension-limit-popup");
+
+const getApplyTensionLimitValues = () => {
+  const lv = globalThis.loadedValues || {};
+  return {
+    retractionLimit: isNaN(parseFloat(lv.applyTensionBeltRetractionLimit))
+      ? applyTensionBeltLimitDefaults.retractionLimit
+      : parseFloat(lv.applyTensionBeltRetractionLimit),
+    extendDist: isNaN(parseFloat(lv.extendDist))
+      ? applyTensionBeltLimitDefaults.extendDist
+      : parseFloat(lv.extendDist),
+  };
+};
+
+const tabletOpenApplyTensionLimitPopup = () => {
+  const { retractionLimit, extendDist } = getApplyTensionLimitValues();
+
+  const elRetractionLimit = id("applyTensionBeltRetractionLimit");
+  const elExtendDist = id("applyTensionExtendDist");
+  const elCurrent = id("apply-tension-limit-current-values");
+
+  if (elRetractionLimit) elRetractionLimit.value = retractionLimit;
+  if (elExtendDist) elExtendDist.value = extendDist;
+  if (elCurrent) elCurrent.textContent = `Current: Belt Retraction Limit=${retractionLimit}mm, Extend Dist=${extendDist}mm`;
+
+  openModal("apply-tension-limit-popup");
+};
+
+const tabletSaveApplyTensionLimit = () => {
+  const elRetractionLimit = id("applyTensionBeltRetractionLimit");
+  const elExtendDist = id("applyTensionExtendDist");
+
+  const newRetractionLimit = elRetractionLimit ? elRetractionLimit.value.trim() : "";
+  const newExtendDist = elExtendDist ? elExtendDist.value.trim() : "";
+
+  const lv = globalThis.loadedValues || {};
+  const keys = [
+    { field: "applyTensionBeltRetractionLimit", cmd: "Maslow_Apply_Tension_Belt_Retraction_Limit", newVal: newRetractionLimit },
+    { field: "extendDist", cmd: "Maslow_Extend_Dist", newVal: newExtendDist },
+  ];
+
+  for (const k of keys) {
+    if (k.newVal !== "" && k.newVal !== String(lv[k.field] || "")) {
+      SendPrinterCommand(`$/${k.cmd}=${k.newVal}`);
+      if (!globalThis.loadedValues) globalThis.loadedValues = {};
+      globalThis.loadedValues[k.field] = k.newVal;
+    }
+  }
+
+  saveMaslowYaml();
+  scheduleCallback(() => {
+    hideModal("apply-tension-limit-popup");
     hideModal("optional-settings-popup");
   }, 1000);
 };
@@ -1760,9 +2058,14 @@ function tabletInit() {
     id("tablettab_set_home_confirm").addEventListener("click", confirmSetHome);
 
     // Buttons - Set Z Home Pop-up
-    id("set-z-home-popup").addEventListener("click", () => hideModal("set-z-home-popup"));
+    id("set-z-home-popup").addEventListener("click", handleSetZHomePopupBackdropClick);
     id("set_z_home_popup_content").addEventListener("click", tabletPopupStopProp);
-    id("tablettab_set_z_home_cancel").addEventListener("click", () => hideModal("set-z-home-popup"));
+    id("set_z_home_popup_content").addEventListener("focusout", handleSetZHomePopupFocusOut);
+    id("setHomeZ").addEventListener("input", handleSetZHomeManualInput);
+    // These popup jog buttons use the popup-specific step from the setHomeZStep input.
+    id("tablettab_set_z_home_up").addEventListener("click", () => moveSetZHomePopupZ(Z_JOG_UP));
+    id("tablettab_set_z_home_down").addEventListener("click", () => moveSetZHomePopupZ(Z_JOG_DOWN));
+    id("tablettab_set_z_home_cancel").addEventListener("click", () => closeSetZHomePopup());
     id("tablettab_move_to_z_home").addEventListener("click", moveToZHome);
     id("tablettab_set_z_home_confirm").addEventListener("click", confirmSetZHome);
 
@@ -1782,8 +2085,9 @@ function tabletInit() {
 
     id("tablettab_save_serial_msg").addEventListener("click", saveSerialMessages);
     
-    // Trace boundary button
+    // Trace boundary and release tension buttons
     id("tablettab_trace_boundary").addEventListener("click", traceBoundary);
+    id("tablettab_release_tension").addEventListener("click", tabletCalRelax);
 
     // Buttons - Calibration Pop-up
     id("calibration-popup").addEventListener("click", tabletCalPopupHide);
@@ -1808,6 +2112,7 @@ function tabletInit() {
     id("tablettab_spindle_toggle").addEventListener("click", tabletToggleSpindle);
     id("tablettab_spindle_home").addEventListener("click", tabletSpindleHome);
     id("tablettab_spindle_remove_tool").addEventListener("click", tabletSpindleRemoveTool);
+    id("tablettab_cal_apply_tension_limit").addEventListener("click", tabletOpenApplyTensionLimitPopup);
 
     // Buttons - Work Area Pop-up
     id("work-area-popup").addEventListener("click", tabletWorkAreaPopupHide);
@@ -1826,6 +2131,12 @@ function tabletInit() {
     id("scale_thickness_popup_content").addEventListener("click", tabletPopupStopProp);
     id("tablettab_scale_thickness_cancel").addEventListener("click", tabletScaleThicknessPopupHide);
     id("tablettab_scale_thickness_save").addEventListener("click", tabletSaveScaleThickness);
+
+    // Buttons - Apply Tension Belt Limit Pop-up
+    id("apply-tension-limit-popup").addEventListener("click", tabletApplyTensionLimitPopupHide);
+    id("apply_tension_limit_popup_content").addEventListener("click", tabletPopupStopProp);
+    id("tablettab_apply_tension_limit_cancel").addEventListener("click", tabletApplyTensionLimitPopupHide);
+    id("tablettab_apply_tension_limit_save").addEventListener("click", tabletSaveApplyTensionLimit);
 
     // Buttons - Configuration Pop-up
     id("configuration-popup").addEventListener("click", tabletConfigPopupHide);
@@ -1846,6 +2157,9 @@ const showGCode = (gcode, append = false, updateToolpath = true) => {
     _gcodeRaw = "";
     setValue("tablettab_gcode", "(No GCode loaded)");
     tpDisplayer().clear();
+    if (typeof updateJobBoundsDisplay === "function") {
+      updateJobBoundsDisplay();
+    }
   } else {
     let startLine;
     if (append) {
@@ -1920,8 +2234,23 @@ function runGCode() {
   // expandVisualizer()
 }
 
+function finalizeGCodePreviewLoad() {
+  // Save GCode state after successful load
+  saveGCodeState();
+  // Restore ping monitoring after preview completes
+  restorePingAfterUpload();
+  Monitor_output_Update("[Preview] GCode preview loaded successfully\n");
+
+  // Validate only after load/preview completion.
+  const home = getCurrentHomeInMm();
+  if (!checkLoadedJobWithinWorkArea(home.x, home.y, "Loaded GCode is outside work area", false, true)) {
+    alertdlg("Warning", OUT_OF_BOUNDS_WARNING_TEXT);
+  }
+}
+
 function tabletLoadGCodeFile(path, size) {
   gCodeFilename = path
+  resetLoadBoundsWarningState();
   if ((Number.isNaN(size) && size.endsWith('GB')) || size > 10000000) {
     showGCode('GCode file too large to display (> 1MB)');
     gCodeDisplayable = false;
@@ -1943,11 +2272,7 @@ function tabletLoadGCodeFile(path, size) {
         .then((response) => response.text())
         .then((gcode) => {
           showGCode(gcode);
-          // Save GCode state after successful load
-          saveGCodeState();
-          // Restore ping monitoring after preview completes
-          restorePingAfterUpload();
-          Monitor_output_Update("[Preview] GCode preview loaded successfully\n");
+          finalizeGCodePreviewLoad();
         })
         .catch((error) => {
           // Restore ping monitoring on error
@@ -2033,11 +2358,7 @@ async function tabletLoadGCodeFileSequentially(path) {
       updateJobBoundsDisplay();
     }
 
-    // Save GCode state after successful load
-    saveGCodeState();
-    // Restore ping monitoring after preview completes
-    restorePingAfterUpload();
-    Monitor_output_Update("[Preview] GCode preview loaded successfully\n");
+    finalizeGCodePreviewLoad();
     
   } catch (error) {
     console.error('Error loading GCode file:', error);
@@ -2368,7 +2689,12 @@ const onCalibrationButtonsClick = async (command, msg = "") => {
   if (msg) {
     addMessage(msg);
   }
-  sendCommand(command);
+  // Send via WebSocket first to bypass PAGEID-based routing, which fails
+  // silently when the WebSocket has reconnected (new channel, stale PAGEID).
+  // Falls back to HTTP if the WebSocket is not currently open.
+  if (!sendViaWS(command + "\n")) {
+    sendCommand(command);
+  }
 
   //Prints out the index.html version number when test is pressed
   if (command === '$TEST') {

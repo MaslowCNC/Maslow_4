@@ -10,9 +10,8 @@
 #include "../Planner.h"                // plan_sync_position
 #include "../Stepper.h"                // Stepper::isAwake (no flash writes while stepping)
 #include "../Maslow/Maslow.h"          // Maslow.resetUpdateWatchdog
-#include "../WebUI/WifiConfig.h"       // wifi_sta_ssid / wifi_sta_password (ENABLE_WIFI)
-#include "../WebUI/InputBuffer.h"      // WebUI::inputBuffer ($STOP after a spindle fault)
-#include "Driver/localfs.h"            // localfsName
+#include "../Settings.h"               // Sta/SSID and Sta/Password, looked up by name
+#include "../FluidPath.h"               // LocalFS
 
 #include <cstdio>   // snprintf
 #include <cstdlib>  // strtol
@@ -119,7 +118,7 @@ namespace Spindles {
         }
 
         // Always call mapSpeed() with the unmodified input so sys.spindle_speed is set.
-        uint32_t dev_speed = mapSpeed(speed);
+        uint32_t dev_speed = mapSpeed(state, speed);
         if (state == SpindleState::Disable) {
             dev_speed = offSpeed();
             // A speed the stepper ISR queued for the next update() would otherwise go out
@@ -225,14 +224,27 @@ namespace Spindles {
         log_info(name() << ": sent tool removal request to the spindle board");
     }
 
+#ifdef ENABLE_WIFI
+    // The WiFi station settings are private to WifiConfig.cpp; both are StringSettings (the
+    // password's subclass only masks what $$ shows), so get() returns the stored value.
+    static const char* stringSettingValue(const char* name) {
+        for (Setting* s : Setting::List) {
+            if (strcasecmp(s->getName(), name) == 0) {
+                return static_cast<StringSetting*>(s)->get();
+            }
+        }
+        return nullptr;
+    }
+#endif
+
     void SpindleBoard::sendEnableOTA() {
         if (!_uart) {
             log_error(name() << ": cannot enable spindle OTA - no link to the spindle board");
             return;
         }
 #ifdef ENABLE_WIFI
-        const char* ssid = WebUI::wifi_sta_ssid->get();
-        const char* pass = WebUI::wifi_sta_password->get();
+        const char* ssid = stringSettingValue("Sta/SSID");
+        const char* pass = stringSettingValue("Sta/Password");
         if (!ssid || ssid[0] == '\0') {
             log_error(name() << ": cannot enable spindle OTA - the XY board has no station SSID configured");
             return;
@@ -310,7 +322,7 @@ namespace Spindles {
             }
             _trip_refetch = false;
             try {
-                _trip_file = new FileStream(TRIP_FILE, "w", localfsName);
+                _trip_file = new FileStream(TRIP_FILE, "w", LocalFS);
             } catch (...) {
                 _trip_file = nullptr;
                 log_error(name() << ": cannot create " << TRIP_FILE << " for the spindle trip recording");
@@ -448,13 +460,14 @@ namespace Spindles {
                 // The belts have stopped (or nothing was moving): end the job like the Stop button.
                 if ((st == State::Hold && sys.suspend().bit.holdComplete) || st == State::Idle) {
                     log_info(name() << ": machine stopped after the spindle fault - ending the job ($STOP)");
-                    // A $STOP line alone waits until the hold is released (the main loop is suspended
-                    // inside it), so also ask the hold itself to end the job.  The line then raises
-                    // the Z and saves the positions as the Stop button does.
+                    // In a hold the main loop is suspended inside it, so ask the hold itself to end
+                    // the job; it then runs $STOP, which raises the Z and saves the positions as the
+                    // Stop button does.  When already Idle, run $STOP directly.
                     if (st == State::Hold) {
                         rtStopFromHold = true;
+                    } else {
+                        rtMaslowStop = true;
                     }
-                    WebUI::inputBuffer.push("$STOP\n");
                     _recovery          = FaultRecovery::WaitForIdle;
                     _recovery_since_ms = now;
                 }
@@ -571,7 +584,7 @@ namespace Spindles {
                 if (strncmp(_rx_buf, "ZHOMED", 6) == 0) {
                     State st = sys.state();
                     if (st == State::Idle || st == State::Alarm || st == State::Sleep) {
-                        set_motor_steps(4, mpos_to_steps(0.0f, 4));  // Z is axis 4
+                        set_steps(static_cast<axis_t>(4), motor_pos_to_steps(0.0f, 4));  // Z is axis 4
                         gc_sync_position();                          // push into the gcode engine
                         plan_sync_position();                        // sync the planner so the first Z move plans from 0
                         // Also clear any lingering Z work offset so both machine and work Z read 0

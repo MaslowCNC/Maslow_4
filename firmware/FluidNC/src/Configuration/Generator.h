@@ -4,10 +4,12 @@
 #pragma once
 
 #include <vector>
+#include <string>
 
-#include "../Pin.h"
-#include "../Report.h"    // report_gcode_modes()
-#include "../Protocol.h"  // send_line()
+#include "Pin.h"
+#include "Report.h"    // report_gcode_modes()
+#include "Protocol.h"  // send_line()
+#include "string_util.h"
 #include "HandlerBase.h"
 
 namespace Configuration {
@@ -17,14 +19,21 @@ namespace Configuration {
         Generator(const Generator&)            = delete;
         Generator& operator=(const Generator&) = delete;
 
-        int      indent_;
-        Channel& dst_;
-        bool     direct_        = false;  // Write to dst_ in the calling task, not via send_line()
-        size_t   expected_      = 0;      // Bytes direct writes should have produced
-        size_t   written_       = 0;      // Bytes dst_ accepted
-        bool     lastIsNewline_ = false;
+        int_fast8_t indent_;
+        Channel&    dst_;
+        bool        direct_        = false;  // Write to dst_ in the calling task, not via the output task
+        size_t      expected_      = 0;      // Bytes direct writes should have produced
+        size_t      written_       = 0;      // Bytes dst_ accepted
+        bool        lastIsNewline_ = false;
 
         void emit(const std::string& line);
+
+        inline void indent() {
+            lastIsNewline_ = false;
+            for (int i = 0; i < indent_ * 2; ++i) {
+                dst_ << ' ';
+            }
+        }
 
         void enter(const char* name);
         void add(Configuration::Configurable* configurable);
@@ -36,12 +45,12 @@ namespace Configuration {
         HandlerType handlerType() override { return HandlerType::Generator; }
 
     public:
-        Generator(Channel& dst, int indent = 0);
+        Generator(Channel& dst, int_fast8_t indent = 0);
 
         // direct: write each line to dst straight from the calling task instead of queueing it for
         // the output task.  Used to save the config file (see save_config_file() in
         // ProcessSettings.cpp).
-        Generator(Channel& dst, int indent, bool direct);
+        Generator(Channel& dst, int_fast8_t indent, bool direct);
 
         bool allWritten() const { return written_ == expected_; }
 
@@ -50,72 +59,82 @@ namespace Configuration {
             std::string line(indent_ * 2, ' ');
             line += name;
             line += ": ";
-            line += value;
+
+            // If value contains a colon, wrap text as string
+            if (value.find(':') == std::string::npos) {
+                line += value;
+            } else {
+                line += "'";
+                line += value;
+                line += "'";
+            }
             emit(line);
         }
 
-        void item(const char* name, int& value, int32_t minValue, int32_t maxValue) override { send_item(name, std::to_string(value)); }
+        void send_item(const char* name, char value) {
+            std::string s;
+            s = value;
+            send_item(name, s);
+        }
 
-        void item(const char* name, uint32_t& value, uint32_t minValue, uint32_t maxValue) override {
+        void send_item(const char* name, const char* value) { send_item(name, std::string(value)); }
+
+        void item(const char* name, int32_t& value, const int32_t minValue, const int32_t maxValue) override {
             send_item(name, std::to_string(value));
         }
 
-        void item(const char* name, float& value, float minValue, float maxValue) override { send_item(name, std::to_string(value)); }
+        void item(const char* name, uint32_t& value, const uint32_t minValue, const uint32_t maxValue) override {
+            send_item(name, std::to_string(value));
+        }
 
-        void item(const char* name, std::vector<speedEntry>& value) {
-            std::string s;
+        void item(const char* name, float& value, const float minValue, const float maxValue) override {
+            send_item(name, std::to_string(value));
+        }
+
+        void item(const char* name, std::vector<speedEntry>& value) override {
             if (value.size() == 0) {
-                s += "None";
+                send_item(name, "None");
             } else {
+                std::string s;
                 const char* separator = "";
                 for (speedEntry n : value) {
-                    s += separator;
+                    s += separator + std::to_string(n.speed) + "=" + formatFloat(n.percent, 2) + "%";
                     separator = " ";
-                    s += std::to_string(n.speed);
-                    s += '=';
-                    s += std::to_string(n.percent);
-                    s += '%';
                 }
+                send_item(name, s);
             }
-            send_item(name, s);
+        }
+
+        void item(const char* name, std::vector<float>& value) override {
+            if (value.size() == 0) {
+                send_item(name, "None");
+            } else {
+                std::string s;
+                const char* separator = "";
+                for (float n : value) {
+                    s += separator + formatFloat(n, 3);
+                    separator = " ";
+                }
+                send_item(name, s);
+            }
         }
 
         void item(const char* name, UartData& wordLength, UartParity& parity, UartStop& stopBits) override {
-            std::string s;
-            s += std::to_string(int(wordLength) - int(UartData::Bits5) + 5);
-            switch (parity) {
-                case UartParity::Even:
-                    s += 'E';
-                    break;
-                case UartParity::Odd:
-                    s += 'O';
-                    break;
-                case UartParity::None:
-                    s += 'N';
-                    break;
-            }
-            switch (stopBits) {
-                case UartStop::Bits1:
-                    s += '1';
-                    break;
-                case UartStop::Bits1_5:
-                    s += "1.5";
-                    break;
-                case UartStop::Bits2:
-                    s += '2';
-                    break;
-            }
-            send_item(name, s);
+            send_item(name, encodeUartMode(wordLength, parity, stopBits));
         }
 
-        void item(const char* name, std::string& value, int minLength, int maxLength) override { send_item(name, value); }
+        void item(const char* name, std::string& value, const int minLength, const int maxLength) override { send_item(name, value); }
 
         void item(const char* name, bool& value) override { send_item(name, value ? "true" : "false"); }
 
+        void item(const char* name, EventPin& value) override { send_item(name, value.name()); }
+        void item(const char* name, InputPin& value) override { send_item(name, value.name()); }
         void item(const char* name, Pin& value) override { send_item(name, value.name()); }
+        void item(const char* name, Macro& value) override { send_item(name, value.get()); }
 
         void item(const char* name, IPAddress& value) override { send_item(name, IP_string(value)); }
-        void item(const char* name, int& value, EnumItem* e) override {
+        void item(const char* name, step_engine*& value) override { send_item(name, value->name); }
+        void item(const char* name, uint32_t& value, const EnumItem* e) override {
             const char* str = "unknown";
             for (; e->name; ++e) {
                 if (value == e->value) {
@@ -125,5 +144,6 @@ namespace Configuration {
             }
             send_item(name, str);
         }
+        void item(const char* name, axis_t& value) override;
     };
 }

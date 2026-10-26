@@ -1,127 +1,149 @@
-# Assembling the Router 4.1
+# Assembling The Router
 
-This guide will walk you through assembling the router mount for your Maslow 4.1 CNC. The router assembly connects your router to the sled and provides Z-axis movement.
+![The assembled Maslow4 router](images/router-01.jpg)
 
-![Router Assembly Overview](images/router-01.jpg)
+The Dewalt 611 router is the heart of Maslow4. In this step we're going to attach everything to the router.
 
-## Tools and Parts Needed
+A video walkthrough of this process is available here: [Maslow 4.1 Router Assembly Video](https://www.youtube.com/watch?v=SX6Un_KJFtk)
 
-- T10 Torx screwdriver
-- Allen wrench
-- DeWalt DWP611 router (or compatible)
-- PCB mounting plate
-- Router clamp and wedge
-- Lock nuts
-- Eight upright pieces
-- Linear bearings
-- Bolts
+Find any of these steps confusing or get stuck? Don't forget, you aren't alone! Maslow is a community driven open source project. Ask in the [forums](https://forums.maslowcnc.com/) and we'll figure it out together!
 
-## Step 1: Prepare the Router
+![Removing the router body from the base](images/router-02.jpg)
 
-Remove the router body from its stock base. The base is not needed for the Maslow 4.1 installation.
+Remove the router body from the router base. Set the base aside, we won't need it.
 
-![Router Preparation](images/router-02.jpg)
+![Attaching the PCB mounting plate](images/router-03.jpg)
 
-![Router Body](images/router-03.jpg)
+Attach the PCB mounting plate to the top of the router. The orientation of this part is important so be sure that it's not rotated 180 degrees. The power cord is down in this photo. Use a firm slap or a tap on the table to press it in place.
 
-## Step 2: Attach PCB Mounting Plate
+> **Note:** This part has been reported to fit not quite right on the 240 volt version of the router. See a potential modification to this part [here](https://forums.maslowcnc.com/t/which-router-to-order-for-240-volt-countries/19550/31?u=bar).
 
-Attach the PCB mounting plate to the top of the router. Make sure this piece is oriented correctly (often with power cords pointed down). A firm tap may be needed to seat it properly.
+![The first router clamp](images/router-04.jpg)
 
-![PCB Mounting Plate](images/router-04.jpg)
+Next find the first router clamp. Note that this is actually two parts together.
 
-![Mounting Plate Attached](images/router-05.jpg)
+![Separating the wedge and inserting lock nuts](images/router-05.jpg)
 
-## Step 3: Assemble the Router Clamp
+Separate the clamping wedge and insert two lock nuts..
 
-Find the first clamp and wedge. Separate them and insert the lock nuts into their designated slots. Reassemble the wedge and lightly start threading the bolts.
+![Sliding the clamp down the router](images/router-06.jpg)
 
-![Router Clamp Parts](images/router-06.jpg)
+Put the wedge back on the clamp and add two bolts so that they just barely start to engage the threads on the bolt. Then slide the clamp down the router. Note that the notch in the clamp should be towards the power cord.
 
-![Clamp Assembly](images/router-07.jpg)
+![Tightening the clamp bolts](images/router-07.jpg)
 
-![Lock Nuts](images/router-08.jpg)
+Next, tighten the two bolts to lock the clamp in place.
 
-## Step 4: Attach Clamp to Router
+![The eight upright pieces](images/router-08.jpg)
 
-Slide the clamp down onto the router with the notch toward the power cord. Tighten the bolts to secure it in place.
+Next, collect the eight pieces which make up the Maslow4 uprights.
 
-![Clamp on Router](images/router-09.jpg)
+![Guiding nuts into the upright recesses](images/router-09.jpg)
 
-![Clamp Tightened](images/router-10.jpg)
+Stack two on top of each-other and then use the Allen wrench to guide a nuts into place in the three recesses at the bottom. I used the regular nuts instead of the lock nuts here because I find it easier.
 
-## Step 5: Build Uprights
+![Adding a bolt from the other side](images/router-10.jpg)
 
-Stack pairs of upright pieces. Place nuts using an Allen wrench, and thread bolts from below so gravity holds the nuts in place. Repeat for all four sets (eight upright pieces total).
+Then add a bolt from the other side. I like to thread the bolts in from the bottom while letting gravity hold the nuts in place.
 
-![Upright Parts](images/router-11.jpg)
+![Repeat for all four uprights](images/router-11.jpg)
 
-![Upright Assembly](images/router-12.jpg)
+Repeat this step for all four uprights.
 
-![Uprights Complete](images/router-13.jpg)
+![The linear bearings and two uprights](images/router-12.jpg)
 
-## Step 6: Install Linear Bearings
+Next collect the linear bearings and two of the uprights.
 
-Insert linear bearings into each end of two uprights. These will be the uprights that go to the left and right of the power cord when assembling.
+![Pressing a linear bearing into each end](images/router-13.jpg)
 
-![Linear Bearings](images/router-14.jpg)
+Press a linear bearing into each end of those two uprights.
 
-![Bearings Installed](images/router-15.jpg)
+![Bolting the uprights to the clamp](images/router-14.jpg)
 
-## Step 7: Attach Uprights to Clamp
+Next, we will bolt the uprights to the clamp. The uprights with the linear bearings will fit into recesses on two of the arms (shown on the right).
 
-The two bearing-equipped uprights go on the sides near the power cord. The other two uprights without bearings go in the remaining positions. Secure with bolts.
+Note that the two uprights with the linear bearings go to the left and right of the power cord, while the two without linear bearings go close to the power cord and across from it.
 
-![Uprights on Clamp](images/router-16.jpg)
+![Upright orientation](images/router-15.jpg)
 
-![Uprights Attached](images/router-17.jpg)
+![Each upright held with three bolts](images/router-16.jpg)
 
-## Step 8: Install Arms
+Each upright is held in place with three bolts.
 
-Slide the four arm assemblies onto the router in the order specified in the assembly diagrams. Reference the official instructions for the correct sequence.
+![Gathering the four arms](images/router-17.jpg)
 
-![Arm Installation Diagram](images/router-21.png)
+Gather the four arms that we built previously.
 
-![Arms on Router](images/router-18.jpg)
+![Sliding the arms onto the router](images/router-18.jpg)
 
-![Arms Positioned](images/router-19.jpg)
+And slide them onto the router. Note that the order that they go on is important. See the illustration below for the correct order.
 
-## Step 9: Secure Leadscrew Nuts
+![Correct arm assembly order](images/router-19.png)
 
-Remove the leadscrew nuts from the Z-axis motors. Bolt them to the second router clamp.
+Credit to jwolter for creating this helpful image
 
-![Leadscrew Nuts](images/router-20.jpg)
+![Assembly process animation](images/router-20.gif)
 
-![Nuts Secured](images/router-22.jpg)
+Here is a gif showing the assembly process. Note that the power cord is to the right in this clip.
 
-## Step 10: Final Assembly
+And here is a video: [Arm Installation Video](https://www.youtube.com/watch?v=J3MzsTrPA-Q)
 
-Place the router assembly onto the sled, aligning the power cord with the dust collection port outlet. Attach linear rod supports and secure everything.
+![Removing the leadscrew nuts](images/router-21.jpg)
 
-![Final Router Assembly](images/router-23.jpg)
+Next remove the two leadscrew nuts from the z-axis stepper motors attached to the sled.
 
-![Router on Sled](images/router-24.jpg)
+![The leadscrew nuts](images/router-22.jpg)
 
-![Router Mounted](images/router-25.gif)
+They will look like this.
 
-![Complete Router Assembly](images/router-26.jpg)
+![Bolting the leadscrew nuts into the second clamp](images/router-23.jpg)
 
-## Router Compatibility
+The two lead screw nuts will bolt into the second router clamp like this. The nut has a longer side and a shorter side. The direction is not critical, but I put the longer side down as shown in the picture.
 
-The Maslow 4.1 is designed for the DeWalt DWP611 (diameter: 69mm). Other compatible routers may work, but only the DeWalt is guaranteed to fit out of the box. If using a different router or upgrading to a brushless spindle, ensure the diameter is ≤69mm, otherwise you may need to print a spacer adapter.
+Repeat the process of adding nuts and bolts to the clamping wedge on the lower clamp the same as on the upper router clamp.
 
-## Tips and Troubleshooting
+![Flipping the router clamp into place](images/router-24.jpg)
 
-- Use Allen keys or precision screwdrivers for tight spots.
-- Tighten bolts just snugly—do not overtighten, especially on plastic parts. Many users use the "three-finger torque" method to avoid stripping threads.
-- Expect some small gaps; 1-4mm play is normal between arms.
-- Assembly can be done in a weekend with basic hand tools.
+Flip the router clamp into place on the router so that the notch in the clamp aligns with the yellow button on the router.
 
-## Next Steps
+![Tightening the clamp bolts](images/router-25.jpg)
 
-Once the router is assembled and mounted, proceed to [Putting It All Together](../putting-it-all-together-4-1/README.md).
+Tighten the bolts to lock the clamp in place
 
-## Resources
+![Bolting the clamp to the uprights](images/router-26.jpg)
 
-- [Maslow 4.1 Assembly Video](https://www.youtube.com/watch?v=qDF2Xozx1bA)
-- [Maslow CNC Forums](https://forums.maslowcnc.com/)
+Then bolt it to the uprights like before.
+
+> **Note:** We recommend not using lock nuts in this step. If you need to take the machine apart you will remove this clamp and the lock nuts can be difficult to remove.
+
+![Placing the main controller board](images/router-27.jpg)
+
+Place the main controller board on top of the router and plug in the four motors.
+
+![Connecting the encoder cables](images/router-28.jpg)
+
+Use the four JST-XH cables to connect the encoders to the controller board.
+
+![The cooling fan and PCB cover](images/router-29.jpg)
+
+Next collect the cooling fan and the PCB cover
+
+![Bolting the cooling fan into the cover](images/router-30.jpg)
+
+Bolt the cooling fan into the controller cover using four bolts.
+
+![Bending the fan wire](images/router-31.jpg)
+
+Add a slight bend to the fan wire close to the connector. This will help keep the wire directed so that it won't go into the fan blades once everything is assembled.
+
+![Plugging in the cooling fan](images/router-32.jpg)
+
+Plug the cooling fan into the controller board.
+
+![Bolting the PCB cover, board, and router together](images/router-33.jpg)
+
+Finally bolt the PCB cover, the controller board and the router together using three bolts and three nuts placed underneath.
+
+## Congratulations! The heart of your machine is complete.
+
+Next let's [put it all together](../putting-it-all-together-4-1/README.md).

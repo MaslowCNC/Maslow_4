@@ -13,7 +13,13 @@ This guide is intended to get your Maslow up and running in as few words as poss
 - Have a **FIRE** suppression plan and equipment. This may be the biggest risk. Hot blades ignite dust.
 - Consider how you will cut power to the machine in an emergency.
 - Check for loose parts, tools, keys, and if the blades are in an appropriate place before providing power to the machine.
-- Train yourself and anyone who will come in contact with the machine on your saftely plan.
+- Train yourself and anyone who will come in contact with the machine on your saftey plan.
+
+  
+## What's not in the box
+
+- Dewalt DW611 Router 120 volt countries or Dewalt D26200 in 240 volt countries
+- Cutting bit, 1/4 Inch Two Flute Up Spiral Router Bit is good to start with
 
 ## Choosing your Anchors
 
@@ -33,7 +39,7 @@ You can find a complete list of different anchor types here: [ADD LINK]
 
 <img width="500" alt="image" src="https://github.com/user-attachments/assets/8e36c830-4d37-4d99-a702-d1638e9ebba6" />
 
-We've put together a tool to help you to better understand what size of frame you might want and how that will impact your cutting area. You can find that tool here: https://maslowcnc.github.io/Layout-Simulator/
+We've put together a tool to help you to better understand what size of frame you might want and how that will impact your cutting area. You can find that tool here: [Layout Simulator](layout-simulator/).
 
 <img src="quick-start/images/Layout%20Simulator.png" alt="Layout Simulator" width="600">
 
@@ -42,7 +48,7 @@ We've put together a tool to help you to better understand what size of frame yo
   - Belt ends will be taken on and off a lot.
   - Can be horizontal to 20 degrees from vertical.
   - Does not have to be exactly rectangular.
-  - Software limits basic frames to less than 5 meters wide and tall.
+  - Software limits basic frames to less than 5.5 meters wide and tall.
   - Belts are 4.4 meters long. Cutting area can not be farther than that from an anchor.
 
 ## Connecting
@@ -121,7 +127,7 @@ maslow.yaml contains the configuration settings for your machine. Your calibrati
 
 The Maslow 4 belts can be retracted for storage and extended for use.
 
-Every time that the belts are retracted the machine will use that as an oportunity to reset it's understanding of how long each belt is. This is done by monitoring the current required to retract each belt. If your machine is in an unknown state retracting the belts will help it to understand exactly where it is.
+Every time that the belts are retracted the machine will use that as an opportunity to reset it's understanding of how long each belt is. This is done by monitoring the current required to retract each belt. If your machine is in an unknown state retracting the belts will help it to understand exactly where it is. After retracting all belts Maslow 4 will measure how much belt has been spooled out using the sensor and magnet in the idle gear. 
 
 To retract the belts press **Setup -> Retract All**
 
@@ -145,11 +151,15 @@ Once all four belts are fully extended you will hear the cooling fan turn off. C
 
 ## Finding your anchor point locations
 
-If you haven't prevously connected your machine to these anchor points, you will need to locate them. This can be done with a tape measure, but that is slow and error prone.
+If you haven't previously connected your machine to these anchor points, you will need to locate them. This can be done with a tape measure, but that is slow and error prone.
 
-Press **Find Anchor Locations** to have the machine take a series of measruements to automatically locate the anchor points for you. The machine will move through a grid of points and take measurements at each one.
+Unplug the machine, remove the blade from the router, then plug it back in and use the down z arrow until the machine can't go any further down.  Open the Settings menu and set Z Stop here.  This is different than z home.  Z stop is the lowest the motors can go. Z home should be set on each job with the cutting blade installed and just barely touching the cutting surface. 
+<img width="1149" height="933" alt="Screenshot from 2026-08-26 10-04-05" src="https://github.com/user-attachments/assets/4eaf439a-c975-4e16-94c6-2a9b991d11a6" />
+Any time you are finding anchors be sure to have the machine with z all the way down.
 
-Be sure to leave your web bowser tab open through the entire process because the calculations will be done there since your computer has much more processing power than the ESP32 in the Maslow.
+Press **Find Anchor Locations** to have the machine take a series of measurements to automatically locate the anchor points for you. The machine will move through a grid of points and take measurements at each one.
+
+Be sure to leave your web browser tab open through the entire process because the calculations will be done there since your computer has much more processing power than the ESP32 in the Maslow. 
 
 Keep an eye on the machine during this entire process, it may be tempting to walk away, but it is important to keep an eye on it.
 
@@ -201,16 +211,24 @@ If you want to move where the file will be cut on the sheet of plywood you can p
 Similarly you can set where the home position is for the z-axis. This will set where the router will start cutting which is typically on the top surface of the plywood. To set the home position for the z-axis:
 
 1. Move the z-axis up or down with the **Up** and **Down** buttons until the router bit is just touching the surface of your material
-2. Press **Define Home** to set the z-axis home position
+2. Press **Define Z Home** to set the z-axis home position
 
 <img src="user-guide/images/guide-15.png" alt="Z-axis home" width="600">
 
 This ensures that your cuts will be at the correct depth.
 
+## Setting Spoil and Work Thickness
+
+Click on **Options** on the right of the arrow buttons, then **Set Scale and Thickness**
+measure your spoil board in mm and then the material to cut through on top of that. Enter those values here. 
 
 ## Running a file
 
-Once you have uploaded your gcode file, positioned the machine, and set the home positions, you're ready to run your first cut!
+Once you have uploaded your gcode file, positioned the machine, and set the home positions, you're ready to run your first cut!  
+
+It is a good idea to run the cut with no blade in and the router off for your first try to make sure that all of the settings will work with your physical setup. 
+
+Before running a file you can also click on the **Trace Boundary** button and Maslow will move around the outside edge of the area that will be cut without moving the z axis down. 
 
 To run the file:
 
@@ -228,6 +246,8 @@ The machine will begin following the toolpath in your gcode file. You can:
 - Monitor the progress on screen
 
 Stay nearby while the machine is cutting, especially for your first few cuts. This will help you identify any issues early and ensure everything is working correctly.
+
+If you press Stop you will need to restart the machine and reset Z home.
 
 If you encounter any problems or error messages, check the [error messages documentation](https://www.maslowcnc.com/error-messages) or ask for help in the [Maslow forums](https://forums.maslowcnc.com/).
 

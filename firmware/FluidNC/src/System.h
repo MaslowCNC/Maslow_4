@@ -1,22 +1,18 @@
 // Copyright (c) 2014-2016 Sungeun K. Jeon for Gnea Research LLC
-// Copyright (c) 2018 -	Bart Dring: This file was modified for use on the ESP32
+// Copyright (c) 2018 -	Bart Dring
 // Copyright (c) 2023 -	Stefan de Bruijn: Modified for listeners.
 // Use of this source code is governed by a GPLv3 license that can be found in the LICENSE file.
 
 #pragma once
 
-#include "Types.h"
-
 // Execution states and alarm
-#include "Types.h"
+#include "State.h"
 #include "Probe.h"
-#include "Config.h"    // MAX_N_AXIS
-#include "Platform.h"  // IRAM_ATTR
-
+#include "Config.h"  // MAX_N_AXIS
 #include <map>
 #include <vector>
 
-const char* stateName(State state);
+extern const std::map<State, const char*> StateName;
 
 // Step segment generator state flags.
 struct StepControl {
@@ -111,11 +107,11 @@ public:
 
     State IRAM_ATTR state() const { return state_; }
     void IRAM_ATTR  set_state(State value) {
-        // We don't have to check the old value always... just when state changes can happen a lot or at more or less the same time.
+         // We don't have to check the old value always... just when state changes can happen a lot or at more or less the same time.
         // It's also not too bad if there are concurrency issues; it will just trigger more events.
         if (value != state_) {
-            dirty_ = SystemDirty(int(dirty_) | int(SystemDirty::State));
-            state_ = value;
+             dirty_ = SystemDirty(int(dirty_) | int(SystemDirty::State));
+             state_ = value;
         }
     }
 
@@ -127,23 +123,23 @@ public:
 
     Suspend IRAM_ATTR suspend() const { return suspend_; }
     void IRAM_ATTR    set_suspend(Suspend value) {
-        dirty_   = SystemDirty(int(dirty_) | int(SystemDirty::Suspend));
-        suspend_ = value;
+           dirty_   = SystemDirty(int(dirty_) | int(SystemDirty::Suspend));
+           suspend_ = value;
     }
 
     Percent IRAM_ATTR f_override() const { return f_override_; }
     void IRAM_ATTR    set_f_override(Percent value) {
-        dirty_      = SystemDirty(int(dirty_) | int(SystemDirty::FeedOverride));
-        f_override_ = value;
+           dirty_      = SystemDirty(int(dirty_) | int(SystemDirty::FeedOverride));
+           f_override_ = value;
     }
 
     Percent IRAM_ATTR r_override() const { return r_override_; }
     void IRAM_ATTR    set_r_override(Percent value) {
-        dirty_      = SystemDirty(int(dirty_) | int(SystemDirty::RapidOverride));
-        r_override_ = value;
+           dirty_      = SystemDirty(int(dirty_) | int(SystemDirty::RapidOverride));
+           r_override_ = value;
     }
 
-    void IRAM_ATTR set_spindle_speed_ovr(int value) {
+    void IRAM_ATTR set_spindle_speed_ovr(uint32_t value) {
         dirty_             = SystemDirty(int(dirty_) | int(SystemDirty::SpindleSpeedOverride));
         spindle_speed_ovr_ = value;
     }
@@ -151,15 +147,15 @@ public:
 
     Override IRAM_ATTR override_ctrl() const { return override_ctrl_; }
     void IRAM_ATTR     set_override_ctrl(Override value) {
-        dirty_         = SystemDirty(int(dirty_) | int(SystemDirty::OverrideControl));
-        override_ctrl_ = value;
+            dirty_         = SystemDirty(int(dirty_) | int(SystemDirty::OverrideControl));
+            override_ctrl_ = value;
     }
 
     SpindleSpeed IRAM_ATTR spindle_speed() const { return spindle_speed_; }
     void IRAM_ATTR         set_spindle_speed(SpindleSpeed value) {
-        if (spindle_speed_ != value) {
-            dirty_         = SystemDirty(int(dirty_) | int(SystemDirty::SpindleSpeed));
-            spindle_speed_ = value;
+                if (spindle_speed_ != value) {
+                    dirty_         = SystemDirty(int(dirty_) | int(SystemDirty::SpindleSpeed));
+                    spindle_speed_ = value;
         }
     }
 
@@ -175,22 +171,29 @@ public:
 
 extern system_t sys;
 
+typedef int32_t steps_t;
+
 // NOTE: These position variables may need to be declared as volatiles, if problems arise.
-extern int32_t motor_steps[MAX_N_AXIS];  // Real-time machine (aka home) position vector in steps.
-extern int32_t probe_steps[MAX_N_AXIS];  // Last probe position in machine coordinates and steps.
+extern steps_t steps[MAX_N_AXIS];        // Real-time machine (aka home) position vector in steps.
+extern steps_t probe_steps[MAX_N_AXIS];  // Last probe position in machine coordinates and steps.
 
 void system_reset();
 
-float   steps_to_mpos(int32_t steps, size_t axis);
-int32_t mpos_to_steps(float mpos, size_t axis);
+// Per axis
+float   steps_to_motor_pos(steps_t steps, size_t motor);
+steps_t motor_pos_to_steps(float mpos, size_t motor);
+steps_t get_axis_steps(axis_t axis);
+void    set_steps(axis_t axis, steps_t steps);
+void    set_motor_pos(size_t motor, float motor_pos);
 
-int32_t  get_axis_motor_steps(size_t axis);
-void     set_motor_steps(size_t axis, int32_t steps);
-void     set_motor_steps_from_mpos(float* mpos);
-int32_t* get_motor_steps();
-
-// Updates a machine position array from a steps array
-void motor_steps_to_mpos(float* position, int32_t* steps);
+// All axes
+steps_t* get_steps();
+void     steps_to_motor_pos(float* motor_pos, steps_t* steps);
+void     motor_pos_to_steps(steps_t* steps, float* motor_pos);
+void     get_steps(steps_t* steps);
+float*   get_motor_pos();
+void     set_motor_pos(float* motor_pos, size_t n_motors);
+void     steps_to_mpos(float* position, steps_t* steps);
 
 float* get_mpos();
 float* get_wco();

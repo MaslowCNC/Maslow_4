@@ -28,7 +28,7 @@
 namespace Spindles {
     class SpindleBoard : public Spindle {
     public:
-        SpindleBoard() = default;
+        SpindleBoard(const char* name) : Spindle(name) {}
 
         SpindleBoard(const SpindleBoard&)            = delete;
         SpindleBoard(SpindleBoard&&)                 = delete;
@@ -97,15 +97,13 @@ namespace Spindles {
             Spindle::group(handler);
         }
 
-        const char* name() const override { return "SpindleBoard"; }
-
         virtual ~SpindleBoard() {}
 
     private:
-        int   _uart_num         = -1;
-        Uart* _uart             = nullptr;
-        float _phase_deg_per_mm = 1.0f;
-        int   _max_rpm          = 10000;
+        int32_t _uart_num         = -1;
+        Uart*   _uart             = nullptr;
+        float   _phase_deg_per_mm = 1.0f;
+        int32_t _max_rpm          = 10000;
 
         // Last values sent so we only transmit on change
         float    _last_sent_deg  = 0.0f;

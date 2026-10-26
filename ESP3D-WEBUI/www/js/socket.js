@@ -107,7 +107,8 @@ const Disable_interface = (lostconnection) => {
 		event_source.removeEventListener("DHT", DHT_events, false);
 	}
 	ws_source.close();
-	document.title += `('${HTMLDecode(translate_text_item("Disabled"))})`;
+	// Set rather than append: each disconnect (e.g. a firmware reboot) used to add another suffix
+	document.title = `${esp_hostname} (${HTMLDecode(translate_text_item("Disabled"))})`;
 	// Only show the dialog if it is not already visible (avoids duplicate listmodal entries)
 	const disabledModal = id("UIdisableddlg.html");
 	if (!disabledModal || disabledModal.style.display === "none") {
@@ -206,6 +207,8 @@ const startSocket = () => {
 		// Reconnected successfully after a disconnection: cancel the auto-retry timer,
 		// restore communication flags, and close the disconnect dialog.
 		cancelReconnectTimer();
+		// Drop the "(Disabled)" suffix Disable_interface() put on the tab title
+		Set_page_title();
 		// Always arm the ping watchdog on every (re)connect,
 		// including the very first connection on page load.
 		handlePing();

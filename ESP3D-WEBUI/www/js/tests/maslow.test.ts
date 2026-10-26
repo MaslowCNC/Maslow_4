@@ -5,7 +5,8 @@ import {
   MaslowErrMsgNoMatchingKey,
   MaslowErrMsgKeyValueCantUse,
   MaslowErrMsgKeyValueSuffix,
-  maslowMsgHandling
+  maslowMsgHandling,
+  processMaslowConfigResponse
 } from "../maslow";
 
 describe('maslowMsgHandling', () => {
@@ -15,6 +16,8 @@ describe('maslowMsgHandling', () => {
               <input id="retractionForce" value="" />
               <input id="spoilboardThickness" value="" />
               <input id="workThickness" value="" />
+              <input id="applyTensionBeltRetractionLimit" value="" />
+              <input id="applyTensionAllowLimiting" value="" />
               <input id="machineWidth" value="" />
               <input id="machineHeight" value="" />
           `;
@@ -44,6 +47,8 @@ describe('maslowMsgHandling', () => {
     ["Retract_Current_Threshold", "1500", "retractionForce"],
     ["spoilboardThickness", "5.5", "spoilboardThickness"],
     ["workThickness", "19.0", "workThickness"],
+    ["Apply_Tension_Belt_Retraction_Limit", "300", "applyTensionBeltRetractionLimit"],
+    ["Apply_Tension_Allow_Limiting", "true", "applyTensionAllowLimiting"],
   ];
 
   const noErrorResult = (key, value) => {
@@ -54,6 +59,25 @@ describe('maslowMsgHandling', () => {
   test.each(stdActions)("Key %p sets value %p into %p", (key, value, outputValueName) => {
     noErrorResult(key, value);
     expect(global.loadedValues[outputValueName]).toBe(value);
+  });
+
+  test("processes Maslow config values returned by HTTP queries", () => {
+    processMaslowConfigResponse([
+      "$/Maslow_Scale_X=1.05",
+      "$/Maslow_Scale_Y=0.97",
+      "$/Maslow_Work_Area_X=2400",
+      "$/Maslow_Work_Area_Y=1200",
+      "$/Maslow_Extend_Dist=3100",
+      "ok",
+    ].join("\n"));
+
+    expect(global.loadedValues).toMatchObject({
+      scaleX: "1.05",
+      scaleY: "0.97",
+      workAreaX: "2400",
+      workAreaY: "1200",
+      extendDist: "3100",
+    });
   });
 
   const setDim = (key, value, outDim, outValue) => {
@@ -94,5 +118,57 @@ describe('maslowMsgHandling', () => {
 
   test.each(stdDimensionActions)("Key %p with value %p sets %p", (key, value, outDim, outValue = undefined) => {
     setDim(key, value, outDim, outValue);
+  });
+
+  test("spoilboardThickness updates all elements with that id (duplicate-id fix)", () => {
+    // Simulate having duplicate ids as in the real HTML (scale-thickness-popup and configuration-popup)
+    document.body.innerHTML = `
+      <div id="scale-thickness-popup">
+        <input id="spoilboardThickness" value="" />
+      </div>
+      <div id="configuration-popup">
+        <input id="spoilboardThickness" value="" />
+      </div>
+    `;
+    global.loadedValues = {};
+    maslowMsgHandling("spoilboardThickness=7.5");
+    const allElements = document.querySelectorAll('[id="spoilboardThickness"]');
+    expect(allElements.length).toBe(2);
+    expect((allElements[0] as HTMLInputElement).value).toBe("7.5");
+    expect((allElements[1] as HTMLInputElement).value).toBe("7.5");
+    expect(global.loadedValues["spoilboardThickness"]).toBe("7.5");
+  });
+
+  test("workThickness updates all elements with that id (duplicate-id fix)", () => {
+    // Simulate having duplicate ids as in the real HTML (scale-thickness-popup and configuration-popup)
+    document.body.innerHTML = `
+      <div id="scale-thickness-popup">
+        <input id="workThickness" value="" />
+      </div>
+      <div id="configuration-popup">
+        <input id="workThickness" value="" />
+      </div>
+    `;
+    global.loadedValues = {};
+    maslowMsgHandling("workThickness=12.0");
+    const allElements = document.querySelectorAll('[id="workThickness"]');
+    expect(allElements.length).toBe(2);
+    expect((allElements[0] as HTMLInputElement).value).toBe("12.0");
+    expect((allElements[1] as HTMLInputElement).value).toBe("12.0");
+    expect(global.loadedValues["workThickness"]).toBe("12.0");
+  });
+
+  test("MINFO status changes refresh job bounds visibility", () => {
+    let refreshCount = 0;
+    const previousUpdate = global.updateJobBoundsDisplay;
+    global.updateJobBoundsDisplay = () => { refreshCount += 1; };
+
+    try {
+      maslowInfoMsgHandling('MINFO: {"state":3}');
+
+      expect(refreshCount).toBe(1);
+    } finally {
+      global.updateJobBoundsDisplay = previousUpdate;
+    }
   });
 });

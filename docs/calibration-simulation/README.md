@@ -44,11 +44,19 @@ Processes **real calibration measurement data** pasted by the user to compute op
 
 ## Code Sharing
 
-Both simulators use the **exact same calibration computation code** as the ESP3D-WEBUI. The shared library (`../../ESP3D-WEBUI/www/js/calibration-computation.js`) ensures:
-- ✅ Identical behavior between simulators and real machine
-- ✅ Zero code duplication
-- ✅ Guaranteed consistency
-- ✅ Single source of truth
+Both simulators run `calibration-computation.js` in this folder, a JavaScript port of the
+calibration math the machine actually runs. That math lives in the firmware, in
+`Calibration::recomputeAnchorsWithLevenbergMarquardt()`
+(`firmware/FluidNC/src/Maslow/Calibration.cpp`) — the firmware is the source of truth, and
+this file is a port kept in step with it by hand.
+
+The port used to be shipped to the machine as well, at
+`ESP3D-WEBUI/www/js/calibration-computation.js`. It no longer is: once calibration moved
+into C++, the web UI stopped calling the JS solver entirely, so it was deleted from the
+bundle to keep `index.html.gz` small. This copy is for development and simulation only.
+
+⚠️ **If you change the firmware routine, update this file to match** — nothing enforces it
+automatically, and a stale port makes the simulator disagree with the real machine.
 
 ---
 
@@ -66,7 +74,7 @@ The machine simulator provides an accurate representation of the Maslow CNC mach
 - **Non-Rectangular Frame**: Simulates realistic frame imperfections (±20mm variations) instead of perfect rectangles
 
 ### Browser-Side Computation
-- **Iterative Optimization**: Implements the same "magnetically attracted lines" algorithm used in `calculatesCalibrationStuff.js`
+- **Iterative Optimization**: Implements the same "magnetically attracted lines" algorithm the firmware uses
 - **Multi-Stage Processing**: Accurately simulates the multiple computation stages that occur during calibration
 - **Fitness Tracking**: Shows how anchor position estimates improve over time
 
@@ -220,58 +228,49 @@ This "magnetically attracted lines" approach is robust to measurement errors and
 - `test.html`: Test page for verification
 - `README.md`: This documentation
 
-**Shared with ESP3D-WEBUI:**
-- `../../ESP3D-WEBUI/www/js/calibration-computation.js`: **Shared computation library** used by BOTH the simulator and ESP3D-WEBUI
+**Computation library:**
+- `calibration-computation.js`: JavaScript port of the firmware's calibration math, used by
+  every page in this folder
+- `firmware-lm.selftest.js`: Node self-test for the Levenberg-Marquardt port
+  (`node docs/calibration-simulation/firmware-lm.selftest.js`)
+- `algorithm-comparison.test.js`: Node comparison of the two solver strategies
 
-## Code Sharing and Architecture
+## Architecture
 
-### True Code Sharing
+### Where the math lives
 
-This simulator now shares the **exact same computation code** with the ESP3D-WEBUI. Both load `calibration-computation.js` from `ESP3D-WEBUI/www/js/`. This is a critical improvement that:
+The machine runs its calibration solver in C++, in
+`Calibration::recomputeAnchorsWithLevenbergMarquardt()`
+(`firmware/FluidNC/src/Maslow/Calibration.cpp`). The web UI does not compute anchor
+positions at all any more — it starts calibration and waits for the firmware's
+`Calibration complete` message.
 
-1. **Eliminates ALL code duplication** - Single source of truth for calibration algorithm
-2. **Guarantees identical behavior** - Simulator and real machine use the exact same math
-3. **Simplifies maintenance** - Update one file, both implementations benefit automatically
-4. **Prevents divergence** - Impossible for simulator and real code to get out of sync
+`calibration-computation.js` is a hand-maintained JavaScript port of that C++ routine,
+so these tools can reproduce and inspect what the machine does without a machine
+attached. It is loaded only by pages in this folder and is never shipped to the device.
 
-### How It Works
+**Keeping the port honest:** the firmware is authoritative, and the port only tracks it
+because someone keeps it in step. When you change the C++ routine, mirror the change here
+and re-run the self-test.
 
-**Shared Library** (`ESP3D-WEBUI/www/js/calibration-computation.js`):
-- Core mathematical functions (`computeLinesFitness`, `magneticallyAttractedLinesFitness`, etc.)
-- `CalibrationComputer` class that manages the iterative optimization process
-- All the "magnetically attracted lines" algorithm logic
-- Loaded by BOTH the ESP3D-WEBUI and the simulator
-
-**ESP3D-WEBUI** (`ESP3D-WEBUI/www/js/calculatesCalibrationStuff.js`):
-- Loads the shared computation library
-- Contains only UI-specific code (messagesBox, sendCommand, etc.)
-- Helper functions for the web interface (projectMeasurements, etc.)
-- No duplicated computation code
-
-**Simulator** (`docs/calibration-simulation/`):
-- Loads the shared computation library from ESP3D-WEBUI
-- `ComputationSimulator` wraps `CalibrationComputer` from shared library
-- Machine simulation and visualization are separate concerns
-
-### Architecture Diagram
+### Diagram
 
 ```
-ESP3D-WEBUI/www/js/
-├── calibration-computation.js  ← SINGLE SOURCE OF TRUTH
-│   └── Used by both ↓
-│
-├── calculatesCalibrationStuff.js (UI-specific code)
-│   └── Loads calibration-computation.js
-│
+firmware/FluidNC/src/Maslow/Calibration.cpp   ← SOURCE OF TRUTH (runs on the machine)
+        │
+        │ hand-maintained port
+        ▼
 docs/calibration-simulation/
-├── index.html
-│   └── Loads ../../ESP3D-WEBUI/www/js/calibration-computation.js
+├── calibration-computation.js   ← JS port, dev/simulation only
+├── index.html          ─┐
+├── data-parser.html     ├─ load calibration-computation.js
+├── test.html           ─┘
 ├── computation-simulator.js (thin wrapper)
 ├── machine-simulator.js
 └── visualization.js
-```
 
-This is true code sharing - not just copying algorithms, but using the exact same file in both places.
+ESP3D-WEBUI/  ← ships index.html.gz; contains no calibration solver
+```
 
 ## Limitations
 
@@ -308,7 +307,7 @@ Potential improvements:
 
 - **Original Simulation**: https://github.com/BarbourSmith/Calibration-Simulation/
 - **FluidNC Firmware**: `firmware/FluidNC/src/Maslow/Calibration.cpp`
-- **Browser Algorithm**: `ESP3D-WEBUI/www/js/calculatesCalibrationStuff.js`
+- **JS Port of the Algorithm**: `docs/calibration-simulation/calibration-computation.js`
 - **Maslow Forum**: https://forums.maslowcnc.com/
 
 ## License
