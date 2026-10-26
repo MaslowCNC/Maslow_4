@@ -15,6 +15,8 @@
 #include "load_sense.h"
 #include "usb_console.h"
 #include "adc_timing_test.h"
+#include "current_sampler.h"
+#include "sync_sense.h"
 #include "esp32s3/rom/rtc.h"
 #include "esp_task_wdt.h"
 #include "soc/usb_serial_jtag_struct.h"   // rtc_get_reset_reason: the chip-level reset cause
@@ -155,6 +157,33 @@ static void reportEvent(const char* level, const char* fmt, ...) {
     usbWriteIfRoom(line, n);
 }
 
+#ifdef SYNC_CURRENT_SENSE
+// Line sinks for sync_sense: the USB console (waits briefly for room, core 0 only) and the link.
+static void syncUsbLine(const char* text) {
+    int n = strlen(text);
+    if (n == 0) return;
+    bool nl = text[n - 1] == '\n';
+    for (int i = 0; i < 3 && Serial; i++) {   // brief: a long print must not hold up protection
+        if (Serial.availableForWrite() >= n + (nl ? 0 : 1)) {
+            Serial.write(reinterpret_cast<const uint8_t*>(text), n);
+            if (!nl) Serial.write('\n');
+            return;
+        }
+        vTaskDelay(pdMS_TO_TICKS(1));
+    }
+}
+
+static void syncLinkLine(const char* text) {
+    char line[128];
+    int  n = snprintf(line, sizeof(line), "MSG:%s", text);
+    if (n <= 0) return;
+    if (n >= (int)sizeof(line)) n = sizeof(line) - 1;
+    while (n > 0 && line[n - 1] == '\n') n--;
+    line[n++] = '\n';
+    if (Serial1.availableForWrite() >= n) Serial1.write(reinterpret_cast<const uint8_t*>(line), n);
+}
+#endif
+
 // Tell the XY board that the spindle has (re)established its Z zero (phase offset 0) so it
 // can reset its own Z-axis machine position to 0 and keep the two boards' Z origins aligned.
 // Sent whenever homing, tool loading, or tool removal redefines the phase-offset zero.
@@ -165,7 +194,7 @@ static void notifyZHomed() {
 
 // Defined with the tool state machine below: drop the Z reference and park the sub-machine in
 // NeedsHoming, so nothing moves the Z until a homing cycle re-establishes the zero.
-static void requireRehome();
+void requireRehome();   // also used by the bench slip test (load_sense.cpp)
 
 // Stop for an over-current.  The motors run OPEN-LOOP, so an over-current means the rotor has
 // already lost synchronisation with the commanded field - resuming the commanded speed cannot
@@ -343,7 +372,25 @@ static void checkOvercurrent() {
         last_cal_motor_idx = -1;
     }
 
+#ifdef SYNC_CURRENT_SENSE
+    // Synchronised samples are true phase currents (see SYNC_OVERCURRENT_THRESHOLD).  And the
+    // protection must not run blind: a motor with no valid sample for SYNC_STALE_MS stops.
+    float oc_threshold = SYNC_OVERCURRENT_THRESHOLD;
+    {
+        bool s1 = syncSenseStale(mc1, 0), s2 = syncSenseStale(mc2, 1);
+        if (s1 || s2) {
+            char why[64];
+            snprintf(why, sizeof(why), "current sensing lost on%s%s", s1 ? " M1" : "", s2 ? " M2" : "");
+            Serial.printf("OVERCURRENT: %s\n", why);
+            if (s1) syncSenseDescribe(0);
+            if (s2) syncSenseDescribe(1);
+            stopForOverCurrent(why);
+            return;
+        }
+    }
+#else
     float oc_threshold = OVERCURRENT_THRESHOLD;
+#endif
 
     bool m1_trip = mc1.enabled && mc1.reached_speed && (mc1.protection_current > oc_threshold);
     bool m2_trip = mc2.enabled && mc2.reached_speed && (mc2.protection_current > oc_threshold);
@@ -637,7 +684,7 @@ static void finishZMove() {
 // Drop the Z reference after a slip.  Deliberately parks in NeedsHoming rather than Booting:
 // Booting auto-starts a homing cycle after BOOT_HOMING_DELAY_MS, and the Z must not move on its
 // own immediately after a fault - the operator (or the XY board's 'G') asks for it.
-static void requireRehome() {
+void requireRehome() {
     g_z_reference_valid = false;
     g_tool_state        = MachineState::NeedsHoming;
 }
@@ -903,6 +950,7 @@ static void updateReportedState() {
 // anything that held core 1 off between iterations (ISRs, preemption, an enable()'s tPUD wait).
 static volatile uint32_t g_foc_loops      = 0;
 static volatile uint32_t g_foc_max_period_us = 0;
+float g_foc_rate_hz = 0.0f;   // FOC loop iterations per second, updated each housekeeping pass
 
 // The Z is moving: a phase ramp in progress, or the phase changed within Z_MOVE_HOLD_MS (see
 // there).  Set by the housekeeping task, read by the FOC task for the Z-move voltage boost.
@@ -985,6 +1033,11 @@ static void recordTripSample(uint32_t now_ms) {
     // the read and the reset.
     uint32_t loops  = __atomic_exchange_n(&g_foc_loops, 0, __ATOMIC_RELAXED);
     uint32_t max_us = __atomic_exchange_n(&g_foc_max_period_us, 0, __ATOMIC_RELAXED);
+    {   // FOC iteration rate, for the SYNC report (the sampling interrupt shares core 1 with it)
+        static uint32_t prev_ms = 0;
+        if (prev_ms && now_ms > prev_ms) g_foc_rate_hz = loops * 1000.0f / (float)(now_ms - prev_ms);
+        prev_ms = now_ms;
+    }
     s.foc_loops  = (uint16_t)min<uint32_t>(loops, 65535);
     s.foc_max_us = (uint16_t)min<uint32_t>(max_us, 65535);
     s.phase_cur  = phase_offset.current;
@@ -1010,6 +1063,23 @@ static void recordTripSample(uint32_t now_ms) {
         m.iq       = le.iq;
         m.lag      = le.lag_deg;
         prev_nf_total[i] = nf_total[i];
+#ifdef SYNC_CURRENT_SENSE
+        static uint32_t prev_slips[2] = { 0, 0 };
+        const ObserverEstimate& oe = syncObserver(i);
+        auto deg = [](float d) { return isnan(d) ? INT16_MIN : (int16_t)constrain(lroundf(d), -32767L, 32767L); };
+        m.load_deg = deg(oe.load_deg);
+        m.load_max = deg(oe.pass_load_max);
+        m.load_r     = deg(oe.load_r_deg);
+        m.load_r_max = deg(oe.pass_load_r_max);
+        m.obs_rpm  = isnan(oe.speed_rpm) ? UINT16_MAX : (uint16_t)constrain(lroundf(oe.speed_rpm), 0L, 65534L);
+        m.obs_ok   = oe.valid ? 1 : 0;
+        m.slips    = (uint8_t)min<uint32_t>(oe.slips - prev_slips[i], 255);
+        m.smp_n    = (uint8_t)min<uint16_t>(oe.pass_n, 255);
+        m.smp_full = (uint8_t)min<uint16_t>(oe.pass_full, 255);
+        m.smp_lo   = (uint8_t)min<uint16_t>(oe.pass_lo, 255);
+        m.smp_off  = (uint8_t)min<uint16_t>(oe.pass_off, 255);
+        prev_slips[i] = oe.slips;
+#endif
     }
     tripRecorderPush(s);
 }
@@ -1056,6 +1126,16 @@ static void housekeepingTask(void* arg) {
     esp_task_wdt_init(HOUSEKEEPING_WDT_TIMEOUT_S, true);
     esp_task_wdt_add(nullptr);
 
+#ifdef SYNC_CURRENT_SENSE
+    // Synchronised current sampling: its interrupt is allocated on the calling core, so it is
+    // started here (core 0) rather than in setup() (core 1).  The drivers are still asleep, which
+    // the one-time timer alignment and the zero-current measurement need.
+    syncSenseInit(syncUsbLine, syncLinkLine);
+    syncSenseStart();
+    mc1.cur_zero_a = samplerZeroVolts(0, 0); mc1.cur_zero_b = samplerZeroVolts(0, 1); mc1.cur_zero_c = samplerZeroVolts(0, 2);
+    mc2.cur_zero_a = samplerZeroVolts(1, 0); mc2.cur_zero_b = samplerZeroVolts(1, 1); mc2.cur_zero_c = samplerZeroVolts(1, 2);
+#endif
+
     for (;;) {
         esp_task_wdt_reset();
         // OTA: stop touching the ADC and signal otaTask that it is now safe to bring the WiFi
@@ -1063,12 +1143,21 @@ static void housekeepingTask(void* arg) {
         // the drivers.  The board reboots into the new firmware when an update completes.
         if (g_ota_active) {
             setMachineState(MachineState::OtaUpdate);  // announce the transition before we park
+#ifdef SYNC_CURRENT_SENSE
+            if (samplerRunning()) syncSenseStop();     // no ADC use once WiFi may come up
+#endif
             g_motor_in_ota_standby = true;
             last_hk_time           = millis();
             vTaskDelay(pdMS_TO_TICKS(10));
             continue;
         }
         g_motor_in_ota_standby = false;
+#ifdef SYNC_CURRENT_SENSE
+        if (!samplerRunning()) {   // an OTA that ended without a reboot: resume sampling
+            static uint32_t last_try = 0;
+            if (millis() - last_try > 1000) { last_try = millis(); syncSenseStart(); }
+        }
+#endif
 
         uint32_t now_ms = millis();
         float    hk_dt  = (now_ms - last_hk_time) / 1000.0f;
@@ -1076,8 +1165,12 @@ static void housekeepingTask(void* arg) {
 
         // Current sensing (six analogReads, ~0.5 ms) - feeds protection, telemetry and cal.
         // Dithered: the always-on load-sense fit needs reads at random points in the PWM cycle.
+#ifdef SYNC_CURRENT_SENSE
+        syncSenseUpdate(mc1, mc2);
+#else
         mc1.updateCurrent(true);
         mc2.updateCurrent(true);
+#endif
         calibration.accumulateCurrentSample(mc1.last_instantaneous_current, 0);
         calibration.accumulateCurrentSample(mc2.last_instantaneous_current, 1);
         // Load-sense fit over the reads above (no extra ADC reads) and the advisory stall warning.
@@ -1111,6 +1204,9 @@ static void housekeepingTask(void* arg) {
         // calibration and spindle commands have all been applied, logging any transition.
         updateReportedState();
         tripRecorderService();  // stream a captured trip recording to USB, a few lines per pass
+#ifdef SYNC_CURRENT_SENSE
+        syncSenseService(mc1, mc2);
+#endif
         reportResetReasonOnce();
 #ifdef ADC_TIMING_TEST
         repeatAdcTestResults(now_ms);
@@ -1312,6 +1408,11 @@ void setup() {
     // Bench build: measure synchronised SOx sampling with the drivers asleep, before any motor
     // task exists, and skip the power-up Z homing so the motors stay idle (home with 'G').
     adcTimingTestRun(emitAdcTestLine);
+    g_tool_state = MachineState::NeedsHoming;
+#endif
+#ifdef SYNC_BENCH_NO_HOMING
+    // Bench build: no power-up Z homing, so a firmware under test never moves anything by itself
+    // at boot (home with 'G' when wanted).
     g_tool_state = MachineState::NeedsHoming;
 #endif
 

@@ -330,6 +330,47 @@ const float    VSWEEP_STOP_IQ_A     = 1.5f;    // stop after a step whose mean I
 const float    VSWEEP_ABORT_IQ_A    = 0.5f;    // abort mid-step if Iq falls below this
 const uint32_t VSWEEP_SETTLE_MS     = 300;
 const uint32_t VSWEEP_MEASURE_MS    = 500;
+
+// Bench slip test (sync-sense-sliptest build only: the link's "T!" runs the next SLIP_SCHEDULE entry).
+// One motor, the other off and the tool out: spin up, settle, then lower the voltage until the
+// rotor pulls out, and stop that motor itself at the first sign - the observer counting a slip,
+// the observer losing lock, the current, or the floor - so nobody has to stop it by hand.  The
+// trip recording of the 2 s before the stop goes to the XY board as usual.
+const uint32_t SLIPTEST_SETTLE_MS   = 2000;    // at speed before stepping (observer locks)
+const float    SLIPTEST_STEP_V      = 0.05f;   // voltage taken off per step
+const uint32_t SLIPTEST_STEP_MS     = 250;
+const float    SLIPTEST_MIN_DV      = -6.0f;   // give up (no slip) past this offset
+const float    SLIPTEST_MAX_A       = 8.0f;    // phase RMS (this pass) that stops the motor
+const uint32_t SLIPTEST_LOST_MS     = 150;     // observer invalid this long while stepping = stop
+const uint32_t SLIPTEST_TIMEOUT_MS  = 90000;
+// Speeds, sudden drops and rescues: SLIP_SCHEDULE in load_sense.cpp.  The sudden drop goes to
+// back-EMF + dead-time loss + friction drop - SLIPTEST_DROP_BELOW_V (10-26 at 4k: pull-out at
+// 3.37/3.32 V against 3.05 V back-EMF, i.e. ~0.24 V dead time + ~0.1 V).
+const float    SLIPTEST_DT_V          = 0.24f;   // 24 V x 0.5 us / 50 us
+const float    SLIPTEST_FRICTION_V    = 0.10f;
+const float    SLIPTEST_DROP_BELOW_V  = 0.15f;
+// Detector (see detectorPass): ld this far over its own average, this many passes in a row.
+const float    SLIPTEST_DET_DEG       = 10.0f;
+const int      SLIPTEST_DET_N         = 3;
+const float    SLIPTEST_DET_TAU_MS    = 200.0f;
+const uint32_t SLIPTEST_DET_REBASE_MS = 20;      // after a sudden drop, before the average restarts
+const float    SLIPTEST_DET_SPEED     = 0.02f;   // observer speed this far below the command
+const float    SLIPTEST_DET_MX_DEG    = 20.0f;   // one pass's max ld this far over the average of ld
+const float    SLIPTEST_RESTORE_STEP  = 0.5f;    // rescue: share of the offset kept after the first step
+const uint32_t SLIPTEST_RESTORE_MS    = 30;      // ... then ramped back to the calibrated voltage over this
+const uint32_t SLIPTEST_HOLD_MS       = 1500;    // rescue: hold at the restored voltage, then judge
+// Shadow slip guard (sync builds, load_sense.cpp guardUpdate): the four SLIPTEST_DET_* rules on every
+// spinning motor, logged only.  A rule that stays clear this long starts a new would-fire episode;
+// would-fire lines per rule and motor at most one per GUARD_EVENT_GAP_MS (the rest are counted).
+const uint32_t GUARD_REARM_MS         = 100;
+const uint32_t GUARD_EVENT_GAP_MS     = 250;
+const uint32_t GUARD_SETTLE_MS        = 500;     // rules skipped this long after the speed arrives
+const uint32_t GUARD_HOLD_MAX_MS      = 300;     // longest the ld average is held, then taken from ld
+const float    GUARD_VSTEP_V          = 0.3f;    // voltage limit this far off its recent average = a step
+const float    GUARD_VSTEP_TAU_MS     = 20.0f;   // ... that average
+const uint32_t GUARD_VSTEP_HOLD_MS    = 30;      // ld/mx/m2 rules held this long after a step
+const uint32_t GUARD_CONFIRM_MS       = 5;       // an m2 candidate must be confirmed within this
+const float    GUARD_CONFIRM_RISE_A   = 0.5f;    // ... by pass RMS current this far over its lowest since
 // Phase resistance (ohm, including the driver) and inductance (H) for the load-angle estimate.
 // 0 = unknown.  RTEST measures R at standstill and uses it until reboot; L must be measured
 // separately (LCR meter, phase-to-phase / 2).  Without both, no load angle is reported.
@@ -358,3 +399,65 @@ const int SERIOUS_CONSEC_LIMIT = 3;  // 3 x 100ms = 300ms sustained OT -> latch
 // already slipped.  There is nothing to retry - the spindle stops at 0 RPM, latches fault
 // code 2 (which alarms the XY board and stops a running job), and invalidates the Z reference
 // until a homing cycle re-establishes it.  A fresh speed command is the deliberate restart.
+
+// --- PWM-synchronised current sensing (build flag SYNC_CURRENT_SENSE; see current_sampler.h) ---
+// Only used by the sync-sense builds.  The default build keeps the unsynchronised analogRead path.
+//
+// Sample timing.  The first ADC1+ADC2 pair (each motor's lowest-duty phase) starts SYNC_LEAD_US
+// before the PWM peak; the second (middle-duty phase) at the peak; the lowest-duty phase is read
+// again SYNC_LEAD_US after the peak.  A read counts only if it starts SYNC_SETTLE_US after its
+// phase's low-side FET turns on and SYNC_HOLD_US before it turns off.  Measured 2026-10-20 at
+// 12,000 RPM (sweep of the middle-phase read, SETTLE): reading/true reaches 0.9 at +2.8 us (ADC1)
+// and +3.3 us (ADC2) after turn-on, 0.95 at +4.2 / +4.7 us; and stays above 0.9 until 3.0 us
+// (ADC1) / 1.8 us (ADC2) before turn-off.  ADC1 samples ~1.5 us later in its conversion than ADC2.
+// 3.0 / 3.0 us passed 98% / 95.5% of samples at 12,000 RPM unloaded; 4.5 / 3.5 us passed 89-90%.
+// ADC1 converts in 7.2 us; ADC2 (started SYNC_STAGGER_US = 1 us later) in 6.2 us, so a pair is
+// done 7.2 us after it starts and pair 1 ends 1.2 us before the peak: time for pair 2's pads to
+// settle before it starts.
+const float    SYNC_LEAD_US   = 8.4f;
+const float    SYNC_MID_US    = 0.0f;
+const float    SYNC_SETTLE_US = 3.0f;
+const float    SYNC_HOLD_US   = 3.0f;
+// ADC2 (motor 2) starts this long after ADC1.  Measured at zero current (2026-10-20): ADC2 reads
+// ~20 LSB (~0.1 A) high and noisier when started less than ~1 us after ADC1 (0: +22 LSB, 0.5 us:
+// +16 LSB sd 3-5); 1 us and 2 us read normally (sd 1.3-1.5).  The two converters couple.
+const float    SYNC_STAGGER_US = 1.0f;
+// Over-current trip on the synchronised samples.  These are TRUE phase currents; the analogRead
+// path's OVERCURRENT_THRESHOLD (6 A) applies to chopped reads that average well under the true
+// value, so it does not carry over.  10 A phase RMS = 14 A peak: below the MP6541A's 16-20 A
+// hardware limit, above the ~11 A peak (fitted Iq/Ip) seen in the heaviest 12k cuts so far.
+const float    SYNC_OVERCURRENT_THRESHOLD = 10.0f;
+// No valid sample for this long with a motor enabled = protection is blind: stop.
+const uint32_t SYNC_STALE_MS  = 20;
+// CAL hunts to CAL_TARGET_CURRENT as read by the CHOPPED analogRead path.  The synchronised path
+// reads true current, so CAL's target is scaled by this.  Bench data (2026-10-06) put the chopped
+// reading at roughly half the true value - UNVERIFIED, re-measure (phase 2) before relying on CAL.
+const float    SYNC_CAL_TARGET_SCALE = 2.0f;
+// Bench build: one SYNC summary line per motor to the XY board's log this often while spinning.
+const uint32_t SYNC_LINK_LOG_MS = 1000;
+
+// Shadow-mode flux observer (flux_observer.h).  Measured 2026-10-20 on this board (USB "OBS"
+// overrides until reboot):
+//   R: RTEST gave 0.50 / 0.53 ohm from the commanded 1.3 V; the dead time takes ~4/3 x 0.24 V off
+//      the applied voltage at DC, so 0.38 / 0.40 ohm against dead-time-compensated voltage.
+//   L, flux: VSWEEP at 8,000 and 12,000 RPM, fitting |V - (R + jwL) I| constant over the voltage
+//      steps (0.4-0.7% spread): L 73-77 uH, flux 7.18-7.33 mWb (0.75-0.77 V per 1000 RPM).
+const float    SYNC_OBS_R_OHM   = 0.39f;
+const float    SYNC_OBS_L_H     = 75e-6f;
+const float    SYNC_OBS_FLUX_WB = 0.00728f;
+const float    SYNC_OBS_MIN_RPM = 1000.0f;   // observer results ignored below this speed
+const uint32_t SYNC_OBS_MAX_GAP = 4;         // more periods than this unsampled: restart the observer
+const float    SYNC_DT_COMP_KNEE_A = 0.2f;   // dead-time compensation sign is smoothed below this current
+const float    SYNC_SLIP_DEG     = 180.0f;   // rotor this far behind the commanded angle = pole slip
+const float    SYNC_LOAD_WARN_DEG = 70.0f;   // logged as approaching pull-out (shadow mode only)
+// Core for the sampling interrupt.  Measured at 12,000 RPM (2026-10-20): on core 1 it cut the FOC
+// loop from 18,300 to 5,500 iterations/s and peak phase current rose from ~3.7 A to 12-15 A
+// (13 deg commutation steps); on core 0 it competes with the housekeeping task instead, which
+// SYNC_EVERY_N_PERIODS = 2 leaves room for.
+const int      SYNC_ISR_CORE     = 0;
+// Sample every Nth PWM period.  Every period (20 kHz) with the four-stage interrupt took ~45-55% of
+// core 0 and the housekeeping task dropped 18-33% of samples at 12,000 RPM; every second period is
+// 10 kHz, 50 samples per electrical cycle at 12,000 RPM.
+const int      SYNC_EVERY_N_PERIODS = 2;
+const int      SYNC_OBS_DECIM    = 4;        // observer angle step every 4th full sample (5 kHz)
+const int      SYNC_MAX_PER_PASS = 256;      // samples per motor per housekeeping pass (one ring)

@@ -50,6 +50,9 @@ struct MotorController {
     // Motor timing
     uint32_t start_time = 0;
     bool enabled = false;
+    // Set by the FOC task (core 1) while runMotorLoop() is running, so disable() on the other
+    // core can wait out a pass that already saw enabled == true before it zeroes the outputs.
+    bool in_motor_loop = false;
     bool reached_speed = false;
 
     // Calibration LUT

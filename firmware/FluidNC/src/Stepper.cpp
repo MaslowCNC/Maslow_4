@@ -296,6 +296,10 @@ void Stepper::wake_up() {
     config->_stepping->startTimer();
 }
 
+bool Stepper::isAwake() {
+    return awake;
+}
+
 void Stepper::go_idle() {
     awake = false;
     stop_stepping();

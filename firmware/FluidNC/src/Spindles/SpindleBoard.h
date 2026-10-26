@@ -171,12 +171,17 @@ namespace Spindles {
         // again once the machine is at rest and the first copy has finished arriving.
         bool _trip_refetch = false;
 
+        // Motion started while a recording was arriving: no more lines are written to the open
+        // file, and it is closed (a flash write) only once flashWriteSafe() allows it.
+        bool _trip_paused = false;
+
         static const uint32_t TRIP_LINE_TIMEOUT_MS = 3000;
 
         // Save one "[TRIP] ..." / "TRIPCSV,..." line from the spindle board to TRIP_FILE.
         void handleTripLine();
         void closeTripFile(const char* why);
         bool machineAtRest() const;
+        bool flashWriteSafe() const;
         void restoreWorkZ();
 
         void sendSpeed(uint32_t rpm);

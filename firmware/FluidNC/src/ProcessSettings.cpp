@@ -810,6 +810,52 @@ static Error setReportInterval(const char* value, WebUI::AuthenticationLevel aut
     return Error::Ok;
 }
 
+#if __has_include("esp_core_dump.h")
+#    include "esp_core_dump.h"
+#endif
+
+// The framework writes an ELF core dump to the coredump partition on a panic, and OTA flashing
+// leaves it in place.  Print its summary so a panic can be decoded without USB access:
+// xtensa-esp32s3-elf-addr2line -e firmware.elf <PCs> against the build that crashed.
+// (Ported from 86cde7fd/682b5a93 on Maslow-Main.)
+static Error showCoredump(const char* value, WebUI::AuthenticationLevel auth_level, Channel& out) {
+#if CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH && CONFIG_ESP_COREDUMP_DATA_FORMAT_ELF
+    if (esp_core_dump_image_check() != ESP_OK) {
+        log_info_to(out, "No valid core dump in flash");
+        return Error::Ok;
+    }
+    auto* summary = new esp_core_dump_summary_t;
+    if (esp_core_dump_get_summary(summary) != ESP_OK) {
+        delete summary;
+        log_info_to(out, "Core dump summary could not be read");
+        return Error::Ok;
+    }
+    log_info_to(out, "Core dump from previous panic:");
+    log_info_to(out, "  Task:     " << summary->exc_task);
+    log_info_to(out, "  PC:       0x" << String(summary->exc_pc, HEX).c_str());
+    log_info_to(out, "  ExcCause: " << summary->ex_info.exc_cause);
+    log_info_to(out, "  ExcVAddr: 0x" << String(summary->ex_info.exc_vaddr, HEX).c_str());
+    log_info_to(out, "  ELF SHA:  " << reinterpret_cast<const char*>(summary->app_elf_sha256));
+    String btLine = "Backtrace:";
+    for (uint32_t i = 0; i < summary->exc_bt_info.depth && i < 16; i++) {
+        btLine += " 0x" + String(summary->exc_bt_info.bt[i], HEX);
+    }
+    if (summary->exc_bt_info.corrupted) {
+        btLine += " (corrupted)";
+    }
+    log_info_to(out, btLine.c_str());
+    String regs = "Registers:";
+    for (int i = 0; i < 16; i++) {
+        regs += " a" + String(i) + "=0x" + String(summary->ex_info.exc_a[i], HEX);
+    }
+    log_info_to(out, regs.c_str());
+    delete summary;
+#else
+    log_info_to(out, "Core dumps to flash are not enabled in this build");
+#endif
+    return Error::Ok;
+}
+
 static Error showHeap(const char* value, WebUI::AuthenticationLevel auth_level, Channel& out) {
     log_info("Heap free: " << xPortGetFreeHeapSize() << " min: " << heapLowWater);
     return Error::Ok;
@@ -1163,6 +1209,7 @@ void make_user_commands() {
 
     new UserCommand("Heap", "Heap/Show", showHeap, anyState);
     new UserCommand("SS", "Startup/Show", showStartupLog, anyState);
+    new UserCommand("CDS", "Coredump/Show", showCoredump, anyState);
 
     new UserCommand("RI", "Report/Interval", setReportInterval, anyState);
 

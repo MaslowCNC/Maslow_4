@@ -5,6 +5,7 @@
 #include "trip_recorder.h"
 #include "load_sense.h"
 #include "usb_console.h"
+#include "sync_sense.h"
 #include <string.h>
 
 static const uint8_t fan_default_level = 49;
@@ -128,6 +129,14 @@ void printCommandHelp() {
     Serial.println(F("  'ADAPT'   toggle adaptive voltage (on at boot): per-motor trim holding Iq at ~2 A"));
     Serial.println(F("  'RTEST'   standstill check: verifies sign/angle and measures phase R"));
     Serial.println(F("  'VSWEEP'  at the current steady speed, step the voltage down; log current + lag"));
+#ifdef SYNC_CURRENT_SENSE
+    Serial.println(F("  'SYNC'    synchronised sampling stats (timing, valid %, zero, noise); 'SYNCRESET' clears"));
+    Serial.println(F("  'SYNCLOG' toggle [SYNC] lines: currents, Id/Iq, observer load angle (4/s per motor)"));
+    Serial.println(F("  'SYNCSET lead=<us> mid=<us> settle=<us> hold=<us>'  sample timing (until reboot)"));
+    Serial.println(F("  'SETTLE'  middle-phase residual vs time since its low side turned on / until off"));
+    Serial.println(F("  'SYNCCAP [periods]'  capture raw samples of both motors, then dump CSV"));
+    Serial.println(F("  'OBS [R=<ohm>] [L=<H>] [F=<Wb>]'  observer parameters (shadow mode only)"));
+#endif
     Serial.println(F("  'LOADREF' no-load baseline sweep 1000 RPM..max (spins the spindle, no cutting)"));
     Serial.println(F("\nLegacy single-character commands (USB maintenance/calibration):"));
     Serial.println(F("  'q' select motor 1 (default)"));
@@ -458,6 +467,9 @@ static void processCommandLine(const char* line, size_t len,
             cal.startAuto(mc1, mc2);
             return;
         }
+#ifdef SYNC_CURRENT_SENSE
+        if (syncSenseCommand(line)) return;   // SYNC, SYNCLOG, SYNCSET, SETTLE, SYNCCAP, OBS, SYNCRESET
+#endif
         if (strcmp(line, "WHY") == 0) {
             extern char g_reset_reason[];
             Serial.printf("[BOOT] last reset: %s, %lu s ago\n", g_reset_reason,
@@ -555,6 +567,10 @@ static void processCommandLine(const char* line, size_t len,
             g_remove_tool_requested = true;
             break;
         case 'T':  // trip recording over the link: "T" re-sends the last one, "T!" records a test one
+#ifdef SLIP_TEST
+            // Bench build: "T!" ($Spindle/Trip=TEST) runs the slip test instead; it ends in a recording.
+            if (line[1] == '!' && !cal.isActive()) { loadSenseStartSlipTest(mc1, mc2); break; }
+#endif
             if (line[1] == '!') tripRecorderLinkTest();
             else tripRecorderRequestLinkDump();
             break;

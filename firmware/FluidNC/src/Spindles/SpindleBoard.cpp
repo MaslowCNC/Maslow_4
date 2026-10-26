@@ -8,6 +8,7 @@
 #include "../Protocol.h"               // rtAlarm, ExecAlarm
 #include "../GCode.h"                  // gc_sync_position
 #include "../Planner.h"                // plan_sync_position
+#include "../Stepper.h"                // Stepper::isAwake (no flash writes while stepping)
 #include "../Maslow/Maslow.h"          // Maslow.resetUpdateWatchdog
 #include "../WebUI/WifiConfig.h"       // wifi_sta_ssid / wifi_sta_password (ENABLE_WIFI)
 #include "../WebUI/InputBuffer.h"      // WebUI::inputBuffer ($STOP after a spindle fault)
@@ -260,7 +261,7 @@ namespace Spindles {
         _uart->write((const uint8_t*)(test ? "T!\n" : "T\n"), test ? 3 : 2);
         log_info(name() << ": " << (test ? "asked the spindle board to record a test trip"
                                         : "asked the spindle board to re-send its trip recording")
-                        << "; it is saved to " << TRIP_FILE << " (~20 s)");
+                        << "; it is saved to " << TRIP_FILE << " (~30 s)");
     }
 
     // Not moving: no motion state, and the Maslow loop is not driving the belts.  The state alone
@@ -272,27 +273,40 @@ namespace Spindles {
         return !moving && !_belt_motion_active;
     }
 
+    // The step ISR keeps running while flash is written (the cache is off then), but it calls
+    // through vtables that live in flash: a flash write while stepping makes it jump to garbage
+    // (10-26 15:44 panic: the trip file was still being written when a Home Z started the
+    // steppers).  Only write the trip file at rest with the step timer stopped.
+    bool SpindleBoard::flashWriteSafe() const {
+        return machineAtRest() && !Stepper::isAwake();
+    }
+
     // The spindle board sends its trip recording (the ~2 s of motor state before an over-current
-    // or driver fault) as "[TRIP] ..." and "TRIPCSV,..." lines, one every 20 ms.  Save them to
+    // or driver fault) as "[TRIP] ..." and "TRIPCSV,..." lines, one every 30 ms.  Save them to
     // the local filesystem rather than the console: ~1000 lines would bury everything else.
-    // Only while the machine is at rest: creating the file can stall this loop for a few hundred
+    // Only while the machine is at rest with the steppers stopped (flashWriteSafe), checked before
+    // EVERY write, not just the first: the recording takes ~30 s to arrive, and a flash write while
+    // stepping crashes the step ISR; creating the file can also stall this loop for a few hundred
     // ms, which trips the Maslow update watchdog while the belts are moving.  A recording that
-    // arrives during motion (the usual case - it follows the trip by ~0.1 s) is asked for again
-    // once the machine has stopped; see serviceStatus().
+    // arrives during motion (the usual case - it follows the trip by ~0.1 s), or that motion
+    // interrupts, is asked for again once the machine has stopped; see serviceStatus().  An
+    // interrupted file is left open, unwritten, until then: closing it would flush to flash.
     void SpindleBoard::handleTripLine() {
         _trip_last_ms = millis();
         bool begin    = strncmp(_rx_buf, "[TRIP] ===== trip recording:", 28) == 0;
+        bool safe     = flashWriteSafe();
         if (begin) {
-            if (_trip_file) {
-                closeTripFile("interrupted by a new recording");
-            }
-            if (!machineAtRest()) {
+            if (!safe) {
                 if (!_trip_refetch) {
                     log_info(name() << ": spindle trip recording arriving while the machine is moving;"
                                        " it will be fetched again once the machine is at rest");
                 }
                 _trip_refetch = true;
+                _trip_paused  = _trip_file != nullptr;   // an open file stays open, unwritten
                 return;
+            }
+            if (_trip_file) {
+                closeTripFile("interrupted by a new recording");
             }
             _trip_refetch = false;
             try {
@@ -312,7 +326,16 @@ namespace Spindles {
             }
             log_info(name() << ": receiving spindle trip recording: " << what);
         }
-        if (!_trip_file) {
+        if (!_trip_file || _trip_paused) {
+            return;
+        }
+        if (!safe) {
+            // Motion started while the recording was arriving: stop writing at once, keep the file
+            // open (closing flushes to flash) and fetch the whole recording again at rest.
+            _trip_paused  = true;
+            _trip_refetch = true;
+            log_info(name() << ": machine started moving during the spindle trip recording - stopped saving"
+                               " it; it will be fetched again once the machine is at rest");
             return;
         }
         _trip_file->write((const uint8_t*)_rx_buf, _rx_len);
@@ -328,7 +351,8 @@ namespace Spindles {
             return;
         }
         delete _trip_file;
-        _trip_file = nullptr;
+        _trip_file   = nullptr;
+        _trip_paused = false;
         if (why) {
             log_warn(name() << ": spindle trip recording incomplete (" << why << "), " << _trip_lines << " lines in " << TRIP_FILE);
         } else {
@@ -609,13 +633,15 @@ namespace Spindles {
                 _rx_len = 0;  // overflow: drop the malformed line
             }
         }
-        if (_trip_file && millis() - _trip_last_ms > TRIP_LINE_TIMEOUT_MS) {
-            closeTripFile("no more lines from the spindle board");
+        // Closing flushes to flash, so it waits for flashWriteSafe() too.
+        if (_trip_file && millis() - _trip_last_ms > TRIP_LINE_TIMEOUT_MS && flashWriteSafe()) {
+            closeTripFile(_trip_paused ? "the machine moved while it arrived; fetching it again"
+                                       : "no more lines from the spindle board");
         }
         // A recording skipped because the machine was moving: once its lines have stopped (the
         // spindle board refuses a re-send while it is still sending) and the machine is at
         // rest, ask for it again.  A spindle start clears the board's copy, so do it promptly.
-        if (_trip_refetch && !_trip_file && millis() - _trip_last_ms > TRIP_LINE_TIMEOUT_MS && machineAtRest()) {
+        if (_trip_refetch && !_trip_file && millis() - _trip_last_ms > TRIP_LINE_TIMEOUT_MS && flashWriteSafe()) {
             _trip_refetch = false;
             sendTripRequest(false);
         }
