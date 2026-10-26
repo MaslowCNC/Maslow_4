@@ -829,6 +829,18 @@ static void guardReset(GuardState& g) {
     for (int r = 0; r < GR_N; r++) g.on[r] = false;
 }
 
+// Start a new per-second tally (also when a motor stops, so the next spin-up does not report this one's).
+static void guardClearSecond(GuardState& g) {
+    g.samples     = 0;
+    g.resyncs     = 0;
+    g.vsteps      = 0;
+    g.unconfirmed = 0;
+    for (int r = 0; r < GR_N; r++) g.fires[r] = 0;
+    g.w_ld = g.w_mx = g.w_m2 = g.w_sp = -1e9f;
+    g.w_iq = 1e9f;
+    g.w_z = false;
+}
+
 static void guardArm(int m) {
     for (int r = 0; r < GR_N; r++) s_guard[m & 1].first_ms[r] = 0;
 }
@@ -858,6 +870,7 @@ static void guardUpdate(MotorController* motors[2], uint32_t now, float dt, bool
         bool  spin = mc.enabled && mc.velocity_mode && rpm >= SYNC_OBS_MIN_RPM && e.valid && !isnan(e.load_deg);
         if (!spin) {
             guardReset(g);
+            if (g.sec_ms) guardClearSecond(g);
             g.sec_ms       = 0;
             g.steady_since = 0;
             continue;
@@ -983,14 +996,7 @@ static void guardUpdate(MotorController* motors[2], uint32_t now, float dt, bool
                          g.w_z ? " Z" : "");
                 syncSenseSay(line);
             }
-            g.samples     = 0;
-            g.resyncs     = 0;
-            g.vsteps      = 0;
-            g.unconfirmed = 0;
-            for (int r = 0; r < GR_N; r++) g.fires[r] = 0;
-            g.w_ld = g.w_mx = g.w_m2 = g.w_sp = -1e9f;
-            g.w_iq = 1e9f;
-            g.w_z = false;
+            guardClearSecond(g);
             g.sec_ms = now;
         }
     }
