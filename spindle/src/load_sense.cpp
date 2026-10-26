@@ -76,6 +76,15 @@ static float    s_sum_ip[2], s_sum_iq[2], s_sum_v[2];
 static int      s_cnt[2];
 static RefTable s_new_ref;
 
+#ifdef SYNC_CURRENT_SENSE
+// Shadow slip guard rules (guardUpdate, below).
+enum { GR_LD, GR_IQ, GR_SP, GR_MX, GR_M2, GR_CM, GR_G, GR_N };
+static const char* const GUARD_RULE[GR_N] = { "ld", "iq", "sp", "mx", "m2", "cm", "G" };
+static void     guardArm(int m);
+static void     guardDeliberateStep(int m);
+static uint32_t guardFirstMs(int m, int r);
+#endif
+
 // Bench slip test (SLIP_TEST builds).  Each "T!" runs the next entry of SLIP_SCHEDULE: a motor, a
 // speed, how the voltage comes down (a ramp of SLIPTEST_STEP_V steps, or a sudden drop to just
 // below the estimated pull-out voltage, then the same ramp), and whether the slip detector rescues
@@ -95,30 +104,12 @@ static int      s_st_motor = 0;
 static uint32_t s_st_start_ms = 0;
 static uint32_t s_st_slips0   = 0;       // observer slip count when stepping began
 static uint32_t s_st_valid_ms = 0;       // last pass the observer was valid
-// Detector, two rules, each SLIPTEST_DET_N passes in a row; the first to fire is the detection:
-//  - ld rising SLIPTEST_DET_DEG over its own ~SLIPTEST_DET_TAU_MS average.  The average restarts
-//    SLIPTEST_DET_REBASE_MS after a sudden drop, which moves ld by itself (less voltage = less Id =
-//    less R*Id tilt).
-//  - the load-sense fit's Iq below zero (current no longer lagging the voltage: under-excited).
-//    Earliest signal on the 10-26 ramps: 32-73 ms before 8 A at 4k/8k, ~900 ms at 12k.
-//  - the observer's speed SLIPTEST_DET_SPEED below the command.  Not held off after a drop.
-//  - one pass's unfiltered maximum ld (pass_load_max) SLIPTEST_DET_MX_DEG over the pre-event
-//    average of ld (~SLIPTEST_DET_TAU_MS, never restarted, so a drop does not reset it).  A
-//    single pass, no hold-off: on the 10-26 8k drop it was +17 deg within 10 ms, when the
-//    filtered speed was still inside 2%.  NB a sudden drop shifts ld by itself as well.
-static float    s_det_base    = NAN;
-static int      s_det_count   = 0;
-static int      s_det_iq_count = 0;
-static int      s_det_sp_count = 0;
-static float    s_mx_base     = NAN;     // ldmx rule's average of ld
-static uint32_t s_det_mx_ms   = 0;
-static uint32_t s_det_ld_ms   = 0;       // when each rule fired (0 = not yet)
-static uint32_t s_det_iq_ms   = 0;
-static uint32_t s_det_sp_ms   = 0;
+// Detection is the shadow guard's (see guardUpdate): stepping arms it, the run's own sudden drop is
+// marked deliberate, and a rescue run acts on G (iq or sp or confirmed m2).  The finish line reports
+// when each of the guard's rules first fired.
 static float    s_restore_from = 0.0f;   // rescue: offset the voltage is ramped back from
-static uint32_t s_det_ms      = 0;       // when the first one fired (0 = not yet)
-static float    s_det_ld = NAN, s_det_v = NAN;
-static uint32_t s_det_arm_ms  = 0;       // detector ignores passes before this
+static uint32_t s_det_ms      = 0;       // when G fired (0 = not yet)
+static float    s_det_v       = NAN;
 static float    s_hold_max_a  = 0.0f;    // rescue: worst phase RMS during the hold
 
 // ------------------- Console output -------------------
@@ -505,13 +496,14 @@ static void finishSlipTest(const char* why) {
     s_mode = M_IDLE;
     stSay("SLIPTEST run %d M%d stopped at %.2f V (dV %+.2f) after %.1f s: %s; recording follows", s_st_run,
           s_st_motor + 1, v, dv, (now - s_st_start_ms) / 1000.0f, why);
-    char ld_t[24] = "never", iq_t[24] = "never", sp_t[24] = "never", mx_t[24] = "never";
-    if (s_det_mx_ms) snprintf(mx_t, sizeof(mx_t), "%lu ms", (unsigned long)(now - s_det_mx_ms));
-    if (s_det_ld_ms) snprintf(ld_t, sizeof(ld_t), "%lu ms", (unsigned long)(now - s_det_ld_ms));
-    if (s_det_iq_ms) snprintf(iq_t, sizeof(iq_t), "%lu ms", (unsigned long)(now - s_det_iq_ms));
-    if (s_det_sp_ms) snprintf(sp_t, sizeof(sp_t), "%lu ms", (unsigned long)(now - s_det_sp_ms));
-    stSay("SLIPTEST run %d detector before this stop: ld %s, Iq<0 %s, speed %s, ldmx %s (first at %.2f V)",
-          s_st_run, ld_t, iq_t, sp_t, mx_t, s_det_v);
+    char rules[120];
+    int  n = 0;
+    for (int r = 0; r < GR_N && n < (int)sizeof(rules) - 16; r++) {
+        uint32_t t = guardFirstMs(s_st_motor, r);
+        n += t ? snprintf(rules + n, sizeof(rules) - n, " %s %lu", GUARD_RULE[r], (unsigned long)(now - t))
+               : snprintf(rules + n, sizeof(rules) - n, " %s -", GUARD_RULE[r]);
+    }
+    stSay("SLIPTEST run %d guard rules, ms before this stop:%s (G at %.2f V)", s_st_run, rules, s_det_v);
 }
 #endif
 
@@ -633,18 +625,8 @@ bool loadSenseStartSlipTest(MotorController& mc1, MotorController& mc2) {
     requireRehome();
     tripRecorderArm();
     s_vs_offset  = 0.0f;
-    s_det_base   = NAN;
-    s_det_count  = 0;
-    s_det_iq_count = 0;
-    s_det_sp_count = 0;
-    s_det_ld_ms  = 0;
-    s_det_iq_ms  = 0;
-    s_det_sp_ms  = 0;
-    s_det_mx_ms  = 0;
-    s_mx_base    = NAN;
     s_det_ms     = 0;
     s_det_v      = NAN;
-    s_det_arm_ms = 0;
     s_hold_max_a = 0.0f;
     mc.target_velocity     = s_st.rpm * 2.0f * PI / 60.0f * mc.direction;
     mc.velocity_mode       = true;
@@ -656,45 +638,6 @@ bool loadSenseStartSlipTest(MotorController& mc1, MotorController& mc2) {
           s_st.sudden ? "sudden drop to below pull-out" : "no drop", SLIPTEST_STEP_V, (unsigned)SLIPTEST_STEP_MS,
           s_st.rescue ? "RESCUES" : "only reports");
     return true;
-}
-
-// The slip detector, every pass while the voltage is coming down.  Both rules keep running so each
-// one's time is reported; true on the pass the first of them fires.
-static bool detectorPass(const ObserverEstimate& e, const LoadEstimate& le, float v, uint32_t now, float dt) {
-    if (!s_det_mx_ms && e.valid && !isnan(e.load_deg)) {
-        if (isnan(s_mx_base)) {
-            s_mx_base = e.load_deg;
-        } else if (!isnan(e.pass_load_max) && e.pass_load_max - s_mx_base > SLIPTEST_DET_MX_DEG) {
-            s_det_mx_ms = now;
-        } else {
-            s_mx_base += (e.load_deg - s_mx_base) * fminf(dt * 1000.0f / SLIPTEST_DET_TAU_MS, 1.0f);
-        }
-    }
-    if (!s_det_sp_ms && e.valid && !isnan(e.speed_rpm)) {
-        s_det_sp_count = e.speed_rpm < (1.0f - SLIPTEST_DET_SPEED) * s_st.rpm ? s_det_sp_count + 1 : 0;
-        if (s_det_sp_count >= SLIPTEST_DET_N) s_det_sp_ms = now;
-    }
-    if (now >= s_det_arm_ms && !s_det_ld_ms && e.valid && !isnan(e.load_deg)) {
-        if (isnan(s_det_base)) {
-            s_det_base = e.load_deg;
-        } else if (e.load_deg - s_det_base > SLIPTEST_DET_DEG) {
-            if (++s_det_count >= SLIPTEST_DET_N) { s_det_ld_ms = now; s_det_ld = e.load_deg; }
-            // the average is not updated while ld is out of line
-        } else {
-            s_det_count = 0;
-            s_det_base += (e.load_deg - s_det_base) * fminf(dt * 1000.0f / SLIPTEST_DET_TAU_MS, 1.0f);
-        }
-    }
-    if (now >= s_det_arm_ms && !s_det_iq_ms && le.valid && !isnan(le.iq)) {
-        s_det_iq_count = le.iq < 0.0f ? s_det_iq_count + 1 : 0;
-        if (s_det_iq_count >= SLIPTEST_DET_N) s_det_iq_ms = now;
-    }
-    if (!s_det_ms && (s_det_ld_ms || s_det_iq_ms || s_det_sp_ms || s_det_mx_ms)) {
-        s_det_ms = now;
-        s_det_v  = v;
-        return true;
-    }
-    return false;
 }
 
 static void updateSlipTest(uint32_t now) {
@@ -729,15 +672,15 @@ static void updateSlipTest(uint32_t now) {
             if (!e.valid) { finishSlipTest("observer not valid at speed"); break; }
             s_st_slips0   = e.slips;
             s_st_valid_ms = now;
+            guardArm(s_st_motor);
             stSay("SLIPTEST run %d M%d at speed: %.2f V, observer %.0f RPM, ld %+.0f lr %+.0f deg; stepping down",
                   s_st_run, s_st_motor + 1, mc.motor.voltage_limit, e.speed_rpm, e.load_deg, e.load_r_deg);
             if (s_st.sudden) {
                 // Just below the estimated pull-out: back-EMF + dead-time loss + the friction drop seen at 4k.
                 float w      = fabsf(mc.current_velocity);
                 float target = w * SYNC_OBS_FLUX_WB + SLIPTEST_DT_V + SLIPTEST_FRICTION_V - SLIPTEST_DROP_BELOW_V;
+                guardDeliberateStep(s_st_motor);   // the bench's own step: no voltage-step hold
                 s_vs_offset  = target - mc.motor.voltage_limit;
-                s_det_arm_ms = now + SLIPTEST_DET_REBASE_MS;
-                s_det_base   = NAN;
                 stSay("SLIPTEST run %d M%d sudden drop to %.2f V (dV %+.2f)", s_st_run, s_st_motor + 1, target,
                       s_vs_offset);
             }
@@ -747,11 +690,13 @@ static void updateSlipTest(uint32_t now) {
         case M_ST_STEP:
             if (e.slips != s_st_slips0) { finishSlipTest("observer counted a pole slip"); break; }
             if (now - s_st_valid_ms > SLIPTEST_LOST_MS) { finishSlipTest("observer lost lock"); break; }
-            if (detectorPass(e, s_est[s_st_motor], mc.motor.voltage_limit, now, dt)) {
-                stSay("SLIPTEST run %d M%d DETECTOR (%s) at %.2f V: ld %+.0f vs average %+.0f, Iq %+.2f, %.0f RPM%s",
-                      s_st_run, s_st_motor + 1,
-                      s_det_mx_ms ? "ldmx rule" : s_det_sp_ms ? "speed rule" : s_det_ld_ms ? "ld rule" : "Iq<0 rule",
-                      mc.motor.voltage_limit, e.load_deg, s_det_base, s_est[s_st_motor].iq, e.speed_rpm,
+            if (!s_det_ms && guardFirstMs(s_st_motor, GR_G)) {
+                s_det_ms = now;
+                s_det_v  = mc.motor.voltage_limit;
+                int via  = guardFirstMs(s_st_motor, GR_CM) ? GR_CM : guardFirstMs(s_st_motor, GR_SP) ? GR_SP : GR_IQ;
+                stSay("SLIPTEST run %d M%d GUARD G (via %s) at %.2f V: ld %+.0f, Iq %+.2f, %.0f RPM, %.1f A%s",
+                      s_st_run, s_st_motor + 1, GUARD_RULE[via], mc.motor.voltage_limit, e.load_deg,
+                      s_est[s_st_motor].iq, e.speed_rpm, mc.last_instantaneous_current,
                       s_st.rescue ? " - ramping the voltage back" : "");
                 if (s_st.rescue) {
                     // Half straight back (a full step spiked 9.8 A at 8k; a 40 ms ramp from the
@@ -823,7 +768,7 @@ float loadSenseResistance(int motor_idx) {
 // a clean cut.  On a board with a faster, simultaneous current ADC this should shift towards the
 // observer (cleaner ldmx, shorter ld/speed filters, then closed-loop control) - provided the samples
 // are always valid: the SOx outputs settle in ~3 us and the low-side window is ~1.9 us at 24k on 36 V.
-// The four slip-detector rules from the 10-26 bench slip tests, run on every motor that is spinning,
+// The slip-detector rules from the 10-26 bench slip tests, run on every motor that is spinning,
 // taking NO action: each would-fire is logged over the link, and once a second the worst margin of
 // each rule, so real cuts show how often they would fire falsely.  Thresholds: SLIPTEST_DET_* and
 // GUARD_* in config.h.  Context flag: Z = Z moving.  The rules are skipped while the speed ramps
@@ -833,9 +778,16 @@ float loadSenseResistance(int motor_idx) {
 // than GUARD_VSTEP_V the ld and mx rules are held for GUARD_VSTEP_HOLD_MS and their average restarts
 // (10-26: every ld/mx would-fire of the second cut was the Z-move boost of +1 V dropping off).
 //   ld   : filtered ld SLIPTEST_DET_DEG over its own ~200 ms average, SLIPTEST_DET_N passes
-//   iq   : load-sense Iq < 0, SLIPTEST_DET_N passes
-//   sp   : observer speed SLIPTEST_DET_SPEED below the command, SLIPTEST_DET_N passes
+//   iq   : load-sense Iq < 0, SLIPTEST_DET_N passes                                   (primary)
+//   sp   : observer speed SLIPTEST_DET_SPEED below the command, SLIPTEST_DET_N passes (primary)
 //   mx   : one pass's unfiltered max ld SLIPTEST_DET_MX_DEG over the ~200 ms average of ld
+//   m2   : the same with the pass's SECOND-largest ld (less noise: one outlier is not enough)
+//   cm   : an m2 candidate confirmed within GUARD_CONFIRM_MS, by a second m2 pass or by the pass
+//          RMS current rising GUARD_CONFIRM_RISE_A over its lowest since the candidate (fast events)
+//   G    : the combined decision, iq or sp or cm - what the guard would act on
+// The slip-test build arms the guard (guardArm) and rescues on G; the bench run's own voltage drop is
+// marked deliberate (guardDeliberateStep) so it does not start a voltage-step hold.
+
 struct GuardState {
     float    base = NAN;                 // ~200 ms average of ld (held while the ld rule is over,
                                          // GUARD_HOLD_MAX_MS at most, then taken from ld again)
@@ -844,22 +796,27 @@ struct GuardState {
     uint32_t resyncs      = 0;           // average taken from ld after a hold ran out, this second
     uint32_t samples      = 0;           // passes judged this second
     float    v_avg        = NAN;         // ~GUARD_VSTEP_TAU_MS average of the voltage limit
-    uint32_t vhold_until  = 0;           // ld and mx rules held until then after a voltage step
+    uint32_t vhold_until  = 0;           // ld/mx/m2 held until then after a voltage step
     uint32_t vsteps       = 0;           // voltage steps this second
+    bool     deliberate   = false;       // the next voltage step is a bench test's own (no hold)
     int      n_ld = 0, n_iq = 0, n_sp = 0;
-    bool     on[4] = { false, false, false, false };   // condition currently met (ld, iq, sp, mx)
-    uint32_t clear_ms[4] = { 0, 0, 0, 0 };            // last pass it was not met
-    uint32_t last_event_ms[4] = { 0, 0, 0, 0 };
-    uint16_t fires[4] = { 0, 0, 0, 0 };               // this second
-    uint16_t quiet[4] = { 0, 0, 0, 0 };               // fires not logged (rate limit) this second
+    // cm: the pending m2 candidate
+    uint32_t cand_ms      = 0;           // 0 = none pending
+    float    cand_i_min   = 0.0f;        // lowest pass RMS current since the candidate
+    uint32_t cm_until     = 0;           // cm reads as met until then after a confirmation
+    uint32_t unconfirmed  = 0;           // candidates that expired this second
+    bool     on[GR_N]            = {};   // condition currently met
+    uint32_t clear_ms[GR_N]      = {};   // last pass it was not met
+    uint32_t last_event_ms[GR_N] = {};
+    uint16_t fires[GR_N]         = {};   // this second
+    uint32_t total[GR_N]         = {};   // since boot
+    uint32_t first_ms[GR_N]      = {};   // first fire since guardArm (slip test); 0 = not yet
     // Worst margins this second
-    float    w_ld = -1e9f, w_mx = -1e9f, w_iq = 1e9f, w_sp = -1e9f;
+    float    w_ld = -1e9f, w_mx = -1e9f, w_m2 = -1e9f, w_iq = 1e9f, w_sp = -1e9f;
     bool     w_z = false;
     uint32_t sec_ms = 0;
-    uint32_t total[4] = { 0, 0, 0, 0 };               // since boot
 };
 static GuardState s_guard[2];
-static const char* const GUARD_RULE[4] = { "ld", "iq", "sp", "mx" };
 
 static void guardReset(GuardState& g) {
     g.base = NAN;
@@ -867,15 +824,24 @@ static void guardReset(GuardState& g) {
     g.v_avg = NAN;
     g.vhold_until = 0;
     g.n_ld = g.n_iq = g.n_sp = 0;
-    for (int r = 0; r < 4; r++) g.on[r] = false;
+    g.cand_ms = 0;
+    g.cm_until = 0;
+    for (int r = 0; r < GR_N; r++) g.on[r] = false;
 }
+
+static void guardArm(int m) {
+    for (int r = 0; r < GR_N; r++) s_guard[m & 1].first_ms[r] = 0;
+}
+static void     guardDeliberateStep(int m) { s_guard[m & 1].deliberate = true; }
+static uint32_t guardFirstMs(int m, int r) { return s_guard[m & 1].first_ms[r]; }
 
 static void guardFire(int m, GuardState& g, int r, uint32_t now, const char* detail, bool z) {
     g.fires[r]++;
     g.total[r]++;
-    if (now - g.last_event_ms[r] < GUARD_EVENT_GAP_MS) { g.quiet[r]++; return; }
+    if (!g.first_ms[r]) g.first_ms[r] = now;
+    if (now - g.last_event_ms[r] < GUARD_EVENT_GAP_MS) return;
     g.last_event_ms[r] = now;
-    char line[150];
+    char line[170];
     snprintf(line, sizeof(line), "GUARD M%d would fire %s: %s%s (#%lu)", m + 1, GUARD_RULE[r], detail,
              z ? " Z" : "", (unsigned long)g.total[r]);
     syncSenseSay(line);
@@ -911,34 +877,56 @@ static void guardUpdate(MotorController* motors[2], uint32_t now, float dt, bool
             float v = mc.motor.voltage_limit;
             if (isnan(g.v_avg)) g.v_avg = v;
             if (fabsf(v - g.v_avg) > GUARD_VSTEP_V) {
-                g.vhold_until = now + GUARD_VSTEP_HOLD_MS;
-                g.v_avg       = v;
+                if (!g.deliberate) g.vhold_until = now + GUARD_VSTEP_HOLD_MS;
+                g.deliberate = false;
+                g.v_avg      = v;
                 g.vsteps++;
             } else {
                 g.v_avg += (v - g.v_avg) * fminf(dt * 1000.0f / GUARD_VSTEP_TAU_MS, 1.0f);
             }
             bool vhold = (int32_t)(g.vhold_until - now) > 0;
-            if (vhold) {   // ld and mx wait; their average restarts from ld once the hold ends
+            if (vhold) {   // ld, mx and m2 wait; their average restarts from ld once the hold ends
                 g.base       = NAN;
                 g.n_ld       = 0;
                 g.hold_since = 0;
+                g.cand_ms    = 0;
             } else if (isnan(g.base)) {
                 g.base = e.load_deg;
             }
             g.samples++;
 
-            bool  cond[4];
+            bool  cond[GR_N] = {};
             float d_ld = vhold ? NAN : e.load_deg - g.base;
             g.n_ld  = !vhold && d_ld > SLIPTEST_DET_DEG ? g.n_ld + 1 : 0;
-            cond[0] = g.n_ld >= SLIPTEST_DET_N;
+            cond[GR_LD] = g.n_ld >= SLIPTEST_DET_N;
             bool iq_ok = le.valid && !isnan(le.iq);
             g.n_iq  = iq_ok && le.iq < 0.0f ? g.n_iq + 1 : 0;
-            cond[1] = g.n_iq >= SLIPTEST_DET_N;
+            cond[GR_IQ] = g.n_iq >= SLIPTEST_DET_N;
             float sp_def = (!isnan(e.speed_rpm) && rpm > 0.0f) ? (rpm - e.speed_rpm) / rpm : NAN;
             g.n_sp  = !isnan(sp_def) && sp_def > SLIPTEST_DET_SPEED ? g.n_sp + 1 : 0;
-            cond[2] = g.n_sp >= SLIPTEST_DET_N;
+            cond[GR_SP] = g.n_sp >= SLIPTEST_DET_N;
             float d_mx = (vhold || isnan(e.pass_load_max)) ? NAN : e.pass_load_max - g.base;
-            cond[3] = !isnan(d_mx) && d_mx > SLIPTEST_DET_MX_DEG;
+            cond[GR_MX] = !isnan(d_mx) && d_mx > SLIPTEST_DET_MX_DEG;
+            float d_m2 = (vhold || isnan(e.pass_load_max2)) ? NAN : e.pass_load_max2 - g.base;
+            cond[GR_M2] = !isnan(d_m2) && d_m2 > SLIPTEST_DET_MX_DEG;
+
+            // cm: confirm an m2 candidate.
+            float i_now = mc.last_instantaneous_current;
+            if (g.cand_ms) {
+                g.cand_i_min = fminf(g.cand_i_min, i_now);
+                if (cond[GR_M2] || i_now - g.cand_i_min >= GUARD_CONFIRM_RISE_A) {
+                    g.cm_until = now + GUARD_REARM_MS;
+                    g.cand_ms  = 0;
+                } else if (now - g.cand_ms > GUARD_CONFIRM_MS) {
+                    g.cand_ms = 0;
+                    g.unconfirmed++;
+                }
+            } else if (cond[GR_M2]) {
+                g.cand_ms    = now;
+                g.cand_i_min = i_now;
+            }
+            cond[GR_CM] = (int32_t)(g.cm_until - now) > 0;
+            cond[GR_G]  = cond[GR_IQ] || cond[GR_SP] || cond[GR_CM];
 
             // The average follows ld except while the ld rule is over its threshold, and then only for
             // GUARD_HOLD_MAX_MS: a lasting shift (10-26: a spin-up value held all cut) is taken as the
@@ -960,12 +948,13 @@ static void guardUpdate(MotorController* motors[2], uint32_t now, float dt, bool
             // Worst margins this second.
             if (!isnan(d_ld)) g.w_ld = fmaxf(g.w_ld, d_ld);
             if (!isnan(d_mx)) g.w_mx = fmaxf(g.w_mx, d_mx);
+            if (!isnan(d_m2)) g.w_m2 = fmaxf(g.w_m2, d_m2);
             if (iq_ok) g.w_iq = fminf(g.w_iq, le.iq);
             if (!isnan(sp_def)) g.w_sp = fmaxf(g.w_sp, sp_def);
             g.w_z |= z_moving;
 
             // A would-fire is the condition becoming true after it was clear for GUARD_REARM_MS.
-            for (int r = 0; r < 4; r++) {
+            for (int r = 0; r < GR_N; r++) {
                 if (!cond[r]) {
                     if (g.on[r]) g.clear_ms[r] = now;
                     g.on[r] = false;
@@ -974,28 +963,32 @@ static void guardUpdate(MotorController* motors[2], uint32_t now, float dt, bool
                 if (g.on[r]) continue;
                 g.on[r] = true;
                 if (g.clear_ms[r] && now - g.clear_ms[r] < GUARD_REARM_MS) continue;   // same episode
-                char detail[96];
-                snprintf(detail, sizeof(detail), "ld %+.0f avg %+.0f mx %+.0f iq %+.2f sp %.0f/%.0f, %.1f V", e.load_deg,
-                         g.base, e.pass_load_max, iq_ok ? le.iq : NAN, e.speed_rpm, cmd, mc.motor.voltage_limit);
+                char detail[110];
+                snprintf(detail, sizeof(detail), "ld %+.0f avg %+.0f mx %+.0f m2 %+.0f iq %+.2f sp %.0f/%.0f %.1fA %.1fV",
+                         e.load_deg, g.base, e.pass_load_max, e.pass_load_max2, iq_ok ? le.iq : NAN, e.speed_rpm, cmd,
+                         i_now, v);
                 guardFire(m, g, r, now, detail, z_moving);
             }
         }   // judge
 
         if (now - g.sec_ms >= 1000) {
             if (g.samples) {   // nothing to report for a second spent ramping or settling
-                char line[180];
+                char line[200];
                 snprintf(line, sizeof(line),
-                         "GUARD M%d %.0frpm worst: ld %+.0f/%+.0f mx %+.0f/%+.0f iq %+.2f sp %.1f/%.1f%% | fires ld%u iq%u sp%u mx%u rs%lu vs%lu%s",
-                         m + 1, cmd, g.w_ld, SLIPTEST_DET_DEG, g.w_mx, SLIPTEST_DET_MX_DEG, g.w_iq,
-                         100.0f * g.w_sp, 100.0f * SLIPTEST_DET_SPEED, g.fires[0], g.fires[1], g.fires[2], g.fires[3],
-                         (unsigned long)g.resyncs, (unsigned long)g.vsteps, g.w_z ? " Z" : "");
+                         "GUARD M%d %.0frpm worst: ld %+.0f mx %+.0f m2 %+.0f iq %+.2f sp %.1f%% | fires ld%u iq%u sp%u mx%u "
+                         "m2%u cm%u G%u nc%lu rs%lu vs%lu%s",
+                         m + 1, cmd, g.w_ld, g.w_mx, g.w_m2, g.w_iq, 100.0f * g.w_sp, g.fires[GR_LD], g.fires[GR_IQ],
+                         g.fires[GR_SP], g.fires[GR_MX], g.fires[GR_M2], g.fires[GR_CM], g.fires[GR_G],
+                         (unsigned long)g.unconfirmed, (unsigned long)g.resyncs, (unsigned long)g.vsteps,
+                         g.w_z ? " Z" : "");
                 syncSenseSay(line);
             }
-            g.samples = 0;
-            g.resyncs = 0;
-            g.vsteps  = 0;
-            for (int r = 0; r < 4; r++) g.fires[r] = g.quiet[r] = 0;
-            g.w_ld = g.w_mx = g.w_sp = -1e9f;
+            g.samples     = 0;
+            g.resyncs     = 0;
+            g.vsteps      = 0;
+            g.unconfirmed = 0;
+            for (int r = 0; r < GR_N; r++) g.fires[r] = 0;
+            g.w_ld = g.w_mx = g.w_m2 = g.w_sp = -1e9f;
             g.w_iq = 1e9f;
             g.w_z = false;
             g.sec_ms = now;
@@ -1055,6 +1048,11 @@ void loadSenseUpdate(MotorController& mc1, MotorController& mc2, float dt, bool 
 #endif
         solve(m, *motors[m]);
     }
+
+#ifdef SYNC_CURRENT_SENSE
+    // Shadow slip guard, on this pass's fit and observer (before the slip test reads it).
+    guardUpdate(motors, millis(), dt, z_moving);
+#endif
 
     // ---- RTEST / LOADREF sequencing ----
     uint32_t now = millis();
@@ -1173,9 +1171,6 @@ void loadSenseUpdate(MotorController& mc1, MotorController& mc2, float dt, bool 
 
     for (int m = 0; m < 2; m++) updateWarning(m, *motors[m], allow_warn, now);
     updateAdaptive(motors, allow_warn, dt, now, z_moving);
-#ifdef SYNC_CURRENT_SENSE
-    guardUpdate(motors, now, dt, z_moving);
-#endif
 
     // ---- Periodic console line ----
     if (!g_load_print) return;

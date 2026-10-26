@@ -81,6 +81,7 @@ struct MotorState {
     float    delta_filt    = 0;
     float    delta_max     = -1e9f;
     float    pass_delta_max = -1e9f;              // delta_max for this pass only (deg)
+    float    pass_delta_max2 = -1e9f;             // second-largest this pass (deg)
     // The same against V - R*I instead of V (see the observer step): delta_r*.
     float    delta_r_filt   = 0;
     float    delta_r_max    = -1e9f;
@@ -423,7 +424,13 @@ static void processSample(MotorController& mc, int m, const CurrentSample& s, ui
             float a = T * SYNC_OBS_DECIM / 0.01f;   // ~10 ms filter
             st.delta_filt += (delta - st.delta_filt) * (a > 1.0f ? 1.0f : a);
             st.delta_max = fmaxf(st.delta_max, delta * (180.0f / PI_F));
-            st.pass_delta_max = fmaxf(st.pass_delta_max, delta * (180.0f / PI_F));
+            float delta_deg = delta * (180.0f / PI_F);
+            if (delta_deg > st.pass_delta_max) {
+                st.pass_delta_max2 = st.pass_delta_max;
+                st.pass_delta_max  = delta_deg;
+            } else if (delta_deg > st.pass_delta_max2) {
+                st.pass_delta_max2 = delta_deg;
+            }
 
             // Resistance-corrected: the same angle measured against V - R*I (dead-time corrected
             // V, the observer's R) instead of V, i.e. against the back-EMF plus the inductive
@@ -478,6 +485,7 @@ void syncSenseUpdate(MotorController& mc1, MotorController& mc2) {
         uint32_t cnt0   = st.w_cnt;
         uint32_t n0 = st.w_n, full0 = st.w_full, lo0 = st.w_lo, off0 = st.w_off;
         st.pass_delta_max = -1e9f;
+        st.pass_delta_max2 = -1e9f;
         st.pass_delta_r_max = -1e9f;
 
         const uint32_t now_ms = millis();
@@ -525,6 +533,7 @@ void syncSenseUpdate(MotorController& mc1, MotorController& mc2) {
         e.pass_lo       = (uint16_t)min<uint32_t>(st.w_lo - lo0, 65535);
         e.pass_off      = (uint16_t)min<uint32_t>(st.w_off - off0, 65535);
         e.pass_load_max = st.pass_delta_max > -1e8f ? st.pass_delta_max : NAN;
+        e.pass_load_max2 = st.pass_delta_max2 > -1e8f ? st.pass_delta_max2 : NAN;
         e.pass_load_r_max = st.pass_delta_r_max > -1e8f ? st.pass_delta_r_max : NAN;
         float rpm_cmd = fabsf(mc.current_velocity) * 60.0f / (2.0f * PI);
         if (st.obs.ready() && !st.obs.first) {

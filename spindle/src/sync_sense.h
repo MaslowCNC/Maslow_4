@@ -37,6 +37,7 @@ struct ObserverEstimate {
     uint32_t slips    = 0;       // pole slips seen since boot
     // The last syncSenseUpdate() pass, for the trip recorder:
     float    pass_load_max = NAN;  // largest unfiltered load angle (deg); NaN if none was computed
+    float    pass_load_max2 = NAN; // second-largest (deg): one noisy outlier does not move it
     float    pass_load_r_max = NAN;  // the same for the resistance-corrected angle
     uint16_t pass_n    = 0;        // samples read
     uint16_t pass_full = 0;        // ... with all three phases valid
