@@ -299,11 +299,9 @@ const updateFindAnchorsView = () => {
 	}
 
 	const elementsToHide = [
-		document.getElementById('tablettab-jog-controls'),
-		document.getElementById('tablettab-file-controls'),
-		document.getElementById('tablettab-playback-controls'),
-		document.getElementById('tablettab-position-display'),
-		document.getElementById('tablettab-job-bounds-container'),
+		document.getElementById('tablettab-machine-buttons'),
+		document.getElementById('tablettab-jog-section'),
+		document.getElementById('tablettab-job-section'),
 	];
 
 	elementsToHide.forEach(el => {
