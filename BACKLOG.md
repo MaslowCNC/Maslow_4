@@ -18,8 +18,10 @@ Format: **title** — what goes wrong, where, and how we found it.
   (`WebUIServer.cpp`) uses `rand() % ('A' - 'Z')` (modulo −25, wrong charset) and reseeds
   with `srand(time(NULL))` on every call, where `time()` is seconds since boot. Two browsers
   that first load in the same second get the same session and hit the bug above.
-- [ ] **UI ignores failed `$` commands.** `SendPrinterCommand` replaces the error handler
-  with `noop` for non-`[ESP]` commands (`printercmd.js`), so a 500 is never shown.
+- [ ] **UI ignores failed commands sent over HTTP.** `SendPrinterCommand` replaces the
+  error handler with `noop` for non-`[ESP]` commands (`printercmd.js`), so a 500 is never
+  shown. Commands sent through `wscommands.js` (jogs, STOP, calibration buttons) now report
+  `error:N`; the rest goes away as commands move there (see Medium: connection protocol).
 - [ ] **State is sent once and never resent.** The UI only learns the Maslow state from the
   one `Current state: N` line logged after a state change (`Calibration.cpp`
   `printCurrentState`). It isn't in `MINFO` or the status report, and the UI doesn't send
@@ -32,13 +34,27 @@ Format: **title** — what goes wrong, where, and how we found it.
 
 ## Medium: stopping
 
-- [ ] **`$STOP` is slow to take effect.** It's a text command, so it runs only after the
-  current move is fully queued; Maslow splits XY moves into ≤5 mm pieces (up to 1000).
-  Direction: send `!`/`0x85` before `$STOP` from the UI, or make the Maslow stop realtime.
-- [ ] **Unverified: does `$STOP` empty the planner queue** on the new FluidNC base, or can
-  motion resume afterwards?
+- [ ] **STOP is only fast for jogs.** STOP sends 0x85 then `$STOP`; 0x85 only acts in Jog
+  state. During a G-code run, belt retraction or calibration, `$STOP` still waits behind
+  the current line. Planned next: per-context stop (feed hold for runs, interrupt retract,
+  pause calibration).
 - [ ] **`!` sent while Idle enters Hold** (`Protocol.cpp` `protocol_do_feedhold`), a race
   if the jog finishes just before the stop arrives.
+
+## Medium: connection protocol (plan: all commands over the WebSocket)
+
+- [ ] **Steps 3-5 of the plan.** Move home, park, `$TKSLK`, start/pause/resume, startup
+  queries and config writes from HTTP `/command` to `wscommands.js`; send `$GSTATE` on every
+  reconnect; drop `PAGEID` from command sending; later, the same layer over Web Serial (USB).
+- [ ] **Replies can be credited to the wrong command** until then: commands sent over HTTP
+  run on the same socket, so their `ok`/`error` can be matched to a pending WebSocket line
+  (errors say "probably").
+- [ ] **Jog-cancel flush can cut a line in half.** If 0x85 arrives while the polling task
+  is partway through assembling a line, `flushQueuedLines` drops the rest and the fragment
+  joins the next line (rejected with `error:`, no unintended motion). Fixing it means
+  clearing the reader's line buffer from another task.
+- [ ] **Dead heartbeat check.** `maslow.js` tracks `[MSG:INFO: Heartbeat]`, which the
+  firmware never sends.
 
 ## Low: state machine and storage
 
