@@ -33,10 +33,12 @@ static bool s_dumping   = false;
 static int  s_dump_line = 0;
 
 // The link copy goes to the XY board, which saves it to its flash as /spindle_trip.csv so the
-// recording can be read over WiFi without the USB cable.  One line every 20 ms (~9 KB/s) stays
-// under the 115200-baud link and the XY board's 256-byte UART RX buffer, and leaves room in the
-// TX buffer for the status line (sendStatus wants 48 bytes free).  The whole dump takes ~21 s.
-static constexpr uint32_t LINK_LINE_INTERVAL_MS = 20;
+// recording can be read over WiFi without the USB cable.  One line every 30 ms (~6 KB/s with the
+// sync-sense observer columns, ~175 bytes a line) stays well under the 115200-baud link (11.5 KB/s)
+// and the XY board's 256-byte UART RX buffer, and leaves room in the TX buffer for the status line
+// (sendStatus wants 48 bytes free).  At 20 ms (~8.7 KB/s) 2 of 1000 lines arrived with bytes
+// missing.  The whole dump takes ~31 s.
+static constexpr uint32_t LINK_LINE_INTERVAL_MS = 30;
 static constexpr int      LINK_STATUS_RESERVE   = 64;
 static bool     s_link_dumping = false;
 static int      s_link_line    = 0;

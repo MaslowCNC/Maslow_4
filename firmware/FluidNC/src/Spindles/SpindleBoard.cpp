@@ -260,7 +260,7 @@ namespace Spindles {
         _uart->write((const uint8_t*)(test ? "T!\n" : "T\n"), test ? 3 : 2);
         log_info(name() << ": " << (test ? "asked the spindle board to record a test trip"
                                         : "asked the spindle board to re-send its trip recording")
-                        << "; it is saved to " << TRIP_FILE << " (~20 s)");
+                        << "; it is saved to " << TRIP_FILE << " (~30 s)");
     }
 
     // Not moving: no motion state, and the Maslow loop is not driving the belts.  The state alone

@@ -876,7 +876,7 @@ async def spindle_trip(action: str = "analyse", source: str = "xy", wait: float 
 
     The spindle records ~2 s of motor state (per-phase currents, filtered protection current,
     voltage limit, load-sense Iq and lag, FOC loop rate, nFAULT retries, Z phase) and, after a trip,
-    sends it to the XY board, which saves it as /spindle_trip.csv (~20 s after the trip). This tool
+    sends it to the XY board, which saves it as /spindle_trip.csv (~30 s after the trip). This tool
     downloads that file, prints a diagnosis, and adds what the XY board was doing at the time
     (messages and status reports).
 
