@@ -94,6 +94,10 @@ namespace Spindles {
             handler.item("phase_deg_per_mm", _phase_deg_per_mm, 0.0f, 100000.0f);
             handler.item("max_rpm", _max_rpm, 1, 100000);
 
+            // The router ramps up and down mechanically, so it takes spinup_ms/spindown_ms like
+            // the other motor spindles.  Upstream moved them out of Spindle::group(); without this
+            // an existing maslow.yaml that sets them raises a configuration alarm at boot.
+            Spindle::groupDelaySettings(handler);
             Spindle::group(handler);
         }
 
