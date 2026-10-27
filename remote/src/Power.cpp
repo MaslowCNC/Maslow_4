@@ -11,10 +11,14 @@
 namespace {
     constexpr gpio_num_t PIN_PENIRQ = (gpio_num_t)PIN_TOUCH_IRQ;
     constexpr gpio_num_t PIN_BL     = (gpio_num_t)PIN_BACKLIGHT;
+#ifndef BOARD_ES3C40P
     // RGB LED, active low
     constexpr gpio_num_t LEDS[] = { (gpio_num_t)PIN_LED_R, (gpio_num_t)PIN_LED_G, (gpio_num_t)PIN_LED_B };
+#endif
     // XPT2046 bus (bit-banged for the power-down command)
-#ifdef BOARD_CYD4
+#if defined(BOARD_ES3C40P)
+    constexpr int T_CLK = -1, T_MOSI = -1, T_MISO = -1, T_CS = -1;  // capacitive: not used
+#elif defined(BOARD_CYD4)
     constexpr int T_CLK = 14, T_MOSI = 13, T_MISO = 12, T_CS = 33;  // shared with the panel
 #else
     constexpr int T_CLK = 25, T_MOSI = 32, T_MISO = 39, T_CS = 33;
@@ -68,7 +72,9 @@ namespace Power {
     void begin() {
         // Pins held through the last deep sleep must be released before use.
         gpio_hold_dis(PIN_BL);
+#ifndef BOARD_ES3C40P
         for (auto p : LEDS) gpio_hold_dis(p);
+#endif
         gpio_deep_sleep_hold_dis();
 
         Preferences p;
@@ -153,16 +159,22 @@ namespace Power {
         Serial.flush();
         lcd.setBrightness(0);
         lcd.sleep();
-        touchPowerDownWithIrq();
+        // The FT6336U keeps signalling touches on INT in its monitor mode;
+        // the XPT2046 needs a command to leave PENIRQ enabled.
+        if (!TOUCH_CAPACITIVE) touchPowerDownWithIrq();
 
         // Keep the backlight off and the LED dark while asleep.
         gpio_set_level(PIN_BL, 0);
         gpio_hold_en(PIN_BL);
+#ifdef BOARD_ES3C40P
+        boardLed(false, false, false);
+#else
         for (auto p : LEDS) {
             pinMode((int)p, OUTPUT);
             digitalWrite((int)p, HIGH);
             gpio_hold_en(p);
         }
+#endif
         gpio_deep_sleep_hold_en();
 
         esp_sleep_enable_ext0_wakeup(PIN_PENIRQ, 0);

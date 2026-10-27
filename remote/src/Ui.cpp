@@ -9,7 +9,7 @@
 #include <math.h>
 
 namespace Ui {
-#ifdef BOARD_CYD4
+#ifdef LARGE_PANEL
     const lgfx::IFont* F_SMALL = &fonts::DejaVu18;
     const lgfx::IFont* F_BTN   = &fonts::FreeSans12pt7b;
     const lgfx::IFont* F_BTN_SMALL = &fonts::FreeSans9pt7b;
@@ -209,6 +209,7 @@ namespace {
     }
 
     void touchDown(int x, int y) {
+        DLOG("TOUCH %d,%d\n", x, y);
         downX = lastX = x;
         downY = lastY = y;
         downAt        = millis();
@@ -688,7 +689,7 @@ namespace Ui {
         p.end();
         lcd.init();
         lcd.setRotation(0);
-        if (haveCal) {
+        if (haveCal && !TOUCH_CAPACITIVE) {
             lcd.setTouchCalibrate(cal);
         }
         setBrightness(bright);
@@ -698,7 +699,7 @@ namespace Ui {
             tabs[i] = makeTab(i);
         }
         gfx.fillScreen(C::bg);
-        if (!haveCal && !Power::wokeFromSleep()) {
+        if (!haveCal && !TOUCH_CAPACITIVE && !Power::wokeFromSleep()) {
             // First boot: offer touch calibration; carry on with the defaults
             // if nobody touches the screen.
             gfx.setFont(F_BTN);
@@ -949,6 +950,10 @@ namespace Ui {
     }
 
     void calibrateTouch() {
+        if (TOUCH_CAPACITIVE) {
+            Machine::toast("Capacitive touch needs no calibration");
+            return;
+        }
         uint16_t cal[8];
         gfx.fillScreen(C::bg);
         gfx.setFont(F_BTN);

@@ -12,13 +12,14 @@
 
 LGFX lcd;
 
-// RGB LED (active low): green connected, blue pairing, red otherwise.
-static constexpr int LED_R = PIN_LED_R, LED_G = PIN_LED_G, LED_B = PIN_LED_B;
-
+// Status LED: green connected, blue pairing, red otherwise.
 static void setLed(bool r, bool g, bool b) {
-    digitalWrite(LED_R, !r);
-    digitalWrite(LED_G, !g);
-    digitalWrite(LED_B, !b);
+    static int last = -1;
+    int        now  = r | g << 1 | b << 2;
+    if (now != last) {  // a WS2812 write takes a while; only on change
+        last = now;
+        boardLed(r, g, b);
+    }
 }
 
 static void debugCommand(const char* c) {
@@ -56,9 +57,6 @@ static void debugCommand(const char* c) {
 void setup() {
     Debug::begin();
     Power::begin();  // releases the pins held through deep sleep
-    pinMode(LED_R, OUTPUT);
-    pinMode(LED_G, OUTPUT);
-    pinMode(LED_B, OUTPUT);
     setLed(false, false, false);
     Debug::setHandler(debugCommand);
     Ui::begin();

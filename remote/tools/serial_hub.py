@@ -28,7 +28,7 @@ PORT = 4568
 
 
 def find_port():
-    ports = glob.glob("/dev/cu.usbserial-*") + glob.glob("/dev/ttyUSB*")
+    ports = glob.glob("/dev/cu.usbserial-*") + glob.glob("/dev/cu.usbmodem*") + glob.glob("/dev/ttyUSB*") + glob.glob("/dev/ttyACM*")
     return ports[0] if ports else None
 
 
