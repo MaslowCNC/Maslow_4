@@ -988,8 +988,11 @@ void Maslow_::loadBeltPositions() {
     // If all belt lengths are near zero (within threshold), go to RETRACTED state, otherwise EXTENDEDOUT
     // Loading into EXTENDEDOUT requires the user to press "Apply Tension" to enter READY_TO_CUT state,
     // which allows the machine to measure its frame and verify everything is as expected
-    // Use threshold of 0.5mm to account for encoder drift and small movements during save/restore
-    const float retractedThreshold = 0.5;  // mm
+    // The threshold has to cover the encoder adjustment above, not just drift: once the motors
+    // power down after a retract the spools relax by a fraction of a turn, and that is added back
+    // here (up to 1/4 turn, ~11 mm).  0.5 mm was too tight - a retracted TR read 0.8 mm and booted
+    // into EXTENDEDOUT.  Extended belts are hundreds of mm, so 15 mm cannot misread a real extension.
+    const float retractedThreshold = 15.0;  // mm
     bool        allNearZero = (fabs(tlPos) < retractedThreshold && fabs(trPos) < retractedThreshold && fabs(blPos) < retractedThreshold &&
                         fabs(brPos) < retractedThreshold);
     int         newState    = allNearZero ? RETRACTED : EXTENDEDOUT;
