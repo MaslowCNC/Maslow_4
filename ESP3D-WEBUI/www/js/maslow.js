@@ -11,7 +11,6 @@ const ZM_INVALID_WARNING_PREFIX = "Maslow Zm invalid warning:";
 /** Maslow state constants (mirror firmware Maslow.h defines) */
 const MASLOW_STATE_FINDING_ANCHORS = 6;
 const MASLOW_STATE_READY_TO_CUT = 7;
-const MASLOW_STATE_FIND_ANCHORS_COMPUTING = 9;
 const FIND_ANCHORS_WAYPOINT_COORDINATE_REGEX = /^\[MSG:INFO:\s*Waypoint\s+\d+\s+coordinates:\s*X=([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\s+Y=([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\]$/;
 let wasFindingAnchors = false;
 
@@ -90,7 +89,6 @@ const updateDynamicButtons = () => {
 	// #define CALIBRATION_IN_PROGRESS 6
 	// #define READY_TO_CUT 7
 	// #define RELEASE_TENSION 8
-	// #define CALIBRATION_COMPUTING 9
 
 	switch (maslowStatus.state) {
 		case 0: 
@@ -226,19 +224,6 @@ const updateDynamicButtons = () => {
 
 			// No buttons are active in this state
 			break;
-		case 9:
-			stateLabel.innerHTML = "State: Find Anchors Computing";
-			if (mainStateLabel) {
-				mainStateLabel.innerHTML = "State: Find Anchors Computing";
-				if (mainStateLabelContainer) mainStateLabelContainer.style.backgroundColor = blueBackground;
-			}
-			// No buttons are active in this state
-			retractButton.style.backgroundColor = greyBackground;
-			extendButton.style.backgroundColor = greyBackground;
-			tenseButton.style.backgroundColor = greyBackground;
-			relaxButton.style.backgroundColor = greenBackground;
-			calibrateButton.style.backgroundColor = greyBackground;
-			break;
 		default:
 			stateLabel.innerHTML = "State: Unknown";
 			if (mainStateLabel) {
@@ -278,11 +263,11 @@ const updateDynamicButtons = () => {
 
 /**
  * Show or hide status panels based on whether Find Anchors is running.
- * When Find Anchors is active (states 6 or 9), hide irrelevant panels
+ * When Find Anchors is active (state 6), hide irrelevant panels
  * and expand the serial messages textarea so users can see progress output.
  */
 const updateFindAnchorsView = () => {
-	const isFindingAnchors = (maslowStatus.state === MASLOW_STATE_FINDING_ANCHORS || maslowStatus.state === MASLOW_STATE_FIND_ANCHORS_COMPUTING);
+	const isFindingAnchors = maslowStatus.state === MASLOW_STATE_FINDING_ANCHORS;
 
 	if (isFindingAnchors !== wasFindingAnchors) {
 		if (isFindingAnchors) {
@@ -634,7 +619,6 @@ const cfgDef = {
 	Retract_Current_Threshold: { name: "retractionForce", type: "A", cmd: "Maslow_Retract_Current_Threshold" },
 	spoilboardThickness: { name: "spoilboardThickness", type: "A", cmd: "Maslow_spoilboardThickness" },
 	workThickness: { name: "workThickness", type: "A", cmd: "Maslow_workThickness" },
-	Acceptable_Calibration_Threshold: { name: "acceptableCalibrationThreshold", type: "A", cmd: "Maslow_Acceptable_Calibration_Threshold" },
 	Apply_Tension_Belt_Retraction_Limit: { name: "applyTensionBeltRetractionLimit", type: "A", cmd: "Maslow_Apply_Tension_Belt_Retraction_Limit" },
 	Apply_Tension_Allow_Limiting: { name: "applyTensionAllowLimiting", type: "A", cmd: "Maslow_Apply_Tension_Allow_Limiting" },
 	Extend_Dist: { name: "extendDist", type: "A", cmd: "Maslow_Extend_Dist" },
@@ -706,10 +690,6 @@ const maslowMsgHandling = (msg) => {
 	}
 	switch (cfgVal.type) {
 		case "A":
-			// Check if this is a global variable assignment (like Acceptable_Calibration_Threshold)
-			if (cfgVal.name === "acceptableCalibrationThreshold") {
-				globalThis.acceptableCalibrationThreshold = stdDimensionAction(value);
-			}
 			stdAction(cfgVal.name, value);
 			break;
 		case "D": {

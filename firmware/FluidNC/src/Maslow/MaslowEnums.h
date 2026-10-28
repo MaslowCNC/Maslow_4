@@ -40,4 +40,3 @@ enum CartesianAxis {
 #define CALIBRATION_IN_PROGRESS 6
 #define READY_TO_CUT 7
 #define RELEASE_TENSION 8
-#define CALIBRATION_COMPUTING 9
