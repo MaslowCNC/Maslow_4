@@ -483,6 +483,17 @@ let fixedZEnabled = false;
 
 const maslowFixedZEnabled = () => fixedZSettingLoaded && fixedZEnabled;
 
+// The Maslow Mini runs on a Unified Control Board ([ESP800] board field, see connectdlg.js)
+const maslowIsMini = () => maslowBoard === "unified" || maslowBoard === "unified36v";
+
+// Show the spindle controls only on the Mini: the Maslow 4 has no spindle board to drive
+const tabletShowBoardControls = () => {
+  const spindleControls = id("tablettab_spindle_controls");
+  if (spindleControls) {
+    spindleControls.style.display = maslowIsMini() ? "" : "none";
+  }
+};
+
 const loadFixedZSetting = () => {
   SendPrinterCommand("$/kinematics/MaslowKinematics/fixedZ");
 };
@@ -1401,11 +1412,17 @@ const openSetZHomePopup = () => {
   const zInput = id("setHomeZ");
   if (zInput) {
     // Pre-fill with current machine Z position so confirming sets Z zero here.
-    // Maslow Mini: no min/max - the spindle board's Z travel differs from the M4 range.
     zInput.value = zCurrent;
-    zInput.removeAttribute("min");
-    zInput.removeAttribute("max");
-    zInput.title = "Machine Z to use as Z zero (default: the current position)";
+    if (maslowIsMini()) {
+      // No min/max: the spindle board's Z travel differs from the Maslow 4 range
+      zInput.removeAttribute("min");
+      zInput.removeAttribute("max");
+      zInput.title = "Machine Z to use as Z zero (default: the current position)";
+    } else {
+      zInput.min = Z_HOME_MIN_SAFE_MM;
+      zInput.max = Z_HOME_MAX_SAFE_MM;
+      zInput.title = `Z: ${Z_HOME_MIN_SAFE_MM} to ${Z_HOME_MAX_SAFE_MM} mm`;
+    }
   }
   const zStepInput = id("setHomeZStep");
   if (zStepInput) {
@@ -1440,8 +1457,15 @@ const moveToZHome = () => {
 const confirmSetZHome = () => {
   const zInput = id("setHomeZ");
   const rawZ = zInput ? parseNumericInput(zInput.value) : NaN;
-  // Maslow Mini: no clamp to the M4 Z range - the spindle board's Z travel is different.
-  const zVal = isNaN(rawZ) ? 0 : rawZ;
+  let zVal = isNaN(rawZ) ? 0 : rawZ;
+  // The Maslow 4 range does not apply to the Mini: the spindle board's Z travel is different
+  if (!maslowIsMini()) {
+    zVal = Math.max(Z_HOME_MIN_SAFE_MM, Math.min(Z_HOME_MAX_SAFE_MM, zVal));
+  }
+
+  if (!isNaN(rawZ) && zVal !== rawZ) {
+    addMessage(`Z Home value clamped to range: Z=${zVal}`);
+  }
 
   const mposZ = getMachineZPosition() ?? 0;
   sendCommand(`G10 L20 P0 Z${mposZ - zVal}`);
@@ -1475,6 +1499,9 @@ let _stopPending = false;
 // Does NOT clear _stopPending — tabletGrblState clears it once the firmware
 // confirms the machine is no longer running (stateName === 'Idle').
 const onWSOpenCallback = () => {
+  // [ESP800] has been read by now, so the board is known
+  tabletShowBoardControls();
+
   // Reset startup Z check so the safety popup re-fires if machine Z is unsafe
   // after a reconnect or firmware restart.
   startupZCheckDone = false;

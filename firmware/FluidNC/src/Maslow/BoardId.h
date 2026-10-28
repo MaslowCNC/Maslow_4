@@ -20,6 +20,7 @@ namespace BoardId {
 
     Board       board();
     const char* boardName(Board board);
+    const char* boardTag(Board board);  // short id for [ESP800]: maslow41, unified, unified36v or unknown
     int         millivolts();  // the boot reading, or -1 if the ADC could not be read
 
     // The Unified Control Boards wire the belt motors and encoders the opposite way round to the

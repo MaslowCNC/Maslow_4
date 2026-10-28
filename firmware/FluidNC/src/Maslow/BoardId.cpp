@@ -131,4 +131,17 @@ namespace BoardId {
                 return "Unknown";
         }
     }
+
+    const char* boardTag(Board board) {
+        switch (board) {
+            case Board::Maslow41:
+                return "maslow41";
+            case Board::Unified:
+                return "unified";
+            case Board::Unified36V:
+                return "unified36v";
+            default:
+                return "unknown";
+        }
+    }
 }
