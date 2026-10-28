@@ -2233,8 +2233,8 @@ bool Calibration::generate_calibration_grid() {
         }
 
         // Calculate grid size based on frame dimensions
-        float gridWidth  = frameWidth * 0.5;
-        float gridHeight = frameHeight * 0.2;
+        float gridWidth  = frameWidth * 0.4;
+        float gridHeight = frameHeight * 0.4;
 
         // Automatically select the grid spacing (3x3, 5x5, 7x7, or 9x9) such that
         // the smallest grid is used which will not leave more than 260mm between each point
