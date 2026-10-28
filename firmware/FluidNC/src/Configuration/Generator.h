@@ -21,7 +21,12 @@ namespace Configuration {
 
         int_fast8_t indent_;
         Channel&    dst_;
+        bool        direct_        = false;  // Write to dst_ in the calling task, not via the output task
+        size_t      expected_      = 0;      // Bytes direct writes should have produced
+        size_t      written_       = 0;      // Bytes dst_ accepted
         bool        lastIsNewline_ = false;
+
+        void emit(const std::string& line);
 
         inline void indent() {
             lastIsNewline_ = false;
@@ -42,23 +47,28 @@ namespace Configuration {
     public:
         Generator(Channel& dst, int_fast8_t indent = 0);
 
+        // direct: write each line to dst straight from the calling task instead of queueing it for
+        // the output task.  Used to save the config file (see save_config_file() in
+        // ProcessSettings.cpp).
+        Generator(Channel& dst, int_fast8_t indent, bool direct);
+
+        bool allWritten() const { return written_ == expected_; }
+
         void send_item(const char* name, const std::string& value) {
-            LogStream s(dst_, "");
             lastIsNewline_ = false;
-            for (int i = 0; i < indent_ * 2; ++i) {
-                s << ' ';
-            }
-            s << name;
-            s << ": ";
+            std::string line(indent_ * 2, ' ');
+            line += name;
+            line += ": ";
 
             // If value contains a colon, wrap text as string
             if (value.find(':') == std::string::npos) {
-                s << value;
+                line += value;
             } else {
-                s << "'";
-                s << value;
-                s << "'";
+                line += "'";
+                line += value;
+                line += "'";
             }
+            emit(line);
         }
 
         void send_item(const char* name, char value) {

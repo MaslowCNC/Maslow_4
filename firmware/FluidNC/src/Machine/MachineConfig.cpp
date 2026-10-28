@@ -7,6 +7,7 @@
 #include "Kinematics/Kinematics.h"
 #include "Kinematics/MaslowKinematics.h"
 #include "Maslow/Maslow.h"  // Maslow.using_default_config, M
+#include "Maslow/BoardId.h"
 
 #include "Motors/MotorDriver.h"
 #include "Motors/NullMotor.h"
@@ -33,6 +34,10 @@
 #include <cstring>
 #include <atomic>
 #include <memory>
+
+#if defined(ESP32)
+#    include <esp_system.h>  // esp_reset_reason
+#endif
 
 Machine::MachineConfig* config;
 
@@ -203,6 +208,13 @@ namespace Machine {
         handler.item(M + "_Park_Z", Maslow.parkZ, -100.0, 100.0);
         handler.item(M + "_Park_X", Maslow.parkX, -10000.0, 10000.0);
         handler.item(M + "_Park_Y", Maslow.parkY, -10000.0, 10000.0);
+
+        // Dust collection fan speed on the spindle board (0-100, 0 = off).  Only the Unified Control
+        // Board has one, and leaving it out of a Maslow 4 config keeps that file readable by older
+        // firmware, which rejects keys it does not know.
+        if (BoardId::reversedBeltMotors()) {
+            handler.item(M + "_Dust_Fan_Speed", Maslow.dustFanSpeed, 0, 100);
+        }
     }
 
     void MachineConfig::afterParse() {
@@ -307,68 +319,195 @@ namespace Machine {
         }
     }
 
-    // Maslow M4 built-in default configuration, used when the config file
-    // cannot be loaded.  Composed from partial strings for readability.
-    const std::string mcgrid = M + "_calibration_grid_";
+    // Built-in default configuration, used when the config file cannot be loaded.  Composed from
+    // partial strings for readability, and built only when needed so none of it stays on the heap.
+    // The Z axis is the Maslow 4.1's TMC2209 steppers; on a Unified Control Board it is the spindle
+    // board, which turns the planned Z position into its own motion over the GPIO15/16 link.
+    static std::string defaultConfig() {
+        const std::string mcgrid = M + "_calibration_grid_";
 
-    const std::string dcBoard = "name: Default (" + M + " S3 Board)\nboard: " + M + "\n";
+        const std::string dcBoard = "name: Default (" + M + " S3 Board)\nboard: " + M + "\n";
 
-    const std::string dcM4Vert            = M + "_vertical: false\n";
-    const std::string dcM4CalibrationGrid = mcgrid + "width_mm_X: 0\n" + mcgrid + "height_mm_Y: 0\n" + mcgrid + "size: 9\n";
+        const std::string dcM4Vert            = M + "_vertical: false\n";
+        const std::string dcM4CalibrationGrid = mcgrid + "width_mm_X: 0\n" + mcgrid + "height_mm_Y: 0\n" + mcgrid + "size: 9\n";
 
-    const std::string dcM4CurrentThreshold = M + "_Retract_Current_Threshold: 1300\n" + M + "_Acceptable_Calibration_Threshold: 0.5\n";
-    const std::string dcM4ApplyTensionLimit =
-        M + "_Apply_Tension_Belt_Retraction_Limit: 300.0\n" + M + "_Apply_Tension_Allow_Limiting: true\n";
+        const std::string dcM4CurrentThreshold = M + "_Retract_Current_Threshold: 1300\n" + M + "_Acceptable_Calibration_Threshold: 0.5\n";
+        const std::string dcM4ApplyTensionLimit =
+            M + "_Apply_Tension_Belt_Retraction_Limit: 300.0\n" + M + "_Apply_Tension_Allow_Limiting: true\n";
 
-    const std::string dcM4Thickness = M + "_spoilboardThickness: 0.0\n" + M + "_workThickness: 0.0\n";
+        const std::string dcM4Thickness = M + "_spoilboardThickness: 0.0\n" + M + "_workThickness: 0.0\n";
 
-    const std::string dcM4Park = M + "_Park_Z: 2.0\n" + M + "_Park_X: 0.0\n" + M + "_Park_Y: 0.0\n";
+        const std::string dcM4Park = M + "_Park_Z: 2.0\n" + M + "_Park_X: 0.0\n" + M + "_Park_Y: 0.0\n";
 
-    const std::string dcSpi      = "spi:\n  miso_pin: gpio.13\n  mosi_pin: gpio.11\n  sck_pin: gpio.12\n";
-    const std::string dcSDCard   = "sdcard:\n  card_detect_pin: NO_PIN\n  cs_pin: gpio.10\n";
-    const std::string dcStepping = "stepping:\n  engine: RMT\n  idle_ms: 240\n";
-    const std::string dcUart1    = "uart1:\n  txd_pin: gpio.1\n  rxd_pin: gpio.2\n  baud: 115200\n  mode: 8N1\n";
+        const std::string dcSpi      = "spi:\n  miso_pin: gpio.13\n  mosi_pin: gpio.11\n  sck_pin: gpio.12\n";
+        const std::string dcSDCard   = "sdcard:\n  card_detect_pin: NO_PIN\n  cs_pin: gpio.10\n";
+        const std::string dcStepping = "stepping:\n  engine: RMT\n  idle_ms: 240\n";
+        const std::string dcUart1    = "uart1:\n  txd_pin: gpio.1\n  rxd_pin: gpio.2\n  baud: 115200\n  mode: 8N1\n";
 
-    const std::string dcZMotor = "        uart_num: 1\n        cs_pin: NO_PIN\n        r_sense_ohms: 0.110\n"
-                                 "        run_amps: 1.000\n        hold_amps: 0.500\n        microsteps: 0\n"
-                                 "        stallguard: 0\n        stallguard_debug: false\n"
-                                 "        toff_disable: 0\n        toff_stealthchop: 5\n        toff_coolstep: 3\n"
-                                 "        run_mode: StealthChop\n        homing_mode: StealthChop\n        use_enable: true\n";
+        const std::string dcZMotor = "        uart_num: 1\n        cs_pin: NO_PIN\n        r_sense_ohms: 0.110\n"
+                                     "        run_amps: 1.000\n        hold_amps: 0.500\n        microsteps: 0\n"
+                                     "        stallguard: 0\n        stallguard_debug: false\n"
+                                     "        toff_disable: 0\n        toff_stealthchop: 5\n        toff_coolstep: 3\n"
+                                     "        run_mode: StealthChop\n        homing_mode: StealthChop\n        use_enable: true\n";
 
-    const std::string dcKinematics = "kinematics:\n"
-                                     "  MaslowKinematics:\n"
-                                     "    tlX: 0.0\n"
-                                     "    tlY: 2000.0\n"
-                                     "    tlZ: 100.0\n"
-                                     "    trX: 3000.0\n"
-                                     "    trY: 2000.0\n"
-                                     "    trZ: 100.0\n"
-                                     "    blX: 0.0\n"
-                                     "    blY: 0.0\n"
-                                     "    blZ: 100.0\n"
-                                     "    brX: 3000.0\n"
-                                     "    brY: 0.0\n"
-                                     "    brZ: 100.0\n"
-                                     "    beltEndExtension: 30.0\n"
-                                     "    armLength: 123.4\n"
-                                     "    beltToothSpacing: 1.9988\n"
-                                     "    encoderTeeth: 22.0\n"
-                                     "    maxSegmentLength: 5.0\n"
-                                     "    fixedZ: false\n";
+        const std::string dcKinematics = "kinematics:\n"
+                                         "  MaslowKinematics:\n"
+                                         "    tlX: 0.0\n"
+                                         "    tlY: 2000.0\n"
+                                         "    tlZ: 100.0\n"
+                                         "    trX: 3000.0\n"
+                                         "    trY: 2000.0\n"
+                                         "    trZ: 100.0\n"
+                                         "    blX: 0.0\n"
+                                         "    blY: 0.0\n"
+                                         "    blZ: 100.0\n"
+                                         "    brX: 3000.0\n"
+                                         "    brY: 0.0\n"
+                                         "    brZ: 100.0\n"
+                                         "    beltEndExtension: 30.0\n"
+                                         "    armLength: 123.4\n"
+                                         "    beltToothSpacing: 1.9988\n"
+                                         "    encoderTeeth: 22.0\n"
+                                         "    maxSegmentLength: 5.0\n"
+                                         "    fixedZ: false\n";
 
-    const std::string defaultConfig =
-        dcBoard +
-        // Maslow M4 default items
-        dcM4Vert + dcM4CalibrationGrid + dcM4CurrentThreshold + dcM4ApplyTensionLimit + dcM4Thickness + dcM4Park +
-        // Default sections
-        dcSpi + dcSDCard + dcStepping + dcUart1 + dcKinematics +
-        "axes:\n"
-        "  z:\n    max_rate_mm_per_min: 400\n    acceleration_mm_per_sec2: 10\n    max_travel_mm: 100\n    steps_per_mm: 100\n"
-        "    homing:\n      cycle: -1\n"
-        "    motor0:\n      tmc_2209:\n        addr: 0\n        direction_pin: gpio.16\n        step_pin: gpio.15\n" +
-        dcZMotor + "    motor1:\n      tmc_2209:\n        addr: 1\n        direction_pin: NO_PIN\n        step_pin: gpio.46\n" + dcZMotor;
+        std::string config =
+            dcBoard +
+            // Maslow M4 default items
+            dcM4Vert + dcM4CalibrationGrid + dcM4CurrentThreshold + dcM4ApplyTensionLimit + dcM4Thickness + dcM4Park +
+            // Default sections
+            dcSpi + dcSDCard + dcStepping + dcUart1 + dcKinematics +
+            "axes:\n"
+            "  z:\n    max_rate_mm_per_min: 400\n    acceleration_mm_per_sec2: 10\n    max_travel_mm: 100\n    steps_per_mm: 100\n"
+            "    homing:\n      cycle: -1\n";
+        if (BoardId::reversedBeltMotors()) {
+            config += "    motor0:\n      null_motor:\n"
+                      "SpindleBoard:\n  phase_deg_per_mm: 45.0\n  max_rpm: 14000\n"
+                      "  uart:\n    txd_pin: gpio.15\n    rxd_pin: gpio.16\n    baud: 115200\n    mode: 8N1\n";
+        } else {
+            config += "    motor0:\n      tmc_2209:\n        addr: 0\n        direction_pin: gpio.16\n        step_pin: gpio.15\n" +
+                      dcZMotor +
+                      "    motor1:\n      tmc_2209:\n        addr: 1\n        direction_pin: NO_PIN\n        step_pin: gpio.46\n" + dcZMotor;
+        }
+        return config;
+    }
+
+    // A fresh filesystem has no config file, only a template for each machine.  Copy the one for
+    // this board into place so the machine starts from its own pins rather than the built-in
+    // default.  The copy goes through a temporary file and a small stack buffer, so a power cut
+    // cannot leave a half-written config and the file is never held in memory.
+    static void copyConfigTemplate(const char* filename) {
+        const char* templateName;
+        switch (BoardId::board()) {
+            case BoardId::Board::Maslow41:
+                templateName = "maslow-m4.yaml";
+                break;
+            case BoardId::Board::Unified:
+            case BoardId::Board::Unified36V:
+                templateName = "maslow-mini.yaml";
+                break;
+            default:
+                return;
+        }
+
+        std::error_code ec;
+        FluidPath       target(filename, LocalFS, ec);
+        if (ec || stdfs::exists(target, ec)) {
+            return;
+        }
+        FluidPath source(templateName, LocalFS, ec);
+        if (ec || !stdfs::exists(source, ec)) {
+            return;
+        }
+        FluidPath temp(std::string(filename) + ".tmp", LocalFS, ec);
+        if (ec) {
+            return;
+        }
+
+        bool ok = true;
+        try {
+            FileStream in(source, "rb");
+            FileStream out(temp, "w");
+            char       buffer[256];
+            int        len;
+            while (ok && (len = in.read(buffer, sizeof(buffer))) > 0) {
+                ok = out.write(reinterpret_cast<uint8_t*>(buffer), len) == size_t(len);
+            }
+        } catch (...) { ok = false; }
+        if (ok) {
+            stdfs::rename(temp, target, ec);
+        }
+        if (!ok || ec) {
+            log_error("Cannot create " << filename << " from " << templateName);
+            stdfs::remove(temp, ec);
+            return;
+        }
+        log_info("Created " << filename << " from " << templateName);
+    }
+
+    // A config written for the other board drives GPIO15/16 the wrong way: on the Maslow 4.1 they
+    // are the Z steppers' STEP/DIR, on a Unified Control Board the link to the spindle board.  Raise
+    // a config alarm, which stops all motion, and say which template to start from.
+    static void checkConfigMatchesBoard() {
+        switch (BoardId::board()) {
+            case BoardId::Board::Maslow41:
+                for (auto spindle : Spindles::SpindleFactory::objects()) {
+                    if (strcmp(spindle->name(), "SpindleBoard") == 0) {
+                        log_config_error("This config is for a Maslow Mini (SpindleBoard spindle) but the board is a Maslow 4.1, "
+                                         "whose GPIO15/16 drive the Z steppers. Start from maslow-m4.yaml");
+                        return;
+                    }
+                }
+                break;
+            case BoardId::Board::Unified:
+            case BoardId::Board::Unified36V:
+                for (axis_t axis = X_AXIS; axis < Axes::_numberAxis; ++axis) {
+                    auto a = Axes::_axis[axis];
+                    if (a == nullptr) {
+                        continue;
+                    }
+                    for (motor_t motor = 0; motor < Axis::MAX_MOTORS_PER_AXIS; ++motor) {
+                        auto m = a->_motors[motor];
+                        if (m && m->_driver && strcmp(m->_driver->name(), "null_motor") != 0) {
+                            log_config_error("This config drives a " << m->_driver->name()
+                                                                     << " motor but the Unified Control Board has none: its GPIO15/16 "
+                                                                        "are the spindle board link. Start from maslow-mini.yaml");
+                            return;
+                        }
+                    }
+                }
+                break;
+            default:
+                break;
+        }
+    }
 
     void MachineConfig::load() {
+#if defined(ESP32)
+        // Log why the previous boot ended, so unexpected resets (e.g. a brownout when the
+        // motors surge against mechanical resistance) can be told apart from panics and
+        // watchdog timeouts.
+        esp_reset_reason_t reason = esp_reset_reason();
+        const char*        reasonStr;
+        switch (reason) {
+            case ESP_RST_POWERON:  reasonStr = "power-on"; break;
+            case ESP_RST_EXT:      reasonStr = "external pin"; break;
+            case ESP_RST_SW:       reasonStr = "software"; break;
+            case ESP_RST_PANIC:    reasonStr = "panic/exception"; break;
+            case ESP_RST_INT_WDT:  reasonStr = "interrupt watchdog"; break;
+            case ESP_RST_TASK_WDT: reasonStr = "task watchdog"; break;
+            case ESP_RST_WDT:      reasonStr = "other watchdog"; break;
+            case ESP_RST_BROWNOUT: reasonStr = "brownout (supply sag)"; break;
+            case ESP_RST_SDIO:     reasonStr = "SDIO"; break;
+            case ESP_RST_DEEPSLEEP: reasonStr = "deep-sleep wake"; break;
+            default:               reasonStr = "unknown"; break;
+        }
+        log_info("Reset reason: " << reasonStr << " (" << (int)reason << ")");
+
+        // Before the config is parsed (it will depend on the board) and before WiFi claims ADC2
+        BoardId::detect();
+#endif
+
         // Maslow: unlike stock FluidNC, always try the user config file even
         // after a panic - the fixed built-in default config is the fallback,
         // so a bad config file cannot cause an unrecoverable reset loop.
@@ -388,7 +527,9 @@ namespace Machine {
                 log_error(btLine.c_str());
             }
         }
+        copyConfigTemplate(config_filename->get());
         load_file(config_filename->get());
+        checkConfigMatchesBoard();
     }
 
     void MachineConfig::load_file(const std::string_view filename) {
@@ -418,7 +559,7 @@ namespace Machine {
             log_warn("Cannot open configuration file:" << filename);
             log_info("Using default configuration");
             Maslow.using_default_config = true;
-            load_yaml(defaultConfig);
+            load_yaml(defaultConfig());
         }
     }
 

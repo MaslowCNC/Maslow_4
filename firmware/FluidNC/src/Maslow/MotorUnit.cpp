@@ -8,7 +8,12 @@
 
 #include "../Report.h"
 #include "Maslow.h"
+#include "BoardId.h"
 #include <cmath>
+
+// MASLOW_DISABLE_BOOT_SELFTEST is defined in Maslow.h. When 1, missing hardware is
+// logged as a warning instead of latching Maslow.error and blocking startup, so the
+// controller can run without motors and encoders attached for bench testing.
 
 // PID controller tuning
 #define P 300
@@ -26,26 +31,44 @@ void MotorUnit::begin(int forwardPin, int backwardPin, int readbackPin, int enco
 
     Maslow.I2CMux.setPort(_encoderAddress);
     if (!encoder.begin()) {
+#if MASLOW_DISABLE_BOOT_SELFTEST
+        log_warn("Encoder not found on " << encAddrLabel.c_str() << " (boot self-test disabled)");
+#else
         log_error("Encoder not found on " << encAddrLabel.c_str());
         Maslow.error        = true;
         Maslow.errorMessage = "Encoder not found on " + encAddrLabel;
+#endif
     } else {
+        encoder.setDirection(BoardId::reversedBeltMotors() ? AS5600_COUNTERCLOCK_WISE : AS5600_CLOCK_WISE);
         log_info("Encoder connected on " << encAddrLabel.c_str());
     }
     zero();
 
-    motor.begin(forwardPin, backwardPin, readbackPin, channel1, channel2);
+    // On a reversed board the forward/backward pins and their PWM channels are swapped, so that
+    // commanded FORWARD/BACKWARD turn the belt the same way as on a Maslow 4.1.
+    if (BoardId::reversedBeltMotors()) {
+        motor.begin(backwardPin, forwardPin, readbackPin, channel2, channel1);
+    } else {
+        motor.begin(forwardPin, backwardPin, readbackPin, channel1, channel2);
+    }
 
     positionPID.setPID(P, I, D);
     positionPID.setOutputLimits(-1023, 1023);
 
-    if (!motor_test()) {
+#if MASLOW_DISABLE_BOOT_SELFTEST
+    log_warn("Motor self-test skipped on " << encAddrLabel.c_str() << " (boot self-test disabled)");
+#else
+    // Without a known board the motor direction is a guess, so leave the motors still
+    if (BoardId::board() == BoardId::Board::Unknown) {
+        log_warn("Motor self-test skipped on " << encAddrLabel.c_str() << " (control board not recognised)");
+    } else if (!motor_test()) {
         log_error("Motor not found on " << encAddrLabel.c_str());
         Maslow.error        = true;
         Maslow.errorMessage = "Motor not found on " + encAddrLabel;
     } else {
         log_info("Motor detected on " << encAddrLabel.c_str());
     }
+#endif
 }
 
 //Test the motor unit by testing the motor and checking the encoder
@@ -124,6 +147,9 @@ bool MotorUnit::updateEncoderPosition() {
         return false;
 
     String encAddrLabel = Maslow.axis_id_to_label(_encoderAddress);
+#if MASLOW_DISABLE_BOOT_SELFTEST
+    (void)encAddrLabel;  // unused when bench-test logging is suppressed
+#endif
 
     if (encoder.isConnected()) {                                               //this func has 50ms timeout (or worse?, hard to tell)
         mostRecentCumulativeEncoderReading = encoder.getCumulativePosition();  //This updates and returns the encoder value
@@ -131,16 +157,20 @@ bool MotorUnit::updateEncoderPosition() {
         // Check for I2C communication errors using new AS5600 error handling
         int error = encoder.lastError();
         if (error != 0) {  // AS5600_OK = 0
+#if !MASLOW_DISABLE_BOOT_SELFTEST
             if (millis() - encoderReadFailurePrintTime > 5000) {
                 encoderReadFailurePrintTime = millis();
                 log_warn("Encoder I2C error " << error << " on " << encAddrLabel.c_str());
             }
+#endif
             return false;
         }
         return true;
     } else if (millis() - encoderReadFailurePrintTime > 5000) {
         encoderReadFailurePrintTime = millis();
+#if !MASLOW_DISABLE_BOOT_SELFTEST
         log_warn("Encoder read failure on " << encAddrLabel.c_str());
+#endif
         //Maslow.panic();
     }
     return false;
@@ -204,14 +234,28 @@ bool MotorUnit::comply() {
 
 // Pulls_tight and zeros axis; returns true when done
 bool MotorUnit::retract() {
-    if (!pull_tight(Maslow.calibration.retractCurrentThreshold))
+    if (!retractPendingZero) {
+        if (!pull_tight(Maslow.calibration.retractCurrentThreshold))
+            return false;
+        retractPendingZero = true;
+    }
+
+    stop();
+    if (!updateEncoderPosition()) {
         return false;
+    }
 
-    String encAddrLabel = Maslow.axis_id_to_label(_encoderAddress);
-    log_info(encAddrLabel.c_str() << " pulled tight with offset " << getPosition());
-    zero();
+    lastRetractOffset = getPosition();
+    if (!zero()) {
+        return false;
+    }
 
+    retractPendingZero = false;
     return true;
+}
+
+double MotorUnit::getLastRetractOffset() const {
+    return lastRetractOffset;
 }
 
 // Pulls the belt until we hit a current treshold; returns true when done
@@ -360,6 +404,7 @@ void MotorUnit::reset() {
     retract_speed            = 0;
     retract_baseline         = 700;
     incrementalThresholdHits = 0;
+    retractPendingZero       = false;
     amtToMove                = 0;
     lastPosition             = getPosition();
     beltSpeedTimer           = millis();
@@ -372,11 +417,17 @@ void MotorUnit::resetPID() {
 }
 
 //sets the encoder position to 0
-void MotorUnit::zero() {
-    Maslow.I2CMux.setPort(_encoderAddress);
+bool MotorUnit::zero() {
+    if (!Maslow.I2CMux.setPort(_encoderAddress)) {
+        return false;
+    }
     encoder.resetCumulativePosition();
+    if (encoder.lastError() != 0) {
+        return false;
+    }
     // Update our cached value to match the reset position
     mostRecentCumulativeEncoderReading = 0;
+    return true;
 }
 
 //sets the encoder position to a specific value (for restoring from NVS)

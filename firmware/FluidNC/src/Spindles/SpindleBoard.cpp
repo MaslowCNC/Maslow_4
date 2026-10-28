@@ -1,0 +1,667 @@
+// Copyright (c) 2024 -	Maslow
+// Use of this source code is governed by a GPLv3 license that can be found in the LICENSE file.
+
+#include "SpindleBoard.h"
+
+#include "../Machine/MachineConfig.h"  // config->_uarts
+#include "../System.h"                 // sys
+#include "../Protocol.h"               // rtAlarm, ExecAlarm
+#include "../GCode.h"                  // gc_sync_position
+#include "../Planner.h"                // plan_sync_position
+#include "../Stepper.h"                // Stepper::isAwake (no flash writes while stepping)
+#include "../Maslow/Maslow.h"          // Maslow.resetUpdateWatchdog
+#include "../Settings.h"               // Sta/SSID and Sta/Password, looked up by name
+#include "../FluidPath.h"               // LocalFS
+
+#include <cstdio>   // snprintf
+#include <cstdlib>  // strtol
+#include <cstring>  // strncmp
+#include <cmath>    // fabsf
+
+namespace Spindles {
+    SpindleBoard* SpindleBoard::instance = nullptr;
+
+    void SpindleBoard::init() {
+        // Either an embedded "uart:" section or an external "uart_num:" reference.
+        if (_uart) {
+            _uart->begin();
+        } else {
+            _uart = config->_uarts[_uart_num];
+            if (!_uart) {
+                log_error("SpindleBoard: missing uart" << _uart_num << " section");
+                return;
+            }
+        }
+
+        is_reversable = false;
+
+        if (_speeds.size() == 0) {
+            // Default linear map so that the device speed equals the requested RPM.
+            linearSpeeds(_max_rpm, 100.0f);
+        }
+        setupSpeeds(maxSpeed());
+
+        _current_state = SpindleState::Disable;
+        instance       = this;
+
+        // Make sure the board is stopped at startup.
+        sendSpeed(0);
+
+        config_message();
+
+        // Confirm the spindle/Z controller board is connected and talking.  The dust
+        // collection fan speed follows on the first update() pass.
+        handshake();
+    }
+
+    void SpindleBoard::handshake() {
+        if (!_uart) {
+            return;
+        }
+
+        log_info(name() << ": handshaking with spindle board over the inter-board link...");
+
+        _uart->flushRx();
+
+        char line[80];
+        // Try for ~2 seconds (10 x 200 ms).  The spindle board needs a moment after
+        // power-on before its control task starts answering, so a few misses are normal.
+        for (int attempt = 1; attempt <= 10; attempt++) {
+            _uart->write((const uint8_t*)"H\n", 2);
+
+            uint32_t start   = millis();
+            size_t   idx     = 0;
+            bool     gotLine = false;
+            while (millis() - start < 200) {
+                while (_uart->available()) {
+                    char c = (char)_uart->read();
+                    if (c == '\r') {
+                        continue;
+                    }
+                    if (c == '\n') {
+                        line[idx] = '\0';
+                        gotLine   = true;
+                        break;
+                    }
+                    if (idx < sizeof(line) - 1) {
+                        line[idx++] = c;
+                    }
+                }
+                if (gotLine) {
+                    break;
+                }
+                delay(5);
+            }
+
+            // An "I:" identity reply or a "T:" status line both prove the link is up.
+            if (gotLine && (strncmp(line, "I:", 2) == 0 || strncmp(line, "T:", 2) == 0)) {
+                _link_confirmed = true;
+                log_info(name() << ": link ESTABLISHED with spindle board on attempt " << attempt << " -> " << line);
+                return;
+            }
+        }
+
+        log_warn(name() << ": NO response from spindle board during boot. Check the link wiring "
+                           "(XY TX gpio.15 -> spindle RX gpio.39, XY RX gpio.16 <- spindle TX gpio.38), "
+                           "a shared ground between the boards, and 115200 baud. "
+                           "Will confirm automatically if the spindle board responds later.");
+    }
+
+    void SpindleBoard::config_message() {
+        log_info(name() << " Spindle on " << (_uart_num != -1 ? "uart" : "embedded uart")
+                        << " phase_deg_per_mm:" << _phase_deg_per_mm << " max_rpm:" << _max_rpm);
+    }
+
+    void SpindleBoard::setState(SpindleState state, SpindleSpeed speed) {
+        if (sys.abort()) {
+            return;  // Block during abort.
+        }
+
+        // Always call mapSpeed() with the unmodified input so sys.spindle_speed is set.
+        uint32_t dev_speed = mapSpeed(state, speed);
+        if (state == SpindleState::Disable) {
+            dev_speed = offSpeed();
+            // A speed the stepper ISR queued for the next update() would otherwise go out
+            // after this stop and start the spindle again.
+            _rpm_dirty = false;
+        } else {
+            // M3/M4 is the operator's deliberate restart after a spindle fault.
+            _fault_latched = false;
+        }
+
+        sendSpeed(dev_speed);
+
+        _current_state = state;
+        spindleDelay(state, speed);
+    }
+
+    void IRAM_ATTR SpindleBoard::setSpeedfromISR(uint32_t dev_speed) {
+        // UART transmission is unsafe from an ISR, so just record the request and
+        // let update() flush it from task context.
+        _pending_rpm = dev_speed;
+        _rpm_dirty   = true;
+    }
+
+    void SpindleBoard::sendSpeed(uint32_t rpm) {
+        if (!_uart || rpm == _last_sent_rpm) {
+            return;
+        }
+        _last_sent_rpm = rpm;
+        char    buf[24];
+        int     n = snprintf(buf, sizeof(buf), "S%lu\n", (unsigned long)rpm);
+        if (n > 0) {
+            _uart->write((const uint8_t*)buf, (size_t)n);
+        }
+    }
+
+    void SpindleBoard::sendPhase(float deg) {
+        if (!_uart) {
+            return;
+        }
+        if (_deg_sent && fabsf(deg - _last_sent_deg) < 0.05f) {
+            return;
+        }
+        _deg_sent      = true;
+        _last_sent_deg = deg;
+        char buf[24];
+        int  n = snprintf(buf, sizeof(buf), "Z%.2f\n", deg);
+        if (n > 0) {
+            _uart->write((const uint8_t*)buf, (size_t)n);
+        }
+    }
+
+    void SpindleBoard::sendFan(int level) {
+        if (!_uart) {
+            return;
+        }
+        if (level < 0) {
+            level = 0;
+        } else if (level > 100) {
+            level = 100;
+        }
+        if (level == _last_sent_fan) {
+            return;
+        }
+        _last_sent_fan = level;
+        char buf[16];
+        int  n = snprintf(buf, sizeof(buf), "C%d\n", level);
+        if (n > 0) {
+            _uart->write((const uint8_t*)buf, (size_t)n);
+        }
+    }
+
+    void SpindleBoard::sendBeltCooling(bool active) {
+        if (!_uart || (int)active == _last_sent_belt) {
+            return;
+        }
+        _last_sent_belt = (int)active;
+        const char* command = active ? "B1\n" : "B0\n";
+        _uart->write((const uint8_t*)command, 3);
+    }
+
+    void SpindleBoard::sendHoldRelease() {
+        if (!_uart) {
+            return;
+        }
+        _uart->write((const uint8_t*)"D\n", 2);
+    }
+
+    void SpindleBoard::sendHome() {
+        if (!_uart) {
+            log_error(name() << ": cannot home spindle Z - no link to the spindle board");
+            return;
+        }
+        _uart->write((const uint8_t*)"G\n", 2);
+        log_info(name() << ": sent Z homing request to the spindle board");
+    }
+
+    void SpindleBoard::sendRemoveTool() {
+        if (!_uart) {
+            log_error(name() << ": cannot remove tool - no link to the spindle board");
+            return;
+        }
+        _uart->write((const uint8_t*)"R\n", 2);
+        log_info(name() << ": sent tool removal request to the spindle board");
+    }
+
+#ifdef ENABLE_WIFI
+    // The WiFi station settings are private to WifiConfig.cpp; both are StringSettings (the
+    // password's subclass only masks what $$ shows), so get() returns the stored value.
+    static const char* stringSettingValue(const char* name) {
+        for (Setting* s : Setting::List) {
+            if (strcasecmp(s->getName(), name) == 0) {
+                return static_cast<StringSetting*>(s)->get();
+            }
+        }
+        return nullptr;
+    }
+#endif
+
+    void SpindleBoard::sendEnableOTA() {
+        if (!_uart) {
+            log_error(name() << ": cannot enable spindle OTA - no link to the spindle board");
+            return;
+        }
+#ifdef ENABLE_WIFI
+        const char* ssid = stringSettingValue("Sta/SSID");
+        const char* pass = stringSettingValue("Sta/Password");
+        if (!ssid || ssid[0] == '\0') {
+            log_error(name() << ": cannot enable spindle OTA - the XY board has no station SSID configured");
+            return;
+        }
+        // "W<ssid>\t<password>" - the spindle joins this network and starts ArduinoOTA.
+        char buf[128];
+        int  n = snprintf(buf, sizeof(buf), "W%s\t%s\n", ssid, pass ? pass : "");
+        if (n <= 0 || n >= (int)sizeof(buf)) {
+            log_error(name() << ": SSID/password too long to send to the spindle board");
+            return;
+        }
+        _uart->write((const uint8_t*)buf, (size_t)n);
+        log_info(name() << ": told spindle board to join '" << ssid
+                        << "' and start OTA. When it reports its IP, run: "
+                           "pio run -e esp32-s3-devkitc-1-ota -t upload");
+#else
+        log_error(name() << ": cannot enable spindle OTA - this XY firmware was built without WiFi");
+#endif
+    }
+
+    void SpindleBoard::sendTripRequest(bool test) {
+        if (!_uart) {
+            log_error(name() << ": cannot request the trip recording - no link to the spindle board");
+            return;
+        }
+        _uart->write((const uint8_t*)(test ? "T!\n" : "T\n"), test ? 3 : 2);
+        log_info(name() << ": " << (test ? "asked the spindle board to record a test trip"
+                                        : "asked the spindle board to re-send its trip recording")
+                        << "; it is saved to " << TRIP_FILE << " (~30 s)");
+    }
+
+    // Not moving: no motion state, and the Maslow loop is not driving the belts.  The state alone
+    // is not enough - after a spindle alarm the state reads Alarm before the belts have stopped.
+    bool SpindleBoard::machineAtRest() const {
+        State st = sys.state();
+        bool  moving = st == State::Cycle || st == State::Jog || st == State::Homing || st == State::Hold ||
+                      st == State::SafetyDoor;
+        return !moving && !_belt_motion_active;
+    }
+
+    // The step ISR keeps running while flash is written (the cache is off then), but it calls
+    // through vtables that live in flash: a flash write while stepping makes it jump to garbage
+    // (10-26 15:44 panic: the trip file was still being written when a Home Z started the
+    // steppers).  Only write the trip file at rest with the step timer stopped.
+    bool SpindleBoard::flashWriteSafe() const {
+        return machineAtRest() && !Stepper::isAwake();
+    }
+
+    // The spindle board sends its trip recording (the ~2 s of motor state before an over-current
+    // or driver fault) as "[TRIP] ..." and "TRIPCSV,..." lines, one every 30 ms.  Save them to
+    // the local filesystem rather than the console: ~1000 lines would bury everything else.
+    // Only while the machine is at rest with the steppers stopped (flashWriteSafe), checked before
+    // EVERY write, not just the first: the recording takes ~30 s to arrive, and a flash write while
+    // stepping crashes the step ISR; creating the file can also stall this loop for a few hundred
+    // ms, which trips the Maslow update watchdog while the belts are moving.  A recording that
+    // arrives during motion (the usual case - it follows the trip by ~0.1 s), or that motion
+    // interrupts, is asked for again once the machine has stopped; see serviceStatus().  An
+    // interrupted file is left open, unwritten, until then: closing it would flush to flash.
+    void SpindleBoard::handleTripLine() {
+        _trip_last_ms = millis();
+        bool begin    = strncmp(_rx_buf, "[TRIP] ===== trip recording:", 28) == 0;
+        bool safe     = flashWriteSafe();
+        if (begin) {
+            if (!safe) {
+                if (!_trip_refetch) {
+                    log_info(name() << ": spindle trip recording arriving while the machine is moving;"
+                                       " it will be fetched again once the machine is at rest");
+                }
+                _trip_refetch = true;
+                _trip_paused  = _trip_file != nullptr;   // an open file stays open, unwritten
+                return;
+            }
+            if (_trip_file) {
+                closeTripFile("interrupted by a new recording");
+            }
+            _trip_refetch = false;
+            try {
+                _trip_file = new FileStream(TRIP_FILE, "w", LocalFS);
+            } catch (...) {
+                _trip_file = nullptr;
+                log_error(name() << ": cannot create " << TRIP_FILE << " for the spindle trip recording");
+                return;
+            }
+            // Creating the file is a deliberate blocking flash write, made only at rest.
+            Maslow.resetUpdateWatchdog();
+            _trip_lines = 0;
+            // "[TRIP] ===== trip recording: <reason> (at <uptime>) =====" -> "<reason> (at <uptime>)"
+            std::string what(_rx_buf + 29);
+            if (what.size() > 6 && what.compare(what.size() - 6, 6, " =====") == 0) {
+                what.resize(what.size() - 6);
+            }
+            log_info(name() << ": receiving spindle trip recording: " << what);
+        }
+        if (!_trip_file || _trip_paused) {
+            return;
+        }
+        if (!safe) {
+            // Motion started while the recording was arriving: stop writing at once, keep the file
+            // open (closing flushes to flash) and fetch the whole recording again at rest.
+            _trip_paused  = true;
+            _trip_refetch = true;
+            log_info(name() << ": machine started moving during the spindle trip recording - stopped saving"
+                               " it; it will be fetched again once the machine is at rest");
+            return;
+        }
+        _trip_file->write((const uint8_t*)_rx_buf, _rx_len);
+        _trip_file->write((const uint8_t*)"\n", 1);
+        _trip_lines++;
+        if (strncmp(_rx_buf, "[TRIP] ===== end of trip recording", 34) == 0) {
+            closeTripFile(nullptr);
+        }
+    }
+
+    void SpindleBoard::closeTripFile(const char* why) {
+        if (!_trip_file) {
+            return;
+        }
+        delete _trip_file;
+        _trip_file   = nullptr;
+        _trip_paused = false;
+        if (why) {
+            log_warn(name() << ": spindle trip recording incomplete (" << why << "), " << _trip_lines << " lines in " << TRIP_FILE);
+        } else {
+            log_info(name() << ": spindle trip recording saved to " << TRIP_FILE << " (" << _trip_lines << " lines)");
+        }
+    }
+
+    void SpindleBoard::updateHoldState() {
+        // The Z axis is driven by the spindle board's two BLDC motors.  While the machine is
+        // at rest and the spindle is stopped, those drivers would otherwise sit energized just
+        // holding the Z position, keeping the drivers hot and the vacuum/cooling fan running.
+        // Tell the board it may power them down once its move has settled.
+        //
+        // "At rest" is every state that is not actively producing motion - deliberately
+        // including Alarm and ConfigAlarm.  Gating this on State::Idle alone meant that a board
+        // that booted into its alarm (the normal power-up state, before the machine is unlocked)
+        // never sent the release at all, so the Z drivers stayed energized and the vacuum ran
+        // continuously from power-up until the operator cleared the alarm.
+        State st     = sys.state();
+        bool  moving = st == State::Cycle || st == State::Jog || st == State::Homing || st == State::Hold ||
+                      st == State::SafetyDoor;
+        bool atRest = !moving && _current_state == SpindleState::Disable;
+
+        if (!atRest) {
+            // Motion (or the spindle) has resumed; re-arm so the release is sent again as soon
+            // as the machine comes back to rest.
+            _hold_released = false;
+            return;
+        }
+
+        // Repeat the release slowly while at rest rather than sending it exactly once.  The
+        // spindle board clears its pending release as soon as any Z target or speed command
+        // arrives (and forgets it entirely across one of its own reboots), so a single 'D' can
+        // be silently dropped and leave the drivers - and the fan - energized indefinitely.
+        uint32_t now = millis();
+        if (_hold_released && (now - _last_hold_release_ms) < HOLD_RELEASE_REPEAT_MS) {
+            return;
+        }
+        sendHoldRelease();
+        _hold_released        = true;
+        _last_hold_release_ms = now;
+    }
+
+    void SpindleBoard::update(float zPositionMM, bool beltMotionActive, int fanSpeed) {
+        if (!_uart) {
+            return;
+        }
+        _belt_motion_active = beltMotionActive;
+        if (_rpm_dirty) {
+            _rpm_dirty = false;
+            // After a spindle fault only a deliberate M3/M4 may start the spindle again (see
+            // setState); the stepper ISR re-sending the speed of a block that was already
+            // planned must not.
+            if (!_fault_latched) {
+                sendSpeed(_pending_rpm);
+            }
+        }
+        sendPhase(zPositionMM * _phase_deg_per_mm);
+        sendBeltCooling(beltMotionActive);
+        sendFan(fanSpeed);
+        updateHoldState();
+        serviceStatus();
+        serviceFaultRecovery();
+    }
+
+    // How long the machine must sit Idle after $STOP before the Z is re-homed.  $STOP's own Z
+    // raise passes through Idle on its way into a Cycle, so a single Idle reading is not enough.
+    static const uint32_t RECOVERY_IDLE_MS = 1000;
+    // Give up on a step that has not completed in this long (e.g. the operator took over).
+    static const uint32_t RECOVERY_STEP_TIMEOUT_MS = 30000;
+
+    void SpindleBoard::serviceFaultRecovery() {
+        if (_recovery == FaultRecovery::None) {
+            return;
+        }
+        State    st  = sys.state();
+        uint32_t now = millis();
+        if (st == State::Alarm || st == State::ConfigAlarm) {
+            // $STOP would clear the alarm (it sets Idle), hiding whatever raised it.
+            _recovery = FaultRecovery::None;
+            log_warn(name() << ": machine in alarm - not recovering from the spindle fault automatically;"
+                               " clear the alarm, press Stop, then re-home the Z");
+            return;
+        }
+        if (now - _recovery_since_ms > RECOVERY_STEP_TIMEOUT_MS) {
+            _recovery = FaultRecovery::None;
+            log_warn(name() << ": spindle fault recovery timed out (state " << (int)st
+                            << ") - press Stop, then re-home the Z before cutting");
+            return;
+        }
+        switch (_recovery) {
+            case FaultRecovery::WaitForHold:
+                // The belts have stopped (or nothing was moving): end the job like the Stop button.
+                if ((st == State::Hold && sys.suspend().bit.holdComplete) || st == State::Idle) {
+                    log_info(name() << ": machine stopped after the spindle fault - ending the job ($STOP)");
+                    // In a hold the main loop is suspended inside it, so ask the hold itself to end
+                    // the job; it then runs $STOP, which raises the Z and saves the positions as the
+                    // Stop button does.  When already Idle, run $STOP directly.
+                    if (st == State::Hold) {
+                        rtStopFromHold = true;
+                    } else {
+                        rtMaslowStop = true;
+                    }
+                    _recovery          = FaultRecovery::WaitForIdle;
+                    _recovery_since_ms = now;
+                }
+                break;
+            case FaultRecovery::WaitForIdle: {
+                static uint32_t idle_since = 0;
+                if (st != State::Idle || _belt_motion_active) {
+                    idle_since = 0;
+                    break;
+                }
+                if (idle_since == 0) {
+                    idle_since = now;
+                }
+                if (now - idle_since >= RECOVERY_IDLE_MS) {
+                    idle_since = 0;
+                    log_info(name() << ": re-homing the Z after the spindle fault (raises it to the top of travel)");
+                    sendHome();
+                    _recovery          = FaultRecovery::Homing;
+                    _recovery_since_ms = now;
+                }
+                break;
+            }
+            case FaultRecovery::Homing:
+                break;  // finished by the spindle's ZHOMED (restoreWorkZ) or the timeout above
+            default:
+                break;
+        }
+    }
+
+    // After the recovery re-home, put back the work Z zero the job was cut against.  Homing sets
+    // the machine Z to 0 at the top-of-travel beam, the same reference the zero was set from
+    // (every home zeroes the work Z), so the same G54 offset finds the same surface again.
+    void SpindleBoard::restoreWorkZ() {
+        float z = _saved_work_z_mm;
+        if (gc_state.modal.units == Units::Inches) {
+            z /= MM_PER_INCH;
+        }
+        char cmd[40];
+        snprintf(cmd, sizeof(cmd), "G10 L2 P0 Z%.4f", z);
+        if (gc_execute_line(cmd) == Error::Ok) {
+            log_info(name() << ": Z re-homed after the spindle fault; work Z zero restored ("
+                            << _saved_work_z_mm << " mm) - ready to cut");
+        } else {
+            log_warn(name() << ": Z re-homed after the spindle fault, but the work Z zero could not be"
+                               " restored - set Z zero again before cutting");
+        }
+    }
+
+    void SpindleBoard::serviceStatus() {
+        if (!_uart) {
+            return;
+        }
+        while (_uart->available()) {
+            char c = (char)_uart->read();
+            if (c == '\r') {
+                continue;
+            }
+            if (c == '\n') {
+                _rx_buf[_rx_len] = '\0';
+                // Trip recording lines are saved to a file, not parsed as status or events.
+                if (strncmp(_rx_buf, "[TRIP]", 6) == 0 || strncmp(_rx_buf, "TRIPCSV", 7) == 0) {
+                    _last_rx_ms = millis();
+                    handleTripLine();
+                    _rx_len = 0;
+                    continue;
+                }
+                // The board reports status every 50 ms, so a long silence before this line
+                // means it went away - usually a reboot or reflash, which resets its fan
+                // speed to 100.  _last_rx_ms == 0 means no line has been read yet.
+                uint32_t now    = millis();
+                uint32_t gap    = now - _last_rx_ms;
+                bool     silent = _last_rx_ms != 0 && gap > LINK_SILENCE_MS;
+                _last_rx_ms     = now;
+                // Any complete line from the board proves the link is alive.  Log the
+                // first confirmation if the boot-time handshake did not already do so.
+                if (!_link_confirmed && _rx_len > 0) {
+                    _link_confirmed = true;
+                    log_info(name() << ": link to spindle board confirmed -> " << _rx_buf);
+                    silent = true;  // the board may have just booted
+                } else if (silent) {
+                    log_info(name() << ": no data from spindle board for " << gap << " ms; re-sending fan speed");
+                }
+                if (silent) {
+                    // Re-send the fan speed and belt-cooling state on the next update() pass.
+                    _last_sent_fan  = -1;
+                    _last_sent_belt = -1;
+                }
+                // OTA lifecycle messages from the spindle board (in response to
+                // $Spindle/EnableOTA).  Surface the address so the update can be pushed.
+                if (strncmp(_rx_buf, "OTA_IP:", 7) == 0) {
+                    log_info(name() << ": spindle board is on WiFi at " << (_rx_buf + 7)
+                                    << " (also maslow-spindle.local). Reflash it with: "
+                                       "pio run -e esp32-s3-devkitc-1-ota -t upload");
+                } else if (strncmp(_rx_buf, "OTA_ERR:", 8) == 0) {
+                    log_error(name() << ": spindle board could not start OTA (" << (_rx_buf + 8) << ")");
+                } else if (strncmp(_rx_buf, "OTA_END:", 8) == 0) {
+                    log_info(name() << ": spindle board left OTA mode (" << (_rx_buf + 8) << ")");
+                } else if (strncmp(_rx_buf, "ERR:", 4) == 0) {
+                    // Latched spindle fault detail (the F: field below raises the alarm).
+                    log_error(name() << ": " << (_rx_buf + 4));
+                } else if (strncmp(_rx_buf, "WARN:", 5) == 0) {
+                    // Recoverable event, e.g. a transient over-current the board is auto-recovering.
+                    log_warn(name() << ": " << (_rx_buf + 5));
+                } else if (strncmp(_rx_buf, "MSG:", 4) == 0) {
+                    // Informational event, e.g. the board has recovered and resumed.
+                    log_info(name() << ": " << (_rx_buf + 4));
+                }
+                // The spindle board redefined its Z zero (homing / tool load / tool removal
+                // finished).  Reset the XY board's Z-axis machine position to 0 so the two
+                // boards' Z origins stay aligned; otherwise the next streamed Z target (based
+                // on the XY board's own Z) would differ from where the spindle parked and
+                // drive the Z straight back off home.  Only accept this while the machine is
+                // idle/alarm/asleep so it can never disturb an active move.
+                if (strncmp(_rx_buf, "ZHOMED", 6) == 0) {
+                    State st = sys.state();
+                    if (st == State::Idle || st == State::Alarm || st == State::Sleep) {
+                        set_steps(static_cast<axis_t>(4), motor_pos_to_steps(0.0f, 4));  // Z is axis 4
+                        gc_sync_position();                          // push into the gcode engine
+                        plan_sync_position();                        // sync the planner so the first Z move plans from 0
+                        // Also clear any lingering Z work offset so both machine and work Z read 0
+                        // after homing; otherwise a prior "Set Z Home" (G10 L20) offset persists and
+                        // the work Z keeps reporting the old value instead of 0.
+                        char clear_g92[] = "G92.1";
+                        if (gc_execute_line(clear_g92) != Error::Ok) {
+                            log_warn(name() << ": could not clear G92 offset after Z home");
+                        }
+                        if (_recovery == FaultRecovery::Homing) {
+                            _recovery = FaultRecovery::None;
+                            restoreWorkZ();
+                        } else {
+                            char zero_wcs[] = "G10 L20 P0 Z0";
+                            if (gc_execute_line(zero_wcs) != Error::Ok) {
+                                log_warn(name() << ": could not zero Z work coordinate after Z home");
+                            }
+                        }
+                        _deg_sent = false;                           // re-send the next phase from the new zero
+                        log_info(name() << ": spindle re-homed Z - reset XY Z position to 0");
+                    } else {
+                        log_warn(name() << ": ignoring spindle ZHOMED while machine is busy (state " << (int)st << ")");
+                    }
+                }
+                // Expected: "T:<state>,P:<deg>,R:<rpm>,F:<code>"
+                const char* f = strstr(_rx_buf, "F:");
+                if (f) {
+                    uint8_t fault = (uint8_t)strtol(f + 2, nullptr, 10);
+                    if (fault != 0 && _last_fault == 0) {
+                        log_error("SpindleBoard reported fault " << (int)fault);
+                        // The spindle has stopped, so the machine must stop too.  Pause it the way
+                        // the Pause button does: a feed hold decelerates the belts to a stop and
+                        // holds them there.  Not an alarm: that leaves the steppers running and drags
+                        // the stalled tool through the work.  Not mc_reset() either: a FluidNC reset
+                        // re-runs Maslow's start-up mid-cut - on 2026-10-16 it lost the belt lengths
+                        // once and, with a change to keep them, left the board silent with the belt
+                        // motors still driven until the E-stop.
+                        _fault_latched = true;
+                        _rpm_dirty     = false;
+                        protocol_send_event(&feedHoldEvent);
+                        // The board has stopped already; match it so the Z release (and the fan) follow
+                        // once the machine is at rest.  Not stop(): its spin-down delay would block here.
+                        sendSpeed(0);
+                        _current_state = SpindleState::Disable;
+                        // Then, once the belts are at rest, end the job and re-home the Z (see
+                        // serviceFaultRecovery) so the machine is ready to cut again.
+                        _saved_work_z_mm   = gc_state.coord_system[Z_AXIS];
+                        _recovery          = FaultRecovery::WaitForHold;
+                        _recovery_since_ms = millis();
+                        log_error(name() << ": job paused because the spindle stopped - stopping the job and"
+                                           " re-homing the Z once the machine is at rest");
+                    }
+                    _last_fault = fault;
+                }
+                _rx_len = 0;
+            } else if (_rx_len < sizeof(_rx_buf) - 1) {
+                _rx_buf[_rx_len++] = c;
+            } else {
+                _rx_len = 0;  // overflow: drop the malformed line
+            }
+        }
+        // Closing flushes to flash, so it waits for flashWriteSafe() too.
+        if (_trip_file && millis() - _trip_last_ms > TRIP_LINE_TIMEOUT_MS && flashWriteSafe()) {
+            closeTripFile(_trip_paused ? "the machine moved while it arrived; fetching it again"
+                                       : "no more lines from the spindle board");
+        }
+        // A recording skipped because the machine was moving: once its lines have stopped (the
+        // spindle board refuses a re-send while it is still sending) and the machine is at
+        // rest, ask for it again.  A spindle start clears the board's copy, so do it promptly.
+        if (_trip_refetch && !_trip_file && millis() - _trip_last_ms > TRIP_LINE_TIMEOUT_MS && flashWriteSafe()) {
+            _trip_refetch = false;
+            sendTripRequest(false);
+        }
+    }
+
+    // Configuration registration
+    namespace {
+        SpindleFactory::InstanceBuilder<SpindleBoard> registration("SpindleBoard");
+    }
+}

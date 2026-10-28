@@ -570,6 +570,10 @@ function showApplyTensionRetractionWarningMessage(msg) {
 }
 
 function showZHomeResetWarningMessage(msg) {
+	if (typeof maslowFixedZEnabled === "function" && maslowFixedZEnabled()) {
+		return;
+	}
+
 	const warningMatch = msg.match(/^\[MSG:WARN:\s*(.*)\]$/);
 	if (!warningMatch) {
 		return;
@@ -588,6 +592,10 @@ function showZHomeResetWarningMessage(msg) {
 }
 
 function showZmInvalidWarningMessage(msg) {
+	if (typeof maslowFixedZEnabled === "function" && maslowFixedZEnabled()) {
+		return;
+	}
+
 	const warningMatch = msg.match(/^\[MSG:WARN:\s*(.*)\]$/);
 	if (!warningMatch) {
 		return;

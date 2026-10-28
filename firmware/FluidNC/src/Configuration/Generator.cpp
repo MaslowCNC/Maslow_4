@@ -16,6 +16,20 @@ namespace Configuration {
         std::atomic_thread_fence(std::memory_order_seq_cst);
     }
 
+    Generator::Generator(Channel& dst, int_fast8_t indent, bool direct) : indent_(indent), dst_(dst), direct_(direct) {
+        std::atomic_thread_fence(std::memory_order_seq_cst);
+    }
+
+    void Generator::emit(const std::string& line) {
+        if (direct_) {
+            expected_ += line.size() + 1;
+            written_ += dst_.write(reinterpret_cast<const uint8_t*>(line.data()), line.size());
+            written_ += dst_.write('\n');
+        } else {
+            dst_.sendLine(MsgLevelNone, line);
+        }
+    }
+
     void Generator::enter(const char* name) {
         send_item(name, "");
         indent_++;
@@ -29,7 +43,7 @@ namespace Configuration {
 
     void Generator::leave() {
         if (!lastIsNewline_) {
-            log_string(dst_, "");
+            emit("");
             lastIsNewline_ = true;
         }
 

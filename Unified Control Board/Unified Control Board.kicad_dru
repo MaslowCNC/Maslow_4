@@ -1,0 +1,18 @@
+(version 1)
+
+# MP6541A (U11, U12) land pattern has 0.1 mm pad-to-pad gaps. JLCPCB's 4-layer
+# minimum spacing is 0.09 mm, so allow 0.1 mm between pads of the same driver only.
+(rule "MP6541A pad-to-pad"
+	(constraint clearance (min 0.1mm))
+	(condition "A.Type == 'Pad' && B.Type == 'Pad' && ((A.memberOfFootprint('U11') && B.memberOfFootprint('U11')) || (A.memberOfFootprint('U12') && B.memberOfFootprint('U12')))"))
+
+# Flag narrow sections on high-current nets (warnings: pad escapes may need to neck down).
+(rule "Motor min width"
+	(severity warning)
+	(constraint track_width (min 1.0mm))
+	(condition "A.NetClass == 'Motor'"))
+
+(rule "Power min width"
+	(severity warning)
+	(constraint track_width (min 0.5mm))
+	(condition "A.NetClass == 'Power'"))

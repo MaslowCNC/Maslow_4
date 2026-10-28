@@ -48,6 +48,14 @@ void protocol_cancel_disable_steppers();
 void protocol_do_motion_cancel();
 
 extern volatile bool rtCycleStop;
+// Stop the paused job from inside the feed hold.  A $STOP line cannot run while the main loop is
+// suspended in a hold, so the WebSocket channel and the spindle-fault recovery set this instead;
+// protocol_exec_rt_suspend() acts on it once the hold is complete.  Cleared by maslow_stop().
+extern volatile bool rtStopFromHold;
+// Run $STOP on the protocol task at the main loop's next top-level pass.  Set after a
+// stop-from-hold (a $STOP line from another channel is refused while the job is still active)
+// and by the spindle-fault recovery.  Cleared by maslow_stop().
+extern volatile bool rtMaslowStop;
 
 extern volatile bool runLimitLoop;
 

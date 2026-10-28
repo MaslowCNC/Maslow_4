@@ -10,6 +10,8 @@ var OVR = { feed: undefined, rapid: undefined, spindle: undefined }
 var MPOS = [0, 0, 0]
 var WPOS = [0, 0, 0]
 var grblaxis = 3;
+// Control board reported in [ESP800] ("maslow41", "unified", "unified36v", "unknown"); "" until known
+var maslowBoard = '';
 var grblzerocmd = 'X0 Y0 Z0';
 var currentGrblStateName = '';
 

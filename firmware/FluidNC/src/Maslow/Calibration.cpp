@@ -1,5 +1,6 @@
 #include "Calibration.h"
 #include "Maslow.h"
+#include "BoardId.h"
 #include "../Kinematics/MaslowKinematics.h"
 #include "../Serial.h"
 #include "../Settings.h"
@@ -358,6 +359,11 @@ bool Calibration::requestStateChange(int newState) {
         case RETRACTED:  //We can enter retracted from retracting only
             if (currentState == RETRACTING) {
                 currentState = RETRACTED;
+                for (int axis = 0; axis < ARM_COUNT; axis++) {
+                    set_steps(static_cast<axis_t>(axis), motor_pos_to_steps(0.0f, axis));
+                }
+                gc_sync_position();
+                plan_sync_position();
                 sys.set_state(State::Idle);
                 // Explicitly save belt positions now that belts are retracted and tight
                 Maslow.saveBeltPositions();
@@ -662,6 +668,10 @@ void Calibration::home() {
 
             //Once the limits are hit switch to the next state
             if (!retracting[_TL] && !retracting[_BL] && !retracting[_BR] && !retracting[_TR]) {
+                log_info("Belts pulled tight with offsets TL:" << Maslow.axis[_TL].getLastRetractOffset()
+                                                               << " TR:" << Maslow.axis[_TR].getLastRetractOffset()
+                                                               << " BL:" << Maslow.axis[_BL].getLastRetractOffset()
+                                                               << " BR:" << Maslow.axis[_BR].getLastRetractOffset());
                 requestStateChange(RETRACTED);
             }
 
@@ -1306,16 +1316,22 @@ bool Calibration::takeSlackFunc() {
 
             float x = 0;
             float y = 0;
+            // Returning true alone would leave the state stuck in TAKING_SLACK, so fall back to EXTENDEDOUT
             if (!computeXYfromLengths(calibration_data[0][0], calibration_data[0][1], x, y)) {
-                log_error("Failed to compute XY from lengths");
+                log_error("Apply Tension failed: the measured belt lengths (TL: " << calibration_data[0][0] << " TR: " << calibration_data[0][1]
+                                                                                 << ") do not fit the anchor locations, maybe try running Find Anchors again?");
+                takeSlackState               = 0;
                 retractionMonitorInitialized = false;
+                requestStateChange(EXTENDEDOUT);
                 return true;
             }
 
             auto kinematics = getKinematics();
-            if (!kinematics)
-            {
+            if (!kinematics) {
+                log_error("Apply Tension failed: no Maslow kinematics");
+                takeSlackState               = 0;
                 retractionMonitorInitialized = false;
+                requestStateChange(EXTENDEDOUT);
                 return true;
             }
 
@@ -1437,7 +1453,6 @@ bool Calibration::computeXYfromLengths(double TL, double TR, float& x, float& y)
 
     double d = sqrt((tlX - trX) * (tlX - trX) + (tlY - trY) * (tlY - trY));
     if (d > tlLength + trLength || d < abs(tlLength - trLength)) {
-        log_info("Unable to determine machine position");
         return false;
     }
 
@@ -1923,19 +1938,21 @@ bool Calibration::take_measurement_avg_with_check(int waypoint, int dir) {
 
                 log_info("Machine Position computed as X: " << x << " Y: " << y);
 
-                //Recompute the first four waypoint locations based on the current position
+                //Recompute the first four waypoint locations based on the current position.  The
+                //Mini's frame (Unified Control Board) is too small for the Maslow 4's 150 mm ring.
+                const float ring = BoardId::board() == BoardId::Board::Maslow41 ? 150 : 50;
                 calibrationGrid[0][0] =
                     x;  //This first point is never really used because we've already measured here, but it shouldn't be left undefined
                 calibrationGrid[0][1] = y;
-                calibrationGrid[1][0] = x + 150;
+                calibrationGrid[1][0] = x + ring;
                 calibrationGrid[1][1] = y;
-                calibrationGrid[2][0] = x + 150;
-                calibrationGrid[2][1] = y + 150;
+                calibrationGrid[2][0] = x + ring;
+                calibrationGrid[2][1] = y + ring;
                 calibrationGrid[3][0] = x;
-                calibrationGrid[3][1] = y + 150;
-                calibrationGrid[4][0] = x - 150;
-                calibrationGrid[4][1] = y + 150;
-                calibrationGrid[5][0] = x - 150;
+                calibrationGrid[3][1] = y + ring;
+                calibrationGrid[4][0] = x - ring;
+                calibrationGrid[4][1] = y + ring;
+                calibrationGrid[5][0] = x - ring;
                 calibrationGrid[5][1] = y;
             }
 
@@ -2345,7 +2362,7 @@ bool Calibration::adjustFrameSizeToMatchFirstMeasurement() {
     // The algorithm works for any interior point E inside the square
     double L = SquareCalculation::calculateSquareSideLength(tlLen, trLen, blLen, brLen);
 
-    if (L < 500.0 || L > 5500.0) {  // Sanity check on square size
+    if (L < 400.0 || L > 5500.0) {  // Sanity check on square size
         log_error("Unable to adjust frame size. Calculated size " << L << "mm is outside reasonable range");
         return false;
     }

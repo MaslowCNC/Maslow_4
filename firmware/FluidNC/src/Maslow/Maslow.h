@@ -15,6 +15,14 @@
 
 #define TCAADDR 0x70
 
+// Set to 1 to bench-test the controller without motors and encoders attached.
+// When 1, the boot self-test does not latch an error for missing hardware, and
+// the runtime encoder-read watchdog is suppressed (no spammy failure warnings and
+// no panic when encoders cannot be read). Set back to 0 for normal operation.
+#ifndef MASLOW_DISABLE_BOOT_SELFTEST
+#    define MASLOW_DISABLE_BOOT_SELFTEST 0
+#endif
+
 #define CALIBRATION_GRID_SIZE_MAX (10 * 10) + 2
 
 #define MASLOW_TELEM_FILE "M4_telemetry.bin"
@@ -107,8 +115,13 @@ public:
     void markBeltPositionsStale();
 
     void stopMotors();
+    /** Switches the spindle off as M5 would (used by every stop path) */
+    void stopSpindle();
     /** Raises Z axis to Z home + 2mm to prevent workpiece damage after stop */
     void raiseZ();
+    // The non-blocking first half of raiseZ(): end the job, clear the planner and stepper, hold the
+    // belts where they are, clear any feed hold and go Idle.  Safe to call from inside the hold.
+    void haltMotion();
 
     void   stop();
     void   eStop(String message = "Emergency stop triggered.");
@@ -207,6 +220,10 @@ public:
     float parkX = 0.0;
     float parkY = 0.0;
 
+    // Dust collection fan speed (0-100, 0 = off) used whenever the fan runs: during moves and
+    // while the spindle is on.  Streamed live to the spindle board, so changes apply at once.
+    int32_t dustFanSpeed = 100;
+
     bool test         = false;
     bool debugEnabled = false;
 
@@ -226,6 +243,9 @@ private:
 
     //Stores a reference to the global system runtime function to be called when blocking operations are needed
     void (*_sys_rt)() = nullptr;
+
+    // Stream Z, the fan level and the belt-cooling request to the spindle board and read its replies.
+    void updateSpindleBoard(bool beltMotionActive);
 
     //Used to overide and drive motors directly...dangerous
     bool          TLIOveride   = false;

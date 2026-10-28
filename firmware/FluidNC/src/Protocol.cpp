@@ -21,6 +21,8 @@
 #include "SettingsDefinitions.h"  // gcode_echo
 #include "Machine/LimitPin.h"
 #include "Job.h"
+#include "MotionControl.h"  // mc_set_drop_motion
+#include "Settings.h"       // execute_line
 #include "Driver/restart.h"
 #include "Driver/watchdog.h"
 #include "Driver/heap.h"  // platform_max_free_block()
@@ -70,6 +72,9 @@ volatile bool runLimitLoop;  // Interface to show_limits()
 // overridden by an auto-queued cycle start, regardless of event-queue ordering.
 // Uses acquire/release semantics to guarantee visibility on dual-core ESP32-S3.
 static std::atomic<bool> feedHoldPending { false };
+
+volatile bool rtStopFromHold = false;
+volatile bool rtMaslowStop   = false;
 
 static void protocol_exec_rt_suspend();
 static void protocol_do_initiate_cycle();  // Forward declaration for auto cycle start handler
@@ -364,6 +369,12 @@ void protocol_main_loop() {
     for (;; vTaskDelay(1)) {
         if (should_exit()) {
             break;
+        }
+        // Back at the top level, so any line interrupted by a stop-from-hold has unwound.
+        mc_set_drop_motion(false);
+        if (rtMaslowStop) {
+            rtMaslowStop = false;
+            execute_line("$STOP", allChannels, AuthenticationLevel::LEVEL_ADMIN, true);
         }
         // A line collected by the polling task.  xQueueReceive supplies the
         // barrier that makes item.line fully visible here.
@@ -1158,6 +1169,19 @@ static void protocol_exec_rt_suspend() {
 
     while (sys.suspend().value) {
         if (sys.abort()) {
+            return;
+        }
+        // Stop requested while paused (Stop button, or a spindle fault): end the job here, with
+        // the belts already at rest, instead of resuming it.  haltMotion() clears the suspend and
+        // sets Idle, so this loop exits; the drop flag keeps the G-code line that was waiting for
+        // planner space from queuing the rest of its motion as it unwinds.  The main loop then
+        // runs $STOP to raise the Z and save the positions.
+        if (rtStopFromHold && sys.state() == State::Hold && sys.suspend().bit.holdComplete) {
+            rtStopFromHold = false;
+            log_info("Stopping the paused job");
+            mc_set_drop_motion(true);
+            Maslow.haltMotion();
+            rtMaslowStop = true;
             return;
         }
         // if a jogCancel comes in and we have a jog "in-flight" (parsed and handed over to mc_move_motors()),

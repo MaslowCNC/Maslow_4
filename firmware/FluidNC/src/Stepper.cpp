@@ -283,6 +283,10 @@ void Stepper::wake_up() {
     Stepping::startTimer();
 }
 
+bool Stepper::isAwake() {
+    return awake;
+}
+
 void Stepper::go_idle() {
     awake = false;
     stop_stepping();

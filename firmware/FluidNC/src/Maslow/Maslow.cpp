@@ -11,6 +11,8 @@
 #include "../FileStream.h"
 #include "../Kinematics/MaslowKinematics.h"
 #include "../GCode.h"
+#include "../Spindles/SpindleBoard.h"
+#include "BoardId.h"
 #include "../Job.h"        // Job::abort()
 #include "../FluidPath.h"  // SD volume
 #include <cmath>
@@ -72,8 +74,10 @@ extern const char* VERSION_NUMBER;
 #define WIFILED 35
 #define REDLED 14
 
-// Maximum allowed interval between Maslow.update() calls before triggering emergency stop
-#define UPDATE_WATCHDOG_MS 100
+// Maximum interval between Maslow.update() calls. Reporting and network startup can
+// briefly block the protocol task while belts are idle, but belt motion must remain strict.
+#define ACTIVE_UPDATE_WATCHDOG_MS 100
+#define IDLE_UPDATE_WATCHDOG_MS 500
 
 int ENCODER_READ_FREQUENCY_HZ = 1000;  //max frequency for polling the encoders
 
@@ -85,6 +89,14 @@ int ENCODER_READ_FREQUENCY_HZ = 1000;  //max frequency for polling the encoders
 void Maslow_::begin(void (*sys_rt)()) {
     Wire.begin(5, 4, 200000);
     I2CMux.begin(TCAADDR, Wire);
+
+    // Every board has the BoardVersion divider, so a reading outside all the bands is a fault.
+    // The belt motors' direction depends on the board: they stay off, and $X cannot clear this.
+    if (BoardId::board() == BoardId::Board::Unknown) {
+        error        = true;
+        errorMessage = "Control board not recognised (BoardVersion " + String(BoardId::millivolts()) +
+                       " mV), so the belt motor direction is unknown. Check the divider on GPIO17";
+    }
 
     axis[_TL].begin(tlIn1Pin, tlIn2Pin, tlADCPin, TLEncoderLine, tlIn1Channel, tlIn2Channel);
     axis[_TR].begin(trIn1Pin, trIn2Pin, trADCPin, TREncoderLine, trIn1Channel, trIn2Channel);
@@ -175,6 +187,7 @@ void Maslow_::update() {
             digitalWrite(WIFILED, ledsOn ? HIGH : LOW);
             wdTimer = millis();
         }
+        updateSpindleBoard(false);
         return;
     }
 
@@ -196,6 +209,7 @@ void Maslow_::update() {
                 errorMessageLogged = true;
             }
         }
+        updateSpindleBoard(false);
         return;
     }
 
@@ -236,18 +250,44 @@ void Maslow_::update() {
         unsigned long now = millis();
         //if the update function is not being called enough, stop everything to prevent damage
         // Skip the watchdog check during file/firmware uploads: flash write operations stall
-        // both CPU cores, so update() may not run for > UPDATE_WATCHDOG_MS through no fault
+        // both CPU cores, so update() may not run for longer than the watchdog limit through no fault
         // of the motion system.  lastCallToUpdate is still refreshed so the watchdog does not
         // trigger immediately after the upload finishes.
-        if (!uploadInProgress && now - lastCallToUpdate > UPDATE_WATCHDOG_MS) {
+        //
+        // Also skip the very first call after boot: lastCallToUpdate is set in begin(), but
+        // there can be a long gap (WiFi connect, etc.) before the update loop starts running.
+        // That startup gap must not be treated as a stalled motion loop.
+        static bool firstUpdateCall = true;
+        bool        skipWatchdog    = firstUpdateCall;
+        if (firstUpdateCall) {
+            firstUpdateCall = false;
+        }
+        int  calibrationState = calibration.getCurrentState();
+        bool beltMotionActive = sys.state() == State::Cycle || sys.state() == State::Jog || sys.state() == State::Hold ||
+                                sys.state() == State::Homing || calibrationState == RETRACTING || calibrationState == EXTENDING ||
+                                calibrationState == TAKING_SLACK || calibrationState == CALIBRATION_IN_PROGRESS ||
+                                calibrationState == RELEASE_TENSION;
+        unsigned int watchdogLimit = beltMotionActive ? ACTIVE_UPDATE_WATCHDOG_MS : IDLE_UPDATE_WATCHDOG_MS;
+        if (!skipWatchdog && !uploadInProgress && now - lastCallToUpdate > watchdogLimit) {
             unsigned int elapsedTime = now - lastCallToUpdate;
-            log_error("Emergency stop. Update function not being called enough. " << elapsedTime << "ms since last call");
+#if MASLOW_DISABLE_BOOT_SELFTEST
+            // Bench-test mode: the update loop can legitimately stall longer than
+            // UPDATE_WATCHDOG_MS (WiFi activity, jog parsing, etc.) when no motors are
+            // attached.  Warn instead of triggering an emergency stop so Z streaming and
+            // other update() work below this check still runs.
+            log_warn("Update loop slow: " << elapsedTime << "ms since last call (watchdog panic suppressed in bench-test mode)");
+#else
+            log_error("Emergency stop. Update loop stalled for " << elapsedTime << "ms (limit " << watchdogLimit
+                                                                  << "ms, belt motion " << (beltMotionActive ? "active" : "idle") << ")");
             watchdogFired = true;
             Maslow.panic();
+#endif
         }
         lastCallToUpdate = now;
 
         Maslow.updateEncoderPositions();  //We always update encoder positions in any state,
+
+        updateSpindleBoard(beltMotionActive);
 
         for (int arm = _TL; arm < ARM_COUNT; arm++) {
             axis[arm].update();  //update motor currents and belt speeds like this for now
@@ -385,6 +425,10 @@ bool Maslow_::updateEncoderPositions() {
         for (int i = 0; i < 4; i++) {
             //turn i into proper label
             String label = axis_id_to_label(i);
+#if MASLOW_DISABLE_BOOT_SELFTEST
+            // Bench-test mode: encoders may be absent, so don't warn or panic on read failures.
+            (void)label;
+#else
             if (encoderFailCounter[i] > 0.1 * ENCODER_READ_FREQUENCY_HZ) {
                 // log error statement with appropriate label
                 log_error("Failure on " << label.c_str() << " encoder, failed to read " << encoderFailCounter[i]
@@ -394,6 +438,7 @@ bool Maslow_::updateEncoderPositions() {
                 log_warn("Bad connection on " << label.c_str() << " encoder, failed to read " << encoderFailCounter[i]
                                               << " times in the last second");
             }
+#endif
             encoderFailCounter[i] = 0;
             encoderFailTimer      = millis();
         }
@@ -952,8 +997,11 @@ void Maslow_::loadBeltPositions() {
     // If all belt lengths are near zero (within threshold), go to RETRACTED state, otherwise EXTENDEDOUT
     // Loading into EXTENDEDOUT requires the user to press "Apply Tension" to enter READY_TO_CUT state,
     // which allows the machine to measure its frame and verify everything is as expected
-    // Use threshold of 0.5mm to account for encoder drift and small movements during save/restore
-    const float retractedThreshold = 0.5;  // mm
+    // The threshold has to cover the encoder adjustment above, not just drift: once the motors
+    // power down after a retract the spools relax by a fraction of a turn, and that is added back
+    // here (up to 1/4 turn, ~11 mm).  0.5 mm was too tight - a retracted TR read 0.8 mm and booted
+    // into EXTENDEDOUT.  Extended belts are hundreds of mm, so 15 mm cannot misread a real extension.
+    const float retractedThreshold = 15.0;  // mm
     bool        allNearZero = (fabs(tlPos) < retractedThreshold && fabs(trPos) < retractedThreshold && fabs(blPos) < retractedThreshold &&
                         fabs(brPos) < retractedThreshold);
     int         newState    = allNearZero ? RETRACTED : EXTENDEDOUT;
@@ -1171,8 +1219,7 @@ void Maslow_::stopMotors() {
 // Safe Z height in mm above Z home to raise to after stop (prevents workpiece damage)
 static constexpr float Z_SAFE_HEIGHT_MM = 2.0f;
 
-// Raises Z axis to Z home + Z_SAFE_HEIGHT_MM to prevent workpiece damage after stop
-void Maslow_::raiseZ() {
+void Maslow_::haltMotion() {
     // Always stop streaming and clear the planner/stepper immediately, regardless of Z height.
     // If we only stop the job without clearing, any moves already in the planner buffer
     // will resume executing after maslow_stop() returns, causing the machine to keep moving.
@@ -1206,6 +1253,11 @@ void Maslow_::raiseZ() {
     suspend.value = 0;
     sys.set_suspend(suspend);
     sys.set_state(State::Idle);
+}
+
+// Raises Z axis to Z home + Z_SAFE_HEIGHT_MM to prevent workpiece damage after stop
+void Maslow_::raiseZ() {
+    haltMotion();
 
     float* mpos  = get_mpos();
     float* wco   = get_wco();
@@ -1238,7 +1290,29 @@ static void stopEverything() {
 void Maslow_::panic() {
     panicCount++;
     stop();
+    stopSpindle();
     stopEverything();
+}
+
+// Switch the spindle off as M5 would.  Clearing the modal state as well means no later planner
+// block can carry the old speed back to the spindle.
+void Maslow_::stopSpindle() {
+    gc_state.modal.spindle = SpindleState::Disable;
+    if (spindle) {
+        spindle->stop();
+    }
+}
+
+// Stream the planned Z position to the spindle/Z controller board (if configured), which turns it
+// into the BLDC phase offset that moves the Z axis, along with the fan level and the belt-cooling
+// request, and read the board's replies.  This keeps running after a watchdog or emergency stop:
+// otherwise the board never hears that the belts have stopped, so the dust fan runs until a power
+// cycle, and its faults and trip recordings go unread.
+void Maslow_::updateSpindleBoard(bool beltMotionActive) {
+    if (Spindles::SpindleBoard::instance) {
+        float zPositionMM = steps_to_motor_pos(get_axis_steps(static_cast<axis_t>(4)), 4);  // Z from Z axis (axis 4)
+        Spindles::SpindleBoard::instance->update(zPositionMM, beltMotionActive, dustFanSpeed);
+    }
 }
 
 // Reset the update watchdog timer to prevent false emergency stops during
@@ -1253,6 +1327,11 @@ void Maslow_::resetUpdateWatchdog() {
 // command the user already reaches for to acknowledge an alarm, so it clears them
 // here.  Returns true if a latched condition was actually cleared.
 bool Maslow_::clearError() {
+    if (BoardId::board() == BoardId::Board::Unknown) {
+        log_error("Motion stays disabled: the control board was not recognised at boot (BoardVersion " << BoardId::millivolts() << " mV)");
+        return false;
+    }
+
     // The LED is driven low unconditionally: if nothing is latched it is already off,
     // and this also picks up the case where a blink left it mid-cycle.
     digitalWrite(REDLED, LOW);
@@ -1299,6 +1378,7 @@ void Maslow_::eStop(String message) {
     log_error("Emergency stop! Stopping all motors");
     log_warn("The machine will not respond until turned off and back on again");
     stop();
+    stopSpindle();
     error              = true;
     errorMessage       = message;
     errorMessageLogged = false;

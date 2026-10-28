@@ -27,6 +27,10 @@ namespace Stepper {
     // Stops stepping (ISR-safe)
     void stop_stepping();
 
+    // True while the step timer is running.  The step ISR runs during flash writes
+    // (ESP_INTR_FLAG_IRAM) but reads vtables in flash, so nothing may write flash then.
+    bool isAwake();
+
     // Reset the stepper subsystem variables
     void reset();
 

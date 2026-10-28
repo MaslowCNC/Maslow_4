@@ -1,0 +1,463 @@
+#pragma once
+
+#include <Arduino.h>
+
+// Motor parameters
+const int   POLE_PAIRS = 1;
+const float SUPPLY_VOLTAGE = 24.0f;
+
+// Which way the spindle turns.  The two motors always run in OPPOSITE senses (the spindle is
+// driven by the difference of their angles); this flips both at once, which reverses the
+// spindle.  The Z axis is unaffected: it comes from the phase OFFSET, which updatePhaseOffset()
+// applies as the same delta to both motors without consulting these signs, so homing, tool
+// load and tool removal keep their existing directions.  Flip to +1 to spin the other way.
+const int SPINDLE_DIRECTION = -1;
+
+// Voltage limits
+const float BASE_VOLTAGE = 1.3f;
+// Open-loop ceiling: the largest phase amplitude the drive can produce WITHOUT clipping.
+// The motors use SpaceVectorPWM (midpoint clamp, see MotorController::initMotor), which stays
+// linear up to Vdc/sqrt(3) = 13.86V on a 24V bus - 15% more than SinePWM's Vdc/2 = 12V.  Below
+// 12V the two modulations give the same fundamental, so LUT values there mean the same thing.
+//
+// Requesting more than this only clips the waveform: past it the fundamental barely rises (full
+// square wave tops out at (4/pi)(Vdc/2) = 15.3V) while the harmonic current climbs steeply.  With
+// the old 24V ceiling the calibration sweep kept raising the request above ~13,500 RPM, and a trip
+// recording at ~17,700 RPM showed exactly that clipping driving M1 into the MP6541A's 16-20A
+// hardware OCP.  So the top of the speed range is now voltage-limited (less torque margin) instead
+// of over-current tripping.  Reaching 18,000 RPM with margin needs a higher bus voltage.
+// Stored LUT entries above this are clamped at use; re-run "CAL" after changing it.
+// (driver.voltage_limit stays at SUPPLY_VOLTAGE: SimpleFOC centres the waveform on half of it.)
+const float MAX_VOLTAGE = SUPPLY_VOLTAGE / 1.7320508f;  // 13.86V on a 24V bus
+
+// PWM configuration.  The MP6541A adds no dead time of its own (HSx+LSx both high simply
+// gives Hi-Z), so the dead zone below is the only shoot-through margin.
+// NOTE: on the DRV8316 board these two values were assigned AFTER the driver was initialized,
+// so they never reached SimpleFOC and the PWM actually ran at its 20kHz default - which is
+// what the calibration LUT below was measured at.  They now take effect, so the value here is
+// set to that same 20kHz to keep commutation identical to the old board.  Note the practical
+// ceiling is ~26.7kHz, NOT the 50kHz that _constrain() in _configure6PWM suggests: the timer
+// period is then clamped to _PWM_RES_MIN = 3000 counts, giving 160MHz/(2*3000).  Anything above
+// that is silently rounded down to it.  Raise deliberately and re-run CAL, remembering that a
+// higher carrier shrinks the ripple the sweep measures, so the same current target then
+// corresponds to a higher real fundamental current.
+const long  PWM_FREQUENCY = 20000;   // 20 kHz
+const float DEAD_ZONE = 0.02f;       // ~2% deadtime
+
+// Phase current sensing (MP6541A SOx -> board termination -> ESP32 ADC).
+// SOx sources/sinks ILOAD/11000 into a 3.3k/3.3k divider across 3V3, so Rref = 1.65k and the
+// nominal mid-point is 1.65V:  V = Vref + Rref * ILOAD / 11000  ->  0.15 V/A.
+// (The preliminary MPQ6541 datasheet quotes 1/10,000, which would be 0.165 V/A - verify on
+// the bench against a clamp meter before trusting the current-based trip points below.)
+const float CSA_RREF_OHMS   = 1650.0f;
+const float CSA_RATIO       = 11000.0f;
+const float CSA_GAIN_V_PER_A = CSA_RREF_OHMS / CSA_RATIO;   // 0.15 V/A
+const float CSA_VREF        = 1.65f;   // nominal zero-current level; measured at boot
+
+// Fan PWM configuration
+const long FAN_PWM_FREQUENCY = 25000;
+const int  FAN_PWM_RESOLUTION_BITS = 8;
+const int  FAN_PWM_CHANNEL = 7;
+const uint8_t FAN_MIN_DUTY = 80;
+const uint8_t FAN_MAX_DUTY = 255;
+const int FAN_LEVEL_COUNT = 100;
+const float FAN_PWM_RAMP_UNITS_PER_SEC = 320.0f;
+
+// Velocity ramping
+const float VELOCITY_RAMP_RATE = 20.0f;   // rad/s per second, used during calibration
+// Spindle spin-up/down ramp, applied by rampVelocity() every FOC iteration.  Above
+// SPINDLE_RAMP_SLOW_ABOVE_RAD the drive is close to its voltage ceiling (MAX_VOLTAGE), so there is
+// little torque margin left for acceleration; the ramp slows there so the open-loop rotor keeps
+// sync.  Applies to spin-down too, which needs braking torque from the same limited voltage.
+const float SPINDLE_RAMP_RATE      = 500.0f;  // rad/s per second (~4,800 RPM/s) below the threshold
+const float SPINDLE_RAMP_RATE_HIGH = 150.0f;  // rad/s per second (~1,400 RPM/s) above it
+const float SPINDLE_RAMP_SLOW_ABOVE_RAD = 14000.0f * 2.0f * PI / 60.0f;  // 14,000 RPM
+
+// --- FOC loop scheduling ---
+// The FOC update (loopFOC + move) runs on its OWN task pinned to core 1 with nothing else in the
+// loop body, so open-loop commutation runs at the highest, most uniform rate possible.  Everything
+// that is not time-critical for commutation - current sensing (six analogReads, ~0.5 ms), the
+// calibration sweep, serial command dispatch, fault checks, the tool state machine, fan, telemetry
+// and status reporting - runs on a SEPARATE housekeeping task pinned to core 0, ticking every
+// FOC_HOUSEKEEPING_INTERVAL_MS.  This keeps the expensive/slow work entirely off the FOC core so it
+// can never lengthen a commutation step (the ~1.8 kHz-with-hiccups single-task design pulled the
+// open-loop rotor out of sync at high RPM and tripped the driver's hardware OCP even with voltage
+// headroom).
+const uint32_t FOC_HOUSEKEEPING_INTERVAL_MS = 2;     // core-0 housekeeping task period
+// The housekeeping task is registered with the task watchdog: if a pass does not complete within
+// this long (stuck waiting on something), the chip panics - which stops the motors (the drivers
+// sleep until enabled again after the reboot) and saves a coredump showing where it was stuck.
+// Without this, a stuck housekeeping task leaves the spindle running with no over-current
+// monitoring or command handling (2026-10-06: board went silent after a spindle start).
+const uint32_t HOUSEKEEPING_WDT_TIMEOUT_S = 3;
+
+// Phase offset ramping
+const float PHASE_OFFSET_STEP = 45.0f * PI / 180.0f;          // 45 deg per keypress
+const float PHASE_OFFSET_RAMP_RATE = 400.0f * PI / 180.0f;    // 400 deg/s ramp
+
+// Inter-board link (UART to FluidNC XY board)
+const long    LINK_BAUD = 115200;          // baud rate for the XY <-> spindle link
+const uint32_t LINK_STATUS_INTERVAL_MS = 50;  // how often to report status to the XY board
+// Highest speed the spindle will accept, from the link or the USB digit keys; also the top of the
+// calibration sweep (CAL_MAX_RAD).  Limited by the 24V bus: with no tool, M1 held 17,000 RPM at the
+// MAX_VOLTAGE cap but lost sync at 17,100 RPM; with a tool loaded both motors tripped at 14,000 RPM
+// (2026-10-05).  12,000 RPM has run reliably with a tool, so that is the limit for now.
+const int     MAX_COMMAND_RPM = 12000;
+
+// On-demand WiFi OTA.  The board normally keeps its radio off; when the XY board sends
+// the 'W' link command (in response to $Spindle/EnableOTA) it joins the XY board's WiFi
+// network and runs an ArduinoOTA server so it can be reflashed wirelessly with:
+//   pio run -e esp32-s3-devkitc-1-ota -t upload
+const char*    const OTA_HOSTNAME                = "maslow-spindle";  // mDNS -> maslow-spindle.local
+const uint32_t       OTA_WIFI_CONNECT_TIMEOUT_MS = 20000;   // give up joining WiFi after 20 s
+const uint32_t       OTA_IDLE_TIMEOUT_MS         = 300000;  // drop WiFi/OTA after 5 min idle
+const int            OTA_RECEIVE_TIMEOUT_MS      = 15000;   // tolerate 15 s data gaps mid-flash
+// The OTA request is persisted to NVS and the board reboots to service it from a clean,
+// freshly booted state (the only state that reliably survives the WiFi radio's power-up
+// current surge on 24 V-only power).  Each boot is one attempt: a bring-up that resets mid-surge
+// OR a transfer that fails (which also reboots, since ArduinoOTA won't cleanly retry on the same
+// boot) consumes one.  The flag survives across reboots so setup() resumes automatically, up to
+// this many attempts before giving up so a truly unreachable network can't boot-loop forever.
+const uint8_t        OTA_BOOT_MAX_ATTEMPTS       = 10;
+
+// Current filtering
+const float CURRENT_FILTER_ALPHA = 0.001f;      // Slow filter for DC-equivalent telemetry
+const float PROTECTION_FILTER_ALPHA = 0.1f;     // Fast filter for stall detection
+
+// Overcurrent protection
+const float OVERCURRENT_THRESHOLD = 6.0f;       // Phase-RMS trip point (A), same during calibration
+const int   OVERCURRENT_CONSECUTIVE_TRIPS = 100;
+
+// Motor run timeout
+const uint32_t MOTOR_RUN_DURATION = 6000000;     // 60 seconds in ms
+
+// Z-axis (phase-offset) hold power-down.  When the spindle is not spinning, the two
+// BLDC drivers only hold the Z position with current, which keeps them (and the
+// cooling fan) energized even though nothing is moving.  Once the XY board reports the
+// machine is idle (the 'D' command) and the phase ramp has settled to within this
+// tolerance of its target, the drivers are powered down.
+const float PHASE_MOVE_COMPLETE_EPS_RAD = 0.001f;   // within ~0.06 deg of target = move done
+
+// Extra motor voltage applied while the relative phase between the two motors is
+// changing (i.e. the Z axis is moving).  Changing the phase fights extra mechanical
+// resistance in the Z drive, so give the drivers a little more headroom while moving.
+const float Z_MOVE_VOLTAGE_BOOST = 1.0f;            // volts added during phase (Z) moves
+// The Z counts as moving until this long after the phase last changed.  A G-code ramp reaches the
+// spindle as a stream of tiny Z targets, each finished within a few ms at PHASE_OFFSET_RAMP_RATE,
+// so "target != current" alone was false nearly all the time: on 2026-10-19 14:14 it held for 1 of
+// 149 samples of a 0.5 s step-down.  Neither the boost nor the adaptive loop's Z-move guard
+// engaged, the loop took 0.4 V off M2 during the move, and the spindle slipped as it ended.
+const uint32_t Z_MOVE_HOLD_MS = 100;                // bridges the gaps between streamed Z targets
+
+// --- Z-axis power-up homing (top-of-travel beam break) ---
+// On power-up, an already-blocked beam makes the Z lower until the beam clears.  Otherwise,
+// the Z raises until the top-of-travel beam is interrupted, which establishes the home
+// position and confirms a tool is loaded.  The Z is driven by the relative phase between
+// the two BLDC motors; the XY board uses 45 deg of phase per mm of Z travel (its
+// phase_deg_per_mm), so the mm limit below is converted with the same constant.  If the Z
+// raises further than Z_HOMING_MAX_MM without the beam breaking, no tool is loaded.
+const float PHASE_DEG_PER_MM   = 45.0f;   // must match the XY board's phase_deg_per_mm
+const float Z_HOMING_MAX_MM    = 70.0f;   // give up (no tool loaded) past this much travel
+const float Z_HOMING_PHASE_DIR = +1.0f;   // +1 raises the Z; flip to -1 if homing drives it down
+const float Z_HOMING_MAX_RAD =
+    Z_HOMING_MAX_MM * PHASE_DEG_PER_MM * PI / 180.0f;  // travel limit as a phase offset (rad)
+
+// Delay the power-up Z-homing raise so the shared 24V rail and the other boards have time to
+// come up first.  The homing raise energizes both BLDC motors (a heavy current surge); doing
+// it the instant the app starts can sag a marginal supply.  Only the initial boot homing is
+// delayed - an operator re-home ('G') happens long after boot so it is unaffected.
+const uint32_t BOOT_HOMING_DELAY_MS = 1000;  // wait this long after boot before homing
+
+// --- Z-axis tool loading (reverse of homing) ---
+// While homing has left the board in the "no tool loaded" state, the top-of-travel beam
+// is monitored.  When the operator inserts a tool it interrupts the beam, which starts a
+// tool-loading move: the Z is lowered (opposite the homing direction) until the beam is no
+// longer broken, at which point a tool is considered loaded.  The lowering move gives up
+// (leaving the tool not loaded) once it travels this far without the beam clearing.
+const float Z_TOOL_LOAD_MAX_MM = 200.0f;  // give up lowering past this much travel
+const float Z_TOOL_LOAD_MAX_RAD =
+    Z_TOOL_LOAD_MAX_MM * PHASE_DEG_PER_MM * PI / 180.0f;  // travel limit as a phase offset (rad)
+// As the operator inserts a tool the beam can flicker (blocked, briefly clear, blocked) before
+// the tool is pulled fully down and seated.  The lowering move keeps going until the beam has
+// stayed clear for this long; any re-interruption during the window restarts the timer, so a
+// momentary clear while the tool is still entering the beam is not mistaken for a seated tool.
+const uint32_t Z_TOOL_LOAD_CONFIRM_MS = 400;  // beam must stay clear this long to finish loading
+
+// --- Z-axis tool removal (raise to eject) ---
+// Triggered on demand by the XY board's 'R' command (web UI "Remove Tool" button).  With a
+// tool loaded the top-of-travel beam is interrupted; the Z raises (the homing direction)
+// until the beam transitions from blocked (tool present) to clear (tool removed), at which
+// point the board returns to the "no tool loaded" state.  The move gives up and stops once
+// it travels this far without the beam clearing.
+const float Z_TOOL_REMOVE_MAX_MM = 150.0f;  // give up raising past this much travel
+const float Z_TOOL_REMOVE_MAX_RAD =
+    Z_TOOL_REMOVE_MAX_MM * PHASE_DEG_PER_MM * PI / 180.0f;  // travel limit as a phase offset (rad)
+// After the beam first clears the Z keeps raising for this long to confirm a clean removal;
+// if the beam is interrupted again at any point during the window the timer restarts, so a
+// tool flickering right on the edge of the beam is not mistaken for a completed removal.
+const uint32_t Z_TOOL_REMOVE_CONFIRM_MS = 500;  // beam must stay clear this long to finish
+
+// Calibration LUT
+const int   CAL_LUT_SIZE = 180;                                     // 100, 200, ... 18000 RPM
+const float CAL_TARGET_CURRENT = 2.625f;                            // Target phase-RMS current (A).
+                                                                    // 75% of the 3.5A used on the DRV8316 board: the
+                                                                    // MP6541A's hardware OCP is fixed at 16-20A (the
+                                                                    // DRV8316 was configured for 24A), so the sweep
+                                                                    // hunts to a lower current to keep the spin-up
+                                                                    // transient clear of that lower ceiling.
+const float CAL_CHECKPOINT_STEP_RAD = 100.0f * 2.0f * PI / 60.0f;  // 100 RPM step in rad/s
+const float CAL_MAX_RAD = MAX_COMMAND_RPM * 2.0f * PI / 60.0f;     // top of the sweep (rad/s).
+                                                                    // The LUT keeps 180 entries (so stored
+                                                                    // calibrations still load); steps above
+                                                                    // this are never swept or commanded.
+const uint32_t CAL_TRIP_PAUSE_MS = 5000;                            // after motor 1 trips during auto-cal,
+                                                                    // let it coast to rest before motor 2's
+                                                                    // sweep starts
+const uint32_t CAL_SETTLE_MS = 500;                                 // ms to wait after reaching speed
+const float CAL_HUNT_VOLTAGE_MARGIN = 0.9f;                         // Max extra volts above seeded LUT at each step
+const float CAL_RAMP_VOLT_PER_RAD = 0.0025f;                        // Open-loop spin-floor slope (volts per rad/s).
+                                                                    // Kept BELOW the real current-limited curve so the hunt
+                                                                    // can converge; spin-up between steps relies on the
+                                                                    // previous step's voltage carried forward, not this floor.
+const uint32_t CAL_COOLDOWN_MS = 8000;                              // How long to coast (motor de-energized) after the driver
+                                                                    // thermally shuts down before continuing the sweep.  At low
+                                                                    // RPM the open-loop current sits on one or two FETs long
+                                                                    // enough to heat the die (the package can still feel cool);
+                                                                    // coasting to cool before advancing stops the heat cascading
+                                                                    // up through the rest of the sweep.  The MP6541A has no
+                                                                    // over-temperature WARNING and nFAULT is released once the
+                                                                    // drivers sleep, so the die temperature cannot be polled
+                                                                    // while cooling - this is a fixed wait.
+
+// --- Load sensing (opt-in diagnostic, USB "LOAD"; see load_sense.h) ---
+// The fit weights each existing current read by the fraction of the PWM period in which that
+// phase's low side conducts (the only time the MP6541A sense output is valid).  Half the sense
+// output's settling time after the low side turns on is taken off that fraction.  The board's
+// 330R/1nF filter settles in ~2-3 us and the MP6541A's own response comes on top - UNVERIFIED;
+// scope INLx against CURx to pin it down.
+const float    LOAD_SOX_SETTLE_US   = 3.0f;
+// Sign of the measured phase current relative to SimpleFOC's phase-voltage convention.  Measured
+// 2026-10-06: with both motors energised near standstill (Z homing raise, 2.3 V) the fit put the
+// current at 180 deg to the applied voltage on both motors (Iq ~ 0), i.e. the sense polarity is
+// inverted.  RTEST re-checks this.
+const float    LOAD_CURRENT_SIGN    = -1.0f;
+// Readings are full-or-zero at random, so the fit is noisy per reading and needs a longer window.
+const float    LOAD_FILTER_TAU_S    = 0.15f;   // forgetting time constant of the current fit
+const uint32_t LOAD_LOG_INTERVAL_MS = 250;     // [LOAD] console line period while LOAD is on
+// Load warning (advisory only - takes no protective action).  Raised when a motor's current phase
+// (lag) is more than LOAD_WARN_LAG_DEG away from the no-load baseline for that speed for
+// LOAD_WARN_HOLD_MS, while the spindle is at speed.  Cleared once back within
+// LOAD_WARN_CLEAR_DEG for LOAD_WARN_CLEAR_MS.  Basis (2026-10-06): run to run, the baseline lag
+// repeated within +/-4 deg and steady running varied +/-2 deg; before a stall while cutting wood
+// at 12,000 RPM, M2's lag moved >15 deg 1.1 s before the trip (0.67 s before the first driver
+// over-current pulse) and went ~110 deg off.  Caveat: Z moves add Z_MOVE_VOLTAGE_BOOST, which
+// shifts the lag somewhat; not yet measured.
+const float    LOAD_WARN_LAG_DEG    = 20.0f;
+const uint32_t LOAD_WARN_HOLD_MS    = 100;
+const float    LOAD_WARN_CLEAR_DEG  = 12.0f;
+const uint32_t LOAD_WARN_CLEAR_MS   = 300;
+// Adaptive voltage (on at boot; USB "ADAPT" toggles it until reboot).  Each motor gets its own
+// voltage trim on top of the LUT, steered so its lagging current Iq (load-sense fit) sits at
+// ADAPT_IQ_TARGET_A.  VSWEEP (2026-10-06) showed Iq falls smoothly and steeply as the voltage
+// drops toward the motor's back-EMF (about 8 A/V at 12,000 RPM, 5-8 A/V at 8,000, 2-4 A/V at
+// 4,000) and crosses ~0 where the motor goes over the pull-out edge; the calibrated LUT sits
+// 3-5 A above that, which is most of the no-load current and heat.  Holding Iq at ~2 A cuts the
+// no-load copper heat ~2-3x at 12,000 RPM and more at lower speeds, and raises the voltage as load
+// pulls Iq down - so each motor gets the same margin (M2 used to sit closest to its edge).
+// Gains are tuned for 12,000 RPM: settles ~0.3 s adding voltage, ~1.5 s removing it (slower at
+// lower speeds, where Iq is less sensitive).  Below ADAPT_IQ_FAST_A (near the edge) or when a
+// load warning fires, voltage is added at once.  Only active at a steady speed >= ADAPT_MIN_RPM
+// (not ramping, calibrating, LOADREF/RTEST/VSWEEP); any speed change resets the trim to 0 (the
+// calibrated, safe-side voltage) and it settles again.
+const bool     ADAPT_DEFAULT_ON        = true;
+const float    ADAPT_IQ_TARGET_A       = 2.0f;
+const float    ADAPT_IQ_FAST_A         = 1.5f;    // below this: add voltage at the maximum rate
+const float    ADAPT_K_UP              = 0.4f;    // V/s per A of Iq shortfall
+const float    ADAPT_K_DOWN            = 0.08f;   // V/s per A of Iq excess
+const float    ADAPT_UP_MAX_V_PER_S    = 5.0f;
+const float    ADAPT_DOWN_MAX_V_PER_S  = 0.5f;
+// Immediate step when a load warning fires.  Was 1.0 V: in the 2026-10-06 cut it sent M2's Iq to
+// 8-9 A, and that lagging current - not the cutting (in-phase) current - was ~14 of M2's ~18 W.
+const float    ADAPT_WARN_STEP_V       = 0.5f;
+// Iq far above target (typically just after a warning step, once the load has passed) comes down
+// fast instead of at ADAPT_DOWN_MAX_V_PER_S - but only ADAPT_WARN_HOLD_MS after the last warning,
+// so the margin a warning step adds is not taken straight back.
+const float    ADAPT_IQ_HIGH_A          = 5.0f;
+const float    ADAPT_K_DOWN_FAST        = 0.3f;    // V/s per A of excess while Iq > ADAPT_IQ_HIGH_A
+const float    ADAPT_DOWN_FAST_V_PER_S  = 2.0f;
+const uint32_t ADAPT_WARN_HOLD_MS       = 1000;
+// Trend (2026-10-16 trip at 12,000 RPM): M2's Iq slid from 3.6 to 2.0 A over ~270 ms while the
+// loop held the voltage - Iq was still above target - and then the motor went over the edge.  The
+// loop now watches the load part of Iq (Iq less ADAPT_IQ_A_PER_V_PER_KRPM x kRPM A per volt of its
+// own trim, from VSWEEP).  While that falls faster than ADAPT_TREND_DEADBAND_A_PER_S, the target is
+// judged on Iq extrapolated LOAD_FILTER_TAU_S ahead (the fit trails by that much), and
+// ADAPT_TREND_GAIN times the voltage that would hold Iq level is added.  A rising load Iq does not
+// feed forward.  Without the deadband, fit noise kept bumping the voltage up: on the bench,
+// unloaded at 12,000 RPM, Iq settled at 4-5 A instead of 2 A.  Replaying the trip recording with
+// these values: M2 had 3.2 A instead of 2.0 A at the moment it slipped and M1's lowest point was
+// 2.3 A instead of 0.6 A; replaying the unloaded bench recording, the trim is unchanged.
+const float    ADAPT_TREND_TAU_S            = 0.10f;   // smoothing of the load-Iq slope
+const float    ADAPT_TREND_DEADBAND_A_PER_S = 1.5f;    // slower falls are left to the loop above
+const float    ADAPT_TREND_GAIN             = 6.0f;
+// The feed-forward runs away on its own when it acts on an Iq well above target (2026-10-16 16:36
+// and 2026-10-19 09:59, both in air): it assumes ~8 A/V of its own trim, but well above the edge
+// Iq only rises ~2 A/V, so every volt it adds reads as a falling load Iq and it adds more, up to
+// ADAPT_TRIM_MAX_V, until the drivers' over-current protection trips.  The drop that set it off
+// was Iq coming back down as a Z move ended (Iq sits 1-2 A higher while the phase is changing).
+// So the trend only feeds forward while Iq is near the target, where the margin matters, and
+// ignores Iq during a Z move and for ADAPT_Z_SETTLE_MS after it.
+// In that window the loop also never lowers the voltage (2026-10-19 11:04, under real load): during
+// a 0.7 s ramp to the next pass the Z drive raised M2's Iq from 3.4 to 6.6 A, the loop read it as
+// excess margin and took 0.7 V off, and M2 slipped 90 ms after the full cut load came back.
+const float    ADAPT_TREND_MAX_IQ_A         = 3.5f;    // no feed-forward with Iq above this
+const uint32_t ADAPT_Z_SETTLE_MS            = 400;     // fit lag (150 ms) + slope smoothing + margin
+const float    ADAPT_IQ_A_PER_V_PER_KRPM = 0.67f;   // ~8 A/V at 12,000 RPM
+const float    ADAPT_TRIM_MIN_V        = -1.5f;   // never more than this below the LUT
+const float    ADAPT_TRIM_MAX_V        = 2.5f;    // never more than this above (MAX_VOLTAGE caps too)
+const float    ADAPT_MIN_RPM           = 3000.0f; // untested below 4,000 RPM - LUT only below this
+// Voltage sweep diagnostic (USB "VSWEEP"): at the spindle's current steady speed, offset both
+// motors' voltage from VSWEEP_START_V downward in VSWEEP_STEP_V steps, logging current and lag at
+// each, to find how far the no-load voltage (and heat) can come down and where a safe target lag
+// lies.  Stops after a step whose mean lag on either motor is below VSWEEP_STOP_LAG_DEG, and at
+// once if a lag falls below VSWEEP_ABORT_LAG_DEG mid-step (heading for pull-out).
+const float    VSWEEP_START_V       = 1.0f;
+const float    VSWEEP_STEP_V        = 0.25f;
+const float    VSWEEP_MIN_V         = -8.0f;   // never offset further than this
+const float    VSWEEP_STOP_LAG_DEG  = 20.0f;
+const float    VSWEEP_ABORT_LAG_DEG = 5.0f;
+// Also stop on Iq: at 4,000 RPM M1 went over the edge one step after a mean Iq of 1.2 A.
+const float    VSWEEP_STOP_IQ_A     = 1.5f;    // stop after a step whose mean Iq is below this
+const float    VSWEEP_ABORT_IQ_A    = 0.5f;    // abort mid-step if Iq falls below this
+const uint32_t VSWEEP_SETTLE_MS     = 300;
+const uint32_t VSWEEP_MEASURE_MS    = 500;
+
+// Bench slip test (sync-sense-sliptest build only: the link's "T!" runs the next SLIP_SCHEDULE entry).
+// One motor, the other off and the tool out: spin up, settle, then lower the voltage until the
+// rotor pulls out, and stop that motor itself at the first sign - the observer counting a slip,
+// the observer losing lock, the current, or the floor - so nobody has to stop it by hand.  The
+// trip recording of the 2 s before the stop goes to the XY board as usual.
+const uint32_t SLIPTEST_SETTLE_MS   = 2000;    // at speed before stepping (observer locks)
+const float    SLIPTEST_STEP_V      = 0.05f;   // voltage taken off per step
+const uint32_t SLIPTEST_STEP_MS     = 250;
+const float    SLIPTEST_MIN_DV      = -6.0f;   // give up (no slip) past this offset
+const float    SLIPTEST_MAX_A       = 8.0f;    // phase RMS (this pass) that stops the motor
+const uint32_t SLIPTEST_LOST_MS     = 150;     // observer invalid this long while stepping = stop
+const uint32_t SLIPTEST_TIMEOUT_MS  = 90000;
+// Speeds, sudden drops and rescues: SLIP_SCHEDULE in load_sense.cpp.  The sudden drop goes to
+// back-EMF + dead-time loss + friction drop - SLIPTEST_DROP_BELOW_V (10-26 at 4k: pull-out at
+// 3.37/3.32 V against 3.05 V back-EMF, i.e. ~0.24 V dead time + ~0.1 V).
+const float    SLIPTEST_DT_V          = 0.24f;   // 24 V x 0.5 us / 50 us
+const float    SLIPTEST_FRICTION_V    = 0.10f;
+const float    SLIPTEST_DROP_BELOW_V  = 0.15f;
+// Detector (see detectorPass): ld this far over its own average, this many passes in a row.
+const float    SLIPTEST_DET_DEG       = 10.0f;
+const int      SLIPTEST_DET_N         = 3;
+const float    SLIPTEST_DET_TAU_MS    = 200.0f;
+const uint32_t SLIPTEST_DET_REBASE_MS = 20;      // after a sudden drop, before the average restarts
+const float    SLIPTEST_DET_SPEED     = 0.02f;   // observer speed this far below the command
+const float    SLIPTEST_DET_MX_DEG    = 20.0f;   // one pass's max ld this far over the average of ld
+const float    SLIPTEST_RESTORE_STEP  = 0.5f;    // rescue: share of the offset kept after the first step
+const uint32_t SLIPTEST_RESTORE_MS    = 30;      // ... then ramped back to the calibrated voltage over this
+const uint32_t SLIPTEST_HOLD_MS       = 1500;    // rescue: hold at the restored voltage, then judge
+// Shadow slip guard (sync builds, load_sense.cpp guardUpdate): the four SLIPTEST_DET_* rules on every
+// spinning motor, logged only.  A rule that stays clear this long starts a new would-fire episode;
+// would-fire lines per rule and motor at most one per GUARD_EVENT_GAP_MS (the rest are counted).
+const uint32_t GUARD_REARM_MS         = 100;
+const uint32_t GUARD_EVENT_GAP_MS     = 250;
+const uint32_t GUARD_SETTLE_MS        = 500;     // rules skipped this long after the speed arrives
+const uint32_t GUARD_HOLD_MAX_MS      = 300;     // longest the ld average is held, then taken from ld
+const float    GUARD_VSTEP_V          = 0.3f;    // voltage limit this far off its recent average = a step
+const float    GUARD_VSTEP_TAU_MS     = 20.0f;   // ... that average
+const uint32_t GUARD_VSTEP_HOLD_MS    = 30;      // ld/mx/m2 rules held this long after a step
+const uint32_t GUARD_CONFIRM_MS       = 5;       // an m2 candidate must be confirmed within this
+const float    GUARD_CONFIRM_RISE_A   = 0.5f;    // ... by pass RMS current this far over its lowest since
+// Phase resistance (ohm, including the driver) and inductance (H) for the load-angle estimate.
+// 0 = unknown.  RTEST measures R at standstill and uses it until reboot; L must be measured
+// separately (LCR meter, phase-to-phase / 2).  Without both, no load angle is reported.
+const float    LOAD_R_OHM           = 0.0f;
+const float    LOAD_L_H             = 0.0f;
+// No-load baseline sweep (USB "LOADREF"): both motors spin as the spindle, no tool cutting.
+const int      LOAD_REF_STEP_RPM    = 1000;
+const int      LOAD_REF_MAX_POINTS  = 24;      // room for up to 24,000 RPM
+const uint32_t LOAD_REF_SETTLE_MS   = 1500;    // after reaching each speed
+const uint32_t LOAD_REF_MEASURE_MS  = 1000;    // averaging time per speed
+
+// MP6541A fault detection (nFAULT, one open-drain pin per driver).
+// The MP6541A reports two things on nFAULT, distinguished by shape rather than by any status
+// register: an OVER-CURRENT disables the outputs and auto-retries after ~2ms, so it appears as
+// a burst of falling EDGES (counted by an ISR - a 100ms poll would miss the pulses), while an
+// OVER-TEMPERATURE shutdown holds the pin LOW continuously until the die cools by ~25C.
+// Over-voltage and UVLO are NOT reported on nFAULT at all, so they can no longer be observed
+// in firmware; the MP6541A still protects itself in hardware.
+const int OCP_CONSEC_LIMIT = 5;  // 5 x 100ms = 500ms of repeated OCP retries -> disable
+// An over-temperature must be seen held low across this many 100ms samples before it is
+// treated as a genuine (latching) serious fault, so that the brief low of an over-current
+// retry sampled at just the wrong moment is not mistaken for a thermal shutdown.
+const int SERIOUS_CONSEC_LIMIT = 3;  // 3 x 100ms = 300ms sustained OT -> latch
+
+// Over-current response: the motors run open-loop, so an over-current means the rotor has
+// already slipped.  There is nothing to retry - the spindle stops at 0 RPM, latches fault
+// code 2 (which alarms the XY board and stops a running job), and invalidates the Z reference
+// until a homing cycle re-establishes it.  A fresh speed command is the deliberate restart.
+
+// --- PWM-synchronised current sensing (build flag SYNC_CURRENT_SENSE; see current_sampler.h) ---
+// Only used by the sync-sense builds.  The default build keeps the unsynchronised analogRead path.
+//
+// Sample timing.  The first ADC1+ADC2 pair (each motor's lowest-duty phase) starts SYNC_LEAD_US
+// before the PWM peak; the second (middle-duty phase) at the peak; the lowest-duty phase is read
+// again SYNC_LEAD_US after the peak.  A read counts only if it starts SYNC_SETTLE_US after its
+// phase's low-side FET turns on and SYNC_HOLD_US before it turns off.  Measured 2026-10-20 at
+// 12,000 RPM (sweep of the middle-phase read, SETTLE): reading/true reaches 0.9 at +2.8 us (ADC1)
+// and +3.3 us (ADC2) after turn-on, 0.95 at +4.2 / +4.7 us; and stays above 0.9 until 3.0 us
+// (ADC1) / 1.8 us (ADC2) before turn-off.  ADC1 samples ~1.5 us later in its conversion than ADC2.
+// 3.0 / 3.0 us passed 98% / 95.5% of samples at 12,000 RPM unloaded; 4.5 / 3.5 us passed 89-90%.
+// ADC1 converts in 7.2 us; ADC2 (started SYNC_STAGGER_US = 1 us later) in 6.2 us, so a pair is
+// done 7.2 us after it starts and pair 1 ends 1.2 us before the peak: time for pair 2's pads to
+// settle before it starts.
+const float    SYNC_LEAD_US   = 8.4f;
+const float    SYNC_MID_US    = 0.0f;
+const float    SYNC_SETTLE_US = 3.0f;
+const float    SYNC_HOLD_US   = 3.0f;
+// ADC2 (motor 2) starts this long after ADC1.  Measured at zero current (2026-10-20): ADC2 reads
+// ~20 LSB (~0.1 A) high and noisier when started less than ~1 us after ADC1 (0: +22 LSB, 0.5 us:
+// +16 LSB sd 3-5); 1 us and 2 us read normally (sd 1.3-1.5).  The two converters couple.
+const float    SYNC_STAGGER_US = 1.0f;
+// Over-current trip on the synchronised samples.  These are TRUE phase currents; the analogRead
+// path's OVERCURRENT_THRESHOLD (6 A) applies to chopped reads that average well under the true
+// value, so it does not carry over.  10 A phase RMS = 14 A peak: below the MP6541A's 16-20 A
+// hardware limit, above the ~11 A peak (fitted Iq/Ip) seen in the heaviest 12k cuts so far.
+const float    SYNC_OVERCURRENT_THRESHOLD = 10.0f;
+// No valid sample for this long with a motor enabled = protection is blind: stop.
+const uint32_t SYNC_STALE_MS  = 20;
+// CAL hunts to CAL_TARGET_CURRENT as read by the CHOPPED analogRead path.  The synchronised path
+// reads true current, so CAL's target is scaled by this.  Bench data (2026-10-06) put the chopped
+// reading at roughly half the true value - UNVERIFIED, re-measure (phase 2) before relying on CAL.
+const float    SYNC_CAL_TARGET_SCALE = 2.0f;
+// Bench build: one SYNC summary line per motor to the XY board's log this often while spinning.
+const uint32_t SYNC_LINK_LOG_MS = 1000;
+
+// Shadow-mode flux observer (flux_observer.h).  Measured 2026-10-20 on this board (USB "OBS"
+// overrides until reboot):
+//   R: RTEST gave 0.50 / 0.53 ohm from the commanded 1.3 V; the dead time takes ~4/3 x 0.24 V off
+//      the applied voltage at DC, so 0.38 / 0.40 ohm against dead-time-compensated voltage.
+//   L, flux: VSWEEP at 8,000 and 12,000 RPM, fitting |V - (R + jwL) I| constant over the voltage
+//      steps (0.4-0.7% spread): L 73-77 uH, flux 7.18-7.33 mWb (0.75-0.77 V per 1000 RPM).
+const float    SYNC_OBS_R_OHM   = 0.39f;
+const float    SYNC_OBS_L_H     = 75e-6f;
+const float    SYNC_OBS_FLUX_WB = 0.00728f;
+const float    SYNC_OBS_MIN_RPM = 1000.0f;   // observer results ignored below this speed
+const uint32_t SYNC_OBS_MAX_GAP = 4;         // more periods than this unsampled: restart the observer
+const float    SYNC_DT_COMP_KNEE_A = 0.2f;   // dead-time compensation sign is smoothed below this current
+const float    SYNC_SLIP_DEG     = 180.0f;   // rotor this far behind the commanded angle = pole slip
+const float    SYNC_LOAD_WARN_DEG = 70.0f;   // logged as approaching pull-out (shadow mode only)
+// Core for the sampling interrupt.  Measured at 12,000 RPM (2026-10-20): on core 1 it cut the FOC
+// loop from 18,300 to 5,500 iterations/s and peak phase current rose from ~3.7 A to 12-15 A
+// (13 deg commutation steps); on core 0 it competes with the housekeeping task instead, which
+// SYNC_EVERY_N_PERIODS = 2 leaves room for.
+const int      SYNC_ISR_CORE     = 0;
+// Sample every Nth PWM period.  Every period (20 kHz) with the four-stage interrupt took ~45-55% of
+// core 0 and the housekeeping task dropped 18-33% of samples at 12,000 RPM; every second period is
+// 10 kHz, 50 samples per electrical cycle at 12,000 RPM.
+const int      SYNC_EVERY_N_PERIODS = 2;
+const int      SYNC_OBS_DECIM    = 4;        // observer angle step every 4th full sample (5 kHz)
+const int      SYNC_MAX_PER_PASS = 256;      // samples per motor per housekeeping pass (one ring)
