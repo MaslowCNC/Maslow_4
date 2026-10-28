@@ -8,6 +8,7 @@
 
 #include "../Report.h"
 #include "Maslow.h"
+#include "BoardId.h"
 #include <cmath>
 
 // MASLOW_DISABLE_BOOT_SELFTEST is defined in Maslow.h. When 1, missing hardware is
@@ -38,15 +39,18 @@ void MotorUnit::begin(int forwardPin, int backwardPin, int readbackPin, int enco
         Maslow.errorMessage = "Encoder not found on " + encAddrLabel;
 #endif
     } else {
-        encoder.setDirection(AS5600_COUNTERCLOCK_WISE);
+        encoder.setDirection(BoardId::reversedBeltMotors() ? AS5600_COUNTERCLOCK_WISE : AS5600_CLOCK_WISE);
         log_info("Encoder connected on " << encAddrLabel.c_str());
     }
     zero();
 
-    // Wiring/PWM direction is swapped here (forward/backward pins and their PWM
-    // channels reversed) so that commanded FORWARD/BACKWARD drive the motor the
-    // opposite way relative to the previous wiring, without touching DCMotor itself.
-    motor.begin(backwardPin, forwardPin, readbackPin, channel2, channel1);
+    // On a reversed board the forward/backward pins and their PWM channels are swapped, so that
+    // commanded FORWARD/BACKWARD turn the belt the same way as on a Maslow 4.1.
+    if (BoardId::reversedBeltMotors()) {
+        motor.begin(backwardPin, forwardPin, readbackPin, channel2, channel1);
+    } else {
+        motor.begin(forwardPin, backwardPin, readbackPin, channel1, channel2);
+    }
 
     positionPID.setPID(P, I, D);
     positionPID.setOutputLimits(-1023, 1023);
@@ -54,7 +58,10 @@ void MotorUnit::begin(int forwardPin, int backwardPin, int readbackPin, int enco
 #if MASLOW_DISABLE_BOOT_SELFTEST
     log_warn("Motor self-test skipped on " << encAddrLabel.c_str() << " (boot self-test disabled)");
 #else
-    if (!motor_test()) {
+    // Without a known board the motor direction is a guess, so leave the motors still
+    if (BoardId::board() == BoardId::Board::Unknown) {
+        log_warn("Motor self-test skipped on " << encAddrLabel.c_str() << " (control board not recognised)");
+    } else if (!motor_test()) {
         log_error("Motor not found on " << encAddrLabel.c_str());
         Maslow.error        = true;
         Maslow.errorMessage = "Motor not found on " + encAddrLabel;

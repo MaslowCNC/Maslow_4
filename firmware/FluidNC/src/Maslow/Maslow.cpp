@@ -12,6 +12,7 @@
 #include "../Kinematics/MaslowKinematics.h"
 #include "../GCode.h"
 #include "../Spindles/SpindleBoard.h"
+#include "BoardId.h"
 #include "../Job.h"        // Job::abort()
 #include "../FluidPath.h"  // SD volume
 #include <cmath>
@@ -88,6 +89,14 @@ int ENCODER_READ_FREQUENCY_HZ = 1000;  //max frequency for polling the encoders
 void Maslow_::begin(void (*sys_rt)()) {
     Wire.begin(5, 4, 200000);
     I2CMux.begin(TCAADDR, Wire);
+
+    // Every board has the BoardVersion divider, so a reading outside all the bands is a fault.
+    // The belt motors' direction depends on the board: they stay off, and $X cannot clear this.
+    if (BoardId::board() == BoardId::Board::Unknown) {
+        error        = true;
+        errorMessage = "Control board not recognised (BoardVersion " + String(BoardId::millivolts()) +
+                       " mV), so the belt motor direction is unknown. Check the divider on GPIO17";
+    }
 
     axis[_TL].begin(tlIn1Pin, tlIn2Pin, tlADCPin, TLEncoderLine, tlIn1Channel, tlIn2Channel);
     axis[_TR].begin(trIn1Pin, trIn2Pin, trADCPin, TREncoderLine, trIn1Channel, trIn2Channel);
@@ -1318,6 +1327,11 @@ void Maslow_::resetUpdateWatchdog() {
 // command the user already reaches for to acknowledge an alarm, so it clears them
 // here.  Returns true if a latched condition was actually cleared.
 bool Maslow_::clearError() {
+    if (BoardId::board() == BoardId::Board::Unknown) {
+        log_error("Motion stays disabled: the control board was not recognised at boot (BoardVersion " << BoardId::millivolts() << " mV)");
+        return false;
+    }
+
     // The LED is driven low unconditionally: if nothing is latched it is already off,
     // and this also picks up the case where a blink left it mid-cycle.
     digitalWrite(REDLED, LOW);

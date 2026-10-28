@@ -115,6 +115,10 @@ namespace BoardId {
         return detectedMillivolts;
     }
 
+    bool reversedBeltMotors() {
+        return detectedBoard == Board::Unified || detectedBoard == Board::Unified36V;
+    }
+
     const char* boardName(Board board) {
         switch (board) {
             case Board::Maslow41:

@@ -21,4 +21,8 @@ namespace BoardId {
     Board       board();
     const char* boardName(Board board);
     int         millivolts();  // the boot reading, or -1 if the ADC could not be read
+
+    // The Unified Control Boards wire the belt motors and encoders the opposite way round to the
+    // Maslow 4.1, so both must be reversed in firmware for a command to turn a belt the same way.
+    bool reversedBeltMotors();
 }
