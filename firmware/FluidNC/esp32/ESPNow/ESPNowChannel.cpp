@@ -22,6 +22,9 @@
 static constexpr uint32_t    FRAG_REASSEMBLY_TIMEOUT_MS  = 3000;
 static constexpr uint32_t    PENDANT_IDLE_TIMEOUT_MS     = 10000;
 static constexpr uint32_t    PAIRING_WINDOW_MS           = 60000;
+// Every power-on opens a pairing window, so a remote can pair without the
+// WebUI: power the Maslow on and tap Pair on the remote.  $EC closes it early.
+static constexpr uint32_t    BOOT_PAIRING_WINDOW_MS      = 120000;
 static constexpr uint32_t    PAIRING_PACKET_INTERVAL_MS  = 100;
 static constexpr uint32_t    PAIRING_RESULT_RETRY_MS     = 300;
 static constexpr uint32_t    SEND_CALLBACK_TIMEOUT_MS    = 1000;
@@ -373,6 +376,9 @@ void ESPNowChannel::init() {
     }
 
     _initialized = true;
+
+    startPairingWindow(BOOT_PAIRING_WINDOW_MS);
+    log_info("ESP-NOW: pairing open for " << (BOOT_PAIRING_WINDOW_MS / 1000) << " seconds after power-on");
 }
 
 bool ESPNowChannel::startPairingWindow(uint32_t window_ms) {
