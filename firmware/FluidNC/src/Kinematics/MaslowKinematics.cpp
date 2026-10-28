@@ -87,6 +87,30 @@ namespace Kinematics {
         //log_info("Maslow center calculated: X=" << _centerX << " Y=" << _centerY);
     }
 
+    void MaslowKinematics::getFrameSize(float& width, float& height) const {
+        width  = std::min(anchor_location[_TR][Coord_X] - anchor_location[_TL][Coord_X],
+                         anchor_location[_BR][Coord_X] - anchor_location[_BL][Coord_X]);
+        height = std::min(anchor_location[_TL][Coord_Y] - anchor_location[_BL][Coord_Y],
+                          anchor_location[_TR][Coord_Y] - anchor_location[_BR][Coord_Y]);
+    }
+
+    void MaslowKinematics::getWorkArea(float& width, float& height) const {
+        width  = Maslow.workAreaX;
+        height = Maslow.workAreaY;
+        if (width > 0 && height > 0) {
+            return;
+        }
+        //Auto: about a 4x8 sheet on a standard ~3000 x 2100 mm frame
+        float frameWidth, frameHeight;
+        getFrameSize(frameWidth, frameHeight);
+        if (width <= 0) {
+            width = std::max(frameWidth * 0.8f, 0.0f);
+        }
+        if (height <= 0) {
+            height = std::max(frameHeight * 0.6f, 0.0f);
+        }
+    }
+
     bool MaslowKinematics::cartesian_to_motors(float* target, plan_line_data_t* pl_data, float* position) {
         auto n_axis = config->_axes->_numberAxis;
 
@@ -98,8 +122,10 @@ namespace Kinematics {
 
         // Apply work area constraints to the target position
         // Calculate work area bounds
-        float halfWidth  = Maslow.workAreaX / 2.0f;
-        float halfHeight = Maslow.workAreaY / 2.0f;
+        float workWidth, workHeight;
+        getWorkArea(workWidth, workHeight);
+        float halfWidth  = workWidth / 2.0f;
+        float halfHeight = workHeight / 2.0f;
         float minX       = -halfWidth + Maslow.workAreaCenterOffsetX;
         float maxX       = halfWidth + Maslow.workAreaCenterOffsetX;
         float minY       = -halfHeight + Maslow.workAreaCenterOffsetY;

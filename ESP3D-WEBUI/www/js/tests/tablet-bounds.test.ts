@@ -51,6 +51,20 @@ describe("tablet work area bounds checks", () => {
     expect(alertCount).toBe(1);
   });
 
+  test("a 0 work area is sized from the frame", () => {
+    g.loadedValues.workAreaX = "0";
+    g.loadedValues.workAreaY = "0";
+    g.initialGuess = { tl: { x: 0, y: 2000 }, tr: { x: 3000, y: 2100 }, bl: { x: 0, y: 0 }, br: { x: 2900, y: 0 } };
+
+    // 80% of the narrower width (2900) by 60% of the shorter height (2000): +/-1160 x +/-600
+    g.getJobBoundingBox = () => ({ min: { x: -1150, y: -590, z: 0 }, max: { x: 1150, y: 590, z: 0 } });
+    expect(g.__tabletBoundsTestApi.checkLoadedJobWithinWorkArea(0, 0, "Load", false, true)).toBe(true);
+
+    g.getJobBoundingBox = () => ({ min: { x: -1150, y: -610, z: 0 }, max: { x: 1150, y: 590, z: 0 } });
+    expect(g.__tabletBoundsTestApi.checkLoadedJobWithinWorkArea(0, 0, "Load", false, true)).toBe(false);
+    delete g.initialGuess;
+  });
+
   test("suppresses duplicate warnings for repeated identical failures", () => {
     g.getJobBoundingBox = () => ({
       min: { x: -60, y: -20, z: 0 },

@@ -303,10 +303,23 @@ if (typeof globalThis !== "undefined") {
 const fromMmToDisplayUnits = (mm) => gCodeModal.units === 'G20' ? mm / MM_PER_INCH : mm;
 const fromDisplayUnitsToMm = (distance) => gCodeModal.units === 'G20' ? distance * MM_PER_INCH : distance;
 
+// A work area axis set to 0 is sized automatically from the frame, matching MaslowKinematics::getWorkArea() in the firmware
+const getAutoWorkArea = () => {
+  const ig = globalThis.initialGuess || {};
+  const coord = (anchor, axis) => parseFloat(ig[anchor]?.[axis]) || 0;
+  const frameWidth = Math.min(coord("tr", "x") - coord("tl", "x"), coord("br", "x") - coord("bl", "x"));
+  const frameHeight = Math.min(coord("tl", "y") - coord("bl", "y"), coord("tr", "y") - coord("br", "y"));
+  return {
+    x: frameWidth > 0 ? frameWidth * 0.8 : workAreaDefaults.x,
+    y: frameHeight > 0 ? frameHeight * 0.6 : workAreaDefaults.y,
+  };
+}
+
 const getWorkAreaBounds = () => {
   const lv = globalThis.loadedValues || {};
-  const areaX = parseFloat(lv.workAreaX) || workAreaDefaults.x;
-  const areaY = parseFloat(lv.workAreaY) || workAreaDefaults.y;
+  const auto = getAutoWorkArea();
+  const areaX = parseFloat(lv.workAreaX) || auto.x;
+  const areaY = parseFloat(lv.workAreaY) || auto.y;
   const offX = parseFloat(lv.workAreaCenterOffsetX) || workAreaDefaults.offX;
   const offY = parseFloat(lv.workAreaCenterOffsetY) || workAreaDefaults.offY;
   return {
@@ -1749,8 +1762,8 @@ const tabletSpindleRemoveTool = () => {
 const getWorkAreaValues = () => {
   const lv = globalThis.loadedValues || {};
   return {
-    areaX: parseFloat(lv.workAreaX) || workAreaDefaults.x,
-    areaY: parseFloat(lv.workAreaY) || workAreaDefaults.y,
+    areaX: parseFloat(lv.workAreaX) || 0,
+    areaY: parseFloat(lv.workAreaY) || 0,
     offX: parseFloat(lv.workAreaCenterOffsetX) || workAreaDefaults.offX,
     offY: parseFloat(lv.workAreaCenterOffsetY) || workAreaDefaults.offY,
   };
@@ -1773,7 +1786,9 @@ const tabletOpenWorkAreaPopup = () => {
   if (elY) elY.value = areaY;
   if (elOffX) elOffX.value = offX;
   if (elOffY) elOffY.value = offY;
-  if (elCurrent) elCurrent.textContent = `Current: ${areaX}, ${areaY}, ${offX}, ${offY}`;
+  const auto = getAutoWorkArea();
+  const showArea = (area, autoArea) => area || `auto (${Math.round(autoArea)})`;
+  if (elCurrent) elCurrent.textContent = `Current: ${showArea(areaX, auto.x)}, ${showArea(areaY, auto.y)}, ${offX}, ${offY}`;
 
   openModal("work-area-popup");
 };
