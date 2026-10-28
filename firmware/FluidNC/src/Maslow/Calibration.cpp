@@ -472,13 +472,6 @@ bool Calibration::requestStateChange(int newState) {
                         return false;
                     }
                 }
-                //We have just finished the first six points and have updated anchor locations so it's time to generate the grid again
-                //if the user has selected for it to be generated automatically
-                if (waypoint == 6 && calibration_grid_width_mm_X == 0 && calibration_grid_height_mm_Y == 0) {
-                    if (!generate_calibration_grid()) {  //Fail out if the grid cannot be generated
-                        return false;
-                    }
-                }
                 Maslow.stop();
 
                 //Save the z-axis 'stop' position
@@ -1241,6 +1234,16 @@ void Calibration::calibration_loop() {
                     resetCalibrationState();
                     requestStateChange(EXTENDEDOUT);
                     return;
+                }
+                //The first six points have given us a rough estimate of the anchor locations, so size the rest of the grid from them
+                //(unless the user has set a fixed grid size). Points 0-6 are kept, everything after is replaced.
+                if (recomputeCountIndex == 0 && calibration_grid_width_mm_X == 0 && calibration_grid_height_mm_Y == 0) {
+                    if (!generate_calibration_grid()) {
+                        log_error("Find Anchors could not size the calibration grid from the first estimate");
+                        resetCalibrationState();
+                        requestStateChange(EXTENDEDOUT);
+                        return;
+                    }
                 }
                 recomputeCountIndex++;
             } else {
@@ -2210,27 +2213,28 @@ bool Calibration::generate_calibration_grid() {
     float xSpacing = calibration_grid_width_mm_X / (calibrationGridSize - 1);
     float ySpacing = calibration_grid_height_mm_Y / (calibrationGridSize - 1);
 
-    //If either dimension is set to zero we automatically compute it as half the frame size
+    //If either dimension is set to zero we automatically size the grid from the current anchor locations. This runs once at the
+    //start with the configured anchors (only points 0-6 of that grid are used) and again once the first six points have been
+    //fitted, so the work area setting plays no part in calibration. The grid is centered on (0,0), the center of the anchors.
     if (calibration_grid_height_mm_Y == 0 || calibration_grid_width_mm_X == 0) {
-        float frameWidth  = getKinematics()->getTrX() - getKinematics()->getTlX();
-        float frameHeight = getKinematics()->getTlY() - getKinematics()->getBlY();
-
-        // Calculate initial grid size based on frame dimensions
-        float gridWidth  = frameWidth * 0.5;
-        float gridHeight = frameHeight * 0.2;
-
-        // Constrain grid to be at most 200mm less than work area to ensure it stays within bounds
-        float maxGridWidth  = Maslow.workAreaX - 200.0;
-        float maxGridHeight = Maslow.workAreaY - 200.0;
-
-        if (gridWidth > maxGridWidth) {
-            gridWidth = maxGridWidth;
-            log_info("Grid width constrained to work area: " << gridWidth << " mm (work area X: " << Maslow.workAreaX << " mm)");
+        auto kinematics = getKinematics();
+        if (!kinematics) {
+            log_error("generate_calibration_grid: MaslowKinematics not available");
+            return false;
         }
-        if (gridHeight > maxGridHeight) {
-            gridHeight = maxGridHeight;
-            log_info("Grid height constrained to work area: " << gridHeight << " mm (work area Y: " << Maslow.workAreaY << " mm)");
+
+        //The frame need not be a perfect rectangle, so use the narrower of its two widths and the shorter of its two heights
+        float frameWidth  = min(kinematics->getTrX() - kinematics->getTlX(), kinematics->getBrX() - kinematics->getBlX());
+        float frameHeight = min(kinematics->getTlY() - kinematics->getBlY(), kinematics->getTrY() - kinematics->getBrY());
+
+        if (frameWidth <= 0 || frameHeight <= 0) {
+            log_error("Cannot size the calibration grid: anchors give a " << frameWidth << " x " << frameHeight << " mm frame");
+            return false;
         }
+
+        // Calculate grid size based on frame dimensions
+        float gridWidth  = frameWidth * 0.4;
+        float gridHeight = frameHeight * 0.4;
 
         // Automatically select the grid spacing (3x3, 5x5, 7x7, or 9x9) such that
         // the smallest grid is used which will not leave more than 260mm between each point
@@ -2255,6 +2259,9 @@ bool Calibration::generate_calibration_grid() {
 
         xSpacing = gridWidth / (calibrationGridSize - 1);
         ySpacing = gridHeight / (calibrationGridSize - 1);
+
+        log_info("Calibration grid: " << calibrationGridSize << "x" << calibrationGridSize << ", " << gridWidth << " x " << gridHeight
+                                      << " mm from a " << frameWidth << " x " << frameHeight << " mm frame");
     }
 
     int numberOfCycles = 0;
