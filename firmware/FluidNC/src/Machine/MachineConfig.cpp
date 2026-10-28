@@ -185,7 +185,12 @@ namespace Machine {
         handler.item(M + "_calibration_grid_size", Maslow.calibration.calibrationGridSize, 3, 9);
 
         handler.item(M + "_Retract_Current_Threshold", Maslow.calibration.retractCurrentThreshold, 0, 3500);
-        handler.item(M + "_Acceptable_Calibration_Threshold", Maslow.calibration.acceptableCalibrationThreshold, 0, 1);
+        // Retired: the browser-side anchor solve used this; the on-board fit has its own gates.  Still accepted
+        // when parsing so an existing maslow.yaml loads without a configuration alarm, but no longer saved.
+        if (handler.handlerType() == Configuration::HandlerType::Parser) {
+            float retiredAcceptableCalibrationThreshold = 0;
+            handler.item(M + "_Acceptable_Calibration_Threshold", retiredAcceptableCalibrationThreshold);
+        }
         handler.item(M + "_Apply_Tension_Belt_Retraction_Limit", Maslow.calibration.applyTensionBeltRetractionLimitMm, 0.0, 4250.0);
         handler.item(M + "_Apply_Tension_Allow_Limiting", Maslow.calibration.applyTensionAllowLimiting);
         handler.item(M + "_Extend_Dist", Maslow.calibration.extendDist, 0, 4250);
@@ -331,7 +336,7 @@ namespace Machine {
         const std::string dcM4Vert            = M + "_vertical: false\n";
         const std::string dcM4CalibrationGrid = mcgrid + "width_mm_X: 0\n" + mcgrid + "height_mm_Y: 0\n" + mcgrid + "size: 9\n";
 
-        const std::string dcM4CurrentThreshold = M + "_Retract_Current_Threshold: 1300\n" + M + "_Acceptable_Calibration_Threshold: 0.5\n";
+        const std::string dcM4CurrentThreshold = M + "_Retract_Current_Threshold: 1300\n";
         const std::string dcM4ApplyTensionLimit =
             M + "_Apply_Tension_Belt_Retraction_Limit: 300.0\n" + M + "_Apply_Tension_Allow_Limiting: true\n";
 

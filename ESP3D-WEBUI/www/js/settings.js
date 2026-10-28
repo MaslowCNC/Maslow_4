@@ -32,7 +32,6 @@ const CONFIG_TOOLTIPS = {
   "kinematics/MaslowKinematics/beltEndExtension": "Extension distance during calibration",
   "kinematics/MaslowKinematics/armLength": "Length of the router arm",
   Maslow_Retract_Current_Threshold: `Sets how hard should ${M} pull on the belts during retraction and calibration before considering them to be tight`,
-  Maslow_Acceptable_Calibration_Threshold: "Sets the acceptable fitness threshold for moving on to the next calibration round",
   Maslow_Scale_X: "Sets the scale factor for the x axis",
   Maslow_Scale_Y: "Sets the scale factor for the y axis",
   Maslow_Extend_Dist: "Sets the distance to extend the belts during the calibration process. Max 4,250mm.",

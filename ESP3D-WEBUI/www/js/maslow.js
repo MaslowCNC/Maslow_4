@@ -619,7 +619,6 @@ const cfgDef = {
 	Retract_Current_Threshold: { name: "retractionForce", type: "A", cmd: "Maslow_Retract_Current_Threshold" },
 	spoilboardThickness: { name: "spoilboardThickness", type: "A", cmd: "Maslow_spoilboardThickness" },
 	workThickness: { name: "workThickness", type: "A", cmd: "Maslow_workThickness" },
-	Acceptable_Calibration_Threshold: { name: "acceptableCalibrationThreshold", type: "A", cmd: "Maslow_Acceptable_Calibration_Threshold" },
 	Apply_Tension_Belt_Retraction_Limit: { name: "applyTensionBeltRetractionLimit", type: "A", cmd: "Maslow_Apply_Tension_Belt_Retraction_Limit" },
 	Apply_Tension_Allow_Limiting: { name: "applyTensionAllowLimiting", type: "A", cmd: "Maslow_Apply_Tension_Allow_Limiting" },
 	Extend_Dist: { name: "extendDist", type: "A", cmd: "Maslow_Extend_Dist" },
@@ -691,10 +690,6 @@ const maslowMsgHandling = (msg) => {
 	}
 	switch (cfgVal.type) {
 		case "A":
-			// Check if this is a global variable assignment (like Acceptable_Calibration_Threshold)
-			if (cfgVal.name === "acceptableCalibrationThreshold") {
-				globalThis.acceptableCalibrationThreshold = stdDimensionAction(value);
-			}
 			stdAction(cfgVal.name, value);
 			break;
 		case "D": {

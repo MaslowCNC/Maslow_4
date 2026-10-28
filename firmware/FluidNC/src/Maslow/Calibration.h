@@ -78,7 +78,6 @@ public:
 
     //Variables used by calibration
     bool  orientation;
-    float acceptableCalibrationThreshold = 0.5;
     float applyTensionBeltRetractionLimitMm = 300.0;
     bool  applyTensionAllowLimiting         = true;
     int32_t calibrationGridSize            = 9;

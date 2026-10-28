@@ -28,7 +28,6 @@ describe('maslowMsgHandling', () => {
       br: { x: 0, y: 0, z: 0 },
       bl: { x: 0, y: 0, z: 0 }
     };
-    global.acceptableCalibrationThreshold = 0.5;
   });
 
   const inputValidation = [
@@ -113,7 +112,6 @@ describe('maslowMsgHandling', () => {
     ["blX", "16", ["bl", "x"], 0],
     ["blY", "17", ["bl", "y"], 0],
     ["blZ", "70", ["bl", "z"]],
-    ["Acceptable_Calibration_Threshold", "1500", "acceptableCalibrationThreshold"],
   ];
 
   test.each(stdDimensionActions)("Key %p with value %p sets %p", (key, value, outDim, outValue = undefined) => {
