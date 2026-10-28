@@ -987,9 +987,8 @@ namespace {
             gfx.setTextDatum(textdatum_t::middle_left);
             gfx.drawString("Pair with a Maslow", 6, CONTENT_Y + 13);
             std::string text =
-                "1. Tap Pair below.\n"
-                "2. Turn the Maslow off and on again.\n"
-                "3. Hold the remote right next to the Maslow until it pairs.\n"
+                "1. Turn the Maslow off and on again.\n"
+                "2. Within 2 minutes, tap Pair below.\n"
                 "(Or send $EP from the WebUI instead of turning it off and on.)";
             auto lines = wrap(F_SMALL, text, W - 12);
             gfx.setFont(F_SMALL);
@@ -1130,7 +1129,7 @@ namespace {
                 { "Link info", linkInfo, C::button },
                 { "Pair\nmachine", showPairing, C::select },
                 { "Forget\nmachine", [] {
-                     confirm("Forget machine", "Remove the pairing? To pair again, tap Pair and turn the Maslow off and on.",
+                     confirm("Forget machine", "Remove the pairing? To pair again, turn the Maslow off and on, then tap Pair.",
                              "Forget", [] {
                                  Link::forget();
                                  redrawAll();
