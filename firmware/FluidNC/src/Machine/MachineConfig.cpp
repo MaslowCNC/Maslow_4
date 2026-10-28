@@ -185,12 +185,10 @@ namespace Machine {
         handler.item(M + "_calibration_grid_size", Maslow.calibration.calibrationGridSize, 3, 9);
 
         handler.item(M + "_Retract_Current_Threshold", Maslow.calibration.retractCurrentThreshold, 0, 3500);
-        // Retired: the browser-side anchor solve used this; the on-board fit has its own gates.  Still accepted so
-        // an existing maslow.yaml loads without a configuration alarm and an older WebUI's $/ query gets an answer
-        // instead of an error, but no longer saved or offered for completion.
-        if (handler.handlerType() != Configuration::HandlerType::Generator &&
-            handler.handlerType() != Configuration::HandlerType::Completer) {
-            float retiredAcceptableCalibrationThreshold = 0.5;
+        // Retired: the browser-side anchor solve used this; the on-board fit has its own gates.  Still accepted
+        // when parsing so an existing maslow.yaml loads without a configuration alarm, but no longer saved.
+        if (handler.handlerType() == Configuration::HandlerType::Parser) {
+            float retiredAcceptableCalibrationThreshold = 0;
             handler.item(M + "_Acceptable_Calibration_Threshold", retiredAcceptableCalibrationThreshold);
         }
         handler.item(M + "_Apply_Tension_Belt_Retraction_Limit", Maslow.calibration.applyTensionBeltRetractionLimitMm, 0.0, 4250.0);
