@@ -1477,7 +1477,9 @@ namespace WebUI {
             dnsServer.processNextRequest();
         }
 #endif
-        if (_schedule_reboot and _schedule_reboot_time == millis()) {
+        // Reboot once the scheduled time has passed, not only on that exact millisecond: a slow loop
+        // pass skips it and the board keeps running the old image.  The signed difference survives wrap.
+        if (_schedule_reboot and int32_t(millis() - _schedule_reboot_time) >= 0) {
             _schedule_reboot = false;
             protocol_send_event(&fullResetEvent);
         }
