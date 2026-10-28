@@ -7,6 +7,7 @@
 #include "Kinematics/Kinematics.h"
 #include "Kinematics/MaslowKinematics.h"
 #include "Maslow/Maslow.h"  // Maslow.using_default_config, M
+#include "Maslow/BoardId.h"
 
 #include "Motors/MotorDriver.h"
 #include "Motors/NullMotor.h"
@@ -396,6 +397,9 @@ namespace Machine {
             default:               reasonStr = "unknown"; break;
         }
         log_info("Reset reason: " << reasonStr << " (" << (int)reason << ")");
+
+        // Before the config is parsed (it will depend on the board) and before WiFi claims ADC2
+        BoardId::detect();
 #endif
 
         // Maslow: unlike stock FluidNC, always try the user config file even

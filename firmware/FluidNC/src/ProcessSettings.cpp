@@ -31,6 +31,7 @@
 #include "Job.h"                  // Job::active()
 #include "Maslow/Maslow.h"
 #include "Maslow/Calibration.h"
+#include "Maslow/BoardId.h"
 
 #include "FluidPath.h"
 #include "HashFS.h"
@@ -1526,6 +1527,13 @@ static Error maslow_set_zStop(const char* value, AuthenticationLevel auth_level,
     return Error::Ok;
 }
 
+// The board found from the BoardVersion divider at boot (see BoardId::detect())
+static Error maslow_board(const char* value, AuthenticationLevel auth_level, Channel& out) {
+    log_string(out, std::string("Board: ") + BoardId::boardName(BoardId::board()) + " (BoardVersion " +
+                        std::to_string(BoardId::millivolts()) + " mV)");
+    return Error::Ok;
+}
+
 static Error maslow_get_info(const char* value, AuthenticationLevel auth_level, Channel& out) {
     Maslow.getInfo();
     Maslow.logLoadZPosDebug();
@@ -1644,6 +1652,7 @@ void make_user_commands() {
     new UserCommand("ESTOP", "Maslow/estop", maslow_estop, anyState);
     new UserCommand("SETZSTOP", "Maslow/setZStop", maslow_set_zStop, anyState);
     new UserCommand("MINFO", "Maslow/getInfo", maslow_get_info, anyState);
+    new UserCommand("MBOARD", "Maslow/board", maslow_board, anyState);
     new UserCommand("GSTATE", "Maslow/gstate", maslow_get_state, anyState);
 
     new ReportCommand("RI", "Report/Interval", setReportInterval, anyState);
