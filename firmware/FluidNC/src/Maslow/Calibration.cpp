@@ -302,7 +302,6 @@ static Kinematics::MaslowKinematics* getKinematics() {
 // #define CALIBRATION_IN_PROGRESS 6
 // #define READY_TO_CUT 7
 // #define RELEASE_TENSION 8
-// #define CALIBRATION_COMPUTING 9
 
 // Constructor
 Calibration::Calibration() {
@@ -390,9 +389,9 @@ bool Calibration::requestStateChange(int newState) {
                 log_info("Cannot extend the belts until they have been retracted");
                 break;
             }
-        case EXTENDEDOUT:  //We can enter extended from extending or in the event of a failure from taking slack, release tension, or calibration computing
+        case EXTENDEDOUT:  //We can enter extended from extending or in the event of a failure from taking slack, release tension, or Find Anchors
             if (currentState == EXTENDING || currentState == TAKING_SLACK || currentState == RELEASE_TENSION ||
-                currentState == CALIBRATION_COMPUTING || currentState == CALIBRATION_IN_PROGRESS) {
+                currentState == CALIBRATION_IN_PROGRESS) {
                 currentState = EXTENDEDOUT;
                 sys.set_state(State::Idle);
                 // Save belt positions now that belts are extended and at a known position
@@ -431,17 +430,8 @@ bool Calibration::requestStateChange(int newState) {
                 log_info("Cannot take slack until the belts have been extended");
                 break;
             }
-        case CALIBRATION_IN_PROGRESS:  //We can enter calibration in progress from EXTENDEDOUT, READY_TO_CUT, or CALIBRATION_COMPUTING
-            if (currentState == EXTENDEDOUT || currentState == READY_TO_CUT || currentState == CALIBRATION_COMPUTING) {
-                // If we're coming from CALIBRATION_COMPUTING and calibration is already complete,
-                // go directly to READY_TO_CUT instead of cycling through CALIBRATION_IN_PROGRESS
-                if (currentState == CALIBRATION_COMPUTING && waypoint > pointCount && pointCount > 0) {
-                    log_info("Find Anchors already complete (waypoint " << waypoint << " > pointCount " << pointCount
-                             << "), transitioning directly to READY_TO_CUT");
-                    resetCalibrationState();
-                    return requestStateChange(READY_TO_CUT);
-                }
-
+        case CALIBRATION_IN_PROGRESS:  //We can enter calibration in progress from EXTENDEDOUT or READY_TO_CUT
+            if (currentState == EXTENDEDOUT || currentState == READY_TO_CUT) {
                 // When entering from EXTENDEDOUT this is always a fresh calibration start (either
                 // the first run or a re-run after a failure).  Reset waypoint counters and fitness
                 // tracking so stale data from any previous run cannot affect this run.
@@ -540,22 +530,11 @@ bool Calibration::requestStateChange(int newState) {
                 log_info("Cannot start Find Anchors until the belts have been extended");
                 break;
             }
-        case CALIBRATION_COMPUTING:  //We can enter calibration computing from calibration in progress
-            if (currentState == CALIBRATION_IN_PROGRESS) {
-                currentState          = CALIBRATION_COMPUTING;
-                calibrationInProgress = false;
-                success               = true;
-                break;
-            } else {
-                log_info("Cannot enter Find Anchors computing from state " << stateNames[currentState].name);
-                break;
-            }
-        case READY_TO_CUT:  //We can enter ready to cut from calibration in progress, calibration computing or taking slack
-            if (currentState == CALIBRATION_IN_PROGRESS || currentState == CALIBRATION_COMPUTING || currentState == TAKING_SLACK) {
+        case READY_TO_CUT:  //We can enter ready to cut from calibration in progress or taking slack
+            if (currentState == CALIBRATION_IN_PROGRESS || currentState == TAKING_SLACK) {
                 currentState = READY_TO_CUT;
                 
                 // Synchronize motor positions with actual belt positions to prevent jogging issues
-                // This is especially critical when transitioning from CALIBRATION_COMPUTING
                 float beltLength[ARM_COUNT];
                 for (int arm = _TL; arm < ARM_COUNT; arm++) {
                     beltLength[arm] = Maslow.axis[arm].getPosition();  // Actual belt position from hardware
@@ -585,8 +564,7 @@ bool Calibration::requestStateChange(int newState) {
                 break;
             }
         case RELEASE_TENSION:  //We can enter release tension from any stable state (the machine is not currently performing an action)
-            if (currentState == READY_TO_CUT || currentState == UNKNOWN || currentState == EXTENDEDOUT ||
-                currentState == CALIBRATION_COMPUTING || currentState == RELEASE_TENSION) {
+            if (currentState == READY_TO_CUT || currentState == UNKNOWN || currentState == EXTENDEDOUT || currentState == RELEASE_TENSION) {
                 previousState   = (currentState != RELEASE_TENSION) ? currentState : previousState;
                 currentState    = RELEASE_TENSION;
                 complyCallTimer = millis();
@@ -732,9 +710,9 @@ void Calibration::home() {
                     }
                     // Don't call sys.set_state here - it will be called by requestStateChange
 
-                    // If the machine was in READY_TO_CUT, EXTENDEDOUT, or CALIBRATION_COMPUTING state before releasing tension,
+                    // If the machine was in READY_TO_CUT or EXTENDEDOUT state before releasing tension,
                     // return to EXTENDEDOUT state, otherwise go to UNKNOWN
-                    if (previousState == READY_TO_CUT || previousState == EXTENDEDOUT || previousState == CALIBRATION_COMPUTING) {
+                    if (previousState == READY_TO_CUT || previousState == EXTENDEDOUT) {
                         requestStateChange(EXTENDEDOUT);
                     } else {
                         requestStateChange(UNKNOWN);
@@ -744,12 +722,6 @@ void Calibration::home() {
             break;
         case CALIBRATION_IN_PROGRESS:
             calibration_loop();
-            break;
-        case CALIBRATION_COMPUTING:
-            // In CALIBRATION_COMPUTING state, we're waiting for the computer to acknowledge
-            for (int arm = _TL; arm < ARM_COUNT; arm++) {
-                Maslow.axis[arm].stop();
-            }
             break;
         case READY_TO_CUT:
             // When calibration is complete and we're ready to cut, ensure we're in Idle state
@@ -764,8 +736,7 @@ void Calibration::home() {
     handleMotorOverides();
 
     //if we are done with all the homing moves, switch system state back to Idle?
-    if (currentState != RETRACTING && currentState != EXTENDING && currentState != RELEASE_TENSION &&
-        currentState != CALIBRATION_COMPUTING && !calibrationInProgress &&
+    if (currentState != RETRACTING && currentState != EXTENDING && currentState != RELEASE_TENSION && !calibrationInProgress &&
         !takeSlack && !checkOverides()) {
         sys.set_state(State::Idle);
     }
