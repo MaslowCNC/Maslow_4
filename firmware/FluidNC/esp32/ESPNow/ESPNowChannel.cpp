@@ -22,6 +22,14 @@
 static constexpr uint32_t    FRAG_REASSEMBLY_TIMEOUT_MS  = 3000;
 static constexpr uint32_t    PENDANT_IDLE_TIMEOUT_MS     = 10000;
 static constexpr uint32_t    PAIRING_WINDOW_MS           = 60000;
+// Every power-on opens a pairing window, so a remote can pair without the
+// WebUI: tap Pair on the remote, then power-cycle the Maslow.  Only a remote
+// held close to the machine is answered in this window, which picks the right
+// machine in a shop with several and stops a remote across the room pairing
+// when someone restarts their machine.  $EC closes it early.
+static constexpr uint32_t    BOOT_PAIRING_WINDOW_MS      = 120000;
+static constexpr int8_t      BOOT_PAIRING_MIN_RSSI       = -55;
+static constexpr uint32_t    PAIRING_FAR_LOG_INTERVAL_MS = 5000;
 static constexpr uint32_t    PAIRING_PACKET_INTERVAL_MS  = 100;
 static constexpr uint32_t    PAIRING_RESULT_RETRY_MS     = 300;
 static constexpr uint32_t    SEND_CALLBACK_TIMEOUT_MS    = 1000;
@@ -373,9 +381,12 @@ void ESPNowChannel::init() {
     }
 
     _initialized = true;
+
+    startPairingWindow(BOOT_PAIRING_WINDOW_MS, true);
+    log_info("ESP-NOW: pairing open for " << (BOOT_PAIRING_WINDOW_MS / 1000) << " seconds after power-on (hold the remote close)");
 }
 
-bool ESPNowChannel::startPairingWindow(uint32_t window_ms) {
+bool ESPNowChannel::startPairingWindow(uint32_t window_ms, bool near_only) {
     clearPairingTransaction(true);
     if (_pairing_queue) {
         xQueueReset(_pairing_queue);
@@ -384,6 +395,8 @@ bool ESPNowChannel::startPairingWindow(uint32_t window_ms) {
         xQueueReset(_pair_confirm_queue);
     }
     _pairing_window_until_ms.store((uint32_t)millis() + window_ms, std::memory_order_release);
+    _pairing_near_only.store(near_only, std::memory_order_release);
+    _pairing_far_rssi.store(0, std::memory_order_release);
     _pairing_window_active.store(true, std::memory_order_release);
     uint8_t local_mac[6] = {};
     uint8_t channel = espnowCurrentChannel();
@@ -975,6 +988,13 @@ void ESPNowChannel::poll() {
         processPacket(packet);
     }
 
+    int8_t far_rssi = _pairing_far_rssi.exchange(0, std::memory_order_acq_rel);
+    if (far_rssi != 0 && (uint32_t)(now - _last_pairing_far_log_ms) >= PAIRING_FAR_LOG_INTERVAL_MS) {
+        _last_pairing_far_log_ms = now;
+        log_info("ESP-NOW: remote too far away to pair (" << (int)far_rssi << " dBm, need " << (int)BOOT_PAIRING_MIN_RSSI
+                                                          << "), hold it closer");
+    }
+
     now = (uint32_t)millis();
 
     size_t paired_count = _paired_count.load(std::memory_order_acquire);
@@ -1134,9 +1154,11 @@ void ESPNowChannel::processPacket(const RxPacket& packet) {
 
 #if ESP_IDF_VERSION_MAJOR >= 5
 void ESPNowChannel::onRecv(const esp_now_recv_info_t* info, const uint8_t* data, int len) {
-    const uint8_t* src = info ? info->src_addr : nullptr;
+    const uint8_t* src  = info ? info->src_addr : nullptr;
+    int8_t         rssi = (info && info->rx_ctrl) ? info->rx_ctrl->rssi : 0;
 #else
 void ESPNowChannel::onRecv(const uint8_t* src, const uint8_t* data, int len) {
+    int8_t rssi = 0;  // not reported before IDF 5, so the near-only check passes
 #endif
     if (!_instance || !src || !data || len < 1 || len > MAX_ESP_PAYLOAD) {
         return;
@@ -1147,7 +1169,12 @@ void ESPNowChannel::onRecv(const uint8_t* src, const uint8_t* data, int len) {
         case PKT_DISCOVERY:
             if (len == (int)sizeof(DiscoveryV4Pkt) &&
                 _instance->_pairing_window_active.load(std::memory_order_acquire)) {
-                queue = _instance->_pairing_queue;
+                if (rssi != 0 && rssi < BOOT_PAIRING_MIN_RSSI &&
+                    _instance->_pairing_near_only.load(std::memory_order_acquire)) {
+                    _instance->_pairing_far_rssi.store(rssi, std::memory_order_release);  // logged from poll()
+                } else {
+                    queue = _instance->_pairing_queue;
+                }
             }
             break;
         case PKT_PAIR_CONFIRM:

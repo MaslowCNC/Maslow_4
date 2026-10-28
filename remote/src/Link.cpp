@@ -84,7 +84,7 @@ namespace {
     // Most routers sit on 1, 6 or 11, so try those first.
     const uint8_t SCAN_ORDER[] = { 1, 6, 11, 2, 3, 4, 5, 7, 8, 9, 10, 12, 13 };
 
-    constexpr uint32_t PAIRING_TIMEOUT_MS   = 60000;
+    constexpr uint32_t PAIRING_TIMEOUT_MS   = 180000;  // long enough to power-cycle the Maslow
     constexpr uint32_t PAIR_DWELL_MS        = 700;   // per channel while discovering
     constexpr uint32_t PAIR_RESEND_MS       = 250;
     constexpr uint32_t PAIR_SETTLE_MS       = 1200;  // quiet time after the last RESULT

@@ -54,7 +54,7 @@ public:
     void   flushRx() override;
 
     static ESPNowChannel* instance() { return _instance; }
-    bool                  startPairingWindow(uint32_t window_ms);
+    bool                  startPairingWindow(uint32_t window_ms, bool near_only = false);
     void                  cancelPairingWindow();
     bool                  listPairings(Channel& out) const;
     bool                  removePairingIndex(size_t one_based_index, uint8_t removed_mac[6]);
@@ -208,6 +208,9 @@ private:
     std::atomic<bool>         _pairing_challenge_waiting { false };
     std::atomic<bool>         _pairing_window_active { false };
     std::atomic<uint32_t>     _pairing_window_until_ms { 0 };
+    std::atomic<bool>         _pairing_near_only { false };  // only answer remotes held close
+    std::atomic<int8_t>       _pairing_far_rssi { 0 };       // last discovery ignored as too far away
+    uint32_t                  _last_pairing_far_log_ms = 0;
     uint32_t                  _last_pairing_packet_ms = 0;
 };
 

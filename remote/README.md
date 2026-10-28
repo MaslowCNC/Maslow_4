@@ -37,9 +37,19 @@ tree editing and firmware update are not on the remote.
 
 ## Pairing
 
-1. On the Maslow, open the pairing window: send `$EP` from the WebUI
-   terminal (it stays open for 60 seconds).
-2. On the remote, tap **Pair** (shown at first boot, and under More).
+1. On the remote, tap **Pair** (shown at first boot, and under More).
+2. Turn the Maslow off and on again.
+3. Hold the remote right next to the Maslow until it pairs.
+
+No computer or WiFi login is needed. Every power-on opens the Maslow's
+pairing window for 2 minutes, and in that window it only answers a remote
+held close to it (RSSI -55 dBm or stronger), so in a shop with several
+Maslows the one you are standing at pairs. A remote that is too far away
+shows in the Maslow's log as "remote too far away to pair". The window
+closes once a remote pairs, and `$EC` closes it early.
+
+From the WebUI, `$EP` opens a 60 second window without the distance check,
+the old way.
 
 The remote finds the Maslow's WiFi channel by itself and remembers the
 pairing. `$EL` on the Maslow lists paired remotes; `$EU=<n>` removes one.
