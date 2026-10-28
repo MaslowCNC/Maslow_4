@@ -1,5 +1,6 @@
 #include "Calibration.h"
 #include "Maslow.h"
+#include "BoardId.h"
 #include "../Kinematics/MaslowKinematics.h"
 #include "../Serial.h"
 #include "../Settings.h"
@@ -1937,19 +1938,21 @@ bool Calibration::take_measurement_avg_with_check(int waypoint, int dir) {
 
                 log_info("Machine Position computed as X: " << x << " Y: " << y);
 
-                //Recompute the first four waypoint locations based on the current position
+                //Recompute the first four waypoint locations based on the current position.  The
+                //Mini's frame (Unified Control Board) is too small for the Maslow 4's 150 mm ring.
+                const float ring = BoardId::board() == BoardId::Board::Maslow41 ? 150 : 50;
                 calibrationGrid[0][0] =
                     x;  //This first point is never really used because we've already measured here, but it shouldn't be left undefined
                 calibrationGrid[0][1] = y;
-                calibrationGrid[1][0] = x + 50;
+                calibrationGrid[1][0] = x + ring;
                 calibrationGrid[1][1] = y;
-                calibrationGrid[2][0] = x + 50;
-                calibrationGrid[2][1] = y + 50;
+                calibrationGrid[2][0] = x + ring;
+                calibrationGrid[2][1] = y + ring;
                 calibrationGrid[3][0] = x;
-                calibrationGrid[3][1] = y + 50;
-                calibrationGrid[4][0] = x - 50;
-                calibrationGrid[4][1] = y + 50;
-                calibrationGrid[5][0] = x - 50;
+                calibrationGrid[3][1] = y + ring;
+                calibrationGrid[4][0] = x - ring;
+                calibrationGrid[4][1] = y + ring;
+                calibrationGrid[5][0] = x - ring;
                 calibrationGrid[5][1] = y;
             }
 
