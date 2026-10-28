@@ -195,8 +195,8 @@ namespace Machine {
         handler.item(M + "_debugEnabled", Maslow.debugEnabled);
 
         // Work area constraints
-        handler.item(M + "_Work_Area_X", Maslow.workAreaX, 1.0, 10000.0);
-        handler.item(M + "_Work_Area_Y", Maslow.workAreaY, 1.0, 10000.0);
+        handler.item(M + "_Work_Area_X", Maslow.workAreaX, 0.0, 10000.0);
+        handler.item(M + "_Work_Area_Y", Maslow.workAreaY, 0.0, 10000.0);
         handler.item(M + "_Work_Area_Center_Offset_X", Maslow.workAreaCenterOffsetX, -5000.0, 5000.0);
         handler.item(M + "_Work_Area_Center_Offset_Y", Maslow.workAreaCenterOffsetY, -5000.0, 5000.0);
 

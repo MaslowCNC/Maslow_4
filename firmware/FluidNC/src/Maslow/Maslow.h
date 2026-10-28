@@ -209,9 +209,9 @@ public:
     float  scaleX = 1.0;
     float  scaleY = 1.0;
 
-    // Work area constraints
-    float workAreaX             = 2440.0;
-    float workAreaY             = 1220.0;
+    // Work area constraints. 0 (the default) sizes that axis from the frame, see MaslowKinematics::getWorkArea()
+    float workAreaX             = 0.0;
+    float workAreaY             = 0.0;
     float workAreaCenterOffsetX = 0.0;
     float workAreaCenterOffsetY = 0.0;
 

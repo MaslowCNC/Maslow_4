@@ -2215,7 +2215,8 @@ bool Calibration::generate_calibration_grid() {
 
     //If either dimension is set to zero we automatically size the grid from the current anchor locations. This runs once at the
     //start with the configured anchors (only points 0-6 of that grid are used) and again once the first six points have been
-    //fitted, so the work area setting plays no part in calibration. The grid is centered on (0,0), the center of the anchors.
+    //fitted. The grid is centered on (0,0), the center of the anchors. A work area the user has set (non-zero) is respected so
+    //the sled stays on the workpiece; one left at 0 (auto) plays no part in calibration.
     if (calibration_grid_height_mm_Y == 0 || calibration_grid_width_mm_X == 0) {
         auto kinematics = getKinematics();
         if (!kinematics) {
@@ -2223,9 +2224,8 @@ bool Calibration::generate_calibration_grid() {
             return false;
         }
 
-        //The frame need not be a perfect rectangle, so use the narrower of its two widths and the shorter of its two heights
-        float frameWidth  = min(kinematics->getTrX() - kinematics->getTlX(), kinematics->getBrX() - kinematics->getBlX());
-        float frameHeight = min(kinematics->getTlY() - kinematics->getBlY(), kinematics->getTrY() - kinematics->getBrY());
+        float frameWidth, frameHeight;
+        kinematics->getFrameSize(frameWidth, frameHeight);
 
         if (frameWidth <= 0 || frameHeight <= 0) {
             log_error("Cannot size the calibration grid: anchors give a " << frameWidth << " x " << frameHeight << " mm frame");
@@ -2235,6 +2235,29 @@ bool Calibration::generate_calibration_grid() {
         // Calculate grid size based on frame dimensions
         float gridWidth  = frameWidth * 0.4;
         float gridHeight = frameHeight * 0.4;
+
+        // Keep every point at least 100mm inside a work area the user has set. The grid is centered on (0,0), so the
+        // work area's center offset eats into the room on one side.
+        const float workAreaMarginMm = 100.0;
+        if (Maslow.workAreaX > 0) {
+            float maxGridWidth = Maslow.workAreaX - 2 * (fabsf(Maslow.workAreaCenterOffsetX) + workAreaMarginMm);
+            if (gridWidth > maxGridWidth) {
+                gridWidth = maxGridWidth;
+                log_info("Grid width constrained to work area: " << gridWidth << " mm (work area X: " << Maslow.workAreaX << " mm)");
+            }
+        }
+        if (Maslow.workAreaY > 0) {
+            float maxGridHeight = Maslow.workAreaY - 2 * (fabsf(Maslow.workAreaCenterOffsetY) + workAreaMarginMm);
+            if (gridHeight > maxGridHeight) {
+                gridHeight = maxGridHeight;
+                log_info("Grid height constrained to work area: " << gridHeight << " mm (work area Y: " << Maslow.workAreaY << " mm)");
+            }
+        }
+        if (gridWidth <= 0 || gridHeight <= 0) {
+            log_error("Cannot fit a calibration grid inside the " << Maslow.workAreaX << " x " << Maslow.workAreaY
+                                                               << " mm work area. Check the work area, or set it to 0 for automatic");
+            return false;
+        }
 
         // Automatically select the grid spacing (3x3, 5x5, 7x7, or 9x9) such that
         // the smallest grid is used which will not leave more than 260mm between each point
