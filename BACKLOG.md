@@ -68,6 +68,13 @@ Format: **title** — what goes wrong, where, and how we found it.
 
 ## Tooling
 
+- [ ] **Every machine is `maslow.local`, so two on one network collide.** The default
+  `$Hostname` is `maslow`, and mDNS answers go to whichever board replies first. Then
+  `flash-maslow.sh wifi maslow.local`, `npm run dev` and the browser can each reach a different
+  machine with no warning, and a WiFi flash can land on the wrong one. Seen 2026-10-29 with a
+  Maslow 4.1 (192.168.1.253) and a Unified Control Board (192.168.1.243). Work around with the
+  IP, or give each its own `$Hostname`. A default like `maslow-<last 4 of MAC>`, or a board
+  check in the flash script, would prevent it.
 - [ ] **`flash-maslow.sh` never builds firmware unless `--skip-build` is passed.** The
   `echo "== Building firmware"` / `pio run` lines sit inside the `elif` (skip-build + wifi
   + `--fs`) branch instead of the normal build path, so `build`, `wifi` and `usb` stop with
