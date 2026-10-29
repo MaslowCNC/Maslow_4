@@ -68,6 +68,11 @@ Format: **title** — what goes wrong, where, and how we found it.
 
 ## Tooling
 
+- [ ] **New `$Hostname` didn't apply after the FluidNC tab's Restart button** (2026-10-29,
+  Maslow 4.1 renamed to `m4`); a power cycle applied it. The button sends `[ESP444]RESTART`
+  (`restartdlg.js`), which raises `fullResetEvent` (`WebCommands.cpp`, `Protocol.cpp`) and
+  should reboot the chip, so either that restart didn't run or the old name was cached on
+  the computer. Not diagnosed yet.
 - [ ] **Every machine is `maslow.local`, so two on one network collide.** The default
   `$Hostname` is `maslow`, and mDNS answers go to whichever board replies first. Then
   `flash-maslow.sh wifi maslow.local`, `npm run dev` and the browser can each reach a different
