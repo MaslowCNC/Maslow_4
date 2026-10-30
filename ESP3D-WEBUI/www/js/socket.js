@@ -277,8 +277,8 @@ const startSocket = () => {
 				}
 				if (enable_ping) {
 					if (tval[0] === "PING") {
-						pageID(tval[1]);
-						// console.log("ping from id = " + pageID());
+						// Don't take the page ID from PING: older firmware sends it as a raw byte, which
+						// the board then reads as connection 0 and drops commands. CURRENT_ID sets it.
 						last_ping = Date.now();
 						if (interval_ping === -1)
 							interval_ping = setInterval(() => {
