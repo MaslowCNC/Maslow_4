@@ -622,9 +622,10 @@ function show_grbl_probe_status(probed) {
   grbl_set_probe_detected(probed)
 }
 
+// Straight down the WebSocket, never behind queued lines (and not through SendPrinterCommand,
+// whose trim() would swallow 0xA0).
 function SendRealtimeCmd(code) {
-  var cmd = String.fromCharCode(code)
-  SendPrinterCommand(cmd, false, null, null, code, 1)
+  sendLineOrRealtime(String.fromCharCode(code))
 }
 
 function pauseGCode() {
@@ -820,11 +821,6 @@ const grblHandleMessage = (msg) => {
       // Finish collecting settings
       getESPconfigSuccess(collectedSettings);
       collectedSettings = null;
-      if (grbl_errorfn) {
-        grbl_errorfn();
-        grbl_errorfn = null;
-        grbl_processfn = null;
-      }
     } else {
       // Continue collecting settings
       collectedSettings += msg;
@@ -838,13 +834,9 @@ const grblHandleMessage = (msg) => {
   }
 
   // Handlers for standard Grbl protocol messages
+  // ok / error:N are matched to the line that caused them by wsCommands.handleLine (socket.js).
 
   if (valueStartsWith(msg, ["ok"])) {
-    if (grbl_processfn) {
-      grbl_processfn();
-      grbl_processfn = null;
-      grbl_errorfn = null;
-    }
     return;
   }
   if (valueStartsWith(msg, ["[PRB:"])) {
@@ -858,13 +850,6 @@ const grblHandleMessage = (msg) => {
     }
     if (!valueStartsWith(msg, ["[MSG:ERR:"])) {
       return;
-    }
-  }
-  if (valueStartsWith(msg, ["error:"])) {
-    if (grbl_errorfn) {
-      grbl_errorfn(msg.replace("error:", "").trim());
-      grbl_errorfn = null;
-      grbl_processfn = null;
     }
   }
   if (valueStartsWith(msg, ["error:", "ALARM:", "Hold:", "Door:", "[MSG:ERR:"])) {

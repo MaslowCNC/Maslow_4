@@ -1523,22 +1523,32 @@ const onWSOpenCallback = () => {
   if (_stopPending && !wsCommands.send("$STOP")) {
     console.warn("Failed to send pending $STOP on connect");
   }
-  // Refresh park settings after reconnect (e.g. after firmware restart with new maslow.yaml).
-  // A short delay lets the firmware send CURRENT_ID so PAGEID is established before querying.
-  scheduleCallback(() => {
-    loadFixedZSetting();
-    if (typeof loadParkSettings === 'function') {
-      loadParkSettings();
-    }
-    // The firmware only announces the Maslow state when it changes, so a change made while
-    // disconnected or during a restart was missed. Ask again rather than show a stale state.
-    if (!sendViaWS("$GSTATE\n")) {
-      sendCommand('$GSTATE');
-    }
-    if (!sendViaWS("$MINFO\n")) {
-      sendCommand('$MINFO');
-    }
-  }, 1000);
+  requestMachineState();
+  _wsOpenedBefore = true;
+};
+
+let _wsOpenedBefore = false;
+
+// Everything the UI needs to know about the machine, asked for on every new socket. Each socket
+// is a new firmware channel, so per-channel settings (auto-report) start off again, and log
+// lines sent while we were disconnected (e.g. "Current state: N") were missed.
+const requestMachineState = () => {
+  // Auto-report is per channel. Turn it back on unless the user picked polling or none.
+  if (!_wsOpenedBefore || reportType === 'auto') {
+    tryAutoReport();
+  }
+  SendRealtimeCmd(0x3f); // ? : current state and position now
+  if (!_wsOpenedBefore) {
+    SendPrinterCommand("$SS"); // startup log into the serial monitor, once per page load
+  }
+  SendPrinterCommand("$MINFO");
+  SendPrinterCommand("$GSTATE");
+  requestModes();
+  loadFixedZSetting();
+  loadCornerValues();
+  if (typeof loadParkSettings === 'function') {
+    loadParkSettings();
+  }
 };
 
 // Send $STOP directly via WebSocket to bypass PAGEID routing.
@@ -1570,11 +1580,7 @@ const sendStopCommand = () => {
       console.warn("$STOP retry limit reached without firmware confirmation; machine may not have stopped");
     }
   }, RETRY_INTERVAL_MS);
-  scheduleCallback(() => {
-    if (!sendViaWS("$MINFO\n")) {
-      sendCommand('$MINFO');
-    }
-  }, 1000);
+  scheduleCallback(() => { sendCommand('$MINFO'); }, 1000);
 };
 
 // Button event handlers - Sixth Row
@@ -2021,18 +2027,10 @@ function tabletInit() {
   setTimeout(() => {
     showVersionNumber();
 
-    // get grbl status
-    SendRealtimeCmd(0x3f); // ?
-    // print startup messages in serial
-    SendPrinterCommand("$SS");
-    // get maslow info
-    SendPrinterCommand("$MINFO");
+    // Machine queries ($SS, $MINFO, $GSTATE, ?, $G, corner values) go over the socket from
+    // requestMachineState() once it opens. These two are HTTP request/response.
     files_refreshFiles("/");
-    requestModes();
     loadConfigValues();
-    loadCornerValues();
-
-    SendPrinterCommand("$GSTATE");
 
     numpad.attach({ target: "disM", axis: "D" });
     numpad.attach({ target: "disZ", axis: "Z" });
@@ -2734,12 +2732,7 @@ const onCalibrationButtonsClick = async (command, msg = "") => {
   if (msg) {
     addMessage(msg);
   }
-  // Send via WebSocket first to bypass PAGEID-based routing, which fails
-  // silently when the WebSocket has reconnected (new channel, stale PAGEID).
-  // Falls back to HTTP if the WebSocket is not currently open.
-  if (!sendViaWS(command + "\n")) {
-    sendCommand(command);
-  }
+  sendCommand(command);
 
   //Prints out the index.html version number when test is pressed
   if (command === '$TEST') {

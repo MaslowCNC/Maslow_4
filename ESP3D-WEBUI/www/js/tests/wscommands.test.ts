@@ -1,4 +1,4 @@
-import { beforeAll, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeAll, beforeEach, describe, expect, setSystemTime, test } from "bun:test";
 
 const g = globalThis as any;
 
@@ -27,11 +27,21 @@ beforeEach(() => {
 });
 
 describe("wsCommands", () => {
-  test("sends lines in order with a newline", () => {
+  test("sends lines one at a time, each after the previous reply", () => {
     g.wsCommands.send("$J=G91G21F1000X10");
     g.wsCommands.send("$STOP\n");
-    expect(g.ws_source.sent).toEqual(["$J=G91G21F1000X10\n", "$STOP\n"]);
+    expect(g.ws_source.sent).toEqual(["$J=G91G21F1000X10\n"]);
     expect(g.wsCommands.pendingCount()).toBe(2);
+    g.wsCommands.handleLine("ok");
+    expect(g.ws_source.sent).toEqual(["$J=G91G21F1000X10\n", "$STOP\n"]);
+    expect(g.wsCommands.pendingCount()).toBe(1);
+  });
+
+  test("an error reply also lets the next line go", () => {
+    g.wsCommands.send("A");
+    g.wsCommands.send("B");
+    g.wsCommands.handleLine("error:3");
+    expect(g.ws_source.sent).toEqual(["A\n", "B\n"]);
   });
 
   test("returns false and tracks nothing when the socket is closed", () => {
@@ -47,7 +57,7 @@ describe("wsCommands", () => {
     g.wsCommands.handleLine("ok");
     g.wsCommands.handleLine("error:8");
     expect(seen).toEqual(["A ok", "B err 8"]);
-    expect(messages).toEqual(["Machine rejected 'B' (probably): error 8"]);
+    expect(messages).toEqual(["Machine rejected 'B': error 8"]);
     expect(g.wsCommands.pendingCount()).toBe(0);
   });
 
@@ -109,9 +119,63 @@ describe("wsCommands", () => {
       console.log = origLog;
     }
     expect(logged.length).toBe(4);
-    expect(logged[0]).toContain("→ '$G' (1 waiting)");
-    expect(logged[2]).toContain("← ok for '$G'");
+    expect(logged[0]).toContain("→ '$G'");
+    expect(logged[1]).toContain("← ok for '$G'");
+    expect(logged[2]).toContain("→ '$BOGUS'");
     expect(logged[3]).toContain("← error 3 for '$BOGUS'");
+  });
+
+  test("soft reset (0x18) drops every waiting line", () => {
+    const dropped: string[] = [];
+    g.wsCommands.send("G0 X1", { onError: (c: string) => dropped.push(`X1 ${c}`) });
+    g.wsCommands.send("G0 X2", { onError: (c: string) => dropped.push(`X2 ${c}`) });
+    g.wsCommands.sendRealtime(0x18);
+    expect(dropped).toEqual(["X1 reset", "X2 reset"]);
+    expect(g.wsCommands.pendingCount()).toBe(0);
+  });
+
+  test("isRealtime picks out one-byte realtime commands", () => {
+    for (const c of ["?", "!", "~", "\x18", "\x85", "\xa0"]) {
+      expect(g.wsCommands.isRealtime(c)).toBe(true);
+    }
+    for (const c of ["$G", "G0", "x", "??", ""]) {
+      expect(g.wsCommands.isRealtime(c)).toBe(false);
+    }
+  });
+
+  describe("reply timeout", () => {
+    afterEach(() => setSystemTime());
+
+    test("a line with no reply is given up on and the next one goes", () => {
+      const start = new Date("2026-10-30T12:00:00Z").getTime();
+      setSystemTime(start);
+      const errors: string[] = [];
+      g.wsCommands.send("$/lost", { onError: (c: string) => errors.push(c) });
+      g.wsCommands.send("$G");
+      setSystemTime(start + 4000);
+      g.wsCommands.checkTimeout();
+      expect(errors).toEqual([]);
+      setSystemTime(start + 6000);
+      g.wsCommands.checkTimeout();
+      expect(errors).toEqual(["timeout"]);
+      expect(g.ws_source.sent).toEqual(["$/lost\n", "$G\n"]);
+      expect(messages[0]).toContain("No reply from the machine to '$/lost'");
+    });
+
+    test("the clock doesn't run while the machine is moving", () => {
+      const start = new Date("2026-10-30T12:00:00Z").getTime();
+      setSystemTime(start);
+      const errors: string[] = [];
+      g.wsCommands.send("$MINFO", { onError: (c: string) => errors.push(c) });
+      setSystemTime(start + 4000);
+      g.wsCommands.handleLine("<Jog|MPos:0,0,0>");
+      setSystemTime(start + 8000);
+      g.wsCommands.checkTimeout();
+      expect(errors).toEqual([]);
+      setSystemTime(start + 9500);
+      g.wsCommands.checkTimeout();
+      expect(errors).toEqual(["timeout"]);
+    });
   });
 
   test("reset forgets pending lines", () => {

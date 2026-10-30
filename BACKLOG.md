@@ -7,26 +7,28 @@ Format: **title** — what goes wrong, where, and how we found it.
 
 ## High: UI can silently lose sync with the machine
 
+- [ ] **A full input queue drops lines with no reply.** `Channel::queue_push` discards whole
+  lines once a channel has `4 * maxLine` (1020) bytes unread, logging only at debug level.
+  The sender never gets `ok`/`error` for them, which breaks reply matching. A client must pace
+  its sends (`wscommands.js` sends one at a time); answering dropped lines with an `error:`
+  would make it visible.
 - [ ] **Two tabs in one browser kick each other off forever.** Each new WebSocket closes
   every other socket with the same `sessionId` cookie (`WSChannel.cpp` WS_EVT_CONNECT,
   `closeSessionChannels`), and a cookie is shared by all tabs in a browser. The closed tab
-  auto-reconnects every 3 s (`socket.js` RECONNECT_INTERVAL_MS), so they take turns. Every
-  HTTP command then 500s ("WebSocket dead") because its `PAGEID` points at a closed socket,
-  and the UI shows a blank/stale state with no error. Seen 2026-10-26: connection ID reached
+  auto-reconnects every 3 s (`socket.js` RECONNECT_INTERVAL_MS), so they take turns, and
+  commands fail with "Not sent" while their socket is down. Possible fix: open the socket
+  with `?independent_session` (supported by the firmware), now that no command relies on
+  the session cookie or `PAGEID`. Seen 2026-10-26: connection ID reached
   835 about 40 min after boot. Fixed by closing the other tab.
 - [ ] **Session IDs are weak and can collide across browsers.** `get_random_string`
   (`WebUIServer.cpp`) uses `rand() % ('A' - 'Z')` (modulo −25, wrong charset) and reseeds
   with `srand(time(NULL))` on every call, where `time()` is seconds since boot. Two browsers
   that first load in the same second get the same session and hit the bug above.
-- [ ] **UI ignores failed commands sent over HTTP.** `SendPrinterCommand` replaces the
-  error handler with `noop` for non-`[ESP]` commands (`printercmd.js`), so a 500 is never
-  shown. Commands sent through `wscommands.js` (jogs, STOP, calibration buttons) now report
-  `error:N`; the rest goes away as commands move there (see Medium: connection protocol).
-- [ ] **State is sent once and never resent.** The UI only learns the Maslow state from the
-  one `Current state: N` line logged after a state change (`Calibration.cpp`
-  `printCurrentState`). It isn't in `MINFO` or the status report, and the UI doesn't send
-  `$GSTATE` on WebSocket reconnect (`tablet.js` `onWSOpenCallback`), only on page load. A
-  missed line leaves the UI wrong until reload.
+- [ ] **State is only sent as a log line.** The UI learns the Maslow state from the
+  `Current state: N` line logged after a state change (`Calibration.cpp` `printCurrentState`).
+  It isn't in `MINFO` or the status report. The UI now asks with `$GSTATE` on every socket
+  open, but a line missed while connected leaves the UI wrong until the next change or
+  reconnect. Planned fix: a Maslow state field in the status report.
 - [ ] **WebSocket frames are dropped silently while moving.** In a motion state a full send
   queue drops frames (`WSChannel.cpp` `send_frame`); outside motion a stalled client is
   closed after 250 ms. Only a debug line on USB serial records it. This can lose state lines,
@@ -43,12 +45,10 @@ Format: **title** — what goes wrong, where, and how we found it.
 
 ## Medium: connection protocol (plan: all commands over the WebSocket)
 
-- [ ] **Steps 3-5 of the plan.** Move home, park, `$TKSLK`, start/pause/resume, startup
-  queries and config writes from HTTP `/command` to `wscommands.js`; send `$GSTATE` on every
-  reconnect; drop `PAGEID` from command sending; later, the same layer over Web Serial (USB).
-- [ ] **Replies can be credited to the wrong command** until then: commands sent over HTTP
-  run on the same socket, so their `ok`/`error` can be matched to a pending WebSocket line
-  (errors say "probably").
+- [ ] **Rest of the connection plan.** Every line command now goes over the WebSocket
+  (`wscommands.js`). Left: multi-line reads still over HTTP `plain=` (`loadConfigValues`,
+  `$CO` and setting writes in `settings.js`); reconnect backoff; at most one `?` outstanding;
+  later, the same layer over Web Serial (USB).
 - [ ] **Jog-cancel flush can cut a line in half.** If 0x85 arrives while the polling task
   is partway through assembling a line, `flushQueuedLines` drops the rest and the fragment
   joins the next line (rejected with `error:`, no unintended motion). Fixing it means
