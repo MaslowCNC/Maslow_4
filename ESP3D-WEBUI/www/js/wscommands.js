@@ -27,6 +27,35 @@ const wsCommands = (() => {
 	let lastState = "";
 	let lastRxMs = 0;
 
+	// Debug log of every send and the reply matched to it, in the browser console.
+	// Turn on with wsCommands.setDebug(true); it is remembered in this browser across reloads.
+	const DEBUG_KEY = "wsCommandsDebug";
+	let debug = false;
+	try {
+		debug = typeof localStorage !== "undefined" && localStorage.getItem(DEBUG_KEY) === "1";
+	} catch (e) {
+		// storage blocked: stay off
+	}
+	const log = (text) => {
+		if (debug) {
+			console.log(`[ws] ${text}`);
+		}
+	};
+	const setDebug = (on) => {
+		debug = !!on;
+		try {
+			if (debug) {
+				localStorage.setItem(DEBUG_KEY, "1");
+			} else {
+				localStorage.removeItem(DEBUG_KEY);
+			}
+		} catch (e) {
+			// not persisted; still applies to this page
+		}
+		return debug;
+	};
+	const waited = (c) => `${Date.now() - c.sentAt} ms`;
+
 	const socket = () => (typeof ws_source !== "undefined" ? ws_source : null);
 
 	const isOpen = () => {
@@ -60,7 +89,7 @@ const wsCommands = (() => {
 		const cutoff = Date.now() - STALE_MS;
 		while (pending.length && pending[0].sentAt < cutoff) {
 			const c = pending.shift();
-			console.warn(`No reply to '${c.line}'; dropped`);
+			console.warn(`No reply to '${c.line}' after ${waited(c)}; dropped`);
 		}
 	};
 
@@ -79,10 +108,12 @@ const wsCommands = (() => {
 	const send = (line, { onOk, onError } = {}) => {
 		const text = line.endsWith("\n") ? line : `${line}\n`;
 		if (!rawSend(text)) {
+			log(`not sent (socket ${socketStatus()}): '${text.trim()}'`);
 			return false;
 		}
 		dropStale();
 		pending.push({ line: text.trim(), onOk, onError, sentAt: Date.now() });
+		log(`→ '${text.trim()}' (${pending.length} waiting)`);
 		return true;
 	};
 
@@ -91,11 +122,13 @@ const wsCommands = (() => {
 		if (!rawSend(String.fromCharCode(code))) {
 			return false;
 		}
+		log(`→ realtime 0x${code.toString(16)} (state ${lastState || "unknown"})`);
 		// During a jog the firmware cancels the running line and drops every line it hasn't
 		// read yet (RealtimeCmd.cpp). The oldest pending line is the one running; the rest
 		// will never be answered.
 		if (code === JOG_CANCEL && lastState === "Jog" && pending.length > 1) {
 			for (const c of pending.splice(1)) {
+				log(`✕ '${c.line}' flushed by jog cancel`);
 				if (c.onError) {
 					c.onError("flushed");
 				}
@@ -129,7 +162,12 @@ const wsCommands = (() => {
 		}
 		if (msg === "ok") {
 			const c = pending.shift();
-			if (c && c.onOk) {
+			if (!c) {
+				log("← ok, nothing waiting (reply to an HTTP-sent command)");
+				return;
+			}
+			log(`← ok for '${c.line}' after ${waited(c)} (${pending.length} waiting)`);
+			if (c.onOk) {
 				c.onOk();
 			}
 			return;
@@ -137,6 +175,7 @@ const wsCommands = (() => {
 		if (msg.startsWith("error:")) {
 			const code = msg.slice("error:".length).trim();
 			const c = pending.shift();
+			log(c ? `← error ${code} for '${c.line}' after ${waited(c)} (${pending.length} waiting)` : `← error ${code}, nothing waiting`);
 			if (c) {
 				report(`Machine rejected '${c.line}' (probably): error ${code}`);
 				if (c.onError) {
@@ -150,6 +189,9 @@ const wsCommands = (() => {
 
 	/** Call when a new socket opens: replies to lines sent on the old one will never come. */
 	const reset = () => {
+		if (pending.length) {
+			log(`socket reopened; forgot ${pending.length} waiting: ${pending.map((c) => `'${c.line}'`).join(", ")}`);
+		}
 		pending.length = 0;
 		noteActivity(); // a fresh open counts as hearing from the machine
 	};
@@ -173,6 +215,7 @@ const wsCommands = (() => {
 		noteActivity,
 		health,
 		msSinceRx,
+		setDebug,
 		pendingCount: () => pending.length,
 		lastState: () => lastState,
 		JOG_CANCEL,

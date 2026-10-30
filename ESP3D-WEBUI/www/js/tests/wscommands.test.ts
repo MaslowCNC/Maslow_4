@@ -93,6 +93,27 @@ describe("wsCommands", () => {
     expect(g.wsCommands.lastState()).toBe("Hold");
   });
 
+  test("debug mode logs each send and the reply matched to it", () => {
+    const logged: string[] = [];
+    const origLog = console.log;
+    console.log = (m: string) => logged.push(m);
+    try {
+      g.wsCommands.setDebug(true);
+      g.wsCommands.send("$G");
+      g.wsCommands.send("$BOGUS");
+      g.wsCommands.handleLine("ok");
+      g.wsCommands.handleLine("error:3");
+      g.wsCommands.setDebug(false);
+      g.wsCommands.send("$G");
+    } finally {
+      console.log = origLog;
+    }
+    expect(logged.length).toBe(4);
+    expect(logged[0]).toContain("→ '$G' (1 waiting)");
+    expect(logged[2]).toContain("← ok for '$G'");
+    expect(logged[3]).toContain("← error 3 for '$BOGUS'");
+  });
+
   test("reset forgets pending lines", () => {
     g.wsCommands.send("A");
     g.wsCommands.reset();
