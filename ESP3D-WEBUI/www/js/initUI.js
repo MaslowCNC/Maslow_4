@@ -136,8 +136,7 @@ const initUI = () => {
 	}
 
 	initUI_2();
-
-	setTimeout(tryAutoReport, 500); //Not sure why this needs a delay but it seems like a hack
+	// Auto-report ($Report/Interval) is turned on per socket by requestMachineState (tablet.js).
 }
 
 /** InitUI step2 - get settings from ESP3D and start processing them */

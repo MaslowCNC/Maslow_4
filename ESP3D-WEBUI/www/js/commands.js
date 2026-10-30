@@ -119,6 +119,12 @@ function SendCustomCommand() {
 	setValue("custom_cmd_txt", "");
 	Monitor_output_Update(`${custCmd}\n`);
 
+	// Lines go over the WebSocket like every other command; their output (and ok/error) shows
+	// up in this monitor from the socket. [ESP...] commands answer in the HTTP body.
+	if (!custCmd.startsWith("[ESP")) {
+		sendLineOrRealtime(custCmd);
+		return;
+	}
 	const cmd = buildHttpCommandCmd(httpCmdType.commandText, custCmd);
 	SendGetHttp(cmd, SendCustomCommandSuccess, SendCustomCommandFailed);
 }
