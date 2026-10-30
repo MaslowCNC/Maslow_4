@@ -28467,7 +28467,7 @@
 			)
 		)
 	)
-	(global_label "TR OUT2"
+	(global_label "BR OUT2"
 		(shape input)
 		(at -13.97 88.9 180)
 		(effects
@@ -28599,7 +28599,7 @@
 			)
 		)
 	)
-	(global_label "SCL3"
+	(global_label "SCL2"
 		(shape input)
 		(at -154.94 270.51 180)
 		(effects
@@ -28643,7 +28643,7 @@
 			)
 		)
 	)
-	(global_label "SCL0"
+	(global_label "SCL3"
 		(shape input)
 		(at -210.82 242.57 180)
 		(effects
@@ -28687,7 +28687,7 @@
 			)
 		)
 	)
-	(global_label "SDA0"
+	(global_label "SDA3"
 		(shape input)
 		(at -210.82 237.49 180)
 		(effects
@@ -28907,7 +28907,7 @@
 			)
 		)
 	)
-	(global_label "TR OUT1"
+	(global_label "BR OUT1"
 		(shape input)
 		(at -13.97 83.82 180)
 		(effects
@@ -29127,7 +29127,7 @@
 			)
 		)
 	)
-	(global_label "TR IN2"
+	(global_label "BR IN2"
 		(shape input)
 		(at -130.81 90.17 180)
 		(effects
@@ -29237,7 +29237,7 @@
 			)
 		)
 	)
-	(global_label "ADC BR"
+	(global_label "ADC BL"
 		(shape input)
 		(at -181.61 195.58 180)
 		(effects
@@ -29281,7 +29281,7 @@
 			)
 		)
 	)
-	(global_label "SCL2"
+	(global_label "SCL1"
 		(shape input)
 		(at -154.94 238.76 180)
 		(effects
@@ -29457,7 +29457,7 @@
 			)
 		)
 	)
-	(global_label "BR OUT1"
+	(global_label "BL OUT1"
 		(shape input)
 		(at -21.59 187.96 180)
 		(effects
@@ -29567,7 +29567,7 @@
 			)
 		)
 	)
-	(global_label "BR OUT1"
+	(global_label "BL OUT1"
 		(shape input)
 		(at -134.62 200.66 180)
 		(effects
@@ -29677,7 +29677,7 @@
 			)
 		)
 	)
-	(global_label "ADC TL"
+	(global_label "ADC TR"
 		(shape input)
 		(at -502.92 106.68 180)
 		(effects
@@ -30095,7 +30095,7 @@
 			)
 		)
 	)
-	(global_label "BR OUT2"
+	(global_label "BL OUT2"
 		(shape input)
 		(at -21.59 193.04 180)
 		(effects
@@ -30755,7 +30755,7 @@
 			)
 		)
 	)
-	(global_label "SCL1"
+	(global_label "SCL0"
 		(shape input)
 		(at -209.55 270.51 180)
 		(effects
@@ -30953,7 +30953,7 @@
 			)
 		)
 	)
-	(global_label "TL IN2"
+	(global_label "TR IN2"
 		(shape input)
 		(at -457.2 96.52 180)
 		(effects
@@ -31129,7 +31129,7 @@
 			)
 		)
 	)
-	(global_label "SDA2"
+	(global_label "SDA1"
 		(shape input)
 		(at -154.94 233.68 180)
 		(effects
@@ -31327,7 +31327,7 @@
 			)
 		)
 	)
-	(global_label "SDA3"
+	(global_label "SDA2"
 		(shape input)
 		(at -154.94 265.43 180)
 		(effects
@@ -31459,7 +31459,7 @@
 			)
 		)
 	)
-	(global_label "ADC BL"
+	(global_label "ADC TL"
 		(shape input)
 		(at -515.62 195.58 180)
 		(effects
@@ -31679,7 +31679,7 @@
 			)
 		)
 	)
-	(global_label "SDA1"
+	(global_label "SDA0"
 		(shape input)
 		(at -209.55 265.43 180)
 		(effects
@@ -32119,7 +32119,7 @@
 			)
 		)
 	)
-	(global_label "BL IN2"
+	(global_label "TL IN2"
 		(shape input)
 		(at -469.9 185.42 180)
 		(effects
@@ -32251,7 +32251,7 @@
 			)
 		)
 	)
-	(global_label "TR OUT2"
+	(global_label "BR OUT2"
 		(shape input)
 		(at -102.87 102.87 0)
 		(effects
@@ -32317,7 +32317,7 @@
 			)
 		)
 	)
-	(global_label "BL OUT1"
+	(global_label "TL OUT1"
 		(shape input)
 		(at -345.44 177.8 180)
 		(effects
@@ -32471,7 +32471,7 @@
 			)
 		)
 	)
-	(global_label "BR IN1"
+	(global_label "BL IN1"
 		(shape input)
 		(at -134.62 182.88 180)
 		(effects
@@ -32691,7 +32691,7 @@
 			)
 		)
 	)
-	(global_label "TL OUT1"
+	(global_label "TR OUT1"
 		(shape input)
 		(at -457.2 111.76 180)
 		(effects
@@ -32933,7 +32933,7 @@
 			)
 		)
 	)
-	(global_label "TL OUT2"
+	(global_label "TR OUT2"
 		(shape input)
 		(at -350.52 91.44 180)
 		(effects
@@ -33219,7 +33219,7 @@
 			)
 		)
 	)
-	(global_label "BL OUT1"
+	(global_label "TL OUT1"
 		(shape input)
 		(at -469.9 200.66 180)
 		(effects
@@ -33307,7 +33307,7 @@
 			)
 		)
 	)
-	(global_label "BL OUT2"
+	(global_label "TL OUT2"
 		(shape input)
 		(at -345.44 182.88 180)
 		(effects
@@ -33373,7 +33373,7 @@
 			)
 		)
 	)
-	(global_label "BR OUT2"
+	(global_label "BL OUT2"
 		(shape input)
 		(at -106.68 198.12 0)
 		(effects
@@ -33483,7 +33483,7 @@
 			)
 		)
 	)
-	(global_label "BL OUT2"
+	(global_label "TL OUT2"
 		(shape input)
 		(at -441.96 198.12 0)
 		(effects
@@ -33527,7 +33527,7 @@
 			)
 		)
 	)
-	(global_label "TL OUT1"
+	(global_label "TR OUT1"
 		(shape input)
 		(at -350.52 86.36 180)
 		(effects
@@ -33703,7 +33703,7 @@
 			)
 		)
 	)
-	(global_label "TL OUT2"
+	(global_label "TR OUT2"
 		(shape input)
 		(at -429.26 109.22 0)
 		(effects
@@ -33879,7 +33879,7 @@
 			)
 		)
 	)
-	(global_label "BL IN1"
+	(global_label "TL IN1"
 		(shape input)
 		(at -469.9 182.88 180)
 		(effects
@@ -34055,7 +34055,7 @@
 			)
 		)
 	)
-	(global_label "ADC TR"
+	(global_label "ADC BR"
 		(shape input)
 		(at -176.53 100.33 180)
 		(effects
@@ -34363,7 +34363,7 @@
 			)
 		)
 	)
-	(global_label "TL IN1"
+	(global_label "TR IN1"
 		(shape input)
 		(at -457.2 93.98 180)
 		(effects
@@ -34671,7 +34671,7 @@
 			)
 		)
 	)
-	(global_label "TR OUT1"
+	(global_label "BR OUT1"
 		(shape input)
 		(at -130.81 105.41 180)
 		(effects
@@ -34693,7 +34693,7 @@
 			)
 		)
 	)
-	(global_label "TR IN1"
+	(global_label "BR IN1"
 		(shape input)
 		(at -130.81 87.63 180)
 		(effects
@@ -34957,7 +34957,7 @@
 			)
 		)
 	)
-	(global_label "BR IN2"
+	(global_label "BL IN2"
 		(shape input)
 		(at -134.62 185.42 180)
 		(effects
