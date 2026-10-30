@@ -1266,6 +1266,14 @@ const onWSOpenCallback = () => {
     if (typeof loadParkSettings === 'function') {
       loadParkSettings();
     }
+    // The firmware only announces the Maslow state when it changes, so a change made while
+    // disconnected or during a restart was missed. Ask again rather than show a stale state.
+    if (!sendViaWS("$GSTATE\n")) {
+      sendCommand('$GSTATE');
+    }
+    if (!sendViaWS("$MINFO\n")) {
+      sendCommand('$MINFO');
+    }
   }, 1000);
 };
 
