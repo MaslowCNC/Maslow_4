@@ -9,6 +9,8 @@
 #include <list>
 #include <map>
 #include <ESPAsyncWebServer.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 
 #include "Channel.h"
 
@@ -65,13 +67,18 @@ namespace WebUI {
         static constexpr uint32_t WS_OUT_IDLE_MS   = 8;
         std::string               _output_line;
         uint32_t                  _output_pending_since = 0;
-        unsigned long             _last_queue_full      = 0;
+        // Maslow: guards _output_line and _output_pending_since.  write() runs on the output
+        // task, while pollLine() flushes from the polling task; without a lock, output appended
+        // between a flush's send and its clear was lost (whole replies, "ok" included).
+        SemaphoreHandle_t         _output_mutex    = xSemaphoreCreateMutex();
+        unsigned long             _last_queue_full = 0;
         std::atomic<uint32_t>     _lastActivityMs { 0 };
 
         // may_block=false: if the client send queue is full, give up rather than
         // spin (used from pollLine(), which runs under AllChannels' poll mutex).
         bool send_frame(const uint8_t* out, size_t outlen, bool may_block);
         void flush_output(bool may_block = true);
+        void flush_output_locked(bool may_block);  // caller holds _output_mutex
 
         // Instead of queueing realtime characters, we put them here
         // so they can be processed immediately during operations like
