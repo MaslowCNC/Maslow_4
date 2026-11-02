@@ -1107,7 +1107,8 @@ function tabletGrblState(grbl, response) {
   // (e.g. watchdog fired mid-stop).  Either way the machine is no longer
   // running, so continuing to send $STOP would be harmful.
   if (_stopPending && (stateName === 'Idle' || stateName === 'Alarm')) {
-    _stopPending = false;
+    setStopPending(false);
+    sendCommand('$MINFO'); // refresh Maslow status; its reply also resets the stop buttons
   }
 
   switch (stateName) {
@@ -1520,8 +1521,8 @@ const onWSOpenCallback = () => {
   zHomeLastAcknowledgedResultZ = null;
   zLowWarningAcknowledged = false;
   zLowLastAcknowledgedResultZ = null;
-  if (_stopPending && !wsCommands.send("$STOP")) {
-    console.warn("Failed to send pending $STOP on connect");
+  if (_stopPending && !wsCommands.stop()) {
+    console.warn("Failed to send pending stop on connect");
   }
   requestMachineState();
   _wsOpenedBefore = true;
@@ -1551,36 +1552,31 @@ const requestMachineState = () => {
   }
 };
 
-// Send $STOP directly via WebSocket to bypass PAGEID routing.
-// Sets _stopPending and retries every 300 ms for up to ~10 seconds.
-// _stopPending is cleared by tabletGrblState when the firmware confirms
-// the machine is Idle, or by the timeout.  onWSOpenCallback also sends
-// $STOP as the very first message on every WebSocket (re)connect while
-// the flag is set, so the command survives a TCP drop between send and
-// firmware processing.
+// Stop button: wsCommands.stop() sends 0x18 (soft reset: halts at once in any state, ends any
+// job) and then $STOP (raises Z, saves positions). _stopPending stays set until the
+// firmware reports Idle or Alarm (tabletGrblState), so a stop sent while the socket was down
+// is sent again on reconnect (onWSOpenCallback). It expires after STOP_PENDING_MS so an old
+// stop is never replayed much later.
+const STOP_PENDING_MS = 30000;
+let _stopPendingTimer = null;
+const setStopPending = (on) => {
+  _stopPending = on;
+  clearTimeout(_stopPendingTimer);
+  if (on) {
+    _stopPendingTimer = setTimeout(() => {
+      if (_stopPending) {
+        _stopPending = false;
+        console.warn("Stop not confirmed by the machine within 30 s; no longer resending it");
+      }
+    }, STOP_PENDING_MS);
+  }
+};
+
 const sendStopCommand = () => {
-  const RETRY_INTERVAL_MS = 300;
-  const MAX_RETRY_ATTEMPTS = 33; // 33 * 300ms ≈ 10 seconds
-  _stopPending = true;
-  // Jog cancel (0x85) is a realtime byte, so it acts at once instead of waiting behind the
-  // jog line. The firmware ignores it unless a jog is running, and then also drops jog lines
-  // still waiting to be read. Sent on the same socket just before $STOP so $STOP survives.
-  wsCommands.sendRealtime(wsCommands.JOG_CANCEL);
-  sendViaWS("$STOP\n"); // Try immediately; keep _stopPending for retries
-  let attempts = 0;
-  const retryTimer = setInterval(() => {
-    if (!_stopPending) {
-      clearInterval(retryTimer);
-      return;
-    }
-    sendViaWS("$STOP\n");
-    if (++attempts >= MAX_RETRY_ATTEMPTS) {
-      _stopPending = false;
-      clearInterval(retryTimer);
-      console.warn("$STOP retry limit reached without firmware confirmation; machine may not have stopped");
-    }
-  }, RETRY_INTERVAL_MS);
-  scheduleCallback(() => { sendCommand('$MINFO'); }, 1000);
+  setStopPending(true);
+  if (!wsCommands.stop()) {
+    addMessage(`Stop not sent: connection to the machine is ${wsCommands.socketStatus()}. It will be sent when the connection comes back.`);
+  }
 };
 
 // Button event handlers - Sixth Row
