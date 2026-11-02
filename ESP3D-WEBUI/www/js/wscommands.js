@@ -30,7 +30,7 @@ const wsCommands = (() => {
 	// The firmware drops whole lines without a reply when a channel's input queue is full
 	// (Channel::queue_push), so we pace. Firmware before the WSChannel output-mutex fix also
 	// lost replies under bursts; pacing keeps this UI safe on those builds too.
-	/** @typedef {{line: string, onOk?: Function, onError?: Function, sentAt?: number, quietSince?: number}} Cmd */
+	/** @typedef {{line: string, onOk?: Function, onError?: Function, quiet?: boolean, sentAt?: number, quietSince?: number}} Cmd */
 	/** @type {Cmd | null} */
 	let inflight = null;
 	/** @type {Cmd[]} */
@@ -144,15 +144,22 @@ const wsCommands = (() => {
 	/**
 	 * Send one command line. Returns false (and sends nothing) if the socket isn't open.
 	 * Lines go out one at a time, in order; onOk() / onError(code) run when its reply arrives.
+	 * urgent: go ahead of lines still queued here (not ahead of the one on the wire).
+	 * quiet: don't show "Machine rejected" for an error reply (the caller handles it).
 	 */
-	const send = (line, { onOk, onError } = {}) => {
+	const send = (line, { onOk, onError, urgent = false, quiet = false } = {}) => {
 		const text = line.trim();
 		if (!isOpen()) {
 			log(`not sent (socket ${socketStatus()}): '${text}'`);
 			return false;
 		}
 		checkTimeout();
-		outbox.push({ line: text, onOk, onError });
+		const c = { line: text, onOk, onError, quiet };
+		if (urgent) {
+			outbox.unshift(c);
+		} else {
+			outbox.push(c);
+		}
 		pump();
 		return true;
 	};
@@ -183,6 +190,58 @@ const wsCommands = (() => {
 		return true;
 	};
 
+	const ANOTHER_INTERFACE_BUSY = "120";
+	const RESTART_WAIT_MS = 1500;
+	const RESTART_POLL_MS = 25;
+	let restarts = 0; // restart banners seen ("Grbl 3.x [FluidNC ...]")
+
+	/**
+	 * Stop whatever the machine is doing, at once, in any state.
+	 * 1. 0x18 (soft reset): realtime, so it acts the moment it arrives. The firmware stops
+	 *    stepping, ends any job, stops the spindle and belt motors. On a Maslow it syncs the
+	 *    belts to the encoders and goes Idle rather than alarming (Protocol.cpp
+	 *    protocol_do_rt_reset), since the encoders still know where the belts are.
+	 * 2. $STOP once the firmware has restarted (its banner arrives): raises Z clear of the work
+	 *    and saves positions. Sent after the restart because the restart discards every
+	 *    channel's unread input.
+	 * Returns false if the socket isn't open.
+	 */
+	const stop = ({ onError } = {}) => {
+		if (!isOpen()) {
+			return false;
+		}
+		const sendStopLine = () =>
+			send("$STOP", {
+				urgent: true,
+				quiet: true,
+				onError: (code) => {
+					if (code === ANOTHER_INTERFACE_BUSY) {
+						log("$STOP answered 120 (another interface is running a job)");
+						return;
+					}
+					if (/^\d+$/.test(code)) {
+						report(`Machine rejected '$STOP': error ${code}`);
+					}
+					if (onError) {
+						onError(code);
+					}
+				},
+			}) || (onError && onError("not sent"));
+		const restartsBefore = restarts;
+		sendRealtime(RESET);
+		const start = Date.now();
+		const waitForRestart = () => {
+			if (restarts === restartsBefore && Date.now() - start < RESTART_WAIT_MS) {
+				setTimeout(waitForRestart, RESTART_POLL_MS);
+				return;
+			}
+			log(`stop: ${restarts === restartsBefore ? "no restart banner" : "restarted"} after ${Date.now() - start} ms; sending $STOP`);
+			sendStopLine();
+		};
+		setTimeout(waitForRestart, RESTART_POLL_MS);
+		return true;
+	};
+
 	/** True for a one-character command that the firmware acts on immediately (no reply). */
 	const isRealtime = (text) => {
 		if (text.length !== 1) {
@@ -207,22 +266,30 @@ const wsCommands = (() => {
 
 	const msSinceRx = () => (lastRxMs ? Date.now() - lastRxMs : null);
 
-	/** Feed every complete line received from the machine through here. */
+	/**
+	 * Feed every complete line received from the machine through here. Returns true when the
+	 * line was an expected error for a line sent with quiet: the caller should not process it
+	 * further (no fault handling).
+	 */
 	const handleLine = (msg) => {
 		noteActivity();
+		if (msg.startsWith("Grbl ")) {
+			restarts++; // restart banner, e.g. after a soft reset
+			return false;
+		}
 		if (msg.startsWith("<")) {
 			// Status report: <Idle|MPos:...>
 			lastState = msg.slice(1).split(/[|:>]/)[0];
 			if (inflight && BUSY_STATES.includes(lastState)) {
 				inflight.quietSince = Date.now(); // moving: a slow reply is expected
 			}
-			return;
+			return false;
 		}
 		if (msg === "ok") {
 			const c = inflight;
 			if (!c) {
 				log("← ok, nothing waiting");
-				return;
+				return false;
 			}
 			inflight = null;
 			log(`← ok for '${c.line}' after ${waited(c)}`);
@@ -230,7 +297,7 @@ const wsCommands = (() => {
 				c.onOk();
 			}
 			pump();
-			return;
+			return false;
 		}
 		if (msg.startsWith("error:")) {
 			const code = msg.slice("error:".length).trim();
@@ -238,16 +305,20 @@ const wsCommands = (() => {
 			if (!c) {
 				log(`← error ${code}, nothing waiting`);
 				report(`Machine reported error ${code}`);
-				return;
+				return false;
 			}
 			inflight = null;
 			log(`← error ${code} for '${c.line}' after ${waited(c)}`);
-			report(`Machine rejected '${c.line}': error ${code}`);
+			if (!c.quiet) {
+				report(`Machine rejected '${c.line}': error ${code}`);
+			}
 			if (c.onError) {
 				c.onError(code);
 			}
 			pump();
+			return !!c.quiet;
 		}
+		return false;
 	};
 
 	/** Call when a new socket opens: replies to lines sent on the old one will never come. */
@@ -274,6 +345,7 @@ const wsCommands = (() => {
 	return {
 		send,
 		sendRealtime,
+		stop,
 		isRealtime,
 		handleLine,
 		checkTimeout,

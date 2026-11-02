@@ -36,12 +36,21 @@ Format: **title** — what goes wrong, where, and how we found it.
 
 ## Medium: stopping
 
-- [ ] **STOP is only fast for jogs.** STOP sends 0x85 then `$STOP`; 0x85 only acts in Jog
-  state. During a G-code run, belt retraction or calibration, `$STOP` still waits behind
-  the current line. Planned next: per-context stop (feed hold for runs, interrupt retract,
-  pause calibration).
+- [ ] **The 0x18 stop isn't tested on the machine yet.** STOP now sends 0x18 (soft reset),
+  then `$STOP` once the restart banner arrives. In Run, Jog and Hold the reset path syncs the
+  belts to the encoders and goes Idle instead of ALARM:3 (`protocol_do_rt_reset`). Check:
+  the job ends at once, nothing lurches on the next move, Z rises.
+- [ ] **0x18 during a Maslow belt operation alarms.** Retract, extend, take slack and
+  calibrate run in Home state, where a reset goes through `Homing::fail` (ALARM "Homing fail
+  reset"). The motors stop at once, and the `$STOP` that follows clears the alarm, but the
+  ALARM line makes the UI save the serial log and show an error. Untested on the machine;
+  check whether the calibration state machine resumes or stays stopped.
+- [ ] **Feed hold decelerates over the rest of the move.** STOP used to send `!`. On
+  2026-10-30, `!` during a long move to the first cut slowed the machine at once, but the
+  hold only completed at the end of the move ("Stopping the paused job" logged then). At
+  50 mm/s² and 2000 mm/min it should stop in about 11 mm. Pause (`!`) has the same problem.
 - [ ] **`!` sent while Idle enters Hold** (`Protocol.cpp` `protocol_do_feedhold`), a race
-  if the jog finishes just before the stop arrives.
+  if the move finishes just before Pause is pressed.
 
 ## Medium: connection protocol (plan: all commands over the WebSocket)
 

@@ -143,6 +143,86 @@ describe("wsCommands", () => {
     }
   });
 
+  test("urgent lines go ahead of queued ones, not the one on the wire", () => {
+    g.wsCommands.send("A");
+    g.wsCommands.send("B");
+    g.wsCommands.send("$STOP", { urgent: true });
+    g.wsCommands.handleLine("ok");
+    expect(g.ws_source.sent).toEqual(["A\n", "$STOP\n"]);
+  });
+
+  test("quiet lines don't show 'Machine rejected' but still call onError", () => {
+    const errors: string[] = [];
+    g.wsCommands.send("$STOP", { quiet: true, onError: (c: string) => errors.push(c) });
+    expect(g.wsCommands.handleLine("error:120")).toBe(true); // caller skips fault handling
+    expect(errors).toEqual(["120"]);
+    expect(messages).toEqual([]);
+  });
+
+  test("other replies are passed on for normal processing", () => {
+    g.wsCommands.send("A");
+    expect(g.wsCommands.handleLine("error:3")).toBe(false);
+    expect(g.wsCommands.handleLine("ok")).toBe(false);
+    expect(g.wsCommands.handleLine("<Idle|MPos:0,0,0>")).toBe(false);
+  });
+
+  describe("stop()", () => {
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    const BANNER = "Grbl 3.9 [FluidNC v1.26.0 (wifi) '$' for help]";
+
+    test("sends 0x18 at once, then $STOP after the restart banner", async () => {
+      g.wsCommands.handleLine("<Run|MPos:0,0,0|SD:10.00,/sd/job.nc>");
+      expect(g.wsCommands.stop()).toBe(true);
+      expect(g.ws_source.sent).toEqual(["\x18"]);
+      await sleep(60);
+      expect(g.ws_source.sent).toEqual(["\x18"]); // still waiting for the restart
+      g.wsCommands.handleLine("");
+      g.wsCommands.handleLine(BANNER);
+      await sleep(60);
+      expect(g.ws_source.sent).toEqual(["\x18", "$STOP\n"]);
+    });
+
+    test("the same in every state, jog included (no 0x85)", async () => {
+      g.wsCommands.handleLine("<Jog|MPos:0,0,0>");
+      g.wsCommands.stop();
+      g.wsCommands.handleLine(BANNER);
+      await sleep(60);
+      expect(g.ws_source.sent).toEqual(["\x18", "$STOP\n"]);
+    });
+
+    test("lines waiting for a reply are dropped by the reset", async () => {
+      const dropped: string[] = [];
+      g.wsCommands.send("G0 X10", { onError: (c: string) => dropped.push(c) });
+      g.wsCommands.send("G0 X20", { onError: (c: string) => dropped.push(c) });
+      g.wsCommands.stop();
+      expect(dropped).toEqual(["reset", "reset"]);
+      g.wsCommands.handleLine(BANNER); // let this stop finish before the next test
+      await sleep(60);
+    });
+
+    test("sends $STOP anyway if no banner comes", async () => {
+      g.wsCommands.stop();
+      await sleep(1600);
+      // (the 1 s status probe "?" also fires in this window)
+      expect(g.ws_source.sent.filter((t: string) => t !== "?")).toEqual(["\x18", "$STOP\n"]);
+    });
+
+    test("a rejected $STOP is reported, except 120", async () => {
+      const errors: string[] = [];
+      g.wsCommands.stop({ onError: (c: string) => errors.push(c) });
+      g.wsCommands.handleLine(BANNER);
+      await sleep(60);
+      expect(g.wsCommands.handleLine("error:152")).toBe(true);
+      expect(errors).toEqual(["152"]);
+      expect(messages).toEqual(["Machine rejected '$STOP': error 152"]);
+    });
+
+    test("returns false with the socket closed", () => {
+      g.ws_source.readyState = 3;
+      expect(g.wsCommands.stop()).toBe(false);
+    });
+  });
+
   describe("reply timeout", () => {
     afterEach(() => setSystemTime());
 
