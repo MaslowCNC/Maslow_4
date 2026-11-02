@@ -447,7 +447,7 @@ const toggleUnits = () => {
 
 const goAxisByValue = (axis, coordinate) => {
   tabletClick()
-  moveTo(axis + coordinate)
+  startMachineAction("Move", () => machine.moveTo(toMachineMm({ [axis]: coordinate })));
 }
 
 const setAxisByValue = (axis, coordinate) => {
@@ -636,69 +636,49 @@ const checkParams = (params = {}) => {
   return s.join("");
 }
 
-/** Perform a jog command */
+/** {X: 10, Y: -2} in display units → {x: 10, y: -2} in mm, for machine actions */
+const toMachineMm = (params) => {
+  const mm = {};
+  for (const [axis, value] of Object.entries(params)) {
+    mm[axis.toLowerCase()] = fromDisplayUnitsToMm(Number(value));
+  }
+  return mm;
+};
+
+/** Describe a machine action failure in the message box (a Stop needs no message). */
+const reportMachineFailure = (label) => (err) => {
+  if (err.reason !== "reset") {
+    addMessage(`${label} failed: ${err.detail ?? err.reason ?? err.message}`);
+  }
+};
+
+/** Start a machine action from a click: failures, including bad arguments, go to the message box. */
+const startMachineAction = (label, start) => {
+  try {
+    start().catch(reportMachineFailure(label));
+  } catch (err) {
+    reportMachineFailure(label)(err);
+  }
+};
+
+/** Jog by {X, Y, Z} in display units, at the jog feed rate for the axis (controls.js). */
 const jog = (params = {}) => {
-  const axisAndDistance = checkParams(params);
-  if (!axisAndDistance) {
-    return;
+  if (!checkParams(params)) {
+    return; // no axes, or X/Y with unknown belt lengths (checkParams told the user)
   }
+  const delta = toMachineMm(params);
+  const feed = JogFeedrate(Object.keys(params)[0]); // mm/min
+  addMessage(`Jog ${Object.entries(delta).map(([a, v]) => `${a.toUpperCase()}${Number(v.toFixed(3))}`).join(" ")} mm`);
+  startMachineAction("Jog", () => machine.jog(delta, { feed }));
+};
 
-  jogTo(axisAndDistance);
-}
-
-const jogTo = (axisAndDistance) => {
-  // Always force G90 mode because synchronization of gCodeModal reports is unreliable
-  // JogFeedRate is defined in controls.js
-  let feedrate = JogFeedrate(axisAndDistance);
-  if (gCodeModal.units === "G20") {
-    feedrate /= 25.4;
-    feedrate = feedrate.toFixed(2);
-  }
-
-  // For safety, always ensure firmware units match UI expectations before jogging
-  jogWithUnitsSafeguard(feedrate, axisAndDistance);
-}
-
-/** 
- * Safely execute a jog command with firmware units synchronized to UI units.
- * This prevents issues where UI is in mm but firmware is in inches (or vice versa),
- * which could cause dangerous oversized movements.
- * 
- * Strategy: Always force firmware to match UI units before jogging, then restore.
- * This is simpler and more reliable than trying to query and conditionally synchronize.
- */
-const jogWithUnitsSafeguard = (feedrate, axisAndDistance) => {
-  // Store what units the UI is currently displaying (what user expects)
-  const uiExpectedUnits = gCodeModal.units;
-
-  // Embed the units code directly in the jog command (G20/G21 are allowed within $J= commands).
-  // This avoids sending a separate G20/G21 command which would fail with
-  // Error 9 (SystemGcLock) when the firmware is still in Jog state from a previous jog.
-  const unitsLabel = uiExpectedUnits === 'G20' ? 'inch' : 'mm';
-  const cmd = `$J=G91${uiExpectedUnits}F${feedrate}${axisAndDistance}`;
-  addMessage(`JogTo: ${cmd} (${unitsLabel})`);
-  // Over the WebSocket, so jogs stay in order with STOP and the jog-cancel flush catches
-  // every jog sent before it. No HTTP fallback: it routes to this same socket and would fail.
-  if (!wsCommands.send(cmd)) {
-    addMessage(`Jog not sent: connection to the machine is ${wsCommands.socketStatus()}`);
-  }
-}
-
-/** Peform a move command */
+/** Rapid move to {X, Y, Z} in display units, in work coordinates. */
 const move = (params = {}) => {
-  const location = checkParams(params);
-  if (!location) {
+  if (!checkParams(params)) {
     return;
   }
-
-  moveTo(location);
-}
-
-const moveTo = (location) => {
-  // Always force G90 mode because synchronization of gCodeModal reports is unreliable
-  const cmd = `G90 G0 ${location}`;
-  sendCommand(cmd);
-}
+  startMachineAction("Move", () => machine.moveTo(toMachineMm(params)));
+};
 
 /** Perform jog or move commands based on the supplied command */
 const getMoveDistance = (isZMove, options = {}) => {
@@ -1521,8 +1501,8 @@ const onWSOpenCallback = () => {
   zHomeLastAcknowledgedResultZ = null;
   zLowWarningAcknowledged = false;
   zLowLastAcknowledgedResultZ = null;
-  if (_stopPending && !wsCommands.stop()) {
-    console.warn("Failed to send pending stop on connect");
+  if (_stopPending) {
+    machine.stop().catch((err) => console.warn("Pending stop on connect failed:", err.detail ?? err.reason));
   }
   requestMachineState();
   _wsOpenedBefore = true;
@@ -1552,7 +1532,7 @@ const requestMachineState = () => {
   }
 };
 
-// Stop button: wsCommands.stop() sends 0x18 (soft reset: halts at once in any state, ends any
+// Stop button: machine.stop() ends running machine actions, then wsCommands.stop() sends 0x18 (soft reset: halts at once in any state, ends any
 // job) and then $STOP (raises Z, saves positions). _stopPending stays set until the
 // firmware reports Idle or Alarm (tabletGrblState), so a stop sent while the socket was down
 // is sent again on reconnect (onWSOpenCallback). It expires after STOP_PENDING_MS so an old
@@ -1574,9 +1554,13 @@ const setStopPending = (on) => {
 
 const sendStopCommand = () => {
   setStopPending(true);
-  if (!wsCommands.stop()) {
-    addMessage(`Stop not sent: connection to the machine is ${wsCommands.socketStatus()}. It will be sent when the connection comes back.`);
-  }
+  machine.stop().catch((err) => {
+    if (err.reason === "not-sent") {
+      addMessage(`Stop not sent: connection to the machine is ${wsCommands.socketStatus()}. It will be sent when the connection comes back.`);
+    } else {
+      addMessage(`Stop failed: ${err.detail ?? err.reason}`);
+    }
+  });
 };
 
 // Button event handlers - Sixth Row
@@ -1614,16 +1598,16 @@ const returnFocusToTablet = () => {
 };
 
 const tabletCalRetract = () => {
-  onCalibrationButtonsClick("$ALL", "Retract All");
+  runMachineAction("Retract All", machine.retractBelts);
   returnFocusToTablet();
 };
 const tabletCalExtend = () => {
-  onCalibrationButtonsClick("$EXT", "Extend All");
+  runMachineAction("Extend All", machine.extendBelts);
   returnFocusToTablet();
 };
 const tabletCalCalibrate = () => {
   const startCalibration = () => {
-    onCalibrationButtonsClick("$CAL", "Find Anchors");
+    runMachineAction("Find Anchors", machine.calibrate);
     scheduleCallback(() => { hideModal("calibration-popup"); }, 1000);
   };
 
@@ -1643,7 +1627,7 @@ const tabletCalCalibrate = () => {
   );
 };
 const tabletCalTense = () => {
-  onCalibrationButtonsClick("$TKSLK", "Apply Tension");
+  runMachineAction("Apply Tension", machine.applyTension);
   scheduleCallback(() => { hideModal("calibration-popup"); }, 1000);
 };
 // const tabletCalZHome = () => onCalibrationButtonsClick("$TKSLK", "Home Z");
@@ -1661,7 +1645,7 @@ const tabletCalStop = () => {
   returnFocusToTablet();
 };
 const tabletCalSetZStop = () => {
-  onCalibrationButtonsClick("$SETZSTOP", "Set Z-Stop");
+  runMachineAction("Set Z-Stop", machine.setZStop);
   returnFocusToTablet();
 };
 const tabletCalTest = () => {
@@ -1669,7 +1653,7 @@ const tabletCalTest = () => {
   scheduleCallback(() => { hideModal("calibration-popup"); }, 1000);
 };
 const tabletCalRelax = () => {
-  onCalibrationButtonsClick("$CMP", "Release Tension");
+  runMachineAction("Release Tension", machine.releaseTension);
   returnFocusToTablet();
 };
 
@@ -2724,6 +2708,24 @@ const hideModal = (modalId) => {
   }
 };
 
+/**
+ * Run a machine action for a button: show its label, then say how it ended (finished, failed
+ * with the reason, or stopped). $MINFO refreshes the Maslow status 1 s after the start, as
+ * before, and again when the action ends.
+ */
+const runMachineAction = async (label, action) => {
+  addMessage(label);
+  scheduleCallback(() => { sendCommand('$MINFO'); }, 1000);
+  try {
+    await action();
+    addMessage(`${label} finished`);
+  } catch (err) {
+    addMessage(err.reason === "reset" ? `${label} stopped` : `${label} failed: ${err.detail ?? err.reason}`);
+  }
+  sendCommand('$MINFO');
+};
+
+// For commands that aren't machine actions ($TEST).
 const onCalibrationButtonsClick = async (command, msg = "") => {
   if (msg) {
     addMessage(msg);

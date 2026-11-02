@@ -225,8 +225,12 @@ const machine = (() => {
 	const notReady = (name, detail) =>
 		operation(name, ({ reject }) => reject(machineError("not-ready", name, { detail })));
 
-	/** Send one line; resolves on ok (with the collected lines if collect), rejects with a MachineError. */
-	const sendLine = (line, { collect = false, quiet = false } = {}) =>
+	/**
+	 * Send one line; resolves on ok (with the collected lines if collect), rejects with a
+	 * MachineError. Quiet by default: the caller of the action reports failures, so wsCommands
+	 * doesn't also post "Machine rejected" and grbl.js doesn't treat it as a fault.
+	 */
+	const sendLine = (line, { collect = false, quiet = true } = {}) =>
 		new Promise((resolve, reject) => {
 			const sent = wsCommands.send(line, {
 				collect,
