@@ -30,7 +30,7 @@ const wsCommands = (() => {
 	// The firmware drops whole lines without a reply when a channel's input queue is full
 	// (Channel::queue_push), so we pace. Firmware before the WSChannel output-mutex fix also
 	// lost replies under bursts; pacing keeps this UI safe on those builds too.
-	/** @typedef {{line: string, onOk?: Function, onError?: Function, quiet?: boolean, sentAt?: number, quietSince?: number}} Cmd */
+	/** @typedef {{line: string, onOk?: Function, onError?: Function, quiet?: boolean, lines?: string[], sentAt?: number, quietSince?: number}} Cmd */
 	/** @type {Cmd | null} */
 	let inflight = null;
 	/** @type {Cmd[]} */
@@ -146,15 +146,17 @@ const wsCommands = (() => {
 	 * Lines go out one at a time, in order; onOk() / onError(code) run when its reply arrives.
 	 * urgent: go ahead of lines still queued here (not ahead of the one on the wire).
 	 * quiet: don't show "Machine rejected" for an error reply (the caller handles it).
+	 * collect: onOk(lines) receives the lines that arrived while this line was on the wire
+	 *   (its output, e.g. "$/path=value"; unrelated log lines can be among them).
 	 */
-	const send = (line, { onOk, onError, urgent = false, quiet = false } = {}) => {
+	const send = (line, { onOk, onError, urgent = false, quiet = false, collect = false } = {}) => {
 		const text = line.trim();
 		if (!isOpen()) {
 			log(`not sent (socket ${socketStatus()}): '${text}'`);
 			return false;
 		}
 		checkTimeout();
-		const c = { line: text, onOk, onError, quiet };
+		const c = { line: text, onOk, onError, quiet, lines: collect ? [] : undefined };
 		if (urgent) {
 			outbox.unshift(c);
 		} else {
@@ -206,7 +208,7 @@ const wsCommands = (() => {
 	 *    channel's unread input.
 	 * Returns false if the socket isn't open.
 	 */
-	const stop = ({ onError } = {}) => {
+	const stop = ({ onOk, onError } = {}) => {
 		if (!isOpen()) {
 			return false;
 		}
@@ -214,9 +216,14 @@ const wsCommands = (() => {
 			send("$STOP", {
 				urgent: true,
 				quiet: true,
+				onOk,
 				onError: (code) => {
 					if (code === ANOTHER_INTERFACE_BUSY) {
+						// The 0x18 before it already stopped the machine; count it as stopped.
 						log("$STOP answered 120 (another interface is running a job)");
+						if (onOk) {
+							onOk();
+						}
 						return;
 					}
 					if (/^\d+$/.test(code)) {
@@ -285,6 +292,12 @@ const wsCommands = (() => {
 			}
 			return false;
 		}
+		if (msg !== "ok" && !msg.startsWith("error:")) {
+			if (inflight && inflight.lines && msg) {
+				inflight.lines.push(msg);
+			}
+			return false;
+		}
 		if (msg === "ok") {
 			const c = inflight;
 			if (!c) {
@@ -294,7 +307,7 @@ const wsCommands = (() => {
 			inflight = null;
 			log(`← ok for '${c.line}' after ${waited(c)}`);
 			if (c.onOk) {
-				c.onOk();
+				c.onOk(c.lines);
 			}
 			pump();
 			return false;
@@ -330,6 +343,11 @@ const wsCommands = (() => {
 		inflight = null;
 		outbox.length = 0;
 		noteActivity(); // a fresh open counts as hearing from the machine
+		for (const c of forgotten) {
+			if (c.onError) {
+				c.onError("disconnected");
+			}
+		}
 	};
 
 	// Keep the machine talking so a dead link shows up within seconds (browser only).

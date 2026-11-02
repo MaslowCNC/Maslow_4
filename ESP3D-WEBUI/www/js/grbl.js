@@ -229,8 +229,10 @@ function tryAutoReport() {
     // Do nothing more on success
     () => { },
 
-    // Fall back to polling if the firmware does not support auto-reports
-    () => { enablePolling(); },
+    // Fall back to polling if the firmware does not support auto-reports (an error:N reply).
+    // A dropped connection ("disconnected", "not sent") is not that: the next socket open
+    // asks again.
+    (code) => { if (/^\d+$/.test(String(code))) { enablePolling(); } },
 
     99.1,
     1

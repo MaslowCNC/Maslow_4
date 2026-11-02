@@ -261,7 +261,9 @@ const startSocket = () => {
 					Monitor_output_Update(thismsg);
 					// An expected error (from a line sent "quiet") is handled by its sender; don't
 					// treat it as a fault (grbl.js would show it and save the serial log).
-					if (!wsCommands.handleLine(thismsg)) {
+					const expectedError = wsCommands.handleLine(thismsg);
+					machine.handleLine(thismsg);
+					if (!expectedError) {
 						process_socket_response(thismsg);
 					}
 					const noNeedToShowMsg = ["<", "ok T:", "X:", "FR:", "echo:E0 Flow"].some((msgStart) => thismsg.startsWith(msgStart));
