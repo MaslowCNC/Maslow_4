@@ -15,10 +15,6 @@ const MASLOW_STATE_FIND_ANCHORS_COMPUTING = 9;
 const FIND_ANCHORS_WAYPOINT_COORDINATE_REGEX = /^\[MSG:INFO:\s*Waypoint\s+\d+\s+coordinates:\s*X=([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\s+Y=([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\]$/;
 let wasFindingAnchors = false;
 
-/** This keeps track of when we saw the last heartbeat from the machine */
-//I think this is not used anymore and can be removed now
-let lastHeartBeatTime = new Date().getTime();
-
 const err = "error: ";
 // When we can change to proper ESM - prefix these const strings and functions with 'export' (minus the quotes of course)
 const MaslowErrMsgKeyValueCantUse = `${err}Could not use supplied key-value pair.`;
@@ -324,17 +320,16 @@ const updateFindAnchorsView = () => {
 
 
 /**
- * Record the Maslow calibration state (0-9) and refresh the buttons that depend on it. Fed by
- * the MS field of every status report (grbl.js; buttons refresh only on a change) and by
- * "Current state: N" log lines (older firmware; buttons always refresh, as before). Returns
- * false for an out-of-range value.
+ * Record the Maslow calibration state (0-9) from the MS field of each status report (grbl.js)
+ * and refresh the buttons that depend on it when it changes. Returns false for an
+ * out-of-range value.
  */
-const setMaslowState = (state, { refresh = false } = {}) => {
+const setMaslowState = (state) => {
 	if (!Number.isInteger(state) || state < 0 || state > 9) {
 		console.error("Invalid state received from machine: " + state);
 		return false;
 	}
-	if (refresh || maslowStatus.state !== state) {
+	if (maslowStatus.state !== state) {
 		maslowStatus.state = state;
 		updateDynamicButtons();
 	}
@@ -366,22 +361,6 @@ const maslowInfoMsgHandling = (msg) => {
 		// Reset stop button colors when firmware responds to our command
 		if (typeof resetStopButtonColors === 'function') {
 			resetStopButtonColors();
-		}
-		return true;
-	}
-
-	if (msg.startsWith('[MSG:INFO: Heartbeat')) {
-		lastHeartBeatTime = new Date().getTime();
-		return true;
-	}
-
-	//Parse state messages like [MSG:INFO: Current state: 0]
-	if (msg.startsWith("[MSG:INFO: Current state:")) {
-		const m = msg.match(/Current state:\s*(\d+)/);
-		if (m) {
-			if (!setMaslowState(Number(m[1]), { refresh: true })) {
-				return false;
-			}
 		}
 		return true;
 	}

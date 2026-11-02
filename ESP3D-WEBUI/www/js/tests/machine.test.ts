@@ -35,7 +35,7 @@ beforeEach(() => {
   g.ws_source = makeSocket();
   g.wsCommands.reset();
   // A calibrated machine sitting idle.
-  reply("<Idle|MPos:0,0,0|FS:0,0|WCO:0,0,0>", "[MSG:INFO: Current state: 7]");
+  reply("<Idle|MPos:0,0,0|FS:0,0|WCO:0,0,0|MS:7>");
   g.ws_source.sent.length = 0;
 });
 
@@ -55,7 +55,7 @@ describe("state store", () => {
 
   test("Maslow state, MINFO and G-code units", () => {
     reply(
-      "[MSG:INFO: Current state: 4]",
+      "<Idle|MPos:0,0,0|FS:0,0|MS:4>",
       'MINFO: { "homed": false, "calibrationInProgress": false, "tl": 1800.5, "tr": 1801, "br": 1900, "bl": 1899, "etl": 0, "etr": 0, "ebr": 0, "ebl": 0, "extended": true }',
       "[GC:G0 G54 G17 G20 G90 G94 M5 M9 T0 F0 S0]",
     );
@@ -94,50 +94,76 @@ describe("state store", () => {
 });
 
 describe("belt operations", () => {
+  const idle = (ms: number) => `<Idle|MPos:0,0,0|FS:0,0|MS:${ms}>`;
+  const home = (ms: number) => `<Home|MPos:0,0,0|FS:0,0|MS:${ms}>`;
+
   test("retract: accepted on ok, done when RETRACTED and Idle", async () => {
+    reply(idle(4));
     const op = g.machine.retractBelts();
     let accepted = false;
     let done = false;
     op.accepted.then(() => (accepted = true));
     op.then(() => (done = true));
     expect(lastSent()).toBe("$ALL\n");
-    reply("[MSG:INFO: Retracting all belts]", "[MSG:INFO: Current state: 1]", "ok");
+    reply("[MSG:INFO: Retracting all belts]", "ok");
     await tick();
     expect(accepted).toBe(true);
-    expect(done).toBe(false);
-    reply("<Home|MPos:0,0,0>", "[MSG:INFO: Current state: 2]");
+    expect(lastSent()).toBe("?"); // asks for a fresh report to see the operation start
+    reply(home(1));
+    await tick();
+    reply(home(2));
     await tick();
     expect(done).toBe(false); // still Home
-    reply("<Idle|MPos:0,0,0>");
+    reply(idle(2));
     await op;
     expect(done).toBe(true);
     expect(g.machine.runningCount()).toBe(0);
   });
 
-  test("a refused request fails at once, saying which state the machine stayed in", async () => {
-    reply("[MSG:INFO: Current state: 0]");
+  test("already retracted: a stale report doesn't finish it, the start state must show", async () => {
+    reply(idle(2));
+    const op = g.machine.retractBelts();
+    let done = false;
+    op.then(() => (done = true));
+    reply("ok", idle(2)); // a report from before the command
+    await tick();
+    expect(done).toBe(false);
+    reply(home(1), home(2), idle(2));
+    await op;
+  });
+
+  test("a refused request fails after two fresh reports show no change", async () => {
+    reply(idle(0));
     const op = g.machine.extendBelts();
-    reply("[MSG:INFO: Cannot extend the belts until they have been retracted]", "[MSG:INFO: Current state: 0]", "ok");
-    await expect(op).rejects.toMatchObject({ reason: "failed", detail: expect.stringContaining("stayed in UNKNOWN") });
+    reply("[MSG:INFO: Cannot extend the belts until they have been retracted]", "ok");
+    await tick();
+    reply(idle(0));
+    await tick();
+    let settled = false;
+    op.catch(() => (settled = true));
+    await tick();
+    expect(settled).toBe(false); // one report could be stale
+    reply(idle(0));
+    await expect(op).rejects.toMatchObject({ reason: "failed", detail: "extend belts didn't start: the machine stayed in UNKNOWN" });
     await expect(op.accepted).resolves.toBeUndefined();
   });
 
   test("apply tension falling back to EXTENDEDOUT fails it", async () => {
-    reply("[MSG:INFO: Current state: 4]");
+    reply(idle(4));
     const op = g.machine.applyTension();
-    reply("[MSG:INFO: Current state: 5]", "ok", "<Home|MPos:0,0,0>");
+    reply("ok", home(5));
     await tick();
-    reply("[MSG:INFO: Current state: 4]", "<Idle|MPos:0,0,0>");
+    reply(idle(4));
     await expect(op).rejects.toMatchObject({ reason: "failed", detail: "apply tension failed: now EXTENDEDOUT" });
   });
 
   test("calibrate succeeds on READY_TO_CUT", async () => {
-    reply("[MSG:INFO: Current state: 4]");
+    reply(idle(4));
     const op = g.machine.calibrate();
     expect(lastSent()).toBe("$CAL\n");
-    reply("[MSG:INFO: Current state: 6]", "ok", "<Home|MPos:0,0,0>");
+    reply("ok", home(6));
     await tick();
-    reply("[MSG:INFO: Calibration complete]", "[MSG:INFO: Current state: 7]", "<Idle|MPos:0,0,0>");
+    reply("[MSG:INFO: Calibration complete]", idle(7));
     await expect(op).resolves.toBeUndefined();
   });
 
@@ -166,7 +192,7 @@ describe("motion", () => {
   });
 
   test("an XY jog needs known belt lengths; a Z jog doesn't", async () => {
-    reply("[MSG:INFO: Current state: 4]");
+    reply("<Idle|MPos:0,0,0|FS:0,0|MS:4>");
     const xy = g.machine.jog({ x: 5 }, { feed: 1000 });
     await expect(xy).rejects.toMatchObject({ reason: "not-ready" });
     expect(g.ws_source.sent).toEqual([]);
