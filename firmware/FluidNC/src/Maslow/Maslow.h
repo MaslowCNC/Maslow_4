@@ -125,6 +125,10 @@ public:
     // Make the belt step counts match the encoders and clear the belt PIDs, so the next move
     // starts from where the belts really are.  Call with stepping stopped.
     void syncBeltsToEncoders();
+    // True if this belt's length is known (see Maslow.cpp); reported in the status report's BL.
+    bool beltLengthKnown(int arm);
+    // Belts whose saved length was restored at boot (loadBeltPositions); each is checked alone.
+    bool beltRestored[ARM_COUNT] = { false, false, false, false };
 
     void   stop();
     void   eStop(String message = "Emergency stop triggered.");

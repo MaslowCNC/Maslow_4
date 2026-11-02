@@ -797,6 +797,13 @@ void Maslow_::saveBeltPositions() {
 }
 
 //This function loads the belt positions from non-volatile storage
+// A belt's length is known after a retract (every state but UNKNOWN and RETRACTING follows a
+// retract or a full restore), or if that belt was restored on its own at boot.
+bool Maslow_::beltLengthKnown(int arm) {
+    int state = calibration.getCurrentState();
+    return (state != UNKNOWN && state != RETRACTING) || beltRestored[arm];
+}
+
 void Maslow_::loadBeltPositions() {
     nvs_handle_t nvsHandle;
     esp_err_t    ret = nvs_open("maslow", NVS_READWRITE, &nvsHandle);
@@ -826,21 +833,32 @@ void Maslow_::loadBeltPositions() {
         int32_t i;
     };
 
-    // Load TL belt position
-    int32_t tlValue;
-    ret         = nvs_get_i32(nvsHandle, "tlPos", &tlValue);
-    float tlPos = 0;
-    if (ret == ESP_OK) {
-        FloatInt32 tlFi;
-        tlFi.i = tlValue;
-        tlPos  = tlFi.f;
+    // Each belt is restored on its own.  While the motors are off a belt can turn its spool
+    // (the upper belts in vertical mode, under the sled's weight); if its encoder moved more than
+    // 1/4 turn since the save, that belt's length is unknown and it is left alone, but the others
+    // are still restored.  Within 1/4 turn the movement is added to the saved length.
+    static const char* posKeys[ARM_COUNT]   = { "tlPos", "trPos", "blPos", "brPos" };
+    static const char* angleKeys[ARM_COUNT] = { "tlAngle", "trAngle", "blAngle", "brAngle" };
+    static const char* armNames[ARM_COUNT]  = { "TL", "TR", "BL", "BR" };
+    float              beltPos[ARM_COUNT]   = { 0, 0, 0, 0 };
+    for (int arm = _TL; arm < ARM_COUNT; arm++) {
+        int32_t value;
+        ret = nvs_get_i32(nvsHandle, posKeys[arm], &value);
+        if (ret != ESP_OK) {
+            if (ret != ESP_ERR_NVS_NOT_FOUND) {
+                log_info("Error " + std::string(esp_err_to_name(ret)) + " reading " << armNames[arm] << " belt position from NVS!");
+            }
+            continue;
+        }
+        FloatInt32 fi;
+        fi.i      = value;
+        float pos = fi.f;
 
         // Load saved encoder angle and compare with current
-        int32_t savedTLAngle;
-        ret = nvs_get_i32(nvsHandle, "tlAngle", &savedTLAngle);
-        if (ret == ESP_OK) {
-            uint16_t currentTLAngle = axis[_TL].getRawEncoderAngle();
-            int32_t  angleDiff      = currentTLAngle - savedTLAngle;
+        int32_t savedAngle;
+        if (nvs_get_i32(nvsHandle, angleKeys[arm], &savedAngle) == ESP_OK) {
+            uint16_t currentAngle = axis[arm].getRawEncoderAngle();
+            int32_t  angleDiff    = currentAngle - savedAngle;
 
             // Handle wrap-around: if difference is > 2048, it wrapped the other direction
             if (angleDiff > 2048)
@@ -848,144 +866,21 @@ void Maslow_::loadBeltPositions() {
             if (angleDiff < -2048)
                 angleDiff += 4096;
 
-            // If angle difference is within 1/4 turn (1024 counts), adjust belt position for small movement
-            if (abs(angleDiff) < 1024) {
-                float movementMM = (angleDiff / 4096.0f) * axis[_TL].getMmPerRevolution() * -1.0f;
-                tlPos += movementMM;
-            } else {
-                log_info("TL encoder angle difference too large (" << angleDiff << " counts), treating belt positions as stale");
-                nvs_close(nvsHandle);
-                return;
+            if (abs(angleDiff) >= 1024) {
+                log_info(armNames[arm] << " encoder moved " << angleDiff << " counts since the belt positions were saved; "
+                                       << armNames[arm] << " belt length is unknown");
+                continue;
             }
+            pos += (angleDiff / 4096.0f) * axis[arm].getMmPerRevolution() * -1.0f;
         }
 
-        // Set motor steps directly for TL belt (A axis = motor 0)
-        set_steps(static_cast<axis_t>(0), motor_pos_to_steps(tlPos, 0));
-        axis[_TL].setTarget(tlPos);
+        // Belt motor axes are A-D = motors 0-3, in arm order
+        set_steps(static_cast<axis_t>(arm), motor_pos_to_steps(pos, arm));
+        axis[arm].setTarget(pos);
         // Initialize encoder cumulative position to match adjusted belt length
-        axis[_TL].setPosition(tlPos);
-    } else if (ret != ESP_ERR_NVS_NOT_FOUND) {
-        log_info("Error " + std::string(esp_err_to_name(ret)) + " reading TL belt position from NVS!");
-    }
-
-    // Load TR belt position
-    int32_t trValue;
-    ret         = nvs_get_i32(nvsHandle, "trPos", &trValue);
-    float trPos = 0;
-    if (ret == ESP_OK) {
-        FloatInt32 trFi;
-        trFi.i = trValue;
-        trPos  = trFi.f;
-
-        // Load saved encoder angle and compare with current
-        int32_t savedTRAngle;
-        ret = nvs_get_i32(nvsHandle, "trAngle", &savedTRAngle);
-        if (ret == ESP_OK) {
-            uint16_t currentTRAngle = axis[_TR].getRawEncoderAngle();
-            int32_t  angleDiff      = currentTRAngle - savedTRAngle;
-
-            // Handle wrap-around
-            if (angleDiff > 2048)
-                angleDiff -= 4096;
-            if (angleDiff < -2048)
-                angleDiff += 4096;
-
-            if (abs(angleDiff) < 1024) {
-                float movementMM = (angleDiff / 4096.0f) * axis[_TR].getMmPerRevolution() * -1.0f;
-                trPos += movementMM;
-            } else {
-                log_info("TR encoder angle difference too large (" << angleDiff << " counts), treating belt positions as stale");
-                nvs_close(nvsHandle);
-                return;
-            }
-        }
-
-        // Set motor steps directly for TR belt (B axis = motor 1)
-        set_steps(static_cast<axis_t>(1), motor_pos_to_steps(trPos, 1));
-        axis[_TR].setTarget(trPos);
-        axis[_TR].setPosition(trPos);
-    } else if (ret != ESP_ERR_NVS_NOT_FOUND) {
-        log_info("Error " + std::string(esp_err_to_name(ret)) + " reading TR belt position from NVS!");
-    }
-
-    // Load BL belt position
-    int32_t blValue;
-    ret         = nvs_get_i32(nvsHandle, "blPos", &blValue);
-    float blPos = 0;
-    if (ret == ESP_OK) {
-        FloatInt32 blFi;
-        blFi.i = blValue;
-        blPos  = blFi.f;
-
-        // Load saved encoder angle and compare with current
-        int32_t savedBLAngle;
-        ret = nvs_get_i32(nvsHandle, "blAngle", &savedBLAngle);
-        if (ret == ESP_OK) {
-            uint16_t currentBLAngle = axis[_BL].getRawEncoderAngle();
-            int32_t  angleDiff      = currentBLAngle - savedBLAngle;
-
-            // Handle wrap-around
-            if (angleDiff > 2048)
-                angleDiff -= 4096;
-            if (angleDiff < -2048)
-                angleDiff += 4096;
-
-            if (abs(angleDiff) < 1024) {
-                float movementMM = (angleDiff / 4096.0f) * axis[_BL].getMmPerRevolution() * -1.0f;
-                blPos += movementMM;
-            } else {
-                log_info("BL encoder angle difference too large (" << angleDiff << " counts), treating belt positions as stale");
-                nvs_close(nvsHandle);
-                return;
-            }
-        }
-
-        // Set motor steps directly for BL belt (C axis = motor 2)
-        set_steps(static_cast<axis_t>(2), motor_pos_to_steps(blPos, 2));
-        axis[_BL].setTarget(blPos);
-        axis[_BL].setPosition(blPos);
-    } else if (ret != ESP_ERR_NVS_NOT_FOUND) {
-        log_info("Error " + std::string(esp_err_to_name(ret)) + " reading BL belt position from NVS!");
-    }
-
-    // Load BR belt position
-    int32_t brValue;
-    ret         = nvs_get_i32(nvsHandle, "brPos", &brValue);
-    float brPos = 0;
-    if (ret == ESP_OK) {
-        FloatInt32 brFi;
-        brFi.i = brValue;
-        brPos  = brFi.f;
-
-        // Load saved encoder angle and compare with current
-        int32_t savedBRAngle;
-        ret = nvs_get_i32(nvsHandle, "brAngle", &savedBRAngle);
-        if (ret == ESP_OK) {
-            uint16_t currentBRAngle = axis[_BR].getRawEncoderAngle();
-            int32_t  angleDiff      = currentBRAngle - savedBRAngle;
-
-            // Handle wrap-around
-            if (angleDiff > 2048)
-                angleDiff -= 4096;
-            if (angleDiff < -2048)
-                angleDiff += 4096;
-
-            if (abs(angleDiff) < 1024) {
-                float movementMM = (angleDiff / 4096.0f) * axis[_BR].getMmPerRevolution() * -1.0f;
-                brPos += movementMM;
-            } else {
-                log_info("BR encoder angle difference too large (" << angleDiff << " counts), treating belt positions as stale");
-                nvs_close(nvsHandle);
-                return;
-            }
-        }
-
-        // Set motor steps directly for BR belt (D axis = motor 3)
-        set_steps(static_cast<axis_t>(3), motor_pos_to_steps(brPos, 3));
-        axis[_BR].setTarget(brPos);
-        axis[_BR].setPosition(brPos);
-    } else if (ret != ESP_ERR_NVS_NOT_FOUND) {
-        log_info("Error " + std::string(esp_err_to_name(ret)) + " reading BR belt position from NVS!");
+        axis[arm].setPosition(pos);
+        beltPos[arm]      = pos;
+        beltRestored[arm] = true;
     }
 
     nvs_close(nvsHandle);
@@ -993,6 +888,20 @@ void Maslow_::loadBeltPositions() {
     // Sync position with G-code parser and planner
     gc_sync_position();
     plan_sync_position();
+
+    float tlPos = beltPos[_TL];
+    float trPos = beltPos[_TR];
+    float blPos = beltPos[_BL];
+    float brPos = beltPos[_BR];
+
+    if (!(beltRestored[_TL] && beltRestored[_TR] && beltRestored[_BL] && beltRestored[_BR])) {
+        // Some belt lengths are unknown: stay in UNKNOWN.  The restored ones are reported as known
+        // (beltLengthKnown); the rest become known once the belts are retracted.
+        log_info("Belt lengths restored: TL " << (beltRestored[_TL] ? "yes" : "no") << ", TR " << (beltRestored[_TR] ? "yes" : "no")
+                                              << ", BL " << (beltRestored[_BL] ? "yes" : "no") << ", BR "
+                                              << (beltRestored[_BR] ? "yes" : "no") << " - retract the belts to continue");
+        return;
+    }
 
     // Determine the state based on belt lengths
     // If all belt lengths are near zero (within threshold), go to RETRACTED state, otherwise EXTENDEDOUT
