@@ -165,7 +165,7 @@ the firmware decodes them.
 | `?` (0x3F) | StatusReport | send one status report (section 5.1) to this channel |
 | `!` (0x21) | FeedHold | decelerate and hold (also when Idle, see the backlog) |
 | `~` (0x7E) | CycleStart | resume from hold |
-| 0x18 (Ctrl-X) | Reset | soft reset: stops everything, clears queues |
+| 0x18 (Ctrl-X) | Reset | soft reset: stops at once, aborts any job, clears queues. **Maslow change:** stopped during a move or a hold it goes Idle with no alarm, where upstream raises `ALARM:3` (below) |
 | 0x84 | SafetyDoor | |
 | 0x85 | JogCancel | only in Jog state: stop the current jog and **drop this channel's queued lines** (Maslow change) |
 | 0x87–0x8A | Macro0–3 | |
@@ -182,7 +182,38 @@ more.
 One exception, from reading the code (not tested): a line the main loop has already taken can
 still answer. A `$` command that is waiting for the planner to empty stops waiting when the reset
 starts, then runs its action and sends its reply, before the reset finishes. So up to one stray
-`ok`/`error:N` can follow a reset.
+`ok`/`error:N` can follow a reset. It arrives before the start message, so a client that waits
+for that message is not confused by it.
+
+### Soft reset is Maslow's fast stop
+
+Changed after `exp1` commit `0d9585929` (`protocol_do_rt_reset` in `Protocol.cpp`). What 0x18
+does depends on the state when it arrives:
+
+| State | Upstream FluidNC | Maslow |
+|---|---|---|
+| Run, Jog, or a feed hold (including a paused job) | stops stepping at once, then `ALARM:3` "Abort during cycle" (a stepper machine may have lost position) | stops stepping at once, makes the belt step counts match the encoders and resets the belt PIDs (`Maslow_::syncBeltsToEncoders()`), then goes **Idle, no alarm**: the encoders still know where the belts are |
+| Home (Maslow retract, extend, calibrate run in this state) | homing fails: `ALARM:6` "Homing fail reset" | the same; motors stop |
+| any other state | as upstream (Idle stays Idle, Alarm stays Alarm, Sleep alarms) | the same |
+
+In every state the rest of the reset is as upstream: the job is aborted, spindle and coolant off,
+belt motors off, every channel's unread input discarded, and the start message sent to all
+channels.
+
+### How a client should stop the machine
+
+1. Send **0x18**. It is realtime, so it acts the moment it arrives, even behind queued lines or
+   a running job, and it works from every channel.
+2. Wait for the start message (`Grbl …`), with a timeout.
+3. Send **`$STOP`**. It raises Z to 2 mm if lower and saves positions. Sending it before the
+   restart would be useless: the reset discards unread input, so `$STOP` would be dropped
+   unanswered.
+
+`$STOP` alone is not a fast stop: it is queued like other `$` commands, so it waits behind
+running motion. 0x85 stops only a jog (`!` holds, it doesn't stop). Our UI still uses 0x85 for
+releasing a hold-to-jog button, where only the jog should end.
+
+This is built but not yet tested on a machine.
 
 ### Our UI: what goes where, and reply matching
 
@@ -215,6 +246,11 @@ line. Realtime bytes are never queued: they go out at once, even while a line is
 - **Jog cancel** (0x85, in Jog state) drops the lines queued in the UI, as the firmware drops that
   channel's unread lines. **Soft reset** (0x18) drops the line on the wire and everything queued
   (see above).
+- **Stop button** (`wsCommands.stop()`): sends 0x18, waits up to 1.5 s for a line starting
+  `Grbl ` (the restart banner), then sends `$STOP` ahead of anything queued. If the banner doesn't
+  come in time (or `$Start/Message` was changed so it doesn't start with `Grbl `), it sends
+  `$STOP` anyway when the wait ends. This replaces the old 0x85 + `$STOP` for jogs and
+  `!` + `$STOP` for running jobs.
 - **Reconnect:** the queue is emptied (a new socket is a new channel). If the socket isn't open,
   nothing is sent: the UI shows "Not sent: '…'" and the error callback runs. Lines are never held
   over a disconnect, because a jog replayed after a reconnect would be dangerous.
@@ -273,7 +309,7 @@ plus a log line `Motion is disabled: <reason>` when Maslow has blocked motion.
 
 | Command | Name | What it does | UI sends it |
 |---|---|---|---|
-| [`$STOP`][STOP] | `Maslow/stop` | stop belts, spindle and any job; sync positions; raise Z to 2 mm if lower; save state. The UI sends 0x85 first so jogs stop at once. Queued like other `$` commands, so it waits behind running motion (backlog) | yes |
+| [`$STOP`][STOP] | `Maslow/stop` | stop belts, spindle and any job; sync positions; raise Z to 2 mm if lower; save state. Queued like other `$` commands, so it waits behind running motion (backlog). The UI sends 0x18 first and `$STOP` after the restart (section 3, how to stop) | yes |
 | [`$ESTOP`][ESTOP] | `Maslow/estop` | emergency stop: Alarm state, motors and spindle off; the machine ignores further commands until power-cycled | no |
 
 **State and diagnostics (read-only):**
