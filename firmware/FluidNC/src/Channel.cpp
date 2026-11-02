@@ -9,6 +9,7 @@
 #include "Limit.h"
 #include "Logging.h"
 #include "Job.h"
+#include "Maslow/Maslow.h"  // Maslow: calibration state for autoReport
 #include <string_view>
 #include <algorithm>
 
@@ -271,10 +272,13 @@ void Channel::autoReportGCodeState() {
 }
 void Channel::autoReport() {
     if (_reportInterval) {
-        const char* stateName = state_name();
+        const char* stateName       = state_name();
+        int         maslowState     = Maslow.calibration.getCurrentState();  // Maslow: report changes at once
         if (_reportOvr || _reportWco || _reportState || _lastPinString != report_pin_string ||
-            (motionState() && (int32_t(xTaskGetTickCount()) - _nextReportTime) >= 0) || (_lastJobActive != Job::active())) {
-            _reportState = false;
+            (motionState() && (int32_t(xTaskGetTickCount()) - _nextReportTime) >= 0) || (_lastJobActive != Job::active()) ||
+            _lastMaslowState != maslowState) {
+            _reportState     = false;
+            _lastMaslowState = maslowState;
             if (_reportOvr) {
                 report_ovr_counter = 0;
                 _reportOvr         = false;

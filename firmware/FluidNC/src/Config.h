@@ -95,6 +95,7 @@ const int REPORT_OVR_REFRESH_BUSY_COUNT = 20;  // (1-255)
 const int REPORT_OVR_REFRESH_IDLE_COUNT = 10;  // (1-255) Must be less than or equal to the busy count
 const int REPORT_WCO_REFRESH_BUSY_COUNT = 30;  // (2-255)
 const int REPORT_WCO_REFRESH_IDLE_COUNT = 10;  // (2-255) Must be less than or equal to the busy count
+const int REPORT_BELTS_REFRESH_BUSY_COUNT = 20;  // Maslow: belt lengths/errors every Nth report while busy
 
 // The temporal resolution of the acceleration management subsystem. A higher number gives smoother
 // acceleration, particularly noticeable on machines that run at very high feedrates, but may negatively

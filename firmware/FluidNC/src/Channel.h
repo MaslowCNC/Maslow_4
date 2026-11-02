@@ -85,6 +85,7 @@ protected:
     float       _lastFeedRate     = 0;
     MotorMask   _lastLimits       = 0;
     bool        _lastJobActive    = false;
+    int         _lastMaslowState  = -1;  // Maslow: last calibration state reported (autoReport)
     std::string _lastPinString    = "";
 
     bool       _reportState = true;
