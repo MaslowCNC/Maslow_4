@@ -74,13 +74,6 @@ Format: **title** — what goes wrong, where, and how we found it.
 - [ ] **`$CALRESET` from READY_TO_CUT is silently rejected.**
 - [ ] **NVS state isn't tied to the config file.** Belt positions, Z and G54 are shared
   across `.yaml` setups, so switching setups keeps the old belts/Z.
-- [ ] **`loadBeltPositions` can apply only some arms** (`Maslow.cpp`). Arms are restored in
-  order TL, TR, BL, BR; if a later arm's encoder angle moved more than 1/4 turn since the save,
-  it logs "… encoder angle difference too large … treating belt positions as stale" and
-  returns, leaving the earlier arms applied. Happened 2026-11-02 after a WiFi flash of
-  machine-api-afb70ccfd on m4: MS:0, BL:1814.59,0,0,0 (TL restored, the rest 0). Why the
-  angle moved is unknown (the message is on USB only). Fix: check every arm before applying
-  any; find out what moves an encoder between the last save and boot.
 - [ ] **Boot restore bypasses state-change guards** by setting `calibration.currentState`
   directly.
 

@@ -397,7 +397,7 @@ Example while jogging, a report that carries the belts:
 | `Ov:feed,rapid,spindle` | every 10th / 20th report | overrides in % |
 | `A:SCFM` | with Ov, when on | S/C spindle CW/CCW, F flood, M mist |
 | `MS:n` | yes (Maslow) | Maslow calibration state, 0–9 (section 5.3) |
-| `BL:tl,tr,bl,br` | every 20th report while busy, every report otherwise (Maslow, see below) | belt lengths, mm, 2 decimals |
+| `BL:tl,tr,bl,br` | every 20th report while busy, every report otherwise (Maslow, see below) | belt lengths, mm, 2 decimals; `?` for a belt whose length is unknown (not restored at boot and not retracted since) |
 | `BE:tl,tr,bl,br` | with `BL` (Maslow) | each belt's position error (encoder position minus target), mm, 3 decimals |
 | `SD:pct,file[,line]` | while a job runs | progress %, file name, and (Maslow addition) the file line of the running block |
 

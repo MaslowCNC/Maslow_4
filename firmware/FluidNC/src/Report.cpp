@@ -608,8 +608,8 @@ void report_realtime_status(Channel& channel) {
             }
         }
     }
-    // Maslow: belt lengths (BL) and position errors (BE, encoder minus target), mm, arms in the
-    // order TL,TR,BL,BR.  Like WCO, counted in reports: every 20th while busy (auto-report at
+    // Maslow: belt lengths (BL, "?" for a belt whose length is unknown) and position errors (BE,
+    // encoder minus target), mm, arms in the order TL,TR,BL,BR.  Like WCO, counted in reports: every 20th while busy (auto-report at
     // 50 ms makes that about once a second), and every report while idle, when reports only
     // come on changes or a '?' (the WebUI asks once a second).
     static int report_belts_counter = 0;
@@ -618,7 +618,12 @@ void report_realtime_status(Channel& channel) {
         report_belts_counter = busy ? (REPORT_BELTS_REFRESH_BUSY_COUNT - 1) : 0;
         msg << "|BL:";
         for (int arm = _TL; arm < ARM_COUNT; arm++) {
-            msg << (arm ? "," : "") << setprecision(2) << Maslow.axis[arm].getPosition();
+            msg << (arm ? "," : "");
+            if (Maslow.beltLengthKnown(arm)) {
+                msg << setprecision(2) << Maslow.axis[arm].getPosition();
+            } else {
+                msg << "?";
+            }
         }
         msg << "|BE:";
         for (int arm = _TL; arm < ARM_COUNT; arm++) {
