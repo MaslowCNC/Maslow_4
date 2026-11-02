@@ -317,7 +317,7 @@ plus a log line `Motion is disabled: <reason>` when Maslow has blocked motion.
 | Command | Name | What it does | UI sends it |
 |---|---|---|---|
 | [`$MINFO`][MINFO] | `Maslow/getInfo` | reply `MINFO: {json}` (section 5.2), sent to **every** channel | yes |
-| [`$GSTATE`][GSTATE] | `Maslow/gstate` | log `Current state: N` (section 5.3) | yes |
+| [`$GSTATE`][GSTATE] | `Maslow/gstate` | log `Current state: N` (section 5.3) | no (the state is in every status report) |
 | [`$MBOARD`][MBOARD] | `Maslow/board` | log the board name and version | no |
 | [`$MDIAG`][MDIAG], [`$MADC`][MADC], [`$TEST`][TEST] | `Maslow/diag`, `Maslow/adc`, `Maslow/test` | diagnostics as log lines | `$TEST` |
 
@@ -375,13 +375,13 @@ plus a log line `Motion is disabled: <reason>` when Maslow has blocked motion.
 ### 5.1 Status report
 
 ```
-<State|MPos:x,y,z|FS:feed,spindle[|Bf:blocks,bytes][|Ln:n][|Pn:pins][|WCO:x,y,z][|Ov:f,r,s[|A:SCFM]][|SD:pct,file[,line]]>
+<State|MPos:x,y,z[|Bf:blocks,bytes][|Ln:n]|FS:feed,spindle|MS:n[|Pn:pins][|WCO:x,y,z][|Ov:f,r,s[|A:SCFM]][|BL:tl,tr,bl,br|BE:tl,tr,bl,br][|SD:pct,file[,line]]>
 ```
 
-Example while jogging:
+Example while jogging, a report that carries the belts:
 
 ```
-<Jog|MPos:120.000,85.500,0.000|FS:1000,0|WCO:0.000,0.000,0.000>
+<Jog|MPos:120.000,85.500,0.000|FS:1000,0|MS:7|BL:1800.25,1801.50,1900.75,1899.00|BE:0.012,-0.034,0.000,0.500>
 ```
 
 | Field | Always? | Meaning |
@@ -396,9 +396,25 @@ Example while jogging:
 | `WCO:x,y,z` | every 10th report when idle, every 30th when busy, or when it changes | work offset; WPos = MPos − WCO |
 | `Ov:feed,rapid,spindle` | every 10th / 20th report | overrides in % |
 | `A:SCFM` | with Ov, when on | S/C spindle CW/CCW, F flood, M mist |
+| `MS:n` | yes (Maslow) | Maslow calibration state, 0–9 (section 5.3) |
+| `BL:tl,tr,bl,br` | every 20th report while busy, every report otherwise (Maslow, see below) | belt lengths, mm, 2 decimals |
+| `BE:tl,tr,bl,br` | with `BL` (Maslow) | each belt's position error (encoder position minus target), mm, 3 decimals |
 | `SD:pct,file[,line]` | while a job runs | progress %, file name, and (Maslow addition) the file line of the running block |
 
-Nothing Maslow-specific is in the report yet: no Maslow state, no belt lengths.
+**Maslow fields** (added after `exp1` commit `0d9585929`, on branch `machine-api`; not yet on a
+machine):
+
+- `MS` is in every report, and a change of Maslow state triggers an auto-report at once, so an
+  idle machine reports a new state without being asked.
+- `BL` and `BE` list the arms in the firmware's order **TL, TR, BL, BR**. Careful: `MINFO` uses
+  `tl, tr, br, bl` (section 5.2).
+- `BL`/`BE` are counted like `WCO`. While reports are periodic (Run, Home, Jog) they come in every
+  20th report: about once a second at a 50 ms interval. In every other state (Idle, Hold, Alarm,
+  …) reports only come on a change or a `?`, so every report carries them. Clients should keep
+  the last values between reports that don't carry them.
+- The every-20th counter is shared by all channels, like upstream's `WCO` and `Ov` counters. With
+  two clients getting reports while busy, each sees the belts less often than every 20th of its
+  own reports.
 
 **Clients must ignore fields they don't know.** That is the GRBL convention (the UI's parser in
 `grbl.js` does), and it is what lets us add fields later.
@@ -408,8 +424,8 @@ Nothing Maslow-specific is in the report yet: no Maslow state, no belt lengths.
 - `?` sends one report right away, in any state.
 - With auto-report on (`$Report/Interval=ms`), the firmware sends that channel a report:
   - every `ms` milliseconds **while moving** (Run, Home or Jog), and
-  - otherwise **only when something changes**: the state, an override, the work offset, a pin, or
-    a job starting or ending.
+  - otherwise **only when something changes**: the state, the Maslow state (`MS`), an override,
+    the work offset, a pin, or a job starting or ending.
 
   So an idle machine with auto-report on goes quiet. A client that needs a heartbeat has to send `?`
   itself.
@@ -419,9 +435,8 @@ Nothing Maslow-specific is in the report yet: no Maslow state, no belt lengths.
   after each (re)connect.
 
 **Our UI** sends these each time its WebSocket opens, the first time and on every reconnect:
-`$Report/Interval=50` (faster than the 200 ms default), `?`, `$G`, `$MINFO`, `$GSTATE`, and the
-reads of `fixedZ` and the park settings. `$SS` (replay the startup log) is sent only on the first
-open. (Before this change they were sent only at page load, so a reconnected socket stayed at
+`$Report/Interval=50` (faster than the 200 ms default), `?`, `$G`, `$MINFO`, and the corner,
+`fixedZ` and park setting reads. `$SS` (replay the startup log) is sent only on the first open. (Before this change they were sent only at page load, so a reconnected socket stayed at
 200 ms and the Maslow state wasn't re-read.) After that, `wscommands.js` sends `?` every second
 as a heartbeat.
 
@@ -447,19 +462,25 @@ The calibration state machine (`MaslowEnums.h`):
 | 3 | EXTENDING | 8 | RELEASE_TENSION |
 | 4 | EXTENDEDOUT | 9 | CALIBRATION_COMPUTING (never reached) |
 
-The only way to learn it is the log line `[MSG:INFO: Current state: N]`. It is sent to all channels
-when the state changes, and on `$GSTATE`. A client that misses the line has the wrong state until it
-asks again. Moving this into the status report is the first planned change (section 6).
+Clients learn it from the **`MS:n` field of the status report** (section 5.1). It is in every
+report, and a state change sends an auto-report at once, so a client with auto-report on sees each
+change, and any client can ask with `?`.
+
+The log line `[MSG:INFO: Current state: N]` is still printed (to all channels when the state
+changes, and on `$GSTATE`) for people reading the log. Our UI no longer reads it: it takes the
+state from `MS` only. Older firmware (before `MS`) has only this line.
 
 ## 6. Gaps for USB and ESP-NOW
 
-- **State isn't in the status report.** Clients that can't afford to parse log text (the pendant)
-  have no reliable way to follow the Maslow state. Proposed: a `|MS:N` field, plus belt lengths at
-  a lower rate.
 - **Logs and `MINFO` go to every channel.** That's fine for a browser, but too much for ESP-NOW.
   A pendant channel should default to warnings and errors only, and `MINFO` should reply only to
   the channel that asked.
-- **Completion of Maslow operations is only visible as log text** (because `ok` means "started").
+- **Success or failure of a Maslow operation is only in log text.** `ok` means "started"; `MS`
+  in the status report now shows when the state changes, but not whether the operation succeeded
+  (e.g. a calibration that failed and why).
+- **Belts in the report cost bytes.** `BL`/`BE` add about 70 bytes to every idle report and every
+  20th busy one. Fine over WiFi and USB; an ESP-NOW pendant may want them less often or not at
+  all, which would need a per-channel setting.
 - **Moving file contents and firmware updates need HTTP.** Over USB, either add stream commands for
   them or show a reduced UI.
 - **Several controllers at once.** Commands from all channels share one queue. A job locks other
