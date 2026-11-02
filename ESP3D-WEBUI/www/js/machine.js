@@ -33,7 +33,7 @@ const machine = (() => {
 		CALIBRATION_COMPUTING: 9,
 	};
 	const MOVING_STATES = ["Run", "Jog", "Home"];
-	// A Maslow operation logs its new state before its "ok"; allow this long for that line.
+	// How long a Maslow operation may take to show its start state in a status report.
 	const START_WAIT_MS = 3000;
 
 	// ---------------------------------------------------------------- state store
@@ -41,7 +41,7 @@ const machine = (() => {
 	/**
 	 * grbl:        FluidNC state name ("Idle", "Run", "Hold", "Jog", "Home", "Alarm", ...)
 	 * grblDetail:  the part after ':' ("0" for a completed hold, "1" while stopping)
-	 * maslow:      Maslow state number (MASLOW), null until known
+	 * maslow:      Maslow state number (MASLOW) from the MS status field, null until known
 	 * mpos, wpos, wco: {x, y, z} in mm, null until known
 	 * units:       the firmware's G-code units, "mm" or "inch" (machine actions always send G21)
 	 * job:         {pct, file, line} while a file runs, else null
@@ -61,7 +61,6 @@ const machine = (() => {
 		belts: null,
 	};
 	let statusCount = 0; // status reports seen, to wait for a fresh one
-	let maslowSeq = 0; // "Current state" lines seen
 	const listeners = { state: new Set(), line: new Set() };
 
 	/** Subscribe to "state" (a state snapshot after each change) or "line" (every line from
@@ -145,13 +144,6 @@ const machine = (() => {
 				changed = true;
 			} catch (e) {
 				console.warn("machine: unreadable MINFO", msg);
-			}
-		} else if (msg.startsWith("[MSG:INFO: Current state:")) {
-			const m = msg.match(/Current state:\s*(\d+)/);
-			if (m) {
-				state.maslow = Number(m[1]);
-				maslowSeq++;
-				changed = true;
 			}
 		} else if (msg.startsWith("[GC:")) {
 			const units = msg.includes(" G20") ? "inch" : msg.includes(" G21") ? "mm" : null;
@@ -327,17 +319,20 @@ const machine = (() => {
 	 */
 	const maslowOperation = (name, command, { start, success, failure = [] }) =>
 		operation(name, async ({ accept, resolve, ended }) => {
-			const seqBefore = maslowSeq;
+			// Already in the success state (e.g. retract when retracted): only the start state
+			// then shows the operation began, or a stale report would look like it had finished.
+			const stateBefore = state.maslow;
 			await sendLine(command);
 			accept();
-			// The firmware logs "Current state: N" for every state request, before its ok. A
-			// line that arrived but isn't the start state means the request was refused.
-			if (maslowSeq > seqBefore && state.maslow !== start) {
-				throw machineError("failed", command, {
-					detail: `${name} didn't start: the machine stayed in ${stateName(state.maslow)}`,
-				});
-			}
-			await waitFor((s) => s.maslow === start || s.maslow === success, {
+			// The firmware changes state before it answers "ok", and every status report carries
+			// the state (MS). A report already on its way when the ok arrived can be from just
+			// before the change, so a refusal (the state didn't move) is only concluded from the
+			// second report after the ok. Ask for one now; the UI's 1 s probe brings the next.
+			const countAtOk = statusCount;
+			wsCommands.sendRealtime(0x3f);
+			await waitFor((s) => s.maslow === start || (s.maslow === success && stateBefore !== success), {
+				failIf: () => statusCount - countAtOk >= 2,
+				failDetail: (s) => `${name} didn't start: the machine stayed in ${stateName(s.maslow)}`,
 				timeoutMs: START_WAIT_MS,
 				what: `${name} to start`,
 				ended,
@@ -531,11 +526,11 @@ const machine = (() => {
 	/** Write the running config to the config file. */
 	const saveConfig = () => simpleOperation("save config", "$CO");
 
-	/** Ask for a fresh status report, MINFO, Maslow state and G-code modes. */
+	/** Ask for a fresh status report (which carries the Maslow state), MINFO and G-code modes. */
 	const refreshStatus = () =>
 		operation("refresh status", async ({ resolve }) => {
 			await sendRealtime(0x3f, "status");
-			await Promise.all([sendLine("$MINFO"), sendLine("$GSTATE"), sendLine("$G")]);
+			await Promise.all([sendLine("$MINFO"), sendLine("$G")]);
 			resolve();
 		});
 

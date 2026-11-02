@@ -1512,7 +1512,8 @@ let _wsOpenedBefore = false;
 
 // Everything the UI needs to know about the machine, asked for on every new socket. Each socket
 // is a new firmware channel, so per-channel settings (auto-report) start off again, and log
-// lines sent while we were disconnected (e.g. "Current state: N") were missed.
+// lines sent while we were disconnected were missed. (The Maslow state needs no query: it is in
+// every status report.)
 const requestMachineState = () => {
   // Auto-report is per channel. Turn it back on unless the user picked polling or none.
   if (!_wsOpenedBefore || reportType === 'auto') {
@@ -1523,7 +1524,6 @@ const requestMachineState = () => {
     SendPrinterCommand("$SS"); // startup log into the serial monitor, once per page load
   }
   SendPrinterCommand("$MINFO");
-  SendPrinterCommand("$GSTATE");
   requestModes();
   loadFixedZSetting();
   loadCornerValues();
@@ -2007,7 +2007,7 @@ function tabletInit() {
   setTimeout(() => {
     showVersionNumber();
 
-    // Machine queries ($SS, $MINFO, $GSTATE, ?, $G, corner values) go over the socket from
+    // Machine queries ($SS, $MINFO, ?, $G, corner values) go over the socket from
     // requestMachineState() once it opens. These two are HTTP request/response.
     files_refreshFiles("/");
     loadConfigValues();
