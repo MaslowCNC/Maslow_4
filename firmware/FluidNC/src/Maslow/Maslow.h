@@ -122,6 +122,9 @@ public:
     // The non-blocking first half of raiseZ(): end the job, clear the planner and stepper, hold the
     // belts where they are, clear any feed hold and go Idle.  Safe to call from inside the hold.
     void haltMotion();
+    // Make the belt step counts match the encoders and clear the belt PIDs, so the next move
+    // starts from where the belts really are.  Call with stepping stopped.
+    void syncBeltsToEncoders();
 
     void   stop();
     void   eStop(String message = "Emergency stop triggered.");

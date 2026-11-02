@@ -1229,6 +1229,18 @@ void Maslow_::haltMotion() {
     plan_reset();
     Stepper::reset();
 
+    syncBeltsToEncoders();
+
+    // Clear any pending suspend bits (e.g. holdComplete from a prior feed hold) before
+    // transitioning to Idle.  If left set, protocol_exec_rt_suspend() would loop indefinitely
+    // after maslow_stop() returns, preventing any further commands from being processed.
+    auto suspend  = sys.suspend();
+    suspend.value = 0;
+    sys.set_suspend(suspend);
+    sys.set_state(State::Idle);
+}
+
+void Maslow_::syncBeltsToEncoders() {
     // Sync belt motor step positions to actual encoder positions.
     // Maslow.update() uses get_axis_steps() as belt PID targets.  If the
     // commanded step position is ahead of the encoder position when stop is pressed
@@ -1246,14 +1258,6 @@ void Maslow_::haltMotion() {
 
     gc_sync_position();
     plan_sync_position();
-
-    // Clear any pending suspend bits (e.g. holdComplete from a prior feed hold) before
-    // transitioning to Idle.  If left set, protocol_exec_rt_suspend() would loop indefinitely
-    // after maslow_stop() returns, preventing any further commands from being processed.
-    auto suspend  = sys.suspend();
-    suspend.value = 0;
-    sys.set_suspend(suspend);
-    sys.set_state(State::Idle);
 }
 
 // Raises Z axis to Z home + Z_SAFE_HEIGHT_MM to prevent workpiece damage after stop

@@ -1383,8 +1383,13 @@ void protocol_do_rt_reset() {
     if (state_is(State::Homing)) {
         Machine::Homing::fail(ExecAlarm::HomingFailReset);
     } else if (state_is(State::Cycle) || state_is(State::Jog) || sys.step_control.executeHold || sys.step_control.executeSysMotion) {
-        Stepper::stop_stepping();  // Stop stepping immediately, possibly losing position
-        protocol_do_alarm((void*)ExecAlarm::AbortCycle);
+        Stepper::stop_stepping();  // Stop stepping immediately
+        // Maslow: a reset is the fast stop (the UI's Stop button sends it).  Upstream alarms here
+        // because a stepper machine may have lost position; the Maslow's encoders still know
+        // where the belts are.  Make the belt step counts match them, so the next move starts
+        // from where the belts really are, and go Idle instead of alarming.
+        Maslow.syncBeltsToEncoders();
+        set_state(State::Idle);
     } else if (state_is(State::Critical)) {
         if (Homing::unhomed_axes()) {
             protocol_do_alarm((void*)ExecAlarm::Unhomed);
