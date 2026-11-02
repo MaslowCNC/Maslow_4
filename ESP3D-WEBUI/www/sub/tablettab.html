@@ -39,6 +39,15 @@
               Release Tension
             </div>
           </div>
+          <!-- Belt lengths from the machine's status reports (tablet.js updateBeltLengths) -->
+          <div id="tablettab-belt-lengths" class="tablettab-belt-lengths"
+            title="Belt lengths reported by the machine, in mm. Unknown: the belt moved while the motors were off, or hasn't been retracted since power-on.">
+            <span class="belt-length-label">Belt lengths (mm)</span>
+            <span class="belt-length">TL <span id="belt-length-tl" class="belt-length-value">-</span></span>
+            <span class="belt-length">TR <span id="belt-length-tr" class="belt-length-value">-</span></span>
+            <span class="belt-length">BL <span id="belt-length-bl" class="belt-length-value">-</span></span>
+            <span class="belt-length">BR <span id="belt-length-br" class="belt-length-value">-</span></span>
+          </div>
         </div>
         <!-- Jogging and position readout -->
         <div id="tablettab-jog-section" class="tablettab-section">
