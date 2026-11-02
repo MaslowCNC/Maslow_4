@@ -446,7 +446,7 @@ const updateUnifiedPlayPauseButton = (stateName, clickable) => {
           </path>
         </g>
       </svg>`;
-    playButton.onclick = () => SendRealtimeCmd(0x21); // Pause command
+    playButton.onclick = pauseGCode;
     
   } else if (clickable.resume) {
     // Machine is paused - show play button
@@ -459,7 +459,7 @@ const updateUnifiedPlayPauseButton = (stateName, clickable) => {
           </path>
         </g>
       </svg>`;
-    playButton.onclick = () => SendRealtimeCmd(0x7e); // Resume command
+    playButton.onclick = resumeGCode;
   } else {
     // Machine is idle or in another state - restore canvas if needed, then
     // let setRunControls() determine the correct visual state based on Maslow
@@ -630,12 +630,13 @@ function SendRealtimeCmd(code) {
   sendLineOrRealtime(String.fromCharCode(code))
 }
 
+// machine.pause/resume only send when the machine is running/held; otherwise they say why.
 function pauseGCode() {
-  SendRealtimeCmd(0x21) // '!'
+  machine.pause().catch((err) => addMessage(`Pause: ${err.detail ?? err.reason}`))
 }
 
 function resumeGCode() {
-  SendRealtimeCmd(0x7e) // '~'
+  machine.resume().catch((err) => addMessage(`Resume: ${err.detail ?? err.reason}`))
 }
 
 function stopGCode() {

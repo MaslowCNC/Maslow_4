@@ -556,7 +556,7 @@ function showApplyTensionRetractionWarningMessage(msg) {
 	continueButton.textContent = "Continue";
 	continueButton.style.cssText = "padding: 5px 10px; cursor: pointer;";
 	continueButton.onclick = () => {
-		sendCommand("$TKSLK");
+		runMachineAction("Apply Tension", machine.applyTension);
 		modal.remove();
 	};
 

@@ -12,6 +12,11 @@ Format: **title** — what goes wrong, where, and how we found it.
   The sender never gets `ok`/`error` for them, which breaks reply matching. A client must pace
   its sends (`wscommands.js` sends one at a time); answering dropped lines with an `error:`
   would make it visible.
+- [ ] **An HTTP request from the dev computer drops the browser's WebSocket.** With the UI
+  open through `npm run dev` (localhost:8485 → m4), one `curl "http://m4.local/command?plain=$I"`
+  from the same computer closed the tab's socket (it reconnected 3 s later). Seen 2026-11-02.
+  Cause not found: `/command` doesn't call `closeSessionChannels`. Could be the dev server's
+  proxy or a connection limit on the ESP32.
 - [ ] **Two tabs in one browser kick each other off forever.** Each new WebSocket closes
   every other socket with the same `sessionId` cookie (`WSChannel.cpp` WS_EVT_CONNECT,
   `closeSessionChannels`), and a cookie is shared by all tabs in a browser. The closed tab
@@ -49,8 +54,6 @@ Format: **title** — what goes wrong, where, and how we found it.
   2026-10-30, `!` during a long move to the first cut slowed the machine at once, but the
   hold only completed at the end of the move ("Stopping the paused job" logged then). At
   50 mm/s² and 2000 mm/min it should stop in about 11 mm. Pause (`!`) has the same problem.
-- [ ] **`!` sent while Idle enters Hold** (`Protocol.cpp` `protocol_do_feedhold`), a race
-  if the move finishes just before Pause is pressed.
 
 ## Medium: connection protocol (plan: all commands over the WebSocket)
 
