@@ -45,7 +45,7 @@ const machine = (() => {
 	 * mpos, wpos, wco: {x, y, z} in mm, null until known
 	 * units:       the firmware's G-code units, "mm" or "inch" (machine actions always send G21)
 	 * job:         {pct, file, line} while a file runs, else null
-	 * belts:       belt lengths tl/tr/bl/br and position errors etl/etr/ebl/ebr (mm), from the BL/BE
+	 * belts:       belt lengths tl/tr/bl/br (null = unknown) and position errors etl/etr/ebl/ebr (mm), from the BL/BE
  *              status fields (about once a second) and MINFO; kept between reports that
  *              don't carry them. MINFO also adds homed, extended, calibrationInProgress.
 	 */
@@ -61,6 +61,7 @@ const machine = (() => {
 		belts: null,
 	};
 	let statusCount = 0; // status reports seen, to wait for a fresh one
+	let beltLengthsFromStatus = false; // a BL field has been seen (firmware that reports it)
 	const listeners = { state: new Set(), line: new Set() };
 
 	/** Subscribe to "state" (a state snapshot after each change) or "line" (every line from
@@ -111,8 +112,10 @@ const machine = (() => {
 			} else if (key === "MS") {
 				state.maslow = Number(value);
 			} else if (key === "BL") {
-				const [tl, tr, bl, br] = value.split(",").map(Number);
+				// "?" = that belt's length is unknown (e.g. it moved while the motors were off)
+				const [tl, tr, bl, br] = value.split(",").map((v) => (v === "?" ? null : Number(v)));
 				state.belts = { ...state.belts, tl, tr, bl, br };
+				beltLengthsFromStatus = true;
 			} else if (key === "BE") {
 				const [etl, etr, ebl, ebr] = value.split(",").map(Number);
 				state.belts = { ...state.belts, etl, etr, ebl, ebr };
@@ -140,7 +143,16 @@ const machine = (() => {
 			changed = true;
 		} else if (msg.startsWith("MINFO: ")) {
 			try {
-				state.belts = { ...state.belts, ...JSON.parse(msg.slice("MINFO: ".length)) };
+				const info = JSON.parse(msg.slice("MINFO: ".length));
+				if (beltLengthsFromStatus) {
+					// The status report's BL knows which lengths are unknown; MINFO gives raw
+					// encoder values for those, so it doesn't override the lengths.
+					delete info.tl;
+					delete info.tr;
+					delete info.bl;
+					delete info.br;
+				}
+				state.belts = { ...state.belts, ...info };
 				changed = true;
 			} catch (e) {
 				console.warn("machine: unreadable MINFO", msg);

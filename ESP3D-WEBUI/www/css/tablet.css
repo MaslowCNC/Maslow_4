@@ -944,3 +944,24 @@ width: 100%;
 .conn-dot.conn-quiet { background-color: #e0a100; animation: conn-blink 1s step-start infinite; }
 .conn-dot.conn-down { background-color: #d23b2c; animation: conn-blink 1s step-start infinite; }
 @keyframes conn-blink { 50% { opacity: 0.35; } }
+
+/* Belt lengths in the status section: a 2x2 grid laid out like the arms (TL TR / BL BR) */
+.tablettab-belt-lengths {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px 8px;
+  padding: 4px 6px;
+  font-size: 0.9em;
+  text-align: center;
+}
+.tablettab-belt-lengths .belt-length-label {
+  grid-column: 1 / -1;
+  font-weight: bold;
+}
+.tablettab-belt-lengths .belt-length-value {
+  font-variant-numeric: tabular-nums;
+}
+.tablettab-belt-lengths .belt-length-unknown {
+  color: #b35c00;
+  font-style: italic;
+}

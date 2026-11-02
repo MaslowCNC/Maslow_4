@@ -636,6 +636,26 @@ const checkParams = (params = {}) => {
   return s.join("");
 }
 
+// Belt lengths row in the status section: refreshed on every machine.js state update (each
+// status report). Lengths are machine values, always in mm (the heading says so); "unknown" when the machine
+// reports it doesn't know a belt's length; "-" before any report.
+const BELT_ARMS = ["tl", "tr", "bl", "br"];
+const updateBeltLengths = (s) => {
+  for (const arm of BELT_ARMS) {
+    const el = document.getElementById(`belt-length-${arm}`);
+    if (!el) {
+      return; // tab not loaded yet
+    }
+    const mm = s.belts ? s.belts[arm] : undefined;
+    const unknown = mm === null;
+    el.textContent = unknown ? "unknown" : Number.isFinite(mm) ? mm.toFixed(1) : "-";
+    el.classList.toggle("belt-length-unknown", unknown);
+  }
+};
+if (typeof machine !== "undefined") {
+  machine.on("state", updateBeltLengths);
+}
+
 /** {X: 10, Y: -2} in display units → {x: 10, y: -2} in mm, for machine actions */
 const toMachineMm = (params) => {
   const mm = {};

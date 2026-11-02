@@ -78,9 +78,14 @@ describe("state store", () => {
     expect(g.machine.state.belts).toMatchObject(belts);
     reply("<Jog|MPos:1,0,0|FS:500,0|MS:7>", "<Jog|MPos:2,0,0|FS:500,0|MS:7|WCO:0,0,0>");
     expect(g.machine.state.belts).toMatchObject(belts);
-    // MINFO merges into the same object (it also brings homed/extended)
-    reply('MINFO: { "homed": true, "calibrationInProgress": false, "tl": 1810, "tr": 1801.5, "br": 1899, "bl": 1900.75, "etl": 0, "etr": 0, "ebr": 0, "ebl": 0, "extended": true }');
-    expect(g.machine.state.belts).toMatchObject({ tl: 1810, homed: true, extended: true });
+    // MINFO merges in homed/extended, but doesn't override lengths the status report gave
+    reply('MINFO: { "homed": true, "calibrationInProgress": false, "tl": 0.01, "tr": 1801.5, "br": 1899, "bl": 1900.75, "etl": 0, "etr": 0, "ebr": 0, "ebl": 0, "extended": true }');
+    expect(g.machine.state.belts).toMatchObject({ tl: 1800.25, homed: true, extended: true });
+  });
+
+  test("a '?' belt length is unknown (null)", () => {
+    reply("<Idle|MPos:0,0,0|FS:0,0|MS:0|BL:1814.59,?,1790.66,?|BE:0,0,0,0>");
+    expect(g.machine.state.belts).toMatchObject({ tl: 1814.59, tr: null, bl: 1790.66, br: null });
   });
 
   test("on('state') hears changes and can unsubscribe", () => {
