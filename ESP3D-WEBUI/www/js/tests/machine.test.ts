@@ -65,6 +65,24 @@ describe("state store", () => {
     expect(s.units).toBe("inch");
   });
 
+  test("MS gives the Maslow state from every report", () => {
+    reply("<Idle|MPos:0,0,0|FS:0,0|MS:4>");
+    expect(g.machine.state.maslow).toBe(4);
+    reply("<Home|MPos:0,0,0|FS:0,0|MS:1>");
+    expect(g.machine.state.maslow).toBe(1);
+  });
+
+  test("belt lengths and errors are kept between the reports that carry them", () => {
+    reply("<Jog|MPos:0,0,0|FS:500,0|MS:7|BL:1800.25,1801.5,1900.75,1899|BE:0.012,-0.034,0,0.5>");
+    const belts = { tl: 1800.25, tr: 1801.5, bl: 1900.75, br: 1899, etl: 0.012, etr: -0.034, ebl: 0, ebr: 0.5 };
+    expect(g.machine.state.belts).toMatchObject(belts);
+    reply("<Jog|MPos:1,0,0|FS:500,0|MS:7>", "<Jog|MPos:2,0,0|FS:500,0|MS:7|WCO:0,0,0>");
+    expect(g.machine.state.belts).toMatchObject(belts);
+    // MINFO merges into the same object (it also brings homed/extended)
+    reply('MINFO: { "homed": true, "calibrationInProgress": false, "tl": 1810, "tr": 1801.5, "br": 1899, "bl": 1900.75, "etl": 0, "etr": 0, "ebr": 0, "ebl": 0, "extended": true }');
+    expect(g.machine.state.belts).toMatchObject({ tl: 1810, homed: true, extended: true });
+  });
+
   test("on('state') hears changes and can unsubscribe", () => {
     const seen: string[] = [];
     const off = g.machine.on("state", (s: any) => seen.push(s.grbl));

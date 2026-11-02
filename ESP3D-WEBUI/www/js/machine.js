@@ -45,7 +45,9 @@ const machine = (() => {
 	 * mpos, wpos, wco: {x, y, z} in mm, null until known
 	 * units:       the firmware's G-code units, "mm" or "inch" (machine actions always send G21)
 	 * job:         {pct, file, line} while a file runs, else null
-	 * belts:       the last MINFO report (belt lengths tl/tr/bl/br, errors etl..., homed, extended)
+	 * belts:       belt lengths tl/tr/bl/br and position errors etl/etr/ebl/ebr (mm), from the BL/BE
+ *              status fields (about once a second) and MINFO; kept between reports that
+ *              don't carry them. MINFO also adds homed, extended, calibrationInProgress.
 	 */
 	const state = {
 		grbl: "",
@@ -107,6 +109,14 @@ const machine = (() => {
 				wpos = xyz(value);
 			} else if (key === "WCO") {
 				state.wco = xyz(value);
+			} else if (key === "MS") {
+				state.maslow = Number(value);
+			} else if (key === "BL") {
+				const [tl, tr, bl, br] = value.split(",").map(Number);
+				state.belts = { ...state.belts, tl, tr, bl, br };
+			} else if (key === "BE") {
+				const [etl, etr, ebl, ebr] = value.split(",").map(Number);
+				state.belts = { ...state.belts, etl, etr, ebl, ebr };
 			} else if (key === "SD") {
 				const [pct, file, line] = value.split(",");
 				job = { pct: Number(pct), file, line: line ? Number(line) : undefined };
@@ -131,7 +141,7 @@ const machine = (() => {
 			changed = true;
 		} else if (msg.startsWith("MINFO: ")) {
 			try {
-				state.belts = JSON.parse(msg.slice("MINFO: ".length));
+				state.belts = { ...state.belts, ...JSON.parse(msg.slice("MINFO: ".length)) };
 				changed = true;
 			} catch (e) {
 				console.warn("machine: unreadable MINFO", msg);

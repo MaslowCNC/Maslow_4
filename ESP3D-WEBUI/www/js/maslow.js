@@ -323,6 +323,24 @@ const updateFindAnchorsView = () => {
 
 
 
+/**
+ * Record the Maslow calibration state (0-9) and refresh the buttons that depend on it. Fed by
+ * the MS field of every status report (grbl.js; buttons refresh only on a change) and by
+ * "Current state: N" log lines (older firmware; buttons always refresh, as before). Returns
+ * false for an out-of-range value.
+ */
+const setMaslowState = (state, { refresh = false } = {}) => {
+	if (!Number.isInteger(state) || state < 0 || state > 9) {
+		console.error("Invalid state received from machine: " + state);
+		return false;
+	}
+	if (refresh || maslowStatus.state !== state) {
+		maslowStatus.state = state;
+		updateDynamicButtons();
+	}
+	return true;
+};
+
 /** Perform maslow specific-ish info message handling */
 const maslowInfoMsgHandling = (msg) => {
 	if (msg.startsWith('MINFO: ')) {
@@ -361,14 +379,9 @@ const maslowInfoMsgHandling = (msg) => {
 	if (msg.startsWith("[MSG:INFO: Current state:")) {
 		const m = msg.match(/Current state:\s*(\d+)/);
 		if (m) {
-			const state = Number(m[1]);
-			//If the state is in the range of 0-7, update the maslowStatus
-			if (state < 0 || state > 9) {
-				console.error("Invalid state received from machine: " + state);
+			if (!setMaslowState(Number(m[1]), { refresh: true })) {
 				return false;
 			}
-			maslowStatus.state = state;
-			updateDynamicButtons();
 		}
 		return true;
 	}

@@ -343,6 +343,10 @@ function parseGrblStatus(response) {
         grbl.feedrate = parseFloat(rates[0])
         grbl.spindleSpeed = parseInt(rates[1])
         break
+      case 'MS':
+        // Maslow calibration state, in every report from current firmware
+        grbl.maslowState = parseInt(value, 10)
+        break
       case 'Ov':
         var rates = value.split(',')
         grbl.ovr = {
@@ -648,6 +652,9 @@ var onWCOUpdateCallback = null;
 
 function grblProcessStatus(response) {
   var grbl = parseGrblStatus(response)
+  if (grbl.maslowState !== undefined && typeof setMaslowState === 'function') {
+    setMaslowState(grbl.maslowState)
+  }
   // Record persistent values of data
   const oldWCO = WCO ? [WCO[0], WCO[1], WCO[2]] : null;
   if (grbl.wco && !grbl.wco.some(isNaN)) {

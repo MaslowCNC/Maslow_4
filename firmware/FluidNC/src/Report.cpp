@@ -26,6 +26,7 @@
 #include "WebUI/NotificationsService.h"  // WebUI::notificationsService
 #include "InputFile.h"
 #include "Job.h"
+#include "Maslow/Maslow.h"  // Maslow: calibration state and belts in the status report
 
 #include <map>
 #include <freertos/task.h>
@@ -535,6 +536,10 @@ void report_realtime_status(Channel& channel) {
     }
     msg << "|FS:" << setprecision(0) << rate << "," << sys.spindle_speed();
 
+    // Maslow: the calibration state (MaslowEnums.h, 0-9) in every report.  Clients ignore
+    // fields they don't know, so standard senders are unaffected.
+    msg << "|MS:" << Maslow.calibration.getCurrentState();
+
     if (report_pin_string.length()) {
         msg << "|Pn:" << report_pin_string;
     }
@@ -603,6 +608,26 @@ void report_realtime_status(Channel& channel) {
             }
         }
     }
+    // Maslow: belt lengths (BL) and position errors (BE, encoder minus target), mm, arms in the
+    // order TL,TR,BL,BR.  Like WCO, counted in reports: every 20th while busy (auto-report at
+    // 50 ms makes that about once a second), and every report while idle, when reports only
+    // come on changes or a '?' (the WebUI asks once a second).
+    static int report_belts_counter = 0;
+    bool       busy = state_is(State::Homing) || state_is(State::Cycle) || state_is(State::Jog);  // periodic reports
+    if (!busy || report_belts_counter == 0) {
+        report_belts_counter = busy ? (REPORT_BELTS_REFRESH_BUSY_COUNT - 1) : 0;
+        msg << "|BL:";
+        for (int arm = _TL; arm < ARM_COUNT; arm++) {
+            msg << (arm ? "," : "") << setprecision(2) << Maslow.axis[arm].getPosition();
+        }
+        msg << "|BE:";
+        for (int arm = _TL; arm < ARM_COUNT; arm++) {
+            msg << (arm ? "," : "") << setprecision(3) << Maslow.axis[arm].getPositionError();
+        }
+    } else {
+        report_belts_counter--;
+    }
+
     if (Channel* jc = Job::channel()) {
         msg << "|" << jc->_progress;
         // Maslow: append the SD file line number of the currently-executing
