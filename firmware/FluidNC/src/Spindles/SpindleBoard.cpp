@@ -121,6 +121,10 @@ namespace Spindles {
         uint32_t dev_speed = mapSpeed(state, speed);
         if (state == SpindleState::Disable) {
             dev_speed = offSpeed();
+            // M5 keeps the modal S word, so mapSpeed() reported the old speed (FS:0,12000) for a
+            // spindle that is stopped.  The WebUI's spindle button follows that report: it stayed
+            // on "Spindle Off" and kept sending M5 instead of M3.
+            sys.set_spindle_speed(0);
             // A speed the stepper ISR queued for the next update() would otherwise go out
             // after this stop and start the spindle again.
             _rpm_dirty = false;
