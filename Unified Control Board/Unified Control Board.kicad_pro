@@ -852,6 +852,10 @@
     [
       "dfafd8b3-c553-40fe-89ed-f7586d7cf6a1",
       "Unified Control Board"
+    ],
+    [
+      "176e5b9f-9a9c-4b6b-b18a-17424bf72869",
+      "Spindle Drive"
     ]
   ],
   "text_variables": {},
