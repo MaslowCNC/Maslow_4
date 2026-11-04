@@ -473,6 +473,45 @@ const machine = (() => {
 		});
 	};
 
+	/**
+	 * Rapid (G0) through [{x, y}, ...] mm in work coordinates; Z doesn't move. Done when the
+	 * machine has reached the last point. The lines go out one at a time, each after the one
+	 * before is answered, so a stop leaves no moves waiting to run: the machine stays where it
+	 * stopped. Accepted once the first move is.
+	 */
+	const tracePath = (points) => {
+		if (!points.length) {
+			throw new TypeError("machine.tracePath: no points");
+		}
+		const lines = points.map((p) => `G90 G21 G0 ${axisWords({ x: p.x, y: p.y }).join(" ")}`);
+		if (state.maslow !== MASLOW.READY_TO_CUT) {
+			return notReady("trace", "Can't trace: belt lengths are unknown (machine not ready to cut)");
+		}
+		const restoreInches = state.units === "inch"; // the moves switch to G21
+		return operation("trace", async ({ accept, resolve, ended }) => {
+			let over = false;
+			ended.then(() => {
+				over = true;
+			});
+			const motion = trackMotion("trace");
+			ended.then(motion.stop);
+			for (const [i, line] of lines.entries()) {
+				if (over) {
+					return;
+				}
+				await sendLine(line);
+				if (i === 0) {
+					accept();
+				}
+			}
+			if (restoreInches && !over) {
+				await sendLine("G20");
+			}
+			await motion.wait(ended);
+			resolve();
+		});
+	};
+
 	// Stopping and pausing
 	/** End any running operation now: 0x18, then $STOP (raise Z, save). Done when $STOP is answered. */
 	const stop = () => {
@@ -770,6 +809,7 @@ const machine = (() => {
 		jog,
 		jogCancel,
 		moveTo,
+		tracePath,
 		// jobs and files
 		runFile,
 		files,
