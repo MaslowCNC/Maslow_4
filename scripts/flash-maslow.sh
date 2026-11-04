@@ -124,13 +124,14 @@ stage_fs() {
 if [[ $SKIP_BUILD == 0 ]]; then
     mkdir -p "$PLATFORMIO_DATA_DIR"
     [[ $FS == 1 ]] && stage_fs
+    echo "== Building firmware"
+    (cd "$FW" && "$PIO" run -e "$ENV_NAME")
+    # WiFi uploads the staged files one by one; only USB needs the littlefs image.
+    if [[ $FS == 1 && $MODE != wifi ]]; then (cd "$FW" && "$PIO" run -e "$ENV_NAME" -t buildfs); fi
 elif [[ $FS == 1 && $MODE == wifi ]]; then
     # WiFi uploads the staged files directly, so always stage the current UI build;
     # otherwise --skip-build would send whatever was staged last time.
     stage_fs
-    echo "== Building firmware"
-    (cd "$FW" && "$PIO" run -e "$ENV_NAME")
-    [[ $FS == 1 && $MODE != wifi ]] && (cd "$FW" && "$PIO" run -e "$ENV_NAME" -t buildfs)
 fi
 for f in bootloader.bin partitions.bin firmware.bin; do
     [[ -f "$BUILD/$f" ]] || { echo "missing $BUILD/$f (build first)" >&2; exit 1; }
