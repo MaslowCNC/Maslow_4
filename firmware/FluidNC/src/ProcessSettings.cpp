@@ -1499,6 +1499,15 @@ static Error maslow_takeSlack(const char* value, AuthenticationLevel auth_level,
     if (maslow_motion_blocked(out)) {
         return Error::SystemGcLock;
     }
+    // From UNKNOWN, Apply Tension recovers the belts that weren't restored at boot; refuse it
+    // here, with an error reply, when there is nothing to recover from.
+    if (Maslow.calibration.getCurrentState() == UNKNOWN) {
+        std::string why;
+        if (!Maslow.beltRecoveryPossible(why)) {
+            log_error(why);
+            return Error::SystemGcLock;
+        }
+    }
     sys.set_state(State::Homing);
     Maslow.calibration.requestStateChange(TAKING_SLACK);
     return Error::Ok;

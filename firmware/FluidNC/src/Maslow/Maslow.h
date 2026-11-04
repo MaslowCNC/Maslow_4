@@ -4,6 +4,7 @@
 
 #pragma once
 #include <Arduino.h>
+#include <string>
 #include "MaslowEnums.h"
 #include "MotorUnit.h"
 #include "Calibration.h"
@@ -129,6 +130,17 @@ public:
     bool beltLengthKnown(int arm);
     // Belts whose saved length was restored at boot (loadBeltPositions); each is checked alone.
     bool beltRestored[ARM_COUNT] = { false, false, false, false };
+    // The belt lengths and encoder angles saved in NVS, as read at boot.  Apply Tension from
+    // UNKNOWN uses them to restore the belts that weren't restored at boot.
+    float   savedBeltPos[ARM_COUNT]       = { 0, 0, 0, 0 };
+    int32_t savedBeltAngle[ARM_COUNT]     = { 0, 0, 0, 0 };
+    bool    savedBeltAvailable[ARM_COUNT] = { false, false, false, false };
+    bool    savedAngleAvailable[ARM_COUNT] = { false, false, false, false };
+    // Restore one belt's length from its saved value if its encoder is within 1/4 turn of the
+    // saved angle (the difference is added).  Returns false, leaving the belt alone, otherwise.
+    bool restoreBeltFromSaved(int arm);
+    // Whether Apply Tension can recover the unknown belts from UNKNOWN; if not, why.
+    bool beltRecoveryPossible(std::string& why);
 
     void   stop();
     void   eStop(String message = "Emergency stop triggered.");

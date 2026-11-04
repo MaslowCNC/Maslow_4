@@ -70,6 +70,10 @@ Format: **title** — what goes wrong, where, and how we found it.
 
 ## Low: state machine and storage
 
+- [ ] **STOP during Apply Tension probably leaves the state at TAKING_SLACK.** `$STOP` sets
+  Idle and stops the motors, but nothing changes the calibration state, so the machine reports
+  state 5 with no motion and refuses `$TKSLK` (only allowed from EXTENDEDOUT, READY_TO_CUT or
+  UNKNOWN); a retract gets out of it. Seen by reading the code (2026-11-04), not tested.
 - [ ] **CALIBRATION_COMPUTING (9) is unreachable.** Nothing requests it.
 - [ ] **`$CALRESET` from READY_TO_CUT is silently rejected.**
 - [ ] **NVS state isn't tied to the config file.** Belt positions, Z and G54 are shared
@@ -79,6 +83,11 @@ Format: **title** — what goes wrong, where, and how we found it.
 
 ## Tooling
 
+- [ ] **`flash-maslow.sh build` doesn't compile.** The `pio run` lines sit inside the
+  `--skip-build --fs` wifi branch (around line 126), so `build` (and a flash without
+  `--skip-build`) prints "Build complete" with whatever firmware.bin is already there, while
+  `--skip-build --fs` over WiFi does build. Found 2026-11-04 when a build left firmware.bin at
+  its old time. Workaround: `PLATFORMIO_DATA_DIR=firmware/.pio/fsdata pio run -e wifi_s3`.
 - [ ] **New `$Hostname` didn't apply after the FluidNC tab's Restart button** (2026-10-29,
   Maslow 4.1 renamed to `m4`); a power cycle applied it. The button sends `[ESP444]RESTART`
   (`restartdlg.js`), which raises `fullResetEvent` (`WebCommands.cpp`, `Protocol.cpp`) and

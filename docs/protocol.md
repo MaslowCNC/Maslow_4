@@ -298,7 +298,7 @@ plus a log line `Motion is disabled: <reason>` when Maslow has blocked motion.
 |---|---|---|---|
 | [`$ALL`][ALL] | `Maslow/retract` | retract all belts (state 1 → 2) | yes |
 | [`$EXT`][EXT] | `Maslow/extend` | extend all belts (3 → 4) | yes |
-| [`$TKSLK`][TKSLK] | `Maslow/takeSlack` | take up slack and find the frame (5) | yes |
+| [`$TKSLK`][TKSLK] | `Maslow/takeSlack` | take up slack and find the frame (5); from UNKNOWN, pull the belts not restored at boot tight and restore them from their saved lengths (`error:9` if no belt is known) | yes |
 | [`$CMP`][CMP] | `Maslow/comply` | release tension (8) | yes |
 | [`$CAL`][CAL] | `Maslow/calibrate` | run calibration (6) | yes |
 | [`$TLI`][TLI] [`$TRI`][TRI] [`$BLI`][BLI] [`$BRI`][BRI] | `Maslow/calibrateXXI` | pull that arm's belt in at full power for 200 ms (clears a jam) | no |
