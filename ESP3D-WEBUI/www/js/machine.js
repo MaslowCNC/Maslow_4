@@ -1,7 +1,8 @@
 // Machine actions: named operations on the machine (retract belts, jog, stop, read a setting,
 // ...) and one store of machine state. UI handlers call these instead of building command
 // strings. This file knows what to send for each action and how to tell when it has finished;
-// the lines themselves go through wsCommands (wscommands.js).
+// the lines themselves go through wsCommands (wscommands.js). SD card files (machine.files) go
+// over HTTP instead; see that section.
 //
 // Every action returns an Operation: a Promise that resolves when the action is DONE (the move
 // has finished, the belts are retracted, the setting was read), with .accepted, a Promise that
@@ -552,6 +553,203 @@ const machine = (() => {
 			resolve();
 		});
 
+	// Jobs
+	// What the firmware logs when a line of a running file fails, before it abandons the job:
+	// "[MSG:ERR: 20 (Unsupported or invalid g-code command) in SD at line 12]"
+	const JOB_LINE_ERROR = /^\[MSG:ERR: (\d+) \((.*)\) in .+ at line (\d+)\]/;
+
+	/**
+	 * Run a G-code file from the SD card, e.g. runFile("/part.nc"). Accepted when the firmware
+	 * has opened the file; done when the job has finished and the machine is Idle again. Fails
+	 * on an alarm, or when the firmware rejects a line of the file (code is that error).
+	 * pause(), resume() and stop() act on the running job.
+	 */
+	const runFile = (path) => {
+		if (typeof path !== "string" || !path) {
+			throw new TypeError(`machine.runFile: path must be a file path, got ${path}`);
+		}
+		if (state.maslow !== MASLOW.READY_TO_CUT) {
+			return notReady("run file", `Can't run ${path}: belt lengths are unknown (machine not ready to cut)`);
+		}
+		const line = `$SD/Run=${path}`;
+		return operation("run file", async ({ accept, resolve, reject, ended }) => {
+			// A job shows as the SD status field, or as Run/Hold while its lines execute.
+			let sawJob = false;
+			const offState = on("state", (s) => {
+				if (s.job || s.grbl === "Run" || s.grbl === "Hold") {
+					sawJob = true;
+				}
+			});
+			const offLine = on("line", (msg) => {
+				const m = JOB_LINE_ERROR.exec(msg);
+				if (m) {
+					reject(machineError("failed", line, { code: Number(m[1]), detail: `${path} line ${m[3]}: ${m[2]}` }));
+				}
+			});
+			ended.then(() => {
+				offState();
+				offLine();
+			});
+			await sendLine(line);
+			accept();
+			// A very short file can finish between two status reports, so Idle with no job also
+			// counts once two fresh reports have come after the ok (as in trackMotion).
+			const countAtOk = statusCount;
+			wsCommands.sendRealtime(0x3f);
+			await waitFor((s) => s.grbl === "Idle" && !s.job && (sawJob || statusCount - countAtOk >= 2), {
+				failIf: (s) => s.grbl === "Alarm",
+				what: "run file",
+				failDetail: () => `${path}: machine alarmed`,
+				ended,
+			});
+			resolve();
+		});
+	};
+
+	// ---------------------------------------------------------------- SD card files
+
+	// machine.files: the SD card, over HTTP (/upload, through http.js's queue), not the
+	// WebSocket. These are plain Promises, not Operations: they don't move the machine, and
+	// stop() leaves them alone. Paths are from the SD card root, e.g. "/jobs/part.nc".
+	//
+	// Each resolves with the listing of the directory the firmware sends back:
+	//   { path, status, total, used, occupation, files: [{ name, size, isdir, datetime }] }
+	// size is in bytes (null for a directory); status is the firmware's message ("Ok",
+	// "part.nc deleted", ...). They reject with an Error { reason, command, code?, detail }:
+	//   busy       another upload is in progress; nothing was sent
+	//   rejected   HTTP error (code is the HTTP status)
+	//   bad-reply  the reply wasn't a listing
+	//   failed     the firmware answered, but said the action failed (status says why);
+	//              err.listing is the directory as it now is
+
+	const fileError = (reason, command, extra = {}) =>
+		Object.assign(new Error(extra.detail ?? `${command}: ${reason}`), { reason, command, ...extra });
+
+	// The firmware's status messages for a file action that didn't happen (WebUIServer.cpp)
+	const FILE_ACTION_FAILED = /^(Cannot |Missing |Upload failed)/;
+
+	const splitPath = (path) => {
+		const i = path.lastIndexOf("/");
+		return { dir: path.slice(0, i + 1) || "/", name: path.slice(i + 1) };
+	};
+
+	const parseListing = (text, command) => {
+		let raw;
+		try {
+			raw = text.length ? JSON.parse(text) : { files: [] };
+		} catch (e) {
+			raw = null;
+		}
+		if (!raw || raw.status === undefined) {
+			throw fileError("bad-reply", command, { detail: `${command}: unreadable reply` });
+		}
+		const files = (Array.isArray(raw.files) ? raw.files : []).map((f) => {
+			const isdir = f.size === "-1";
+			return { name: f.name, size: isdir ? null : Number(f.size), isdir, datetime: f.datetime };
+		});
+		const listing = {
+			path: raw.path,
+			status: raw.status,
+			total: raw.total,
+			used: raw.used,
+			occupation: raw.occupation,
+			files,
+		};
+		if (FILE_ACTION_FAILED.test(listing.status)) {
+			throw fileError("failed", command, { detail: listing.status, listing });
+		}
+		return listing;
+	};
+
+	const httpError = (command, status, text) =>
+		fileError("rejected", command, { code: status, detail: `${command}: HTTP ${status}${text ? ` ${text}` : ""}` });
+
+	/** GET a /upload file action ({action, filename, newname}) in dir; resolves with the listing. */
+	const fileAction = (command, dir, params = {}) =>
+		new Promise((resolve, reject) => {
+			SendGetHttp(
+				buildHttpFileCmd({ path: dir, ...params }),
+				(text) => {
+					try {
+						resolve(parseListing(text, command));
+					} catch (err) {
+						reject(err);
+					}
+				},
+				(status, text) => reject(httpError(command, status, text)),
+			);
+		});
+
+	// Ping checks are paused during uploads and deletes, which can take long enough to look
+	// like a lost connection (socket.js).
+	const withoutPing = async (work) => {
+		if (typeof disablePingForUpload === "function") {
+			disablePingForUpload();
+		}
+		try {
+			return await work();
+		} finally {
+			if (typeof restorePingAfterUpload === "function") {
+				restorePingAfterUpload();
+			}
+		}
+	};
+
+	const files = {
+		/** List a directory, e.g. list("/") or list("/jobs/"). */
+		list: (dir = "/") => fileAction(`list ${dir}`, dir),
+
+		/**
+		 * Upload one File (or several: a FileList or array) into dir. onProgress(event) gets the
+		 * XHR upload progress events. Resolves with the listing of dir.
+		 */
+		upload: (dir, fileOrFiles, { onProgress } = {}) => {
+			const list = fileOrFiles instanceof Blob ? [fileOrFiles] : [...fileOrFiles];
+			const command = `upload ${list.map((f) => f.name).join(", ")}`;
+			if (typeof http_communication_locked !== "undefined" && http_communication_locked) {
+				return Promise.reject(fileError("busy", command, { detail: `${command}: another upload is in progress` }));
+			}
+			return withoutPing(
+				() =>
+					new Promise((resolve, reject) => {
+						SendFileHttp(
+							httpCmd.fileUpload,
+							BuildFileUploadFormData(dir, list),
+							onProgress,
+							(text) => {
+								try {
+									resolve(parseListing(text, command));
+								} catch (err) {
+									reject(err);
+								}
+							},
+							(status, text) => reject(httpError(command, status, text)),
+						);
+					}),
+			);
+		},
+
+		/** Delete a file, or with {dir: true} a directory and everything in it. */
+		delete: (path, { dir = false } = {}) => {
+			const { dir: parent, name } = splitPath(path);
+			return withoutPing(() =>
+				fileAction(`delete ${path}`, parent, { action: dir ? "deletedir" : "delete", filename: name }),
+			);
+		},
+
+		/** Rename a file or directory in place: rename("/jobs/a.nc", "b.nc"). */
+		rename: (path, newName) => {
+			const { dir, name } = splitPath(path);
+			return fileAction(`rename ${path}`, dir, { action: "rename", filename: name, newname: newName });
+		},
+
+		/** Create a directory, e.g. createDir("/jobs/new"). */
+		createDir: (path) => {
+			const { dir, name } = splitPath(path);
+			return fileAction(`create ${path}`, dir, { action: "createdir", filename: name });
+		},
+	};
+
 	return {
 		// state
 		get state() {
@@ -572,6 +770,9 @@ const machine = (() => {
 		jog,
 		jogCancel,
 		moveTo,
+		// jobs and files
+		runFile,
+		files,
 		// stopping
 		stop,
 		pause,

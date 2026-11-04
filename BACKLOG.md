@@ -81,6 +81,15 @@ Format: **title** — what goes wrong, where, and how we found it.
 - [ ] **Boot restore bypasses state-change guards** by setting `calibration.currentState`
   directly.
 
+## Low: web UI
+
+- [ ] **File sizes always show in bytes.** `formatFileSize` (`files.js`) loops with
+  `for...in` over the unit array, so it gets indices, not units, and never matches a unit.
+  Found reading the code (2026-11-04).
+- [ ] **`buildHttpCmd` encodes every parameter.** It checks `[noEncKeys].includes(key)` (an
+  array inside an array), which is never true, so the "don't encode" list does nothing
+  (`httpCmdBuilders.js`). Harmless for the keys used now. Found reading the code (2026-11-04).
+
 ## Tooling
 
 - [ ] **`flash-maslow.sh build` doesn't compile.** The `pio run` lines sit inside the
