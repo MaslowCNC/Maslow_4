@@ -1257,6 +1257,7 @@ static Error maslow_stop(const char* value, AuthenticationLevel auth_level, Chan
     // regardless of whether the Z raise executed or the previous state.
     Maslow.saveZPos();
     Maslow.saveBeltPositions();
+    Maslow.calibration.stopTakingSlack();  // leave TAKING_SLACK (EXTENDEDOUT saves the belts itself)
     Maslow.stop();  // Complete cleanup (calibration state, arm reset, etc.)
     return Error::Ok;
 }

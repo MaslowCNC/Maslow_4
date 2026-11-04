@@ -70,10 +70,11 @@ Format: **title** — what goes wrong, where, and how we found it.
 
 ## Low: state machine and storage
 
-- [ ] **STOP during Apply Tension probably leaves the state at TAKING_SLACK.** `$STOP` sets
-  Idle and stops the motors, but nothing changes the calibration state, so the machine reports
-  state 5 with no motion and refuses `$TKSLK` (only allowed from EXTENDEDOUT, READY_TO_CUT or
-  UNKNOWN); a retract gets out of it. Seen by reading the code (2026-11-04), not tested.
+- [ ] **STOP during other belt operations leaves the in-progress state.** STOP during
+  Extend, Find Anchors or Release Tension leaves state 3, 6 or 8 with no motion, and Extend,
+  Find Anchors and Release Tension are each refused from their own state, so only a retract
+  gets out of it. Apply Tension (5) is handled (`Calibration::stopTakingSlack`). Seen by reading
+  the code (2026-11-04), not tested.
 - [ ] **CALIBRATION_COMPUTING (9) is unreachable.** Nothing requests it.
 - [ ] **`$CALRESET` from READY_TO_CUT is silently rejected.**
 - [ ] **NVS state isn't tied to the config file.** Belt positions, Z and G54 are shared
