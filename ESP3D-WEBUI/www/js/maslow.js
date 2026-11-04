@@ -324,13 +324,16 @@ const updateFindAnchorsView = () => {
  * and refresh the buttons that depend on it when it changes. Returns false for an
  * out-of-range value.
  */
+let maslowStateShown = false;
 const setMaslowState = (state) => {
 	if (!Number.isInteger(state) || state < 0 || state > 9) {
 		console.error("Invalid state received from machine: " + state);
 		return false;
 	}
-	if (maslowStatus.state !== state) {
+	// maslowStatus.state starts at 0 (UNKNOWN), so also redraw on the first report.
+	if (maslowStatus.state !== state || !maslowStateShown) {
 		maslowStatus.state = state;
+		maslowStateShown = true;
 		updateDynamicButtons();
 	}
 	return true;

@@ -7,11 +7,13 @@
 //   node dev-server.js 192.168.1.50 9000
 //
 // On each page load it runs `gulp package2` (unminified build, ~3 s) if anything
-// under www/ changed since the last build. Keep only one UI tab open per machine.
+// under www/ changed since the last build. Tabs in one browser share a session, so the
+// newest tab takes the machine connection (as on the machine itself).
 
 const http = require('http')
 const net = require('net')
 const dns = require('dns')
+const crypto = require('crypto')
 const fs = require('fs')
 const path = require('path')
 const { execFile } = require('child_process')
@@ -55,10 +57,19 @@ const build = () => {
 	return building
 }
 
-const serveIndex = async (res) => {
+// The firmware ties each WebSocket to a sessionId cookie and closes older sockets of the same
+// session. It sets that cookie when it serves index.html, which it doesn't do here, so give each
+// browser its own; without one, every dev-server tab shares the empty session and they keep
+// closing each other's sockets.
+const sessionCookie = (req) => {
+	if (/(?:^|;\s*)sessionId=/.test(req.headers.cookie || '')) return {}
+	return { 'Set-Cookie': `sessionId=${crypto.randomBytes(8).toString('hex')}; Path=/` }
+}
+
+const serveIndex = async (req, res) => {
 	try {
 		if (!fs.existsSync(builtIndex) || newestMtime(wwwDir) > lastBuild) await build()
-		res.writeHead(200, { 'Content-Type': 'text/html', 'Cache-Control': 'no-store' })
+		res.writeHead(200, { 'Content-Type': 'text/html', 'Cache-Control': 'no-store', ...sessionCookie(req) })
 		fs.createReadStream(builtIndex).pipe(res)
 	} catch (err) {
 		res.writeHead(500, { 'Content-Type': 'text/plain' })
@@ -103,7 +114,7 @@ const proxy = (req, res) => {
 const server = http.createServer((req, res) => {
 	const p = req.url.split('?')[0]
 	if (p === '/' || p === '/index.html') {
-		if (req.method === 'GET') return serveIndex(res)
+		if (req.method === 'GET') return serveIndex(req, res)
 		if (req.method === 'HEAD') return res.writeHead(200).end() // health probes; the firmware sends a body on HEAD
 	}
 	proxy(req, res)
