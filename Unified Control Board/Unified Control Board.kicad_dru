@@ -24,52 +24,58 @@
 	(constraint track_width (min 0.3mm))
 	(condition "A.NetClass == 'Motor' && A.Width < 0.35mm"))
 
+# USB1 (KH-TYPE-C-16P) has pads 0.18-0.21 mm from its own NPTH locating holes, as the footprint is drawn and
+# as JLCPCB builds it; the head design excluded these markers. Allow it for that footprint only.
+(rule "USB1 locating holes"
+	(constraint hole_clearance (min 0.15mm))
+	(condition "A.memberOfFootprint('USB1') && B.memberOfFootprint('USB1')"))
+
 # Small power pours stay whole: no other net's tracks through them, except to reach a pad inside
 # (areas ISL_nn, made by island_areas.py; rules by island_rules.py).
-(rule "ISL_00: PHA2 PHA2 top Q21/Q20 F.Cu stays whole"
+(rule "ISL_00: VCC pour F.Cu stays whole"
 	(layer F.Cu)
 	(constraint disallow track)
-	(condition "A.intersectsArea('ISL_00') && A.NetName != 'PHA2'"))
+	(condition "A.intersectsArea('ISL_00') && A.NetName != 'VCC' && A.NetName != 'GND'"))
 
-(rule "ISL_01: VCC pour F.Cu stays whole"
+(rule "ISL_01: PHC1 PHC1 top Q15/Q14 F.Cu stays whole"
 	(layer F.Cu)
 	(constraint disallow track)
-	(condition "A.intersectsArea('ISL_01') && A.NetName != 'VCC' && A.NetName != 'GND'"))
+	(condition "A.intersectsArea('ISL_01') && A.NetName != 'PHC1'"))
 
-(rule "ISL_02: VCC VCC Q1 tab F.Cu stays whole"
+(rule "ISL_02: PHC2 PHC2 top Q25/Q24 F.Cu stays whole"
 	(layer F.Cu)
 	(constraint disallow track)
-	(condition "A.intersectsArea('ISL_02') && A.NetName != 'VCC'"))
+	(condition "A.intersectsArea('ISL_02') && A.NetName != 'PHC2'"))
 
-(rule "ISL_03: PHA1 PHA1 top Q11/Q10 F.Cu stays whole"
+(rule "ISL_03: VCC VCC top Q10 F.Cu stays whole"
 	(layer F.Cu)
 	(constraint disallow track)
-	(condition "A.intersectsArea('ISL_03') && A.NetName != 'PHA1'"))
+	(condition "A.intersectsArea('ISL_03') && A.NetName != 'VCC'"))
 
-(rule "ISL_04: PHC2 PHC2 top Q25/Q24 F.Cu stays whole"
+(rule "ISL_04: PHA1 PHA1 top Q11/Q10 F.Cu stays whole"
 	(layer F.Cu)
 	(constraint disallow track)
-	(condition "A.intersectsArea('ISL_04') && A.NetName != 'PHC2'"))
+	(condition "A.intersectsArea('ISL_04') && A.NetName != 'PHA1'"))
 
-(rule "ISL_05: VCC VCC top Q14 F.Cu stays whole"
+(rule "ISL_05: VCC VCC top Q12 F.Cu stays whole"
 	(layer F.Cu)
 	(constraint disallow track)
 	(condition "A.intersectsArea('ISL_05') && A.NetName != 'VCC'"))
 
-(rule "ISL_06: PHC1 PHC1 top Q15/Q14 F.Cu stays whole"
+(rule "ISL_06: VCC pour F.Cu stays whole"
 	(layer F.Cu)
 	(constraint disallow track)
-	(condition "A.intersectsArea('ISL_06') && A.NetName != 'PHC1'"))
+	(condition "A.intersectsArea('ISL_06') && A.NetName != 'VCC' && A.NetName != 'GND'"))
 
-(rule "ISL_07: VCC pour F.Cu stays whole"
+(rule "ISL_07: VCC VCC Q1 tab F.Cu stays whole"
 	(layer F.Cu)
 	(constraint disallow track)
-	(condition "A.intersectsArea('ISL_07') && A.NetName != 'VCC' && A.NetName != 'GND'"))
+	(condition "A.intersectsArea('ISL_07') && A.NetName != 'VCC'"))
 
-(rule "ISL_08: VCC VCC top Q12 F.Cu stays whole"
+(rule "ISL_08: VIN_RAW VIN_RAW Q1 source F.Cu stays whole"
 	(layer F.Cu)
 	(constraint disallow track)
-	(condition "A.intersectsArea('ISL_08') && A.NetName != 'VCC'"))
+	(condition "A.intersectsArea('ISL_08') && A.NetName != 'VIN_RAW'"))
 
 (rule "ISL_09: BR OUT2 pour F.Cu stays whole"
 	(layer F.Cu)
@@ -86,7 +92,7 @@
 	(constraint disallow track)
 	(condition "A.intersectsArea('ISL_11') && A.NetName != 'VCC' && A.NetName != 'BL OUT2' && A.NetName != 'GND'"))
 
-(rule "ISL_12: VCC VCC top Q20 F.Cu stays whole"
+(rule "ISL_12: VCC VCC top Q22 F.Cu stays whole"
 	(layer F.Cu)
 	(constraint disallow track)
 	(condition "A.intersectsArea('ISL_12') && A.NetName != 'VCC'"))
@@ -96,122 +102,122 @@
 	(constraint disallow track)
 	(condition "A.intersectsArea('ISL_13') && A.NetName != 'VCC'"))
 
-(rule "ISL_14: VIN_RAW VIN_RAW Q1 source F.Cu stays whole"
+(rule "ISL_14: PHB1 PHB1 top Q13/Q12 F.Cu stays whole"
 	(layer F.Cu)
 	(constraint disallow track)
-	(condition "A.intersectsArea('ISL_14') && A.NetName != 'VIN_RAW'"))
+	(condition "A.intersectsArea('ISL_14') && A.NetName != 'PHB1'"))
 
-(rule "ISL_15: VCC VCC top Q22 F.Cu stays whole"
+(rule "ISL_15: VCC VCC top Q20 F.Cu stays whole"
 	(layer F.Cu)
 	(constraint disallow track)
 	(condition "A.intersectsArea('ISL_15') && A.NetName != 'VCC'"))
 
-(rule "ISL_16: PHB2 PHB2 top Q23/Q22 F.Cu stays whole"
+(rule "ISL_16: PHA2 PHA2 top Q21/Q20 F.Cu stays whole"
 	(layer F.Cu)
 	(constraint disallow track)
-	(condition "A.intersectsArea('ISL_16') && A.NetName != 'PHB2'"))
+	(condition "A.intersectsArea('ISL_16') && A.NetName != 'PHA2'"))
 
 (rule "ISL_17: VCC pour F.Cu stays whole"
 	(layer F.Cu)
 	(constraint disallow track)
 	(condition "A.intersectsArea('ISL_17') && A.NetName != 'VCC' && A.NetName != 'GND'"))
 
-(rule "ISL_18: PHB1 PHB1 top Q13/Q12 F.Cu stays whole"
+(rule "ISL_18: PHB2 PHB2 top Q23/Q22 F.Cu stays whole"
 	(layer F.Cu)
 	(constraint disallow track)
-	(condition "A.intersectsArea('ISL_18') && A.NetName != 'PHB1'"))
+	(condition "A.intersectsArea('ISL_18') && A.NetName != 'PHB2'"))
 
-(rule "ISL_19: VCC VCC top Q10 F.Cu stays whole"
+(rule "ISL_19: VCC VCC top Q14 F.Cu stays whole"
 	(layer F.Cu)
 	(constraint disallow track)
 	(condition "A.intersectsArea('ISL_19') && A.NetName != 'VCC'"))
 
-(rule "ISL_20: VCC VCC Q20 B.Cu stays whole"
+(rule "ISL_20: SA2 SA2 Q21/R143 B.Cu stays whole"
 	(layer B.Cu)
 	(constraint disallow track)
-	(condition "A.intersectsArea('ISL_20') && A.NetName != 'VCC'"))
+	(condition "A.intersectsArea('ISL_20') && A.NetName != 'SA2' && A.NetName != 'GLA2_G'"))
 
-(rule "ISL_21: SA2 SA2 Q21/R143 B.Cu stays whole"
+(rule "ISL_21: PHA1 PHA1 Q11/Q10 B.Cu stays whole"
 	(layer B.Cu)
 	(constraint disallow track)
-	(condition "A.intersectsArea('ISL_21') && A.NetName != 'SA2' && A.NetName != 'GLA2_G'"))
+	(condition "A.intersectsArea('ISL_21') && A.NetName != 'PHA1' && A.NetName != 'GHA1_G'"))
 
-(rule "ISL_22: VCC VCC Q22 B.Cu stays whole"
+(rule "ISL_22: VCC VCC Q12 B.Cu stays whole"
 	(layer B.Cu)
 	(constraint disallow track)
 	(condition "A.intersectsArea('ISL_22') && A.NetName != 'VCC'"))
 
-(rule "ISL_23: VCC VCC Q14 B.Cu stays whole"
+(rule "ISL_23: PHC2 PHC2 Q25/Q24 B.Cu stays whole"
 	(layer B.Cu)
 	(constraint disallow track)
-	(condition "A.intersectsArea('ISL_23') && A.NetName != 'VCC'"))
+	(condition "A.intersectsArea('ISL_23') && A.NetName != 'PHC2' && A.NetName != 'GHC2_G'"))
 
-(rule "ISL_24: PHB1 PHB1 Q13/Q12 B.Cu stays whole"
+(rule "ISL_24: SB2 SB2 Q23/R144 B.Cu stays whole"
 	(layer B.Cu)
 	(constraint disallow track)
-	(condition "A.intersectsArea('ISL_24') && A.NetName != 'PHB1' && A.NetName != 'GHB1_G'"))
+	(condition "A.intersectsArea('ISL_24') && A.NetName != 'SB2' && A.NetName != 'GLB2_G'"))
 
-(rule "ISL_25: PHC1 PHC1 Q15/Q14 B.Cu stays whole"
+(rule "ISL_25: VCC VCC Q10 B.Cu stays whole"
 	(layer B.Cu)
 	(constraint disallow track)
-	(condition "A.intersectsArea('ISL_25') && A.NetName != 'PHC1' && A.NetName != 'GHC1_G'"))
+	(condition "A.intersectsArea('ISL_25') && A.NetName != 'VCC'"))
 
-(rule "ISL_26: SC2 SC2 Q25/R145 B.Cu stays whole"
+(rule "ISL_26: VCC VCC Q14 B.Cu stays whole"
 	(layer B.Cu)
 	(constraint disallow track)
-	(condition "A.intersectsArea('ISL_26') && A.NetName != 'SC2' && A.NetName != 'GLC2_G'"))
+	(condition "A.intersectsArea('ISL_26') && A.NetName != 'VCC'"))
 
-(rule "ISL_27: PHB2 PHB2 Q23/Q22 B.Cu stays whole"
+(rule "ISL_27: SA1 SA1 Q11/R113 B.Cu stays whole"
 	(layer B.Cu)
 	(constraint disallow track)
-	(condition "A.intersectsArea('ISL_27') && A.NetName != 'PHB2' && A.NetName != 'GHB2_G'"))
+	(condition "A.intersectsArea('ISL_27') && A.NetName != 'SA1' && A.NetName != 'GLA1_G'"))
 
-(rule "ISL_28: SC1 SC1 Q15/R115 B.Cu stays whole"
+(rule "ISL_28: VCC VCC Q24 B.Cu stays whole"
 	(layer B.Cu)
 	(constraint disallow track)
-	(condition "A.intersectsArea('ISL_28') && A.NetName != 'SC1' && A.NetName != 'GLC1_G'"))
+	(condition "A.intersectsArea('ISL_28') && A.NetName != 'VCC'"))
 
-(rule "ISL_29: VCC VCC Q12 B.Cu stays whole"
+(rule "ISL_29: PHB1 PHB1 Q13/Q12 B.Cu stays whole"
 	(layer B.Cu)
 	(constraint disallow track)
-	(condition "A.intersectsArea('ISL_29') && A.NetName != 'VCC'"))
+	(condition "A.intersectsArea('ISL_29') && A.NetName != 'PHB1' && A.NetName != 'GHB1_G'"))
 
-(rule "ISL_30: PHA1 PHA1 Q11/Q10 B.Cu stays whole"
+(rule "ISL_30: PHA2 PHA2 Q21/Q20 B.Cu stays whole"
 	(layer B.Cu)
 	(constraint disallow track)
-	(condition "A.intersectsArea('ISL_30') && A.NetName != 'PHA1' && A.NetName != 'GHA1_G'"))
+	(condition "A.intersectsArea('ISL_30') && A.NetName != 'PHA2' && A.NetName != 'GHA2_G'"))
 
-(rule "ISL_31: VCC VCC Q10 B.Cu stays whole"
+(rule "ISL_31: VCC VCC Q22 B.Cu stays whole"
 	(layer B.Cu)
 	(constraint disallow track)
 	(condition "A.intersectsArea('ISL_31') && A.NetName != 'VCC'"))
 
-(rule "ISL_32: SB2 SB2 Q23/R144 B.Cu stays whole"
+(rule "ISL_32: SB1 SB1 Q13/R114 B.Cu stays whole"
 	(layer B.Cu)
 	(constraint disallow track)
-	(condition "A.intersectsArea('ISL_32') && A.NetName != 'SB2' && A.NetName != 'GLB2_G'"))
+	(condition "A.intersectsArea('ISL_32') && A.NetName != 'SB1' && A.NetName != 'GLB1_G'"))
 
-(rule "ISL_33: VCC VCC Q24 B.Cu stays whole"
+(rule "ISL_33: PHC1 PHC1 Q15/Q14 B.Cu stays whole"
 	(layer B.Cu)
 	(constraint disallow track)
-	(condition "A.intersectsArea('ISL_33') && A.NetName != 'VCC'"))
+	(condition "A.intersectsArea('ISL_33') && A.NetName != 'PHC1' && A.NetName != 'GHC1_G'"))
 
-(rule "ISL_34: SA1 SA1 Q11/R113 B.Cu stays whole"
+(rule "ISL_34: SC2 SC2 Q25/R145 B.Cu stays whole"
 	(layer B.Cu)
 	(constraint disallow track)
-	(condition "A.intersectsArea('ISL_34') && A.NetName != 'SA1' && A.NetName != 'GLA1_G'"))
+	(condition "A.intersectsArea('ISL_34') && A.NetName != 'SC2' && A.NetName != 'GLC2_G'"))
 
-(rule "ISL_35: SB1 SB1 Q13/R114 B.Cu stays whole"
+(rule "ISL_35: SC1 SC1 Q15/R115 B.Cu stays whole"
 	(layer B.Cu)
 	(constraint disallow track)
-	(condition "A.intersectsArea('ISL_35') && A.NetName != 'SB1' && A.NetName != 'GLB1_G'"))
+	(condition "A.intersectsArea('ISL_35') && A.NetName != 'SC1' && A.NetName != 'GLC1_G'"))
 
-(rule "ISL_36: PHC2 PHC2 Q25/Q24 B.Cu stays whole"
+(rule "ISL_36: VCC VCC Q20 B.Cu stays whole"
 	(layer B.Cu)
 	(constraint disallow track)
-	(condition "A.intersectsArea('ISL_36') && A.NetName != 'PHC2' && A.NetName != 'GHC2_G'"))
+	(condition "A.intersectsArea('ISL_36') && A.NetName != 'VCC'"))
 
-(rule "ISL_37: PHA2 PHA2 Q21/Q20 B.Cu stays whole"
+(rule "ISL_37: PHB2 PHB2 Q23/Q22 B.Cu stays whole"
 	(layer B.Cu)
 	(constraint disallow track)
-	(condition "A.intersectsArea('ISL_37') && A.NetName != 'PHA2' && A.NetName != 'GHA2_G'"))
+	(condition "A.intersectsArea('ISL_37') && A.NetName != 'PHB2' && A.NetName != 'GHB2_G'"))
