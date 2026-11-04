@@ -186,6 +186,19 @@ void cmd_queue_drop_channel(Channel& channel) {
     }
 }
 
+// Maslow: a reset discards every unread line (allChannels.flushRx), but the polling task may
+// already have handed the next line to cmd_queue, and it would run after the restart (STOP
+// mid-trace made the machine carry on to the next point). Drop it too.
+static void cmd_queue_drop_all() {
+    if (!cmd_queue) {
+        return;
+    }
+    LineItem item;
+    while (xQueueReceive(cmd_queue, &item, 0) == pdTRUE) {
+        item.channel->release_processing_ref();  // dropped: it will never run or be acked
+    }
+}
+
 TaskHandle_t pollingTask = nullptr;
 
 // Maslow emergency-stops when Maslow.update() is not called for 100 ms, and its message says only
@@ -596,6 +609,7 @@ static void protocol_do_soft_restart() {
     plan_sync_position();
     gc_sync_position();
     allChannels.flushRx();
+    cmd_queue_drop_all();
     report_init_message(allChannels);
     mc_init();
 

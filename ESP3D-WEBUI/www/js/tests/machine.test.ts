@@ -235,6 +235,51 @@ describe("motion", () => {
     await op;
   });
 
+  test("tracePath sends one move at a time and finishes at the last point", async () => {
+    reply("[GC:G0 G54 G17 G21 G90 G94 M5 M9 T0 F0 S0]");
+    const op = g.machine.tracePath([{ x: 10, y: 0 }, { x: 10, y: 20.5 }, { x: 0, y: 0 }]);
+    expect(g.ws_source.sent).toEqual(["G90 G21 G0 X10 Y0\n"]);
+    reply("ok", "<Run|MPos:5,0,0>");
+    await op.accepted;
+    expect(lastSent()).toBe("G90 G21 G0 X10 Y20.5\n");
+    reply("ok");
+    await tick();
+    expect(lastSent()).toBe("G90 G21 G0 X0 Y0\n");
+    reply("ok", "<Run|MPos:3,3,0>", "<Idle|MPos:0,0,0>");
+    await op;
+    expect(g.ws_source.sent.length).toBe(3);
+  });
+
+  test("tracePath puts inches back after its G21 moves", async () => {
+    reply("[GC:G0 G54 G17 G20 G90 G94 M5 M9 T0 F0 S0]");
+    const op = g.machine.tracePath([{ x: 1, y: 2 }]);
+    reply("ok", "<Run|MPos:0.5,1,0>");
+    await tick();
+    expect(lastSent()).toBe("G20\n");
+    reply("ok", "<Idle|MPos:1,2,0>");
+    await op;
+  });
+
+  test("stop during tracePath sends none of the remaining moves", async () => {
+    const op = g.machine.tracePath([{ x: 10, y: 0 }, { x: 10, y: 10 }, { x: 0, y: 10 }, { x: 0, y: 0 }]);
+    reply("ok", "<Run|MPos:5,0,0>");
+    await op.accepted;
+    const stop = g.machine.stop();
+    await expect(op).rejects.toMatchObject({ reason: "reset" });
+    reply("", BANNER);
+    await tick(60);
+    reply("ok", "<Idle|MPos:6,0,0>");
+    await stop;
+    await tick();
+    expect(g.ws_source.sent).toEqual(["G90 G21 G0 X10 Y0\n", "G90 G21 G0 X10 Y10\n", "\x18", "$STOP\n"]);
+  });
+
+  test("tracePath needs known belts", async () => {
+    reply("<Idle|MPos:0,0,0|MS:0>");
+    await expect(g.machine.tracePath([{ x: 1, y: 1 }])).rejects.toMatchObject({ reason: "not-ready" });
+    expect(g.ws_source.sent).toEqual([]);
+  });
+
   test("bad arguments throw before anything is sent", () => {
     expect(() => g.machine.jog({}, { feed: 100 })).toThrow();
     expect(() => g.machine.jog({ x: 1 }, {})).toThrow();
