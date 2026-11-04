@@ -83,6 +83,11 @@ describe("state store", () => {
     expect(g.machine.state.belts).toMatchObject({ tl: 1800.25, homed: true, extended: true });
   });
 
+  test("MC gives the motor currents", () => {
+    reply("<Idle|N:12|MPos:0,0,0|FS:0,0|MS:7|BL:1,2,3,4|BE:0,0,0,0|MC:120,98,0,4095>");
+    expect(g.machine.state.motorCurrent).toEqual({ tl: 120, tr: 98, bl: 0, br: 4095 });
+  });
+
   test("a '?' belt length is unknown (null)", () => {
     reply("<Idle|MPos:0,0,0|FS:0,0|MS:0|BL:1814.59,?,1790.66,?|BE:0,0,0,0>");
     expect(g.machine.state.belts).toMatchObject({ tl: 1814.59, tr: null, bl: 1790.66, br: null });
