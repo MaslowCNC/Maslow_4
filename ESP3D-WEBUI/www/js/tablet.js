@@ -1664,8 +1664,9 @@ const tabletCalCalibrate = () => {
 };
 const tabletCalTense = () => {
   runMachineAction("Apply Tension", machine.applyTension);
-  scheduleCallback(() => { hideModal("calibration-popup"); }, 1000);
 };
+// From the Setup popup: the popup stays open and its state label shows the outcome.
+const tabletCalTenseClick = () => runButtonAction(id("tablettab_cal_tense"), "Apply Tension", machine.applyTension);
 // const tabletCalZHome = () => onCalibrationButtonsClick("$TKSLK", "Home Z");
 const tabletCalOpenConfig = () => {
   loadConfigValues();
@@ -2154,7 +2155,7 @@ function tabletInit() {
     id("tablettab_cal_retract").addEventListener("click", tabletCalRetract);
     id("tablettab_cal_extend").addEventListener("click", tabletCalExtend);
     id("tablettab_cal_calibrate").addEventListener("click", tabletCalCalibrate);
-    id("tablettab_cal_tense").addEventListener("click", tabletCalTense);
+    id("tablettab_cal_tense").addEventListener("click", tabletCalTenseClick);
     // id("tablettab_cal_homez").addEventListener("click", tabletCalZHome);
     id("tablettab_cal_config").addEventListener("click", tabletCalOpenConfig);
     id("tablettab_cal_stop").addEventListener("click", tabletCalStop);
@@ -2759,6 +2760,60 @@ const runMachineAction = async (label, action) => {
     addMessage(err.reason === "reset" ? `${label} stopped` : `${label} failed: ${err.detail ?? err.reason}`);
   }
   sendCommand('$MINFO');
+};
+
+const BUTTON_WARNING_MS = 2500;
+
+/**
+ * Run a machine action from a button that stays on screen (the Setup popup).
+ * - Until the firmware accepts the command: the button shows a spinner and ignores clicks.
+ * - Not accepted (not sent, disconnected, error:N): the button briefly shows a warning.
+ * - Accepted, then the operation fails (e.g. the firmware refused it from this state): an
+ *   error dialog with the reason. A STOP (reset) only gets a log line.
+ * - Accepted and finished: nothing more; the state label shows the new state.
+ */
+const runButtonAction = async (button, label, action) => {
+  if (!button || button.classList.contains("machine-action-busy")) {
+    return;
+  }
+  addMessage(label);
+  const op = action();
+  op.catch(() => {}); // handled below; a rejected .accepted means the operation rejects too
+  button.classList.add("machine-action-busy");
+  try {
+    await op.accepted;
+  } catch (err) {
+    addMessage(`${label} not sent: ${err.detail ?? err.reason}`);
+    showButtonWarning(button, err.reason === "rejected" ? "Rejected" : "Not sent");
+    return;
+  } finally {
+    button.classList.remove("machine-action-busy");
+  }
+  try {
+    await op;
+  } catch (err) {
+    if (err.reason === "reset") {
+      addMessage(`${label} stopped`);
+      return;
+    }
+    const detail = err.detail ?? err.reason;
+    addMessage(`${label} failed: ${detail}`);
+    alertdlg(label, detail);
+  }
+};
+
+/** Swap a button's text for a short warning, then put it back. */
+const showButtonWarning = (button, text) => {
+  if (button.classList.contains("machine-action-warning")) {
+    return;
+  }
+  const original = button.textContent;
+  button.textContent = text;
+  button.classList.add("machine-action-warning");
+  scheduleCallback(() => {
+    button.textContent = original;
+    button.classList.remove("machine-action-warning");
+  }, BUTTON_WARNING_MS);
 };
 
 // For commands that aren't machine actions ($TEST).
