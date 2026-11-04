@@ -945,18 +945,25 @@ width: 100%;
 .conn-dot.conn-down { background-color: #d23b2c; animation: conn-blink 1s step-start infinite; }
 @keyframes conn-blink { 50% { opacity: 0.35; } }
 
-/* Belt lengths in the status section: a 2x2 grid laid out like the arms (TL TR / BL BR) */
+/* Belt lengths in the status section: a 2x2 grid laid out like the arms (TL TR / BL BR), in the
+   same 12px as the X/Y/Z readout, each with a small motor-current dial twice the text height */
 .tablettab-belt-lengths {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 2px 8px;
-  padding: 4px 6px;
-  font-size: 0.9em;
+  padding: 2px 6px 4px;
+  font-size: 12px;
   text-align: center;
 }
 .tablettab-belt-lengths .belt-length-label {
   grid-column: 1 / -1;
   font-weight: bold;
+}
+.tablettab-belt-lengths .belt-length {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
 }
 .tablettab-belt-lengths .belt-length-value {
   font-variant-numeric: tabular-nums;
@@ -964,4 +971,22 @@ width: 100%;
 .tablettab-belt-lengths .belt-length-unknown {
   color: #b35c00;
   font-style: italic;
+}
+.belt-current-dial {
+  width: 2em;
+  height: 2em;
+  flex: none;
+}
+.belt-current-dial-bg,
+.belt-current-dial-arc {
+  fill: none;
+  stroke-width: 3;
+}
+.belt-current-dial-bg {
+  stroke: #e0e0e0;
+}
+.belt-current-dial-arc {
+  stroke: #4CAF50;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.2s ease;
 }

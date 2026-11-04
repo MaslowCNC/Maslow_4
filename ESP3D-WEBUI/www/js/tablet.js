@@ -636,10 +636,13 @@ const checkParams = (params = {}) => {
   return s.join("");
 }
 
-// Belt lengths row in the status section: refreshed on every machine.js state update (each
-// status report). Lengths are machine values, always in mm (the heading says so); "unknown" when the machine
-// reports it doesn't know a belt's length; "-" before any report.
+// Belt lengths and motor-current dials in the status section: refreshed on every machine.js
+// state update (each status report). Lengths are machine values, always in mm (the heading says
+// so); "unknown" when the machine reports it doesn't know a belt's length; "-" before any
+// report. The dials use the Debug tab's scale and colours (debugging.js); the mA value is in
+// the dial's tooltip.
 const BELT_ARMS = ["tl", "tr", "bl", "br"];
+const BELT_DIAL_CIRCUMFERENCE = 2 * Math.PI * 9; // r = 9 in the 24x24 dial
 const updateBeltLengths = (s) => {
   for (const arm of BELT_ARMS) {
     const el = document.getElementById(`belt-length-${arm}`);
@@ -650,6 +653,19 @@ const updateBeltLengths = (s) => {
     const unknown = mm === null;
     el.textContent = unknown ? "unknown" : Number.isFinite(mm) ? mm.toFixed(1) : "-";
     el.classList.toggle("belt-length-unknown", unknown);
+
+    const dial = document.getElementById(`belt-current-${arm}`);
+    const arc = dial ? dial.querySelector(".belt-current-dial-arc") : null;
+    const adc = s.motorCurrent ? s.motorCurrent[arm] : undefined;
+    if (arc && Number.isFinite(adc)) {
+      const mA = convertAdcToMilliamps(adc);
+      const percentage = Math.min((mA / MAX_CURRENT) * 100, 100);
+      arc.style.strokeDashoffset = BELT_DIAL_CIRCUMFERENCE * (1 - percentage / 100);
+      arc.style.stroke = currentGaugeColor(percentage);
+      dial.setAttribute("title", `${arm.toUpperCase()} motor: ${Math.round(mA)} mA`);
+    } else if (dial) {
+      dial.setAttribute("title", `${arm.toUpperCase()} motor: no current reading (needs current firmware)`);
+    }
   }
 };
 if (typeof machine !== "undefined") {

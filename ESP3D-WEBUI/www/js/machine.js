@@ -44,7 +44,8 @@ const machine = (() => {
 	 * maslow:      Maslow state number (MASLOW) from the MS status field, null until known
 	 * mpos, wpos, wco: {x, y, z} in mm, null until known
 	 * units:       the firmware's G-code units, "mm" or "inch" (machine actions always send G21)
-	 * job:         {pct, file, line} while a file runs, else null
+	 * motorCurrent: {tl, tr, bl, br}, raw ADC 0-4095 (Debug tab converts to mA), from MC; null until known
+ * job:         {pct, file, line} while a file runs, else null
 	 * belts:       belt lengths tl/tr/bl/br (null = unknown) and position errors etl/etr/ebl/ebr (mm), from the BL/BE
  *              status fields (about once a second) and MINFO; kept between reports that
  *              don't carry them. MINFO also adds homed, extended, calibrationInProgress.
@@ -59,6 +60,7 @@ const machine = (() => {
 		units: null,
 		job: null,
 		belts: null,
+		motorCurrent: null,
 	};
 	let statusCount = 0; // status reports seen, to wait for a fresh one
 	let beltLengthsFromStatus = false; // a BL field has been seen (firmware that reports it)
@@ -119,6 +121,9 @@ const machine = (() => {
 			} else if (key === "BE") {
 				const [etl, etr, ebl, ebr] = value.split(",").map(Number);
 				state.belts = { ...state.belts, etl, etr, ebl, ebr };
+			} else if (key === "MC") {
+				const [tl, tr, bl, br] = value.split(",").map(Number);
+				state.motorCurrent = { tl, tr, bl, br };
 			} else if (key === "SD") {
 				const [pct, file, line] = value.split(",");
 				job = { pct: Number(pct), file, line: line ? Number(line) : undefined };
