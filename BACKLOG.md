@@ -92,11 +92,6 @@ Format: **title** — what goes wrong, where, and how we found it.
 
 ## Tooling
 
-- [ ] **`flash-maslow.sh build` doesn't compile.** The `pio run` lines sit inside the
-  `--skip-build --fs` wifi branch (around line 126), so `build` (and a flash without
-  `--skip-build`) prints "Build complete" with whatever firmware.bin is already there, while
-  `--skip-build --fs` over WiFi does build. Found 2026-11-04 when a build left firmware.bin at
-  its old time. Workaround: `PLATFORMIO_DATA_DIR=firmware/.pio/fsdata pio run -e wifi_s3`.
 - [ ] **New `$Hostname` didn't apply after the FluidNC tab's Restart button** (2026-10-29,
   Maslow 4.1 renamed to `m4`); a power cycle applied it. The button sends `[ESP444]RESTART`
   (`restartdlg.js`), which raises `fullResetEvent` (`WebCommands.cpp`, `Protocol.cpp`) and
@@ -109,11 +104,6 @@ Format: **title** — what goes wrong, where, and how we found it.
   Maslow 4.1 (192.168.1.253) and a Unified Control Board (192.168.1.243). Work around with the
   IP, or give each its own `$Hostname`. A default like `maslow-<last 4 of MAC>`, or a board
   check in the flash script, would prevent it.
-- [ ] **`flash-maslow.sh` never builds firmware unless `--skip-build` is passed.** The
-  `echo "== Building firmware"` / `pio run` lines sit inside the `elif` (skip-build + wifi
-  + `--fs`) branch instead of the normal build path, so `build`, `wifi` and `usb` stop with
-  "missing .../bootloader.bin (build first)" in a fresh checkout or worktree, and flash a
-  stale `firmware.bin` otherwise. Found 2026-10-26 flashing from the ui-polish worktree.
 - [ ] **Native unit tests don't build on Linux** (missing `Queue.h` in X86TestSupport).
 - [ ] **One UI test fails: `maslowInfoMsgHandling is not defined`** (`maslow.test.ts:167`).
   The test calls it as a global, but `maslow.js:327` declares it as a module `const` and
