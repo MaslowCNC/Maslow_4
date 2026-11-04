@@ -497,6 +497,9 @@ void report_realtime_debug() {}
 void report_realtime_status(Channel& channel) {
     LogStream msg(channel, "<");
     msg << state_name();
+    // Maslow (temporary, for measuring report delivery): per-channel report sequence number, so a
+    // client can tell a dropped report from a late one.
+    msg << "|N:" << channel.nextReportSeq();
 
     // Report position
 
@@ -608,14 +611,10 @@ void report_realtime_status(Channel& channel) {
             }
         }
     }
-    // Maslow: belt lengths (BL, "?" for a belt whose length is unknown) and position errors (BE,
-    // encoder minus target), mm, arms in the order TL,TR,BL,BR.  Like WCO, counted in reports: every 20th while busy (auto-report at
-    // 50 ms makes that about once a second), and every report while idle, when reports only
-    // come on changes or a '?' (the WebUI asks once a second).
-    static int report_belts_counter = 0;
-    bool       busy = state_is(State::Homing) || state_is(State::Cycle) || state_is(State::Jog);  // periodic reports
-    if (!busy || report_belts_counter == 0) {
-        report_belts_counter = busy ? (REPORT_BELTS_REFRESH_BUSY_COUNT - 1) : 0;
+    // Maslow: in every report, arms in the order TL,TR,BL,BR: belt lengths (BL, mm, "?" for a
+    // belt whose length is unknown), position errors (BE, mm, encoder minus target) and motor
+    // currents (MC, raw ADC 0-4095 averaged over the last 10 samples, as the debug log line).
+    {
         msg << "|BL:";
         for (int arm = _TL; arm < ARM_COUNT; arm++) {
             msg << (arm ? "," : "");
@@ -629,8 +628,10 @@ void report_realtime_status(Channel& channel) {
         for (int arm = _TL; arm < ARM_COUNT; arm++) {
             msg << (arm ? "," : "") << setprecision(3) << Maslow.axis[arm].getPositionError();
         }
-    } else {
-        report_belts_counter--;
+        msg << "|MC:";
+        for (int arm = _TL; arm < ARM_COUNT; arm++) {
+            msg << (arm ? "," : "") << setprecision(0) << Maslow.axis[arm].getMotorCurrent();
+        }
     }
 
     if (Channel* jc = Job::channel()) {

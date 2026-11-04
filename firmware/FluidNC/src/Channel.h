@@ -86,6 +86,7 @@ protected:
     MotorMask   _lastLimits       = 0;
     bool        _lastJobActive    = false;
     int         _lastMaslowState  = -1;  // Maslow: last calibration state reported (autoReport)
+    uint32_t    _reportSeq        = 0;   // Maslow: status reports sent on this channel
     std::string _lastPinString    = "";
 
     bool       _reportState = true;
@@ -195,6 +196,8 @@ public:
     }
 
     void notifyState() { _reportState = true; }
+    // Maslow (temporary): status report sequence number for this channel (Report.cpp "|N:")
+    uint32_t nextReportSeq() { return ++_reportSeq; }
     void notifyOvr() { _reportOvr = true; }
     void notifyWco() { _reportWco = true; }
     void notifyNgc(CoordIndex coord) { _reportNgc = coord; }

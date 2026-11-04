@@ -14,7 +14,8 @@ layer on top, plus the ESP3D-WEBUI browser UI that the machine serves itself.
   - `FluidNC/test/`: googletest unit tests (`native` env).
 - `ESP3D-WEBUI/www/js/` holds the web UI (plain JS, built with gulp). Maslow logic is in `maslow.js`, `tablet.js`, `debugging.js`.
 - `docs/` holds the GitHub Pages site, including `calibration-simulation/` (the JS copy of the calibration math).
-- `scripts/` holds `flash-maslow.sh` (build + flash), `maslow_serial.py` (talk to a USB-connected machine), and release tooling.
+- `scripts/` holds `flash-maslow.sh` (build + flash), `maslow_serial.py` (talk to a USB-connected machine),
+  `report_monitor.mjs` (measure status-report size and drops over WiFi), and release tooling.
 - `CAD/`, `assets/`: hardware files and docs images.
 
 ## Build and test
