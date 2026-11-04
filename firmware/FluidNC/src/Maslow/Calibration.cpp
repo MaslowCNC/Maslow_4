@@ -345,6 +345,10 @@ bool Calibration::requestStateChange(int newState) {
             break;
         case RETRACTING:  //We can enter retracting from any state
             currentState = RETRACTING;
+            // A retract re-measures every belt: a belt restored at boot is no longer known until it ends.
+            for (int arm = _TL; arm < ARM_COUNT; arm++) {
+                Maslow.beltRestored[arm] = false;
+            }
 
             retracting[_TL] = true;
             retracting[_TR] = true;
@@ -402,9 +406,34 @@ bool Calibration::requestStateChange(int newState) {
             } else {
                 break;
             }
-        case TAKING_SLACK:  //We can enter taking slack from extended or ready to cut
+        case TAKING_SLACK:  //We can enter taking slack from extended or ready to cut, or from unknown to recover belts
+            if (currentState == UNKNOWN) {
+                // Some belts were restored at boot and others weren't (their spools turned while
+                // the power was off).  Hold the restored ones and pull the others tight, which
+                // should bring them back to their saved lengths; recoverBeltsFunc() checks.
+                std::string why;
+                if (!Maslow.beltRecoveryPossible(why)) {
+                    log_error(why);
+                    break;
+                }
+                currentState       = TAKING_SLACK;
+                recoveringBelts    = true;
+                takeSlack          = true;
+                recoverArm         = _TL;
+                recoverSettleStart = 0;
+                for (int arm = _TL; arm < ARM_COUNT; arm++) {
+                    Maslow.axis[arm].reset();
+                    Maslow.axis[arm].setTarget(Maslow.axis[arm].getPosition());
+                    recoverStartPos[arm] = Maslow.axis[arm].getPosition();
+                    recoverPulling[arm]  = false;
+                }
+                log_info("Apply Tension: holding the known belts and pulling the unknown ones tight");
+                success = true;
+                break;
+            }
             if (currentState == EXTENDEDOUT || currentState == READY_TO_CUT) {
                 currentState = TAKING_SLACK;
+                recoveringBelts = false;
 
                 //Reset the axis targets at the beginning of taking slack
                 Maslow.axis[_TL].setTarget(Maslow.axis[_TL].getPosition());
@@ -609,6 +638,9 @@ bool Calibration::requestStateChange(int newState) {
 
     if (success) {
         log_info("Succeeded");
+        if (currentState != TAKING_SLACK) {
+            recoveringBelts = false;
+        }
     }
 
     printCurrentState();
@@ -698,7 +730,11 @@ void Calibration::home() {
             }
             break;
         case TAKING_SLACK:
-            if (takeSlackFunc()) {  //Returns true. Requests correct state transition within function
+            if (recoveringBelts) {
+                if (recoverBeltsFunc()) {  // Returns true when done; it requests the next state itself
+                    takeSlack = false;
+                }
+            } else if (takeSlackFunc()) {  //Returns true. Requests correct state transition within function
                 takeSlack = false;
                 deallocateCalibrationMemory();
             }
@@ -1435,6 +1471,88 @@ bool Calibration::takeSlackFunc() {
     }
 
     return false;
+}
+
+/*
+* Apply Tension from UNKNOWN, when some belts were restored at boot and others weren't.
+* Holds the restored belts at their lengths and pulls each unknown belt tight in turn (TL, TR, BL,
+* BR), holding it once tight.  Then every belt's encoder is checked against its saved angle
+* (restoreBeltFromSaved): if all are within 1/4 turn, the belts are back at their saved lengths and
+* the machine is READY_TO_CUT; otherwise the ones that don't match are unknown and it goes back
+* to UNKNOWN.  The encoder only measures within one turn, so a belt that is a whole number of
+* turns off would pass; the same holds for the restore at boot.
+* Returns true when it is finished, whatever the result.
+*/
+bool Calibration::recoverBeltsFunc() {
+    constexpr unsigned long settleMs = 500;  // hold everything this long before checking the encoders
+
+    // Hold the restored belts and the ones already pulled tight; leave the rest alone for now.
+    for (int arm = _TL; arm < ARM_COUNT; arm++) {
+        if (Maslow.beltRestored[arm] || (recoverPulling[arm] && arm < recoverArm)) {
+            Maslow.axis[arm].recomputePID();
+        } else if (arm != recoverArm) {
+            Maslow.axis[arm].stop();
+        }
+    }
+
+    // Pull the current unknown belt tight
+    while (recoverArm < ARM_COUNT && Maslow.beltRestored[recoverArm]) {
+        recoverArm++;
+    }
+    if (recoverArm < ARM_COUNT) {
+        const int arm = recoverArm;
+        if (!recoverPulling[arm]) {
+            recoverPulling[arm]  = true;
+            recoverStartPos[arm] = Maslow.axis[arm].getPosition();
+            log_info("Apply Tension: pulling the " << Maslow.axis_id_to_label(arm).c_str() << " belt tight");
+        }
+        const float retractedAmount = recoverStartPos[arm] - Maslow.axis[arm].getPosition();
+        if (applyTensionAllowLimiting && retractedAmount > applyTensionBeltRetractionLimitMm) {
+            Maslow.stopMotors();
+            log_warn("Maslow Apply Tension retraction warning: Belt "
+                     << Maslow.axis_id_to_label(arm).c_str() << " retracted " << retractedAmount
+                     << "mm while applying tension (limit " << applyTensionBeltRetractionLimitMm
+                     << "mm). A belt may not be anchored. Continue to keep retracting or Cancel to stop.");
+            requestStateChange(UNKNOWN);
+            sys.set_state(State::Idle);
+            return true;
+        }
+        if (Maslow.axis[arm].pull_tight(retractCurrentThreshold)) {
+            Maslow.axis[arm].setTarget(Maslow.axis[arm].getPosition());
+            recoverArm++;
+        }
+        return false;
+    }
+
+    // All belts tight: let them settle, then check every encoder against its saved angle.
+    if (recoverSettleStart == 0) {
+        recoverSettleStart = millis();
+        return false;
+    }
+    if (millis() - recoverSettleStart < settleMs) {
+        return false;
+    }
+
+    bool allKnown = true;
+    for (int arm = _TL; arm < ARM_COUNT; arm++) {
+        Maslow.beltRestored[arm] = Maslow.restoreBeltFromSaved(arm);
+        allKnown                 = allKnown && Maslow.beltRestored[arm];
+    }
+    gc_sync_position();
+    plan_sync_position();
+
+    if (allKnown) {
+        log_info("Apply Tension: all belt lengths recovered");
+        setExtendedState(true, true, true, true);
+        sys.set_state(State::Idle);
+        requestStateChange(READY_TO_CUT);
+    } else {
+        Maslow.stopMotors();
+        log_error("Apply Tension: unexpected encoder position after tension applied, full retract required");
+        requestStateChange(UNKNOWN);
+        sys.set_state(State::Idle);
+    }
+    return true;
 }
 
 /*

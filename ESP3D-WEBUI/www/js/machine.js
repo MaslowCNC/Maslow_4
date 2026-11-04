@@ -401,7 +401,8 @@ const machine = (() => {
 		maslowOperation("apply tension", "$TKSLK", {
 			start: MASLOW.TAKING_SLACK,
 			success: MASLOW.READY_TO_CUT,
-			failure: [MASLOW.EXTENDEDOUT],
+			// EXTENDEDOUT: the normal run failed; UNKNOWN: recovering belts from UNKNOWN failed
+			failure: [MASLOW.EXTENDEDOUT, MASLOW.UNKNOWN],
 		});
 	const calibrate = () =>
 		maslowOperation("calibrate", "$CAL", {
