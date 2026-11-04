@@ -2872,13 +2872,7 @@ function processTabletFileDelete(answer) {
     deleteBtn.setAttribute("disabled", "true");
   }
   
-  // Build the delete command using the same pattern as files.js
-  const cmd = buildHttpFileCmd({ 
-    action: "delete", 
-    filename: gCodeFilename.split('/').pop() // Get just the filename without path
-  });
-  
-  SendGetHttp(cmd, tabletFileDeleteSuccess, tabletFileDeleteFailed);
+  machine.files.delete(gCodeFilename).then(tabletFileDeleteSuccess, tabletFileDeleteFailed);
 }
 
 function tabletFileDeleteSuccess(response) {
@@ -2906,7 +2900,7 @@ function tabletFileDeleteSuccess(response) {
   }, 500); // 500ms delay to ensure server-side delete completes
 }
 
-function tabletFileDeleteFailed(error_code, response) {
+function tabletFileDeleteFailed(err) {
   // Re-enable the delete button
   const deleteBtn = id("tablettab_gcode_delete");
   if (deleteBtn && gCodeFilename) {
@@ -2915,7 +2909,7 @@ function tabletFileDeleteFailed(error_code, response) {
     deleteBtn.removeAttribute("disabled");
   }
   
-  addMessage("Failed to delete file: " + (response || "Unknown error"));
+  addMessage("Failed to delete file: " + (err.detail ?? err.reason));
 }
 
 function updateDeleteButtonState() {

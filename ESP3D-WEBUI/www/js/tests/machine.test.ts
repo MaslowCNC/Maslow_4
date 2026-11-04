@@ -305,3 +305,154 @@ describe("settings and failures", () => {
     await expect(op).rejects.toMatchObject({ reason: "disconnected" });
   });
 });
+
+describe("runFile", () => {
+  const run = (line: number) => `<Run|MPos:0,0,0|FS:800,0|MS:7|SD:${line}.00,/part.nc,${line}>`;
+
+  test("accepted on ok; done when the job has gone and the machine is Idle", async () => {
+    const op = g.machine.runFile("/part.nc");
+    let done = false;
+    op.then(() => (done = true));
+    expect(lastSent()).toBe("$SD/Run=/part.nc\n");
+    reply("ok");
+    await op.accepted;
+    reply(run(10), "<Hold:0|MPos:0,0,0|MS:7|SD:50.00,/part.nc,50>");
+    await tick();
+    expect(done).toBe(false); // paused mid-job
+    reply(run(90), "<Idle|MPos:0,0,0|FS:0,0|MS:7>");
+    await op;
+    expect(g.machine.runningCount()).toBe(0);
+  });
+
+  test("a file that finishes before any report shows it is done after two fresh reports", async () => {
+    const op = g.machine.runFile("/tiny.nc");
+    reply("ok");
+    await op.accepted;
+    reply("<Idle|MPos:0,0,0|MS:7>");
+    await tick();
+    expect(g.machine.runningCount()).toBe(1);
+    reply("<Idle|MPos:0,0,0|MS:7>");
+    await op;
+  });
+
+  test("a rejected line in the file fails it with that error", async () => {
+    const op = g.machine.runFile("/part.nc");
+    reply("ok", run(3), "[MSG:ERR: 20 (Unsupported or invalid g-code command) in SD at line 4]");
+    await expect(op).rejects.toMatchObject({ reason: "failed", code: 20, detail: "/part.nc line 4: Unsupported or invalid g-code command" });
+  });
+
+  test("an alarm fails it, stop() resets it", async () => {
+    const a = g.machine.runFile("/part.nc");
+    reply("ok", run(3), "<Alarm|MPos:0,0,0|MS:7>");
+    await expect(a).rejects.toMatchObject({ reason: "failed" });
+    reply("<Idle|MPos:0,0,0|MS:7>");
+    const b = g.machine.runFile("/part.nc");
+    reply("ok", run(3));
+    g.machine.stop();
+    await expect(b).rejects.toMatchObject({ reason: "reset" });
+  });
+
+  test("needs known belt lengths; a firmware error rejects it", async () => {
+    reply("<Idle|MPos:0,0,0|MS:4>");
+    await expect(g.machine.runFile("/part.nc")).rejects.toMatchObject({ reason: "not-ready" });
+    expect(g.ws_source.sent).toEqual([]);
+    reply("<Idle|MPos:0,0,0|MS:7>");
+    const op = g.machine.runFile("/missing.nc");
+    op.catch(() => {});
+    reply("error:60");
+    await expect(op.accepted).rejects.toMatchObject({ reason: "rejected", code: 60 });
+  });
+});
+
+describe("files", () => {
+  // http.js and httpCmdBuilders.js stand-ins: each request waits in `requests` for a reply.
+  let requests: { url: string; data?: any; progress?: any; ok: (t: string) => void; fail: (s: number, t: string) => void }[];
+  const listing = (status = "Ok", files = [{ name: "part.nc", size: "1234", datetime: "" }, { name: "jobs", size: "-1", datetime: "" }]) =>
+    JSON.stringify({ files, path: "/", total: "8 GB", used: "1 GB", occupation: "12", mode: "direct", status });
+  let pingPaused: boolean[];
+
+  beforeEach(() => {
+    requests = [];
+    pingPaused = [];
+    g.httpCmd = { fileUpload: "/upload" };
+    g.buildHttpFileCmd = (p: any) =>
+      `/upload?path=${encodeURIComponent(p.path)}` +
+      ["action", "filename", "newname"].filter((k) => p[k]).map((k) => `&${k}=${encodeURIComponent(p[k])}`).join("");
+    g.SendGetHttp = (url: string, ok: any, fail: any) => requests.push({ url, ok, fail });
+    g.SendFileHttp = (url: string, data: any, progress: any, ok: any, fail: any) => requests.push({ url, data, progress, ok, fail });
+    g.BuildFileUploadFormData = (dir: string, files: File[]) => ({ dir, names: files.map((f) => f.name) });
+    g.disablePingForUpload = () => pingPaused.push(true);
+    g.restorePingAfterUpload = () => pingPaused.push(false);
+  });
+
+  test("list parses the listing", async () => {
+    const p = g.machine.files.list("/");
+    expect(requests[0].url).toBe("/upload?path=%2F");
+    requests[0].ok(listing());
+    const l = await p;
+    expect(l.status).toBe("Ok");
+    expect(l.total).toBe("8 GB");
+    expect(l.files).toEqual([
+      { name: "part.nc", size: 1234, isdir: false, datetime: "" },
+      { name: "jobs", size: null, isdir: true, datetime: "" },
+    ]);
+  });
+
+  test("delete splits the path and pauses ping checks while it runs", async () => {
+    const p = g.machine.files.delete("/jobs/old.nc");
+    await tick();
+    expect(requests[0].url).toBe("/upload?path=%2Fjobs%2F&action=delete&filename=old.nc");
+    expect(pingPaused).toEqual([true]);
+    requests[0].ok(listing("old.nc deleted"));
+    await p;
+    expect(pingPaused).toEqual([true, false]);
+    g.machine.files.delete("/jobs", { dir: true });
+    await tick();
+    expect(requests[1].url).toBe("/upload?path=%2F&action=deletedir&filename=jobs");
+  });
+
+  test("a refused action rejects with the firmware's status and the listing", async () => {
+    const p = g.machine.files.delete("/part.nc");
+    await tick();
+    requests[0].ok(listing("Cannot delete part.nc No such file"));
+    const err = await p.catch((e: any) => e);
+    expect(err).toMatchObject({ reason: "failed", detail: "Cannot delete part.nc No such file" });
+    expect(err.listing.files.length).toBe(2);
+  });
+
+  test("upload sends the files to the directory and reports progress", async () => {
+    const onProgress = () => {};
+    const file = new File(["G0 X0"], "a.nc");
+    const p = g.machine.files.upload("/jobs/", file, { onProgress });
+    await tick();
+    expect(requests[0]).toMatchObject({ url: "/upload", data: { dir: "/jobs/", names: ["a.nc"] }, progress: onProgress });
+    requests[0].ok(listing());
+    await p;
+    expect(pingPaused).toEqual([true, false]);
+  });
+
+  test("HTTP errors, unreadable replies and a busy upload channel", async () => {
+    const a = g.machine.files.list("/");
+    requests[0].fail(500, "oops");
+    await expect(a).rejects.toMatchObject({ reason: "rejected", code: 500 });
+    const b = g.machine.files.list("/");
+    requests[1].ok("<html>");
+    await expect(b).rejects.toMatchObject({ reason: "bad-reply" });
+    g.http_communication_locked = true;
+    try {
+      await expect(g.machine.files.upload("/", [new File([""], "x.nc")])).rejects.toMatchObject({ reason: "busy" });
+    } finally {
+      delete g.http_communication_locked;
+    }
+    expect(requests.length).toBe(2);
+  });
+
+  test("rename and createDir", async () => {
+    g.machine.files.rename("/jobs/a.nc", "b.nc");
+    g.machine.files.createDir("/jobs/new");
+    expect(requests.map((r) => r.url)).toEqual([
+      "/upload?path=%2Fjobs%2F&action=rename&filename=a.nc&newname=b.nc",
+      "/upload?path=%2Fjobs%2F&action=createdir&filename=new",
+    ]);
+  });
+});
