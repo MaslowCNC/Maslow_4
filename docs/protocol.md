@@ -375,13 +375,13 @@ plus a log line `Motion is disabled: <reason>` when Maslow has blocked motion.
 ### 5.1 Status report
 
 ```
-<State|MPos:x,y,z[|Bf:blocks,bytes][|Ln:n]|FS:feed,spindle|MS:n[|Pn:pins][|WCO:x,y,z][|Ov:f,r,s[|A:SCFM]][|BL:tl,tr,bl,br|BE:tl,tr,bl,br][|SD:pct,file[,line]]>
+<State|N:seq|MPos:x,y,z[|Bf:blocks,bytes][|Ln:n]|FS:feed,spindle|MS:n[|Pn:pins][|WCO:x,y,z][|Ov:f,r,s[|A:SCFM]]|BL:tl,tr,bl,br|BE:tl,tr,bl,br|MC:tl,tr,bl,br[|SD:pct,file[,line]]>
 ```
 
 Example while jogging, a report that carries the belts:
 
 ```
-<Jog|MPos:120.000,85.500,0.000|FS:1000,0|MS:7|BL:1800.25,1801.50,1900.75,1899.00|BE:0.012,-0.034,0.000,0.500>
+<Jog|N:1234|MPos:120.000,85.500,0.000|FS:1000,0|MS:7|BL:1800.25,1801.50,1900.75,1899.00|BE:0.012,-0.034,0.000,0.500|MC:412,398,120,131>
 ```
 
 | Field | Always? | Meaning |
@@ -397,8 +397,10 @@ Example while jogging, a report that carries the belts:
 | `Ov:feed,rapid,spindle` | every 10th / 20th report | overrides in % |
 | `A:SCFM` | with Ov, when on | S/C spindle CW/CCW, F flood, M mist |
 | `MS:n` | yes (Maslow) | Maslow calibration state, 0–9 (section 5.3) |
-| `BL:tl,tr,bl,br` | every 20th report while busy, every report otherwise (Maslow, see below) | belt lengths, mm, 2 decimals; `?` for a belt whose length is unknown (not restored at boot and not retracted since) |
-| `BE:tl,tr,bl,br` | with `BL` (Maslow) | each belt's position error (encoder position minus target), mm, 3 decimals |
+| `N:seq` | yes (Maslow, temporary) | this channel's report sequence number, +1 per report; a jump means reports were dropped. For measuring delivery (`scripts/report_monitor.mjs`) |
+| `BL:tl,tr,bl,br` | yes (Maslow) | belt lengths, mm, 2 decimals; `?` for a belt whose length is unknown (not restored at boot and not retracted since) |
+| `BE:tl,tr,bl,br` | yes (Maslow) | each belt's position error (encoder position minus target), mm, 3 decimals |
+| `MC:tl,tr,bl,br` | yes (Maslow) | belt motor currents, raw ADC 0–4095 averaged over the last 10 samples (the UI converts: mA = 1000 × 3.3 × ADC / 4095 / 1.5) |
 | `SD:pct,file[,line]` | while a job runs | progress %, file name, and (Maslow addition) the file line of the running block |
 
 **Maslow fields** (added after `exp1` commit `0d9585929`, on branch `machine-api`; not yet on a
@@ -406,15 +408,11 @@ machine):
 
 - `MS` is in every report, and a change of Maslow state triggers an auto-report at once, so an
   idle machine reports a new state without being asked.
-- `BL` and `BE` list the arms in the firmware's order **TL, TR, BL, BR**. Careful: `MINFO` uses
-  `tl, tr, br, bl` (section 5.2).
-- `BL`/`BE` are counted like `WCO`. While reports are periodic (Run, Home, Jog) they come in every
-  20th report: about once a second at a 50 ms interval. In every other state (Idle, Hold, Alarm,
-  …) reports only come on a change or a `?`, so every report carries them. Clients should keep
-  the last values between reports that don't carry them.
-- The every-20th counter is shared by all channels, like upstream's `WCO` and `Ov` counters. With
-  two clients getting reports while busy, each sees the belts less often than every 20th of its
-  own reports.
+- `BL`, `BE` and `MC` list the arms in the firmware's order **TL, TR, BL, BR**. Careful: `MINFO`
+  uses `tl, tr, br, bl` (section 5.2).
+- `BL`, `BE` and `MC` are in every report, so belt lengths keep up with the position. Every
+  client gets the same fields; a per-channel choice of fields can come later if a client (e.g.
+  an ESP-NOW pendant) needs smaller reports.
 
 **Clients must ignore fields they don't know.** That is the GRBL convention (the UI's parser in
 `grbl.js` does), and it is what lets us add fields later.
@@ -478,9 +476,10 @@ state from `MS` only. Older firmware (before `MS`) has only this line.
 - **Success or failure of a Maslow operation is only in log text.** `ok` means "started"; `MS`
   in the status report now shows when the state changes, but not whether the operation succeeded
   (e.g. a calibration that failed and why).
-- **Belts in the report cost bytes.** `BL`/`BE` add about 70 bytes to every idle report and every
-  20th busy one. Fine over WiFi and USB; an ESP-NOW pendant may want them less often or not at
-  all, which would need a per-channel setting.
+- **The Maslow fields cost bytes.** `N`, `BL`, `BE` and `MC` add about 100 bytes to every report
+  (roughly 60 → 160 bytes). Frames, not bytes, are what the ESP32 is short of, and the count
+  doesn't change; `scripts/report_monitor.mjs` measures size, drops and gaps. An ESP-NOW pendant
+  may want fewer fields, which would need a per-channel setting.
 - **Moving file contents and firmware updates need HTTP.** Over USB, either add stream commands for
   them or show a reduced UI.
 - **Several controllers at once.** Commands from all channels share one queue. A job locks other
