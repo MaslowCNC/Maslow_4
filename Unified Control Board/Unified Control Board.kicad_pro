@@ -72,62 +72,6 @@
       "diff_pair_dimensions": [],
       "drc_exclusions": [
         [
-          "clearance|-11810000|37880000|4c22dbb4-11fb-40fc-9073-6c4c1be6dcfb|ecc3d195-6317-47dc-a41a-61c781dc1cbc",
-          ""
-        ],
-        [
-          "clearance|-11810000|40480000|4c22dbb4-11fb-40fc-9073-6c4c1be6dcfb|ad4ba8d1-94a1-4443-a6f9-5d0b4bb79794",
-          ""
-        ],
-        [
-          "clearance|-16010000|39830000|813e82a7-d3f1-4877-ba32-af258e354b36|a4b6a54d-c07c-4fde-98e7-d6e6a8c448ae",
-          ""
-        ],
-        [
-          "clearance|-16010000|41130000|813e82a7-d3f1-4877-ba32-af258e354b36|e148d24e-6465-4e4c-86dc-68c3538ebdd3",
-          ""
-        ],
-        [
-          "clearance|-34875686|31827433|4323cf6b-5cce-404a-bcb0-7ec87b81658d|9a622fd3-5eb6-4fd2-80cf-2ee5cfb05c78",
-          ""
-        ],
-        [
-          "clearance|-35484420|29076443|26e3e5a7-5424-4ca2-8e03-b02c31fc2fd9|e8953818-ce09-4446-b056-f8725dae0cf7",
-          ""
-        ],
-        [
-          "clearance|-3880000|30030000|2846d4c3-cbe4-4412-8960-1df89dd324ca|cc5cd143-5b17-43c1-9000-ca838ddeb8e3",
-          ""
-        ],
-        [
-          "clearance|-4180000|30030000|1495e7d3-df81-492f-82b7-eda5b254d3f4|cc5cd143-5b17-43c1-9000-ca838ddeb8e3",
-          ""
-        ],
-        [
-          "clearance|-4180000|34230000|244c3a10-5d6e-4ed6-931f-cd54b6eb61d1|77af4e6c-3b23-4f66-a191-ca43710118e1",
-          ""
-        ],
-        [
-          "clearance|-4180000|34230000|61cef8a7-d1a7-4fd6-bc70-826d53e42346|77af4e6c-3b23-4f66-a191-ca43710118e1",
-          ""
-        ],
-        [
-          "hole_clearance|-35018327|27337732|ca66c0f2-9e2f-4400-a0f6-f7ed32919cd0|316af365-7323-420f-a0e6-bbe1f8260c91",
-          ""
-        ],
-        [
-          "hole_clearance|-35070142|27531111|02950801-4601-490f-8ca6-090244a17e47|316af365-7323-420f-a0e6-bbe1f8260c91",
-          ""
-        ],
-        [
-          "hole_clearance|-36467959|32747058|f173b809-7b8f-480c-871f-2d4d59269729|4cc36656-124c-4044-83e1-e85a637b184b",
-          ""
-        ],
-        [
-          "hole_clearance|-36519696|32940147|1f5efc81-39f4-477c-9339-afc2d6046985|4cc36656-124c-4044-83e1-e85a637b184b",
-          ""
-        ],
-        [
           "hole_clearance|33403712|18308098|85130516-7fe4-411d-9ea2-2b9e9e25bed6|179e9260-f70a-4c87-8c94-4080cea4b8fd",
           ""
         ],
@@ -587,6 +531,25 @@
       },
       {
         "bus_width": 12,
+        "clearance": 0.1,
+        "diff_pair_gap": 0.25,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.2,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "Fine",
+        "pcb_color": "rgba(0, 0, 0, 0.000)",
+        "priority": 2,
+        "schematic_color": "rgba(0, 0, 0, 0.000)",
+        "track_width": 0.1,
+        "tuning_profile": "",
+        "via_diameter": 0.6,
+        "via_drill": 0.3,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
         "clearance": 0.2,
         "diff_pair_gap": 0.25,
         "diff_pair_via_gap": 0.25,
@@ -618,25 +581,6 @@
         "priority": 1,
         "schematic_color": "rgba(0, 0, 0, 0.000)",
         "track_width": 1.0,
-        "tuning_profile": "",
-        "via_diameter": 0.6,
-        "via_drill": 0.3,
-        "wire_width": 6
-      },
-      {
-        "bus_width": 12,
-        "clearance": 0.1,
-        "diff_pair_gap": 0.25,
-        "diff_pair_via_gap": 0.25,
-        "diff_pair_width": 0.2,
-        "line_style": 0,
-        "microvia_diameter": 0.3,
-        "microvia_drill": 0.1,
-        "name": "Fine",
-        "pcb_color": "rgba(0, 0, 0, 0.000)",
-        "priority": 2,
-        "schematic_color": "rgba(0, 0, 0, 0.000)",
-        "track_width": 0.1,
         "tuning_profile": "",
         "via_diameter": 0.6,
         "via_drill": 0.3,
