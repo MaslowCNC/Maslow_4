@@ -324,6 +324,26 @@ void Calibration::printCurrentState() {
     log_info("Current state: " << currentState);
 }
 
+// $STOP during Apply Tension: nothing else leaves TAKING_SLACK once the update loop stops
+// running it, and $TKSLK is refused from there. Go where a failed run would go, so the user
+// can apply tension again: EXTENDEDOUT for a normal run, UNKNOWN when recovering belts.
+void Calibration::stopTakingSlack() {
+    if (currentState != TAKING_SLACK) {
+        return;
+    }
+    bool recovering = recoveringBelts;
+    takeSlack       = false;
+    recoveringBelts = false;
+    if (recovering) {
+        requestStateChange(UNKNOWN);
+    } else {
+        if (calibration_data) {
+            deallocateCalibrationMemory();
+        }
+        requestStateChange(EXTENDEDOUT);
+    }
+}
+
 // Set extended state variables (used when restoring from NVS)
 void Calibration::setExtendedState(bool tl, bool tr, bool bl, bool br) {
     extended[_TL] = tl;

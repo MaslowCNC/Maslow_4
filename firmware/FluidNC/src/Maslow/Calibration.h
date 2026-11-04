@@ -58,6 +58,7 @@ public:
     bool isRecoveringBelts() const { return recoveringBelts; }  // Apply Tension recovering belts from UNKNOWN
     void printCurrentState();
     bool requestStateChange(int newState);
+    void stopTakingSlack();  // $STOP during Apply Tension
 
     // Set extended state variables (used when restoring from NVS)
     void setExtendedState(bool tl, bool tr, bool bl, bool br);

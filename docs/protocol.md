@@ -309,7 +309,7 @@ plus a log line `Motion is disabled: <reason>` when Maslow has blocked motion.
 
 | Command | Name | What it does | UI sends it |
 |---|---|---|---|
-| [`$STOP`][STOP] | `Maslow/stop` | stop belts, spindle and any job; sync positions; raise Z to 2 mm if lower; save state. Queued like other `$` commands, so it waits behind running motion (backlog). The UI sends 0x18 first and `$STOP` after the restart (section 3, how to stop) | yes |
+| [`$STOP`][STOP] | `Maslow/stop` | stop belts, spindle and any job; sync positions; raise Z to 2 mm if lower; save state. During Apply Tension it ends in EXTENDEDOUT (4), or UNKNOWN (0) when recovering belts. Queued like other `$` commands, so it waits behind running motion (backlog). The UI sends 0x18 first and `$STOP` after the restart (section 3, how to stop) | yes |
 | [`$ESTOP`][ESTOP] | `Maslow/estop` | emergency stop: Alarm state, motors and spindle off; the machine ignores further commands until power-cycled | no |
 
 **State and diagnostics (read-only):**
