@@ -41783,7 +41783,7 @@
 				(justify left top)
 			)
 		)
-		(property "Value" "5.1kΩ"
+		(property "Value" "2.2kΩ"
 			(at 129.794 22.9997 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -41828,7 +41828,7 @@
 				)
 			)
 		)
-		(property "MPN" "0402WGF5101TCE"
+		(property "MPN" "0402WGF2201TCE"
 			(at 128.27 21.59 0)
 			(hide yes)
 			(show_name no)
@@ -41850,7 +41850,7 @@
 				)
 			)
 		)
-		(property "Supplier Part" "C25905"
+		(property "Supplier Part" "C25879"
 			(at 128.27 21.59 0)
 			(hide yes)
 			(show_name no)

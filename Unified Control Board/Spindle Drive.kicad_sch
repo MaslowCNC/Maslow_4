@@ -4409,7 +4409,7 @@
 		)
 		(uuid "998910e3-2b90-40e0-abff-f20998c9cd7e")
 	)
-	(text "Motor 1: TIM1 CH1-3 PC0-PC2, CH1N/CH2N PA11/PA12, CH3N PB15.  Motor 2: TIM8 CH1-3 PC6-PC8, CH1N-CH3N PB3/PB4/PC12."
+	(text "Motor 1: TIM1 CH1-3 PC0-PC2, CH1N/CH2N PA11/PA12, CH3N PB15.  Motor 2: TIM8 CH1-3 PC6-PC8, CH1N-CH3N PC10-PC12."
 		(exclude_from_sim no)
 		(at 25.4 27.94 0)
 		(effects
@@ -4418,7 +4418,7 @@
 			)
 			(justify left bottom)
 		)
-		(uuid "56df2081-7e97-49ac-ad04-d77eea7fee0a")
+		(uuid "ed0686b2-7d35-4be2-95e3-20734a7121f9")
 	)
 	(text "Shunt sense: OPAMP1-6 in PGA mode (gain 16, internal output to ADC1/2/3 and ADC5/5/4) on PA1/PA7/PB0 and PB11/PB14/PB13,"
 		(exclude_from_sim no)
@@ -4551,16 +4551,16 @@
 		(uuid "8c6bef9d-098f-4d16-a36b-9f0499a4c810")
 	)
 	(no_connect
-		(at 83.82 160.02)
-		(uuid "318d21fd-aaeb-445b-b2b4-d77ba1c88973")
-	)
-	(no_connect
-		(at 83.82 162.56)
-		(uuid "b9077320-ee06-407a-9898-43c81039590e")
-	)
-	(no_connect
 		(at 83.82 129.54)
 		(uuid "8619b3b4-0951-4b93-bb4a-faa1718e30bf")
+	)
+	(no_connect
+		(at 119.38 162.56)
+		(uuid "6e4e52b7-2775-4dfb-bbc1-31af310a6374")
+	)
+	(no_connect
+		(at 119.38 165.1)
+		(uuid "d51edc26-7fb4-4ad0-82b3-a411c669532b")
 	)
 	(no_connect
 		(at 119.38 167.64)
@@ -5360,40 +5360,18 @@
 			)
 		)
 	)
-	(global_label "INLC2"
+	(global_label "INLA2"
 		(shape input)
-		(at 83.82 165.1 180)
+		(at 83.82 160.02 180)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
 			(justify right)
 		)
-		(uuid "cb1bdfcb-ec0f-48b0-8d03-4d3459f1d8c9")
+		(uuid "130b83e9-bf45-427a-91fb-ac8e1112db16")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 83.82 165.1 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-	)
-	(global_label "INLA2"
-		(shape input)
-		(at 119.38 162.56 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left)
-		)
-		(uuid "31c622c8-2751-410f-ad57-046f6e078dd9")
-		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 119.38 162.56 0)
+			(at 83.82 160.02 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -5406,16 +5384,38 @@
 	)
 	(global_label "INLB2"
 		(shape input)
-		(at 119.38 165.1 0)
+		(at 83.82 162.56 180)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
-			(justify left)
+			(justify right)
 		)
-		(uuid "51e3f8c8-4500-4121-b0e6-73dbe0093654")
+		(uuid "a7d45003-c437-4493-b026-97b54db58602")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 119.38 165.1 0)
+			(at 83.82 162.56 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(global_label "INLC2"
+		(shape input)
+		(at 83.82 165.1 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "cb1bdfcb-ec0f-48b0-8d03-4d3459f1d8c9")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 83.82 165.1 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -20717,7 +20717,7 @@
 				)
 			)
 		)
-		(property "Value" "10k"
+		(property "Value" "4.7k"
 			(at 170.18 135.89 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -20760,7 +20760,7 @@
 				)
 			)
 		)
-		(property "MPN" "0402WGF1002TCE"
+		(property "MPN" "0402WGF4701TCE"
 			(at 167.64 129.54 0)
 			(hide yes)
 			(show_name no)
@@ -20771,7 +20771,7 @@
 				)
 			)
 		)
-		(property "Supplier Part" "C25744"
+		(property "Supplier Part" "C25900"
 			(at 167.64 129.54 0)
 			(hide yes)
 			(show_name no)
@@ -20829,7 +20829,7 @@
 				)
 			)
 		)
-		(property "Value" "10k"
+		(property "Value" "4.7k"
 			(at 177.8 135.89 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -20872,7 +20872,7 @@
 				)
 			)
 		)
-		(property "MPN" "0402WGF1002TCE"
+		(property "MPN" "0402WGF4701TCE"
 			(at 175.26 129.54 0)
 			(hide yes)
 			(show_name no)
@@ -20883,7 +20883,7 @@
 				)
 			)
 		)
-		(property "Supplier Part" "C25744"
+		(property "Supplier Part" "C25900"
 			(at 175.26 129.54 0)
 			(hide yes)
 			(show_name no)
@@ -20941,7 +20941,7 @@
 				)
 			)
 		)
-		(property "Value" "10k"
+		(property "Value" "4.7k"
 			(at 185.42 135.89 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -20984,7 +20984,7 @@
 				)
 			)
 		)
-		(property "MPN" "0402WGF1002TCE"
+		(property "MPN" "0402WGF4701TCE"
 			(at 182.88 129.54 0)
 			(hide yes)
 			(show_name no)
@@ -20995,7 +20995,7 @@
 				)
 			)
 		)
-		(property "Supplier Part" "C25744"
+		(property "Supplier Part" "C25900"
 			(at 182.88 129.54 0)
 			(hide yes)
 			(show_name no)
@@ -25880,7 +25880,7 @@
 				)
 			)
 		)
-		(property "Value" "10k"
+		(property "Value" "4.7k"
 			(at 170.18 275.59 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -25923,7 +25923,7 @@
 				)
 			)
 		)
-		(property "MPN" "0402WGF1002TCE"
+		(property "MPN" "0402WGF4701TCE"
 			(at 167.64 269.24 0)
 			(hide yes)
 			(show_name no)
@@ -25934,7 +25934,7 @@
 				)
 			)
 		)
-		(property "Supplier Part" "C25744"
+		(property "Supplier Part" "C25900"
 			(at 167.64 269.24 0)
 			(hide yes)
 			(show_name no)
@@ -25992,7 +25992,7 @@
 				)
 			)
 		)
-		(property "Value" "10k"
+		(property "Value" "4.7k"
 			(at 177.8 275.59 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -26035,7 +26035,7 @@
 				)
 			)
 		)
-		(property "MPN" "0402WGF1002TCE"
+		(property "MPN" "0402WGF4701TCE"
 			(at 175.26 269.24 0)
 			(hide yes)
 			(show_name no)
@@ -26046,7 +26046,7 @@
 				)
 			)
 		)
-		(property "Supplier Part" "C25744"
+		(property "Supplier Part" "C25900"
 			(at 175.26 269.24 0)
 			(hide yes)
 			(show_name no)
@@ -26104,7 +26104,7 @@
 				)
 			)
 		)
-		(property "Value" "10k"
+		(property "Value" "4.7k"
 			(at 185.42 275.59 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -26147,7 +26147,7 @@
 				)
 			)
 		)
-		(property "MPN" "0402WGF1002TCE"
+		(property "MPN" "0402WGF4701TCE"
 			(at 182.88 269.24 0)
 			(hide yes)
 			(show_name no)
@@ -26158,7 +26158,7 @@
 				)
 			)
 		)
-		(property "Supplier Part" "C25744"
+		(property "Supplier Part" "C25900"
 			(at 182.88 269.24 0)
 			(hide yes)
 			(show_name no)
