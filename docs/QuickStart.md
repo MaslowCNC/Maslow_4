@@ -241,13 +241,13 @@ To run the file:
 
 The machine will begin following the toolpath in your gcode file. You can:
 
-- **Pause** the cut at any time by pressing the pause button
-- **Stop** the cut by pressing the stop button
+- **Stop** the cut at any time by pressing the stop button. The machine halts at once, raises
+  the router and remembers where it stopped. **Resume** then carries on from that line, or from
+  an earlier one you choose (see [Stopping and Resuming a Job](user-guide/README.md#stopping-and-resuming-a-job)).
 - Monitor the progress on screen
 
 Stay nearby while the machine is cutting, especially for your first few cuts. This will help you identify any issues early and ensure everything is working correctly.
 
-If you press Stop you will need to restart the machine and reset Z home.
 
 If you encounter any problems or error messages, check the [error messages documentation](https://www.maslowcnc.com/error-messages) or ask for help in the [Maslow forums](https://forums.maslowcnc.com/).
 

@@ -8,6 +8,65 @@ This project is a fork from the original FluidNC project specifically for Maslow
 
 **ALWAYS reference these instructions first and fallback to search or bash commands only when you encounter unexpected information that does not match the info here.**
 
+## Maslow architecture rules (read before changing the web UI or the firmware ↔ UI protocol)
+
+These are deliberate design decisions. A change that breaks one of them will be sent back, even if
+it works. If a task seems to need breaking one, say so in the PR and explain why, instead of
+working around it quietly.
+
+### The UI talks to the machine through `machine.js`
+
+- **Every new machine action goes through `ESP3D-WEBUI/www/js/machine.js`.** It is the one API for
+  moving, belt operations, jobs, stopping and settings. Its actions return an **Operation**: a
+  Promise that settles when the action has finished, plus `.accepted`, which settles when the
+  firmware has taken the command. Failures reject with an error carrying a `reason` (`rejected`,
+  `not-sent`, `disconnected`, `timeout`, `reset`, `cancelled`, `failed`, `not-ready`) and a
+  `detail` message. UI code shows progress from `.accepted` and the result from the Operation
+  itself, as the Apply Tension button in `tablet.js` (`runButtonAction`) does.
+- **Don't send commands from UI code with `sendCommand`, `SendPrinterCommand` or raw
+  WebSocket/HTTP calls.** About 60 older calls still do this. They are being moved over one feature
+  at a time. When you change a feature that uses one, move that feature onto `machine.js` (adding
+  an action there if needed). Don't migrate unrelated calls in the same PR.
+- **Reuse an existing action or `$` command before adding one.** The firmware's `$` commands are
+  listed in `docs/protocol.md` (section 4) and registered in
+  `firmware/FluidNC/src/ProcessSettings.cpp`. A new action in `machine.js` usually needs no new
+  firmware command.
+- All line commands go over the WebSocket, one at a time, through `wscommands.js`, which matches
+  each reply to its line. Only `[ESP…]` commands and file transfers use HTTP. Don't add a second
+  path for commands.
+
+### Machine state comes from the status report
+
+- **Read machine state from `machine.state` and `machine.on("state", fn)`**, which are filled from
+  the GRBL status report the firmware sends about every 50 ms. That includes the Maslow state
+  (`MS`), belt lengths and errors (`BL`, `BE`), motor currents (`MC`), job progress (`SD`) and a
+  stopped job (`STOPPED`). `docs/protocol.md` section 5.1 lists every field.
+- **Don't add new state reads that use `MINFO` or parse log lines.** Both are being phased out for
+  state. When the UI needs state it doesn't have, add a field to the status report in
+  `firmware/FluidNC/src/Report.cpp` (keep it short: the report is sent every 50 ms), parse it in
+  `machine.js`, and document it in `docs/protocol.md`.
+- Some log lines are still matched by their exact text in the UI (`maslow.js`, `debugging.js`).
+  Before changing any `log_info` / `log_warn` / `log_error` text, search `ESP3D-WEBUI/www/js` for
+  it and change both sides in the same PR.
+- The calibration state numbers (`firmware/FluidNC/src/Maslow/MaslowEnums.h`, 0–9) are mirrored
+  in `machine.js` (`MASLOW`) and range-checked in the UI. Adding a state means updating both.
+
+### Stopping and jobs
+
+- **There is no Pause button, on purpose.** Stop is `machine.stop()`: a soft reset (0x18), which
+  halts at once, then `$STOP` (raise Z, save positions). A stopped SD job is reported as
+  `STOPPED:<line>,<file>` and resumed with `machine.resumeFile(file, line)` (`$SD/RunFrom`). Don't
+  bring back feed-hold pause or add another stop path.
+
+### Safety and tests
+
+- Never send motion, belt or calibration commands to a machine as a side effect of other work.
+- A change to `machine.js` or `wscommands.js` needs bun tests in `ESP3D-WEBUI/www/js/tests`
+  (`cd ESP3D-WEBUI && bun test`). One known failure (`maslowInfoMsgHandling is not defined`)
+  predates this work.
+- Known bugs and loose ends are listed in `BACKLOG.md` at the repository root. Check it before
+  starting, and remove an entry in the same PR that fixes it.
+
 ## Working Effectively
 
 ### Bootstrap and Setup
