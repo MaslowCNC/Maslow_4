@@ -1,9 +1,10 @@
 Unified Control Board (36 V, STM32G474 spindle drive) - JLCPCB order notes
 Generated 2026-11-05 from Unified Control Board.kicad_pcb (KiCad 10.0.5), branch 36V-G474-spindle
+Regenerate: KiCad python jlcpcb/gen_jlcpcb.py "Unified Control Board.kicad_pcb" jlcpcb
 
 FILES
   UnifiedControlBoard_Gerbers.zip    -> PCB quote page (gerbers + PTH/NPTH drill)
-  UnifiedControlBoard_BOM_JLCPCB.csv -> PCB Assembly: BOM (76 lines, 236 parts, all with LCSC numbers)
+  UnifiedControlBoard_BOM_JLCPCB.csv -> PCB Assembly: BOM (68 lines, one per LCSC part, 236 parts)
   UnifiedControlBoard_CPL_JLCPCB.csv -> PCB Assembly: CPL / pick-and-place (236 parts: 69 top, 167 bottom)
   UnifiedControlBoard_JLCPCB.zip     -> all of the above in one archive
 
