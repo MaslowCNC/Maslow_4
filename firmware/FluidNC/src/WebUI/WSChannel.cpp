@@ -467,6 +467,10 @@ namespace WebUI {
                     break;
                 }
                 WSChannel* newChannel = owned.get();
+                // Maslow: ?report_seq adds a sequence number to this socket's status reports
+                if (request && request->hasParam("report_seq")) {
+                    newChannel->enableReportSeq();
+                }
 
                 const char* uri = (const char*)server->url();  // borrowed, logged below; no allocation
                 IPAddress   ip  = client->remoteIP();

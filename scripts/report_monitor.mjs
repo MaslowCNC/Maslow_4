@@ -2,7 +2,8 @@
 // Measure status-report size and delivery on a Maslow over WiFi.
 //
 // Connects as its own WebSocket session (?independent_session), so a browser tab on the same
-// machine keeps its connection. Sets $Report/Interval for this connection only, and otherwise only
+// machine keeps its connection, and asks for a sequence number on its reports (?report_seq), which
+// other clients don't get. Sets $Report/Interval for this connection only, and otherwise only
 // listens: it sends nothing that moves the machine. Drive the machine from the UI while it runs.
 //
 //   node scripts/report_monitor.mjs [host] [--interval 50] [--seconds 60] [--heap] [--csv out.csv]
@@ -14,8 +15,8 @@
 //   --csv       also write the per-second numbers to a CSV file
 //
 // Each second it prints: machine state, reports/s, frames/s, bytes/s, average and largest report
-// size, reports missing (gaps in the |N: sequence the firmware adds to each report; needs firmware
-// that sends N), the longest gap between reports while moving, and which Maslow fields
+// size, reports missing (gaps in the |N: sequence number; needs firmware that supports
+// ?report_seq), the longest gap between reports while moving, and which Maslow fields
 // (MS BL BE MC) were seen. Ctrl-C prints totals.
 //
 // Needs Node 22+ (built-in WebSocket).
@@ -48,7 +49,7 @@ let buf = "";
 const heap = { start: null, end: null };
 let heapWaiter = null;
 
-const ws = new WebSocket(`ws://${host}/?independent_session`, ["arduino"]);
+const ws = new WebSocket(`ws://${host}/?independent_session&report_seq`, ["arduino"]);
 ws.binaryType = "arraybuffer";
 
 const handleLine = (line, now) => {
@@ -160,7 +161,7 @@ const finish = async () => {
 	console.log("\nTotals");
 	console.log(`  ${total.seconds} s, ${total.reports} reports (${(total.reports / s).toFixed(1)}/s), ${total.frames} frames, ${total.bytes} bytes (${Math.round(total.bytes / s)} B/s)`);
 	console.log(`  report size: average ${total.reports ? Math.round(total.reportBytes / total.reports) : 0} B, largest ${total.maxReport} B`);
-	console.log(`  missing reports (N gaps): ${total.missing}${lastSeq === null ? " (no N field: firmware without it)" : ""}`);
+	console.log(`  missing reports (N gaps): ${total.missing}${lastSeq === null ? " (no N field: firmware without ?report_seq)" : ""}`);
 	console.log(`  gaps over ${LATE_MS} ms while moving: ${total.late}, longest ${Math.round(total.maxGapMoving)} ms`);
 	if (wantHeap) {
 		console.log(`  heap at start: ${heap.start}`);

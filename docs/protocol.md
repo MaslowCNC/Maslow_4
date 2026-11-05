@@ -377,13 +377,13 @@ plus a log line `Motion is disabled: <reason>` when Maslow has blocked motion.
 ### 5.1 Status report
 
 ```
-<State|N:seq|MPos:x,y,z[|Bf:blocks,bytes][|Ln:n]|FS:feed,spindle|MS:n[|Pn:pins][|WCO:x,y,z][|Ov:f,r,s[|A:SCFM]]|BL:tl,tr,bl,br|BE:tl,tr,bl,br|MC:tl,tr,bl,br[|SD:pct,file[,line]][|STOPPED:line,file]>
+<State[|N:seq]|MPos:x,y,z[|Bf:blocks,bytes][|Ln:n]|FS:feed,spindle|MS:n[|Pn:pins][|WCO:x,y,z][|Ov:f,r,s[|A:SCFM]]|BL:tl,tr,bl,br|BE:tl,tr,bl,br|MC:tl,tr,bl,br[|SD:pct,file[,line]][|STOPPED:line,file]>
 ```
 
 Example while jogging, a report that carries the belts:
 
 ```
-<Jog|N:1234|MPos:120.000,85.500,0.000|FS:1000,0|MS:7|BL:1800.25,1801.50,1900.75,1899.00|BE:0.012,-0.034,0.000,0.500|MC:412,398,120,131>
+<Jog|MPos:120.000,85.500,0.000|FS:1000,0|MS:7|BL:1800.25,1801.50,1900.75,1899.00|BE:0.012,-0.034,0.000,0.500|MC:412,398,120,131>
 ```
 
 | Field | Always? | Meaning |
@@ -399,7 +399,7 @@ Example while jogging, a report that carries the belts:
 | `Ov:feed,rapid,spindle` | every 10th / 20th report | overrides in % |
 | `A:SCFM` | with Ov, when on | S/C spindle CW/CCW, F flood, M mist |
 | `MS:n` | yes (Maslow) | Maslow calibration state, 0–9 (section 5.3) |
-| `N:seq` | yes (Maslow, temporary) | this channel's report sequence number, +1 per report; a jump means reports were dropped. For measuring delivery (`scripts/report_monitor.mjs`) |
+| `N:seq` | only on a WebSocket opened with `?report_seq` (Maslow) | this channel's report sequence number, +1 per report; a jump means reports were dropped. For measuring delivery (`scripts/report_monitor.mjs`); the UI doesn't ask for it |
 | `BL:tl,tr,bl,br` | yes (Maslow) | belt lengths, mm, 2 decimals; `?` for a belt whose length is unknown (not restored at boot and not retracted since) |
 | `BE:tl,tr,bl,br` | yes (Maslow) | each belt's position error (encoder position minus target), mm, 3 decimals |
 | `MC:tl,tr,bl,br` | yes (Maslow) | belt motor currents, raw ADC 0–4095 averaged over the last 10 samples (the UI converts: mA = 1000 × 3.3 × ADC / 4095 / 1.5) |
@@ -479,9 +479,11 @@ state from `MS` only. Older firmware (before `MS`) has only this line.
 - **Success or failure of a Maslow operation is only in log text.** `ok` means "started"; `MS`
   in the status report now shows when the state changes, but not whether the operation succeeded
   (e.g. a calibration that failed and why).
-- **The Maslow fields cost bytes.** `N`, `BL`, `BE` and `MC` add about 100 bytes to every report
-  (roughly 60 → 160 bytes). Frames, not bytes, are what the ESP32 is short of, and the count
-  doesn't change; `scripts/report_monitor.mjs` measures size, drops and gaps. An ESP-NOW pendant
+- **The Maslow fields cost bytes.** `BL`, `BE` and `MC` add about 90 bytes to every report
+  (roughly 60 → 150 bytes). Frames, not bytes, are what the ESP32 is short of, and the count
+  doesn't change; `scripts/report_monitor.mjs` measures size, drops and gaps. First run (m4,
+  2026-11-05, 146 s of jogs, Trace Boundary and a stopped job, home WiFi, one browser tab): no
+  drops in 1612 reports, average 169 B, largest 227 B, longest gap while moving 171 ms. An ESP-NOW pendant
   may want fewer fields, which would need a per-channel setting.
 - **Moving file contents and firmware updates need HTTP.** Over USB, either add stream commands for
   them or show a reduced UI.
