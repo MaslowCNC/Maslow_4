@@ -1014,3 +1014,91 @@ to { transform: rotate(360deg); }
 .machine-action-warning {
 background-color: #e0a030 !important;
 }
+
+/* After a stop: Resume from line N, and Discard, in the job button row */
+.job-resume {
+background-color: #4aa85c;
+color: white;
+display: flex;
+flex-direction: column;
+align-items: center;
+justify-content: center;
+gap: 2px;
+padding: 2px;
+font-size: 13px;
+line-height: 1.1;
+overflow: hidden;
+}
+/* The line box: flat, with its own step arrows inside it (the browser's spinner is hidden) */
+.job-resume-line {
+display: flex;
+align-items: stretch;
+width: 90%;
+max-width: 7.5em;
+height: 22px;
+box-sizing: border-box;
+border: 1px solid rgba(0, 0, 0, 0.25);
+border-radius: 3px;
+background-color: white;
+overflow: hidden;
+cursor: text;
+}
+.job-resume-line input {
+flex: 1;
+min-width: 0;
+border: none;
+outline: none;
+padding: 0 2px;
+font-size: 14px;
+text-align: center;
+color: #222;
+background: transparent;
+-moz-appearance: textfield;
+appearance: textfield;
+}
+.job-resume-line input::-webkit-outer-spin-button,
+.job-resume-line input::-webkit-inner-spin-button {
+-webkit-appearance: none;
+margin: 0;
+}
+.job-resume-line:focus-within {
+border-color: #2a7a3a;
+}
+.job-resume-steps {
+display: flex;
+flex-direction: column;
+width: 16px;
+border-left: 1px solid rgba(0, 0, 0, 0.15);
+}
+.job-resume-steps button {
+flex: 1;
+padding: 0;
+border: none;
+background: transparent;
+color: #555;
+font-size: 7px;
+line-height: 1;
+cursor: pointer;
+}
+.job-resume-steps button:hover {
+background-color: #e8e8e8;
+}
+.job-resume-steps button + button {
+border-top: 1px solid rgba(0, 0, 0, 0.1);
+}
+/* Pressing or hovering the line box isn't pressing the Resume button */
+.job-resume:has(.job-resume-line:hover) {
+filter: none;
+}
+.job-resume:has(.job-resume-line:active) {
+transform: none;
+}
+.job-discard {
+background-color: #8a8a8a;
+color: white;
+display: flex;
+align-items: center;
+justify-content: center;
+text-align: center;
+font-size: 15px;
+}

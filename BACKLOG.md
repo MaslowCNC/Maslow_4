@@ -54,6 +54,8 @@ Format: **title** — what goes wrong, where, and how we found it.
   2026-10-30, `!` during a long move to the first cut slowed the machine at once, but the
   hold only completed at the end of the move ("Stopping the paused job" logged then). At
   50 mm/s² and 2000 mm/min it should stop in about 11 mm. Pause (`!`) has the same problem.
+  Parked 2026-11-04: the plan is STOP + resume from the stopped line, and no Pause button. If
+  that falls short, a fast hold (fix this, and park Z with the spindle off) is the fallback.
 
 ## Medium: connection protocol (plan: all commands over the WebSocket)
 
