@@ -17,18 +17,18 @@ Format: **title** — what goes wrong, where, and how we found it.
   from the same computer closed the tab's socket (it reconnected 3 s later). Seen 2026-11-02.
   Cause not found: `/command` doesn't call `closeSessionChannels`. Could be the dev server's
   proxy or a connection limit on the ESP32.
-- [ ] **Two tabs in one browser kick each other off forever.** Each new WebSocket closes
-  every other socket with the same `sessionId` cookie (`WSChannel.cpp` WS_EVT_CONNECT,
-  `closeSessionChannels`), and a cookie is shared by all tabs in a browser. The closed tab
-  auto-reconnects every 3 s (`socket.js` RECONNECT_INTERVAL_MS), so they take turns, and
-  commands fail with "Not sent" while their socket is down. Possible fix: open the socket
-  with `?independent_session` (supported by the firmware), now that no command relies on
-  the session cookie or `PAGEID`. Seen 2026-10-26: connection ID reached
-  835 about 40 min after boot. Fixed by closing the other tab.
 - [ ] **Session IDs are weak and can collide across browsers.** `get_random_string`
   (`WebUIServer.cpp`) uses `rand() % ('A' - 'Z')` (modulo −25, wrong charset) and reseeds
   with `srand(time(NULL))` on every call, where `time()` is seconds since boot. Two browsers
-  that first load in the same second get the same session and hit the bug above.
+  that first load in the same second get the same session, so connecting in one closes the other
+  (each then shows the "another tab" notice, code 4001).
+- [ ] **A job keeps a pointer to a closed connection.** `Job::nest` records the channel that
+  started a job as `Job::leader` (`Job.cpp`), and job errors (`Protocol.cpp` "in … at line")
+  and replies to any channel's commands during the job go to it. When that WebSocket closes
+  (refresh, WiFi drop, eviction), the channel is deleted (`AllChannels::reap_channels`) but
+  `leader` isn't cleared and holds no reference, so the next write goes to freed memory: a
+  possible crash mid-job, or lost replies. Found reading the code (2026-11-05), not reproduced.
+  Fix idea: clear or reassign `leader` when its channel is killed.
 - [ ] **WebSocket frames are dropped silently while moving.** In a motion state a full send
   queue drops frames (`WSChannel.cpp` `send_frame`); outside motion a stalled client is
   closed after 250 ms. Only a debug line on USB serial records it. This can lose state lines,

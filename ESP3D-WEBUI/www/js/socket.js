@@ -67,6 +67,20 @@ let reconnect_timer = null;
 /** Interval (ms) between auto-reconnect attempts while the disconnect dialog is visible */
 const RECONNECT_INTERVAL_MS = 3000;
 
+// The firmware closes a socket with one of these codes when it means to (WSChannels in
+// WSChannel.h). For these the UI shows the notice and does not reconnect by itself: reconnecting
+// would close the other tab, which would then reconnect, and so on.
+const WS_CLOSE_NOTICES = {
+	4001: {
+		message: "This machine is now connected in another tab of this browser. Only one tab per browser can be connected at a time.",
+		button: "Use this tab",
+	},
+	4002: {
+		message: "The machine has reached its limit of 4 connections (browser tabs, phones or scripts), and a newer one took this tab's place. Close tabs or devices you aren't using, then reconnect.",
+		button: "Reconnect",
+	},
+};
+
 const cancelReconnectTimer = () => {
 	if (reconnect_timer !== null) {
 		clearInterval(reconnect_timer);
@@ -85,7 +99,8 @@ const resetConnectionState = () => {
 	startSocket();
 };
 
-const Disable_interface = (lostconnection) => {
+// notice: one of WS_CLOSE_NOTICES. Shown in the dialog, and no auto-reconnect.
+const Disable_interface = (lostconnection, notice) => {
 	let lostcon = false;
 	if (typeof lostconnection !== "undefined") lostcon = lostconnection;
 	//block all communication
@@ -110,13 +125,20 @@ const Disable_interface = (lostconnection) => {
 	// Set rather than append: each disconnect (e.g. a firmware reboot) used to add another suffix
 	document.title = `${esp_hostname} (${HTMLDecode(translate_text_item("Disabled"))})`;
 	// Only show the dialog if it is not already visible (avoids duplicate listmodal entries)
+	// showModal() sets display "block"; before the first show the inline style is "" (hidden by
+	// the stylesheet), so test for "block", not "none"
 	const disabledModal = id("UIdisableddlg.html");
-	if (!disabledModal || disabledModal.style.display === "none") {
-		UIdisableddlg(lostcon);
+	if (!disabledModal || disabledModal.style.display !== "block") {
+		UIdisableddlg(lostcon, notice);
+	} else {
+		setUIdisabledText(lostcon, notice);
+	}
+	cancelReconnectTimer();
+	if (notice) {
+		return; // the user reconnects with the dialog's button
 	}
 	// Auto-reconnect: try once every 3 seconds (well under the 1/second limit).
 	// resetConnectionState() or a successful onopen will cancel this timer.
-	cancelReconnectTimer();
 	reconnect_timer = setInterval(startSocket, RECONNECT_INTERVAL_MS);
 };
 
@@ -213,7 +235,7 @@ const startSocket = () => {
 		// including the very first connection on page load.
 		handlePing();
 		const disabledModal = id("UIdisableddlg.html");
-		if (disabledModal && disabledModal.style.display !== "none") {
+		if (disabledModal && disabledModal.style.display === "block") {
 			log_off = false;
 			http_communication_locked = false;
 			closeModal("Reconnected");
@@ -232,7 +254,13 @@ const startSocket = () => {
 		}
 	};
 	ws_source.onclose = (e) => {
-		console.log("Disconnected");
+		console.log("Disconnected", e.code, e.reason);
+		// Closed on purpose by the firmware (another tab, connection limit): say so, don't fight
+		const notice = WS_CLOSE_NOTICES[e.code];
+		if (notice) {
+			Disable_interface(false, notice);
+			return;
+		}
 		//seems sometimes it disconnect so wait 3s and reconnect
 		//if it is not a log off
 		if (!log_off) setTimeout(startSocket, 3000);
