@@ -54,7 +54,9 @@ architecture rules". They apply to every agent. Follow them.
   `wscommands.js`. Only `[ESP…]` commands and file transfers use HTTP.
 - The firmware answers with GRBL status reports (about every 50 ms), `MINFO: {json}`, and plain
   log lines. New state goes in a status report field, not `MINFO` or a log line
-  (`docs/protocol.md` lists the fields).
+  (`docs/protocol.md` lists the fields). Report size matters: a PR that adds data to the regular
+  report needs review from tristan-huber or BarbourSmith on GitHub before merge, and its
+  description should @-mention @tristan-huber.
 - **The UI recognises many log lines by their exact text** (see `maslowInfoMsgHandling` in `maslow.js`
   and the parsing in `debugging.js`). Before changing the text of any `log_info`/`log_warn`/`log_error`,
   grep `ESP3D-WEBUI/www/js` for it and update both sides in the same change.

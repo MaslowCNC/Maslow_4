@@ -45,6 +45,13 @@ working around it quietly.
   state. When the UI needs state it doesn't have, add a field to the status report in
   `firmware/FluidNC/src/Report.cpp` (keep it short: the report is sent every 50 ms), parse it in
   `machine.js`, and document it in `docs/protocol.md`.
+- **Report size is sensitive, so report changes need a human reviewer.** The report goes out about
+  every 50 ms over WiFi, and a longer report means more dropped frames and less headroom. A PR that
+  adds data to the regular status report (a new field, or a longer value in an existing one) must
+  not be merged until @tristan-huber or @BarbourSmith has reviewed it. Mention @tristan-huber in
+  the PR description, say which field changed, and give its typical size in bytes
+  (`scripts/report_monitor.mjs` measures report size and drops). Prefer a field that is sent only
+  while it applies (like `STOPPED`) over one sent in every report.
 - Some log lines are still matched by their exact text in the UI (`maslow.js`, `debugging.js`).
   Before changing any `log_info` / `log_warn` / `log_error` text, search `ESP3D-WEBUI/www/js` for
   it and change both sides in the same PR.
