@@ -210,7 +210,7 @@
 		(thermal_bridge_angle 0)
 	)
 	(embedded_fonts no)
-	(model "${KIPRJMOD}/EASYEDA_MODELS/C0805_L2.0-W1.3-H1.3.step"
+	(model "${KIPRJMOD}/EASYEDA_MODELS/C0805_L2.0-W1.3-H1.3.wrl"
 		(offset
 			(xyz 0 0 0)
 		)

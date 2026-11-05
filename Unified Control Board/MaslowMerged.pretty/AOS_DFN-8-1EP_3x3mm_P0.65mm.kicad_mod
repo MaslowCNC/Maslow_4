@@ -50,4 +50,15 @@
 	(pad "" smd rect (at -0.6 -0.355) (size 1.0 1.8) (layers "F.Paste"))
 	(pad "" smd rect (at 0.6 -0.355) (size 1.0 1.8) (layers "F.Paste"))
 	(embedded_fonts no)
+	(model "${KICAD10_3DMODEL_DIR}/Package_DFN_QFN.3dshapes/DFN-8-1EP_3x3mm_P0.65mm_EP1.55x2.4mm.step"
+		(offset
+			(xyz 0 0 0)
+		)
+		(scale
+			(xyz 1 1 1)
+		)
+		(rotate
+			(xyz 0 0 -90)
+		)
+	)
 )

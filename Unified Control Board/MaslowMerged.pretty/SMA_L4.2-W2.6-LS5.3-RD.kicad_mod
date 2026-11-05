@@ -161,7 +161,7 @@
 		(thermal_bridge_angle 0)
 	)
 	(embedded_fonts no)
-	(model "${KIPRJMOD}/EASYEDA_MODELS/SMA_L4.2-W2.6-LS5.3-RD.step"
+	(model "${KIPRJMOD}/EASYEDA_MODELS/SMA_L4.2-W2.6-LS5.0-RD_1.wrl"
 		(offset
 			(xyz 0.0001 0 0)
 		)
@@ -169,7 +169,7 @@
 			(xyz 1 1 1)
 		)
 		(rotate
-			(xyz -0 -0 -360)
+			(xyz 0 0 180)
 		)
 	)
 )

@@ -197,7 +197,7 @@
 		(thermal_bridge_angle 0)
 	)
 	(embedded_fonts no)
-	(model "${KIPRJMOD}/EASYEDA_MODELS/CAP-SMD_BD10.0-L10.3-W10.3-LS10.9-FD.step"
+	(model "${KIPRJMOD}/EASYEDA_MODELS/CAP-SMD_BD10.0-L10.3-W10.3-LS10.9-FD.wrl"
 		(offset
 			(xyz 0 -0 0)
 		)

@@ -3108,7 +3108,7 @@
 			(uuid "184433e7-1f43-4011-a0c9-f3a6b066f1be")
 		)
 		(embedded_fonts no)
-		(model "${KICAD10_3DMODEL_DIR}/Package_SO.3dshapes/SOIC-8-1EP_3.9x4.9mm_P1.27mm_EP2.95x4.9mm_Mask2.71x3.4mm.step"
+		(model "${KICAD10_3DMODEL_DIR}/Package_SO.3dshapes/SOIC-8-1EP_3.9x4.9mm_P1.27mm_EP2.41x3.81mm.step"
 			(offset
 				(xyz 0 0 0)
 			)
@@ -8797,7 +8797,7 @@
 			(uuid "c4d667a5-a797-4470-b45c-f8e2955151d1")
 		)
 		(embedded_fonts no)
-		(model "${KICAD10_3DMODEL_DIR}/Package_SO.3dshapes/SOIC-8-1EP_3.9x4.9mm_P1.27mm_EP2.95x4.9mm_Mask2.71x3.4mm.step"
+		(model "${KICAD10_3DMODEL_DIR}/Package_SO.3dshapes/SOIC-8-1EP_3.9x4.9mm_P1.27mm_EP2.41x3.81mm.step"
 			(offset
 				(xyz 0 0 0)
 			)
@@ -20095,7 +20095,7 @@
 			(uuid "d0757443-e041-45f5-bd13-47daa2f997a3")
 		)
 		(embedded_fonts no)
-		(model "${KICAD10_3DMODEL_DIR}/Package_SO.3dshapes/SOIC-8-1EP_3.9x4.9mm_P1.27mm_EP2.95x4.9mm_Mask2.71x3.4mm.step"
+		(model "${KICAD10_3DMODEL_DIR}/Package_SO.3dshapes/SOIC-8-1EP_3.9x4.9mm_P1.27mm_EP2.41x3.81mm.step"
 			(offset
 				(xyz 0 0 0)
 			)
@@ -20653,7 +20653,7 @@
 			(uuid "5109d3da-8fd2-4465-8885-b3211c1ac9c9")
 		)
 		(embedded_fonts no)
-		(model "${KICAD10_3DMODEL_DIR}/Package_SO.3dshapes/SOIC-8-1EP_3.9x4.9mm_P1.27mm_EP2.95x4.9mm_Mask2.71x3.4mm.step"
+		(model "${KICAD10_3DMODEL_DIR}/Package_SO.3dshapes/SOIC-8-1EP_3.9x4.9mm_P1.27mm_EP2.41x3.81mm.step"
 			(offset
 				(xyz 0 0 0)
 			)
@@ -34922,7 +34922,7 @@
 			(uuid "05f5a41b-a455-4f02-8a34-4169524d4063")
 		)
 		(embedded_fonts no)
-		(model "${KIPRJMOD}/EASYEDA_MODELS/R0402_L1.0-W0.5-H0.5.step"
+		(model "${KIPRJMOD}/EASYEDA_MODELS/R0402_L1.0-W0.5-H0.4.wrl"
 			(offset
 				(xyz 0 0 0)
 			)
@@ -34930,7 +34930,7 @@
 				(xyz 1 1 1)
 			)
 			(rotate
-				(xyz -0 -0 -0)
+				(xyz 0 0 0)
 			)
 		)
 	)
@@ -36074,6 +36074,17 @@
 			(uuid "0a2a7454-56d5-4775-811d-e27ec30e54d7")
 		)
 		(embedded_fonts no)
+		(model "${KICAD10_3DMODEL_DIR}/Package_DFN_QFN.3dshapes/DFN-8-1EP_3x3mm_P0.65mm_EP1.55x2.4mm.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 -90)
+			)
+		)
 	)
 	(footprint "Resistor_SMD:R_0402_1005Metric"
 		(layer "B.Cu")
@@ -37077,6 +37088,17 @@
 			(uuid "2fdfa2a0-6af3-4733-a52d-9dc1ef87198d")
 		)
 		(embedded_fonts no)
+		(model "${KICAD10_3DMODEL_DIR}/Package_DFN_QFN.3dshapes/DFN-8-1EP_3x3mm_P0.65mm_EP1.55x2.4mm.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 -90)
+			)
+		)
 	)
 	(footprint "ProPrj_Dri-easyedapro:C0603"
 		(layer "B.Cu")
@@ -42074,7 +42096,7 @@
 			(uuid "23ad2c71-0438-49f2-b70d-248a137aeb30")
 		)
 		(embedded_fonts no)
-		(model "${KIPRJMOD}/EASYEDA_MODELS/C0805_L2.0-W1.3-H1.3.step"
+		(model "${KIPRJMOD}/EASYEDA_MODELS/C0805_L2.0-W1.3-H1.3.wrl"
 			(offset
 				(xyz 0 0 0)
 			)
@@ -42082,7 +42104,7 @@
 				(xyz 1 1 1)
 			)
 			(rotate
-				(xyz -0 -0 0)
+				(xyz 0 0 0)
 			)
 		)
 	)
@@ -43566,7 +43588,7 @@
 			(uuid "995eb03a-9a46-4259-8fdd-d5e1283b8a3a")
 		)
 		(embedded_fonts no)
-		(model "${KIPRJMOD}/EASYEDA_MODELS/C0805_L2.0-W1.3-H1.3.step"
+		(model "${KIPRJMOD}/EASYEDA_MODELS/C0805_L2.0-W1.3-H1.3.wrl"
 			(offset
 				(xyz 0 0 0)
 			)
@@ -43574,7 +43596,7 @@
 				(xyz 1 1 1)
 			)
 			(rotate
-				(xyz -0 -0 0)
+				(xyz 0 0 0)
 			)
 		)
 	)
@@ -44526,6 +44548,17 @@
 			(uuid "6168bb15-0be1-4ce2-bcb3-5cec85b082fd")
 		)
 		(embedded_fonts no)
+		(model "${KICAD10_3DMODEL_DIR}/Package_DFN_QFN.3dshapes/DFN-8-1EP_3x3mm_P0.65mm_EP1.55x2.4mm.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 -90)
+			)
+		)
 	)
 	(footprint "MaslowMerged:SOP-16_L5.0-W4.4-P0.65-LS6.4-BL"
 		(layer "B.Cu")
@@ -45652,6 +45685,17 @@
 			(uuid "47ffc221-f9e4-45a6-9b77-29e1c405f8c1")
 		)
 		(embedded_fonts no)
+		(model "${KICAD10_3DMODEL_DIR}/Package_DFN_QFN.3dshapes/DFN-8-1EP_3x3mm_P0.65mm_EP1.55x2.4mm.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 -90)
+			)
+		)
 	)
 	(footprint "MaslowMerged:CONN-TH_XT60PB-M"
 		(layer "B.Cu")
@@ -47273,7 +47317,7 @@
 			(uuid "6258f321-9f8a-4cf4-b68d-32fe3cfb393d")
 		)
 		(embedded_fonts no)
-		(model "${KICAD10_3DMODEL_DIR}/Package_DFN_QFN.3dshapes/VQFN-24-1EP_4x4mm_P0.5mm_EP2.45x2.45mm.step"
+		(model "${KICAD10_3DMODEL_DIR}/Package_DFN_QFN.3dshapes/Texas_RGE0024C_VQFN-24-1EP_4x4mm_P0.5mm_EP2.1x2.1mm.step"
 			(offset
 				(xyz 0 0 0)
 			)
@@ -48341,6 +48385,17 @@
 			(uuid "635488e2-c816-4bc2-a607-0328b4036bf9")
 		)
 		(embedded_fonts no)
+		(model "${KICAD10_3DMODEL_DIR}/Package_DFN_QFN.3dshapes/DFN-8-1EP_3x3mm_P0.65mm_EP1.55x2.4mm.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 -90)
+			)
+		)
 	)
 	(footprint "MaslowMerged:R0402"
 		(layer "B.Cu")
@@ -49369,7 +49424,7 @@
 			(uuid "fd13633d-b48d-4ac2-8663-05ec2efd592b")
 		)
 		(embedded_fonts no)
-		(model "${KICAD10_3DMODEL_DIR}/Package_DFN_QFN.3dshapes/VQFN-24-1EP_4x4mm_P0.5mm_EP2.45x2.45mm.step"
+		(model "${KICAD10_3DMODEL_DIR}/Package_DFN_QFN.3dshapes/Texas_RGE0024C_VQFN-24-1EP_4x4mm_P0.5mm_EP2.1x2.1mm.step"
 			(offset
 				(xyz 0 0 0)
 			)
@@ -53000,6 +53055,17 @@
 			(uuid "9b027a8d-9df4-4562-b3dc-47a0fb44486a")
 		)
 		(embedded_fonts no)
+		(model "${KICAD10_3DMODEL_DIR}/Package_DFN_QFN.3dshapes/DFN-8-1EP_3x3mm_P0.65mm_EP1.55x2.4mm.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 -90)
+			)
+		)
 	)
 	(footprint "Resistor_SMD:R_0402_1005Metric"
 		(layer "B.Cu")
@@ -54085,6 +54151,17 @@
 			(uuid "3c41f671-f4b2-443b-a1f8-fdf7ff09f8b4")
 		)
 		(embedded_fonts no)
+		(model "${KICAD10_3DMODEL_DIR}/Package_DFN_QFN.3dshapes/DFN-8-1EP_3x3mm_P0.65mm_EP1.55x2.4mm.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 -90)
+			)
+		)
 	)
 	(footprint "ProPrj_Dri-easyedapro:CONN-TH_B3B-XH-2-LF-SN"
 		(layer "B.Cu")
@@ -58821,6 +58898,17 @@
 			(uuid "f3f82f6d-e748-4c93-8620-762dec237251")
 		)
 		(embedded_fonts no)
+		(model "${KICAD10_3DMODEL_DIR}/Package_DFN_QFN.3dshapes/DFN-8-1EP_3x3mm_P0.65mm_EP1.55x2.4mm.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 -90)
+			)
+		)
 	)
 	(footprint "Capacitor_SMD:C_1206_3216Metric"
 		(layer "B.Cu")
@@ -59667,7 +59755,7 @@
 			(uuid "b5086906-6f11-4290-8edb-6a3d8a83d0e4")
 		)
 		(embedded_fonts no)
-		(model "${KIPRJMOD}/EASYEDA_MODELS/R0402_L1.0-W0.5-H0.5.step"
+		(model "${KIPRJMOD}/EASYEDA_MODELS/R0402_L1.0-W0.5-H0.4.wrl"
 			(offset
 				(xyz 0 0 0)
 			)
@@ -59675,7 +59763,7 @@
 				(xyz 1 1 1)
 			)
 			(rotate
-				(xyz -0 -0 -0)
+				(xyz 0 0 0)
 			)
 		)
 	)
@@ -61566,6 +61654,17 @@
 			(uuid "f0301d2f-fadb-4c6a-bb02-dc79b2fc1f9c")
 		)
 		(embedded_fonts no)
+		(model "${KICAD10_3DMODEL_DIR}/Package_DFN_QFN.3dshapes/DFN-8-1EP_3x3mm_P0.65mm_EP1.55x2.4mm.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 -90)
+			)
+		)
 	)
 	(footprint "Resistor_SMD:R_1206_3216Metric"
 		(layer "B.Cu")
@@ -62462,6 +62561,17 @@
 			(uuid "e75523c4-73fd-41ed-9685-401427028660")
 		)
 		(embedded_fonts no)
+		(model "${KICAD10_3DMODEL_DIR}/Package_DFN_QFN.3dshapes/DFN-8-1EP_3x3mm_P0.65mm_EP1.55x2.4mm.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 -90)
+			)
+		)
 	)
 	(footprint "MaslowMerged:CAP-SMD_BD10.0-L10.3-W10.3-LS10.9-FD"
 		(layer "B.Cu")
@@ -62741,7 +62851,7 @@
 			(uuid "8a66c8ea-acdc-4be6-93ff-ad9a378c2ef1")
 		)
 		(embedded_fonts no)
-		(model "${KIPRJMOD}/EASYEDA_MODELS/CAP-SMD_BD10.0-L10.3-W10.3-LS10.9-FD.step"
+		(model "${KIPRJMOD}/EASYEDA_MODELS/CAP-SMD_BD10.0-L10.3-W10.3-LS10.9-FD.wrl"
 			(offset
 				(xyz 0 -0 0)
 			)
@@ -62749,7 +62859,7 @@
 				(xyz 1 1 1)
 			)
 			(rotate
-				(xyz -0 -0 0)
+				(xyz 0 0 0)
 			)
 		)
 	)
@@ -63613,7 +63723,7 @@
 			(uuid "6ce3897b-2647-4520-be32-0ef81e3c6833")
 		)
 		(embedded_fonts no)
-		(model "${KIPRJMOD}/EASYEDA_MODELS/CAP-SMD_BD10.0-L10.3-W10.3-LS10.9-FD.step"
+		(model "${KIPRJMOD}/EASYEDA_MODELS/CAP-SMD_BD10.0-L10.3-W10.3-LS10.9-FD.wrl"
 			(offset
 				(xyz 0 -0 0)
 			)
@@ -63621,7 +63731,7 @@
 				(xyz 1 1 1)
 			)
 			(rotate
-				(xyz -0 -0 0)
+				(xyz 0 0 0)
 			)
 		)
 	)
@@ -63905,6 +64015,17 @@
 			(uuid "633ac367-24eb-4a80-a9e7-ce4d4cdd3a36")
 		)
 		(embedded_fonts no)
+		(model "${KICAD10_3DMODEL_DIR}/Package_DFN_QFN.3dshapes/DFN-8-1EP_3x3mm_P0.65mm_EP1.55x2.4mm.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 -90)
+			)
+		)
 	)
 	(footprint "MaslowMerged:CONN-TH_B04B-PASK"
 		(layer "B.Cu")
@@ -65494,6 +65615,17 @@
 			(uuid "b4e01c3b-b079-45fe-8845-6fbfbc955e9b")
 		)
 		(embedded_fonts no)
+		(model "${KICAD10_3DMODEL_DIR}/Package_DFN_QFN.3dshapes/DFN-8-1EP_3x3mm_P0.65mm_EP1.55x2.4mm.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 -90)
+			)
+		)
 	)
 	(footprint "MaslowMerged:SMA_L4.2-W2.6-LS5.3-RD"
 		(layer "B.Cu")
@@ -65733,7 +65865,7 @@
 			(uuid "c0f8eb98-fa1e-49d5-8574-158568050f20")
 		)
 		(embedded_fonts no)
-		(model "${KIPRJMOD}/EASYEDA_MODELS/SMA_L4.2-W2.6-LS5.3-RD.step"
+		(model "${KIPRJMOD}/EASYEDA_MODELS/SMA_L4.2-W2.6-LS5.0-RD_1.wrl"
 			(offset
 				(xyz 0.0001 0 0)
 			)
@@ -65741,7 +65873,7 @@
 				(xyz 1 1 1)
 			)
 			(rotate
-				(xyz -0 -0 -360)
+				(xyz 0 0 180)
 			)
 		)
 	)
