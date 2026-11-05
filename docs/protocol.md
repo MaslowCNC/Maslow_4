@@ -278,6 +278,8 @@ These work as on any FluidNC machine. The useful ones for a Maslow client:
 | `$Report/Interval=ms` | set this channel's status auto-report interval (0 = off, minimum 50; a WebSocket starts at 200, USB off) |
 | `$Report/Status=n` | 1 = report machine position (MPos), 0 = work position (WPos); the default is 1 |
 | `$SD/Run=file` / `$LocalFS/Run=file` | run a G-code file |
+| `$SD/RunFrom=line,file` | (Maslow) run an SD file from a line (1 = the first), as Resume does after a stop. The lines before it are read in check mode (no motion, spindle, coolant or dwell; units, offsets, feed and spindle state are kept), then: Z up to the highest Z so far, spindle and coolant as the file left them, rapid to where the line starts, plunge at 300 mm/min. Answered once that is planned; the state is `Check` while it reads. Needs Idle and READY_TO_CUT; refused if the file is not the size it was when it stopped |
+| `$SD/Discard` | (Maslow) forget the stopped job, so `STOPPED` leaves the report |
 | `$MD` / `$ME` | disable / enable motors |
 | `$CMD`, `$S`, `$E`, `$A` | list commands, settings, errors, alarms |
 
@@ -375,7 +377,7 @@ plus a log line `Motion is disabled: <reason>` when Maslow has blocked motion.
 ### 5.1 Status report
 
 ```
-<State|N:seq|MPos:x,y,z[|Bf:blocks,bytes][|Ln:n]|FS:feed,spindle|MS:n[|Pn:pins][|WCO:x,y,z][|Ov:f,r,s[|A:SCFM]]|BL:tl,tr,bl,br|BE:tl,tr,bl,br|MC:tl,tr,bl,br[|SD:pct,file[,line]]>
+<State|N:seq|MPos:x,y,z[|Bf:blocks,bytes][|Ln:n]|FS:feed,spindle|MS:n[|Pn:pins][|WCO:x,y,z][|Ov:f,r,s[|A:SCFM]]|BL:tl,tr,bl,br|BE:tl,tr,bl,br|MC:tl,tr,bl,br[|SD:pct,file[,line]][|STOPPED:line,file]>
 ```
 
 Example while jogging, a report that carries the belts:
@@ -402,6 +404,7 @@ Example while jogging, a report that carries the belts:
 | `BE:tl,tr,bl,br` | yes (Maslow) | each belt's position error (encoder position minus target), mm, 3 decimals |
 | `MC:tl,tr,bl,br` | yes (Maslow) | belt motor currents, raw ADC 0–4095 averaged over the last 10 samples (the UI converts: mA = 1000 × 3.3 × ADC / 4095 / 1.5) |
 | `SD:pct,file[,line]` | while a job runs | progress %, file name, and (Maslow addition) the file line of the running block |
+| `STOPPED:line,file` | after an SD job ended early, while no job runs (Maslow) | the line that was executing when the job was stopped (STOP, `$STOP`), failed (an error in the file: that line), or a spindle fault ended it; `file` is as given to `$SD/Run`. Not after an alarm. Cleared when a job starts or by `$SD/Discard`; lost on reboot |
 
 **Maslow fields** (added after `exp1` commit `0d9585929`, on branch `machine-api`; not yet on a
 machine):

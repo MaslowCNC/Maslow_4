@@ -22,6 +22,7 @@
 #include "Machine/LimitPin.h"
 #include "Job.h"
 #include "MotionControl.h"  // mc_set_drop_motion
+#include "Maslow/JobResume.h"  // JobResume::noteStop
 #include "Settings.h"       // execute_line
 #include "Driver/restart.h"
 #include "Driver/watchdog.h"
@@ -312,6 +313,7 @@ void polling_loop(void* unused) {
                             Job::unnest();
                             break;
                         default: {
+                            JobResume::noteStop(int32_t(channel->lineNumber()));  // Maslow: resumable from the failed line
                             Channel* ldr = Job::leader_channel();
                             if (ldr) {
                                 log_error_to(*ldr,
@@ -1214,6 +1216,7 @@ static void protocol_exec_rt_suspend() {
         if (rtStopFromHold && sys.state() == State::Hold && sys.suspend().bit.holdComplete) {
             rtStopFromHold = false;
             log_info("Stopping the paused job");
+            JobResume::noteStop();
             mc_set_drop_motion(true);
             Maslow.haltMotion();
             rtMaslowStop = true;
@@ -1394,6 +1397,11 @@ static void protocol_do_fault_pin(void* arg) {
     log_info("Stopped by " << pin->legend());
 }
 void protocol_do_rt_reset() {
+    // Maslow: a reset during an SD job is the Stop button; remember where the job got to.
+    // Not in Alarm: position may not be trustworthy, so there is nothing to resume.
+    if (!state_is(State::Alarm) && !state_is(State::ConfigAlarm)) {
+        JobResume::noteStop();
+    }
     if (state_is(State::Homing)) {
         Machine::Homing::fail(ExecAlarm::HomingFailReset);
     } else if (state_is(State::Cycle) || state_is(State::Jog) || sys.step_control.executeHold || sys.step_control.executeSysMotion) {

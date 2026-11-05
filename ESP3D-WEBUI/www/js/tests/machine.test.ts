@@ -409,6 +409,41 @@ describe("runFile", () => {
   });
 });
 
+describe("stopped jobs", () => {
+  test("STOPPED gives the stopped job, and goes away with the field", () => {
+    reply("<Idle|MPos:0,0,0|MS:7|STOPPED:1234,/jobs/a,b.nc>");
+    expect(g.machine.state.stopped).toEqual({ line: 1234, file: "/jobs/a,b.nc" });
+    reply("<Idle|MPos:0,0,0|MS:7>");
+    expect(g.machine.state.stopped).toBe(null);
+  });
+
+  test("resumeFile sends RunFrom and is done like runFile", async () => {
+    reply("<Idle|MPos:0,0,0|MS:7|STOPPED:120,/part.nc>");
+    const op = g.machine.resumeFile("/part.nc", 115);
+    expect(lastSent()).toBe("$SD/RunFrom=115,/part.nc\n");
+    reply("<Check|MPos:0,0,0|MS:7|STOPPED:120,/part.nc>", "ok");
+    await op.accepted;
+    reply("<Run|MPos:0,0,0|MS:7|SD:60.00,/part.nc,116>", "<Idle|MPos:0,0,0|MS:7>");
+    await op;
+    expect(g.machine.state.stopped).toBe(null);
+  });
+
+  test("resumeFile checks its arguments and needs known belts", async () => {
+    expect(() => g.machine.resumeFile("/part.nc", 0)).toThrow();
+    expect(() => g.machine.resumeFile("/part.nc", 1.5)).toThrow();
+    reply("<Idle|MPos:0,0,0|MS:4>");
+    await expect(g.machine.resumeFile("/part.nc", 10)).rejects.toMatchObject({ reason: "not-ready" });
+    expect(g.ws_source.sent).toEqual([]);
+  });
+
+  test("discardStopped sends $SD/Discard", async () => {
+    const op = g.machine.discardStopped();
+    expect(lastSent()).toBe("$SD/Discard\n");
+    reply("ok");
+    await op;
+  });
+});
+
 describe("files", () => {
   // http.js and httpCmdBuilders.js stand-ins: each request waits in `requests` for a reply.
   let requests: { url: string; data?: any; progress?: any; ok: (t: string) => void; fail: (s: number, t: string) => void }[];

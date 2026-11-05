@@ -47,6 +47,9 @@ const machine = (() => {
 	 * units:       the firmware's G-code units, "mm" or "inch" (machine actions always send G21)
 	 * motorCurrent: {tl, tr, bl, br}, raw ADC 0-4095 (Debug tab converts to mA), from MC; null until known
  * job:         {pct, file, line} while a file runs, else null
+	 * stopped:     {line, file} after a job ended early (STOP, an error in the file, a spindle
+	 *              fault), from the STOPPED field: resumeFile(file, line) continues it. null once
+	 *              a job starts or discardStopped() drops it.
 	 * belts:       belt lengths tl/tr/bl/br (null = unknown) and position errors etl/etr/ebl/ebr (mm), from the BL/BE
  *              status fields (about once a second) and MINFO; kept between reports that
  *              don't carry them. MINFO also adds homed, extended, calibrationInProgress.
@@ -60,6 +63,7 @@ const machine = (() => {
 		wco: null,
 		units: null,
 		job: null,
+		stopped: null,
 		belts: null,
 		motorCurrent: null,
 	};
@@ -102,6 +106,7 @@ const machine = (() => {
 		let mpos = null;
 		let wpos = null;
 		let job = null;
+		let stopped = null;
 		for (const field of fields.slice(1)) {
 			const i = field.indexOf(":");
 			const key = field.slice(0, i);
@@ -128,6 +133,10 @@ const machine = (() => {
 			} else if (key === "SD") {
 				const [pct, file, line] = value.split(",");
 				job = { pct: Number(pct), file, line: line ? Number(line) : undefined };
+			} else if (key === "STOPPED") {
+				// STOPPED:<line>,<path>; the path may itself contain commas
+				const comma = value.indexOf(",");
+				stopped = { line: Number(value.slice(0, comma)), file: value.slice(comma + 1) };
 			}
 		}
 		if (mpos) {
@@ -138,6 +147,7 @@ const machine = (() => {
 			state.mpos = state.wco ? plus(wpos, state.wco) : state.mpos;
 		}
 		state.job = job;
+		state.stopped = stopped;
 		statusCount++;
 	};
 
@@ -610,8 +620,33 @@ const machine = (() => {
 		if (state.maslow !== MASLOW.READY_TO_CUT) {
 			return notReady("run file", `Can't run ${path}: belt lengths are unknown (machine not ready to cut)`);
 		}
-		const line = `$SD/Run=${path}`;
-		return operation("run file", async ({ accept, resolve, reject, ended }) => {
+		return jobOperation("run file", `$SD/Run=${path}`, path);
+	};
+
+	/**
+	 * Run an SD file from a line (1 = the first), as after a stop: the firmware reads the lines
+	 * before it without moving, raises Z, restores the spindle, moves to where the line starts
+	 * and plunges. Accepted once the firmware has done that and started the job; done like runFile.
+	 */
+	const resumeFile = (path, fromLine) => {
+		if (typeof path !== "string" || !path) {
+			throw new TypeError(`machine.resumeFile: path must be a file path, got ${path}`);
+		}
+		if (!Number.isInteger(fromLine) || fromLine < 1) {
+			throw new TypeError(`machine.resumeFile: line must be a whole number from 1, got ${fromLine}`);
+		}
+		if (state.maslow !== MASLOW.READY_TO_CUT) {
+			return notReady("resume file", `Can't resume ${path}: belt lengths are unknown (machine not ready to cut)`);
+		}
+		return jobOperation("resume file", `$SD/RunFrom=${fromLine},${path}`, path);
+	};
+
+	/** Forget the stopped job (the STOPPED field goes away). Done when the firmware accepts it. */
+	const discardStopped = () => simpleOperation("discard stopped job", "$SD/Discard");
+
+	/** A running SD job started by line: accepted on its ok, done when the job has finished. */
+	const jobOperation = (name, line, path) =>
+		operation(name, async ({ accept, resolve, reject, ended }) => {
 			// A job shows as the SD status field, or as Run/Hold while its lines execute.
 			let sawJob = false;
 			const offState = on("state", (s) => {
@@ -637,13 +672,12 @@ const machine = (() => {
 			wsCommands.sendRealtime(0x3f);
 			await waitFor((s) => s.grbl === "Idle" && !s.job && (sawJob || statusCount - countAtOk >= 2), {
 				failIf: (s) => s.grbl === "Alarm",
-				what: "run file",
+				what: name,
 				failDetail: () => `${path}: machine alarmed`,
 				ended,
 			});
 			resolve();
 		});
-	};
 
 	// ---------------------------------------------------------------- SD card files
 
@@ -812,6 +846,8 @@ const machine = (() => {
 		tracePath,
 		// jobs and files
 		runFile,
+		resumeFile,
+		discardStopped,
 		files,
 		// stopping
 		stop,

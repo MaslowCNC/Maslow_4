@@ -27,6 +27,7 @@
 #include "InputFile.h"
 #include "Job.h"
 #include "Maslow/Maslow.h"  // Maslow: calibration state and belts in the status report
+#include "Maslow/JobResume.h"  // Maslow: |STOPPED: for resuming a stopped job
 
 #include <map>
 #include <freertos/task.h>
@@ -642,6 +643,9 @@ void report_realtime_status(Channel& channel) {
         if (cur_block != NULL && cur_block->file_line_number > 0) {
             msg << "," << cur_block->file_line_number;
         }
+    } else if (JobResume::stopped()) {
+        // Maslow: a job that ended early, and the line it got to, for the UI's Resume button
+        msg << "|STOPPED:" << JobResume::stoppedLine() << "," << JobResume::stoppedPath();
     }
 #ifdef DEBUG_STEPPER_ISR
     msg << "|ISRs:" << Stepper::isr_count;

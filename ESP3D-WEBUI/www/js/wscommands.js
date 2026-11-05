@@ -19,7 +19,8 @@ const wsCommands = (() => {
 	// keeps moving. The clock only runs while the machine isn't moving: Maslow $ commands wait
 	// for queued motion to finish before they run and reply.
 	const REPLY_TIMEOUT_MS = 5000;
-	const BUSY_STATES = ["Run", "Jog", "Home", "Hold", "Door"];
+	// Check: $SD/RunFrom reading the lines before the resumed one, which can take seconds.
+	const BUSY_STATES = ["Run", "Jog", "Home", "Hold", "Door", "Check"];
 
 	// Connection health: anything received from the machine proves the link is alive. When
 	// idle the machine sends little, so ask for a status report ('?', realtime: no "ok").

@@ -29,6 +29,7 @@
 #include "Driver/backtrace.h"     // backtrace_get(), etc.
 #include "FileCommands.h"         // make_file_commands()
 #include "Job.h"                  // Job::active()
+#include "Maslow/JobResume.h"  // JobResume::noteStop
 #include "Maslow/Maslow.h"
 #include "Maslow/Calibration.h"
 #include "Maslow/BoardId.h"
@@ -1240,6 +1241,9 @@ static Error maslow_stop(const char* value, AuthenticationLevel auth_level, Chan
     // may hold that mutex while flushing the WebSocket TX buffer; without
     // these resets the 100 ms watchdog can fire and set State::Alarm.
     Maslow.resetUpdateWatchdog();
+    if (!state_is(State::Alarm)) {
+        JobResume::noteStop();  // a job still running (no 0x18 before this $STOP) can be resumed
+    }
     rtStopFromHold = false;  // this is the stop; a request still pending from a hold is done
     rtMaslowStop   = false;
     Maslow.stopMotors();   // Stop XY belt motors immediately

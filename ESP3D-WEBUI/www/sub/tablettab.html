@@ -161,9 +161,23 @@
           <div id="tablettab-playback-controls" class="maslow-grid-container" style="grid-template-columns: 33% 33% 33%;">
             <div id="tablettab_gcode_play" class="maslow-grid-item maslow-grid-item-btn"
               style="background-color: #4aa85c;"><canvas id="playBtn" style="width: 100%; height: 100%"></canvas></div>
+            <!-- After a stop, Resume and Discard take the places of Start and the status -->
+            <div id="tablettab_gcode_resume" class="maslow-grid-item maslow-grid-item-btn job-resume" style="display: none;"
+              title="Run the stopped job again from this line">
+              <span>Resume from</span>
+              <div class="job-resume-line">
+                <input id="tablettab_resume_line" type="number" min="1" step="1" inputmode="numeric" />
+                <div class="job-resume-steps">
+                  <button type="button" data-step="1" tabindex="-1" aria-label="Next line">&#9650;</button>
+                  <button type="button" data-step="-1" tabindex="-1" aria-label="Previous line">&#9660;</button>
+                </div>
+              </div>
+            </div>
             <div id="tablettab_gcode_stop" class="maslow-grid-item maslow-grid-item-btn"
               style="background-color: #ce654c;"><canvas id="stopBtn" style="width: 100%; height: 100%"></canvas></div>
             <div id="systemStatus" class="maslow-grid-item system-status">Idle</div>
+            <div id="tablettab_gcode_discard" class="maslow-grid-item maslow-grid-item-btn job-discard" style="display: none;"
+              title="Forget the stopped job">Discard stopped job</div>
           </div>
           <div id="tablettab-job-bounds-container" class="maslow-grid-container" style="grid-template-columns: 30% 70%; display: none;">
             <div id="tablettab_trace_boundary" class="maslow-grid-item maslow-grid-item-btn"

@@ -672,6 +672,68 @@ if (typeof machine !== "undefined") {
   machine.on("state", updateBeltLengths);
 }
 
+// After a job ends early the firmware reports it (STOPPED), and the job row becomes
+// [Resume from line N] [Stop] [Discard stopped job]. N starts at the stopped line; the user
+// can change it, e.g. to repeat a few lines before the problem.
+let stoppedJobShown = null; // "line,file" of the record the line box was filled from
+const showStoppedJob = (s) => {
+  const resume = id("tablettab_gcode_resume");
+  const discard = id("tablettab_gcode_discard");
+  const play = id("tablettab_gcode_play");
+  const status = id("systemStatus");
+  if (!resume || !discard || !play || !status) {
+    return;
+  }
+  const showing = !!s.stopped && !s.job && s.grbl !== "Run" && s.grbl !== "Hold";
+  const key = s.stopped ? `${s.stopped.line},${s.stopped.file}` : null;
+  if (s.stopped && key !== stoppedJobShown) {
+    id("tablettab_resume_line").value = s.stopped.line; // a new record; keep edits to the same one
+  }
+  stoppedJobShown = key;
+  const display = (el, on) => {
+    const want = on ? "" : "none";
+    if (el.style.display !== want) {
+      el.style.display = want;
+    }
+  };
+  display(play, !showing);
+  display(status, !showing);
+  display(resume, showing);
+  display(discard, showing);
+};
+if (typeof machine !== "undefined") {
+  machine.on("state", showStoppedJob);
+}
+
+const tabletResumeClick = (event) => {
+  const stepButton = event.target.closest && event.target.closest(".job-resume-steps button");
+  if (stepButton) {
+    const input = id("tablettab_resume_line");
+    const next = (Number(input.value) || 0) + Number(stepButton.dataset.step);
+    input.value = Math.max(1, next);
+    return;
+  }
+  if (event.target.closest && event.target.closest(".job-resume-line")) {
+    return; // a tap in the line box, not on the button
+  }
+  const stopped = machine.state.stopped;
+  if (!stopped) {
+    return;
+  }
+  const line = Number(id("tablettab_resume_line").value);
+  if (!Number.isInteger(line) || line < 1) {
+    alertdlg("Resume", "Enter a line number from 1.");
+    return;
+  }
+  if (!confirm(`Resume ${stopped.file} from line ${line}?\n\nThe machine raises Z, starts the spindle if the job had it on, moves to where line ${line} starts and lowers Z to it.`)) {
+    return;
+  }
+  runButtonAction(id("tablettab_gcode_resume"), `Resume ${stopped.file} from line ${line}`, () => machine.resumeFile(stopped.file, line));
+};
+
+const tabletDiscardClick = () =>
+  runButtonAction(id("tablettab_gcode_discard"), "Discard stopped job", machine.discardStopped);
+
 /** {X: 10, Y: -2} in display units → {x: 10, y: -2} in mm, for machine actions */
 const toMachineMm = (params) => {
   const mm = {};
@@ -1145,7 +1207,8 @@ function tabletGrblState(grbl, response) {
       setPlayButton(false, gray, 'Start', null)
       break
     case 'Run':
-      setPlayButton(true, orange, 'Pause', pauseGCode)
+      // No Pause button: Stop, then Resume from the stopped line, takes its place
+      setPlayButton(false, gray, 'Start', null)
       break
     case 'Check':
       setPlayButton(true, gray, 'Start', null)
@@ -2138,6 +2201,8 @@ function tabletInit() {
     id("tablettab_gcode_play").addEventListener("click", doPlayButton);
     // id("tablettab_gcode_pause").addEventListener("click", doPauseButton);
     id("tablettab_gcode_stop").addEventListener("click", tabletGCodeStop);
+    id("tablettab_gcode_resume").addEventListener("click", tabletResumeClick);
+    id("tablettab_gcode_discard").addEventListener("click", tabletDiscardClick);
     id("systemStatus").addEventListener("click", clearAlarm);
     
     // New Maslow action button (below Setup)

@@ -436,22 +436,17 @@ const updateUnifiedPlayPauseButton = (stateName, clickable) => {
   // Always show the stop button
   stopButton.style.display = '';
   
-  // Always show the play button
-  playButton.style.display = '';
-  
+  // The play button's visibility is tablet.js's (showStoppedJob hides it after a stop)
+
   if (clickable.pause) {
-    // Machine is running - show pause button (convert play button to pause)
-    playButton.style.backgroundColor = '#f0ad4e'; // Orange background
-    playButton.innerHTML = `
-      <svg width="2em" height="1.4em" viewBox="0 0 1300 1200">
-        <g transform="translate(50,1200) scale(1, -1)">
-          <path fill="white"
-            d="M250 1000h200q21 0 35.5 -14.5t14.5 -35.5v-800q0 -21 -14.5 -35.5t-35.5 -14.5h-200q-21 0 -35.5 14.5t-14.5 35.5v800q0 21 14.5 35.5t35.5 14.5zM650 1000h200q21 0 35.5 -14.5t14.5 -35.5v-800q0 -21 -14.5 -35.5t-35.5 -14.5h-200q-21 0 -35.5 14.5t-14.5 35.5v800 q0 21 14.5 35.5t35.5 14.5z">
-          </path>
-        </g>
-      </svg>`;
-    playButton.onclick = pauseGCode;
-    
+    // Running: no Pause button. Stop, then Resume from the stopped line, does that job.
+    if (!id("playBtn")) {
+      playButton.innerHTML = '<canvas id="playBtn" style="width:100%;height:100%"></canvas>';
+    }
+    playButton.onclick = null;
+    if (typeof setPlayButton === 'function') {
+      setPlayButton(false, gray, 'Start', null);
+    }
   } else if (clickable.resume) {
     // Machine is paused - show play button
     playButton.style.backgroundColor = '#5cb85c'; // Green background
