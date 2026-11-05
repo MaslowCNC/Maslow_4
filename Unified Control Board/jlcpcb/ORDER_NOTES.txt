@@ -1,24 +1,38 @@
-Unified Control Board - JLCPCB order notes
-Generated 2026-09-24 from Unified Control Board.kicad_pcb (KiCad 10.0.5)
+Unified Control Board (36 V, STM32G474 spindle drive) - JLCPCB order notes
+Generated 2026-11-05 from Unified Control Board.kicad_pcb (KiCad 10.0.5), branch 36V-G474-spindle
 
 FILES
-  UnifiedControlBoard_Gerbers.zip   -> upload on the PCB quote page (gerbers + PTH/NPTH drill)
-  UnifiedControlBoard_BOM_JLCPCB.csv -> PCB Assembly: BOM (50 lines, 166 parts, all with LCSC numbers)
-  UnifiedControlBoard_CPL_JLCPCB.csv -> PCB Assembly: CPL / pick-and-place (166 parts: 55 top, 111 bottom)
+  UnifiedControlBoard_Gerbers.zip    -> PCB quote page (gerbers + PTH/NPTH drill)
+  UnifiedControlBoard_BOM_JLCPCB.csv -> PCB Assembly: BOM (73 lines, 232 parts, all with LCSC numbers)
+  UnifiedControlBoard_CPL_JLCPCB.csv -> PCB Assembly: CPL / pick-and-place (232 parts: 65 top, 167 bottom)
+  UnifiedControlBoard_JLCPCB.zip     -> all of the above in one archive
 
 PCB SETTINGS
-  Layers: 4 (F.Cu / In1.Cu VCC / In2.Cu 3V3 / B.Cu)
-  Thickness: 1.6 mm
-  Size: ~101.6 x 120.8 mm
-  Min track/space: 0.2 / 0.1 mm (0.1 mm only inside MP6541A U11/U12 footprints)
-  Vias: 0.6 / 0.3 mm
-  Via covering: Epoxy filled & capped (51 vias sit inside SMD pads)
+  Layers: 4 (F.Cu GND pour / In1.Cu VCC 36 V / In2.Cu 3V3 / B.Cu GND pour)
+  Thickness: 1.6 mm, outer copper 1 oz
+  Size: ~102.3 x 121.4 mm
+  Min track/space: 0.1 / 0.1 mm (Fine net class: MCU, logic, sense and I2C nets);
+    0.15 / 0.15 mm elsewhere
+  Vias: 0.6 / 0.3 mm (613 vias)
+  Via covering: Epoxy filled & capped -- 56 vias sit inside SMD pads (current-sense filter
+    caps on the top side over their node vias, driver exposed pads, regulator thermal pad)
 
 ASSEMBLY SETTINGS
-  Type: Standard PCBA, BOTH sides (parts on top and bottom)
-  Through-hole parts in BOM: XT60 (U1), JST connectors CN1-CN11, C39, C60
-  Fiducials: 3 per side (FID1-FID6), not in BOM/CPL
+  Type: Standard PCBA, BOTH sides
+  Through-hole parts in BOM: XT60 (U1), JST CN1-CN11, C39, C60
+  Not assembled: J1 (Tag-Connect TC2030-NL SWD pads, no part), fiducials FID1-FID6
 
 CHECK BEFORE CONFIRMING
-  Review part rotations in JLCPCB's placement preview, especially ICs, diodes,
-  LEDs, the USB-C connectors and bottom-side parts.
+  - Review part rotations in JLCPCB's placement preview: ICs (U20 G474, U21/U22 DRV8300 QFN),
+    diodes, LEDs, the USB-C connector, electrolytics, and all bottom-side parts.
+  - Confirm stock for DRV8300DRGE (U21, U22), STM32G474RBT3 (U20) and AON7264E (12x).
+  - C18 (bottom, 22 uF) sits about 0.05 mm from the XT60 housing outline: check it in the 3D
+    preview.
+
+DESIGN STATUS
+  DRC: 0 errors, 0 unconnected, schematic parity clean. Remaining warnings: thin phase taps and
+  FET drain stubs (inside pours), library-version notices, silkscreen overlaps, 14 small dead-end
+  overhangs on connected tracks. ERC: 47 "pin not driven" notices from imported symbols, same as
+  the original design.
+  Bottom-side parts stay clear of the r18 / r27 contact circles (connectors CN1/2/5/7/9/11 as on
+  Maslow-Main).
