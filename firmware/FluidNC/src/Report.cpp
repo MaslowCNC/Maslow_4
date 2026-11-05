@@ -498,9 +498,11 @@ void report_realtime_debug() {}
 void report_realtime_status(Channel& channel) {
     LogStream msg(channel, "<");
     msg << state_name();
-    // Maslow (temporary, for measuring report delivery): per-channel report sequence number, so a
-    // client can tell a dropped report from a late one.
-    msg << "|N:" << channel.nextReportSeq();
+    // Maslow: per-channel report sequence number, so a client can tell a dropped report from a late
+    // one. Only for channels that asked for it (scripts/report_monitor.mjs), to keep reports short.
+    if (channel.reportSeqOn()) {
+        msg << "|N:" << channel.nextReportSeq();
+    }
 
     // Report position
 

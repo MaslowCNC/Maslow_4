@@ -86,7 +86,8 @@ protected:
     MotorMask   _lastLimits       = 0;
     bool        _lastJobActive    = false;
     int         _lastMaslowState  = -1;  // Maslow: last calibration state reported (autoReport)
-    uint32_t    _reportSeq        = 0;   // Maslow: status reports sent on this channel
+    uint32_t    _reportSeq        = 0;      // Maslow: status reports sent on this channel
+    bool        _reportSeqOn      = false;  // Maslow: add |N: to this channel's reports
     std::string _lastPinString    = "";
 
     bool       _reportState = true;
@@ -196,7 +197,10 @@ public:
     }
 
     void notifyState() { _reportState = true; }
-    // Maslow (temporary): status report sequence number for this channel (Report.cpp "|N:")
+    // Maslow: optional status report sequence number for this channel (Report.cpp "|N:"), for
+    // measuring dropped reports. Off unless the client asks for it (WebSocket ?report_seq).
+    void     enableReportSeq() { _reportSeqOn = true; }
+    bool     reportSeqOn() const { return _reportSeqOn; }
     uint32_t nextReportSeq() { return ++_reportSeq; }
     void notifyOvr() { _reportOvr = true; }
     void notifyWco() { _reportWco = true; }
