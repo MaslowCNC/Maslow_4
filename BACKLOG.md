@@ -29,11 +29,6 @@ Format: **title** — what goes wrong, where, and how we found it.
   (`WebUIServer.cpp`) uses `rand() % ('A' - 'Z')` (modulo −25, wrong charset) and reseeds
   with `srand(time(NULL))` on every call, where `time()` is seconds since boot. Two browsers
   that first load in the same second get the same session and hit the bug above.
-- [ ] **State is only sent as a log line.** The UI learns the Maslow state from the
-  `Current state: N` line logged after a state change (`Calibration.cpp` `printCurrentState`).
-  It isn't in `MINFO` or the status report. The UI now asks with `$GSTATE` on every socket
-  open, but a line missed while connected leaves the UI wrong until the next change or
-  reconnect. Planned fix: a Maslow state field in the status report.
 - [ ] **WebSocket frames are dropped silently while moving.** In a motion state a full send
   queue drops frames (`WSChannel.cpp` `send_frame`); outside motion a stalled client is
   closed after 250 ms. Only a debug line on USB serial records it. This can lose state lines,
@@ -41,10 +36,6 @@ Format: **title** — what goes wrong, where, and how we found it.
 
 ## Medium: stopping
 
-- [ ] **The 0x18 stop isn't tested on the machine yet.** STOP now sends 0x18 (soft reset),
-  then `$STOP` once the restart banner arrives. In Run, Jog and Hold the reset path syncs the
-  belts to the encoders and goes Idle instead of ALARM:3 (`protocol_do_rt_reset`). Check:
-  the job ends at once, nothing lurches on the next move, Z rises.
 - [ ] **0x18 during a Maslow belt operation alarms.** Retract, extend, take slack and
   calibrate run in Home state, where a reset goes through `Homing::fail` (ALARM "Homing fail
   reset"). The motors stop at once, and the `$STOP` that follows clears the alarm, but the
@@ -59,6 +50,11 @@ Format: **title** — what goes wrong, where, and how we found it.
 
 ## Medium: connection protocol (plan: all commands over the WebSocket)
 
+- [ ] **About 60 UI calls still send commands directly instead of through `machine.js`.**
+  `sendCommand` / `SendPrinterCommand` calls remain in `tablet.js` (36), `grbl.js` (7),
+  `controls.js` (6), `grblpanel.js` (4), `maslow.js` (4), `files.js` (2) and `restartdlg.js` (1),
+  counted 2026-11-04. The agent rules (`.github/copilot-instructions.md`) say to move a feature
+  over when it is changed. The rest could be done as a planned migration.
 - [ ] **Rest of the connection plan.** Every line command now goes over the WebSocket
   (`wscommands.js`). Left: multi-line reads still over HTTP `plain=` (`loadConfigValues`,
   `$CO` and setting writes in `settings.js`); reconnect backoff; at most one `?` outstanding;
@@ -67,8 +63,6 @@ Format: **title** — what goes wrong, where, and how we found it.
   is partway through assembling a line, `flushQueuedLines` drops the rest and the fragment
   joins the next line (rejected with `error:`, no unintended motion). Fixing it means
   clearing the reader's line buffer from another task.
-- [ ] **Dead heartbeat check.** `maslow.js` tracks `[MSG:INFO: Heartbeat]`, which the
-  firmware never sends.
 
 ## Low: state machine and storage
 
@@ -110,8 +104,9 @@ Format: **title** — what goes wrong, where, and how we found it.
 - [ ] **Native unit tests don't build on Linux** (missing `Queue.h` in X86TestSupport).
 - [ ] **One UI test fails: `maslowInfoMsgHandling is not defined`** (`maslow.test.ts:167`).
   The test calls it as a global, but `maslow.js:327` declares it as a module `const` and
-  never puts it on `globalThis`. Predates the 2026-10-26 work (42/43 pass with bun 1.4.4).
+  never puts it on `globalThis`. Predates the 2026-10-26 work (107/108 pass on 2026-11-04).
 - [ ] **`firmware/install_scripts/*/install-wifi_s3.sh` is the plain-ESP32 script** (wrong
   chip, bootloader at 0x1000).
-- [ ] **`/flash-maslow` didn't load as a command** in the session that created it; check it
-  appears in a fresh session.
+- [ ] **`/flash-maslow` doesn't load as a skill.** It is in `.claude/skills/flash-maslow`, but
+  it was missing from the skill list in the session that created it and again on 2026-11-04.
+  Flashing has been done by running `scripts/flash-maslow.sh` directly.

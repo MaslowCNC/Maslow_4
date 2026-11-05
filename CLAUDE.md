@@ -46,14 +46,20 @@ connected machine unless the user asked for that specific action. Read-only quer
 
 ## Firmware ↔ UI contract
 
-- The UI talks to the firmware with `$` commands over WebSocket `/ws` (or HTTP `/command`).
-- The firmware answers with GRBL status reports, `MINFO: {json}`, and plain log lines.
+The architecture rules (UI actions only through `machine.js`, state from the status report,
+reuse existing commands, no Pause) are in `.github/copilot-instructions.md`, under "Maslow
+architecture rules". They apply to every agent. Follow them.
+
+- The UI talks to the firmware with `$` commands over WebSocket `/ws`, one at a time through
+  `wscommands.js`. Only `[ESP…]` commands and file transfers use HTTP.
+- The firmware answers with GRBL status reports (about every 50 ms), `MINFO: {json}`, and plain
+  log lines. New state goes in a status report field, not `MINFO` or a log line
+  (`docs/protocol.md` lists the fields).
 - **The UI recognises many log lines by their exact text** (see `maslowInfoMsgHandling` in `maslow.js`
   and the parsing in `debugging.js`). Before changing the text of any `log_info`/`log_warn`/`log_error`,
   grep `ESP3D-WEBUI/www/js` for it and update both sides in the same change.
 - Calibration state numbers (`MaslowEnums.h`, 0–9) are mirrored in the UI, which range-checks them.
   Adding a state means updating the UI too.
-- Prefer adding fields to `MINFO` (structured JSON) over adding new log lines for the UI to parse.
 
 ## Style
 

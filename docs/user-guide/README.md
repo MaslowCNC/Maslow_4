@@ -39,6 +39,40 @@ The main dashboard displays:
 
 ![Dashboard Overview](images/guide-05.png)
 
+### The Main Control Screen
+
+The main screen has the controls you use most, from top to bottom:
+
+- **Connection dot** (top bar): **green** means the machine is answering. **Amber** means the
+  connection claims to be open but nothing has arrived for a few seconds; WiFi has probably
+  dropped. **Red** means it isn't connected. Hover over the dot to see when the machine was last
+  heard from. If it's amber or red, click it to reconnect.
+- **Machine buttons:**
+  - **Setup:** opens the belt and calibration controls (Retract, Extend, Apply Tension, Find
+    Anchors).
+  - **Options:** work area, park position, scale factors and material thickness.
+  - **Suggested next step:** shows the next action for the machine's current state, and runs it
+    when you click it:
+
+    | Machine state | Button shows |
+    |---|---|
+    | Belt lengths unknown | **Retract**, or **Apply Tension** if some belt lengths were remembered from before the machine was switched off (see below) |
+    | Retracted | **Extend** |
+    | Belts extended | **Apply Tension** |
+    | Ready to cut, and idle | **Park** |
+
+  - **Release Tension:** lets the belts go slack, for example before you take the machine down.
+- **Belt lengths and motor currents:** each belt (TL, TR, BL, BR) shows its length in mm and a
+  small dial for its motor current. The dial turns from green through blue and orange to red as
+  the current rises. Hover over a dial to see the value in mA. A length shows **unknown** when the
+  machine doesn't know it, for example when the belt moved while the power was off, or it hasn't
+  been retracted since power-on.
+- **Job row:** Start and Stop for the selected G-code file, and the machine's status. See
+  [Stopping and Resuming a Job](#stopping-and-resuming-a-job).
+- **Trace Boundary:** appears once a G-code file is loaded. It moves the router around the
+  outline of the job, without moving Z, so you can check that the job fits on the stock. Press
+  Stop to end the trace where the router is.
+
 ### Actions Menu
 
 The Actions menu provides access to:
@@ -77,9 +111,28 @@ You can configure Maslow to join your home WiFi for networked access from any de
 ### Running a G-code File
 
 1. Select the uploaded file from the list
-2. Set the start position (or pick a specific line if resuming)
-3. Click "Run" to start the job
-4. Monitor progress from the dashboard
+2. Press **Start** (the green button in the job row). The machine must be ready to cut.
+3. Monitor progress from the dashboard. While the job runs, the left button is grey: there is no
+   Pause button. To interrupt a job, press **Stop** (see below).
+
+### Stopping and Resuming a Job
+
+**Stop** halts the machine at once, wherever it is in the job. It also stops the router, raises Z
+to 2 mm above the work if it's lower, and saves the machine's position.
+
+After a stop, the job row changes to three buttons:
+
+- **Resume from [line]:** runs the job again from the line where it stopped. You can change the
+  line number first, using the box or its arrows, for example to repeat a few lines before a
+  problem. After you confirm, the machine reads the file up to that line without moving, raises Z,
+  starts the router if the job had it on, moves to where the line starts, lowers Z slowly and
+  carries on.
+- **Stop.**
+- **Discard stopped job:** forgets the stopped job, and the row goes back to Start.
+
+You can re-tension the belts or change the bit before resuming. The stopped job is also kept
+after a job ends on an error in the file, or on a spindle fault, but not after an alarm.
+Switching the machine off forgets it.
 
 ![Running G-code](images/guide-13.png)
 
@@ -126,7 +179,15 @@ Control the router/spindle using built-in macros:
 
 ## Extending and Retracting Belts
 
-The belts can be extended or retracted using the controls in the interface.
+The belts can be extended or retracted from the **Setup** button, and the suggested-next-step
+button offers each step in turn.
+
+If the machine was switched off with the belts under tension, it tries to remember each belt's
+length when it starts again. It keeps a belt's length only if that belt's spool hasn't turned
+while the power was off. If some belts are remembered and others aren't, the suggested step is
+**Apply Tension**. That holds the remembered belts, pulls the others tight and checks them. If it
+recovers them all, the machine is ready to cut without a full retract. If it can't, it asks you to
+retract.
 
 ![Belt Controls](images/guide-08.gif)
 
