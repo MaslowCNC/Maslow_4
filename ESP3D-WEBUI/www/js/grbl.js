@@ -496,6 +496,14 @@ function show_grbl_position(wpos, mpos) {
   }
 }
 
+// In UNKNOWN, Apply Tension can recover the belts if some were restored at boot (it holds the
+// known ones, pulls the others tight and checks them); with none known only a retract helps.
+const unknownStateAction = () => {
+  const belts = typeof machine !== 'undefined' ? machine.state.belts : null;
+  const someKnown = !!belts && ['tl', 'tr', 'bl', 'br'].some((arm) => typeof belts[arm] === 'number');
+  return someKnown ? 'Apply Tension' : 'Retract';
+};
+
 // Update Maslow action button display based on current Maslow state
 // This is the new state-dependent action button in row 3, column 5
 const updateMaslowActionButton = () => {
@@ -515,8 +523,8 @@ const updateMaslowActionButton = () => {
   
   // Only show button for states 0, 2, 4, and 7
   switch (maslowStatus.state) {
-    case 0: // UNKNOWN
-      displayText = "Retract";
+    case 0: // UNKNOWN: Apply Tension if some belt lengths are known, else Retract
+      displayText = unknownStateAction();
       isActionable = true;
       shouldShow = true;
       break;
