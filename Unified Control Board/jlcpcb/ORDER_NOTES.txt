@@ -13,8 +13,8 @@ PCB SETTINGS
   Size: ~102.3 x 121.4 mm
   Min track/space: 0.1 / 0.1 mm (Fine net class: MCU, logic, sense and I2C nets);
     0.15 / 0.15 mm elsewhere
-  Vias: 0.6 / 0.3 mm (613 vias)
-  Via covering: Epoxy filled & capped -- 56 vias sit inside SMD pads (current-sense filter
+  Vias: 0.6 / 0.3 mm (612 vias)
+  Via covering: Epoxy filled & capped -- 110 via drill holes sit inside SMD pads (current-sense filter
     caps on the top side over their node vias, driver exposed pads, regulator thermal pad)
 
 ASSEMBLY SETTINGS
