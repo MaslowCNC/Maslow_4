@@ -378,7 +378,35 @@ namespace WebUI {
 
         for (auto const channelId : channelIds) {
             if (auto oldClient = get_client(_server, channelId)) {
-                oldClient->close();
+                oldClient->close(CLOSE_REPLACED, "replaced by another tab in this browser");
+            }
+        }
+    }
+
+    void WSChannels::evictOldest(AsyncWebSocket* server, objnum_t keepId) {
+        size_t connected = server->count();  // sockets still open (not already closing)
+        if (connected <= WEBUI_MAX_WS_CLIENTS) {
+            return;
+        }
+        std::vector<objnum_t> channelIds;  // oldest first: _wsChannels is in connect order
+        {
+            xSemaphoreTake(ws_channels_mutex, portMAX_DELAY);
+            for (auto const wsChannel : _wsChannels) {
+                if (wsChannel->id() != keepId) {
+                    channelIds.push_back(wsChannel->id());
+                }
+            }
+            xSemaphoreGive(ws_channels_mutex);
+        }
+        for (auto const channelId : channelIds) {
+            if (connected <= WEBUI_MAX_WS_CLIENTS) {
+                break;
+            }
+            auto client = get_client(server, channelId);
+            if (client && client->status() == WS_CONNECTED) {
+                log_info_to(Console, "WebSocket limit of " << WEBUI_MAX_WS_CLIENTS << " reached, closing the oldest (cid#" << channelId << ")");
+                client->close(CLOSE_TOO_MANY, "too many connections");
+                --connected;
             }
         }
     }
@@ -515,6 +543,10 @@ namespace WebUI {
                     break;  // owned destructs here -> channel freed
                 }
                 owned.release();  // ownership handed to _wsChannels / AllChannels
+
+                // Maslow: over the limit, close the oldest now and say why (4002), rather than
+                // waiting for cleanupClients(), which closes it within 10 s with no reason.
+                evictOldest(server, num);
 
                 // This tells WebUI the ID of the newly-created websocket
                 // so it can include that ID in a PAGEID= argument to

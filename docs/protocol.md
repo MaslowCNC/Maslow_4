@@ -16,10 +16,19 @@ channel speaks the same line protocol (section 3):
 
 | Connection | Firmware class | Notes |
 |---|---|---|
-| WebSocket, one per browser tab | `WSChannel` | `ws://<host>/` (path `/`), subprotocol `arduino` |
+| WebSocket, one per browser (see below) | `WSChannel` | `ws://<host>/` (path `/`), subprotocol `arduino`; at most 4 at once (`WEBUI_MAX_WS_CLIENTS`) |
 | USB serial | `UartChannel` | the port `scripts/maslow_serial.py` uses; open with DTR/RTS low or the board resets |
 | Telnet | `TelnetClient` | port 23 when enabled |
 | ESP-NOW (planned) | none yet | would be one more `Channel` |
+
+**When the firmware closes a WebSocket on purpose, the close frame says why** (Maslow). The UI
+shows a notice with a reconnect button for these, greys out the page, and does not reconnect by
+itself. Any other close (WiFi drop, reboot) still reconnects every 3 s.
+
+| Close code | Reason text | When |
+|---|---|---|
+| 4001 | `replaced by another tab in this browser` | a newer socket with the same session cookie connected, or the same browser loaded the page again. Tabs in one browser share the cookie, so only one of them is connected at a time |
+| 4002 | `too many connections` | a 5th socket connected; the oldest one is closed |
 
 HTTP is separate: it is request/response and does not speak the line protocol. Section 2 lists what
 is only reachable over HTTP.
@@ -496,10 +505,11 @@ state from `MS` only. Older firmware (before `MS`) has only this line.
   pendant) must send one line at a time and use a reply timeout until the firmware at least
   reports a dropped line. Over ESP-NOW, a lost radio packet adds another way
   to lose a line or reply, so the pendant needs the timeout anyway.
-- **Two tabs in one browser kick each other off.** They share a session cookie, and the newest
-  socket for a session closes the older ones, which then reconnect, forever. Opening the socket
-  with `?independent_session` (supported by our firmware) keys the session on IP:port instead.
-  Now that the UI routes no line through `/command` by cookie, that is safe to turn on.
+- **One tab per browser.** Tabs in a browser share a session cookie, and a new socket closes
+  the others of its session. They used to reconnect and close each other every 3 s; now the
+  closed tab gets code 4001 and shows a notice instead (table in section 1). A per-tab ID was
+  tried on 2026-11-05 and reverted: without the per-session close, refreshes and extra tabs went
+  over the 4-socket limit, and evictions cascaded across every client.
 - **Reconnect has no backoff.** The UI retries every 3 s forever.
 - **Some reads still use HTTP.** The Maslow config reads in `loadConfigValues`, `$CO` and the
   setting writes in `settings.js` want the reply in one piece, so they use `plain=`. Multi-line

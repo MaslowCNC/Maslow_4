@@ -86,6 +86,16 @@ namespace WebUI {
         int32_t _rtchar = -1;
     };
 
+    // Upper bound on concurrent WebSocket clients. Each client carries a WSChannel
+    // (line-assembly std::string) plus an AsyncWebSocket send queue of up to
+    // WS_MAX_QUEUED_MESSAGES malloc'd frames, so this directly bounds WS heap use.
+    // AsyncWebSocket's own default (DEFAULT_MAX_WS_CLIENTS) is 8; a CNC realistically
+    // needs a browser plus a pendant or phone. Over the limit, the oldest is closed
+    // (WSChannels::evictOldest, with a periodic cleanupClients() as a backstop).
+#ifndef WEBUI_MAX_WS_CLIENTS
+#    define WEBUI_MAX_WS_CLIENTS 4
+#endif
+
     class WSChannels {
     private:
         static std::vector<WSChannel*> _wsChannels;  // List of channels by client ID
@@ -102,7 +112,14 @@ namespace WebUI {
 
         static bool runGCode(uint32_t pageid, std::string_view cmd, std::string session);
         static bool sendError(uint32_t pageid, std::string error, std::string session);
+        // Maslow: WebSocket close codes for the closes the firmware makes on purpose. The UI
+        // (socket.js) shows a notice for these instead of reconnecting, so tabs don't fight.
+        static constexpr uint16_t CLOSE_REPLACED = 4001;  // a newer socket from the same browser
+        static constexpr uint16_t CLOSE_TOO_MANY = 4002;  // over WEBUI_MAX_WS_CLIENTS, oldest closed
+
         static void closeSessionChannels(const std::string& session, objnum_t exceptId = 0);
+        // Maslow: close the oldest sockets (never keepId) until at most WEBUI_MAX_WS_CLIENTS remain
+        static void evictOldest(AsyncWebSocket* server, objnum_t keepId);
         static void sendPing();
 
         // Close and remove any channel with no inbound traffic for stale_ms.
