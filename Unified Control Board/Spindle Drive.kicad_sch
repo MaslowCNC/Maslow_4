@@ -16071,7 +16071,7 @@
 				)
 			)
 		)
-		(property "Value" "1uF/50V"
+		(property "Value" "10uF/25V"
 			(at 175.26 110.49 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -16114,7 +16114,7 @@
 				)
 			)
 		)
-		(property "MPN" "CL10A105KB8NNNC"
+		(property "MPN" "GRM188R61E106MA73D"
 			(at 172.72 104.14 0)
 			(hide yes)
 			(show_name no)
@@ -16125,7 +16125,7 @@
 				)
 			)
 		)
-		(property "Supplier Part" "C15849"
+		(property "Supplier Part" "C91606"
 			(at 172.72 104.14 0)
 			(hide yes)
 			(show_name no)
@@ -21234,7 +21234,7 @@
 				)
 			)
 		)
-		(property "Value" "1uF/50V"
+		(property "Value" "10uF/25V"
 			(at 175.26 250.19 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -21277,7 +21277,7 @@
 				)
 			)
 		)
-		(property "MPN" "CL10A105KB8NNNC"
+		(property "MPN" "GRM188R61E106MA73D"
 			(at 172.72 243.84 0)
 			(hide yes)
 			(show_name no)
@@ -21288,7 +21288,7 @@
 				)
 			)
 		)
-		(property "Supplier Part" "C15849"
+		(property "Supplier Part" "C91606"
 			(at 172.72 243.84 0)
 			(hide yes)
 			(show_name no)

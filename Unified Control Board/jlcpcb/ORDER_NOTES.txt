@@ -3,8 +3,8 @@ Generated 2026-11-05 from Unified Control Board.kicad_pcb (KiCad 10.0.5), branch
 
 FILES
   UnifiedControlBoard_Gerbers.zip    -> PCB quote page (gerbers + PTH/NPTH drill)
-  UnifiedControlBoard_BOM_JLCPCB.csv -> PCB Assembly: BOM (73 lines, 232 parts, all with LCSC numbers)
-  UnifiedControlBoard_CPL_JLCPCB.csv -> PCB Assembly: CPL / pick-and-place (232 parts: 65 top, 167 bottom)
+  UnifiedControlBoard_BOM_JLCPCB.csv -> PCB Assembly: BOM (76 lines, 236 parts, all with LCSC numbers)
+  UnifiedControlBoard_CPL_JLCPCB.csv -> PCB Assembly: CPL / pick-and-place (236 parts: 69 top, 167 bottom)
   UnifiedControlBoard_JLCPCB.zip     -> all of the above in one archive
 
 PCB SETTINGS
@@ -14,7 +14,7 @@ PCB SETTINGS
   Min track/space: 0.1 / 0.1 mm (Fine net class: MCU, logic, sense and I2C nets);
     0.15 / 0.15 mm elsewhere; plane pours (GND, 3V3, VCC) 0.25 mm clearance
   Vias: 0.6 / 0.3 mm (597 vias)
-  Via covering: Epoxy filled & capped -- 110 via drill holes sit inside SMD pads (current-sense filter
+  Via covering: Epoxy filled & capped -- 111 via drill holes sit inside SMD pads (current-sense filter
     caps on the top side over their node vias, driver exposed pads, regulator thermal pad)
 
 ASSEMBLY SETTINGS
@@ -34,5 +34,11 @@ DESIGN STATUS
   FET drain stubs (inside pours), library-version notices, silkscreen overlaps, 14 small dead-end
   overhangs on connected tracks. ERC: 47 "pin not driven" notices from imported symbols, same as
   the original design.
+  Pre-order review changes (2026-11-05): XY driver IPROPI resistors R1/R11/R12/R21 = 680R
+  (DRV8251A AIPROPI 1575 uA/A: ITRIP 3.08 A, IPROPI sense 1.07 V/A -- firmware current scaling
+  is 7% higher than on the DRV8876 board); C160-C163 100 nF/100 V at the DRV8251A VM pins;
+  GVDD caps C104/C124 = 10 uF/25 V; C5/C9/C16 = 100 nF/100 V; C34 (NRST) moved next to U20;
+  D5 moved beside U9's SW pin (no In2 detour on the switch node).
+  CN10 (fan/vacuum) pin 2 is VCC 36 V: only plug in a 36 V-rated device.
   Bottom-side parts stay clear of the r18 / r27 contact circles (connectors CN1/2/5/7/9/11 as on
   Maslow-Main).

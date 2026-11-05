@@ -37647,7 +37647,7 @@
 				(justify left top)
 			)
 		)
-		(property "Value" "100nF"
+		(property "Value" "100nF/100V"
 			(at -408.94 200.7997 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -37692,7 +37692,7 @@
 				)
 			)
 		)
-		(property "MPN" "CC0603KRX7R9BB104"
+		(property "MPN" "CL10B104KC8NNNC"
 			(at -411.48 199.39 0)
 			(hide yes)
 			(show_name no)
@@ -37703,7 +37703,7 @@
 				)
 			)
 		)
-		(property "Manufacturer" "YAGEO(国巨)"
+		(property "Manufacturer" "Samsung Electro-Mechanics"
 			(at -411.48 199.39 0)
 			(hide yes)
 			(show_name no)
@@ -37714,7 +37714,7 @@
 				)
 			)
 		)
-		(property "Supplier Part" "C14663"
+		(property "Supplier Part" "C15725"
 			(at -411.48 199.39 0)
 			(hide yes)
 			(show_name no)
@@ -42606,7 +42606,7 @@
 				(justify left top)
 			)
 		)
-		(property "Value" "100nF"
+		(property "Value" "100nF/100V"
 			(at -396.24 111.8997 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -42651,7 +42651,7 @@
 				)
 			)
 		)
-		(property "MPN" "CC0603KRX7R9BB104"
+		(property "MPN" "CL10B104KC8NNNC"
 			(at -398.78 110.49 0)
 			(hide yes)
 			(show_name no)
@@ -42662,7 +42662,7 @@
 				)
 			)
 		)
-		(property "Manufacturer" "YAGEO(国巨)"
+		(property "Manufacturer" "Samsung Electro-Mechanics"
 			(at -398.78 110.49 0)
 			(hide yes)
 			(show_name no)
@@ -42673,7 +42673,7 @@
 				)
 			)
 		)
-		(property "Supplier Part" "C14663"
+		(property "Supplier Part" "C15725"
 			(at -398.78 110.49 0)
 			(hide yes)
 			(show_name no)
@@ -43067,7 +43067,7 @@
 				(justify left top)
 			)
 		)
-		(property "Value" "100nF"
+		(property "Value" "100nF/100V"
 			(at -69.85 105.5497 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -43112,7 +43112,7 @@
 				)
 			)
 		)
-		(property "MPN" "CC0603KRX7R9BB104"
+		(property "MPN" "CL10B104KC8NNNC"
 			(at -72.39 104.14 0)
 			(hide yes)
 			(show_name no)
@@ -43123,7 +43123,7 @@
 				)
 			)
 		)
-		(property "Manufacturer" "YAGEO(国巨)"
+		(property "Manufacturer" "Samsung Electro-Mechanics"
 			(at -72.39 104.14 0)
 			(hide yes)
 			(show_name no)
@@ -43134,7 +43134,7 @@
 				)
 			)
 		)
-		(property "Supplier Part" "C14663"
+		(property "Supplier Part" "C15725"
 			(at -72.39 104.14 0)
 			(hide yes)
 			(show_name no)
@@ -50156,7 +50156,7 @@
 				(justify left top)
 			)
 		)
-		(property "Value" "1kΩ"
+		(property "Value" "680Ω"
 			(at -154.686 204.6097 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -50201,7 +50201,7 @@
 				)
 			)
 		)
-		(property "MPN" "0402WGF1001TCE"
+		(property "MPN" "0402WGF6800TCE"
 			(at -156.21 203.2 0)
 			(hide yes)
 			(show_name no)
@@ -50223,7 +50223,7 @@
 				)
 			)
 		)
-		(property "Supplier Part" "C11702"
+		(property "Supplier Part" "C25130"
 			(at -156.21 203.2 0)
 			(hide yes)
 			(show_name no)
@@ -50283,7 +50283,7 @@
 				(justify left top)
 			)
 		)
-		(property "Value" "1kΩ"
+		(property "Value" "680Ω"
 			(at -150.876 109.3597 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -50328,7 +50328,7 @@
 				)
 			)
 		)
-		(property "MPN" "0402WGF1001TCE"
+		(property "MPN" "0402WGF6800TCE"
 			(at -152.4 107.95 0)
 			(hide yes)
 			(show_name no)
@@ -50350,7 +50350,7 @@
 				)
 			)
 		)
-		(property "Supplier Part" "C11702"
+		(property "Supplier Part" "C25130"
 			(at -152.4 107.95 0)
 			(hide yes)
 			(show_name no)
@@ -50410,7 +50410,7 @@
 				(justify left top)
 			)
 		)
-		(property "Value" "1kΩ"
+		(property "Value" "680Ω"
 			(at -477.266 115.7097 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -50455,7 +50455,7 @@
 				)
 			)
 		)
-		(property "MPN" "0402WGF1001TCE"
+		(property "MPN" "0402WGF6800TCE"
 			(at -478.79 114.3 0)
 			(hide yes)
 			(show_name no)
@@ -50477,7 +50477,7 @@
 				)
 			)
 		)
-		(property "Supplier Part" "C11702"
+		(property "Supplier Part" "C25130"
 			(at -478.79 114.3 0)
 			(hide yes)
 			(show_name no)
@@ -50537,7 +50537,7 @@
 				(justify left top)
 			)
 		)
-		(property "Value" "1kΩ"
+		(property "Value" "680Ω"
 			(at -489.966 204.6097 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -50582,7 +50582,7 @@
 				)
 			)
 		)
-		(property "MPN" "0402WGF1001TCE"
+		(property "MPN" "0402WGF6800TCE"
 			(at -491.49 203.2 0)
 			(hide yes)
 			(show_name no)
@@ -50604,7 +50604,7 @@
 				)
 			)
 		)
-		(property "Supplier Part" "C11702"
+		(property "Supplier Part" "C25130"
 			(at -491.49 203.2 0)
 			(hide yes)
 			(show_name no)
@@ -54873,7 +54873,1142 @@
 				)
 			)
 		)
-	)(sheet_instances
+	)
+	(symbol
+		(lib_id "VCC")
+		(at -91.44 118.11 0)
+		(unit 0)
+		(body_style 0)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "42cae2a9-56a7-4f9f-87e6-7b996fd6b582")
+		(property "Reference" "#PWR100"
+			(at -91.44 118.11 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "VCC"
+			(at -94.488 115.062 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(face "Times New Roman")
+					(size 2.1717 2.1717)
+				)
+				(justify left top)
+			)
+		)
+		(property "Footprint" ""
+			(at -91.44 118.11 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at -91.44 118.11 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Power symbol creates a global label with name 'VCC'"
+			(at -91.44 118.11 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "df221763-4e1c-49bd-a2e7-9d9a9d2d53b1")
+		)
+		(instances
+			(project "Unified Control Board"
+				(path "/dfafd8b3-c553-40fe-89ed-f7586d7cf6a1"
+					(reference "#PWR100")
+					(unit 0)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "ProPrj_Dri-easyedapro:Ground-GND")
+		(at -91.44 125.73 0)
+		(unit 1)
+		(body_style 0)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "751e2550-6a50-4be5-abc9-e07da5c0545d")
+		(property "Reference" "#PWR101"
+			(at -91.44 125.73 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at -91.44 132.08 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.5748 1.5748)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at -91.44 125.73 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at -91.44 125.73 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at -91.44 125.73 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "2f014fcb-ebc9-4f78-a22c-1cbdcd66f1f4")
+		)
+		(instances
+			(project "Unified Control Board"
+				(path "/dfafd8b3-c553-40fe-89ed-f7586d7cf6a1"
+					(reference "#PWR101")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "CC0805KRX7R9BB104")
+		(at -91.44 121.92 0)
+		(unit 0)
+		(body_style 0)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "35b7955c-1364-44a1-8213-dcda39f964d3")
+		(property "Reference" "C160"
+			(at -88.8746 121.0437 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(face "Arial")
+					(size 1.6891 1.6891)
+				)
+				(justify left top)
+			)
+		)
+		(property "Value" "100nF/100V"
+			(at -88.9 123.3297 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(face "Arial")
+					(size 1.6891 1.6891)
+				)
+				(justify left top)
+			)
+		)
+		(property "Footprint" "ProPrj_Dri-easyedapro:C0603"
+			(at -91.44 121.92 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at -91.44 121.92 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at -91.44 121.92 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "MPN" "CL10B104KC8NNNC"
+			(at -91.44 121.92 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Manufacturer" "Samsung Electro-Mechanics"
+			(at -91.44 121.92 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Supplier Part" "C15725"
+			(at -91.44 121.92 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Supplier" "LCSC"
+			(at -91.44 121.92 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "7533805a-3c51-44dd-8bdc-c7b37cb018a4")
+		)
+		(pin "2"
+			(uuid "af4967dd-83bd-44af-b0a7-d8c6b2abd23f")
+		)
+		(instances
+			(project "Unified Control Board"
+				(path "/dfafd8b3-c553-40fe-89ed-f7586d7cf6a1"
+					(reference "C160")
+					(unit 0)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "VCC")
+		(at -417.83 124.46 0)
+		(unit 0)
+		(body_style 0)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "cfd8c131-c4fa-4989-9d34-5cd1c05bd3e0")
+		(property "Reference" "#PWR102"
+			(at -417.83 124.46 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "VCC"
+			(at -420.878 121.412 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(face "Times New Roman")
+					(size 2.1717 2.1717)
+				)
+				(justify left top)
+			)
+		)
+		(property "Footprint" ""
+			(at -417.83 124.46 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at -417.83 124.46 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Power symbol creates a global label with name 'VCC'"
+			(at -417.83 124.46 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "5231c1b4-68bb-4fdd-a36d-94021bf1cea3")
+		)
+		(instances
+			(project "Unified Control Board"
+				(path "/dfafd8b3-c553-40fe-89ed-f7586d7cf6a1"
+					(reference "#PWR102")
+					(unit 0)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "ProPrj_Dri-easyedapro:Ground-GND")
+		(at -417.83 132.08 0)
+		(unit 1)
+		(body_style 0)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "1de7b8ad-d1a2-4b2e-87c2-98bd892ea492")
+		(property "Reference" "#PWR103"
+			(at -417.83 132.08 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at -417.83 138.43 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.5748 1.5748)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at -417.83 132.08 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at -417.83 132.08 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at -417.83 132.08 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "f14c7b88-6bff-4df6-b36b-ff3f3c949281")
+		)
+		(instances
+			(project "Unified Control Board"
+				(path "/dfafd8b3-c553-40fe-89ed-f7586d7cf6a1"
+					(reference "#PWR103")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "CC0805KRX7R9BB104")
+		(at -417.83 128.27 0)
+		(unit 0)
+		(body_style 0)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "69788d6b-aaba-4ae7-8242-0f539cc970e9")
+		(property "Reference" "C161"
+			(at -415.2646 127.3937 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(face "Arial")
+					(size 1.6891 1.6891)
+				)
+				(justify left top)
+			)
+		)
+		(property "Value" "100nF/100V"
+			(at -415.29 129.6797 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(face "Arial")
+					(size 1.6891 1.6891)
+				)
+				(justify left top)
+			)
+		)
+		(property "Footprint" "ProPrj_Dri-easyedapro:C0603"
+			(at -417.83 128.27 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at -417.83 128.27 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at -417.83 128.27 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "MPN" "CL10B104KC8NNNC"
+			(at -417.83 128.27 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Manufacturer" "Samsung Electro-Mechanics"
+			(at -417.83 128.27 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Supplier Part" "C15725"
+			(at -417.83 128.27 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Supplier" "LCSC"
+			(at -417.83 128.27 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "c6cd0524-7b84-4e2c-83ca-734837f07558")
+		)
+		(pin "2"
+			(uuid "0bae730b-c333-4f68-b580-b6061325741b")
+		)
+		(instances
+			(project "Unified Control Board"
+				(path "/dfafd8b3-c553-40fe-89ed-f7586d7cf6a1"
+					(reference "C161")
+					(unit 0)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "VCC")
+		(at -430.53 213.36 0)
+		(unit 0)
+		(body_style 0)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "53f62a3d-93e3-4aba-826c-b0a1316dec35")
+		(property "Reference" "#PWR104"
+			(at -430.53 213.36 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "VCC"
+			(at -433.578 210.312 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(face "Times New Roman")
+					(size 2.1717 2.1717)
+				)
+				(justify left top)
+			)
+		)
+		(property "Footprint" ""
+			(at -430.53 213.36 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at -430.53 213.36 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Power symbol creates a global label with name 'VCC'"
+			(at -430.53 213.36 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "0a77053a-eea0-4e20-843f-21eb3984e4ce")
+		)
+		(instances
+			(project "Unified Control Board"
+				(path "/dfafd8b3-c553-40fe-89ed-f7586d7cf6a1"
+					(reference "#PWR104")
+					(unit 0)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "ProPrj_Dri-easyedapro:Ground-GND")
+		(at -430.53 220.98 0)
+		(unit 1)
+		(body_style 0)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "5d92f83d-291a-450e-b64a-c9e1671bfda6")
+		(property "Reference" "#PWR105"
+			(at -430.53 220.98 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at -430.53 227.33 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.5748 1.5748)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at -430.53 220.98 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at -430.53 220.98 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at -430.53 220.98 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "14e30d78-77b5-4ce0-8208-c39b3bdeb675")
+		)
+		(instances
+			(project "Unified Control Board"
+				(path "/dfafd8b3-c553-40fe-89ed-f7586d7cf6a1"
+					(reference "#PWR105")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "CC0805KRX7R9BB104")
+		(at -430.53 217.17 0)
+		(unit 0)
+		(body_style 0)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "1e4c0953-3b54-44cb-aa5e-ea81aeb68f87")
+		(property "Reference" "C162"
+			(at -427.9646 216.2937 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(face "Arial")
+					(size 1.6891 1.6891)
+				)
+				(justify left top)
+			)
+		)
+		(property "Value" "100nF/100V"
+			(at -427.99 218.5797 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(face "Arial")
+					(size 1.6891 1.6891)
+				)
+				(justify left top)
+			)
+		)
+		(property "Footprint" "ProPrj_Dri-easyedapro:C0603"
+			(at -430.53 217.17 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at -430.53 217.17 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at -430.53 217.17 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "MPN" "CL10B104KC8NNNC"
+			(at -430.53 217.17 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Manufacturer" "Samsung Electro-Mechanics"
+			(at -430.53 217.17 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Supplier Part" "C15725"
+			(at -430.53 217.17 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Supplier" "LCSC"
+			(at -430.53 217.17 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "f86e6447-e6ac-4e8b-a407-d01bd9a89a6a")
+		)
+		(pin "2"
+			(uuid "ce759265-7676-4852-a4d2-1f3db1145f67")
+		)
+		(instances
+			(project "Unified Control Board"
+				(path "/dfafd8b3-c553-40fe-89ed-f7586d7cf6a1"
+					(reference "C162")
+					(unit 0)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "VCC")
+		(at -95.25 213.36 0)
+		(unit 0)
+		(body_style 0)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "934d1ba8-93dc-47ac-8663-df5a7d005487")
+		(property "Reference" "#PWR106"
+			(at -95.25 213.36 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "VCC"
+			(at -98.298 210.312 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(face "Times New Roman")
+					(size 2.1717 2.1717)
+				)
+				(justify left top)
+			)
+		)
+		(property "Footprint" ""
+			(at -95.25 213.36 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at -95.25 213.36 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Power symbol creates a global label with name 'VCC'"
+			(at -95.25 213.36 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "cd58bf0b-6065-4eea-afc2-58301416f729")
+		)
+		(instances
+			(project "Unified Control Board"
+				(path "/dfafd8b3-c553-40fe-89ed-f7586d7cf6a1"
+					(reference "#PWR106")
+					(unit 0)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "ProPrj_Dri-easyedapro:Ground-GND")
+		(at -95.25 220.98 0)
+		(unit 1)
+		(body_style 0)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "f7998403-6088-402b-8cef-7ab21f70de2d")
+		(property "Reference" "#PWR107"
+			(at -95.25 220.98 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at -95.25 227.33 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.5748 1.5748)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at -95.25 220.98 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at -95.25 220.98 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at -95.25 220.98 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "4c08df7d-14fa-4e67-a2a0-3b4d23b353eb")
+		)
+		(instances
+			(project "Unified Control Board"
+				(path "/dfafd8b3-c553-40fe-89ed-f7586d7cf6a1"
+					(reference "#PWR107")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "CC0805KRX7R9BB104")
+		(at -95.25 217.17 0)
+		(unit 0)
+		(body_style 0)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "74960b08-3334-45d1-a138-cc008e93d1c8")
+		(property "Reference" "C163"
+			(at -92.6846 216.2937 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(face "Arial")
+					(size 1.6891 1.6891)
+				)
+				(justify left top)
+			)
+		)
+		(property "Value" "100nF/100V"
+			(at -92.71 218.5797 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(face "Arial")
+					(size 1.6891 1.6891)
+				)
+				(justify left top)
+			)
+		)
+		(property "Footprint" "ProPrj_Dri-easyedapro:C0603"
+			(at -95.25 217.17 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at -95.25 217.17 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at -95.25 217.17 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "MPN" "CL10B104KC8NNNC"
+			(at -95.25 217.17 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Manufacturer" "Samsung Electro-Mechanics"
+			(at -95.25 217.17 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Supplier Part" "C15725"
+			(at -95.25 217.17 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Supplier" "LCSC"
+			(at -95.25 217.17 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "39eb49f9-b65f-40b2-8aad-b6cbe392be9a")
+		)
+		(pin "2"
+			(uuid "b4d6d6c3-bb50-4009-a1e6-d170d0eb7ec4")
+		)
+		(instances
+			(project "Unified Control Board"
+				(path "/dfafd8b3-c553-40fe-89ed-f7586d7cf6a1"
+					(reference "C163")
+					(unit 0)
+				)
+			)
+		)
+	)
+	
+
+	(sheet_instances
 		(path "/"
 			(page "1")
 		)
