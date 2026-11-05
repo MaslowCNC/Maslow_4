@@ -1765,8 +1765,12 @@ const handleMaslowActionButtonClick = () => {
   
   // Execute action based on Maslow state
   switch (maslowStatus.state) {
-    case 0: // UNKNOWN - Retract
-      tabletCalRetract();
+    case 0: // UNKNOWN - Apply Tension if some belt lengths are known, else Retract
+      if (unknownStateAction() === 'Apply Tension') {
+        tabletCalTense();
+      } else {
+        tabletCalRetract();
+      }
       break;
     case 2: // RETRACTED - Extend
       tabletCalExtend();
