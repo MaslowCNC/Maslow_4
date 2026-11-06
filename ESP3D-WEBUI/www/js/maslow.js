@@ -6,6 +6,8 @@ let maslowStatus = { homed: false, extended: false, state: 0 };
 const APPLY_TENSION_WARNING_PREFIX = "Maslow Apply Tension deviation warning:";
 const APPLY_TENSION_RETRACTION_WARNING_PREFIX = "Maslow Apply Tension retraction warning:";
 const Z_HOME_RESET_WARNING_PREFIX = "Maslow Z home reset warning:";
+// Apply Tension couldn't confirm the position against the saved anchors; Find Anchors fixes both
+const APPLY_TENSION_FAILED_PREFIXES = ["Apply Tension failed:", "Center point deviation over"];
 const ZM_INVALID_WARNING_PREFIX = "Maslow Zm invalid warning:";
 
 /** Maslow state constants (mirror firmware Maslow.h defines) */
@@ -401,6 +403,10 @@ const maslowInfoMsgHandling = (msg) => {
 		showApplyTensionRetractionWarningMessage(msg);
 	}
 
+	if (APPLY_TENSION_FAILED_PREFIXES.some((prefix) => msg.startsWith(`[MSG:ERR: ${prefix}`))) {
+		showApplyTensionFailedMessage(msg);
+	}
+
 	if (msg.startsWith(`[MSG:WARN: ${Z_HOME_RESET_WARNING_PREFIX}`)) {
 		showZHomeResetWarningMessage(msg);
 	} else if (msg.startsWith(`[MSG:WARN: ${ZM_INVALID_WARNING_PREFIX}`)) {
@@ -564,6 +570,83 @@ function showApplyTensionRetractionWarningMessage(msg) {
 	actions.appendChild(continueButton);
 	dialog.appendChild(heading);
 	dialog.appendChild(messageElement);
+	dialog.appendChild(actions);
+	modal.appendChild(dialog);
+	document.body.appendChild(modal);
+}
+
+function showApplyTensionFailedMessage(msg) {
+	const modalId = "apply-tension-failed-modal";
+	const existingModal = document.getElementById(modalId);
+	if (existingModal) {
+		existingModal.remove();
+	}
+
+	const errorMatch = msg.match(/^\[MSG:ERR:\s*(.*)\]$/);
+	const errorText = errorMatch ? errorMatch[1].trim() : msg;
+
+	const modal = document.createElement("div");
+	modal.id = modalId;
+	modal.style.cssText = `
+		position: fixed;
+		inset: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background-color: rgba(0, 0, 0, 0.45);
+		z-index: 2000;
+		padding: 20px;
+	`;
+
+	const dialog = document.createElement("div");
+	dialog.style.cssText = `
+		background-color: white;
+		padding: 20px;
+		border: 1px solid black;
+		box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+		max-width: 520px;
+		width: 100%;
+	`;
+
+	const heading = document.createElement("h3");
+	heading.textContent = "Couldn't confirm the machine's position";
+	heading.style.marginTop = "0";
+
+	const messageElement = document.createElement("p");
+	messageElement.textContent =
+		"The belt lengths don't match the saved anchor points, so the anchors may have moved. " +
+		"Run Find Anchors to measure them again. The belts are still attached, so there's no need to retract.";
+
+	const detailElement = document.createElement("p");
+	detailElement.textContent = errorText;
+	detailElement.style.cssText = "font-size: 0.85em; color: #555;";
+
+	const actions = document.createElement("div");
+	actions.style.cssText = "display: flex; gap: 10px; justify-content: flex-end;";
+
+	const cancelButton = document.createElement("button");
+	cancelButton.textContent = "Not now";
+	cancelButton.style.cssText = "padding: 5px 10px; cursor: pointer;";
+	cancelButton.onclick = () => modal.remove();
+
+	const findAnchorsButton = document.createElement("button");
+	findAnchorsButton.textContent = "Find Anchors";
+	findAnchorsButton.style.cssText = "padding: 5px 10px; cursor: pointer;";
+	findAnchorsButton.onclick = () => {
+		modal.remove();
+		// Same path as the Find Anchor Locations button, including the Z check
+		if (typeof tabletCalCalibrate === "function") {
+			tabletCalCalibrate();
+		} else {
+			sendCommand("$CAL");
+		}
+	};
+
+	actions.appendChild(cancelButton);
+	actions.appendChild(findAnchorsButton);
+	dialog.appendChild(heading);
+	dialog.appendChild(messageElement);
+	dialog.appendChild(detailElement);
 	dialog.appendChild(actions);
 	modal.appendChild(dialog);
 	document.body.appendChild(modal);
