@@ -272,6 +272,11 @@ const startSocket = () => {
 			wsmsg += msg;
 		} else {
 			msg += e.data;
+			// Firmware since the FluidNC 3.9.9 merge sends a bare "PING", older firmware sent "PING:<id>".
+			// Count either as a heartbeat, or the page disconnects itself every 20 s.
+			if (enable_ping && msg.startsWith("PING")) {
+				last_ping = Date.now();
+			}
 			const tval = msg.split(":");
 			if (tval.length >= 2) {
 				if (tval[0] === "CURRENT_ID") {
@@ -280,8 +285,8 @@ const startSocket = () => {
 				}
 				if (enable_ping) {
 					if (tval[0] === "PING") {
-						pageID(tval[1]);
-						// console.log("ping from id = " + pageID());
+						// Don't take the page ID from PING: older firmware sends it as a raw byte, which
+						// the board then reads as connection 0 and drops commands. CURRENT_ID sets it.
 						last_ping = Date.now();
 						if (interval_ping === -1)
 							interval_ping = setInterval(() => {
