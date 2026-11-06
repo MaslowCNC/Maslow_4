@@ -1,0 +1,592 @@
+<title>Maslow UI Modes Map</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+  /* Layout: a short header, a legend, then the full-width flow map in four stage bands, then notes in two columns. */
+  :root {
+    --bg: #f5f6f3;          /* birch-ply off-white, slightly green */
+    --panel: #ffffff;
+    --band-alt: #eceee8;
+    --ink: #1d2320;
+    --muted: #5b655f;
+    --line: #8a948d;
+    --step-stroke: #b9c1bb;
+    --accent: #1f5f8b;      /* machine status */
+    --accent-soft: #e2edf5;
+    --decision: #fbf1d9;
+    --decision-stroke: #c9a24a;
+    --error: #b23a2e;
+    --error-soft: #f8e3df;
+    --good: #2f7a4b;
+    --good-soft: #e1f0e5;
+    --job: #6a4a9c;
+    --job-soft: #ece6f6;
+    --warn: #a3620f;
+    --warn-soft: #f8ead4;
+    --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-display: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #151917; --panel: #1d2220; --band-alt: #1a1f1c; --ink: #e6ebe7; --muted: #9aa59e;
+      --line: #7b867f; --step-stroke: #46504a; --accent: #7fb6dc; --accent-soft: #1b2e3b;
+      --decision: #33301f; --decision-stroke: #b8954a; --error: #ec8a7e; --error-soft: #3a2220;
+      --good: #7cc898; --good-soft: #1d3326; --job: #bda3e6; --job-soft: #2a2238; --warn: #e2a95b; --warn-soft: #382b17;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #151917; --panel: #1d2220; --band-alt: #1a1f1c; --ink: #e6ebe7; --muted: #9aa59e;
+    --line: #7b867f; --step-stroke: #46504a; --accent: #7fb6dc; --accent-soft: #1b2e3b;
+    --decision: #33301f; --decision-stroke: #b8954a; --error: #ec8a7e; --error-soft: #3a2220;
+    --good: #7cc898; --good-soft: #1d3326; --job: #bda3e6; --job-soft: #2a2238; --warn: #e2a95b; --warn-soft: #382b17;
+    color-scheme: dark;
+  }
+
+  body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.55; }
+  .wrap {
+    max-width: 1440px; margin: 0 auto;
+    padding-block: 32px 56px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    display: grid; gap: 28px;
+  }
+  header { display: grid; gap: 8px; max-width: 70ch; }
+  .eyebrow { font-family: var(--font-mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  h1 { font-family: var(--font-display); font-weight: 600; font-size: clamp(28px, 4vw, 40px); line-height: 1.1; margin: 0; text-wrap: balance; }
+  header p { margin: 0; color: var(--muted); }
+  .draft { display: inline-block; font-family: var(--font-mono); font-size: 12px; padding: 2px 8px; border-radius: 999px;
+           background: var(--warn-soft); color: var(--warn); margin-left: 6px; vertical-align: middle; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center; margin: 0; padding: 0; list-style: none; font-size: 13.5px; color: var(--muted); }
+  .legend li { display: flex; align-items: center; gap: 8px; }
+  .sw { width: 34px; height: 18px; flex: none; border: 1.5px solid var(--step-stroke); background: var(--panel); border-radius: 5px; }
+  .sw.setup { background: var(--accent-soft); border-color: var(--accent); border-radius: 999px; }
+  .sw.ready { background: var(--good-soft); border-color: var(--good); border-radius: 999px; }
+  .sw.job { background: var(--job-soft); border-color: var(--job); border-radius: 999px; }
+  .sw.error { background: var(--error-soft); border-color: var(--error); border-radius: 999px; }
+  .sw.decision { background: var(--decision); border-color: var(--decision-stroke); clip-path: polygon(0 50%, 22% 0, 78% 0, 100% 50%, 78% 100%, 22% 100%); border: none; }
+  .sw.faint { height: 0; border: 0; border-top: 2px dotted var(--line); border-radius: 0; background: none; opacity: .6; }
+  .sw.mdecision { background: var(--accent-soft); clip-path: polygon(0 50%, 22% 0, 78% 0, 100% 50%, 78% 100%, 22% 100%); border: none; box-shadow: inset 0 0 0 2px var(--accent); }
+  .hx { width: 34px; height: 18px; flex: none; overflow: visible; }
+  .sw.open { border-style: dashed; border-color: var(--line); background: transparent; }
+
+  figure { margin: 0; display: grid; gap: 10px; }
+  .scroller { overflow-x: auto; border: 1px solid var(--step-stroke); border-radius: 10px; background: var(--bg); }
+  .scroller:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  svg.map { display: block; width: 100%; min-width: 980px; height: auto; }
+  figcaption { font-size: 13.5px; color: var(--muted); max-width: 80ch; }
+
+  .band { fill: var(--bg); }
+  .band-alt { fill: var(--band-alt); }
+  .band-num { font-family: var(--font-mono); font-size: 14px; fill: var(--accent); }
+  .band-label { font-family: var(--font-mono); font-size: 13px; letter-spacing: .08em; fill: var(--muted); }
+
+  .edge { fill: none; stroke: var(--line); stroke-width: 1.6; }
+  .edge.dashed { stroke-dasharray: 5 4; }
+  .edge.faint { stroke-dasharray: 2 4; opacity: .45; }
+  g.faint { opacity: .5; }
+  .arrowhead { fill: var(--line); }
+  .edge-label-bg { fill: var(--bg); stroke: var(--step-stroke); stroke-width: 1; }
+  .edge-label { font-family: var(--font-mono); font-size: 11.5px; fill: var(--muted); }
+
+  .shape { stroke-width: 1.5; }
+  .shape.step { fill: var(--panel); stroke: var(--step-stroke); }
+  .shape.start { fill: var(--panel); stroke: var(--ink); stroke-width: 2; }
+  .shape.setup { fill: var(--accent-soft); stroke: var(--accent); }
+  .shape.ready { fill: var(--good-soft); stroke: var(--good); }
+  .shape.job { fill: var(--job-soft); stroke: var(--job); }
+  .shape.error { fill: var(--error-soft); stroke: var(--error); }
+  .shape.warn { fill: var(--warn-soft); stroke: var(--warn); }
+  .shape.mdecision { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 2; }
+  .label-mdecision { fill: var(--accent); font-weight: 600; }
+  .shape.decision { fill: var(--decision); stroke: var(--decision-stroke); }
+  .shape.open { fill: none; stroke: var(--line); stroke-dasharray: 5 4; }
+  .shape.comment { fill: var(--warn-soft); stroke: var(--warn); stroke-dasharray: 4 3; }
+  .comment-title { font-weight: 600; fill: var(--warn); font-size: 13px; }
+  .shape.note { fill: var(--panel); stroke: var(--step-stroke); stroke-dasharray: 2 3; }
+
+  .label { font-family: var(--font-body); font-size: 13.5px; fill: var(--ink); }
+  .label.sub { font-size: 12px; fill: var(--muted); }
+  .label.strong { font-weight: 600; }
+  .label-setup, .label.mode-setup { fill: var(--accent); }
+  .label-ready, .label.mode-ready { fill: var(--good); }
+  .label-job { fill: var(--job); }
+  .label-error { fill: var(--error); }
+  .label-warn { fill: var(--warn); }
+  .label-open { fill: var(--muted); font-style: italic; }
+  .label.sub.label-setup, .label.sub.label-ready, .label.sub.label-job, .label.sub.label-error, .label.sub.label-warn { font-weight: 400; }
+  .note-text { font-size: 13px; }
+  .tick { fill: var(--good); font-weight: 600; }
+
+  .notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: 28px 40px; }
+  .notes section { min-width: 0; }
+  .notes h2 { font-family: var(--font-display); font-weight: 600; font-size: 20px; margin: 0 0 8px; }
+  .notes ul { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+  .notes li::marker { color: var(--muted); }
+  code { font-family: var(--font-mono); font-size: .9em; }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Maslow 4 · WebUI rewrite</div>
+    <h1>Workflow map by UI mode <span class="draft">draft</span></h1>
+    <p>A copy of the workflow map, reworked to follow the four UI modes in <code>REWRITE.md</code>: Setup, Ready to cut, Job and Error. Each pill is what the UI shows, written as mode, then subheader. The steps carry the subheader shown while they run. This is a draft for discussion, and the original map is unchanged.</p>
+  </header>
+
+  <ul class="legend" aria-label="Legend">
+    <li><span class="sw setup"></span>Setup mode</li>
+    <li><span class="sw ready"></span>Ready to cut mode</li>
+    <li><span class="sw job"></span>Job mode</li>
+    <li><span class="sw error"></span>Error mode</li>
+    <li><span class="sw"></span>Step the user takes</li>
+    <li><svg class="hx" viewBox="0 0 34 18" aria-hidden="true"><polygon points="1,9 7,1 27,1 33,9 27,17 7,17" class="shape decision"/></svg>Question the user answers</li>
+    <li><svg class="hx" viewBox="0 0 34 18" aria-hidden="true"><polygon points="1,9 7,1 27,1 33,9 27,17 7,17" class="shape mdecision"/></svg>Check the machine answers</li>
+    <li><span class="sw open"></span>Open: still to define</li>
+    <li><span class="sw faint"></span>Unlikely path</li>
+  </ul>
+
+  <figure>
+    <div class="scroller" tabindex="0" aria-label="Workflow map, scrolls sideways on small screens">
+<svg viewBox="0 0 1400 3275" role="img" aria-labelledby="map-title map-desc" class="map">
+<title id="map-title">Maslow workflow by UI mode</title>
+<desc id="map-desc">From powering on and connecting, through the Setup and Ready to cut modes, to the Job mode and the ways a job can end: success, Stop, a spindle fault or an emergency stop.</desc>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="arrowhead"/></marker></defs>
+<rect x="0" y="0" width="1400" height="318" class="band "/>
+<text x="20" y="30" class="band-num">1</text>
+<text x="44" y="30" class="band-label">CONNECT</text>
+<rect x="0" y="318" width="1400" height="1987" class="band band-alt"/>
+<text x="20" y="348" class="band-num">2</text>
+<text x="44" y="348" class="band-label">SETUP: CONFIRM THE WORK AREA, THEN ONLY WHAT’S MISSING</text>
+<rect x="0" y="2305" width="1400" height="440" class="band "/>
+<text x="20" y="2335" class="band-num">3</text>
+<text x="44" y="2335" class="band-label">READY TO CUT: PREPARE AND START</text>
+<rect x="0" y="2745" width="1400" height="530" class="band band-alt"/>
+<text x="20" y="2775" class="band-num">4</text>
+<text x="44" y="2775" class="band-label">JOB, AND HOW IT ENDS</text>
+<path d="M730,72 L730,92 L440,92 L440,113" class="edge" marker-end="url(#arrow)"/>
+<path d="M730,72 L730,92 L1010,92 L1010,113" class="edge" marker-end="url(#arrow)"/>
+<path d="M440,157 L440,183" class="edge" marker-end="url(#arrow)"/>
+<path d="M1010,157 L1010,183" class="edge" marker-end="url(#arrow)"/>
+<path d="M1010,227 L1010,241" class="edge" marker-end="url(#arrow)"/>
+<path d="M440,227 L440,334 L730,334 L730,349" class="edge" marker-end="url(#arrow)"/>
+<path d="M1010,315 L1010,334 L730,334 L730,349" class="edge" marker-end="url(#arrow)"/>
+<path d="M730,407 L730,428 L150,428 L150,446" class="edge" marker-end="url(#arrow)"/>
+<path d="M730,407 L730,428 L1270,428 L1270,446" class="edge" marker-end="url(#arrow)"/>
+<path d="M1270,490 L1270,523" class="edge" marker-end="url(#arrow)"/>
+<path d="M1270,581 L1270,620" class="edge" marker-end="url(#arrow)"/>
+<path d="M1270,664 L1270,705" class="edge" marker-end="url(#arrow)"/>
+<path d="M1270,749 L1270,790" class="edge dashed" marker-end="url(#arrow)"/>
+<path d="M1360,642 L1382,642 L1382,807 L1370,807" class="edge dashed" marker-end="url(#arrow)"/>
+<path d="M150,490 L150,529" class="edge" marker-end="url(#arrow)"/>
+<path d="M150,587 L150,623" class="edge" marker-end="url(#arrow)"/>
+<path d="M245,558 L305,558" class="edge" marker-end="url(#arrow)"/>
+<path d="M535,558 L730,558 L730,1376" class="edge" marker-end="url(#arrow)"/>
+<path d="M420,595 L420,714 L150,714" class="edge" marker-end="url(#arrow)"/>
+<path d="M150,697 L150,758" class="edge" marker-end="url(#arrow)"/>
+<path d="M255,780 L325,780" class="edge" marker-end="url(#arrow)"/>
+<path d="M420,809 L420,843" class="edge" marker-end="url(#arrow)"/>
+<path d="M420,751 L420,738 L190,738 L190,758" class="edge dashed" marker-end="url(#arrow)"/>
+<path d="M535,872 L575,872 L575,780 L515,780" class="edge" marker-end="url(#arrow)"/>
+<path d="M420,901 L420,927 L150,927" class="edge" marker-end="url(#arrow)"/>
+<path d="M150,802 L150,958" class="edge" marker-end="url(#arrow)"/>
+<path d="M255,980 L320,980" class="edge" marker-end="url(#arrow)"/>
+<path d="M420,1009 L420,1033" class="edge" marker-end="url(#arrow)"/>
+<path d="M420,1107 L420,1130 L150,1130" class="edge" marker-end="url(#arrow)"/>
+<path d="M535,1070 L560,1070" class="edge" marker-end="url(#arrow)"/>
+<path d="M640,1107 L640,1118 L480,1118 L480,1107" class="edge dashed" marker-end="url(#arrow)"/>
+<path d="M150,1002 L150,1148" class="edge" marker-end="url(#arrow)"/>
+<path d="M150,1222 L150,1273" class="edge" marker-end="url(#arrow)"/>
+<path d="M255,1185 L400,1185 L400,1258" class="edge dashed" marker-end="url(#arrow)"/>
+<path d="M255,1295 L300,1295" class="edge" marker-end="url(#arrow)"/>
+<path d="M500,1295 L525,1295" class="edge" marker-end="url(#arrow)"/>
+<path d="M620,1324 L620,1347 L470,1347 L470,1332" class="edge dashed" marker-end="url(#arrow)"/>
+<path d="M400,1332 L400,1357 L150,1357" class="edge" marker-end="url(#arrow)"/>
+<path d="M150,1317 L150,1405 L285,1405" class="edge" marker-end="url(#arrow)"/>
+<path d="M515,1405 L610,1405" class="edge" marker-end="url(#arrow)"/>
+<path d="M730,1434 L730,1461" class="edge" marker-end="url(#arrow)"/>
+<path d="M850,1405 L1175,1405" class="edge" marker-end="url(#arrow)"/>
+<path d="M1270,1434 L1270,1575 L1130,1575" class="edge" marker-end="url(#arrow)"/>
+<path d="M1365,1405 L1386,1405 L1386,1750 L855,1750" class="edge" marker-end="url(#arrow)"/>
+<path d="M835,1490 L885,1490" class="edge" marker-end="url(#arrow)"/>
+<path d="M1010,1519 L1010,1546" class="edge" marker-end="url(#arrow)"/>
+<path d="M1010,1604 L1010,1628" class="edge" marker-end="url(#arrow)"/>
+<path d="M900,1665 L845,1665" class="edge" marker-end="url(#arrow)"/>
+<path d="M625,1490 L580,1490 L580,1750 L605,1750" class="edge" marker-end="url(#arrow)"/>
+<path d="M730,1694 L730,1728" class="edge" marker-end="url(#arrow)"/>
+<path d="M730,1772 L730,1806" class="edge" marker-end="url(#arrow)"/>
+<path d="M730,1864 L730,1896" class="edge" marker-end="url(#arrow)"/>
+<path d="M625,1835 L540,1835 L540,2170 L615,2170" class="edge" marker-end="url(#arrow)"/>
+<path d="M880,1925 L905,1925" class="edge dashed" marker-end="url(#arrow)"/>
+<path d="M730,1954 L730,2148" class="edge" marker-end="url(#arrow)"/>
+<path d="M1010,1954 L1010,1976" class="edge" marker-end="url(#arrow)"/>
+<path d="M1010,2034 L1010,2056" class="edge" marker-end="url(#arrow)"/>
+<path d="M1010,2114 L1010,2170 L845,2170" class="edge" marker-end="url(#arrow)"/>
+<path d="M730,2192 L730,2233" class="edge" marker-end="url(#arrow)"/>
+<path d="M730,2277 L730,2338" class="edge" marker-end="url(#arrow)"/>
+<path d="M730,2382 L730,2416" class="edge" marker-end="url(#arrow)"/>
+<path d="M730,2474 L730,2501" class="edge dashed" marker-end="url(#arrow)"/>
+<path d="M615,2445 L540,2445 L540,2615 L625,2615" class="edge" marker-end="url(#arrow)"/>
+<path d="M730,2559 L730,2593" class="edge" marker-end="url(#arrow)"/>
+<path d="M835,2615 L1005,2615" class="edge dashed" marker-end="url(#arrow)"/>
+<path d="M730,2637 L730,2678" class="edge" marker-end="url(#arrow)"/>
+<path d="M730,2722 L730,2773" class="edge" marker-end="url(#arrow)"/>
+<path d="M730,2817 L730,2860 L170,2860 L170,2893" class="edge" marker-end="url(#arrow)"/>
+<path d="M730,2817 L730,2860 L450,2860 L450,2893" class="edge" marker-end="url(#arrow)"/>
+<path d="M730,2817 L730,2860 L1270,2860 L1270,2878" class="edge" marker-end="url(#arrow)"/>
+<path d="M730,2817 L730,2860 L1010,2860 L1010,2878" class="edge" marker-end="url(#arrow)"/>
+<path d="M170,2937 L170,2986" class="edge" marker-end="url(#arrow)"/>
+<path d="M170,3044 L170,3088" class="edge" marker-end="url(#arrow)"/>
+<path d="M170,3132 L170,3183" class="edge dashed" marker-end="url(#arrow)"/>
+<path d="M450,2937 L450,2986" class="edge" marker-end="url(#arrow)"/>
+<path d="M450,3044 L450,3081" class="edge" marker-end="url(#arrow)"/>
+<path d="M555,3015 L635,3015" class="edge" marker-end="url(#arrow)"/>
+<path d="M740,3044 L740,3066" class="edge" marker-end="url(#arrow)"/>
+<path d="M740,3124 L740,3158" class="edge dashed" marker-end="url(#arrow)"/>
+<path d="M1010,2952 L1010,2986" class="edge" marker-end="url(#arrow)"/>
+<path d="M1010,3044 L1010,3093" class="edge dashed" marker-end="url(#arrow)"/>
+<path d="M1270,2952 L1270,2993" class="edge" marker-end="url(#arrow)"/>
+<path d="M1270,3037 L1270,3073" class="edge" marker-end="url(#arrow)"/>
+<path d="M1270,3117 L1270,3158" class="edge dashed" marker-end="url(#arrow)"/>
+<rect x="625" y="28" width="210" height="44" rx="8" class="shape start"/>
+<text x="730" y="54" text-anchor="middle" class="label strong label-start">Power on the machine</text>
+<rect x="335" y="113" width="210" height="44" rx="8" class="shape step"/>
+<text x="440" y="140" text-anchor="middle" class="label label-step">Machine joins your WiFi</text>
+<rect x="335" y="183" width="210" height="44" rx="8" class="shape step"/>
+<text x="440" y="210" text-anchor="middle" class="label label-step">Open maslow.local</text>
+<rect x="895" y="113" width="230" height="44" rx="8" class="shape step"/>
+<text x="1010" y="140" text-anchor="middle" class="label label-step">Join the Maslow WiFi hotspot</text>
+<rect x="895" y="183" width="230" height="44" rx="8" class="shape step"/>
+<text x="1010" y="210" text-anchor="middle" class="label label-step">Go to the machine’s IP address</text>
+<rect x="880" y="241" width="260" height="74" rx="8" class="shape step"/>
+<text x="1010" y="266" text-anchor="middle" class="label label-step">Name the device, then set up WiFi</text>
+<text x="1010" y="282" text-anchor="middle" class="label sub label-step">(WiFi dialog is a placeholder)</text>
+<text x="1010" y="300" text-anchor="middle" class="label sub label-step">Connecting: WiFi setup</text>
+<rect x="625" y="349" width="210" height="58" rx="8" class="shape start"/>
+<text x="730" y="374" text-anchor="middle" class="label strong label-start">Assess machine state</text>
+<text x="730" y="391" text-anchor="middle" class="label sub strong label-start">(UI shows Connecting)</text>
+<rect x="25" y="446" width="250" height="44" rx="22" class="shape setup"/>
+<text x="150" y="472" text-anchor="middle" class="label strong label-setup">Setup: Confirm the work area</text>
+<rect x="1165" y="446" width="210" height="44" rx="22" class="shape error"/>
+<text x="1270" y="472" text-anchor="middle" class="label strong label-error">Error: Not responding</text>
+<rect x="1175" y="523" width="190" height="58" rx="8" class="shape open"/>
+<text x="1270" y="548" text-anchor="middle" class="label label-open">Reboot from the UI</text>
+<text x="1270" y="565" text-anchor="middle" class="label sub label-open">(new: [ESP444]RESTART)</text>
+<polygon points="1180,642 1194,620 1346,620 1360,642 1346,664 1194,664" class="shape mdecision"/>
+<text x="1270" y="646" text-anchor="middle" class="label label-mdecision">Back online?</text>
+<rect x="1180" y="705" width="180" height="44" rx="8" class="shape step"/>
+<text x="1270" y="732" text-anchor="middle" class="label label-step">Power cycle</text>
+<rect x="1170" y="790" width="200" height="34" rx="8" class="shape open"/>
+<text x="1270" y="812" text-anchor="middle" class="label label-open">Back to Assess machine state</text>
+<polygon points="55,558 69,529 231,529 245,558 231,587 69,587" class="shape decision"/>
+<text x="150" y="554" text-anchor="middle" class="label label-decision">Keep the saved</text>
+<text x="150" y="571" text-anchor="middle" class="label label-decision">work area?</text>
+<rect x="45" y="623" width="210" height="74" rx="8" class="shape step"/>
+<text x="150" y="648" text-anchor="middle" class="label label-step">Set a new work area</text>
+<text x="150" y="664" text-anchor="middle" class="label sub label-step">(size, spoil board thickness)</text>
+<text x="150" y="682" text-anchor="middle" class="label sub label-step">clears the anchor points</text>
+<polygon points="305,558 319,521 521,521 535,558 521,595 319,595" class="shape mdecision"/>
+<text x="420" y="546" text-anchor="middle" class="label label-mdecision">Still tensioned?</text>
+<text x="420" y="562" text-anchor="middle" class="label label-mdecision">(page reload only: always</text>
+<text x="420" y="580" text-anchor="middle" class="label label-mdecision">no after a reboot)</text>
+<rect x="870" y="601" width="280" height="98" rx="8" class="shape comment"/>
+<text x="884" y="625" class="label comment-title">About a new work area</text>
+<text x="884" y="645" class="label note-text">Does a smaller work area need a retract</text>
+<text x="884" y="665" class="label note-text">first? A bigger one may not, since the</text>
+<text x="884" y="685" class="label note-text">belt lengths are still known.</text>
+<rect x="870" y="721" width="280" height="118" rx="8" class="shape comment"/>
+<text x="884" y="745" class="label comment-title">After a reboot</text>
+<text x="884" y="765" class="label note-text">The encoders restore the belt lengths,</text>
+<text x="884" y="785" class="label note-text">but the machine comes back as Belts</text>
+<text x="884" y="805" class="label note-text">extended or Belts retracted, never</text>
+<text x="884" y="825" class="label note-text">tensioned. The user applies tension again.</text>
+<polygon points="45,780 59,758 241,758 255,780 241,802 59,802" class="shape mdecision"/>
+<text x="150" y="784" text-anchor="middle" class="label label-mdecision">Belt lengths known?</text>
+<rect x="325" y="751" width="190" height="58" rx="8" class="shape step"/>
+<text x="420" y="776" text-anchor="middle" class="label label-step">Retract the belts</text>
+<text x="420" y="793" text-anchor="middle" class="label sub mode-setup label-step">Setup: Retracting belts</text>
+<polygon points="305,872 319,843 521,843 535,872 521,901 319,901" class="shape decision"/>
+<text x="420" y="868" text-anchor="middle" class="label label-decision">Belts fully retracted?</text>
+<text x="420" y="885" text-anchor="middle" class="label sub label-decision">(check each arm by eye)</text>
+<polygon points="45,980 59,958 241,958 255,980 241,1002 59,1002" class="shape mdecision"/>
+<text x="150" y="984" text-anchor="middle" class="label label-mdecision">Belts extended?</text>
+<rect x="320" y="951" width="200" height="58" rx="8" class="shape step"/>
+<text x="420" y="976" text-anchor="middle" class="label label-step">Next: Extend belts</text>
+<text x="420" y="993" text-anchor="middle" class="label sub mode-setup label-step">Setup: Belts retracted</text>
+<rect x="305" y="1033" width="230" height="74" rx="8" class="shape step"/>
+<text x="420" y="1058" text-anchor="middle" class="label label-step">Extending belts: pull them</text>
+<text x="420" y="1074" text-anchor="middle" class="label sub label-step">out and attach to the anchors</text>
+<text x="420" y="1092" text-anchor="middle" class="label sub mode-setup label-step">Setup: Extending belts</text>
+<rect x="560" y="1033" width="160" height="74" rx="37" class="shape setup"/>
+<text x="640" y="1058" text-anchor="middle" class="label strong label-setup">Extending stopped</text>
+<text x="640" y="1074" text-anchor="middle" class="label sub strong label-setup">lengths known: extend</text>
+<text x="640" y="1092" text-anchor="middle" class="label sub strong label-setup">again or retract</text>
+<rect x="45" y="1148" width="210" height="74" rx="8" class="shape step"/>
+<text x="150" y="1172" text-anchor="middle" class="label label-step">Apply tension</text>
+<text x="150" y="1190" text-anchor="middle" class="label sub label-step">(checks the saved anchors)</text>
+<text x="150" y="1206" text-anchor="middle" class="label sub mode-setup label-step">Setup: Applying tension</text>
+<rect x="445" y="1128" width="270" height="118" rx="8" class="shape comment"/>
+<text x="459" y="1152" class="label comment-title">Always returns a result now</text>
+<text x="459" y="1172" class="label note-text">Current firmware passes or fails every</text>
+<text x="459" y="1192" class="label note-text">time: a failure goes back to Belts</text>
+<text x="459" y="1212" class="label note-text">extended. Older firmware (before</text>
+<text x="459" y="1232" class="label note-text">20493b1b) can stick at Taking slack.</text>
+<polygon points="45,1295 59,1273 241,1273 255,1295 241,1317 59,1317" class="shape mdecision"/>
+<text x="150" y="1300" text-anchor="middle" class="label label-mdecision">Position confirmed?</text>
+<rect x="300" y="1258" width="200" height="74" rx="8" class="shape step"/>
+<text x="400" y="1282" text-anchor="middle" class="label label-step">Find anchors</text>
+<text x="400" y="1300" text-anchor="middle" class="label sub label-step">(also tensions the belts)</text>
+<text x="400" y="1316" text-anchor="middle" class="label sub mode-setup label-step">Setup: Finding anchor points</text>
+<rect x="525" y="1266" width="190" height="58" rx="29" class="shape error"/>
+<text x="620" y="1291" text-anchor="middle" class="label strong label-error">Error: can’t find anchors</text>
+<text x="620" y="1308" text-anchor="middle" class="label sub strong label-error">check the belts, try again</text>
+<rect x="285" y="1383" width="230" height="44" rx="22" class="shape setup"/>
+<text x="400" y="1410" text-anchor="middle" class="label strong label-setup">Setup: Checking for a tool</text>
+<rect x="1145" y="1241" width="250" height="98" rx="8" class="shape comment"/>
+<text x="1159" y="1265" class="label comment-title">Jogging unlocks here</text>
+<text x="1159" y="1285" class="label note-text">Anchors and position are confirmed,</text>
+<text x="1159" y="1305" class="label note-text">so jogging works from here on,</text>
+<text x="1159" y="1325" class="label note-text">except while something moves.</text>
+<polygon points="610,1405 624,1376 836,1376 850,1405 836,1434 624,1434" class="shape mdecision"/>
+<text x="730" y="1401" text-anchor="middle" class="label label-mdecision">Tool detected?</text>
+<text x="730" y="1418" text-anchor="middle" class="label sub label-mdecision">(spindle rises through the beam)</text>
+<polygon points="1175,1405 1189,1376 1351,1376 1365,1405 1351,1434 1189,1434" class="shape decision"/>
+<text x="1270" y="1401" text-anchor="middle" class="label label-decision">No tool loaded:</text>
+<text x="1270" y="1418" text-anchor="middle" class="label label-decision">measure one?</text>
+<polygon points="625,1490 639,1461 821,1461 835,1490 821,1519 639,1519" class="shape decision"/>
+<text x="730" y="1486" text-anchor="middle" class="label label-decision">Have you set Z</text>
+<text x="730" y="1503" text-anchor="middle" class="label label-decision">for this tool?</text>
+<rect x="885" y="1461" width="250" height="58" rx="8" class="shape step"/>
+<text x="1010" y="1486" text-anchor="middle" class="label label-step">Press Remove tool, take the bit out</text>
+<text x="1010" y="1503" text-anchor="middle" class="label sub mode-setup label-step">Setup: Removing the tool</text>
+<rect x="890" y="1546" width="240" height="58" rx="8" class="shape step"/>
+<text x="1010" y="1571" text-anchor="middle" class="label label-step">Measure the stick-out, enter it</text>
+<text x="1010" y="1588" text-anchor="middle" class="label sub mode-setup label-step">Setup: Measure the tool</text>
+<rect x="900" y="1628" width="220" height="74" rx="8" class="shape step"/>
+<text x="1010" y="1652" text-anchor="middle" class="label label-step">Load the bit back in</text>
+<text x="1010" y="1670" text-anchor="middle" class="label sub label-step">(the beam detects it)</text>
+<text x="1010" y="1686" text-anchor="middle" class="label sub mode-setup label-step">Setup: Load the tool</text>
+<rect x="245" y="1546" width="270" height="98" rx="8" class="shape comment"/>
+<text x="259" y="1570" class="label comment-title">About Z</text>
+<text x="259" y="1590" class="label note-text">Z is set from the bit’s stick-out,</text>
+<text x="259" y="1610" class="label note-text">measured from the spindle socket face</text>
+<text x="259" y="1630" class="label note-text">to the tip. Needs firmware support.</text>
+<rect x="615" y="1636" width="230" height="58" rx="8" class="shape step"/>
+<text x="730" y="1661" text-anchor="middle" class="label label-step">Z set from the measurement</text>
+<text x="730" y="1678" text-anchor="middle" class="label sub mode-setup label-step">Setup: Setting Z</text>
+<rect x="605" y="1728" width="250" height="44" rx="22" class="shape setup"/>
+<text x="730" y="1754" text-anchor="middle" class="label strong label-setup">Setup: Secure the work piece</text>
+<polygon points="625,1835 639,1806 821,1806 835,1835 821,1864 639,1864" class="shape decision"/>
+<text x="730" y="1831" text-anchor="middle" class="label label-decision">Is your work piece</text>
+<text x="730" y="1848" text-anchor="middle" class="label label-decision">set up and secure?</text>
+<rect x="580" y="1896" width="300" height="58" rx="8" class="shape step"/>
+<text x="730" y="1921" text-anchor="middle" class="label label-step">Enter stock thickness, secure the work piece</text>
+<text x="730" y="1938" text-anchor="middle" class="label sub label-step">Tip: belts too tight? Release tension</text>
+<rect x="905" y="1896" width="210" height="58" rx="8" class="shape step"/>
+<text x="1010" y="1921" text-anchor="middle" class="label label-step">Release tension</text>
+<text x="1010" y="1938" text-anchor="middle" class="label sub mode-setup label-step">Setup: Releasing tension</text>
+<rect x="905" y="1976" width="210" height="58" rx="8" class="shape step"/>
+<text x="1010" y="2001" text-anchor="middle" class="label label-step">Secure your work piece</text>
+<text x="1010" y="2018" text-anchor="middle" class="label sub mode-setup label-step">Setup: Belts extended</text>
+<rect x="905" y="2056" width="210" height="58" rx="8" class="shape step"/>
+<text x="1010" y="2081" text-anchor="middle" class="label label-step">Apply tension</text>
+<text x="1010" y="2098" text-anchor="middle" class="label sub mode-setup label-step">Setup: Applying tension</text>
+<rect x="615" y="2148" width="230" height="44" rx="22" class="shape setup"/>
+<text x="730" y="2174" text-anchor="middle" class="label strong label-setup">Setup: Choose a job file</text>
+<rect x="615" y="2233" width="230" height="44" rx="8" class="shape step"/>
+<text x="730" y="2260" text-anchor="middle" class="label label-step">Choose or upload a file</text>
+<rect x="640" y="2338" width="180" height="44" rx="22" class="shape ready"/>
+<text x="730" y="2364" text-anchor="middle" class="label strong label-ready">Ready to cut</text>
+<rect x="615" y="2416" width="230" height="58" rx="8" class="shape step"/>
+<text x="730" y="2441" text-anchor="middle" class="label label-step">Set home XY</text>
+<text x="730" y="2458" text-anchor="middle" class="label sub label-step">(a good spot on the work piece)</text>
+<rect x="605" y="2501" width="250" height="58" rx="8" class="shape step"/>
+<text x="730" y="2526" text-anchor="middle" class="label label-step">Trace the boundary (optional)</text>
+<text x="730" y="2543" text-anchor="middle" class="label sub mode-ready label-step">Ready to cut: Moving</text>
+<rect x="625" y="2593" width="210" height="44" rx="8" class="shape step"/>
+<text x="730" y="2620" text-anchor="middle" class="label label-step">Final check</text>
+<rect x="1005" y="2563" width="270" height="104" rx="8" class="shape note"/>
+<text x="1023" y="2589" class="label note-text"><tspan class="tick">✓</tspan> Does the file look right?</text>
+<text x="1023" y="2610" class="label note-text"><tspan class="tick">✓</tspan> Right material thickness?</text>
+<text x="1023" y="2631" class="label note-text"><tspan class="tick">✓</tspan> Anchor points secure?</text>
+<text x="1023" y="2652" class="label note-text"><tspan class="tick">✓</tspan> Spoil board in place?</text>
+<rect x="625" y="2678" width="210" height="44" rx="8" class="shape start"/>
+<text x="730" y="2704" text-anchor="middle" class="label strong label-start">Run job: press START</text>
+<rect x="640" y="2773" width="180" height="44" rx="22" class="shape job"/>
+<text x="730" y="2800" text-anchor="middle" class="label strong label-job">Job: Cutting</text>
+<rect x="85" y="2893" width="170" height="44" rx="22" class="shape job"/>
+<text x="170" y="2920" text-anchor="middle" class="label strong label-job">Job: Success</text>
+<rect x="325" y="2893" width="250" height="44" rx="22" class="shape job"/>
+<text x="450" y="2920" text-anchor="middle" class="label strong label-job">Job: Spindle fault: recovering</text>
+<rect x="890" y="2878" width="240" height="74" rx="8" class="shape step"/>
+<text x="1010" y="2902" text-anchor="middle" class="label label-step">Stop pressed</text>
+<text x="1010" y="2920" text-anchor="middle" class="label sub label-step">Belts stop, spindle off, Z lifts,</text>
+<text x="1010" y="2936" text-anchor="middle" class="label sub label-step">progress saved (needs firmware)</text>
+<rect x="1160" y="2878" width="220" height="74" rx="37" class="shape error"/>
+<text x="1270" y="2902" text-anchor="middle" class="label strong label-error">Error: Emergency stop</text>
+<text x="1270" y="2920" text-anchor="middle" class="label sub strong label-error">emergency button or a</text>
+<text x="1270" y="2936" text-anchor="middle" class="label sub strong label-error">machine error, not the user</text>
+<rect x="75" y="2986" width="190" height="58" rx="29" class="shape ready"/>
+<text x="170" y="3011" text-anchor="middle" class="label strong label-ready">Ready to cut: Parking</text>
+<text x="170" y="3028" text-anchor="middle" class="label sub strong label-ready">(automatic)</text>
+<rect x="85" y="3088" width="170" height="44" rx="22" class="shape ready"/>
+<text x="170" y="3114" text-anchor="middle" class="label strong label-ready">Ready to cut</text>
+<rect x="95" y="3183" width="150" height="44" rx="8" class="shape step"/>
+<text x="170" y="3210" text-anchor="middle" class="label label-step">Power off</text>
+<rect x="345" y="2986" width="210" height="58" rx="8" class="shape step"/>
+<text x="450" y="3011" text-anchor="middle" class="label label-step">Job ends, Z lifts</text>
+<text x="450" y="3028" text-anchor="middle" class="label sub label-step">and re-homes by itself</text>
+<rect x="315" y="3081" width="270" height="58" rx="29" class="shape setup"/>
+<text x="450" y="3106" text-anchor="middle" class="label strong label-setup">Setup: Checking for a tool</text>
+<text x="450" y="3123" text-anchor="middle" class="label sub strong label-setup">Message: Job stopped, spindle fault</text>
+<rect x="635" y="2986" width="210" height="58" rx="29" class="shape error"/>
+<text x="740" y="3011" text-anchor="middle" class="label strong label-error">Error: recovery failed</text>
+<text x="740" y="3028" text-anchor="middle" class="label sub strong label-error">Spindle recovery didn’t finish</text>
+<rect x="645" y="3066" width="190" height="58" rx="8" class="shape step"/>
+<text x="740" y="3091" text-anchor="middle" class="label label-step">Clear with $X, re-home Z</text>
+<text x="740" y="3108" text-anchor="middle" class="label sub label-step">(to be tested)</text>
+<rect x="640" y="3158" width="200" height="34" rx="8" class="shape open"/>
+<text x="740" y="3180" text-anchor="middle" class="label label-open">Back to Assess machine state</text>
+<rect x="895" y="2986" width="230" height="58" rx="29" class="shape ready"/>
+<text x="1010" y="3011" text-anchor="middle" class="label strong label-ready">Ready to cut: Job stopped</text>
+<text x="1010" y="3028" text-anchor="middle" class="label sub strong label-ready">stopped at line 1,240</text>
+<rect x="860" y="3093" width="300" height="34" rx="8" class="shape open"/>
+<text x="1010" y="3114" text-anchor="middle" class="label label-open">Continue, run from the start, or choose a file</text>
+<rect x="1185" y="2993" width="170" height="44" rx="8" class="shape step"/>
+<text x="1270" y="3020" text-anchor="middle" class="label label-step">Check the bit</text>
+<rect x="1185" y="3073" width="170" height="44" rx="8" class="shape step"/>
+<text x="1270" y="3100" text-anchor="middle" class="label label-step">Power cycle</text>
+<rect x="1170" y="3158" width="200" height="34" rx="8" class="shape open"/>
+<text x="1270" y="3180" text-anchor="middle" class="label label-open">Back to Assess machine state</text>
+<g><rect x="530" y="82" width="111" height="20" rx="10" class="edge-label-bg"/>
+<text x="585" y="96" text-anchor="middle" class="edge-label">on your network</text></g>
+<g><rect x="780" y="82" width="190" height="20" rx="10" class="edge-label-bg"/>
+<text x="875" y="96" text-anchor="middle" class="edge-label">no network: use the hotspot</text></g>
+<g><rect x="1257" y="675" width="25" height="20" rx="10" class="edge-label-bg"/>
+<text x="1270" y="689" text-anchor="middle" class="edge-label">no</text></g>
+<g><rect x="1366" y="715" width="32" height="20" rx="10" class="edge-label-bg"/>
+<text x="1382" y="729" text-anchor="middle" class="edge-label">yes</text></g>
+<g><rect x="137" y="592" width="25" height="20" rx="10" class="edge-label-bg"/>
+<text x="150" y="606" text-anchor="middle" class="edge-label">no</text></g>
+<g><rect x="259" y="548" width="32" height="20" rx="10" class="edge-label-bg"/>
+<text x="275" y="562" text-anchor="middle" class="edge-label">yes</text></g>
+<g><rect x="635" y="820" width="190" height="20" rx="10" class="edge-label-bg"/>
+<text x="730" y="834" text-anchor="middle" class="edge-label">yes: skip to the tool check</text></g>
+<g><rect x="407" y="650" width="25" height="20" rx="10" class="edge-label-bg"/>
+<text x="420" y="664" text-anchor="middle" class="edge-label">no</text></g>
+<g><rect x="262" y="770" width="25" height="20" rx="10" class="edge-label-bg"/>
+<text x="275" y="784" text-anchor="middle" class="edge-label">no</text></g>
+<g><rect x="230" y="728" width="151" height="20" rx="10" class="edge-label-bg"/>
+<text x="305" y="742" text-anchor="middle" class="edge-label">stopped: lengths lost</text></g>
+<g><rect x="526" y="816" width="98" height="20" rx="10" class="edge-label-bg"/>
+<text x="575" y="830" text-anchor="middle" class="edge-label">no: add slack</text></g>
+<g><rect x="404" y="904" width="32" height="20" rx="10" class="edge-label-bg"/>
+<text x="420" y="918" text-anchor="middle" class="edge-label">yes</text></g>
+<g><rect x="134" y="835" width="32" height="20" rx="10" class="edge-label-bg"/>
+<text x="150" y="849" text-anchor="middle" class="edge-label">yes</text></g>
+<g><rect x="262" y="970" width="25" height="20" rx="10" class="edge-label-bg"/>
+<text x="275" y="984" text-anchor="middle" class="edge-label">no</text></g>
+<g><rect x="438" y="1012" width="45" height="20" rx="10" class="edge-label-bg"/>
+<text x="460" y="1026" text-anchor="middle" class="edge-label">press</text></g>
+<g><rect x="248" y="1120" width="104" height="20" rx="10" class="edge-label-bg"/>
+<text x="300" y="1134" text-anchor="middle" class="edge-label">Done extending</text></g>
+<g><rect x="526" y="1042" width="38" height="20" rx="10" class="edge-label-bg"/>
+<text x="545" y="1056" text-anchor="middle" class="edge-label">Stop</text></g>
+<g><rect x="539" y="1108" width="91" height="20" rx="10" class="edge-label-bg"/>
+<text x="585" y="1122" text-anchor="middle" class="edge-label">extend again</text></g>
+<g><rect x="134" y="1003" width="32" height="20" rx="10" class="edge-label-bg"/>
+<text x="150" y="1017" text-anchor="middle" class="edge-label">yes</text></g>
+<g><rect x="259" y="1175" width="118" height="20" rx="10" class="edge-label-bg"/>
+<text x="318" y="1189" text-anchor="middle" class="edge-label">no saved anchors</text></g>
+<g><rect x="262" y="1285" width="25" height="20" rx="10" class="edge-label-bg"/>
+<text x="275" y="1299" text-anchor="middle" class="edge-label">no</text></g>
+<g><rect x="490" y="1250" width="45" height="20" rx="10" class="edge-label-bg"/>
+<text x="512" y="1264" text-anchor="middle" class="edge-label">fails</text></g>
+<g><rect x="524" y="1337" width="71" height="20" rx="10" class="edge-label-bg"/>
+<text x="560" y="1351" text-anchor="middle" class="edge-label">try again</text></g>
+<g><rect x="134" y="1373" width="32" height="20" rx="10" class="edge-label-bg"/>
+<text x="150" y="1387" text-anchor="middle" class="edge-label">yes</text></g>
+<g><rect x="714" y="1437" width="32" height="20" rx="10" class="edge-label-bg"/>
+<text x="730" y="1451" text-anchor="middle" class="edge-label">yes</text></g>
+<g><rect x="987" y="1395" width="25" height="20" rx="10" class="edge-label-bg"/>
+<text x="1000" y="1409" text-anchor="middle" class="edge-label">no</text></g>
+<g><rect x="1254" y="1490" width="32" height="20" rx="10" class="edge-label-bg"/>
+<text x="1270" y="1504" text-anchor="middle" class="edge-label">yes</text></g>
+<g><rect x="1055" y="1740" width="190" height="20" rx="10" class="edge-label-bg"/>
+<text x="1150" y="1754" text-anchor="middle" class="edge-label">no: continue without a tool</text></g>
+<g><rect x="845" y="1480" width="25" height="20" rx="10" class="edge-label-bg"/>
+<text x="858" y="1494" text-anchor="middle" class="edge-label">no</text></g>
+<g><rect x="564" y="1610" width="32" height="20" rx="10" class="edge-label-bg"/>
+<text x="580" y="1624" text-anchor="middle" class="edge-label">yes</text></g>
+<g><rect x="717" y="1872" width="25" height="20" rx="10" class="edge-label-bg"/>
+<text x="730" y="1886" text-anchor="middle" class="edge-label">no</text></g>
+<g><rect x="524" y="1990" width="32" height="20" rx="10" class="edge-label-bg"/>
+<text x="540" y="2004" text-anchor="middle" class="edge-label">yes</text></g>
+<g><rect x="521" y="2520" width="38" height="20" rx="10" class="edge-label-bg"/>
+<text x="540" y="2534" text-anchor="middle" class="edge-label">skip</text></g>
+<g><rect x="991" y="2850" width="38" height="20" rx="10" class="edge-label-bg"/>
+<text x="1010" y="2864" text-anchor="middle" class="edge-label">Stop</text></g>
+<g><rect x="128" y="3052" width="85" height="20" rx="10" class="edge-label-bg"/>
+<text x="170" y="3066" text-anchor="middle" class="edge-label">immediately</text></g>
+<g><rect x="111" y="3147" width="118" height="20" rx="10" class="edge-label-bg"/>
+<text x="170" y="3161" text-anchor="middle" class="edge-label">when you’re done</text></g>
+<g><rect x="572" y="3005" width="45" height="20" rx="10" class="edge-label-bg"/>
+<text x="595" y="3019" text-anchor="middle" class="edge-label">fails</text></g>
+</svg>
+    </div>
+    <figcaption>Four stages, top to bottom. The machine starts in Setup or Error. Setup starts by confirming the work area, runs only the steps the saved data doesn’t cover, and ends at Ready to cut once Z is set, the work piece is secure and a file is chosen; a job runs in Job mode, and it ends in success, Stop, a spindle fault or an emergency stop.</figcaption>
+  </figure>
+
+  <div class="notes">
+    <section>
+      <h2>Open questions</h2>
+      <ul>
+        <li><b>Apply tension result:</b> this flow only works if Apply tension always returns a result, and current <code>Maslow-Mini</code> does. It reaches Ready to cut, or goes back to Belts extended with an error: a belt wound in over 300 mm (probably not attached), lengths that don’t fit the anchors (<code>20493b1b</code>), or a position more than 25 mm off. One rare case still needs a firmware fix: if the measurements disagree nine times in a row, the state goes back to Belts extended but the board can stay in Homing. Older firmware gets stuck at Taking slack. None of this has been tested on a machine yet.</li>
+        <li><b>Automatic Park:</b> a job success always triggers it, but who sends it? If the UI does, every connected browser could send it, and none will if no browser is open. Firmware could start it instead. It also needs to make sure the spindle is off first.</li>
+        <li><b>Saved setups:</b> anchor points survive a restart, and Apply tension checks them. Could a user save a setup for each table and choose one, so they don’t have to recalibrate? A setup only stays valid while the anchors are in the same place.</li>
+        <li><b>Work area and anchors:</b> the map says setting the work area clears the anchor points. No firmware code for that was found, so the rewrite would have to add it. Should it clear them, or prompt the user to recalibrate?</li>
+        <li><b>Other errors:</b> encoder failures, a stalled update loop and startup hardware faults aren’t drawn yet. They need different instructions.</li>
+        <li><b>Skipping setup steps:</b> keeping a saved work area skips Retract, Extend and Find anchors, but the machine can’t say whether its saved anchors were measured for this work area. The firmware, or the UI, needs to record that Find anchors finished, and for which work area.</li>
+        <li><b>New work area:</b> does a smaller work area need a retract first? A bigger one may not, since the belt lengths are still known.</li>
+        <li><b>Reboot from the UI:</b> FluidNC already has a restart command (<code>[ESP444]RESTART</code>, also <code>$Bye</code>). It only works while the board’s web server still answers. When the UI can’t reach the board at all, a power cycle is still the only option. Should the UI say which case it is?</li>
+        <li><b>Spindle board:</b> if only the spindle board stops answering, does it get its own reboot?</li>
+        <li><b>Naming the device:</b> the hotspot screen asks for a name first. It sets the hostname (<code>$ESP112</code>, so <code>maslow.local</code> becomes <code>&lt;name&gt;.local</code>) and the hotspot name (<code>$ESP105</code>); both default to <code>maslow</code>. Does the new name need a restart to take effect? Should a machine that’s already on WiFi, which never sees this screen, be able to rename itself in Device config?</li>
+        <li><b>WiFi setup dialog:</b> it’s a placeholder (Connecting: WiFi setup) until we look at what the current dialog shows. Where does the option to turn it off live afterwards?</li>
+      </ul>
+    </section>
+    <section>
+      <h2>What’s different from the original map</h2>
+      <ul>
+        <li><b>Latest, from the layout mockups:</b> Setup always starts with <b>Setup: Confirm the work area</b>. Keeping a saved work area skips straight to the tool check only if the belts are still tensioned, which can only happen after a page reload. After a reboot the encoders restore the belt lengths, but the machine never comes back tensioned, so the user always applies tension again. Otherwise the machine checks run as before, and a new work area clears the anchors, so Find anchors runs. The “Has your workspace changed?” branch from Ready to cut is gone.</li>
+        <li><b>Secure the work piece</b> and <b>Choose a job file</b> are now Setup steps, so Ready to cut only shows once both are done, after Z. Jogging unlocks at the tool check, once the anchors and position are confirmed.</li>
+        <li><b>Extend</b> now ends when the user presses <b>Done extending</b>, after attaching the belts to the anchors, instead of when the belts reach their full length. This needs a firmware change. <b>Stop extending</b> keeps the belt lengths, so the user can extend again or retract from where the belts are.</li>
+        <li>Tracing the boundary is optional (dashed), and sits beside Run in the UI. <b>Error: can’t find anchors</b> loops back to Find anchors after the user checks the belts.</li>
+        <li>Machine statuses are now the four UI modes, each with its own color.</li>
+        <li><b>Latest, from testing on the machine</b> (on firmware well behind current <code>Maslow-Mini</code>, so to be rechecked)<b>:</b> “Anchor points known?” and “Belts tensioned?” are gone, because the machine can’t answer them. Saved anchors always have values, and nothing records whether calibration has run. Instead, belts that are extended go to Apply tension, which checks the saved anchors, and the machine answers “Position confirmed?”.</li>
+        <li>If the position can’t be confirmed, the flow goes to Find anchors. The belts are already out, so no retract is needed. Older firmware can hang here instead; <code>20493b1b</code> fixes it.</li>
+        <li>A first-time user, or someone who has moved the anchors, can go straight to Find anchors (dashed).</li>
+        <li>The “retract again” loops are no longer shown as unlikely. Retract can report success with belts still out if they’re under tension, so the check by eye matters, and the fix is to add slack and retract again.</li>
+        <li>Setup can start in Alarm after a reset, and Retract clears it. Anchor points survive a restart, so Setup doesn’t always mean recalibrating.</li>
+        <li><b>Setup needed</b> is now <b>Setup</b>, and steps show their subheader, such as Setup: Retracting belts.</li>
+        <li><b>Latest:</b> once the position is confirmed, the device checks for a tool on its own by raising the spindle through the light beam. If a bit is found, the user says whether Z is set for it; if not, they remove the bit, measure how far it sticks out of the spindle socket, enter that, and load it back in, and Z is set from the measurement. With no bit, they measure one or continue without a tool. The beam check result and setting Z from the stick-out both need firmware support.</li>
+        <li>The tool and Z checks are Setup steps. The UI only shows Ready to cut after them, even if the firmware already reports <code>READY_TO_CUT</code>, so Ready to cut now appears once, just before preparing the work piece.</li>
+        <li>“Secure your work piece” is now a question: <b>Is your work piece set up and secure?</b> The user may have calibrated with the machine on top of a large enough work piece, so they can answer yes and go straight to choosing a file.</li>
+        <li>“Too tight?” is no longer a question. Securing the work piece shows a suggested prompt instead: if your belts are too tight, release tension. The dashed line is that optional path.</li>
+        <li>Z stays before securing the work piece. It’s set from the bit’s measured stick-out, and the stock doesn’t affect it because the machine sits on top of the stock.</li>
+        <li>The tool check runs again after a power cycle or page load, a tool change, a user Z re-home or a spindle fault. They aren’t asked after a finished job, a stopped job or releasing tension.</li>
+        <li>Releasing tension to secure a work piece is shown as Setup, because that’s what the firmware does.</li>
+        <li>Added <b>Choose or upload a file</b>, now the last Setup step.</li>
+        <li>Added <b>Job: Cutting</b>. There’s no Pause: Stop is the only way to halt a job, and it should save the job’s progress so the user can continue from where it stopped. That needs a firmware change.</li>
+        <li><b>Emergency stop (by the user)</b> is now the <b>Stop</b> button, which ends at Ready to cut: Job stopped and needs no power cycle.</li>
+        <li><b>Machine stopped (error)</b> is now <b>Error: Emergency stop</b>. Only the emergency button or a machine error triggers it, never the UI. It needs a power cycle or <code>$X</code>. The bit may still be in the material, so there’s a step to check it.</li>
+        <li>Added <b>Job: Spindle fault: recovering</b>, which ends the job and re-homes Z by itself. If that fails, the UI shows Error and offers <code>$X</code>, then re-homing Z. This still needs testing on current firmware, with a power cycle as the fallback.</li>
+        <li>Success goes to <b>Ready to cut: Parking</b>, then Ready to cut. Power off is the option from there. Sleep has been removed.</li>
+        <li>Connecting is shown on Assess machine state, because the page has no state until the board answers.</li>
+        <li>Trace the boundary shows as Ready to cut: Moving. Jogging and manual gcode show the same subheader.</li>
+      </ul>
+    </section>
+  </div>
+</div>

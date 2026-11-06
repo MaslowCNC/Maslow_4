@@ -1,0 +1,1391 @@
+<title>Maslow UI Layouts</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto+Flex:opsz,wght@8..144,600..800&family=Work+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap">
+<style>
+  /* Layout: a control bar above a mock machine screen; the screen is a fixed banner over a grid that each layout rearranges. Dark only, per the Abundance tool style. */
+  :root {
+    color-scheme: dark;
+    --page: #2b2e33;
+    --canvas: #3f4243;
+    --panel: #232832;
+    --panel-border: #272a31;
+    --sep: #31343b;
+    --input: #242834;
+    --hover: #292e3b;
+    --text: #e0e5ef;
+    --muted: #aaa4b2;
+    --lilac: #c4a3d5;
+    --violet: #be3fe5;
+    --purple: #8d4bb0;
+    --setup: #3c82dc;
+    --ready: #3fb950;
+    --job: #c4a3d5;
+    --danger: #e05b5b;
+    --warn: #d4a32c;
+    --font-sans: "Work Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-display: "Roboto Flex", "Work Sans", system-ui, sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --sub: #2c3240;
+    --on-accent: #232832;
+    --on-go: #0d2414;
+    --node: #e0e5ef;
+    --wire: #8f8a97;
+    --line2: #545252;
+    --canvas2: #3f4243;
+    --shadow: 0 4px 16px rgba(20,24,31,.16);
+    --r: 8px;
+  }
+  /* Light panels: the board stays graphite, the panels turn white with plum accents */
+  .screen[data-panels="light"], .phones[data-panels="light"] {
+    --panel: #ffffff; --panel-border: #e4dfea; --sep: #e4dfea; --input: #f3eff6; --hover: #e9ddf2;
+    --text: #26232b; --muted: #5b5462; --lilac: #8d4bb0; --sub: #f1ebf6; --on-accent: #ffffff; --on-go: #ffffff;
+    --setup: #2563eb; --ready: #15803d; --job: #8d4bb0; --danger: #b91c1c; --warn: #b45309;
+    --node: #3f4243; --wire: #8f8a97; --line2: #b3aebb; --canvas2: #d3c6dd;
+    --shadow: 0 2px 8px rgba(20,24,31,.18);
+  }
+  [hidden] { display: none !important; }
+  body { background: var(--page); color: var(--text); font-family: var(--font-sans); font-size: 14px; line-height: 1.45; }
+  .wrap { max-width: 1500px; margin: 0 auto; padding-block: 20px 40px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+    display: grid; gap: 16px; }
+  h1 { font-family: var(--font-display); font-weight: 700; font-size: 26px; margin: 0; text-wrap: balance; }
+  .intro { display: grid; gap: 6px; max-width: 80ch; }
+  .intro p { margin: 0; color: var(--muted); }
+  code { font-family: var(--font-mono); font-size: .9em; }
+
+  /* Controls above the mockup */
+  .controls { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: end; }
+  .ctl { display: grid; gap: 6px; min-width: 0; }
+  .ctl > span { font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .seg { display: flex; flex-wrap: wrap; gap: 4px; }
+  .seg button { font: 600 14px/1 var(--font-mono); color: var(--text); background: var(--panel); border: 1px solid var(--sep);
+    border-radius: 6px; min-width: 40px; min-height: 40px; padding: 0 12px; cursor: pointer; }
+  .seg button[aria-pressed="true"] { background: var(--lilac); color: var(--on-accent); border-color: var(--lilac); }
+  select { font: 500 14px var(--font-sans); color: var(--text); background: var(--panel); border: 1.5px solid var(--lilac);
+    border-radius: 6px; padding: 9px 12px; min-height: 40px; }
+  :where(button, select, a):focus-visible { outline: 2px solid var(--lilac); outline-offset: 2px; }
+  .layout-note { font-size: 13px; color: var(--muted); margin: 0; }
+  .layout-note b { color: var(--text); font-weight: 600; }
+
+  /* The mock screen */
+  .screen { color: var(--text); background: var(--canvas); border-radius: 12px; padding: 10px; display: grid; gap: 10px;
+    grid-template-rows: auto 1fr; height: clamp(640px, 82vh, 860px); box-shadow: var(--shadow); min-width: 0; }
+  .board { display: grid; gap: 10px; min-height: 0; }
+
+  .banner { display: flex; align-items: center; justify-content: center; gap: 14px; background: var(--panel); border: 1px solid var(--panel-border);
+    border-radius: var(--r); padding: 8px 12px; min-height: 52px; position: relative; }
+  .banner .conn { position: absolute; right: 14px; }
+  .banner.combined { justify-content: flex-start; flex-wrap: wrap; gap: 10px 18px; padding: 10px 12px; border-top: 4px solid var(--tone); }
+  .banner.combined .conn { position: static; }
+  .bstate { display: flex; align-items: center; gap: 10px; flex: none; }
+  .bexplain { flex: 1 1 260px; min-width: 0; font-size: 13px; color: var(--muted); }
+  .bexplain.alert { color: var(--danger); }
+  .bxyz { display: flex; gap: 6px; flex: none; }
+  .bxyz div { background: var(--input); border-radius: 6px; padding: 4px 10px; display: flex; gap: 8px; align-items: baseline; }
+  .bxyz span { font: 600 11px var(--font-mono); color: var(--muted); }
+  .bxyz b { font: 700 16px var(--font-mono); font-variant-numeric: tabular-nums; }
+  .bbtns { display: flex; gap: 8px; flex: none; }
+  .bbtns .btn { min-width: 96px; }
+  .explain { margin: 0; font-size: 14px; line-height: 1.4; }
+  .explain.alert { color: var(--danger); }
+  .xyz { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .xyz div { background: var(--input); border-radius: 6px; padding: 6px 8px; display: grid; gap: 2px; }
+  .xyz span { font: 600 11px var(--font-mono); color: var(--muted); }
+  .xyz b { font: 700 18px var(--font-mono); font-variant-numeric: tabular-nums; }
+  .minis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; }
+  .mini { background: var(--sub); border: 1px solid var(--sep); border-radius: 10px; padding: 8px 10px; display: grid; gap: 4px; align-content: start; min-width: 0; }
+  .mini > span { font: 600 10px var(--font-mono); color: var(--muted); letter-spacing: .04em; text-transform: uppercase; }
+  .mini p { margin: 0; font-size: 13px; line-height: 1.35; }
+  .mini p.alert { color: var(--danger); }
+  .mbody p.alert { color: var(--danger); }
+  .mini b { font: 600 13px var(--font-mono); font-variant-numeric: tabular-nums; }
+  .mini small { font: 11px var(--font-mono); color: var(--muted); }
+  .mini .pos { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+  .mini .pos i { font: 600 11px var(--font-mono); color: var(--muted); font-style: normal; margin-right: 4px; }
+  .side { display: grid; gap: 6px; flex: none; justify-items: end; }
+  .ws { background: var(--sub); border: 1px solid var(--sep); border-radius: 10px; padding: 5px 10px; display: grid; gap: 1px; min-width: 0; }
+  .ws span { font: 600 10px var(--font-mono); color: var(--muted); letter-spacing: .04em; text-transform: uppercase; }
+  .ws b { font: 600 12px var(--font-mono); font-variant-numeric: tabular-nums; }
+  .ws small { font: 11px var(--font-mono); color: var(--muted); }
+  .xyzpill { background: var(--sub); border: 1px solid var(--sep); border-radius: 999px; padding: 5px 14px; display: flex; gap: 14px; }
+  .xyzpill div { display: flex; gap: 6px; align-items: baseline; }
+  .xyzpill span { font: 600 11px var(--font-mono); color: var(--muted); }
+  .xyzpill b { font: 700 14px var(--font-mono); font-variant-numeric: tabular-nums; }
+  .srow { display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
+  .srow .explain { flex: 1 1 180px; min-width: 0; }
+  .xyz.mini { grid-template-columns: repeat(3, auto); gap: 4px; flex: none; }
+  .xyz.mini div { padding: 4px 8px; gap: 0; min-width: 64px; }
+  .xyz.mini span { font-size: 10px; }
+  .xyz.mini b { font-size: 14px; }
+  .mode { display: inline-flex; align-items: center; gap: 8px; font: 700 15px var(--font-display); padding: 5px 12px 5px 10px;
+    border-radius: 999px; background: color-mix(in srgb, var(--tone) 18%, transparent); color: var(--tone); white-space: nowrap; }
+  .mode::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--tone); }
+  .sub { font-weight: 600; white-space: nowrap; }
+  .msg { color: var(--muted); font-size: 13px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+  .msg.alert { color: var(--tone); }
+  .conn { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .conn i { width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
+  .stop { font: 700 15px var(--font-sans); color: #fff; background: #b91c1c; border: 0; border-radius: var(--r);
+    min-height: 44px; padding: 0 20px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
+  .stop::before { content: ""; width: 11px; height: 11px; background: #fff; border-radius: 2px; }
+
+  .panel { background: var(--panel); border: 1px solid var(--panel-border); border-radius: var(--r); box-shadow: var(--shadow);
+    display: grid; grid-template-rows: auto 1fr; min-height: 0; min-width: 0; overflow: hidden; position: relative; }
+  .ph { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 12px; border-bottom: 1px solid var(--sep);
+    font: 700 13px var(--font-mono); letter-spacing: .5px; color: var(--lilac); }
+  .ph small { font: 500 11px var(--font-mono); color: var(--muted); letter-spacing: 0; }
+  .ph .hbtns { display: flex; gap: 6px; flex: none; }
+  .ph .hbtns .row { flex-wrap: nowrap; gap: 6px; }
+  .ph .hbtns .btn { min-height: 40px; padding: 0 14px; font-size: 14px; letter-spacing: 0; }
+  .ph.pinned { flex-wrap: wrap; padding: 6px 8px 6px 12px; }
+  .pb { padding: 12px; overflow: auto; min-height: 0; display: grid; gap: 10px; align-content: start; }
+
+  .btn { font: 600 14px/1.2 var(--font-sans); border-radius: var(--r); min-height: 44px; padding: 0 14px; cursor: pointer;
+    border: 1.5px solid var(--lilac); background: var(--lilac); color: var(--on-accent); display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+  .btn.ghost { background: transparent; color: var(--lilac); }
+  .btn.go { background: var(--ready); border-color: var(--ready); color: var(--on-go); }
+  .btn.danger { background: #b91c1c; border-color: #b91c1c; color: #fff; }
+  .btn.stopping { background: transparent; border-color: var(--danger); color: var(--danger); }
+  .btn:disabled { opacity: .4; cursor: not-allowed; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; }
+  .row .btn { flex: 1 1 0; }
+
+  .kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 13px; }
+  .kv dt { color: var(--muted); }
+  .kv dd { margin: 0; font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; }
+  .stale { opacity: .45; }
+  .note { font-size: 13px; color: var(--muted); margin: 0; }
+  .callout { border: 1px solid var(--tone, var(--sep)); background: color-mix(in srgb, var(--tone, var(--sep)) 12%, transparent);
+    border-radius: var(--r); padding: 10px 12px; font-size: 13px; display: grid; gap: 6px; }
+  .callout b { color: var(--tone, var(--text)); }
+
+  .steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+  .steps li { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px; font-size: 13px; background: var(--input); }
+  .steps li::before { content: attr(data-mark); font: 700 12px var(--font-mono); width: 22px; height: 22px; border-radius: 50%;
+    display: grid; place-items: center; background: var(--sep); color: var(--muted); flex: none; }
+  .steps li.done::before { background: var(--ready); color: var(--on-go); }
+  .steps li.now { outline: 1.5px solid var(--setup); }
+  .steps li.now::before { background: var(--setup); color: #fff; }
+  .steps li.todo { color: var(--muted); }
+
+  .guide { display: grid; gap: 10px; }
+  .ghead { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .ghead b { font: 700 15px var(--font-display); }
+  .ghead span { font: 600 12px var(--font-mono); color: var(--muted); white-space: nowrap; }
+  .segs { display: grid; grid-template-columns: repeat(9, 1fr); gap: 4px; }
+  .segs i { height: 6px; border-radius: 99px; background: var(--input); }
+  .segs i.done { background: var(--ready); } .segs i.now { background: var(--setup); }
+  .field { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+  .field input { width: 70px; background: var(--input); border: 1px solid var(--sep); color: var(--text); border-radius: 8px; padding: 6px 8px; font: 13px var(--font-mono); }
+  .dstats { display: grid; gap: 8px; border-top: 1px solid var(--sep); padding-top: 10px; }
+  .dtabs { display: flex; align-items: center; gap: 4px; }
+  .dtabs button { background: none; border: 1px solid transparent; color: var(--muted); font: 600 12px var(--font-sans); padding: 6px 10px; border-radius: 8px; cursor: pointer; min-height: 32px; }
+  .dtabs button[aria-selected="true"] { background: var(--input); border-color: var(--sep); color: var(--lilac); }
+  .dlive { margin-left: auto; font: 11px var(--font-mono); color: var(--ready); }
+  .dlive.off { color: var(--muted); }
+  .belts.stale { opacity: .55; }
+  .gmore { flex-basis: 100%; display: grid; grid-template-columns: minmax(260px, 420px) 1fr; gap: 16px; padding: 10px 2px 2px; border-top: 1px solid var(--sep); }
+  .gbig { background: var(--input); border-radius: 10px; padding: 10px; display: grid; gap: 6px; }
+  .gbig svg { width: 100%; height: auto; display: block; }
+  .gbig span { font: 11px var(--font-mono); color: var(--muted); text-align: center; }
+  .ghelp b { font-size: 15px; }
+  .ghelp ol { margin: 8px 0 0; padding-left: 20px; display: grid; gap: 6px; font-size: 14px; line-height: 1.45; }
+  .gtoggle { flex-basis: 100%; display: flex; justify-content: center; margin: -2px 0 -4px; }
+  .gtoggle button { display: grid; place-items: center; width: 44px; height: 24px; background: var(--input); border: 1px solid var(--sep); color: var(--setup);
+    border-radius: 99px; cursor: pointer; padding: 0; transition: transform .15s ease; }
+  .gtoggle button:hover { border-color: var(--setup); }
+  .gtoggle button svg { transition: transform .2s ease; }
+  .gtoggle button[aria-expanded="true"] svg { transform: rotate(180deg); }
+  @media (max-width: 760px) { .gmore { grid-template-columns: 1fr; } }
+  .walkbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 10px 14px; border-radius: 10px; border: 1px solid var(--lilac);
+    background: color-mix(in srgb, var(--lilac) 10%, transparent); font-size: 14px; }
+  .walkbar b { color: var(--lilac); }
+  .walkbar .try { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+  .walkbar .try span { font: 600 12px var(--font-sans); padding: 3px 10px; border-radius: 99px; background: var(--input); border: 1px solid var(--sep); }
+  .walkbar .busy { color: var(--muted); }
+  .walking .btn:not([disabled]) { cursor: pointer; }
+  .flash { animation: flash .6s ease 2; }
+  @keyframes flash { 50% { box-shadow: 0 0 0 3px var(--warn); } }
+  .binput { display: flex; align-items: center; gap: 8px; flex: none; }
+  .bchecks { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; padding-top: 8px; border-top: 1px solid var(--sep); font-size: 13px; }
+  .bchecks b { color: var(--ready); font-size: 13px; }
+  .bchecks label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+  .bchecks .note { margin: 0; }
+  .phone .bchecks { display: grid; gap: 6px; padding-top: 6px; }
+  .phone.land .bchecks { display: flex; gap: 2px 12px; padding-top: 4px; font-size: 12px; }
+  .phone.land .bchecks .note { display: none; }
+  .actgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; }
+  .actpair { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .actpair .btn { flex: 1; min-height: 40px; }
+  .actpair .btn[disabled] { opacity: .4; cursor: not-allowed; }
+  .qhelp { position: relative; flex: none; width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--sep); color: var(--muted);
+    font: 700 11px var(--font-sans); display: grid; place-items: center; cursor: help; }
+  .qhelp:hover, .qhelp:focus { color: var(--lilac); border-color: var(--lilac); outline: none; }
+  .qhelp:hover::after, .qhelp:focus::after { content: attr(data-tip); position: absolute; z-index: 5; right: 0; top: calc(100% + 6px); width: 240px;
+    padding: 8px 10px; border-radius: 8px; background: var(--input); border: 1px solid var(--sep); color: var(--text);
+    font: 400 12px/1.4 var(--font-sans); box-shadow: 0 6px 16px rgba(0,0,0,.3); }
+  .segs i.skip { background: repeating-linear-gradient(135deg, var(--ready) 0 2px, transparent 2px 5px); opacity: .7; }
+  .skipnote { color: var(--muted); font-size: .9em; }
+  .art { background: var(--input); border-radius: var(--r); display: grid; place-items: center; padding: 6px; }
+  .art svg { width: 100%; max-width: 260px; height: auto; max-height: 120px; display: block; }
+  .guide p { margin: 0; font-size: 13px; }
+  .guide .more { font-size: 12px; color: var(--muted); }
+  .guide .more summary { cursor: pointer; color: var(--lilac); }
+  .banner.gtop { justify-content: flex-start; gap: 10px 16px; flex-wrap: wrap; border-top: 4px solid var(--setup); }
+  .banner.gtop .conn { position: static; }
+  .gthumb { width: 96px; flex: none; background: var(--input); border-radius: 6px; }
+  .gthumb svg { width: 100%; height: auto; display: block; }
+  .gmeta { display: grid; gap: 4px; flex: none; min-width: 150px; }
+  .gmeta .segs { width: 150px; }
+  .gmeta span { font: 600 12px var(--font-mono); color: var(--muted); }
+  .gmeta b { font: 700 15px var(--font-display); }
+  .gtext { flex: 1 1 220px; min-width: 0; font-size: 13px; color: var(--muted); }
+  .bar { height: 8px; border-radius: 99px; background: var(--input); overflow: hidden; }
+  .bar i { display: block; height: 100%; background: var(--fill, var(--lilac)); border-radius: 99px; }
+  .belts { display: grid; grid-template-columns: auto 1fr auto; gap: 6px 10px; align-items: center; font: 12px var(--font-mono); }
+
+  .files { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+  .files li { display: flex; justify-content: space-between; gap: 8px; padding: 7px 10px; border-radius: 6px; font-size: 13px; }
+  .files li.sel { background: color-mix(in srgb, var(--lilac) 18%, transparent); outline: 1px solid var(--lilac); }
+  .files li span:last-child { font-family: var(--font-mono); color: var(--muted); }
+
+  .compass { display: grid; grid-template-columns: repeat(3, 1fr) 14px 1fr; gap: 6px; }
+  .compass button { min-height: 44px; font: 700 16px var(--font-mono); color: var(--text); background: var(--input);
+    border: 1px solid var(--sep); border-radius: 6px; cursor: pointer; }
+  .compass .home { color: var(--lilac); font-size: 12px; }
+  .compass .z { grid-column: 5; }
+  .chips { display: flex; gap: 4px; }
+  .chips span { flex: 1; text-align: center; font: 600 12px var(--font-mono); padding: 6px 0; border-radius: 6px; background: var(--input); color: var(--muted); }
+  .chips span.on { background: var(--lilac); color: var(--on-accent); }
+  .hl { outline: 2px solid var(--setup); outline-offset: 2px; }
+  .locked { position: absolute; inset: 37px 0 0 0; background: color-mix(in srgb, var(--panel) 94%, transparent);
+    display: grid; place-items: center; padding: 16px; text-align: center; }
+  .locked div { display: grid; gap: 8px; max-width: 32ch; font-size: 13px; background: var(--input); border: 1px solid var(--sep);
+    border-radius: var(--r); padding: 12px 14px; }
+  .locked b { color: var(--text); }
+
+  .vis { position: relative; display: grid; grid-template-rows: auto 1fr; min-height: 0; }
+  .tabs { display: flex; gap: 4px; padding: 6px 10px 0; }
+  .tabs span { font: 600 12px var(--font-mono); padding: 5px 10px; border-radius: 6px 6px 0 0; color: var(--muted); }
+  .tabs span.on { color: var(--lilac); background: var(--input); }
+  .vis svg { width: 100%; height: 100%; display: block; min-height: 0; }
+  .viscap { position: absolute; right: 12px; bottom: 10px; font: 12px var(--font-mono); color: var(--muted); }
+  .inset { position: absolute; left: 10px; top: 46px; bottom: 10px; width: min(34%, 260px); background: color-mix(in srgb, var(--panel) 88%, transparent);
+    border: 1px solid var(--sep); border-radius: 6px; display: grid; grid-template-rows: auto 1fr; overflow: hidden; }
+  .overlay { position: absolute; left: 10px; bottom: 10px; width: min(46%, 300px); background: color-mix(in srgb, var(--panel) 94%, transparent);
+    border: 1px solid var(--sep); border-radius: var(--r); padding: 10px; display: grid; gap: 8px; box-shadow: var(--shadow); }
+
+  .filebar { position: absolute; left: 10px; right: 10px; bottom: 10px; background: color-mix(in srgb, var(--panel) 94%, transparent);
+    border: 1px solid var(--sep); border-radius: var(--r); font-size: 13px; }
+  .filebar summary { list-style: none; display: flex; align-items: center; gap: 12px; padding: 8px 12px; cursor: pointer; min-height: 40px; }
+  .filebar summary::-webkit-details-marker { display: none; }
+  .filebar summary b { font: 700 12px var(--font-mono); color: var(--lilac); }
+  .filebar summary span { color: var(--muted); font-family: var(--font-mono); font-size: 12px; }
+  .filebar summary em { margin-left: auto; font-style: normal; color: var(--lilac); font-size: 12px; }
+  .filebar[open] summary em::after { content: " ▾"; } .filebar:not([open]) summary em::after { content: " ▸"; }
+  .filebar .fbody { padding: 0 12px 12px; display: grid; gap: 8px; max-height: 220px; overflow: auto; }
+  .log { font: 12px/1.5 var(--font-mono); margin: 0; white-space: pre-wrap; color: var(--muted); overflow: auto; min-height: 0; }
+  .log .e { color: var(--danger); } .log .w { color: var(--warn); } .log .i { color: var(--text); }
+  .drawer .pb { display: none; }
+  .drawer { grid-template-rows: auto; }
+  .ctabs { display: flex; gap: 2px; }
+  .ctabs span { font: 600 11px var(--font-mono); padding: 3px 8px; border-radius: 4px; color: var(--muted); }
+  .ctabs span.on { background: var(--lilac); color: var(--on-accent); }
+
+  @media (max-width: 900px) {
+    .screen { height: auto; }
+    .board { grid-template-columns: 1fr !important; grid-template-rows: none !important; grid-template-areas: none !important; }
+    .board > * { grid-area: auto !important; min-height: 220px; }
+    .board > [data-a="vis"] { order: 1; min-height: 300px; } .board > [data-a="comp"] { order: 2; }
+    .board > [data-a="state"] { order: 3; } .board > [data-a="files"] { order: 4; }
+    .board > [data-a="cfg"] { order: 5; } .board > [data-a="log"] { order: 6; min-height: 0; }
+    .banner { flex-wrap: wrap; } .msg { flex-basis: 100%; order: 5; white-space: normal; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+  /* Phone mockups: three phones side by side, each keeps the state, Stop and navigation pinned */
+  .phones { display: flex; flex-wrap: wrap; gap: 28px; justify-content: center; }
+  .phonecol { display: grid; gap: 10px; justify-items: center; }
+  .phonecol h2 { margin: 0; font: 700 16px var(--font-display); }
+  .phonecol p { margin: 0; max-width: 340px; font-size: 13px; color: var(--muted); text-align: center; }
+  .phone { width: 360px; max-width: 100%; height: 740px; border-radius: 38px; border: 10px solid #15171b; background: var(--canvas);
+    color: var(--text); overflow: hidden; display: grid; grid-template-rows: auto 1fr auto auto; position: relative; box-shadow: var(--shadow); }
+  .phone .p-head { background: var(--panel); padding: 12px 14px 8px; display: grid; gap: 6px; border-bottom: 1px solid var(--sep); }
+  .phone .p-top { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .phone .p-top .mode { font-size: 13px; padding: 4px 10px 4px 8px; }
+  .phone .p-top .sub { font-size: 14px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .phone .p-top .conn { margin-left: auto; }
+  .phone .p-msg { font-size: 12px; color: var(--muted); }
+  .phone .p-msg.alert { color: var(--danger); }
+  .phone .p-prog { display: flex; align-items: center; gap: 8px; font: 600 11px var(--font-mono); color: var(--muted); }
+  .phone .p-prog .segs { flex: 1; }
+  .phone .p-act { background: var(--panel); padding: 8px 12px; display: flex; gap: 8px; border-top: 1px solid var(--sep); position: relative; z-index: 2; }
+  .phone .p-act .row { flex: 1; flex-wrap: nowrap; }
+  .phone .p-act .btn { min-height: 48px; }
+  .phone .p-body { min-height: 0; overflow: auto; display: grid; align-content: start; }
+  .phone .p-card { background: var(--panel); padding: 12px; display: grid; gap: 10px; min-height: 0; }
+  .phone .vis { min-height: 0; height: 100%; }
+  .phone .vis svg { height: 100%; }
+  .phone .inset { width: 56%; bottom: auto; height: 90px; }
+  .phone .tabbar { background: var(--panel); border-top: 1px solid var(--sep); display: grid; grid-template-columns: repeat(5, 1fr); padding: 6px 6px 14px; }
+  .phone .tabbar button { background: none; border: 0; color: var(--muted); font: 600 11px var(--font-sans); min-height: 48px; border-radius: 10px;
+    display: grid; place-items: center; gap: 2px; cursor: pointer; }
+  .phone .tabbar button b { font: 700 16px var(--font-mono); }
+  .phone .tabbar button[aria-selected="true"] { color: var(--lilac); background: var(--input); }
+  .phone .tabbar button .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--setup); }
+  .acc { display: grid; gap: 6px; padding: 8px; }
+  .acc details { background: var(--panel); border: 1px solid var(--sep); border-radius: 12px; overflow: hidden; }
+  .acc summary { list-style: none; display: flex; align-items: center; gap: 10px; padding: 0 12px; min-height: 50px; cursor: pointer; }
+  .acc summary::-webkit-details-marker { display: none; }
+  .acc summary b { font: 700 13px var(--font-mono); color: var(--lilac); flex: none; }
+  .acc summary span { font-size: 12px; color: var(--muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+  .acc summary::after { content: "▸"; color: var(--muted); }
+  .acc details[open] summary::after { content: "▾"; }
+  .acc .accbody { padding: 0 12px 12px; display: grid; gap: 10px; }
+  .accvis { height: 230px; margin: 8px 8px 0; border-radius: 12px; overflow: hidden; background: var(--panel); position: relative; display: grid; grid-template-rows: auto 1fr; }
+  .sheetwrap { position: relative; min-height: 0; }
+  .sheetwrap .vis { position: absolute; inset: 0; border-radius: 0; }
+  .sheet { position: absolute; left: 0; right: 0; bottom: 0; background: var(--panel); border-radius: 18px 18px 0 0; box-shadow: 0 -6px 20px rgba(0,0,0,.25);
+    display: grid; grid-template-rows: auto auto 1fr; max-height: 92%; transition: height .2s ease; }
+  .sheet .handle { justify-self: center; width: 44px; height: 5px; border-radius: 99px; background: var(--sep); margin: 8px 0 4px; border: 0; cursor: pointer; padding: 0; }
+  .sheet .chips2 { display: flex; gap: 6px; padding: 4px 12px 8px; overflow-x: auto; }
+  .sheet .chips2 button { flex: none; font: 600 12px var(--font-sans); padding: 0 12px; min-height: 36px; border-radius: 999px; border: 1px solid var(--sep);
+    background: var(--input); color: var(--text); cursor: pointer; }
+  .sheet .chips2 button[aria-selected="true"] { background: var(--lilac); color: var(--on-accent); border-color: var(--lilac); }
+  .sheet .sbody { overflow: auto; padding: 0 12px 16px; display: grid; gap: 10px; align-content: start; min-height: 0; }
+  .phone .locked { inset: 0; }
+  .phone .compass button { min-height: 48px; }
+
+  /* Landscape phones */
+  .phone.land { width: 760px; height: 370px; border-radius: 34px; }
+  .phone.land .p-head { padding: 8px 14px 6px; gap: 3px; }
+  .phone.land .p-act .btn { min-height: 44px; }
+  .phone .p-act.vert { flex-direction: column; justify-content: flex-end; border-top: 0; border-left: 1px solid var(--sep); padding: 10px; }
+  .phone .p-act.vert .row { flex-direction: column; flex: none; }
+  .phone .rail { background: var(--panel); border-right: 1px solid var(--sep); display: grid; align-content: center; gap: 4px; padding: 6px; }
+  .phone .rail button { background: none; border: 0; color: var(--muted); font: 600 10px var(--font-sans); min-height: 52px; border-radius: 10px;
+    display: grid; place-items: center; gap: 1px; cursor: pointer; }
+  .phone .rail button b { font: 700 15px var(--font-mono); }
+  .phone .rail button[aria-selected="true"] { color: var(--lilac); background: var(--input); }
+  .phone .rail button .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--setup); }
+  .sheet.side { left: auto; top: 0; bottom: 0; right: 0; border-radius: 18px 0 0 18px; max-height: none; box-shadow: -6px 0 20px rgba(0,0,0,.25);
+    grid-template-rows: auto auto 1fr; transition: width .2s ease; }
+  .sheet.side .handle { width: 5px; height: 44px; margin: 0; position: absolute; left: 6px; top: calc(50% - 22px); }
+  .sheet.side .chips2 { padding: 10px 12px 8px 18px; }
+  .sheet.side .sbody { padding: 0 12px 12px 18px; }
+
+  /* Settings pop-up */
+  .screen { position: relative; }
+  .gear { flex: none; width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--sep); background: var(--input); color: var(--muted);
+    font-size: 18px; line-height: 1; cursor: pointer; display: grid; place-items: center; padding: 0; }
+  .gear:hover, .gear[aria-expanded="true"] { color: var(--lilac); border-color: var(--lilac); }
+  .banner .gear { margin-left: 4px; }
+  .phone .gear { width: 32px; height: 32px; font-size: 16px; }
+  /* The pop-up covers the panels only, so the top bar with Stop stays visible */
+  .modal-bg { position: absolute; inset: 0; grid-row: 2; grid-column: 1; background: rgba(10, 12, 16, .55); display: grid; place-items: center; z-index: 30; border-radius: inherit; padding: 16px; }
+  .modal { width: min(820px, 100%); height: min(600px, 100%); background: var(--panel); color: var(--text); border: 1px solid var(--sep); border-radius: 16px;
+    display: grid; grid-template-columns: 190px 1fr; grid-template-rows: auto 1fr; overflow: hidden; box-shadow: 0 20px 50px rgba(0,0,0,.4); }
+  .mhead { grid-column: 1 / 3; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px 12px 18px; border-bottom: 1px solid var(--sep); }
+  .mhead h3 { margin: 0; font: 700 16px var(--font-sans); }
+  .mhead small { color: var(--muted); font-size: 12px; margin-left: 10px; font-weight: 400; }
+  .mnav { border-right: 1px solid var(--sep); padding: 10px; display: grid; align-content: start; gap: 2px; overflow: auto; }
+  .mnav button { text-align: left; background: none; border: 0; color: var(--text); font: 500 14px var(--font-sans); padding: 10px 12px; border-radius: 10px; cursor: pointer; min-height: 40px; }
+  .mnav button[aria-current="true"] { background: var(--input); color: var(--lilac); font-weight: 600; }
+  .mbody { overflow: auto; padding: 16px 18px; display: grid; gap: 14px; align-content: start; min-height: 0; }
+  .mbody h4 { margin: 0; font: 700 15px var(--font-sans); }
+  .srow { display: grid; grid-template-columns: minmax(130px, 34%) 1fr; gap: 6px 14px; align-items: center; padding-bottom: 12px; border-bottom: 1px solid var(--sep); }
+  .srow:last-child { border-bottom: 0; }
+  .srow > span { font-size: 14px; }
+  .srow > span small { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .srow .val { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; font-size: 14px; }
+  .srow input[type=text], .srow select { background: var(--input); border: 1px solid var(--sep); color: var(--text); border-radius: 8px; padding: 8px 10px; font: 14px var(--font-sans); min-width: 0; }
+  .srow input.mono { font-family: var(--font-mono); }
+  .srow .btn { min-height: 38px; }
+  .modal.single { width: min(520px, 100%); height: auto; max-height: 100%; grid-template-columns: 1fr; grid-template-rows: auto 1fr auto; }
+  .modal.single .mhead { grid-column: 1; }
+  .modal .art { max-width: 260px; }
+  .mfoot { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--sep); }
+  .modal.compact { grid-template-columns: 1fr; grid-template-rows: auto auto 1fr; border-radius: 0; height: 100%; width: 100%; border: 0; }
+  .modal.compact .mhead { grid-column: 1; }
+  .modal.single.compact { width: 100%; height: 100%; grid-template-rows: auto 1fr auto; }
+  .modal.compact .mnav { border-right: 0; border-bottom: 1px solid var(--sep); display: flex; gap: 6px; overflow-x: auto; padding: 8px 10px; }
+  .modal.compact .mnav button { flex: none; min-height: 36px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--sep); font-size: 13px; }
+  .modal.compact .srow { grid-template-columns: 1fr; }
+  .modal-bg.compact { padding: 0; place-items: stretch; grid-row: 1 / 3; grid-column: 1 / -1; z-index: 1; }
+  .phone .p-act { position: relative; z-index: 2; }
+</style>
+
+<div class="wrap">
+  <header class="intro">
+    <h1>Maslow UI layouts</h1>
+    <p>The chosen desktop layout for the WebUI rewrite (layout 6, numbered as in the original sketches) and three phone layouts, filled with sample content for each device state. During setup, the setup guide runs along the top, and the Device state panel, with Run and Stop pinned to its header, sits where Device config used to be. Outside setup, the top bar shows the device state with Run and Stop, and that panel shows the details. Values are examples, not readings from a device. The ⚙ button opens Settings. To click through a flow the way the device would run it, pick a <b>Walkthrough</b>: the buttons on the device screen then move it to the next state, and moving steps finish on their own.</p>
+  </header>
+
+  <div class="controls">
+    <label class="ctl" for="viewSel"><span>Screen</span>
+      <select id="viewSel"><option value="desktop">Desktop</option><option value="phone">Phone, portrait</option><option value="land">Phone, landscape</option></select></label>
+    <label class="ctl" for="stateSel"><span>Device state</span>
+      <select id="stateSel"></select></label>
+    <label class="ctl" for="themeSel"><span>Panels</span>
+      <select id="themeSel"><option value="dark">Dark</option><option value="light">Light</option></select></label>
+    <label class="ctl" for="walkSel"><span>Walkthrough</span>
+      <select id="walkSel"><option value="">Off: pick states yourself</option></select></label>
+    <button class="btn ghost" type="button" id="walkRestart" hidden>Restart</button>
+
+  </div>
+  <p class="layout-note" id="layoutNote"></p>
+  <div class="walkbar" id="walkbar" hidden></div>
+
+  <div class="phones" id="phones" hidden></div>
+  <div class="screen" id="screen">
+    <div class="banner" id="banner"></div>
+    <div class="board" id="board"></div>
+  </div>
+</div>
+
+<script>
+const LAYOUTS = {
+  6: { name: "Tall compass", note: "The log sits inside the visuals. State over a tall compass on the right, with files beside the config below.",
+       cols: "2.2fr 1fr", rows: ".7fr .7fr .8fr 1fr", areas: ["vis state", "vis comp", "vis comp", "cfg files"], absorb: "comp", log: "inset" }
+};
+
+// The device's saved work area. Everything that shows the work area reads it from here, and Save in the
+// Work area pop-up updates it.
+const WA = { w: 1200, h: 1200, spoil: 12.7 };
+const waText = () => `${WA.w} × ${WA.h} mm`;
+const T = { setup: "var(--setup)", ready: "var(--ready)", job: "var(--job)", error: "var(--danger)", wait: "var(--muted)" };
+const OK = ["Connected", "var(--ready)"];
+// nopos: no trustworthy position yet. moving: the device is running a move, so jogging is locked.
+const STATES = {
+  wifi: { label: "Connecting: WiFi setup (placeholder)", mode: "Connecting", tone: T.wait, sub: "WiFi setup",
+    msg: "Connected through the Maslow hotspot. Choose a network for the device to join", conn: ["Hotspot", "var(--warn)"], nopos: true, nostop: true },
+  connecting: { label: "Connecting", mode: "Connecting", tone: T.wait, sub: "", msg: "Waiting for the device to report its state",
+    conn: ["Connecting", "var(--warn)"], stale: true },
+  workarea: { label: "Setup: Confirm the work area", mode: "Setup", tone: T.setup, sub: "Confirm the work area",
+    msg: "Saved work area, belt lengths and anchors found. Confirm the work area before anything moves", conn: OK, nopos: true },
+  newarea: { label: "Setup: Confirm the work area: set a new one", mode: "Setup", tone: T.setup, sub: "Confirm the work area",
+    msg: "Enter the table size. A new work area clears the saved anchors, so every setup step runs", conn: OK, nopos: true },
+  unknown: { label: "Setup: Belt lengths unknown", mode: "Setup", tone: T.setup, sub: "Belt lengths unknown",
+    msg: "No saved belt lengths, or a retract was stopped. Start by retracting the belts", conn: OK, nopos: true },
+  retracting: { label: "Setup: Retracting belts", mode: "Setup", tone: T.setup, sub: "Retracting belts",
+    msg: "Winding each belt in until it meets resistance", conn: OK, nopos: true, moving: true },
+  retracted: { label: "Setup: Belts retracted", mode: "Setup", tone: T.setup, sub: "Belts retracted",
+    msg: "Retract finished. Check each arm by eye before extending", conn: OK, nopos: true },
+  toextend: { label: "Setup: Belts retracted, ready to extend", mode: "Setup", tone: T.setup, sub: "Belts retracted",
+    msg: "All four belts are fully wound in. Press Extend belts when you're ready to pull them out", conn: OK, nopos: true },
+  extending: { label: "Setup: Extending belts", mode: "Setup", tone: T.setup, sub: "Extending belts",
+    msg: "Pull each belt out and attach it to its anchor. Press Done when all four are attached", conn: OK, nopos: true, moving: true },
+  extstopped: { label: "Setup: Extending stopped", mode: "Setup", tone: T.setup, sub: "Extending stopped",
+    msg: "Extending was stopped. The belt lengths are still known, so you can extend again or retract from here", conn: OK, nopos: true },
+  extended: { label: "Setup: Belts extended", mode: "Setup", tone: T.setup, sub: "Belts extended",
+    msg: "All four belts are attached to their anchors. Apply tension next", conn: OK, nopos: true },
+  restored: { label: "Setup: Belts extended (after a reboot)", mode: "Setup", tone: T.setup, sub: "Belts extended",
+    msg: "Belt lengths restored from the encoders. A reboot always releases tension, so apply it again", conn: OK, nopos: true },
+  tensioning: { label: "Setup: Applying tension", mode: "Setup", tone: T.setup, sub: "Applying tension",
+    msg: "Taking up slack, then checking the position against the anchors", conn: OK, nopos: true, moving: true },
+  anchors: { label: "Setup: Finding anchor points", mode: "Setup", tone: T.setup, sub: "Finding anchor points",
+    msg: "Measuring the frame. This takes a few minutes", conn: OK, nopos: true, moving: true },
+  tcheck: { label: "Setup: Checking for a tool", mode: "Setup", tone: T.setup, sub: "Checking for a tool",
+    msg: "Position confirmed. Raising the spindle through the light beam to see if a bit is loaded", conn: OK, moving: true },
+  toolq: { label: "Setup: Tool found", mode: "Setup", tone: T.setup, sub: "Tool found",
+    msg: "A bit is loaded. Have you set Z for this tool?", conn: OK },
+  notool: { label: "Setup: No tool loaded", mode: "Setup", tone: T.setup, sub: "No tool loaded",
+    msg: "No bit was detected. Measure a tool to load one, or continue without a tool", conn: OK },
+  toolremove: { label: "Setup: Remove the tool", mode: "Setup", tone: T.setup, sub: "Remove the tool",
+    msg: "Press Remove tool. The spindle rises so you can take the bit out and measure it", conn: OK },
+  toolfreeing: { label: "Setup: Removing the tool", mode: "Setup", tone: T.setup, sub: "Removing the tool",
+    msg: "Raising the spindle until the bit clears the light beam", conn: OK, moving: true },
+  measure: { label: "Setup: Measure the tool", mode: "Setup", tone: T.setup, sub: "Measure the tool",
+    msg: "Measure how far the bit will stick out of the spindle socket, then enter it", conn: OK },
+  toolload: { label: "Setup: Load the tool", mode: "Setup", tone: T.setup, sub: "Load the tool",
+    msg: "Put the bit back in at the stick-out you measured. The device detects it when the bit breaks the light beam", conn: OK },
+  zsetting: { label: "Setup: Setting Z", mode: "Setup", tone: T.setup, sub: "Setting Z",
+    msg: "Setting Z from the 31.5 mm stick-out", conn: OK, moving: true },
+  recovered: { label: "Setup: Checking for a tool (after a spindle fault)", mode: "Setup", tone: T.setup, sub: "Job stopped: spindle fault", alert: true,
+    msg: "Job stopped: spindle fault. Z was re-homed. Check the bit is still OK, then check for a tool again", conn: OK },
+  secure: { label: "Setup: Secure the work piece", mode: "Setup", tone: T.setup, sub: "Secure the work piece",
+    msg: "Z is set. Make sure the work piece is clamped down", conn: OK },
+  releasing: { label: "Setup: Releasing tension", mode: "Setup", tone: T.setup, sub: "Releasing tension",
+    msg: "Belts are slack so you can reach the work piece. Apply tension again once it's secure", conn: OK, nopos: true, moving: true },
+  choosefile: { label: "Setup: Choose a job file", mode: "Setup", tone: T.setup, sub: "Choose a job file",
+    msg: "Tool, Z and work piece are ready. Choose what to cut", conn: OK },
+  ready: { label: "Ready to cut", mode: "Ready to cut", tone: T.ready, sub: "", msg: "sign-panel.nc loaded. Set home XY, trace the boundary if you like, then run", conn: OK },
+  finalcheck: { label: "Ready to cut: Final check", mode: "Ready to cut", tone: T.ready, sub: "Final check",
+    msg: "Check these before sign-panel.nc starts", conn: OK },
+  tracing: { label: "Ready to cut: Moving", mode: "Ready to cut", tone: T.ready, sub: "Tracing the boundary",
+    msg: "Moving around the edge of sign-panel.nc with Z raised", conn: OK, moving: true },
+  parking: { label: "Ready to cut: Parking", mode: "Ready to cut", tone: T.ready, sub: "Parking",
+    msg: "Job done. Moving to the park position", conn: OK, moving: true },
+  stopped: { label: "Ready to cut: Job stopped", mode: "Ready to cut", tone: T.ready, sub: "Job stopped",
+    msg: "sign-panel.nc stopped at line 1,240. Z lifted, spindle off. Progress is saved, so you can continue from there", conn: OK },
+  cutting: { label: "Job: Cutting", mode: "Job", tone: T.job, sub: "Cutting", msg: "sign-panel.nc, 38% done, about 11 min left", conn: OK },
+  success: { label: "Job: Success", mode: "Job", tone: T.job, sub: "Success", msg: "sign-panel.nc finished in 18:04. Parking next", conn: OK, moving: true },
+  spindle: { label: "Job: Spindle fault: recovering", mode: "Job", tone: T.job, sub: "Spindle fault: recovering", alert: true,
+    msg: "The spindle tripped. Ending the job, lifting Z and re-homing it", conn: OK, moving: true },
+  error: { label: "Error: Emergency stop", mode: "Error", tone: T.error, sub: "Emergency stop", alert: true,
+    msg: "The machine stopped itself: position error over 15 mm on the top right belt. Motion is disabled", conn: OK },
+  noanchors: { label: "Error: Can't find anchors", mode: "Error", tone: T.error, sub: "Can't find anchors", alert: true,
+    msg: "Find anchors didn't finish: the top left belt didn't reach the frame", conn: OK, nopos: true },
+  recovery: { label: "Error: Recovery failed", mode: "Error", tone: T.error, sub: "Recovery failed", alert: true,
+    msg: "Spindle recovery didn't finish. The Z position isn't known", conn: OK },
+  lost: { label: "Error: Not responding", mode: "Error", tone: T.error, sub: "Not responding", alert: true,
+    msg: "No reply from the device for 25 s. Values shown are out of date", conn: ["Not responding", "var(--danger)"], stale: true }
+};
+const isSetup = k => STATES[k].mode === "Setup";
+const showsGuide = k => isSetup(k) || k === "error" || k === "noanchors";
+
+const st = { layout: 6, state: "cutting", bar: "guidetop", view: "desktop", settings: false, sec: "state", wa: false, dtab: "job", gx: false };
+
+function actions(k, long) {
+  const s = STATES[k], A = [];
+  if (k === "ready") A.push(["Trace boundary", "ghost"], [long ? "Run sign-panel.nc" : "Run", "go"]);
+  else if (k === "stopped") A.push(["Run from the start", "ghost"], [long ? "Continue from line 1,240" : "Continue", "go"]);
+  else if (k === "finalcheck") A.push(["Back", "ghost"], [long ? "Start sign-panel.nc" : "Start", "go"]);
+  else if (k === "error" || k === "recovery") A.push(["Clear error ($X)", ""]);
+  else if (k === "lost") A.push(["Reboot device", "ghost"]);
+  else if (isSetup(k) || k === "noanchors") A.push(["Run", "go", "Finish setup first"]);
+  if (!s.nostop) A.push(["Stop", "danger"]);
+  return A.map(([t, c, dis]) => `<button class="btn ${c}" type="button"${dis ? ` disabled title="${dis}"` : ""}>${t}</button>`).join("");
+}
+
+// What the top bar asks for, the top bar collects: small inputs beside the instruction, and the final check
+const BAR_INPUT = {
+  measure: `<label class="field"><span>Stick-out</span><input type="text" value="31.5" aria-label="Stick-out in mm"> mm</label>`,
+  secure: `<label class="field"><span>Stock</span><input type="text" value="6.35" aria-label="Stock thickness in mm"> mm</label>`
+};
+const FINAL_CHECKS = ["The file looks right in the preview", "The material thickness matches (6.35 mm)", "The anchor points are secure", "The spoil board is in place"];
+const finalChecks = () => `<div class="bchecks" role="group" aria-label="Final check"><b>Final check</b>` +
+  FINAL_CHECKS.map((c, i) => `<label><input type="checkbox"${i < 2 ? " checked" : ""}> ${c}</label>`).join("") +
+  `<span class="note">Start unlocks once all four are checked.</span></div>`;
+function combinedBar(k, s) {
+  return `<div class="bstate"><span class="mode" style="--tone:${s.tone}">${s.mode}</span>${s.sub ? `<span class="sub">${s.sub}</span>` : ""}</div>` +
+    `<span class="bexplain${s.alert ? " alert" : ""}">${s.msg}</span>` +
+    `<div class="bbtns">${actions(k, true)}</div>` +
+    `<span class="conn" style="--c:${s.conn[1]}"><i></i>${s.conn[0]}</span>`;
+}
+
+function banner(s) {
+  return `<span class="mode" style="--tone:${s.tone}">${s.mode}</span>` +
+    (s.sub ? `<span class="sub">${s.sub}</span>` : "") +
+    `<span class="conn" style="--c:${s.conn[1]}"><i></i>${s.conn[0]}</span>`;
+}
+
+function panel(area, title, body, small = "") {
+  return `<section class="panel" data-a="${area}" style="grid-area:${area}"><div class="ph">${title}<small>${small}</small></div><div class="pb">${body}</div></section>`;
+}
+
+function stateBtns(k) { return `<div class="row">${actions(k, true)}</div>`; }
+
+function stateBody(k, s, pinned) {
+  const v = s.nopos ? ["–", "–", "–"] : ["0.688", "-9.709", k === "cutting" ? "-3.000" : k === "recovery" ? "?" : "0.000"];
+  const pos = `<div class="mini${s.stale ? " stale" : ""}"><span>Position</span><div class="pos"><b><i>X</i>${v[0]}</b><b><i>Y</i>${v[1]}</b><b><i>Z</i>${v[2]}</b></div></div>` +
+    `<div class="mini"><span>Work area</span><b>${waText()}</b><small>center 0, 0 · stock 6.35 mm</small></div>`;
+  const note = s.nopos && s.moving ? `<p class="note">Position isn't live while the belts move.</p>`
+    : s.nopos ? `<p class="note">No position until the belts are tensioned and the anchors are known.</p>`
+    : { connecting: `<p class="note">Position appears once the device reports it.</p>`, lost: `<p class="note">Last known position.</p>` }[k] || "";
+  const btns = pinned ? "" : stateBtns(k);
+  const callout = (tone, title, text, btn = "") => `<div class="callout" style="--tone:${tone}"><b>${title}</b><span>${text}</span>${btn}</div>`;
+  let extra = "";
+  if (k === "cutting") extra = `<div class="bar"><i style="width:38%"></i></div>
+    <dl class="kv"><dt>Done</dt><dd>38%</dd><dt>Line</dt><dd>1,240 / 3,260</dd><dt>Running</dt><dd>6:51</dd><dt>Left</dt><dd>~11 min</dd><dt>Feed</dt><dd>1200 mm/min</dd></dl>`;
+  if (k === "ready") extra = `<p class="note">Next: set home XY over a good spot on the work piece (in Jog / Home), trace the boundary if you like, then Run. Run opens the final check.</p>`;
+  if (k === "recovered") extra = callout("var(--job)", "Job stopped: spindle fault", "The spindle tripped and the job ended. Z was re-homed, so set it again before cutting.");
+  if (k === "tracing") extra = `<div class="bar"><i style="width:60%"></i></div><p class="note">Optional. Press Stop if the bit would leave the work piece.</p>`;
+  if (k === "success") extra = `<dl class="kv"><dt>Time</dt><dd>18:04</dd><dt>Lines</dt><dd>3,260</dd></dl><p class="note">Parks on its own, then goes back to Ready to cut.</p>`;
+  if (k === "stopped") extra = `<dl class="kv"><dt>Stopped at</dt><dd>line 1,240 (38%)</dd></dl><p class="note">Continue from where it stopped, run it from the start, or choose another file. Continuing needs the firmware to save the job's progress, which it doesn't yet.</p>`;
+  if (k === "spindle") extra = callout("var(--job)", "Recovering on its own", "1. The job ends.<br>2. Z lifts and re-homes.<br>3. You go back to the tool check.");
+  if (k === "error") extra = callout("var(--danger)", "What to do", "Only the emergency button or a machine error triggers an emergency stop, never the Stop button.<br>1. Check the bit isn't in the material.<br>2. Find what caused the position error.<br>3. Clear the error, then recheck tension.", `<button class="btn" type="button">Clear error ($X)</button>`);
+  if (k === "noanchors") extra = callout("var(--danger)", "What to do", "1. Check each belt is hooked to its anchor.<br>2. Clear anything in the belts' path.<br>3. Try again.", `<button class="btn" type="button">Find anchors again</button>`);
+  if (k === "recovery") extra = callout("var(--danger)", "What to do", "Clear the error with $X, then re-home Z. To be tested.", `<div class="row"><button class="btn" type="button">Clear error ($X)</button><button class="btn ghost" type="button">Re-home Z</button></div>`);
+  if (k === "lost") extra = callout("var(--danger)", "Reconnecting automatically", "If it doesn't come back, reboot the device, or turn it off and on.", `<button class="btn ghost" type="button">Reboot device</button>`);
+  if (k === "wifi") extra = callout("var(--warn)", "Placeholder: WiFi setup",
+    "We still need to look at what the current dialog shows. Roughly: pick a network, enter its password, and choose whether to keep the hotspot on.",
+    `<div class="row"><button class="btn" type="button" >Join network</button><button class="btn ghost" type="button" disabled>Turn hotspot off</button></div>`);
+  // Job stats move into the Job tab; instructions and error steps stay above the tabs
+  const JOB_KEYS = ["cutting", "tracing", "success", "stopped"];
+  const jobBody = JOB_KEYS.includes(k) ? extra : jobSummary(k, s);
+  const above = JOB_KEYS.includes(k) ? "" : extra;
+  return `<div class="minis"><div class="mini"><span>Status</span><p${s.alert ? ' class="alert"' : ""}>${s.msg}</p></div>${pos}</div>` + note + btns + above + statTabs(k, s, jobBody);
+}
+
+// ---------- Device details tabs: job stats by default, then live belt lengths and motor currents ----------
+function jobSummary(k, s) {
+  const hasFile = !isSetup(k) && s.mode !== "Connecting" && k !== "noanchors";
+  return hasFile ? `<dl class="kv"><dt>File</dt><dd>sign-panel.nc</dd><dt>Size</dt><dd>482 × 300 mm</dd><dt>Est. time</dt><dd>18 min</dd><dt>Depth</dt><dd>3.0 mm</dd></dl>`
+    : `<p class="note">No job yet. Stats show here once a file is chosen and running.</p>`;
+}
+const BELT_NAMES = ["TL", "TR", "BL", "BR"];
+function beltLengths(k, s) {
+  if (["retracting"].includes(k)) return [0, 212.6, 98.1, 431.0];
+  if (["extending", "extstopped"].includes(k)) return [888.0, 972.0, 624.0, 756.0];
+  if (["extended", "restored", "releasing"].includes(k)) return [1200.0, 1200.0, 1200.0, 1200.0];
+  if (k === "retracted" || k === "toextend") return [0, 0, 0, 0];
+  if (s.nopos && !s.moving) return null;
+  return k === "cutting" ? [1021.7, 1044.2, 1093.5, 1068.9] : [1032.4, 1018.9, 1101.2, 1087.6];
+}
+function motorCurrents(k, s) {
+  // mA for TL, TR, BL, BR and Z. Example values: tensioned belts hold, moving belts draw more.
+  if (s.mode === "Connecting") return null;
+  if (s.moving && s.nopos) return [1180, 1240, 1090, 1310, 0];
+  if (s.moving || k === "cutting") return [960, 1120, 870, 1040, 420];
+  if (s.nopos || k === "error" || k === "recovery") return [0, 0, 0, 0, 0];
+  return [310, 290, 340, 300, 120];
+}
+function statTabs(k, s, jobBody) {
+  const jobLabel = s.mode === "Job" ? "Job" : "Job stats";
+  const tabs = [["job", jobLabel], ["belts", "Belts"], ["motors", "Motors"]];
+  const cur = st.dtab || "job";
+  const head = `<div class="dtabs" role="tablist">${tabs.map(([id, n]) => `<button type="button" role="tab" data-dtab="${id}" aria-selected="${id === cur}">${n}</button>`).join("")}<span class="dlive${s.stale ? " off" : ""}">${s.stale ? "out of date" : cur === "job" ? "" : "live"}</span></div>`;
+  let body = jobBody;
+  if (cur === "belts") {
+    const L = beltLengths(k, s);
+    body = L ? `<div class="belts${s.stale ? " stale" : ""}">` + L.map((v, i) => `<span>${BELT_NAMES[i]}</span><span class="bar" style="--fill:var(--lilac)"><i style="width:${Math.min(100, v / 15)}%"></i></span><span>${v.toFixed(1)} mm</span>`).join("") + `</div>` +
+      `<p class="note">${s.moving ? "Updating as the belts move." : "Measured by the encoders."} Real-time lengths need the new firmware report.</p>`
+      : `<p class="note">Belt lengths aren't known yet. They show once the belts are retracted or restored.</p>`;
+  }
+  if (cur === "motors") {
+    const A = motorCurrents(k, s);
+    const names = [...BELT_NAMES, "Z"];
+    body = A ? `<div class="belts${s.stale ? " stale" : ""}">` + A.map((v, i) => `<span>${names[i]}</span><span class="bar" style="--fill:${v > 1250 ? "var(--warn)" : "var(--setup)"}"><i style="width:${Math.min(100, v / 25)}%"></i></span><span>${v} mA</span>`).join("") + `</div>` +
+      `<p class="note">Example values. Motor currents need the new firmware report, if it can send them.</p>`
+      : `<p class="note">Motor currents show once the device answers.</p>`;
+  }
+  return `<div class="dstats">${head}<div class="dbody">${body}</div></div>`;
+}
+
+const STEPS = ["Confirm the work area", "Retract belts", "Extend belts", "Apply tension", "Find anchors", "Check the tool", "Measure the tool", "Secure the work piece", "Choose a job file"];
+// Kept the saved work area, and its belt lengths and anchors: these steps are skipped.
+const SAVED = [1, 2, 4];
+
+function stepArt(i) {
+  const frame = `<circle cx="20" cy="14" r="5" fill="var(--node)"/><circle cx="240" cy="14" r="5" fill="var(--node)"/><circle cx="20" cy="106" r="5" fill="var(--node)"/><circle cx="240" cy="106" r="5" fill="var(--node)"/>`;
+  const sled = (x, y) => `<rect x="${x - 14}" y="${y - 14}" width="28" height="28" rx="6" fill="var(--panel)" stroke="var(--lilac)" stroke-width="2"/>`;
+  const belts = (x, y, dash) => [[20, 14], [240, 14], [20, 106], [240, 106]].map(([a, b]) =>
+    `<line x1="${a}" y1="${b}" x2="${x}" y2="${y}" stroke="var(--wire)" stroke-width="1.6" ${dash ? 'stroke-dasharray="5 4"' : ""}/>`).join("");
+  const arrow = (x1, y1, x2, y2) => `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#3c82dc" stroke-width="2.5" marker-end="url(#ah)"/>`;
+  const defs = `<defs><marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0 0L10 5L0 10z" fill="#3c82dc"/></marker></defs>`;
+  const art = [
+    `<rect x="40" y="22" width="180" height="76" fill="var(--canvas2)" stroke="var(--lilac)" stroke-dasharray="4 3"/>` + arrow(130, 108, 216, 108) + arrow(130, 108, 44, 108) + arrow(232, 60, 232, 26) + arrow(232, 60, 232, 94) +
+      `<text x="130" y="64" text-anchor="middle" fill="var(--node)" font-size="12" font-family="monospace">${waText()}</text>`,
+    frame + belts(130, 60, true) + sled(130, 60) + arrow(70, 33, 105, 50) + arrow(190, 33, 155, 50) + arrow(70, 87, 105, 70) + arrow(190, 87, 155, 70),
+    frame + belts(130, 60, true) + sled(130, 60) + arrow(105, 50, 60, 28) + arrow(155, 50, 200, 28) + arrow(105, 70, 60, 92) + arrow(155, 70, 200, 92),
+    frame + belts(130, 60, false) + sled(130, 60) + `<text x="130" y="100" text-anchor="middle" fill="var(--muted)" font-size="11" font-family="monospace">belts tight, position checked</text>`,
+    frame + belts(130, 60, false) + sled(130, 60) + [[20, 14], [240, 14], [20, 106], [240, 106]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="11" fill="none" stroke="#3c82dc" stroke-width="2"/>`).join("") +
+      `<text x="130" y="100" text-anchor="middle" fill="var(--muted)" font-size="11" font-family="monospace">measuring the frame</text>`,
+    `<rect x="110" y="12" width="40" height="44" rx="6" fill="var(--panel)" stroke="var(--wire)"/><rect x="124" y="56" width="12" height="16" fill="var(--wire)"/><path d="M127 72 h6 v24 l-3 6 l-3 -6z" fill="var(--lilac)"/>` +
+      `<line x1="60" y1="84" x2="200" y2="84" stroke="#dc3c3c" stroke-width="2" stroke-dasharray="6 4"/><circle cx="60" cy="84" r="4" fill="#dc3c3c"/><text x="206" y="88" fill="var(--muted)" font-size="11" font-family="monospace">beam</text>` + arrow(90, 104, 90, 64),
+    `<rect x="100" y="14" width="40" height="40" rx="6" fill="var(--panel)" stroke="var(--wire)"/><rect x="113" y="54" width="14" height="8" fill="var(--wire)"/><path d="M117 62 h6 v38 l-3 7 l-3 -7z" fill="var(--lilac)"/>` +
+      `<line x1="150" y1="62" x2="170" y2="62" stroke="var(--muted)"/><line x1="150" y1="107" x2="170" y2="107" stroke="var(--muted)"/>` + arrow(162, 84, 162, 66) + arrow(162, 84, 162, 103) +
+      `<text x="176" y="88" fill="var(--node)" font-size="12" font-family="monospace">31.5 mm</text>`,
+    `<rect x="30" y="30" width="200" height="70" fill="var(--canvas2)" stroke="var(--wire)"/><rect x="50" y="42" width="160" height="46" fill="#5c4a3a" stroke="var(--lilac)"/>` +
+      [[46, 38], [214, 38], [46, 92], [214, 92]].map(([x, y]) => `<rect x="${x - 7}" y="${y - 5}" width="14" height="10" rx="2" fill="#3c82dc"/>`).join(""),
+    `<path d="M100 14 h44 l16 16 v76 h-60z" fill="var(--input)" stroke="var(--lilac)" stroke-width="1.5"/><path d="M144 14 v16 h16" fill="none" stroke="var(--lilac)" stroke-width="1.5"/>` +
+      `<text x="130" y="66" text-anchor="middle" fill="var(--node)" font-size="12" font-family="monospace">.nc</text>` + arrow(190, 60, 166, 60)
+  ][i];
+  return `<div class="art"><svg viewBox="0 0 260 120" role="img" aria-label="${STEPS[i]}">${defs}${art}</svg></div>`;
+}
+
+// [current step, skipped steps]. A step of null means no setup steps yet; STEPS.length means setup is complete.
+const GUIDE = {
+  wifi: [null, []], connecting: [null, []], lost: [null, []],
+  workarea: [0, []], newarea: [0, []], unknown: [1, []], retracting: [1, []], retracted: [1, []], toextend: [2, []], extending: [2, []], extstopped: [2, []], extended: [3, []],
+  restored: [3, SAVED], tensioning: [3, []], anchors: [4, []], noanchors: [4, []],
+  tcheck: [5, SAVED], toolq: [5, SAVED], notool: [5, SAVED], recovered: [5, SAVED],
+  toolremove: [6, SAVED], toolfreeing: [6, SAVED], measure: [6, SAVED], toolload: [6, SAVED], zsetting: [6, SAVED], secure: [7, SAVED], releasing: [7, SAVED], choosefile: [8, SAVED], error: [3, SAVED]
+};
+const guideOf = k => GUIDE[k] || [STEPS.length, SAVED];
+function segs(step, skip) {
+  return `<div class="segs">${STEPS.map((_, i) => `<i class="${skip.includes(i) ? "skip" : i < step ? "done" : i === step ? "now" : ""}"></i>`).join("")}</div>`;
+}
+function progress(step, skip) {
+  const n = skip.filter(i => i < (step ?? 0)).length;
+  return `${step ?? 0}/${STEPS.length} done${n ? `, ${n} skipped` : ""}`;
+}
+
+function guide(step, skip, body) {
+  const all = STEPS.map((n, i) => skip.includes(i) ? `– ${n} <span class="skipnote">skipped, saved</span>` : `${i < step ? "✓" : i + 1}. ${n}`).join("<br>");
+  return `<div class="guide"><div class="ghead"><b>${step < STEPS.length ? STEPS[step] : "Setup complete"}</b><span>Setup: ${progress(step, skip)}</span></div>
+    ${segs(step, skip)}${step < STEPS.length ? stepArt(step) : ""}${body}
+    <details class="more"><summary>All steps</summary>${all}</details></div>`;
+}
+
+// What each setup state asks for: [short text for the top bar, buttons, more detail for the guide panel]
+const ASK = {
+  workarea: ["Work area {WA}, with saved belt lengths and anchors. Keep it to skip retracting, extending and finding anchors. You'll still apply tension.",
+    `<button class="btn" type="button">Keep this work area</button><button class="btn ghost" type="button" data-settings="wa">Set new work area</button>`,
+    `<dl class="kv"><dt>Saved work area</dt><dd>{WA}</dd><dt>Spoil board</dt><dd>{SPOIL}</dd><dt>Belt lengths</dt><dd>saved</dd><dt>Anchors</dt><dd>saved</dd></dl>
+     <p>Keep it if the table hasn't changed: setup skips Retract, Extend and Find anchors. A new work area clears the anchors, so every step runs.</p>
+     <p class="note">After a reboot the belts are never tensioned, so Apply tension always runs.</p>`],
+  restored: ["Belt lengths restored from the encoders. A reboot always releases tension, so apply it again.", `<button class="btn" type="button">Apply tension</button>`,
+    `<dl class="kv"><dt>Belt lengths</dt><dd>restored from the encoders</dd><dt>Anchors</dt><dd>saved</dd><dt>Tension</dt><dd>released by the reboot</dd></dl>
+     <p class="note">Apply tension checks the saved anchors. If they don't fit, Find anchors runs next.</p>`],
+  newarea: ["Set the table's size and the spoil board thickness in the Work area pop-up.", `<button class="btn" type="button" data-settings="wa">Open work area</button>`,
+    `<p class="note">The work area opens in its own pop-up.</p>`],
+  retracted: ["Check each arm by eye: are all four belts fully wound in?", `<button class="btn" type="button">Yes, all retracted</button><button class="btn ghost" type="button">No, retract again</button>`,
+    `<p>Retract stops when a belt feels resistance, so a belt under tension can stop early and still report done.</p><p class="note">If one isn't fully in, add some slack by hand and retract again.</p>`],
+  extended: ["Belts attached to the anchors. Apply tension next.", `<button class="btn" type="button">Apply tension</button>`,
+    `<div class="belts">` + [["TL", 1200], ["TR", 1200], ["BL", 1200], ["BR", 1200]].map(([b, v]) =>
+      `<span>${b}</span><span class="bar" style="--fill:var(--ready)"><i style="width:100%"></i></span><span>${v} mm</span>`).join("") + `</div>
+     <p class="note">Check no belt is twisted or caught on the frame.</p>`],
+  unknown: ["Clear the area around the sled so the belts can wind in freely.", `<button class="btn" type="button">Retract belts</button>`,
+    `<p>No saved belt lengths. Clear the area around the sled so the belts can wind in freely. They stop when they feel resistance.</p>`],
+  retracting: ["Winding the belts in. Each one stops when it meets resistance.", `<button class="btn stopping" type="button">Stop retracting</button>`,
+    `<div class="belts">` + [["TL", 100], ["TR", 64], ["BL", 82], ["BR", 41]].map(([b, p]) =>
+      `<span>${b}</span><span class="bar" style="--fill:var(--setup)"><i style="width:${p}%"></i></span><span>${p === 100 ? "done" : "…"}</span>`).join("") + `</div>
+     <p class="note">Stopping a retract loses the belt lengths, so setup goes back to Belt lengths unknown.</p>`],
+  toextend: ["Belts retracted and checked. Press Extend belts, then pull each one out toward its anchor.",
+    `<button class="btn" type="button">Extend belts</button><button class="btn ghost" type="button">Retract again</button>`,
+    `<p>Extending lets the belts pay out while you pull them by hand. Nothing moves until you press Extend belts.</p>
+     <p class="note">Clear the path from the sled to each anchor first.</p>`],
+  extending: ["Pull each belt out and attach it to its anchor. Press Done when all four are attached.",
+    `<button class="btn" type="button">Done extending</button><button class="btn stopping" type="button">Stop extending</button>`,
+    `<div class="belts">` + [["TL", 74], ["TR", 81], ["BL", 52], ["BR", 63]].map(([b, p]) =>
+      `<span>${b}</span><span class="bar" style="--fill:var(--setup)"><i style="width:${p}%"></i></span><span>${Math.round(p * 12)} mm</span>`).join("") + `</div>
+     <p class="note">Done extending means all four belts are attached to their anchors. Stop extending keeps the belt lengths, so you can extend again or retract from where they are.</p>`],
+  extstopped: ["Extending stopped. Extend again, or retract from where the belts are.",
+    `<button class="btn" type="button">Extend again</button><button class="btn ghost" type="button">Retract belts</button>`,
+    `<div class="belts">` + [["TL", 74], ["TR", 81], ["BL", 52], ["BR", 63]].map(([b, p]) =>
+      `<span>${b}</span><span class="bar" style="--fill:var(--setup)"><i style="width:${p}%"></i></span><span>${Math.round(p * 12)} mm</span>`).join("") + `</div>
+     <p class="note">The belt lengths are still known, so nothing has to start over.</p>`],
+  tensioning: ["Taking up slack, then checking the position against the anchors.", `<button class="btn stopping" type="button">Stop</button>`,
+    `<p>First setup with this work area, so Find anchors runs next.</p>`],
+  anchors: ["Measuring the frame to find each anchor point.", `<button class="btn stopping" type="button">Stop finding anchors</button>`,
+    `<div class="bar"><i style="width:45%"></i></div><p class="note">Point 4 of 9.</p>`],
+  tcheck: ["Checking for a tool. The spindle rises through the light beam.", `<button class="btn stopping" type="button">Stop</button>`,
+    `<p class="note">If the beam breaks before the top of travel, a bit is loaded.</p>`],
+  toolq: ["A bit is loaded. Have you set Z for this tool?", `<button class="btn" type="button">Yes, Z is set</button><button class="btn ghost" type="button">No, set Z</button>`,
+    `<dl class="kv"><dt>Last tool</dt><dd>1/4" end mill</dd><dt>Stick-out</dt><dd>31.5 mm</dd></dl>
+     <p class="note">Say yes if this is the same bit, at the same stick-out, as when Z was last set. Otherwise measure it.</p>`],
+  notool: ["No bit loaded. Measure a tool to load one, or continue without a tool.", `<button class="btn" type="button">Measure a tool</button><button class="btn ghost" type="button">Continue without a tool</button>`,
+    `<p class="note">Without a tool you can still trace the boundary, but not cut.</p>`],
+  toolremove: ["Press Remove tool, then take the bit out so you can measure it.", `<button class="btn" type="button">Remove tool</button>`,
+    `<p>The spindle rises until the bit clears the light beam. Then loosen the collet and take the bit out.</p><p class="note">Jog the sled somewhere easy to reach first, if you need to.</p>`],
+  toolfreeing: ["Raising the spindle so the bit can come out.", `<button class="btn stopping" type="button">Stop</button>`,
+    `<p class="note">Take the bit out once the spindle stops.</p>`],
+  measure: ["Measure how far the bit sticks out of the spindle socket, and enter it.", `<button class="btn" type="button">Save measurement</button>`,
+    `<div class="row"><label class="field"><span>Stick-out</span><input type="text" value="31.5" aria-label="Stick-out in mm"> mm</label></div>
+     <p class="note">Measure from the face of the spindle socket to the tip of the bit, at the depth you'll load it.</p>`],
+  toolload: ["Load the bit back in at 31.5 mm stick-out and tighten the collet. The device detects it.", `<button class="btn ghost" type="button">Measure again</button>`,
+    `<p><span class="conn" style="--c:var(--setup)"><i></i>Waiting for the bit to break the light beam…</span></p>
+     <p>Z is set from the 31.5 mm stick-out as soon as the bit is detected.</p><p class="note">Loaded it at a different depth? Measure again.</p>`],
+  zsetting: ["Setting Z from the measured stick-out.", "", `<div class="bar"><i style="width:55%"></i></div>`],
+  recovered: ["Job stopped by a spindle fault. Check the bit, then check for a tool again.", `<button class="btn" type="button">Check the tool</button>`,
+    `<p>Z was re-homed during recovery, so the old Z is gone. Check the bit isn't damaged first.</p>`],
+  secure: ["Enter the stock thickness. Is your work piece set up and secure?", `<button class="btn" type="button">It's secure</button><button class="btn ghost" type="button">Release tension</button>`,
+    `<div class="row"><label class="field"><span>Stock thickness</span><input type="text" value="6.35" aria-label="Stock thickness in mm"> mm</label></div>
+     <p class="note">The sled rides on the stock, so its thickness changes the belt angles. Last job: 6.35 mm.</p>
+     <p class="note">Belts too tight to reach the clamps? Release tension, secure it, then apply tension again.</p>`],
+  releasing: ["Belts are slack. Secure the work piece, then apply tension again.", `<button class="btn" type="button">Apply tension</button>`,
+    `<p>Releasing tension keeps the belt lengths, so Apply tension can run straight away.</p>`],
+  choosefile: ["Upload a G-code file, or choose one already on the device.", `<button class="btn" type="button">Upload file</button><button class="btn ghost" type="button">Choose file</button>`,
+    `<ul class="files"><li><span>sign-panel.nc</span><span>182 KB</span></li><li><span>coaster-set.nc</span><span>64 KB</span></li><li><span>shelf-bracket.nc</span><span>311 KB</span></li></ul>`]
+};
+
+const ask = k => ASK[k] && ASK[k].map(x => x.replaceAll("{WA}", waText()).replaceAll("{SPOIL}", WA.spoil + " mm"));
+// Fuller instructions for each setup step, shown when the setup bar is expanded
+const STEP_HELP = [
+  ["Measure the table's usable width and height.", "Keep the saved work area if nothing about the table changed. Setup then skips the steps it already knows.", "Set a new work area if the table changed. That clears the anchors, so every step runs."],
+  ["Clear the area around the sled and the arms.", "Press Retract belts. Each belt winds in until it feels resistance.", "Check each arm by eye: every belt should be fully wound in.", "If one stopped early, pull out a little slack by hand and retract again. Stopping a retract loses the belt lengths."],
+  ["Press Extend belts.", "Pull each belt out by hand toward its anchor.", "Hook the end of each belt onto its anchor.", "When all four are attached, press Done extending. Stop extending keeps the belt lengths, so you can extend again or retract."],
+  ["Check that all four belts are attached and nothing is in their way.", "Press Apply tension. The belts wind in to take up the slack, which takes about 30 seconds.", "The device checks its position against the saved anchors.", "If a belt winds in more than 300 mm, check that it's attached. If the position doesn't fit, Find anchors runs next."],
+  ["Keep clear of the sled and belts.", "The sled moves to a grid of points and measures each one. This takes a few minutes.", "If it fails, check that each belt is hooked to its anchor, then try again."],
+  ["The device raises the spindle through the light beam to check for a bit.", "If a bit is found, say whether you've set Z for this tool.", "If none is found, measure a tool to load, or continue without one."],
+  ["Press Remove tool. The spindle rises so the bit can come out, then take it out.", "Measure how far it sticks out of the spindle socket, from the socket face to the tip, and enter it.", "Load it back in at that stick-out and tighten the collet. The device detects it when the bit breaks the light beam.", "Z is set from the measurement."],
+  ["Enter the stock thickness.", "Clamp or screw the work piece down so it can't move.", "Belts too tight to reach the clamps? Release tension, secure the work piece, then apply tension again."],
+  ["Upload a G-code file (.nc), or choose one already on the device.", "Check the preview fits on the work piece."]
+];
+function guideMore(k) {
+  const [step] = guideOf(k);
+  if (step === null || step >= STEPS.length) return "";
+  const open = st.gx;
+  const more = open ? `<div class="gmore"><div class="gbig">${stepArt(step).replace('<div class="art">', "").replace(/<\/div>$/, "")}<span>Placeholder: moving line art showing how to ${STEPS[step].toLowerCase()}</span></div>
+    <div class="ghelp"><b>${STEPS[step]}</b><ol>${STEP_HELP[step].map(x => `<li>${x}</li>`).join("")}</ol></div></div>` : "";
+  return more + `<div class="gtoggle"><button type="button" data-gx="1" aria-expanded="${open}" aria-label="${open ? "Hide" : "Show"} step details"><svg viewBox="0 0 16 10" width="16" height="10" aria-hidden="true"><path d="M2 2l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div>`;
+}
+function guideBar(k, s) {
+  const [step, skip] = guideOf(k), [text, btn] = ask(k) || ["", ""];
+  const name = step === null ? "Setup" : step < STEPS.length ? STEPS[step] : "Setup complete";
+  const thumb = step !== null && step < STEPS.length ? `<div class="gthumb">${stepArt(step).replace('<div class="art">', "").replace(/<\/div>$/, "")}</div>` : "";
+  return thumb + `<div class="gmeta"><span style="display:flex;align-items:center;gap:8px"><span class="mode" style="--tone:${s.tone}">${s.mode}</span>${progress(step, skip)}</span><b>${name}</b>${segs(step, skip)}</div>` +
+    `<span class="gtext">${text}</span>${BAR_INPUT[k] ? `<div class="binput">${BAR_INPUT[k]}</div>` : ""}<div class="bbtns">${btn}</div>` +
+    `<span class="conn" style="--c:${s.conn[1]}"><i></i>${s.conn[0]}</span>`;
+}
+
+function configBody(k) {
+  const [step, skip] = guideOf(k);
+  if (ASK[k]) return guide(step, skip, ask(k)[2] + `<div class="row">${ask(k)[1]}</div>`);
+  if (k === "error") return guide(step, skip,
+    `<div class="callout" style="--tone:var(--warn)"><b>After clearing the error</b><span>Run Apply tension again to confirm the position before cutting.</span></div>
+     <button class="btn" type="button" disabled>Apply tension</button>`);
+  if (k === "noanchors") return guide(step, skip,
+    `<div class="callout" style="--tone:var(--danger)"><b>Find anchors didn't finish</b><span>Check each belt is hooked to its anchor, then try again.</span></div>
+     <button class="btn" type="button">Find anchors again</button>`);
+  if (step === null) return `<p class="note">Waiting for the device before showing setup steps.</p>`;
+  if (STATES[k].mode === "Job") return `<p class="note">Setup is locked while a job is running.</p><dl class="kv"><dt>Work area</dt><dd>${waText()}</dd><dt>Tool</dt><dd>1/4" end mill</dd></dl>`;
+  return guide(step, skip,
+    `<dl class="kv"><dt>Work area</dt><dd>${waText()}</dd><dt>Anchors</dt><dd>checked, 0.6 mm</dd><dt>Tool</dt><dd>1/4" end mill</dd></dl>
+     <div class="row"><button class="btn ghost" type="button">Release tension</button><button class="btn ghost" type="button">Find anchors</button></div>`);
+}
+
+function filesBody(k, s) {
+  const list = `<ul class="files"><li class="sel"><span>sign-panel.nc</span><span>182 KB</span></li><li><span>coaster-set.nc</span><span>64 KB</span></li><li><span>shelf-bracket.nc</span><span>311 KB</span></li></ul>`;
+  if (s.mode === "Job") return `<div class="callout" style="--tone:var(--job)"><b>Running sign-panel.nc</b><span>Progress is in Device details. You can't change the file during a job.</span></div>
+    <dl class="kv"><dt>Size</dt><dd>482 × 300 mm</dd><dt>Est. time</dt><dd>18 min</dd><dt>Depth</dt><dd>3.0 mm</dd></dl>`;
+  if (k === "choosefile") return `<div class="row"><button class="btn ghost" type="button">Upload file</button></div>
+    <ul class="files"><li><span>sign-panel.nc</span><span>182 KB</span></li><li><span>coaster-set.nc</span><span>64 KB</span></li><li><span>shelf-bracket.nc</span><span>311 KB</span></li></ul><p class="note">Choose a file to run, or follow the setup step at the top.</p>`;
+  const reason = k === "lost" || s.mode === "Connecting" ? "Waiting for the device" : s.mode === "Error" ? "Clear the error first"
+    : s.mode === "Setup" ? "Finish setup to run a job" : s.moving ? "Wait for the move to finish" : "";
+  return `<div class="row"><button class="btn ghost" type="button">Upload file</button></div>` + list +
+    `<dl class="kv"><dt>Size</dt><dd>482 × 300 mm</dd><dt>Est. time</dt><dd>18 min</dd><dt>Depth</dt><dd>3.0 mm</dd></dl>` +
+    (reason ? `<p class="note">${reason}.</p>` : "");
+}
+
+function compassBody(k) {
+  const s = STATES[k];
+  const g = `<div class="chips"><span>0.1</span><span class="on">1</span><span>10</span><span>100</span></div>
+    <div class="compass"><button type="button" aria-label="Up left">↖</button><button type="button" aria-label="Up">↑</button><button type="button" aria-label="Up right">↗</button><span></span><button type="button" class="z" aria-label="Z up">Z+</button>
+    <button type="button" aria-label="Left">←</button><button type="button" class="home">HOME</button><button type="button" aria-label="Right">→</button><span></span><button type="button" class="z" aria-label="Z down">Z−</button>
+    <button type="button" aria-label="Down left">↙</button><button type="button" aria-label="Down">↓</button><button type="button" aria-label="Down right">↘</button></div>
+    <div class="row"><button class="btn ghost" type="button">Set home XY</button><button class="btn ghost" type="button">Set Z</button></div>
+    <div class="row"><button class="btn ghost" type="button">Park</button></div>`;
+  // Jogging needs anchors and a confirmed position, and nothing else moving.
+  const why = {
+    wifi: ["Not connected", "Jogging unlocks once the device is on your network."],
+    connecting: ["Waiting for the device", "Jogging unlocks once the device reports its state."],
+    workarea: ["Position not known", "Jogging needs anchors and a confirmed position. Confirm the work area first."],
+    unknown: ["Position not known", "Jogging needs anchors and a confirmed position. Next: Retract belts."],
+    releasing: ["Belts are slack", "Apply tension again to jog."],
+    cutting: ["Job running", "Stop the job to jog."],
+    error: ["Motion is disabled", "Firmware: position error over 15 mm. Clear the error first."],
+    noanchors: ["No anchors", "Jogging needs anchors and a confirmed position."],
+    recovery: ["Motion is disabled", "Clear the error and re-home Z first."],
+    lost: ["Not responding", "Jogging is off until the device answers again."]
+  }[k] || (s.nopos && !s.moving ? ["Position not known", "Jogging needs anchors and a confirmed position."] : null) || (s.moving ? ["Moving", `${s.sub || s.mode}. Wait for it to finish, or press Stop.`] : null);
+  return { body: g, lock: why };
+}
+
+function visSvg(k, s) {
+  const sledX = 205, sledY = 140, unk = s.nopos && !s.moving, done = ["cutting", "stopped", "spindle"].includes(k);
+  const loose = s.nopos && s.moving;
+  const belts = [[30, 30], [380, 30], [30, 240], [380, 240]].map(([x, y]) =>
+    `<line x1="${x}" y1="${y}" x2="${sledX}" y2="${sledY}" stroke="${loose ? "var(--setup)" : "#8f8a97"}" stroke-width="1.4" ${loose ? 'stroke-dasharray="5 4"' : ""}/>`).join("");
+  const anchors = [[30, 30], [380, 30], [30, 240], [380, 240]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="6" fill="var(--node)"/>`).join("");
+  const path = "M130 90 H280 V190 H130 Z M170 120 H240 V160 H170 Z";
+  return `<svg viewBox="0 0 410 270" role="img" aria-label="Device frame with the sled and toolpath" class="${s.stale ? "stale" : ""}">
+    <rect x="30" y="30" width="350" height="210" fill="none" stroke="var(--line2)" stroke-dasharray="3 5"/>
+    <rect x="110" y="72" width="190" height="136" fill="var(--input)" stroke="var(--line2)"/>
+    <path d="${path}" fill="none" stroke="var(--line2)" stroke-width="2"/>
+    ${done ? `<path d="M130 90 H280 V190 H210" fill="none" stroke="var(--lilac)" stroke-width="3"/>` : ""}
+    ${k === "success" || k === "parking" ? `<path d="${path}" fill="none" stroke="var(--lilac)" stroke-width="3"/>` : ""}
+    ${k === "tracing" ? `<path d="M126 86 H284 V194 H200" fill="none" stroke="var(--ready)" stroke-width="2.5" stroke-dasharray="6 4"/>` : ""}
+    ${unk ? "" : belts}${anchors}
+    ${unk ? `<text x="205" y="62" text-anchor="middle" fill="var(--muted)" font-family="var(--font-mono)" font-size="12">Sled position unknown</text>` : ""}
+    <rect ${unk ? 'opacity="0"' : ""} x="${sledX - 13}" y="${sledY - 13}" width="26" height="26" rx="6" fill="var(--panel)" stroke="var(--lilac)" stroke-width="2"/>
+    ${unk ? "" : `<circle cx="${sledX}" cy="${sledY}" r="3" fill="var(--lilac)"/>`}</svg>`;
+}
+
+function logText(k) {
+  const L = {
+    wifi: `<span class="i">Connected through the Maslow hotspot</span>\n<span class="i">Waiting for WiFi settings…</span>`,
+    connecting: `<span class="i">Connecting to maslow.local…</span>`,
+    workarea: `MINFO: { "homed": true, "extended": true … }\n[MSG:INFO: Current state: 0]`,
+    unknown: `[MSG:INFO: Current state: 0]\nMINFO: { "homed": false, "extended": false … }`,
+    retracting: `[MSG:INFO: Retracting all belts]\n[MSG:INFO: Current state: 1]`,
+    newarea: `[MSG:INFO: Current state: 0]`,
+    retracted: `[MSG:INFO: Current state: 2]\n<span class="i">Retract finished in 21 s</span>`,
+    restored: `Belt positions after encoder adjustment … newState=4\n[MSG:INFO: Current state: 4]`,
+    extended: `[MSG:INFO: Current state: 4]\nMINFO: { tl: 1200.0, tr: 1200.0 … }`,
+    tcheck: `<span class="i">Checking for a tool: raising the spindle</span>`,
+    toolq: `<span class="i">Beam broken: tool present</span>\n[MSG:INFO: Current state: 7]`,
+    notool: `<span class="i">Top of travel reached: no tool</span>\n[MSG:INFO: Current state: 7]`,
+    toolremove: `[MSG:INFO: Current state: 7]\nok`,
+    toolfreeing: `$Spindle/RemoveTool\n<span class="i">Raising Z until the tool clears the beam</span>`,
+    measure: `[MSG:INFO: Current state: 7]\nok`,
+    toolload: `<span class="i">Waiting for a tool to break the beam…</span>`,
+    zsetting: `<span class="i">Setting Z from a 31.5 mm stick-out</span>`,
+    recovered: `<span class="i">Spindle fault recovery done, Z re-homed</span>\n[MSG:INFO: Current state: 7]`,
+    finalcheck: `[MSG:INFO: Current state: 7]\nok`,
+    toextend: `[MSG:INFO: Current state: 2]\nok`,
+    extstopped: `<span class="i">Extending stopped by the user</span>\nMINFO: { tl: 888.0, tr: 972.0 … }`,
+    extending: `[MSG:INFO: Extending all belts]\n[MSG:INFO: Current state: 3]\nMINFO: { tl: 891.2, tr: 975.8 … }`,
+    tensioning: `[MSG:INFO: Current state: 5]\n[MSG:INFO: Taking slack]`,
+    anchors: `[MSG:INFO: Current state: 6]\n[MSG:INFO: Measured waypoint 4]`,
+    noanchors: `<span class="e">[MSG:ERR: Calibration failed]</span>\n[MSG:INFO: Current state: 4]`,
+    secure: `[MSG:INFO: Current state: 7]\nok`,
+    releasing: `[MSG:INFO: Current state: 8]\n[MSG:INFO: Releasing tension]`,
+    choosefile: `[MSG:INFO: Current state: 7]\nok`,
+    ready: `[MSG:INFO: Current state: 7]\nok`,
+    tracing: `<span class="i">Tracing the boundary of sign-panel.nc</span>\nG0 X284.0 Y194.0`,
+    parking: `SD: sign-panel.nc: Sent\n<span class="i">Parking</span>`,
+    stopped: `<span class="i">Job stopped at line 1240</span>\n[MSG:INFO: Current state: 7]`,
+    cutting: `G1 X212.4 Y88.0 F1200\nG1 X212.4 Y91.5\n<span class="i">G1 X218.0 Y91.5</span>`,
+    success: `SD: sign-panel.nc: Sent\n<span class="i">Job finished</span>`,
+    spindle: `<span class="w">Spindle fault reported by the spindle board</span>\n<span class="i">Ending the job, lifting Z</span>`,
+    recovery: `<span class="w">Spindle fault reported by the spindle board</span>\n<span class="e">Spindle recovery didn't finish</span>`,
+    error: `<span class="w">[MSG:WARN: Position error on Top Right axis exceeded 15mm]</span>\n<span class="e">[MSG:ERR: Emergency stop! Stopping all motors]</span>`,
+    lost: `<span class="e">Connection lost</span>\n<span class="w">Reconnecting…</span>`
+  };
+  return `<pre class="log">${L[k]}</pre>`;
+}
+
+function render() {
+  const L = LAYOUTS[st.layout], k = st.state, s = STATES[k];
+  const bn = document.getElementById("banner");
+  const gtop = st.bar === "guidetop", inSetup = isSetup(k);
+  const comb = st.bar === "combined" || (gtop && !inSetup), inCfg = st.bar === "config";
+  bn.className = "banner" + (comb ? " combined" : gtop ? " gtop" : "");
+  const topGuide = gtop && inSetup;
+  bn.style.setProperty("--tone", s.tone);
+  bn.innerHTML = (topGuide ? guideBar(k, s) : comb ? combinedBar(k, s) : banner(s)) + gearBtn() + (topGuide ? guideMore(k) : "") + (k === "finalcheck" ? finalChecks() : "");
+  document.getElementById("layoutNote").innerHTML = `<b>Layout ${st.layout}: ${L.name}.</b> ${L.note}`;
+
+  const board = document.getElementById("board");
+  const areas = comb || inCfg || gtop ? L.areas.map(r => r.split(" ").map(a => a === "state" ? L.absorb : a).join(" ")) : L.areas;
+  board.style.gridTemplateColumns = L.cols;
+  board.style.gridTemplateRows = L.rows;
+  board.style.gridTemplateAreas = areas.map(r => `"${r}"`).join(" ");
+
+  let html = "";
+  // visuals
+  const inset = L.log === "inset" ? `<div class="inset"><div class="ph">Log<small>collapse ▸</small></div><div class="pb">${logText(k)}</div></div>` : "";
+  html += `<section class="panel vis" data-a="vis" style="grid-area:vis"><div class="tabs"><span class="on">Toolpath</span><span>Frame</span><span>3D</span></div>
+    ${visSvg(k, s)}<span class="viscap">${s.nopos && s.moving ? "Position isn't live while the belts move" : s.stale ? "Last known position" : ""}</span>${inset}</section>`;
+  // compass
+  const c = compassBody(k);
+  html += `<section class="panel" data-a="comp" style="grid-area:comp"><div class="ph">Jog / Home<small></small></div><div class="pb">${c.body}</div>${c.lock ? `<div class="locked"><div><b>${c.lock[0]}</b><span>${c.lock[1]}</span></div></div>` : ""}</section>`;
+  // config (+ log tab)
+  const ctitle = L.log === "tab" ? `<span class="ctabs"><span class="on">Device config</span><span>Serial log</span></span>` : "Device config";
+  if (gtop && !inSetup) html += `<section class="panel" data-a="cfg" style="grid-area:cfg"><div class="ph">Device details<small>${s.stale ? "out of date" : "live"}</small></div><div class="pb">${stateBody(k, s, true)}${k === "ready" || k === "stopped" ? `<p class="note">Setup is complete. Change it only if something moved.</p><div class="row"><button class="btn ghost" type="button">Release tension</button><button class="btn ghost" type="button">Find anchors</button><button class="btn ghost" type="button">Change file</button></div>` : ""}</div></section>`;
+  else if (gtop) html += `<section class="panel" data-a="cfg" style="grid-area:cfg"><div class="ph pinned"><span style="display:flex;align-items:center;gap:8px;min-width:0"><span class="mode" style="--tone:${s.tone};font-size:13px">${s.mode}</span>${s.sub ? `<span class="sub" style="color:var(--text);font-family:var(--font-sans)">${s.sub}</span>` : ""}<small>${s.stale ? "out of date" : ""}</small></span><span class="hbtns">${stateBtns(k)}</span></div><div class="pb">${stateBody(k, s, true)}</div></section>`;
+  else if (inCfg) html += panel("cfg", "Device state and setup", stateBody(k, s) + `<hr style="border:0;border-top:1px solid var(--sep);margin:2px 0">` + configBody(k), s.stale ? "out of date" : "live");
+  else html += panel("cfg", ctitle, configBody(k), isSetup(k) ? "step guide" : "");
+  // files (+ merged state)
+  html += panel("files", "File management", filesBody(k, s));
+  // state
+  if (st.bar === "separate") html += panel("state", "Device state", stateBody(k, s), s.stale ? "out of date" : "live");
+  // log
+  if (L.log === "panel") html += panel("log", "G-code / serial log", logText(k));
+  if (L.log === "drawer") html += `<section class="panel drawer" data-a="log" style="grid-area:log"><div class="ph">G-code / serial log<small>expand ▴</small></div><div class="pb"></div></section>`;
+  board.innerHTML = html;
+}
+
+function init() {
+  const sel = document.getElementById("stateSel");
+  const modes = [...new Set(Object.values(STATES).map(s => s.mode))];
+  sel.innerHTML = modes.map(m => `<optgroup label="${m}">` + Object.entries(STATES).filter(([, s]) => s.mode === m)
+    .map(([k, s]) => `<option value="${k}">${s.label}</option>`).join("") + `</optgroup>`).join("");
+  sel.value = st.state;
+  sel.addEventListener("change", () => { st.state = sel.value; st.wa = sel.value === "newarea"; ph.a = ph.b = ph.c = null; ph.cOpen = false; sync(); });
+  const ws = document.getElementById("walkSel");
+  ws.innerHTML += Object.entries(SCENARIOS).map(([id, [n]]) => `<option value="${id}">${n}</option>`).join("");
+  ws.addEventListener("change", () => startWalk(ws.value));
+  document.getElementById("walkRestart").addEventListener("click", () => startWalk(walk.on));
+  sel.addEventListener("change", () => { if (walk.on) { clearTimeout(walk.timer); walkBar(); } });
+  document.getElementById("viewSel").addEventListener("change", e => { st.view = e.target.value; sync(); });
+  document.getElementById("themeSel").addEventListener("change", e => { document.getElementById("screen").dataset.panels = e.target.value; document.getElementById("phones").dataset.panels = e.target.value; });
+  document.addEventListener("click", e => { if (e.target.closest(".setz-link")) e.preventDefault(); });
+  sync();
+}
+function sync() {
+  const phone = st.view === "phone" || st.view === "land";
+  document.getElementById("screen").hidden = phone;
+  document.getElementById("phones").hidden = !phone;
+  document.getElementById("layoutNote").hidden = phone;
+  render();
+  if (phone) rerenderPhones();
+  renderSettings();
+}
+// ---------- Phone mockups ----------
+const ph = { a: null, b: null, cOpen: false, c: null };
+
+function phoneHead(k, s) {
+  const inSetup = isSetup(k);
+  const [step, skip] = guideOf(k);
+  const sub = s.sub;
+  return `<div class="p-head"><div class="p-top"><span class="mode" style="--tone:${s.tone}">${s.mode}</span>${sub ? `<span class="sub">${sub}</span>` : ""}<span class="conn" style="--c:${s.conn[1]}"><i></i></span>${gearBtn()}</div>` +
+    (inSetup ? `<div class="p-prog"><span>Setup ${progress(step, skip).replace(" done", "")}</span>${segs(step, skip)}</div>` : `<div class="p-msg${s.alert ? " alert" : ""}">${s.msg}</div>`) +
+    (k === "finalcheck" ? finalChecks() : "") + `</div>`;
+}
+function phoneAct(k) {
+  return `<div class="p-act"><div class="row">${actions(k, false)}</div></div>`;
+}
+function phoneSetupOrDetails(k, s) {
+  return showsGuide(k) ? configBody(k) : stateBody(k, s, true);
+}
+function phoneVis(k, s, withLog) {
+  return `<div class="vis"><div class="tabs"><span class="on">Toolpath</span><span>Frame</span><span>3D</span></div>${visSvg(k, s)}${withLog ? `<div class="inset"><div class="ph">Log<small>▸</small></div><div class="pb">${logText(k)}</div></div>` : ""}</div>`;
+}
+function phoneJog(k) { const c = compassBody(k); return `<div style="position:relative;display:grid;gap:10px">${c.body}${c.lock ? `<div class="locked"><div><b>${c.lock[0]}</b><span>${c.lock[1]}</span></div></div>` : ""}</div>`; }
+const PTABS = [["vis", "▣", "Visuals"], ["setup", "✓", "Setup"], ["jog", "✥", "Jog"], ["files", "▤", "Files"], ["log", "≡", "Log"]];
+function defaultTab(k) { return showsGuide(k) ? "setup" : "vis"; }
+
+function phoneA(k, s) {
+  const tab = ph.a || defaultTab(k);
+  const label = { setup: showsGuide(k) ? "Setup" : "Details" };
+  let body = "";
+  if (tab === "vis") body = phoneVis(k, s, false);
+  else body = `<div class="p-card">${tab === "setup" ? phoneSetupOrDetails(k, s) : tab === "jog" ? phoneJog(k) : tab === "files" ? filesBody(k, s) : logText(k)}</div>`;
+  const tabs = PTABS.map(([id, ic, name]) => `<button type="button" data-ph="a" data-tab="${id}" aria-selected="${id === tab}"><b>${ic}</b>${label[id] || name}${id === "setup" && isSetup(k) && tab !== "setup" ? '<span class="dot"></span>' : ""}</button>`).join("");
+  return `<div class="phone">${phoneHead(k, s)}<div class="p-body" style="${tab === "vis" ? "align-content:stretch" : ""}">${body}</div>${phoneAct(k)}<nav class="tabbar" role="tablist">${tabs}</nav></div>`;
+}
+
+function phoneB(k, s) {
+  const open = ph.b || defaultTab(k);
+  const sum = {
+    setup: isSetup(k) ? `Step ${guideOf(k)[0] + 1}: ${STEPS[guideOf(k)[0]]}` : k === "error" ? "Apply tension after clearing the error" : k === "noanchors" ? "Find anchors again" : STATES[k].nopos ? "No position yet" : "X 0.688  Y -9.709",
+    jog: compassBody(k).lock ? compassBody(k).lock[0] : "Ready to jog",
+    files: k === "choosefile" || isSetup(k) ? "No file chosen" : "sign-panel.nc · 18 min",
+    log: "Last: " + (k === "cutting" ? "G1 X218.0 Y91.5" : "Current state")
+  };
+  const sec = (id, name, body) => `<details ${open === id ? "open" : ""} data-ph="b" data-sec="${id}"><summary><b>${name}</b><span>${sum[id]}</span></summary><div class="accbody">${body}</div></details>`;
+  const setupName = showsGuide(k) ? "Setup" : "Details";
+  return `<div class="phone" style="grid-template-rows:auto 1fr auto">${phoneHead(k, s)}<div class="p-body"><div class="accvis">${phoneVis(k, s, false).replace('<div class="vis">', '<div class="vis" style="position:static">')}</div>
+    <div class="acc">${sec("setup", setupName, phoneSetupOrDetails(k, s))}${sec("jog", "Jog", phoneJog(k))}${sec("files", "Files", filesBody(k, s))}${sec("log", "Log", logText(k))}</div></div>${phoneAct(k)}</div>`;
+}
+
+function phoneC(k, s) {
+  const seg = ph.c || (showsGuide(k) ? "setup" : "details");
+  const open = ph.cOpen;
+  const chips = [["setup", "Setup"], ["details", "Details"], ["jog", "Jog"], ["files", "Files"], ["log", "Log"]]
+    .map(([id, n]) => `<button type="button" data-ph="c" data-seg="${id}" aria-selected="${id === seg}">${n}</button>`).join("");
+  const body = seg === "setup" ? configBody(k) : seg === "details" ? stateBody(k, s, true) : seg === "jog" ? phoneJog(k) : seg === "files" ? filesBody(k, s) : logText(k);
+  return `<div class="phone" style="grid-template-rows:auto 1fr auto">${phoneHead(k, s)}<div class="sheetwrap">${phoneVis(k, s, false)}
+    <div class="sheet" style="height:${open ? "88%" : "42%"}"><button class="handle" type="button" data-ph="c" data-toggle="1" aria-label="${open ? "Collapse" : "Expand"} panel"></button><div class="chips2" role="tablist">${chips}</div><div class="sbody">${body}</div></div></div>${phoneAct(k)}</div>`;
+}
+
+function rerenderPhones() { st.view === "land" ? renderLand() : renderPhones(); if (typeof renderSettings === "function") renderSettings(); }
+function renderPhones() {
+  const k = st.state, s = STATES[k];
+  document.getElementById("phones").innerHTML =
+    `<div class="phonecol"><h2>A. Tabs</h2><p>The state is pinned on top, with Run and Stop just above five tabs at the bottom. One panel fills the screen at a time.</p>${phoneA(k, s)}</div>` +
+    `<div class="phonecol"><h2>B. Visuals and sections</h2><p>A small visual stays on screen, with collapsible sections below and Run and Stop pinned at the bottom.</p>${phoneB(k, s)}</div>` +
+    `<div class="phonecol"><h2>C. Visuals with a sheet</h2><p>The visuals fill the screen, with a pull-up sheet above Run and Stop. Chips switch what the sheet shows.</p>${phoneC(k, s)}</div>`;
+}
+
+function phoneALand(k, s) {
+  const tab = ph.a || defaultTab(k);
+  const label = { setup: showsGuide(k) ? "Setup" : "Details" };
+  const body = tab === "vis" ? phoneVis(k, s, false) : `<div class="p-card">${tab === "setup" ? phoneSetupOrDetails(k, s) : tab === "jog" ? phoneJog(k) : tab === "files" ? filesBody(k, s) : logText(k)}</div>`;
+  const tabs = PTABS.map(([id, ic, name]) => `<button type="button" data-ph="a" data-tab="${id}" aria-selected="${id === tab}"><b>${ic}</b>${label[id] || name}${id === "setup" && isSetup(k) && tab !== "setup" ? '<span class="dot"></span>' : ""}</button>`).join("");
+  return `<div class="phone land" style="grid-template-columns:70px 1fr 150px;grid-template-rows:auto 1fr">
+    <nav class="rail" role="tablist" style="grid-row:1 / 3">${tabs}</nav>
+    <div style="grid-column:2 / 4">${phoneHead(k, s)}</div>
+    <div class="p-body" style="${tab === "vis" ? "align-content:stretch" : ""}">${body}</div>
+    ${phoneAct(k).replace('class="p-act"', 'class="p-act vert"')}</div>`;
+}
+function phoneBLand(k, s) {
+  const html = phoneB(k, s);
+  const acc = html.slice(html.indexOf('<div class="acc">'), html.indexOf('</div></div><div class="p-act">') + 6);
+  return `<div class="phone land" style="grid-template-columns:1fr 1fr;grid-template-rows:auto 1fr auto">
+    <div style="grid-column:1 / 3">${phoneHead(k, s)}</div>
+    <div class="accvis" style="grid-row:2 / 4;height:auto;margin:8px">${phoneVis(k, s, false).replace('<div class="vis">', '<div class="vis" style="position:static">')}</div>
+    <div class="p-body">${acc}</div>${phoneAct(k)}</div>`;
+}
+function phoneCLand(k, s) {
+  const seg = ph.c || (showsGuide(k) ? "setup" : "details");
+  const open = ph.cOpen;
+  const chips = [["setup", "Setup"], ["details", "Details"], ["jog", "Jog"], ["files", "Files"], ["log", "Log"]]
+    .map(([id, n]) => `<button type="button" data-ph="c" data-seg="${id}" aria-selected="${id === seg}">${n}</button>`).join("");
+  const body = seg === "setup" ? configBody(k) : seg === "details" ? stateBody(k, s, true) : seg === "jog" ? phoneJog(k) : seg === "files" ? filesBody(k, s) : logText(k);
+  return `<div class="phone land" style="grid-template-rows:auto 1fr auto">${phoneHead(k, s)}<div class="sheetwrap">${phoneVis(k, s, false)}
+    <div class="sheet side" style="width:${open ? "70%" : "44%"}"><button class="handle" type="button" data-ph="c" data-toggle="1" aria-label="${open ? "Collapse" : "Expand"} panel"></button><div class="chips2" role="tablist">${chips}</div><div class="sbody">${body}</div></div></div>${phoneAct(k)}</div>`;
+}
+function renderLand() {
+  const k = st.state, s = STATES[k];
+  document.getElementById("phones").innerHTML =
+    `<div class="phonecol"><h2>A. Tabs</h2><p>Tabs become a rail on the left, and Run and Stop stack on the right, under your thumb.</p>${phoneALand(k, s)}</div>` +
+    `<div class="phonecol"><h2>B. Visuals and sections</h2><p>Visuals on the left, collapsible sections on the right, with Run and Stop under them.</p>${phoneBLand(k, s)}</div>` +
+    `<div class="phonecol"><h2>C. Visuals with a sheet</h2><p>The sheet slides in from the right instead of up from the bottom. Run and Stop stay along the bottom.</p>${phoneCLand(k, s)}</div>`;
+}
+
+document.addEventListener("click", e => {
+  const el = e.target.closest("[data-ph]");
+  if (!el) return;
+  if (el.dataset.ph === "a") { ph.a = el.dataset.tab; rerenderPhones(); }
+  if (el.dataset.ph === "c") { if (el.dataset.toggle) ph.cOpen = !ph.cOpen; else { ph.c = el.dataset.seg; ph.cOpen = true; } rerenderPhones(); }
+  if (el.dataset.ph === "b" && e.target.closest("summary")) { e.preventDefault(); ph.b = ph.b === el.dataset.sec ? "none" : el.dataset.sec; rerenderPhones(); }
+});
+
+// ---------- Settings pop-up ----------
+const SECTIONS = [["state", "State"], ["device", "Device"], ["network", "Network"], ["workarea", "Work area"], ["tool", "Tool and Z"], ["display", "Display"], ["advanced", "Advanced"]];
+const gearBtn = () => `<button class="gear" type="button" data-settings="open" aria-label="Settings" aria-expanded="${st.settings}">⚙</button>`;
+function srow(label, hint, val) { return `<div class="srow"><span>${label}${hint ? `<small>${hint}</small>` : ""}</span><div class="val">${val}</div></div>`; }
+// What the device can do right now, from its state. Each action: [label, what it does, button style, next state, state after Apply tension]
+const ACT = {
+  retract: ["Retract belts", "Winds all four belts in until they meet resistance. The belt lengths reset to zero.", "ghost", "retracting"],
+  extend: ["Extend belts", "Lets the belts pay out so you can pull them to the anchors and attach them.", "ghost", "extending"],
+  tension: ["Apply tension", "Takes up the slack and checks the position against the saved anchors.", "", "tensioning"],
+  release: ["Release tension", "Slackens the belts a little so you can reach the work piece. The belt lengths are kept.", "ghost", "releasing"],
+  anchors: ["Find anchors", "Measures the frame to find each anchor point. Takes a few minutes.", "ghost", "anchors"],
+  anchorsAgain: ["Find anchors again", "Runs Find anchors again, once each belt is hooked to its anchor.", "", "anchors"],
+  tool: ["Check the tool", "Raises the spindle through the light beam to see if a bit is loaded.", "ghost", "tcheck"],
+  clear: ["Clear error ($X)", "Clears the error so the device can move again.", "", null],
+  reboot: ["Reboot device", "Restarts the board. It reconnects on its own.", "ghost", "connecting"],
+  cont: ["Continue from line 1,240", "Carries on with the stopped job from where it stopped. Needs the firmware to save progress.", "go", "cutting"],
+  restart: ["Run from the start", "Runs the job again from the first line, after the final check.", "ghost", "finalcheck"],
+  stop: ["Stop", "Stops the belts at once, turns the spindle off and lifts Z. The job's progress is saved (needs firmware).", "danger", null]
+};
+const TENSIONED = ["tool", "toolq", "notool", "toolremove", "measure", "toolload", "secure", "choosefile", "ready", "stopped", "finalcheck", "recovered"];
+function stateActions(k) {
+  const s = STATES[k];
+  if (k === "wifi" || k === "connecting") return [];
+  if (k === "lost") return ["reboot"];
+  if (k === "cutting") return ["stop"];
+  if (k === "stopped") return ["cont", "restart", "release", "tool", "anchors", "retract"];
+  if (k === "releasing") return ["tension", "retract"];  // belts are slack, waiting for the user
+  if (s.moving) return ["stop"];
+  if (k === "error" || k === "recovery") return ["clear", "reboot"];
+  if (k === "noanchors") return ["anchorsAgain", "retract"];
+  if (["retracted", "toextend", "extstopped"].includes(k)) return ["extend", "retract"];
+  if (["extended", "restored"].includes(k)) return ["tension", "anchors", "retract"];
+  if (TENSIONED.includes(k)) return ["release", "tool", "anchors", "retract"];
+  return ["retract"];  // belt lengths unknown, or the work area is being set
+}
+// Every action, always shown in the same order; the ones the device can't do right now are greyed out
+const ACT_ORDER = ["retract", "extend", "tension", "release", "anchors", "tool", "cont", "restart", "clear", "reboot", "stop"];
+const NEED = {
+  retract: "", extend: "Only once the belts are retracted.", tension: "Only once the belts are extended, or tension was released.",
+  release: "Only while the belts are tensioned.", anchors: "Only once the belts are extended or tensioned.",
+  tool: "Only once the position is confirmed.", cont: "Only after a job was stopped.", restart: "Only after a job was stopped.",
+  clear: "Only after an error.", reboot: "", stop: "Nothing is moving."
+};
+function whyNot(a, k) {
+  const s = STATES[k];
+  if (k === "wifi" || k === "connecting" || (k === "lost" && a !== "reboot")) return "Waiting for the device to answer.";
+  if (a === "stop") return NEED.stop;
+  if (s.mode === "Job" && k !== "stopped") return "Not while a job is running. Press Stop first.";
+  if (s.moving) return "Not while the device is moving. Press Stop first.";
+  if ((k === "error" || k === "recovery") && a !== "clear" && a !== "reboot") return "Clear the error first.";
+  return NEED[a] || "Not available in this state.";
+}
+function stateSection(k) {
+  const s = STATES[k], acts = stateActions(k);
+  const btns = ACT_ORDER.map(a => {
+    const id = a === "anchors" && acts.includes("anchorsAgain") ? "anchorsAgain" : a;
+    const on = acts.includes(id), [label, what, cls] = ACT[id];
+    const tip = what + (on ? "" : " " + whyNot(a, k));
+    return `<span class="actpair"><button class="btn ${cls}" type="button" data-act="${id}"${on ? "" : " disabled"}>${label}</button>` +
+      `<span class="qhelp" tabindex="0" role="img" aria-label="${tip.replace(/"/g, "&quot;")}" data-tip="${tip.replace(/"/g, "&quot;")}">?</span></span>`;
+  }).join("");
+  return `<h4>State</h4>
+    <div class="minis"><div class="mini"><span>Mode</span><b><span class="mode" style="--tone:${s.tone};font-size:12px">${s.mode}</span> ${s.sub || ""}</b></div>
+      <div class="mini"><span>Connection</span><b><span class="conn" style="--c:${s.conn[1]}"><i></i>${s.conn[0]}</span></b></div></div>
+    <p${s.alert ? ' class="alert"' : ""} style="margin:0">${s.msg}</p>
+    <div class="actgrid">${btns}</div>`;
+}
+function settingsBody(sec, k) {
+  const s = STATES[k], busy = s.mode === "Job" || s.moving, off = s.mode === "Connecting" || k === "lost";
+  const dis = (why) => why ? ` disabled title="${why}"` : "";
+  const lockWhy = off ? "Waiting for the device" : busy ? "Not while the device is moving or running a job" : "";
+  if (sec === "state") return stateSection(k);
+  const lockNote = lockWhy ? `<p class="note">${lockWhy}: settings that move or restart the device are unavailable.</p>` : "";
+  if (sec === "device") return `<h4>Device</h4>${lockNote}` +
+    srow("Name", "Letters, numbers and dashes. Sets the .local address and the hotspot name.",
+      `<input type="text" class="mono" value="shop-maslow" aria-label="Device name" style="width:180px"><span class="note">shop-maslow.local</span>`) +
+    srow("Firmware", "", `<span style="font-family:var(--font-mono)">Maslow-Mini 3448d81f</span><button class="btn ghost" type="button"${dis(lockWhy)}>Update firmware</button>`) +
+    srow("Restart", "Reconnects on its own when it's back.", `<button class="btn ghost" type="button"${dis(lockWhy)}>Reboot device</button>`) +
+    `<p class="note">Renaming changes the address, so the page moves to the new one. Whether it needs a restart isn't checked yet.</p>`;
+  if (sec === "network") return `<h4>Network</h4>` +
+    srow("WiFi network", "", `<span>Workshop-5G</span><span class="conn" style="--c:var(--ready)"><i></i>Connected</span><button class="btn ghost" type="button">Change network</button>`) +
+    srow("Hotspot", "The hotspot lets you reach the device when it has no WiFi.",
+      `<select aria-label="Hotspot"><option>Only when WiFi isn't connected</option><option>Always on</option><option>Off</option></select>`) +
+    `<p class="note">Placeholder: these options depend on what the current WiFi dialog offers, which isn't documented yet.</p>`;
+  if (sec === "workarea") return `<h4>Work area</h4>${lockNote}` +
+    srow("Size", "", `<span style="font-family:var(--font-mono)">${waText()}</span>`) +
+    srow("Spoil board thickness", "Raises the sled, which changes the belt angles.", `<span style="font-family:var(--font-mono)">${WA.spoil} mm</span>`) +
+    srow("", "", `<button class="btn ghost" type="button" data-settings="wa"${dis(lockWhy)}>Change work area</button>`) +
+    srow("Stock thickness", "Asked at Secure the work piece for each job.", `<span style="font-family:var(--font-mono)">6.35 mm</span><span class="note">last job</span>`) +
+    srow("Anchors", "Saved in maslow.yaml.", `<span>Saved</span><span class="note">measured date needs firmware support</span>`) +
+    srow("", "", `<button class="btn ghost" type="button"${dis(lockWhy)}>Find anchors</button><button class="btn ghost" type="button"${dis(lockWhy)}>Clear anchors</button>`) +
+    `<p class="note">Changing the size should clear the anchors, so setup runs every step next time. That needs a firmware change, as does Clear anchors.</p>`;
+  if (sec === "tool") return `<h4>Tool and Z</h4>` +
+    srow("Last stick-out", "Set when you measure a tool.", `<span style="font-family:var(--font-mono)">31.5 mm</span>`) +
+    srow("Default bit", "Shown when a tool is found.", `<select aria-label="Default bit"><option>1/4" end mill</option><option>1/8" end mill</option><option>V-bit 60°</option></select>`) +
+    srow("Z after Stop", "How far Z lifts above work Z when you press Stop.", `<span style="font-family:var(--font-mono)">+2 mm</span><span class="note">fixed in firmware</span>`);
+  if (sec === "display") return `<h4>Display</h4>` +
+    srow("Panels", "", `<select aria-label="Panels" data-settings="theme"><option value="dark"${(document.getElementById("screen").dataset.panels || "dark") === "dark" ? " selected" : ""}>Dark</option><option value="light"${document.getElementById("screen").dataset.panels === "light" ? " selected" : ""}>Light</option></select>`) +
+    srow("Units", "", `<select aria-label="Units"><option>mm</option><option>inches</option></select>`);
+  return `<h4>Advanced</h4><p class="note">The raw FluidNC and Maslow settings, for people who need them. Changes here aren't checked by the UI.</p>` +
+    srow("Belt retraction limit", "Apply tension stops if a belt winds in more than this.", `<input type="text" class="mono" value="300" aria-label="Belt retraction limit in mm" style="width:80px"> mm`) +
+    srow("Hostname", "$ESP112", `<span style="font-family:var(--font-mono)">shop-maslow</span>`) +
+    srow("Hotspot name", "$ESP105", `<span style="font-family:var(--font-mono)">shop-maslow</span>`) +
+    srow("Config file", "", `<button class="btn ghost" type="button">Open maslow.yaml</button>`);
+}
+function settingsHTML(compact) {
+  const k = st.state;
+  // During setup on desktop, Stop sits in the Device state panel under the pop-up, so the pop-up carries its own
+  const stopInHead = !compact && isSetup(k);
+  const nav = SECTIONS.map(([id, n]) => `<button type="button" data-settings="sec" data-sec="${id}" aria-current="${id === st.sec}">${n}</button>`).join("");
+  return `<div class="modal-bg${compact ? " compact" : ""}" data-settings="bg"><div class="modal${compact ? " compact" : ""}" role="dialog" aria-modal="true" aria-label="Settings">
+    <div class="mhead"><h3>Settings<small>shop-maslow</small></h3><span style="display:flex;gap:8px;align-items:center">${stopInHead ? `<button class="btn danger" type="button" style="min-height:36px">Stop</button>` : ""}<button class="gear" type="button" data-settings="close" aria-label="Close settings">✕</button></span></div>
+    <nav class="mnav">${nav}</nav><div class="mbody">${settingsBody(st.sec, k)}</div></div></div>`;
+}
+function workAreaHTML(compact) {
+  const k = st.state, stopInHead = !compact && isSetup(k);
+  return `<div class="modal-bg${compact ? " compact" : ""}" data-settings="bg"><div class="modal single${compact ? " compact" : ""}" role="dialog" aria-modal="true" aria-label="Work area">
+    <div class="mhead"><h3>Work area</h3><span style="display:flex;gap:8px;align-items:center">${stopInHead ? `<button class="btn danger" type="button" style="min-height:36px">Stop</button>` : ""}<button class="gear" type="button" data-settings="close" aria-label="Close work area">✕</button></span></div>
+    <div class="mbody">
+      <p class="note">Current work area: ${waText()}</p>${stepArt(0)}
+      ${srow("Width", "", `<input type="text" class="mono" value="${WA.w}" aria-label="Width in mm" data-wa="w" style="width:90px"> mm`)}
+      ${srow("Height", "", `<input type="text" class="mono" value="${WA.h}" aria-label="Height in mm" data-wa="h" style="width:90px"> mm`)}
+      ${srow("Spoil board thickness", "Raises the sled, which changes the belt angles. 0 if there isn't one.", `<input type="text" class="mono" value="${WA.spoil}" aria-label="Spoil board thickness in mm" data-wa="spoil" style="width:90px"> mm`)}
+      <div class="callout" style="--tone:var(--warn)"><b>Saving clears the anchors</b><span>Setup then runs every step, and Find anchors runs after Apply tension. Clearing them on save needs a firmware change.</span></div>
+    </div>
+    <div class="mfoot"><button class="btn ghost" type="button" data-settings="close">Cancel</button><button class="btn" type="button" data-settings="save-wa">Save work area</button></div></div></div>`;
+}
+function renderSettings() {
+  document.querySelectorAll(".modal-bg").forEach(m => m.remove());
+  document.querySelectorAll(".gear[data-settings=open]").forEach(g => g.setAttribute("aria-expanded", String(st.settings)));
+  if (!st.settings && !st.wa) return;
+  const html = c => st.settings ? settingsHTML(c) : workAreaHTML(c);
+  if (st.view === "desktop") document.getElementById("screen").insertAdjacentHTML("beforeend", html(false));
+  // On a phone it covers everything but Run and Stop (and, in A, the tabs)
+  else document.querySelectorAll(".phone").forEach(p => {
+    p.insertAdjacentHTML("beforeend", html(true));
+    if (p.querySelector(".rail")) Object.assign(p.lastElementChild.style, { gridColumn: "1 / 3", gridRow: "1 / -1" });
+  });
+}
+document.addEventListener("click", e => {
+  const el = e.target.closest("[data-settings]");
+  if (!el) return;
+  const a = el.dataset.settings;
+  if (a === "open") { st.settings = true; st.wa = false; }
+  else if (a === "wa") { st.settings = false; st.wa = true; }
+  else if (a === "save-wa") {
+    document.querySelectorAll(".modal [data-wa]").forEach(i => { const v = parseFloat(i.value); if (!isNaN(v) && v >= 0) WA[i.dataset.wa] = v; });
+    st.wa = false; sync(); return;
+  }
+  else if (a === "close") st.settings = st.wa = false;
+  else if (a === "bg") { if (e.target !== el) return; st.settings = st.wa = false; }
+  else if (a === "sec") st.sec = el.dataset.sec;
+  else return;
+  renderSettings();
+});
+document.addEventListener("change", e => {
+  if (e.target.dataset.settings !== "theme") return;
+  const v = e.target.value; document.getElementById("themeSel").value = v;
+  document.getElementById("screen").dataset.panels = v; document.getElementById("phones").dataset.panels = v;
+});
+
+// ---------- Walkthrough: the buttons move the device through the flow ----------
+// FLOW[state][button label] = next state. AUTO[state] = [next state, ms] for steps the device runs on its own.
+const FLOW = {
+  wifi: { "Join network": "connecting" },
+  workarea: { "Keep this work area": "restored", "Set new work area": "newarea" },
+  newarea: { "Save work area": "unknown", "Cancel": "workarea" },
+  unknown: { "Retract belts": "retracting" },
+  retracted: { "Yes, all retracted": "toextend", "No, retract again": "retracting" },
+  toextend: { "Extend belts": "extending", "Retract again": "retracting" },
+  extending: { "Done extending": "extended", "Stop extending": "extstopped" },
+  extstopped: { "Extend again": "extending", "Retract belts": "retracting" },
+  extended: { "Apply tension": ["tensioning", "anchors"] },
+  restored: { "Apply tension": ["tensioning", "tcheck"] },
+  releasing: { "Apply tension": ["tensioning", "secure"] },
+  noanchors: { "Find anchors again": "anchors" },
+  toolq: { "Yes, Z is set": "secure", "No, set Z": "toolremove" },
+  notool: { "Measure a tool": "measure", "Continue without a tool": "secure" },
+  toolremove: { "Remove tool": "toolfreeing" },
+  measure: { "Save measurement": "toolload" },
+  toolload: { "Measure again": "measure" },
+  recovered: { "Check the tool": "tcheck" },
+  secure: { "It's secure": "choosefile", "Release tension": "releasing" },
+  choosefile: { "Upload file": "ready", "Choose file": "ready" },
+  ready: { "Trace boundary": "tracing", "Run sign-panel.nc": "finalcheck", "Run": "finalcheck" },
+  stopped: { "Continue from line 1,240": "cutting", "Continue": "cutting", "Run from the start": "finalcheck" },
+  finalcheck: { "Back": "ready", "Start sign-panel.nc": "cutting", "Start": "cutting" },
+  error: { "Clear error ($X)": "extended" },
+  recovery: { "Clear error ($X)": "tcheck", "Re-home Z": "tcheck" },
+  lost: { "Reboot device": "connecting" }
+};
+const AUTO = { connecting: ["workarea", 1500], retracting: ["retracted", 2500], tensioning: ["@tension", 2500], anchors: ["@anchors", 3500],
+  tracing: ["ready", 3000], cutting: ["@job", 7000], success: ["parking", 2000], parking: ["ready", 2500], spindle: ["recovered", 3000],
+  tcheck: ["@tool", 2000], zsetting: ["secure", 2000],
+  toolfreeing: ["measure", 2000], toolload: ["zsetting", 4000] };
+// Stop, from any moving step: where it leaves the device
+const STOP_TO = { retracting: "unknown", extending: "extstopped", tensioning: "extended", anchors: "extended", tracing: "ready",
+  parking: "ready", cutting: "stopped", success: "ready", zsetting: "toolload", toolfreeing: "toolremove" };
+const STOP_LABELS = ["Stop", "Stop retracting", "Stop extending", "Stop finding anchors"];
+const SCENARIOS = {
+  firstboot: ["First boot, through the hotspot", "wifi", {}],
+  firsttime: ["First-time setup", "newarea", {}],
+  reboot: ["Returning after a reboot", "workarea", {}],
+  job: ["Run a job", "ready", {}],
+  anchorsfail: ["Find anchors fails", "extended", { failAnchors: true }],
+  notool: ["No tool loaded", "restored", { noTool: true }],
+  estop: ["Emergency stop during a job", "cutting", { jobEnd: "error" }],
+  spindle: ["Spindle fault during a job", "cutting", { jobEnd: "spindle" }],
+  lost: ["Connection lost", "lost", {}]
+};
+const walk = { on: "", timer: null, tension: "tcheck", failAnchors: false, jobEnd: "success", noTool: false };
+function go(k) {
+  clearTimeout(walk.timer);
+  if (k === "@tension") k = walk.tension;
+  if (k === "@anchors") { k = walk.failAnchors ? "noanchors" : "tcheck"; walk.failAnchors = false; }
+  if (k === "@tool") k = walk.noTool ? "notool" : "toolq";
+  if (k === "@job") k = walk.jobEnd;
+  st.state = k; st.wa = k === "newarea"; st.settings = false; ph.a = ph.b = ph.c = null; ph.cOpen = false;
+  document.getElementById("stateSel").value = k;
+  sync();
+  const a = AUTO[k];
+  if (walk.on && a) walk.timer = setTimeout(() => go(a[0]), a[1]);
+  walkBar();
+}
+function walkBar() {
+  const bar = document.getElementById("walkbar");
+  document.body.classList.toggle("walking", !!walk.on);
+  document.getElementById("walkRestart").hidden = !walk.on;
+  bar.hidden = !walk.on;
+  if (!walk.on) return;
+  const k = st.state, labels = [...new Set(Object.keys(FLOW[k] || {}).filter(l => !/^(Run|Start)$/.test(l)))];
+  const stop = STOP_TO[k] ? ["Stop"] : [];
+  const tries = [...labels, ...stop];
+  bar.innerHTML = `<b>Walkthrough: ${SCENARIOS[walk.on][0]}</b>` +
+    (k === "toolload" ? `<span class="busy">Pretend to load the bit: the device detects it in a few seconds.</span>` : AUTO[k] ? `<span class="busy">The device is working on its own…</span>` : "") +
+    (tries.length ? `<span>Try:</span><span class="try">${tries.map(x => `<span>${x}</span>`).join("")}</span>` : AUTO[k] ? "" : `<span class="busy">End of this path. Restart, or pick another walkthrough.</span>`);
+}
+function startWalk(id) {
+  walk.on = id; clearTimeout(walk.timer);
+  if (!id) { walkBar(); return; }
+  const [, k, opts] = SCENARIOS[id];
+  walk.failAnchors = !!opts.failAnchors; walk.jobEnd = opts.jobEnd || "success"; walk.tension = "tcheck"; walk.noTool = !!opts.noTool;
+  go(k);
+}
+document.addEventListener("click", e => {
+  if (!walk.on) return;
+  const b = e.target.closest(".btn");
+  if (!b || b.disabled || !(b.closest("#screen") || b.closest("#phones"))) return;
+  const label = b.textContent.trim(), k = st.state;
+  if (STOP_LABELS.includes(label)) { if (STOP_TO[k]) go(STOP_TO[k]); return; }
+  if (b.dataset.act) {
+    const a = ACT[b.dataset.act];
+    let target = a[3];
+    if (b.dataset.act === "clear") target = k === "error" ? "extended" : "tcheck";
+    if (b.dataset.act === "tension") walk.tension = k === "releasing" ? "secure" : k === "extended" ? "anchors" : "tcheck";
+    if (target) setTimeout(() => go(target), 0);
+    return;
+  }
+  let next = (FLOW[k] || {})[label];
+  if (!next) return;
+  if (k === "finalcheck" && /^Start/.test(label)) {
+    const box = b.closest(".phone") || document.getElementById("screen");
+    const checks = [...box.querySelectorAll(".bchecks input[type=checkbox]")];
+    if (checks.some(c => !c.checked)) { checks.filter(c => !c.checked).forEach(c => c.closest("label").classList.add("flash")); return; }
+  }
+  if (Array.isArray(next)) { walk.tension = next[1]; next = next[0]; }
+  setTimeout(() => go(next), 0);  // let the pop-up handlers finish first
+}, true);  // capture, so this sees the click before a pop-up handler removes the button
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-dtab]");
+  if (!b) return;
+  st.dtab = b.dataset.dtab; sync();
+});
+document.addEventListener("click", e => {
+  if (!e.target.closest("[data-gx]")) return;
+  st.gx = !st.gx; render();
+});
+document.addEventListener("keydown", e => { if (e.key === "Escape" && (st.settings || st.wa)) { st.settings = st.wa = false; renderSettings(); } });
+
+init();
+</script>
