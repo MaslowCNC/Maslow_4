@@ -80,6 +80,15 @@ Format: **title** — what goes wrong, where, and how we found it.
 
 ## Low: web UI
 
+- [ ] **A config alarm doesn't say what's wrong or how to fix it.** Any unknown key in
+  `maslow.yaml` logs "Ignored key …" and sets ConfigAlarm (`log_config_error`, `Logging.h`).
+  The status report just says `Alarm`, and the UI's `$X` then fails with error 152, whose text
+  says the file "may be corrupt" and suggests a power cycle, which doesn't help. Seen 2026-11-07
+  after moving a machine from the Belt-stretch-compensation firmware (keys
+  `beltAxialStiffness`, `sledWeight`, `calibrationPullForce`); fixed by hand-editing the file.
+  Keeping the alarm for unknown keys is fine. Wanted: the UI says which keys or errors caused it
+  (from a status-report or `$` field, not by parsing boot log lines) and offers a fix, e.g.
+  remove the unknown keys and restart, with the original kept as a backup.
 - [ ] **File sizes always show in bytes.** `formatFileSize` (`files.js`) loops with
   `for...in` over the unit array, so it gets indices, not units, and never matches a unit.
   Found reading the code (2026-11-04).
@@ -101,6 +110,20 @@ Format: **title** — what goes wrong, where, and how we found it.
   Maslow 4.1 (192.168.1.253) and a Unified Control Board (192.168.1.243). Work around with the
   IP, or give each its own `$Hostname`. A default like `maslow-<last 4 of MAC>`, or a board
   check in the flash script, would prevent it.
+- [ ] **A failed WiFi firmware update doesn't say why, and space is getting tight.** On
+  2026-11-07 a machine on v1.23.0 (Belt-stretch-compensation, 192.168.0.103) refused `/updatefw`
+  with "Upload rejected, not enough space" from a failed `Update.begin()`, although its spare slot
+  (2.94 MB) was bigger than our image (2.77 MB). It answered with the status line `HTTP/1.1 1`,
+  which curl can't parse, so `flash-maslow.sh` only printed "Firmware upload failed (curl)", and
+  the web UI's update page would hit the same refusal. USB worked. To do: show the machine's
+  reason (script and UI), find why `Update.begin()` failed, and check the assumption behind WiFi
+  updates that two copies of the firmware fit at once: each app slot in `max_littlefs.csv` is
+  3,080,192 bytes and the firmware already uses 94.4% of it, so about 170 KB of growth is left
+  before WiFi updates stop working. A size check at build time would catch it early.
+- [ ] **`flash-maslow.sh usb` is broken with esptool 5.** `pio pkg exec` runs PlatformIO's
+  `tool-esptoolpy` 5.3.0 with a Python that lacks `rich_click`, and esptool 5 removed
+  `--verify` (it always verifies) and renamed the options (`write-flash`, `--flash-mode`, …).
+  Running `~/.platformio/penv/bin/python …/esptool.py` with the new names worked (2026-11-07).
 - [ ] **Native unit tests don't build on Linux** (missing `Queue.h` in X86TestSupport).
 - [ ] **One UI test fails: `maslowInfoMsgHandling is not defined`** (`maslow.test.ts:167`).
   The test calls it as a global, but `maslow.js:327` declares it as a module `const` and
