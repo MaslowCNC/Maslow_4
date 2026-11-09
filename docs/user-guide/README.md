@@ -59,6 +59,7 @@ The main screen has the controls you use most, from top to bottom:
     | Belt lengths unknown | **Retract**, or **Apply Tension** if some belt lengths were remembered from before the machine was switched off (see below) |
     | Retracted | **Extend** |
     | Belts extended | **Apply Tension** |
+    | Tensioned, but the belt lengths don't match the saved anchor positions (e.g. a new or moved frame) | **Find Anchors** |
     | Ready to cut, and idle | **Park** |
 
   - **Release Tension:** lets the belts go slack, for example before you take the machine down.

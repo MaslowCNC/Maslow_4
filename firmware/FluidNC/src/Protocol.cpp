@@ -314,12 +314,9 @@ void polling_loop(void* unused) {
                             break;
                         default: {
                             JobResume::noteStop(int32_t(channel->lineNumber()));  // Maslow: resumable from the failed line
-                            Channel* ldr = Job::leader_channel();
-                            if (ldr) {
-                                log_error_to(*ldr,
-                                             static_cast<int>(status) << " (" << errorString(status) << ") in "
-                                                                      << channel->name() << " at line " << channel->lineNumber());
-                            }
+                            // Maslow: to every connection (it used to go only to the one that started the job)
+                            log_error(static_cast<int>(status) << " (" << errorString(status) << ") in " << channel->name()
+                                                               << " at line " << channel->lineNumber());
                             Job::abort();
                             break;
                         }
@@ -424,8 +421,9 @@ void protocol_main_loop() {
                     report_echo_line_received(item.line, allChannels);
                 }
 
-                Channel* ldr         = Job::leader_channel();
-                Channel* out_channel = ldr ? ldr : channel;
+                // Maslow: while a job runs, only its own lines come through here; their output goes to
+                // every connection. Otherwise the reply goes to the channel that sent the line.
+                Channel* out_channel = Job::active() ? static_cast<Channel*>(&allChannels) : channel;
 
                 // Commands run on the task that calls Maslow.update(), and some of them block well
                 // past its 100 ms watchdog - $SD/Run mounts the card and opens the file (650 ms

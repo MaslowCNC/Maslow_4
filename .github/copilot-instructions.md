@@ -55,7 +55,7 @@ working around it quietly.
 - Some log lines are still matched by their exact text in the UI (`maslow.js`, `debugging.js`).
   Before changing any `log_info` / `log_warn` / `log_error` text, search `ESP3D-WEBUI/www/js` for
   it and change both sides in the same PR.
-- The calibration state numbers (`firmware/FluidNC/src/Maslow/MaslowEnums.h`, 0–9) are mirrored
+- The calibration state numbers (`firmware/FluidNC/src/Maslow/MaslowEnums.h`, 0–10) are mirrored
   in `machine.js` (`MASLOW`) and range-checked in the UI. Adding a state means updating both.
 
 ### Stopping and jobs
@@ -64,6 +64,24 @@ working around it quietly.
   halts at once, then `$STOP` (raise Z, save positions). A stopped SD job is reported as
   `STOPPED:<line>,<file>` and resumed with `machine.resumeFile(file, line)` (`$SD/RunFrom`). Don't
   bring back feed-hold pause or add another stop path.
+
+### Every connection is equal
+
+- **No client is special.** Every connection (browser tab, phone, USB, script) can take any
+  allowed action, and none has priority or extra rights. The client that started a job has no
+  more control over it than any other: any client can stop, watch or resume it.
+- **Events and state go to every connection:** log lines, job progress and job errors, `MINFO`,
+  alarms. Don't route a message to "the client that started it", and don't store a pointer to
+  a connection that outlives the command (a connection can close at any time). The firmware
+  used to send job output to a stored "job leader" and was removed for this reason.
+- These are the only exceptions, and they are intentional:
+  - **Replies** (`ok` / `error:N`, and the value a read returns) go only to the connection that
+    sent the command. Each client matches replies to its own commands (`wscommands.js`).
+  - **Per-connection settings** apply to that connection only: `$Report/Interval`, and the
+    `?report_seq` WebSocket option.
+  - **Connection management:** one WebSocket per browser (a new tab replaces the older one,
+    close code 4001), and at most 4 connections (the oldest is closed, code 4002). This limits
+    connection slots, not what a connected client may do.
 
 ### Safety and tests
 

@@ -381,6 +381,7 @@ plus a log line `Motion is disabled: <reason>` when Maslow has blocked motion.
 | `MINFO: {…}` | on `$MINFO` | **all channels** |
 | `[MSG:INFO: …]`, `[MSG:WARN: …]`, `[MSG:ERR: …]` | events | **all channels** (each channel filters by its own message level) |
 | `ALARM:N` | on alarm | all channels |
+| output of a running job's own lines, and the job's failure line (`[MSG:ERR: N (…) in SD at line L]`) | during an SD job or macro | **all channels** (Maslow; it used to go only to the channel that started the job) |
 | bare `PING` | every 10 s on WebSockets | each WebSocket |
 
 ### 5.1 Status report
@@ -407,7 +408,7 @@ Example while jogging, a report that carries the belts:
 | `WCO:x,y,z` | every 10th report when idle, every 30th when busy, or when it changes | work offset; WPos = MPos − WCO |
 | `Ov:feed,rapid,spindle` | every 10th / 20th report | overrides in % |
 | `A:SCFM` | with Ov, when on | S/C spindle CW/CCW, F flood, M mist |
-| `MS:n` | yes (Maslow) | Maslow calibration state, 0–9 (section 5.3) |
+| `MS:n` | yes (Maslow) | Maslow calibration state, 0–10 (section 5.3) |
 | `N:seq` | only on a WebSocket opened with `?report_seq` (Maslow) | this channel's report sequence number, +1 per report; a jump means reports were dropped. For measuring delivery (`scripts/report_monitor.mjs`); the UI doesn't ask for it |
 | `BL:tl,tr,bl,br` | yes (Maslow) | belt lengths, mm, 2 decimals; `?` for a belt whose length is unknown (not restored at boot and not retracted since) |
 | `BE:tl,tr,bl,br` | yes (Maslow) | each belt's position error (encoder position minus target), mm, 3 decimals |
@@ -471,6 +472,13 @@ The calibration state machine (`MaslowEnums.h`):
 | 2 | RETRACTED | 7 | READY_TO_CUT |
 | 3 | EXTENDING | 8 | RELEASE_TENSION |
 | 4 | EXTENDEDOUT | 9 | CALIBRATION_COMPUTING (never reached) |
+| | | 10 | TENSIONED |
+
+`TENSIONED` (Maslow): Apply Tension pulled the belts tight and measured them, but the lengths
+don't fit the saved anchors (they can't be solved, or the center deviates more than 25 mm). The
+belts stay tight; the next step is Find Anchors. Apply Tension, Release Tension (ends in
+EXTENDEDOUT) and Retract are also allowed. It used to go back to EXTENDEDOUT, which looked the
+same as freshly extended belts. Not saved: after a reboot the machine comes back as EXTENDEDOUT.
 
 Clients learn it from the **`MS:n` field of the status report** (section 5.1). It is in every
 report, and a state change sends an auto-report at once, so a client with auto-report on sees each

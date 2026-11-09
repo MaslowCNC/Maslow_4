@@ -23,5 +23,7 @@ Also check every pull request against the "Maslow architecture rules" in `.githu
 - New state read from `MINFO` or parsed from log lines, instead of a status report field.
 - A new `$` command or log line where an existing command or report field would do.
 - A Pause button, or a second way to stop the machine.
+- A client treated as special: messages sent only to the client that started something, extra
+  rights for one connection, or a stored pointer to a connection.
 - Data added to the regular status report. Don't approve it yourself: it needs review from
   @tristan-huber or @BarbourSmith before merge, and the description should mention @tristan-huber.

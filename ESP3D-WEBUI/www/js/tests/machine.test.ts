@@ -167,6 +167,15 @@ describe("belt operations", () => {
     await expect(op).rejects.toMatchObject({ reason: "failed", detail: "apply tension failed: now EXTENDEDOUT" });
   });
 
+  test("apply tension ending in TENSIONED (belts don't fit the anchors) fails it", async () => {
+    reply(idle(4));
+    const op = g.machine.applyTension();
+    reply("ok", home(5));
+    await tick();
+    reply(idle(10));
+    await expect(op).rejects.toMatchObject({ reason: "failed", detail: "apply tension failed: now TENSIONED" });
+  });
+
   test("calibrate succeeds on READY_TO_CUT", async () => {
     reply(idle(4));
     const op = g.machine.calibrate();

@@ -303,6 +303,7 @@ static Kinematics::MaslowKinematics* getKinematics() {
 // #define READY_TO_CUT 7
 // #define RELEASE_TENSION 8
 // #define CALIBRATION_COMPUTING 9
+// #define TENSIONED 10
 
 // Constructor
 Calibration::Calibration() {
@@ -426,7 +427,15 @@ bool Calibration::requestStateChange(int newState) {
             } else {
                 break;
             }
-        case TAKING_SLACK:  //We can enter taking slack from extended or ready to cut, or from unknown to recover belts
+        case TENSIONED:  // Apply Tension measured the belts but they don't fit the saved anchors
+            if (currentState == TAKING_SLACK) {
+                currentState = TENSIONED;
+                sys.set_state(State::Idle);
+                Maslow.saveBeltPositions();  // the belts are tight at measured lengths
+                success = true;
+            }
+            break;
+        case TAKING_SLACK:  //We can enter taking slack from extended, tensioned or ready to cut, or from unknown to recover belts
             if (currentState == UNKNOWN) {
                 // Some belts were restored at boot and others weren't (their spools turned while
                 // the power was off).  Hold the restored ones and pull the others tight, which
@@ -451,7 +460,7 @@ bool Calibration::requestStateChange(int newState) {
                 success = true;
                 break;
             }
-            if (currentState == EXTENDEDOUT || currentState == READY_TO_CUT) {
+            if (currentState == EXTENDEDOUT || currentState == TENSIONED || currentState == READY_TO_CUT) {
                 currentState = TAKING_SLACK;
                 recoveringBelts = false;
 
@@ -480,8 +489,9 @@ bool Calibration::requestStateChange(int newState) {
                 log_info("Cannot take slack until the belts have been extended");
                 break;
             }
-        case CALIBRATION_IN_PROGRESS:  //We can enter calibration in progress from EXTENDEDOUT, READY_TO_CUT, or CALIBRATION_COMPUTING
-            if (currentState == EXTENDEDOUT || currentState == READY_TO_CUT || currentState == CALIBRATION_COMPUTING) {
+        case CALIBRATION_IN_PROGRESS:  //We can enter calibration in progress from EXTENDEDOUT, TENSIONED, READY_TO_CUT, or CALIBRATION_COMPUTING
+            if (currentState == EXTENDEDOUT || currentState == TENSIONED || currentState == READY_TO_CUT ||
+                currentState == CALIBRATION_COMPUTING) {
                 // If we're coming from CALIBRATION_COMPUTING and calibration is already complete,
                 // go directly to READY_TO_CUT instead of cycling through CALIBRATION_IN_PROGRESS
                 if (currentState == CALIBRATION_COMPUTING && waypoint > pointCount && pointCount > 0) {
@@ -491,10 +501,10 @@ bool Calibration::requestStateChange(int newState) {
                     return requestStateChange(READY_TO_CUT);
                 }
 
-                // When entering from EXTENDEDOUT this is always a fresh calibration start (either
-                // the first run or a re-run after a failure).  Reset waypoint counters and fitness
+                // When entering from EXTENDEDOUT or TENSIONED this is always a fresh calibration start
+                // (either the first run or a re-run after a failure).  Reset waypoint counters and fitness
                 // tracking so stale data from any previous run cannot affect this run.
-                if (currentState == EXTENDEDOUT) {
+                if (currentState == EXTENDEDOUT || currentState == TENSIONED) {
                     waypoint            = 0;
                     recomputeCountIndex = 0;
                     previousFitnessRms  = -1.0;
@@ -634,7 +644,7 @@ bool Calibration::requestStateChange(int newState) {
                 break;
             }
         case RELEASE_TENSION:  //We can enter release tension from any stable state (the machine is not currently performing an action)
-            if (currentState == READY_TO_CUT || currentState == UNKNOWN || currentState == EXTENDEDOUT ||
+            if (currentState == READY_TO_CUT || currentState == UNKNOWN || currentState == EXTENDEDOUT || currentState == TENSIONED ||
                 currentState == CALIBRATION_COMPUTING || currentState == RELEASE_TENSION) {
                 previousState   = (currentState != RELEASE_TENSION) ? currentState : previousState;
                 currentState    = RELEASE_TENSION;
@@ -790,7 +800,8 @@ void Calibration::home() {
 
                     // If the machine was in READY_TO_CUT, EXTENDEDOUT, or CALIBRATION_COMPUTING state before releasing tension,
                     // return to EXTENDEDOUT state, otherwise go to UNKNOWN
-                    if (previousState == READY_TO_CUT || previousState == EXTENDEDOUT || previousState == CALIBRATION_COMPUTING) {
+                    if (previousState == READY_TO_CUT || previousState == EXTENDEDOUT || previousState == TENSIONED ||
+                        previousState == CALIBRATION_COMPUTING) {
                         requestStateChange(EXTENDEDOUT);
                     } else {
                         requestStateChange(UNKNOWN);
@@ -1381,7 +1392,7 @@ bool Calibration::takeSlackFunc() {
                                                                                  << ") do not fit the anchor locations, maybe try running Find Anchors again?");
                 takeSlackState               = 0;
                 retractionMonitorInitialized = false;
-                requestStateChange(EXTENDEDOUT);
+                requestStateChange(TENSIONED);  // belts are tight; Find Anchors is the next step
                 return true;
             }
 
@@ -1425,7 +1436,7 @@ bool Calibration::takeSlackFunc() {
                 //Reset
                 takeSlackState = 0;
                 retractionMonitorInitialized = false;
-                requestStateChange(EXTENDEDOUT);
+                requestStateChange(TENSIONED);  // belts are tight; Find Anchors is the next step
                 return true;
             } else {
                 if (maxDeviation > accurateThreshold) {

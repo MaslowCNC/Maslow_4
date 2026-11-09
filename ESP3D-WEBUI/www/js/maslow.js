@@ -14,6 +14,7 @@ const ZM_INVALID_WARNING_PREFIX = "Maslow Zm invalid warning:";
 const MASLOW_STATE_FINDING_ANCHORS = 6;
 const MASLOW_STATE_READY_TO_CUT = 7;
 const MASLOW_STATE_FIND_ANCHORS_COMPUTING = 9;
+const MASLOW_STATE_TENSIONED = 10;
 const FIND_ANCHORS_WAYPOINT_COORDINATE_REGEX = /^\[MSG:INFO:\s*Waypoint\s+\d+\s+coordinates:\s*X=([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\s+Y=([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\]$/;
 let wasFindingAnchors = false;
 
@@ -57,6 +58,12 @@ READY_TO_CUT 7
     -Apply Tension
     -Release Tension
     -Park (State-Dependent Button: moves to machine 0,0)
+
+TENSIONED 10 (Apply Tension done, but the belts don't fit the saved anchors)
+    -Retract All
+    -Apply Tension
+    -Calibrate (State-Dependent Button: Find Anchors)
+    -Release Tension
 */
 const updateDynamicButtons = () => {
 
@@ -89,6 +96,7 @@ const updateDynamicButtons = () => {
 	// #define READY_TO_CUT 7
 	// #define RELEASE_TENSION 8
 	// #define CALIBRATION_COMPUTING 9
+	// #define TENSIONED 10
 
 	switch (maslowStatus.state) {
 		case 0: 
@@ -224,6 +232,19 @@ const updateDynamicButtons = () => {
 
 			// No buttons are active in this state
 			break;
+		case MASLOW_STATE_TENSIONED:
+			stateLabel.innerHTML = "State: Tensioned, run Find Anchors";
+			if (mainStateLabel) {
+				mainStateLabel.innerHTML = "State: Tensioned, run Find Anchors";
+				if (mainStateLabelContainer) mainStateLabelContainer.style.backgroundColor = yellowBackground;
+			}
+
+			retractButton.style.backgroundColor = greenBackground;
+			tenseButton.style.backgroundColor = greenBackground;
+			calibrateButton.style.backgroundColor = greenBackground;
+			extendButton.style.backgroundColor = greyBackground; // Extend is refused while tensioned
+			relaxButton.style.backgroundColor = greenBackground;
+			break;
 		case 9:
 			stateLabel.innerHTML = "State: Find Anchors Computing";
 			if (mainStateLabel) {
@@ -326,7 +347,7 @@ const updateFindAnchorsView = () => {
  */
 let maslowStateShown = false;
 const setMaslowState = (state) => {
-	if (!Number.isInteger(state) || state < 0 || state > 9) {
+	if (!Number.isInteger(state) || state < 0 || state > MASLOW_STATE_TENSIONED) {
 		console.error("Invalid state received from machine: " + state);
 		return false;
 	}

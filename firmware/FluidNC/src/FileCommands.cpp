@@ -267,7 +267,7 @@ static Error runFile(const Volume& fs, const char* parameter, AuthenticationLeve
     if (topLevel && &fs == &SD) {
         JobResume::jobStarted(theFile, parameter);
     }
-    Job::nest(theFile, &out);
+    Job::nest(theFile);
 
     return Error::Ok;
 }
@@ -315,7 +315,7 @@ static Error runSDFileFrom(const char* parameter, AuthenticationLevel auth_level
         return err;
     }
     JobResume::jobStarted(theFile, path.c_str());
-    Job::nest(theFile, &out);
+    Job::nest(theFile);
     return Error::Ok;
 }
 

@@ -32,6 +32,7 @@ const machine = (() => {
 		READY_TO_CUT: 7,
 		RELEASE_TENSION: 8,
 		CALIBRATION_COMPUTING: 9,
+		TENSIONED: 10, // Apply Tension done, but the belts don't fit the saved anchors: Find Anchors next
 	};
 	const MOVING_STATES = ["Run", "Jog", "Home"];
 	// How long a Maslow operation may take to show its start state in a status report.
@@ -412,8 +413,9 @@ const machine = (() => {
 		maslowOperation("apply tension", "$TKSLK", {
 			start: MASLOW.TAKING_SLACK,
 			success: MASLOW.READY_TO_CUT,
-			// EXTENDEDOUT: the normal run failed; UNKNOWN: recovering belts from UNKNOWN failed
-			failure: [MASLOW.EXTENDEDOUT, MASLOW.UNKNOWN],
+			// TENSIONED: the belts were measured but don't fit the saved anchors; EXTENDEDOUT: the
+			// normal run failed otherwise; UNKNOWN: recovering belts from UNKNOWN failed
+			failure: [MASLOW.TENSIONED, MASLOW.EXTENDEDOUT, MASLOW.UNKNOWN],
 		});
 	const calibrate = () =>
 		maslowOperation("calibrate", "$CAL", {

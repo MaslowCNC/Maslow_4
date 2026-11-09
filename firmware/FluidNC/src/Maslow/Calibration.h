@@ -180,5 +180,6 @@ private:
                                  { CALIBRATION_IN_PROGRESS, "Finding Anchor" },
                                  { READY_TO_CUT, "Ready To Cut" },
                                  { RELEASE_TENSION, "Releasing Tension" },
-                                 { CALIBRATION_COMPUTING, "Find Anchors Computing" } };
+                                 { CALIBRATION_COMPUTING, "Find Anchors Computing" },
+                                 { TENSIONED, "Tensioned" } };
 };

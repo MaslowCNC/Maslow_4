@@ -521,7 +521,7 @@ const updateMaslowActionButton = () => {
   let shouldShow = false;
   const backgroundColor = "#4aa85c"; // green when shown
   
-  // Only show button for states 0, 2, 4, and 7
+  // Only show button for states 0, 2, 4, 7 and 10
   switch (maslowStatus.state) {
     case 0: // UNKNOWN: Apply Tension if some belt lengths are known, else Retract
       displayText = unknownStateAction();
@@ -535,6 +535,11 @@ const updateMaslowActionButton = () => {
       break;
     case 4: // EXTENDEDOUT
       displayText = "Apply Tension";
+      isActionable = true;
+      shouldShow = true;
+      break;
+    case 10: // TENSIONED: Apply Tension measured the belts but they don't fit the saved anchors
+      displayText = "Find Anchors";
       isActionable = true;
       shouldShow = true;
       break;

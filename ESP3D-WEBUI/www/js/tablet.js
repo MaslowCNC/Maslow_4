@@ -1778,6 +1778,9 @@ const handleMaslowActionButtonClick = () => {
     case 4: // EXTENDEDOUT - Apply Tension
       tabletCalTense();
       break;
+    case 10: // TENSIONED - the belts don't fit the saved anchors: Find Anchors
+      tabletCalCalibrate();
+      break;
     case 7: // READY_TO_CUT - Park: lift Z to safe height (work coords), then move to park position (machine coords)
     {
       const lv = globalThis.loadedValues || {};

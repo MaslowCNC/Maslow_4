@@ -22,13 +22,6 @@ Format: **title** — what goes wrong, where, and how we found it.
   with `srand(time(NULL))` on every call, where `time()` is seconds since boot. Two browsers
   that first load in the same second get the same session, so connecting in one closes the other
   (each then shows the "another tab" notice, code 4001).
-- [ ] **A job keeps a pointer to a closed connection.** `Job::nest` records the channel that
-  started a job as `Job::leader` (`Job.cpp`), and job errors (`Protocol.cpp` "in … at line")
-  and replies to any channel's commands during the job go to it. When that WebSocket closes
-  (refresh, WiFi drop, eviction), the channel is deleted (`AllChannels::reap_channels`) but
-  `leader` isn't cleared and holds no reference, so the next write goes to freed memory: a
-  possible crash mid-job, or lost replies. Found reading the code (2026-11-05), not reproduced.
-  Fix idea: clear or reassign `leader` when its channel is killed.
 - [ ] **WebSocket frames are dropped silently while moving.** In a motion state a full send
   queue drops frames (`WSChannel.cpp` `send_frame`); outside motion a stalled client is
   closed after 250 ms. Only a debug line on USB serial records it. This can lose state lines,

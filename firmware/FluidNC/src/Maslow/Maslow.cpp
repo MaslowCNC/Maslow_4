@@ -224,9 +224,10 @@ void Maslow_::update() {
     //Save the z-axis position if the prevous state was jog or cycle and the current state is idle
     if ((prevState == State::Jog || prevState == State::Cycle) && sys.state() == State::Idle) {
         saveZPos();
-        // Only save belt positions when in READY_TO_CUT, RETRACTED, or EXTENDEDOUT state (belts are tight and valid)
+        // Only save belt positions when in READY_TO_CUT, RETRACTED, EXTENDEDOUT or TENSIONED state (belts are tight and valid)
         int currentMaslowState = calibration.getCurrentState();
-        if (currentMaslowState == READY_TO_CUT || currentMaslowState == RETRACTED || currentMaslowState == EXTENDEDOUT) {
+        if (currentMaslowState == READY_TO_CUT || currentMaslowState == RETRACTED || currentMaslowState == EXTENDEDOUT ||
+            currentMaslowState == TENSIONED) {
             saveBeltPositions();
         }
     }
@@ -235,9 +236,11 @@ void Maslow_::update() {
     static int prevMaslowState    = calibration.getCurrentState();
     int        currentMaslowState = calibration.getCurrentState();
     if (prevMaslowState != currentMaslowState) {
-        // If we're leaving READY_TO_CUT, RETRACTED, or EXTENDEDOUT, mark positions as stale
-        if ((prevMaslowState == READY_TO_CUT || prevMaslowState == RETRACTED || prevMaslowState == EXTENDEDOUT) &&
-            (currentMaslowState != READY_TO_CUT && currentMaslowState != RETRACTED && currentMaslowState != EXTENDEDOUT)) {
+        // If we're leaving READY_TO_CUT, RETRACTED, EXTENDEDOUT or TENSIONED, mark positions as stale
+        auto beltsValid = [](int state) {
+            return state == READY_TO_CUT || state == RETRACTED || state == EXTENDEDOUT || state == TENSIONED;
+        };
+        if (beltsValid(prevMaslowState) && !beltsValid(currentMaslowState)) {
             markBeltPositionsStale();
         }
         prevMaslowState = currentMaslowState;
@@ -685,8 +688,8 @@ void Maslow_::setZStop() {
 void Maslow_::saveBeltPositions() {
     // Only save if in a valid state (belts are tight and at known positions)
     int currentState = calibration.getCurrentState();
-    if (currentState != READY_TO_CUT && currentState != RETRACTED && currentState != EXTENDEDOUT) {
-        log_debug("Belt positions NOT saved - invalid state (not READY_TO_CUT, RETRACTED, or EXTENDEDOUT), currentState=" << currentState);
+    if (currentState != READY_TO_CUT && currentState != RETRACTED && currentState != EXTENDEDOUT && currentState != TENSIONED) {
+        log_debug("Belt positions NOT saved - invalid state (not READY_TO_CUT, RETRACTED, EXTENDEDOUT or TENSIONED), currentState=" << currentState);
         return;
     }
 
