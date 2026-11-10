@@ -1,12 +1,13 @@
 # Maslow connection protocol (draft)
 
 How a client talks to a Maslow 4 / 4.1: the browser UI over WiFi today, and later a USB-connected
-browser and an ESP-NOW pendant. This is a first pass that describes what the firmware does now
-(branch `exp1`, commit `0d9585929`), not a finished spec. Where behaviour looks wrong it is noted,
-not changed.
+browser and an ESP-NOW pendant. This is a first pass that describes what the firmware on
+`Maslow-Main` does, not a finished spec. Where behaviour looks wrong it is noted, not changed. The
+Maslow changes marked below came in with
+[PR #1132](https://github.com/MaslowCNC/Maslow_4/pull/1132).
 
 Firmware behaviour and what our browser UI does with it are described separately: the parts
-headed "Our UI" describe the UI on `exp1` after the change that moves every line command onto the
+headed "Our UI" describe the web UI in `ESP3D-WEBUI`, which sends every line command over the
 WebSocket.
 
 ## 1. Connections
@@ -127,7 +128,7 @@ is still open, and a second one is fixed in newer firmware:
   ("Input queue full on … dropping lines") that the UI doesn't show by default. Realtime bytes are
   not queued, so they always get through. This is the WebSocket path; USB has its own receive
   buffer in front of the queue, but the same rule applies.
-- **Fixed after `exp1` commit `0d9585929`: WebSocket replies could be lost under bursts of
+- **Fixed in PR #1132: WebSocket replies could be lost under bursts of
   output.** The output task (`WSChannel::write`) and the polling task (`WSChannel::pollLine` /
   `flush_output`) both touched the channel's pending output buffer (`_output_line`) without a
   shared lock. On a Maslow 4.1, 23 `$/` reads sent back-to-back lost about one reply in three;
@@ -196,7 +197,7 @@ for that message is not confused by it.
 
 ### Soft reset is Maslow's fast stop
 
-Changed after `exp1` commit `0d9585929` (`protocol_do_rt_reset` in `Protocol.cpp`). What 0x18
+Changed in PR #1132 (`protocol_do_rt_reset` in `Protocol.cpp`). What 0x18
 does depends on the state when it arrives:
 
 | State | Upstream FluidNC | Maslow |
@@ -222,7 +223,7 @@ channels.
 running motion. 0x85 stops only a jog (`!` holds, it doesn't stop). Our UI still uses 0x85 for
 releasing a hold-to-jog button, where only the jog should end.
 
-This is built but not yet tested on a machine.
+Tested on a Maslow 4.1: Stop during a job, Apply Tension and Trace Boundary.
 
 ### Our UI: what goes where, and reply matching
 
@@ -416,8 +417,7 @@ Example while jogging, a report that carries the belts:
 | `SD:pct,file[,line]` | while a job runs | progress %, file name, and (Maslow addition) the file line of the running block |
 | `STOPPED:line,file` | after an SD job ended early, while no job runs (Maslow) | the line that was executing when the job was stopped (STOP, `$STOP`), failed (an error in the file: that line), or a spindle fault ended it; `file` is as given to `$SD/Run`. Not after an alarm. Cleared when a job starts or by `$SD/Discard`; lost on reboot |
 
-**Maslow fields** (added after `exp1` commit `0d9585929`, on branch `machine-api`; not yet on a
-machine):
+**Maslow fields** (added in PR #1132):
 
 - `MS` is in every report, and a change of Maslow state triggers an auto-report at once, so an
   idle machine reports a new state without being asked.
