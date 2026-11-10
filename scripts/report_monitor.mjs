@@ -8,7 +8,7 @@
 //
 //   node scripts/report_monitor.mjs [host] [--interval 50] [--seconds 60] [--heap] [--csv out.csv]
 //
-//   host        machine address (default m4.local)
+//   host        machine address (default maslow.local)
 //   --interval  report interval to ask for, ms (default 50, what the UI uses)
 //   --seconds   stop after this long (default: run until Ctrl-C)
 //   --heap      run $Heap at the start and at the end (free memory and its low point)
@@ -29,7 +29,7 @@ const option = (name, fallback) => {
 	const i = args.indexOf(`--${name}`);
 	return i >= 0 && args[i + 1] !== undefined ? args[i + 1] : fallback;
 };
-const host = args.find((a, i) => !a.startsWith("--") && !(i > 0 && args[i - 1].startsWith("--") && ["interval", "seconds", "csv"].includes(args[i - 1].slice(2)))) ?? "m4.local";
+const host = args.find((a, i) => !a.startsWith("--") && !(i > 0 && args[i - 1].startsWith("--") && ["interval", "seconds", "csv"].includes(args[i - 1].slice(2)))) ?? "maslow.local";
 const intervalMs = Number(option("interval", 50));
 const seconds = Number(option("seconds", 0));
 const csv = option("csv", "");
