@@ -1,0 +1,20 @@
+{
+  "name": "maslow-webui",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "The Maslow WebUI rewrite. Runs against a simulated device until the firmware changes land.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "preact": "11.2.0"
+  },
+  "devDependencies": {
+    "@preact/preset-vite": "2.10.6",
+    "vite": "8.3.7",
+    "vite-plugin-singlefile": "2.3.4"
+  }
+}

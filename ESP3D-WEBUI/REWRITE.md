@@ -128,6 +128,25 @@ short for people who know the steps. The big graphic is where moving line art go
 how to retract, extend, attach the belts and so on. The line art itself is on hold (see
 `tools/line-art-prototype/`); the mockup shows the static step graphic with a placeholder caption.
 
+### The working site (`webui/`)
+
+The mockup is now a working site in `webui/` (Preact and Vite, built to one self-contained `index.html`):
+desktop layout 6 and phone layout B, with every button and path working. It isn't connected to a machine. A
+simulated device stands behind one interface (`getState`, `subscribe`, `send`), and whenever the firmware would
+report something, a docked "Simulated device" panel asks the tester what happened, including the failures found on
+the machine. A firmware adapter will replace the simulator without changing the screens; `webui/src/device/commands.js`
+lists the command each action will send and which ones need the planned firmware changes. See `webui/README.md`.
+
+The screen comes from the device's state plus the user's answers on the page (`derive()` in
+`webui/src/flow/screens.js`), as described in "Two states the UI has to combine".
+
+**Two positions, both always shown.** The machine position is measured from the anchors: X 0, Y 0 is where Apply
+tension leaves the sled, and Z 0 is where the bit is seated. Set home XY and Set Z don't move it; they set the work
+offset, so the work position becomes 0 there. Device details and the jog panel show the work position with the
+machine position under it (for example work X 0, Y 0 at machine X 10, Y 30), and the frame drawing marks the user's
+home. These are FluidNC's `MPos`, `WCO` and `WPos = MPos − WCO`; the status report already sends `MPos` and, now
+and then, `WCO`.
+
 ### Walkthrough mode in the mockup
 
 The mockup has a Walkthrough control for clicking through a flow the way the device would run it. The

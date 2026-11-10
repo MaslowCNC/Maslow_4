@@ -1,0 +1,74 @@
+import { useEffect, useMemo, useState } from "preact/hooks";
+import { createSimulator } from "./device/simulator.js";
+import { derive, freshAnswers, isSetup } from "./flow/screens.js";
+import { Desktop } from "./ui/desktop.jsx";
+import { Phone } from "./ui/phone.jsx";
+import { Settings, WorkArea } from "./ui/modals.jsx";
+import { SimPanel } from "./ui/sim.jsx";
+import { FINAL_CHECKS } from "./ui/desktop.jsx";
+
+// The device behind the UI. Today it's the simulator; a firmware adapter with the same interface
+// (getState, subscribe, send) replaces it later without touching the screens.
+const device = createSimulator();
+
+function useDevice() {
+  const [d, setD] = useState(device.getState());
+  useEffect(() => device.subscribe(setD), []);
+  return d;
+}
+
+function useNarrow(px = 760) {
+  const q = `(max-width: ${px}px)`;
+  const [narrow, setNarrow] = useState(() => matchMedia(q).matches);
+  useEffect(() => { const m = matchMedia(q); const on = () => setNarrow(m.matches); m.addEventListener("change", on); return () => m.removeEventListener("change", on); }, []);
+  return narrow;
+}
+
+export function App() {
+  const d = useDevice();
+  const [a, setAnswers] = useState(freshAnswers);
+  const [modal, setModal] = useState(null);           // "settings" | "workarea"
+  const [checks, setChecks] = useState(FINAL_CHECKS.map(() => false));
+  const [theme, setTheme] = useState("dark");
+  const narrow = useNarrow();
+
+  const setA = (patch) => setAnswers(prev => ({ ...prev, ...patch }));
+  const mark = (step) => setAnswers(prev => prev.ran.includes(step) ? prev : { ...prev, ran: [...prev.ran, step] });
+  const send = (action, payload) => device.send(action, payload);
+  const openWorkArea = () => { setA({ editingWorkArea: true }); setModal("workarea"); };
+  const k = derive(d, a);
+  const ctx = { d, a, setA, send, mark, openWorkArea };
+
+  useEffect(() => { send("connect"); }, []);
+  // A (re)connection means the device may have changed: start setup again from Confirm the work area
+  useEffect(() => { setAnswers(freshAnswers()); setChecks(FINAL_CHECKS.map(() => false)); }, [d.connectId]);
+  // Once the position is confirmed, the device checks for a tool on its own
+  useEffect(() => { if (k === "tcheck" && d.tool === "unknown" && !d.pending) send("toolCheck"); }, [k, d.tool, d.pending]);
+  // Waiting for the bit to be put back in: the board watches the beam by itself
+  useEffect(() => { if (k === "toolload" && (d.tool === "removed" || d.tool === "none") && !d.pending) send("watchForTool"); }, [k, d.tool, d.pending]);
+  // The bit is seated: set Z from the measured stick-out (planned firmware command). zBase is how many times Z had
+  // been set when this measurement started, so measuring the same stick-out twice still sets Z again.
+  useEffect(() => { if (a.measuring) setA({ zBase: d.zSetCount }); }, [a.measuring]);
+  useEffect(() => { if (k === "zsetting" && !d.settingZ && !d.pending && d.zSetCount === a.zBase) send("setZFromStickout", { stickout: a.stickout }); }, [k, d.settingZ, d.pending, a.zBase]);
+  useEffect(() => { if (a.measuring && a.zBase != null && d.zSetCount > a.zBase) setA({ zDone: true, measuring: false }); }, [d.zSetCount]);
+  // A new retract, from whichever button, needs a new check by eye
+  useEffect(() => { if (d.maslow === 1) setA({ retractChecked: false }); }, [d.maslow]);
+  // Tension is back on after releasing it to secure the work piece
+  useEffect(() => { if (d.maslow === 7 && a.securing) setA({ securing: false }); }, [d.maslow]);
+  // A new job starts with a fresh final check
+  useEffect(() => { if (k !== "finalcheck") setChecks(FINAL_CHECKS.map(() => false)); }, [k === "finalcheck"]);
+
+  // During setup on desktop, Stop sits in the panel the pop-up covers, so the pop-up carries its own
+  const mprops = { ctx, compact: narrow, stop: !narrow && isSetup(k) && d.connected };
+  const overlay = modal === "settings"
+    ? <Settings k={k} {...mprops} theme={theme} setTheme={setTheme} onClose={() => setModal(null)} openWorkArea={() => setModal("workarea")} />
+    : modal === "workarea"
+      ? <WorkArea {...mprops} onClose={() => { setA({ editingWorkArea: false }); setModal(null); }}
+          onSave={(wa) => { send("setWorkArea", wa); setA({ workAreaConfirmed: true, editingWorkArea: false }); setModal(null); }} />
+      : null;
+  const props = { k, ctx, onSettings: () => setModal("settings"), checks, setChecks, overlay };
+  return <div class={`appshell${narrow ? " narrow" : ""}`} data-panels={theme}>
+    {narrow ? <Phone {...props} /> : <Desktop {...props} />}
+    {device.isSimulated && <SimPanel d={d} device={device} />}
+  </div>;
+}
