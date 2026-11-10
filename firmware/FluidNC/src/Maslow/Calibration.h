@@ -38,6 +38,7 @@ public:
     float measurementToXYPlane(float measurement, float zHeight);
     float measurementFromXYPlane(float xyPlaneDistance, float zHeight);
     bool  takeSlackFunc();
+    bool  recoverBeltsFunc();
     bool  adjustFrameSizeToMatchFirstMeasurement();
     bool  computeXYfromLengths(double TL, double TR, float& x, float& y);
     void  calibration_loop();
@@ -54,8 +55,10 @@ public:
 
     //State machine functions
     int  getCurrentState();
+    bool isRecoveringBelts() const { return recoveringBelts; }  // Apply Tension recovering belts from UNKNOWN
     void printCurrentState();
     bool requestStateChange(int newState);
+    void stopTakingSlack();  // $STOP during Apply Tension
 
     // Set extended state variables (used when restoring from NVS)
     void setExtendedState(bool tl, bool tr, bool bl, bool br);
@@ -106,6 +109,15 @@ private:
 
     //Variables used by take slack
     bool takeSlack = false;
+
+    // Apply Tension from UNKNOWN with some belts restored at boot (recoverBeltsFunc): hold the
+    // restored belts, pull the others tight one at a time, then check them against their saved
+    // lengths.  Runs in the TAKING_SLACK state.
+    bool          recoveringBelts                  = false;
+    int           recoverArm                       = 0;  // the arm being pulled tight, or ARM_COUNT once all are
+    unsigned long recoverSettleStart               = 0;
+    float         recoverStartPos[ARM_COUNT]       = { 0, 0, 0, 0 };
+    bool          recoverPulling[ARM_COUNT]        = { false, false, false, false };
 
     //Variables used by calibration
     float** calibration_data      = nullptr;
@@ -168,5 +180,6 @@ private:
                                  { CALIBRATION_IN_PROGRESS, "Finding Anchor" },
                                  { READY_TO_CUT, "Ready To Cut" },
                                  { RELEASE_TENSION, "Releasing Tension" },
-                                 { CALIBRATION_COMPUTING, "Find Anchors Computing" } };
+                                 { CALIBRATION_COMPUTING, "Find Anchors Computing" },
+                                 { TENSIONED, "Tensioned" } };
 };

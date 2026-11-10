@@ -51,15 +51,11 @@ private:
     static void pop();  // caller holds the job mutex
 
 public:
-    // Prefer leader_channel() for a locked read; the bare pointer is retained
-    // for existing call sites and is written only under the job mutex.
-    static Channel* leader;
-
     static bool active();
 
     static void       save();
     static void       restore();
-    static void       nest(Channel* in_channel, Channel* out_channel);
+    static void       nest(Channel* in_channel);
     static void       unnest();
     static void       abort();
     static JobSource* source();  // nullptr when no job is active
@@ -67,8 +63,7 @@ public:
     static bool     get_param(const std::string& name, float& value);
     static bool     set_param(const std::string& name, float value);
     static bool     param_exists(const std::string& name);
-    static Channel* channel();         // top-of-stack channel, or nullptr when idle
-    static Channel* leader_channel();  // job leader, or nullptr when idle
+    static Channel* channel();  // top-of-stack channel, or nullptr when idle
 
     // Snapshot of the stack for $Local/Params listing.  Not safe against a
     // concurrent unnest()/abort(); only meaningful for interactive use.

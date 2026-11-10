@@ -85,6 +85,9 @@ protected:
     float       _lastFeedRate     = 0;
     MotorMask   _lastLimits       = 0;
     bool        _lastJobActive    = false;
+    int         _lastMaslowState  = -1;  // Maslow: last calibration state reported (autoReport)
+    uint32_t    _reportSeq        = 0;      // Maslow: status reports sent on this channel
+    bool        _reportSeqOn      = false;  // Maslow: add |N: to this channel's reports
     std::string _lastPinString    = "";
 
     bool       _reportState = true;
@@ -153,6 +156,11 @@ public:
     // after a reset, so that anything already sent will not be processed.
     virtual void flushRx();
 
+    // flushQueuedLines() discards complete or partial lines waiting in the input queue,
+    // without touching the line the main loop may be assembling.  Safe to call from the
+    // polling task.  Used by jog cancel so queued $J= lines do not run after the cancel.
+    void flushQueuedLines();
+
     // realtimeOkay() returns true if the channel can currently interpret the character as
     // a Grbl realtime character.  Some situations where it might return false are when
     // the channel is being used for file upload or if the channel is doing line editing
@@ -189,6 +197,11 @@ public:
     }
 
     void notifyState() { _reportState = true; }
+    // Maslow: optional status report sequence number for this channel (Report.cpp "|N:"), for
+    // measuring dropped reports. Off unless the client asks for it (WebSocket ?report_seq).
+    void     enableReportSeq() { _reportSeqOn = true; }
+    bool     reportSeqOn() const { return _reportSeqOn; }
+    uint32_t nextReportSeq() { return ++_reportSeq; }
     void notifyOvr() { _reportOvr = true; }
     void notifyWco() { _reportWco = true; }
     void notifyNgc(CoordIndex coord) { _reportNgc = coord; }

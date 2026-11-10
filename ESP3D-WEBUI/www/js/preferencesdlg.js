@@ -567,44 +567,27 @@ function updateFluidNCConfigFilename(newFilename, callback) {
 }
 
 function handleConfigFilenameUpdateSuccess(response, callback) {
-    console.log("FluidNC Config/Filename updated successfully, saving settings to flash");
-    
-    // Send $SS command to save settings to flash so they persist after reset
-    const saveCmd = buildHttpCommandCmd(httpCmdType.plain, "$SS");
-    SendGetHttp(saveCmd, 
-        function(saveResponse) {
-            console.log("Settings saved to flash");
-            // Config filename has been saved, but FluidNC needs to restart to load the new file
-            // Show a message to the user with option to restart
-            displayNone('preferencesdlg_upload_msg');
-            
-            const newFilename = preferenceslist[0].config_filename;
-            confirmdlg(
-                translate_text_item("Config File Changed"),
-                `Configuration file changed to ${newFilename}. FluidNC must be restarted to load settings from the new file. Restart now?`,
-                function(answer) {
-                    if (answer) {
-                        // User chose to restart
-                        if (typeof restart_esp === 'function') {
-                            restart_esp();
-                        }
-                    } else {
-                        // User chose not to restart now
-                        applypreferenceslist();
-                        init_grbl_panel();
-                        closeModal('ok');
-                    }
+    // [ESP401] writes Config/Filename to flash itself, so no separate save is needed.
+    // FluidNC still has to restart to load the new file.
+    console.log("FluidNC Config/Filename updated successfully");
+    displayNone('preferencesdlg_upload_msg');
+
+    const newFilename = preferenceslist[0].config_filename;
+    confirmdlg(
+        translate_text_item("Config File Changed"),
+        `Configuration file changed to ${newFilename}. FluidNC must be restarted to load settings from the new file. Restart now?`,
+        function(answer) {
+            if (answer) {
+                // User chose to restart
+                if (typeof restart_esp === 'function') {
+                    restart_esp();
                 }
-            );
-        },
-        function(error_code, response) {
-            console.error(`Failed to save settings to flash: ${error_code}`, response);
-            displayNone('preferencesdlg_upload_msg');
-            alertdlg(translate_text_item("Error"), translate_text_item("Failed to save config filename setting"));
-            // Still close the modal
-            applypreferenceslist();
-            init_grbl_panel();
-            closeModal('ok');
+            } else {
+                // User chose not to restart now
+                applypreferenceslist();
+                init_grbl_panel();
+                closeModal('ok');
+            }
         }
     );
 }

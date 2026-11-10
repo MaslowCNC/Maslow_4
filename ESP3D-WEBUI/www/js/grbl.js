@@ -229,8 +229,10 @@ function tryAutoReport() {
     // Do nothing more on success
     () => { },
 
-    // Fall back to polling if the firmware does not support auto-reports
-    () => { enablePolling(); },
+    // Fall back to polling if the firmware does not support auto-reports (an error:N reply).
+    // A dropped connection ("disconnected", "not sent") is not that: the next socket open
+    // asks again.
+    (code) => { if (/^\d+$/.test(String(code))) { enablePolling(); } },
 
     99.1,
     1
@@ -341,6 +343,10 @@ function parseGrblStatus(response) {
         grbl.feedrate = parseFloat(rates[0])
         grbl.spindleSpeed = parseInt(rates[1])
         break
+      case 'MS':
+        // Maslow calibration state, in every report from current firmware
+        grbl.maslowState = parseInt(value, 10)
+        break
       case 'Ov':
         var rates = value.split(',')
         grbl.ovr = {
@@ -430,22 +436,17 @@ const updateUnifiedPlayPauseButton = (stateName, clickable) => {
   // Always show the stop button
   stopButton.style.display = '';
   
-  // Always show the play button
-  playButton.style.display = '';
-  
+  // The play button's visibility is tablet.js's (showStoppedJob hides it after a stop)
+
   if (clickable.pause) {
-    // Machine is running - show pause button (convert play button to pause)
-    playButton.style.backgroundColor = '#f0ad4e'; // Orange background
-    playButton.innerHTML = `
-      <svg width="2em" height="1.4em" viewBox="0 0 1300 1200">
-        <g transform="translate(50,1200) scale(1, -1)">
-          <path fill="white"
-            d="M250 1000h200q21 0 35.5 -14.5t14.5 -35.5v-800q0 -21 -14.5 -35.5t-35.5 -14.5h-200q-21 0 -35.5 14.5t-14.5 35.5v800q0 21 14.5 35.5t35.5 14.5zM650 1000h200q21 0 35.5 -14.5t14.5 -35.5v-800q0 -21 -14.5 -35.5t-35.5 -14.5h-200q-21 0 -35.5 14.5t-14.5 35.5v800 q0 21 14.5 35.5t35.5 14.5z">
-          </path>
-        </g>
-      </svg>`;
-    playButton.onclick = () => SendRealtimeCmd(0x21); // Pause command
-    
+    // Running: no Pause button. Stop, then Resume from the stopped line, does that job.
+    if (!id("playBtn")) {
+      playButton.innerHTML = '<canvas id="playBtn" style="width:100%;height:100%"></canvas>';
+    }
+    playButton.onclick = null;
+    if (typeof setPlayButton === 'function') {
+      setPlayButton(false, gray, 'Start', null);
+    }
   } else if (clickable.resume) {
     // Machine is paused - show play button
     playButton.style.backgroundColor = '#5cb85c'; // Green background
@@ -457,7 +458,7 @@ const updateUnifiedPlayPauseButton = (stateName, clickable) => {
           </path>
         </g>
       </svg>`;
-    playButton.onclick = () => SendRealtimeCmd(0x7e); // Resume command
+    playButton.onclick = resumeGCode;
   } else {
     // Machine is idle or in another state - restore canvas if needed, then
     // let setRunControls() determine the correct visual state based on Maslow
@@ -495,6 +496,14 @@ function show_grbl_position(wpos, mpos) {
   }
 }
 
+// In UNKNOWN, Apply Tension can recover the belts if some were restored at boot (it holds the
+// known ones, pulls the others tight and checks them); with none known only a retract helps.
+const unknownStateAction = () => {
+  const belts = typeof machine !== 'undefined' ? machine.state.belts : null;
+  const someKnown = !!belts && ['tl', 'tr', 'bl', 'br'].some((arm) => typeof belts[arm] === 'number');
+  return someKnown ? 'Apply Tension' : 'Retract';
+};
+
 // Update Maslow action button display based on current Maslow state
 // This is the new state-dependent action button in row 3, column 5
 const updateMaslowActionButton = () => {
@@ -512,10 +521,10 @@ const updateMaslowActionButton = () => {
   let shouldShow = false;
   const backgroundColor = "#4aa85c"; // green when shown
   
-  // Only show button for states 0, 2, 4, and 7
+  // Only show button for states 0, 2, 4, 7 and 10
   switch (maslowStatus.state) {
-    case 0: // UNKNOWN
-      displayText = "Retract";
+    case 0: // UNKNOWN: Apply Tension if some belt lengths are known, else Retract
+      displayText = unknownStateAction();
       isActionable = true;
       shouldShow = true;
       break;
@@ -526,6 +535,11 @@ const updateMaslowActionButton = () => {
       break;
     case 4: // EXTENDEDOUT
       displayText = "Apply Tension";
+      isActionable = true;
+      shouldShow = true;
+      break;
+    case 10: // TENSIONED: Apply Tension measured the belts but they don't fit the saved anchors
+      displayText = "Find Anchors";
       isActionable = true;
       shouldShow = true;
       break;
@@ -622,17 +636,19 @@ function show_grbl_probe_status(probed) {
   grbl_set_probe_detected(probed)
 }
 
+// Straight down the WebSocket, never behind queued lines (and not through SendPrinterCommand,
+// whose trim() would swallow 0xA0).
 function SendRealtimeCmd(code) {
-  var cmd = String.fromCharCode(code)
-  SendPrinterCommand(cmd, false, null, null, code, 1)
+  sendLineOrRealtime(String.fromCharCode(code))
 }
 
+// machine.pause/resume only send when the machine is running/held; otherwise they say why.
 function pauseGCode() {
-  SendRealtimeCmd(0x21) // '!'
+  machine.pause().catch((err) => addMessage(`Pause: ${err.detail ?? err.reason}`))
 }
 
 function resumeGCode() {
-  SendRealtimeCmd(0x7e) // '~'
+  machine.resume().catch((err) => addMessage(`Resume: ${err.detail ?? err.reason}`))
 }
 
 function stopGCode() {
@@ -644,6 +660,9 @@ var onWCOUpdateCallback = null;
 
 function grblProcessStatus(response) {
   var grbl = parseGrblStatus(response)
+  if (grbl.maslowState !== undefined && typeof setMaslowState === 'function') {
+    setMaslowState(grbl.maslowState)
+  }
   // Record persistent values of data
   const oldWCO = WCO ? [WCO[0], WCO[1], WCO[2]] : null;
   if (grbl.wco && !grbl.wco.some(isNaN)) {
@@ -820,11 +839,6 @@ const grblHandleMessage = (msg) => {
       // Finish collecting settings
       getESPconfigSuccess(collectedSettings);
       collectedSettings = null;
-      if (grbl_errorfn) {
-        grbl_errorfn();
-        grbl_errorfn = null;
-        grbl_processfn = null;
-      }
     } else {
       // Continue collecting settings
       collectedSettings += msg;
@@ -838,13 +852,9 @@ const grblHandleMessage = (msg) => {
   }
 
   // Handlers for standard Grbl protocol messages
+  // ok / error:N are matched to the line that caused them by wsCommands.handleLine (socket.js).
 
   if (valueStartsWith(msg, ["ok"])) {
-    if (grbl_processfn) {
-      grbl_processfn();
-      grbl_processfn = null;
-      grbl_errorfn = null;
-    }
     return;
   }
   if (valueStartsWith(msg, ["[PRB:"])) {
@@ -858,13 +868,6 @@ const grblHandleMessage = (msg) => {
     }
     if (!valueStartsWith(msg, ["[MSG:ERR:"])) {
       return;
-    }
-  }
-  if (valueStartsWith(msg, ["error:"])) {
-    if (grbl_errorfn) {
-      grbl_errorfn(msg.replace("error:", "").trim());
-      grbl_errorfn = null;
-      grbl_processfn = null;
     }
   }
   if (valueStartsWith(msg, ["error:", "ALARM:", "Hold:", "Door:", "[MSG:ERR:"])) {

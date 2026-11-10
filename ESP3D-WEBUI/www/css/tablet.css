@@ -115,6 +115,28 @@ margin: 10px 0px;
   margin-top: 2px;
 }
 
+/* Right-hand panel: state + setup buttons, jog, job, serial */
+.tablettab-section {
+  border: 1px solid #d6d6d6;
+  border-radius: 4px;
+  background-color: #fafafa;
+  padding: 3px;
+  margin: 0 0 6px 4px;
+}
+.tablettab-machine-btn {
+  aspect-ratio: 1 / .55;
+  padding: 4px;
+}
+/* Upload/Delete have a fixed height; a forced aspect ratio would make them wider than their column */
+#tablettab-file-controls .maslow-grid-item-btn {
+  aspect-ratio: auto;
+}
+.tablettab-machine-btn svg {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+}
+
 .tablettab-canvas-wrapper {
 display: grid;
 grid-template-columns: 100%;
@@ -134,6 +156,9 @@ grid-template-columns: 100%;
 .maslow-grid-item, #filelist, #messages {
   font-size: 24px;
 }
+.tablettab-machine-btn {
+  font-size: 16px !important; /* beats the inline 1vw, which is unreadable on phones */
+}
 
 .tablettab-controls-wrapper {
     width: 100%;
@@ -141,25 +166,6 @@ grid-template-columns: 100%;
     grid-template-columns: 100%;
 }
 
-.tablettab-controls-item:nth-child(1) {
-    order: 2;
-}
-
-.tablettab-controls-item:nth-child(2) {
-    order: 1;
-}
-
-.tablettab-controls-item:nth-child(3) {
-    order: 2;
-}
-
-.tablettab-controls-item:nth-child(4) {
-    order: 2;
-}
-
-.tablettab-controls-item:nth-child(5) {
-    order: 2;
-}
 }
 
 
@@ -918,4 +924,181 @@ width: 100%;
 .calibration-modal-input::-webkit-outer-spin-button {
   -webkit-appearance: none;
   margin: 0;
+}
+
+/* Connection health dot in the navbar (connindicator.js) */
+.conn-dot {
+  display: inline-block;
+  width: 0.8em;
+  height: 0.8em;
+  border-radius: 50%;
+  vertical-align: middle;
+  cursor: pointer;
+}
+/* Navbar slot just left of the menu icon; padding matches the menu link so the dot lines up */
+.conn-dot-item > li {
+  padding: 15px 0.5em;
+  line-height: 20px;
+}
+.conn-dot.conn-ok { background-color: #2e9e44; }
+.conn-dot.conn-quiet { background-color: #e0a100; animation: conn-blink 1s step-start infinite; }
+.conn-dot.conn-down { background-color: #d23b2c; animation: conn-blink 1s step-start infinite; }
+@keyframes conn-blink { 50% { opacity: 0.35; } }
+
+/* Belt lengths in the status section: a 2x2 grid laid out like the arms (TL TR / BL BR), in the
+   same 12px as the X/Y/Z readout, each with a small motor-current dial twice the text height */
+.tablettab-belt-lengths {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px 8px;
+  padding: 2px 6px 4px;
+  font-size: 12px;
+  text-align: center;
+}
+.tablettab-belt-lengths .belt-length-label {
+  grid-column: 1 / -1;
+  font-weight: bold;
+}
+.tablettab-belt-lengths .belt-length {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+.tablettab-belt-lengths .belt-length-value {
+  font-variant-numeric: tabular-nums;
+}
+.tablettab-belt-lengths .belt-length-unknown {
+  color: #b35c00;
+  font-style: italic;
+}
+.belt-current-dial {
+  width: 2em;
+  height: 2em;
+  flex: none;
+}
+.belt-current-dial-bg,
+.belt-current-dial-arc {
+  fill: none;
+  stroke-width: 3;
+}
+.belt-current-dial-bg {
+  stroke: #e0e0e0;
+}
+.belt-current-dial-arc {
+  stroke: #4CAF50;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.2s ease;
+}
+
+/* Machine action buttons: spinner until the firmware accepts the command, warning if it didn't */
+.machine-action-busy {
+position: relative;
+pointer-events: none;
+}
+.machine-action-busy::after {
+content: "";
+position: absolute;
+top: 6px;
+right: 6px;
+width: 14px;
+height: 14px;
+border: 2px solid rgba(255, 255, 255, 0.4);
+border-top-color: #fff;
+border-radius: 50%;
+animation: machine-action-spin 0.8s linear infinite;
+}
+@keyframes machine-action-spin {
+to { transform: rotate(360deg); }
+}
+.machine-action-warning {
+background-color: #e0a030 !important;
+}
+
+/* After a stop: Resume from line N, and Discard, in the job button row */
+.job-resume {
+background-color: #4aa85c;
+color: white;
+display: flex;
+flex-direction: column;
+align-items: center;
+justify-content: center;
+gap: 2px;
+padding: 2px;
+font-size: 13px;
+line-height: 1.1;
+overflow: hidden;
+}
+/* The line box: flat, with its own step arrows inside it (the browser's spinner is hidden) */
+.job-resume-line {
+display: flex;
+align-items: stretch;
+width: 90%;
+max-width: 7.5em;
+height: 22px;
+box-sizing: border-box;
+border: 1px solid rgba(0, 0, 0, 0.25);
+border-radius: 3px;
+background-color: white;
+overflow: hidden;
+cursor: text;
+}
+.job-resume-line input {
+flex: 1;
+min-width: 0;
+border: none;
+outline: none;
+padding: 0 2px;
+font-size: 14px;
+text-align: center;
+color: #222;
+background: transparent;
+-moz-appearance: textfield;
+appearance: textfield;
+}
+.job-resume-line input::-webkit-outer-spin-button,
+.job-resume-line input::-webkit-inner-spin-button {
+-webkit-appearance: none;
+margin: 0;
+}
+.job-resume-line:focus-within {
+border-color: #2a7a3a;
+}
+.job-resume-steps {
+display: flex;
+flex-direction: column;
+width: 16px;
+border-left: 1px solid rgba(0, 0, 0, 0.15);
+}
+.job-resume-steps button {
+flex: 1;
+padding: 0;
+border: none;
+background: transparent;
+color: #555;
+font-size: 7px;
+line-height: 1;
+cursor: pointer;
+}
+.job-resume-steps button:hover {
+background-color: #e8e8e8;
+}
+.job-resume-steps button + button {
+border-top: 1px solid rgba(0, 0, 0, 0.1);
+}
+/* Pressing or hovering the line box isn't pressing the Resume button */
+.job-resume:has(.job-resume-line:hover) {
+filter: none;
+}
+.job-resume:has(.job-resume-line:active) {
+transform: none;
+}
+.job-discard {
+background-color: #8a8a8a;
+color: white;
+display: flex;
+align-items: center;
+justify-content: center;
+text-align: center;
+font-size: 15px;
 }

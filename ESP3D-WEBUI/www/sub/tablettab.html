@@ -8,161 +8,197 @@
         </textarea>
       </div>
       <div class="tablettab-controls-wrapper">
-        <div id="main-state-label-container" style="text-align: center;">
-          <label id="main-state-label" style="font-weight: bold;">State: </label>
-        </div>
-        <div id="tablettab-jog-controls" style="grid-template-columns: 20% 20% 20% 20% 20%;" class="maslow-grid-container tablettab-controls-item">
-          <!-- Buttons row 1 -->
-          <div id="tablettab_zUp" class="maslow-grid-item maslow-grid-item-btn"
-            style="background-color: #f2f0e4;; color: #337ab7; border-right: 2px solid grey;">
-            <svg width="32" height="32" viewBox="0 0 38 38">
-              <polygon fill="currentColor" points="10.319 5.525 17.833 13.039 2.805 13.039 10.319 5.525" />
-              <rect fill="currentColor" height="2.5" transform="translate(31.899 11.262) rotate(90)" width="21.79"
-                x="-0.576" y="20.33" />
-            </svg>
-            Z
+        <!-- Machine state and setup buttons -->
+        <div id="tablettab-status-section" class="tablettab-section">
+          <div id="main-state-label-container" style="text-align: center;">
+            <label id="main-state-label" style="font-weight: bold;">State: </label>
           </div>
-          <div id="tablettab_topLeft" class="maslow-grid-item maslow-grid-item-btn" style="background-color: #b69fcb;">
-            <canvas id="tlBtn" style="width: 100%; height: 100%"></canvas>
+          <div id="tablettab-machine-buttons" class="maslow-grid-container" style="grid-template-columns: 25% 25% 25% 25%;">
+            <div id="calibrationBTN" class="maslow-grid-item maslow-grid-item-btn tablettab-machine-btn"
+              style="background-color: #f2f0e4; font-size: 1vw; color: #337ab7; display: flex;flex-direction: column;">
+              <svg height="32" width="32" viewBox="0 0 48 48" fill="currentColor">
+                <g>
+                  <path
+                    d="M24,11c-7.2,0-13,5.8-13,13c0,7.2,5.8,13,13,13c7.2,0,13-5.8,13-13C37,16.8,31.2,11,24,11z M24,35c-6.1,0-11-4.9-11-11   s4.9-11,11-11s11,4.9,11,11S30.1,35,24,35z" />
+                  <path
+                    d="M44,20h-2.4c-0.5-2.1-1.3-4-2.3-5.6l1.6-1.8c1.2-1.2,1.2-3,0-4.2L39.5,7c-1.2-1.2-3.1-1.2-4.2,0l-1.8,1.8   c-1.8-1.2-3.6-1.9-5.6-2.3V4c0-1.7-1.3-3-3-3h-2c-1.7,0-3,1.3-3,3v2.5c-1.9,0.4-3.8,1.2-5.6,2.3l-1.7-1.7c-1.2-1.2-3-1.2-4.2,0   L7,8.5c-0.6,0.6-0.9,1.3-0.9,2.1s0.3,1.5,0.9,2.1l1.8,1.7c-1.1,1.8-1.9,3.6-2.3,5.6H4c-1.7,0-3,1.3-3,3v2c0,1.7,1.3,3,3,3h2.5   c0.4,1.9,1.2,3.8,2.4,5.6l-1.7,1.8c-1.2,1.2-1.2,3,0,4.2L8.5,41c1.2,1.2,3,1.2,4.2,0l1.7-1.8c1.8,1.1,3.6,1.9,5.6,2.3V44   c0,1.7,1.3,3,3,3h2c1.7,0,3-1.3,3-3v-2.4c2.1-0.5,3.9-1.3,5.6-2.3l1.7,1.6c1.2,1.2,3,1.2,4.2,0l1.4-1.4c1.2-1.2,1.2-3,0-4.2   l-1.7-1.7c1.2-1.8,1.9-3.6,2.3-5.6H44c1.7,0,3-1.3,3-3v-2C47,21.3,45.7,20,44,20z M45,25c0,0.6-0.4,1-1,1h-4.2l-0.1,0.8   c-0.4,2.2-1.2,4.3-2.6,6.3l-0.5,0.7l2.9,2.9c0.2,0.2,0.3,0.4,0.3,0.7c0,0.3-0.1,0.5-0.3,0.7l-1.4,1.4c-0.4,0.4-1,0.4-1.4,0   l-2.9-2.8l-0.7,0.5c-1.8,1.3-3.9,2.2-6.3,2.6L26,40v4c0,0.6-0.4,1-1,1h-2c-0.6,0-1-0.4-1-1v-4.2l-0.8-0.1c-2.2-0.4-4.3-1.2-6.3-2.6   l-0.7-0.5l-2.9,3c-0.4,0.4-1,0.4-1.4,0l-1.4-1.4c-0.4-0.4-0.4-1,0-1.4l2.9-3l-0.5-0.7c-1.4-2-2.3-4.1-2.6-6.3L8.2,26H4   c-0.6,0-1-0.4-1-1v-2c0-0.6,0.4-1,1-1h4.2l0.1-0.8c0.4-2.2,1.2-4.3,2.6-6.3l0.5-0.7l-3-2.9c-0.2-0.2-0.3-0.4-0.3-0.7   s0.1-0.5,0.3-0.7l1.4-1.4c0.4-0.4,1-0.4,1.4,0l2.9,2.9l0.7-0.5c1.9-1.4,4.1-2.3,6.3-2.6l0.8-0.1V4c0-0.6,0.4-1,1-1h2   c0.6,0,1,0.4,1,1v4.2l0.8,0.1c2.2,0.4,4.3,1.2,6.3,2.6l0.7,0.5l3-3c0.4-0.4,1-0.4,1.4,0l1.4,1.4c0.4,0.4,0.4,1,0,1.4l-2.7,3   l0.5,0.7c1.2,1.8,2.1,3.9,2.6,6.3L40,22h4c0.6,0,1,0.4,1,1V25z" />
+                </g>
+              </svg>
+              <span>Setup</span>
+            </div>
+            <div id="tablettab_options_btn" class="maslow-grid-item maslow-grid-item-btn tablettab-machine-btn green-button"
+              style="color: white; font-size: 1vw; display: flex; flex-direction: column;"
+              title="Set work area, park position, scale factors and material thickness">Options</div>
+            <div id="maslowActionButton" class="maslow-grid-item maslow-grid-item-btn tablettab-machine-btn maslow-action-button" 
+                 style="background-color: #4aa85c; font-size: 1.2vw; color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; font-weight: bold; visibility: hidden;"
+                 title="State-dependent action button">
+              <span id="maslowActionText">Idle</span>
+            </div>
+            <div id="tablettab_release_tension" class="maslow-grid-item maslow-grid-item-btn tablettab-machine-btn"
+              style="background-color: #F5B129; color: white; font-size: 1vw;">
+              Release Tension
+            </div>
           </div>
-          <div id="tablettab_top" class="maslow-grid-item maslow-grid-item-btn" style="background-color: #9d88c0;">
-            <canvas id="upBtn" style="width: 100%; height: 100%"></canvas>
-          </div>
-          <div id="tablettab_topRight" class="maslow-grid-item maslow-grid-item-btn" style="background-color: #b69fcb;">
-            <canvas id="trBtn" style="width: 100%; height: 100%"></canvas>
-          </div>
-          <div id="calibrationBTN" class="maslow-grid-item maslow-grid-item-btn"
-            style="background-color: #f2f0e4; font-size: 1vw; color: #337ab7; display: flex;flex-direction: column;">
-            <svg height="32" width="32" viewBox="0 0 48 48" fill="currentColor">
-              <g>
-                <path
-                  d="M24,11c-7.2,0-13,5.8-13,13c0,7.2,5.8,13,13,13c7.2,0,13-5.8,13-13C37,16.8,31.2,11,24,11z M24,35c-6.1,0-11-4.9-11-11   s4.9-11,11-11s11,4.9,11,11S30.1,35,24,35z" />
-                <path
-                  d="M44,20h-2.4c-0.5-2.1-1.3-4-2.3-5.6l1.6-1.8c1.2-1.2,1.2-3,0-4.2L39.5,7c-1.2-1.2-3.1-1.2-4.2,0l-1.8,1.8   c-1.8-1.2-3.6-1.9-5.6-2.3V4c0-1.7-1.3-3-3-3h-2c-1.7,0-3,1.3-3,3v2.5c-1.9,0.4-3.8,1.2-5.6,2.3l-1.7-1.7c-1.2-1.2-3-1.2-4.2,0   L7,8.5c-0.6,0.6-0.9,1.3-0.9,2.1s0.3,1.5,0.9,2.1l1.8,1.7c-1.1,1.8-1.9,3.6-2.3,5.6H4c-1.7,0-3,1.3-3,3v2c0,1.7,1.3,3,3,3h2.5   c0.4,1.9,1.2,3.8,2.4,5.6l-1.7,1.8c-1.2,1.2-1.2,3,0,4.2L8.5,41c1.2,1.2,3,1.2,4.2,0l1.7-1.8c1.8,1.1,3.6,1.9,5.6,2.3V44   c0,1.7,1.3,3,3,3h2c1.7,0,3-1.3,3-3v-2.4c2.1-0.5,3.9-1.3,5.6-2.3l1.7,1.6c1.2,1.2,3,1.2,4.2,0l1.4-1.4c1.2-1.2,1.2-3,0-4.2   l-1.7-1.7c1.2-1.8,1.9-3.6,2.3-5.6H44c1.7,0,3-1.3,3-3v-2C47,21.3,45.7,20,44,20z M45,25c0,0.6-0.4,1-1,1h-4.2l-0.1,0.8   c-0.4,2.2-1.2,4.3-2.6,6.3l-0.5,0.7l2.9,2.9c0.2,0.2,0.3,0.4,0.3,0.7c0,0.3-0.1,0.5-0.3,0.7l-1.4,1.4c-0.4,0.4-1,0.4-1.4,0   l-2.9-2.8l-0.7,0.5c-1.8,1.3-3.9,2.2-6.3,2.6L26,40v4c0,0.6-0.4,1-1,1h-2c-0.6,0-1-0.4-1-1v-4.2l-0.8-0.1c-2.2-0.4-4.3-1.2-6.3-2.6   l-0.7-0.5l-2.9,3c-0.4,0.4-1,0.4-1.4,0l-1.4-1.4c-0.4-0.4-0.4-1,0-1.4l2.9-3l-0.5-0.7c-1.4-2-2.3-4.1-2.6-6.3L8.2,26H4   c-0.6,0-1-0.4-1-1v-2c0-0.6,0.4-1,1-1h4.2l0.1-0.8c0.4-2.2,1.2-4.3,2.6-6.3l0.5-0.7l-3-2.9c-0.2-0.2-0.3-0.4-0.3-0.7   s0.1-0.5,0.3-0.7l1.4-1.4c0.4-0.4,1-0.4,1.4,0l2.9,2.9l0.7-0.5c1.9-1.4,4.1-2.3,6.3-2.6l0.8-0.1V4c0-0.6,0.4-1,1-1h2   c0.6,0,1,0.4,1,1v4.2l0.8,0.1c2.2,0.4,4.3,1.2,6.3,2.6l0.7,0.5l3-3c0.4-0.4,1-0.4,1.4,0l1.4,1.4c0.4,0.4,0.4,1,0,1.4l-2.7,3   l0.5,0.7c1.2,1.8,2.1,3.9,2.6,6.3L40,22h4c0.6,0,1,0.4,1,1V25z" />
-              </g>
-            </svg>
-            <span>Setup</span>
-          </div>
-          <!-- Buttons row 2 -->
-          <div id="disZ" class="maslow-grid-item maslow-grid-item-btn"
-            style="background-color: #f2f0e4; border-right: 2px solid grey;">5</div>
-          <div id="tablettab_left" class="maslow-grid-item maslow-grid-item-btn" style="background-color: #9d88c0;">
-            <canvas id="lBtn" style="width: 100%; height: 100%"></canvas>
-          </div>
-          <div id="disM" class="maslow-grid-item maslow-grid-item-btn" style="background-color: #f2f0e4;">100</div>
-          <div id="tablettab_right" class="maslow-grid-item maslow-grid-item-btn" style="background-color: #9d88c0;">
-            <canvas id="rBtn" style="width: 100%; height: 100%"></canvas>
-          </div>
-          <div id="tablettab_options_btn" class="maslow-grid-item maslow-grid-item-btn green-button"
-            style="color: white; font-size: 1vw; display: flex; flex-direction: column;"
-            title="Set work area, park position, scale factors and material thickness">Options</div>
-          <!-- Buttons row 3 -->
-          <div id="tablettab_zDown" class="maslow-grid-item maslow-grid-item-btn"
-            style="background-color: #f2f0e4; color: #337ab7; border-right: 2px solid grey;">
-            <svg width="32" height="32" viewBox="0 0 38 38">
-              <polygon transform="rotate(180) translate(-21 -44)" fill="currentColor"
-                points="10.319 5.525 17.833 13.039 2.805 13.039 10.319 5.525"></polygon>
-              <rect fill="currentColor" height="2.5" transform="translate(32 10) rotate(90)" width="21.79" x="-0.576"
-                y="20.33">
-              </rect>
-            </svg>
-            Z
-          </div>
-          <div id="tablettab_bottomLeft" class="maslow-grid-item maslow-grid-item-btn"
-            style="background-color: #b69fcb;"><canvas id="blBtn" style="width: 100%; height: 100%"></canvas> </div>
-          <div id="tablettab_bottom" class="maslow-grid-item maslow-grid-item-btn" style="background-color: #9d88c0;">
-            <canvas id="dnBtn" style="width: 100%; height: 100%"></canvas>
-          </div>
-          <div id="tablettab_bottomRight" class="maslow-grid-item maslow-grid-item-btn"
-            style="background-color: #b69fcb;"><canvas id="brBtn" style="width: 100%; height: 100%"></canvas> </div>
-          <div id="maslowActionButton" class="maslow-grid-item maslow-grid-item-btn maslow-action-button" 
-               style="background-color: #4aa85c; font-size: 1.2vw; color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; font-weight: bold; visibility: hidden;"
-               title="State-dependent action button">
-            <span id="maslowActionText">Idle</span>
-          </div>
-          <!-- Buttons row 4 -->
-          <div id="tablettab_set_z_home" class="maslow-grid-item maslow-grid-item-btn"
-            style="background-color: #f2f0e4; border-right: 2px solid grey;">Define Z Home</div>
-          <div id="tablettab_move_to_xy_home" class="maslow-grid-item maslow-grid-item-btn"
-            style="background-color: #f2f0e4;"><canvas id="hBtn" style="width: 100%; height: 100%"></canvas></div>
-          <div id="tablettab_toggle_units" class="maslow-grid-item maslow-grid-item-btn"
-            style="background-color: #f2f0e4;" title="Toggle Units">mm</div>
-          <div id="tablettab_set_xy_home" class="maslow-grid-item maslow-grid-item-btn"
-            style="background-color: #f2f0e4;" title="Set XY home position">Define XY Home</div>
-          <div id="tablettab_release_tension" class="maslow-grid-item maslow-grid-item-btn"
-            style="background-color: #F5B129; color: white; font-size: 1vw;">
-            Release Tension
+          <!-- Belt lengths and motor currents from the machine's status reports (tablet.js updateBeltLengths) -->
+          <div id="tablettab-belt-lengths" class="tablettab-belt-lengths"
+            title="Belt lengths reported by the machine, in mm, and each belt motor's current (hover a dial). Unknown: the belt moved while the motors were off, or hasn't been retracted since power-on.">
+            <span class="belt-length-label">Belt lengths (mm) and motor current</span>
+            <span class="belt-length">TL <span id="belt-length-tl" class="belt-length-value">-</span>
+              <svg id="belt-current-tl" class="belt-current-dial" viewBox="0 0 24 24" aria-hidden="true"><circle class="belt-current-dial-bg" cx="12" cy="12" r="9"/><circle class="belt-current-dial-arc" cx="12" cy="12" r="9" stroke-dasharray="56.55" stroke-dashoffset="56.55" transform="rotate(-90 12 12)"/></svg></span>
+            <span class="belt-length">TR <span id="belt-length-tr" class="belt-length-value">-</span>
+              <svg id="belt-current-tr" class="belt-current-dial" viewBox="0 0 24 24" aria-hidden="true"><circle class="belt-current-dial-bg" cx="12" cy="12" r="9"/><circle class="belt-current-dial-arc" cx="12" cy="12" r="9" stroke-dasharray="56.55" stroke-dashoffset="56.55" transform="rotate(-90 12 12)"/></svg></span>
+            <span class="belt-length">BL <span id="belt-length-bl" class="belt-length-value">-</span>
+              <svg id="belt-current-bl" class="belt-current-dial" viewBox="0 0 24 24" aria-hidden="true"><circle class="belt-current-dial-bg" cx="12" cy="12" r="9"/><circle class="belt-current-dial-arc" cx="12" cy="12" r="9" stroke-dasharray="56.55" stroke-dashoffset="56.55" transform="rotate(-90 12 12)"/></svg></span>
+            <span class="belt-length">BR <span id="belt-length-br" class="belt-length-value">-</span>
+              <svg id="belt-current-br" class="belt-current-dial" viewBox="0 0 24 24" aria-hidden="true"><circle class="belt-current-dial-bg" cx="12" cy="12" r="9"/><circle class="belt-current-dial-arc" cx="12" cy="12" r="9" stroke-dasharray="56.55" stroke-dashoffset="56.55" transform="rotate(-90 12 12)"/></svg></span>
           </div>
         </div>
-        <!-- Controls row 5 -->
-        <div id="tablettab-file-controls" style="grid-template-columns: 60% 20% 20%;" class="maslow-grid-container tablettab-controls-item"
-          style="height: 60px;">
-          <select id="filelist" class="form-control">
-            <option>Load File...</option>
-          </select>
-          <div id="tablettab_gcode_upload" class="maslow-grid-item maslow-grid-item-btn"
-            style="background-color: #337ab7; color: white; height: 50px;display: flex;flex-direction: column; padding: 2px;">
-            <svg width="1.3em" height="1.2em" viewBox="0 0 1792 1792" fill="currentColor">
-              <g>
-                <path
-                  d="M1344 1472q0-26-19-45t-45-19-45 19-19 45 19 45 45 19 45-19 19-45zm256 0q0-26-19-45t-45-19-45 19-19 45 19 45 45 19 45-19 19-45zm128-224v320q0 40-28 68t-68 28h-1472q-40 0-68-28t-28-68v-320q0-40 28-68t68-28h427q21 56 70.5 92t110.5 36h256q61 0 110.5-36t70.5-92h427q40 0 68 28t28 68zm-325-648q-17 40-59 40h-256v448q0 26-19 45t-45 19h-256q-26 0-45-19t-19-45v-448h-256q-42 0-59-40-17-39 14-69l448-448q18-19 45-19t45 19l448 448q31 30 14 69z" />
-              </g>
-            </svg>
-            <span>Upload GCode</span>
+        <!-- Jogging and position readout -->
+        <div id="tablettab-jog-section" class="tablettab-section">
+          <div id="tablettab-jog-controls" style="grid-template-columns: 25% 25% 25% 25%;" class="maslow-grid-container">
+            <!-- Buttons row 1 -->
+            <div id="tablettab_zUp" class="maslow-grid-item maslow-grid-item-btn"
+              style="background-color: #f2f0e4;; color: #337ab7; border-right: 2px solid grey;">
+              <svg width="32" height="32" viewBox="0 0 38 38">
+                <polygon fill="currentColor" points="10.319 5.525 17.833 13.039 2.805 13.039 10.319 5.525" />
+                <rect fill="currentColor" height="2.5" transform="translate(31.899 11.262) rotate(90)" width="21.79"
+                  x="-0.576" y="20.33" />
+              </svg>
+              Z
+            </div>
+            <div id="tablettab_topLeft" class="maslow-grid-item maslow-grid-item-btn" style="background-color: #b69fcb;">
+              <canvas id="tlBtn" style="width: 100%; height: 100%"></canvas>
+            </div>
+            <div id="tablettab_top" class="maslow-grid-item maslow-grid-item-btn" style="background-color: #9d88c0;">
+              <canvas id="upBtn" style="width: 100%; height: 100%"></canvas>
+            </div>
+            <div id="tablettab_topRight" class="maslow-grid-item maslow-grid-item-btn" style="background-color: #b69fcb;">
+              <canvas id="trBtn" style="width: 100%; height: 100%"></canvas>
+            </div>
+            <!-- Buttons row 2 -->
+            <div id="disZ" class="maslow-grid-item maslow-grid-item-btn"
+              style="background-color: #f2f0e4; border-right: 2px solid grey;">5</div>
+            <div id="tablettab_left" class="maslow-grid-item maslow-grid-item-btn" style="background-color: #9d88c0;">
+              <canvas id="lBtn" style="width: 100%; height: 100%"></canvas>
+            </div>
+            <div id="disM" class="maslow-grid-item maslow-grid-item-btn" style="background-color: #f2f0e4;">100</div>
+            <div id="tablettab_right" class="maslow-grid-item maslow-grid-item-btn" style="background-color: #9d88c0;">
+              <canvas id="rBtn" style="width: 100%; height: 100%"></canvas>
+            </div>
+            <!-- Buttons row 3 -->
+            <div id="tablettab_zDown" class="maslow-grid-item maslow-grid-item-btn"
+              style="background-color: #f2f0e4; color: #337ab7; border-right: 2px solid grey;">
+              <svg width="32" height="32" viewBox="0 0 38 38">
+                <polygon transform="rotate(180) translate(-21 -44)" fill="currentColor"
+                  points="10.319 5.525 17.833 13.039 2.805 13.039 10.319 5.525"></polygon>
+                <rect fill="currentColor" height="2.5" transform="translate(32 10) rotate(90)" width="21.79" x="-0.576"
+                  y="20.33">
+                </rect>
+              </svg>
+              Z
+            </div>
+            <div id="tablettab_bottomLeft" class="maslow-grid-item maslow-grid-item-btn"
+              style="background-color: #b69fcb;"><canvas id="blBtn" style="width: 100%; height: 100%"></canvas> </div>
+            <div id="tablettab_bottom" class="maslow-grid-item maslow-grid-item-btn" style="background-color: #9d88c0;">
+              <canvas id="dnBtn" style="width: 100%; height: 100%"></canvas>
+            </div>
+            <div id="tablettab_bottomRight" class="maslow-grid-item maslow-grid-item-btn"
+              style="background-color: #b69fcb;"><canvas id="brBtn" style="width: 100%; height: 100%"></canvas> </div>
+            <!-- Buttons row 4 -->
+            <div id="tablettab_set_z_home" class="maslow-grid-item maslow-grid-item-btn"
+              style="background-color: #f2f0e4; border-right: 2px solid grey;">Define Z Home</div>
+            <div id="tablettab_move_to_xy_home" class="maslow-grid-item maslow-grid-item-btn"
+              style="background-color: #f2f0e4;"><canvas id="hBtn" style="width: 100%; height: 100%"></canvas></div>
+            <div id="tablettab_toggle_units" class="maslow-grid-item maslow-grid-item-btn"
+              style="background-color: #f2f0e4;" title="Toggle Units">mm</div>
+            <div id="tablettab_set_xy_home" class="maslow-grid-item maslow-grid-item-btn"
+              style="background-color: #f2f0e4;" title="Set XY home position">Define XY Home</div>
           </div>
-          <div id="tablettab_gcode_delete" class="maslow-grid-item maslow-grid-item-btn"
-            style="background-color: #ce654c; color: white; height: 50px;display: flex;flex-direction: column; opacity: 0.5; pointer-events: none; padding: 2px;" disabled>
-            <span>Delete GCode</span>
-          </div>
-        </div>
-        <!-- Buttons row 6 -->
-        <div id="tablettab-playback-controls" class="maslow-grid-container tablettab-controls-item" style="grid-template-columns: 33% 33% 33%;">
-          <div id="tablettab_gcode_play" class="maslow-grid-item maslow-grid-item-btn"
-            style="background-color: #4aa85c;"><canvas id="playBtn" style="width: 100%; height: 100%"></canvas></div>
-          <div id="tablettab_gcode_stop" class="maslow-grid-item maslow-grid-item-btn"
-            style="background-color: #ce654c;"><canvas id="stopBtn" style="width: 100%; height: 100%"></canvas></div>
-          <div id="systemStatus" class="maslow-grid-item system-status">Idle</div>
-        </div>
-        <div id="tablettab-position-display" class="maslow-grid-container tablettab-controls-item" style="grid-template-columns: auto;">
-          <div class="maslow-grid-item">
-            <table style="width:100%">
-              <tr>
-                <td>X:</td>
-                <td id="wpos-x">0.000</td>
-                <td id="mpos-x">|Xm: 0.000|</td>
-              </tr>
-              <tr>
-                <td>Y:</td>
-                <td id="wpos-y">0.000</td>
-                <td id="mpos-y">|Ym: 0.000|</td>
-              </tr>
-              <tr>
-                <td>Z:</td>
-                <td id="wpos-z">0.000</td>
-                <td id="mpos-z">|Zm: 0.000|</td>
-              </tr>
-              <tr>
-                <td id="active-state"></td>
-              </tr>
-            </table>
-          </div>
-        </div>
-        <div id="tablettab-job-bounds-container" class="maslow-grid-container tablettab-controls-item" style="grid-template-columns: 30% 70%;">
-          <div id="tablettab_trace_boundary" class="maslow-grid-item maslow-grid-item-btn"
-            style="background-color: #f2f0e4; cursor: pointer; display: none;"
-            title="Move around the job boundary to check positioning">
-            Trace Boundary
-          </div>
-          <div class="maslow-grid-item">
-            <div id="job-bounds-info" style="padding: 5px; background-color: #f8f9fa; border: 1px solid #ddd; border-radius: 3px; font-size: 12px; display: none;">
-              <strong>Job Bounds:</strong><br>
-              <span id="job-bounds-text">No file loaded</span>
+          <div id="tablettab-position-display" class="maslow-grid-container" style="grid-template-columns: auto;">
+            <div class="maslow-grid-item">
+              <table style="width:100%">
+                <tr>
+                  <td>X:</td>
+                  <td id="wpos-x">0.000</td>
+                </tr>
+                <tr>
+                  <td>Y:</td>
+                  <td id="wpos-y">0.000</td>
+                </tr>
+                <tr>
+                  <td>Z:</td>
+                  <td id="wpos-z">0.000</td>
+                </tr>
+                <tr>
+                  <td id="active-state"></td>
+                </tr>
+              </table>
             </div>
           </div>
         </div>
-        <textarea style="border: none" class="messages tablettab-controls-item" id="messages" rows="14"
-          spellcheck="false" readonly>Serial Messages</textarea>
-        <button id="tablettab_save_serial_msg" class="btn btn-primary">Save Serial</button>
+        <!-- GCode job -->
+        <div id="tablettab-job-section" class="tablettab-section">
+          <div id="tablettab-file-controls" style="grid-template-columns: minmax(0, 3fr) minmax(0, 1fr) minmax(0, 1fr);" class="maslow-grid-container"
+            style="height: 60px;">
+            <select id="filelist" class="form-control">
+              <option>Load File...</option>
+            </select>
+            <div id="tablettab_gcode_upload" class="maslow-grid-item maslow-grid-item-btn"
+              style="background-color: #337ab7; color: white; height: 50px;display: flex;flex-direction: column; padding: 2px;">
+              <svg width="1.3em" height="1.2em" viewBox="0 0 1792 1792" fill="currentColor">
+                <g>
+                  <path
+                    d="M1344 1472q0-26-19-45t-45-19-45 19-19 45 19 45 45 19 45-19 19-45zm256 0q0-26-19-45t-45-19-45 19-19 45 19 45 45 19 45-19 19-45zm128-224v320q0 40-28 68t-68 28h-1472q-40 0-68-28t-28-68v-320q0-40 28-68t68-28h427q21 56 70.5 92t110.5 36h256q61 0 110.5-36t70.5-92h427q40 0 68 28t28 68zm-325-648q-17 40-59 40h-256v448q0 26-19 45t-45 19h-256q-26 0-45-19t-19-45v-448h-256q-42 0-59-40-17-39 14-69l448-448q18-19 45-19t45 19l448 448q31 30 14 69z" />
+                </g>
+              </svg>
+              <span>Upload GCode</span>
+            </div>
+            <div id="tablettab_gcode_delete" class="maslow-grid-item maslow-grid-item-btn"
+              style="background-color: #ce654c; color: white; height: 50px;display: flex;flex-direction: column; opacity: 0.5; pointer-events: none; padding: 2px;" disabled>
+              <span>Delete GCode</span>
+            </div>
+          </div>
+          <div id="tablettab-playback-controls" class="maslow-grid-container" style="grid-template-columns: 33% 33% 33%;">
+            <div id="tablettab_gcode_play" class="maslow-grid-item maslow-grid-item-btn"
+              style="background-color: #4aa85c;"><canvas id="playBtn" style="width: 100%; height: 100%"></canvas></div>
+            <!-- After a stop, Resume and Discard take the places of Start and the status -->
+            <div id="tablettab_gcode_resume" class="maslow-grid-item maslow-grid-item-btn job-resume" style="display: none;"
+              title="Run the stopped job again from this line">
+              <span>Resume from</span>
+              <div class="job-resume-line">
+                <input id="tablettab_resume_line" type="number" min="1" step="1" inputmode="numeric" />
+                <div class="job-resume-steps">
+                  <button type="button" data-step="1" tabindex="-1" aria-label="Next line">&#9650;</button>
+                  <button type="button" data-step="-1" tabindex="-1" aria-label="Previous line">&#9660;</button>
+                </div>
+              </div>
+            </div>
+            <div id="tablettab_gcode_stop" class="maslow-grid-item maslow-grid-item-btn"
+              style="background-color: #ce654c;"><canvas id="stopBtn" style="width: 100%; height: 100%"></canvas></div>
+            <div id="systemStatus" class="maslow-grid-item system-status">Idle</div>
+            <div id="tablettab_gcode_discard" class="maslow-grid-item maslow-grid-item-btn job-discard" style="display: none;"
+              title="Forget the stopped job">Discard stopped job</div>
+          </div>
+          <div id="tablettab-job-bounds-container" class="maslow-grid-container" style="grid-template-columns: 30% 70%; display: none;">
+            <div id="tablettab_trace_boundary" class="maslow-grid-item maslow-grid-item-btn"
+              style="background-color: #f2f0e4; cursor: pointer; display: none;"
+              title="Move around the job boundary to check positioning">
+              Trace Boundary
+            </div>
+            <div class="maslow-grid-item">
+              <div id="job-bounds-info" style="padding: 5px; background-color: #f8f9fa; border: 1px solid #ddd; border-radius: 3px; font-size: 12px; display: none;">
+                <strong>Job Bounds:</strong><br>
+                <span id="job-bounds-text">No file loaded</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- Serial messages -->
+        <div id="tablettab-serial-section" class="tablettab-section">
+          <textarea style="border: none" class="messages" id="messages" rows="14"
+            spellcheck="false" readonly>Serial Messages</textarea>
+          <button id="tablettab_save_serial_msg" class="btn btn-primary">Save Serial</button>
+        </div>
       </div>
     </div>
   </div>

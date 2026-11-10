@@ -64,7 +64,6 @@ const Monitor_output_Update = (message) => {
 				outlc.startsWith("echo:") ||
 				outlc.startsWith("Config:") ||
 				outlc.startsWith('echo:Unknown command: "echo"') ||
-				outlc.startsWith("[MSG:INFO: Heartbeat]") ||
 				outlc.startsWith('echo:enqueueing "*"') ||
 				/\[MSG:INFO:\s*TLC:\s*[\d.]+\s*TRC:\s*[\d.]+\s*BLC:\s*[\d.]+\s*BRC:\s*[\d.]+\]/.test(outlc)
 			) {
@@ -119,6 +118,12 @@ function SendCustomCommand() {
 	setValue("custom_cmd_txt", "");
 	Monitor_output_Update(`${custCmd}\n`);
 
+	// Lines go over the WebSocket like every other command; their output (and ok/error) shows
+	// up in this monitor from the socket. [ESP...] commands answer in the HTTP body.
+	if (!custCmd.startsWith("[ESP")) {
+		sendLineOrRealtime(custCmd);
+		return;
+	}
 	const cmd = buildHttpCommandCmd(httpCmdType.commandText, custCmd);
 	SendGetHttp(cmd, SendCustomCommandSuccess, SendCustomCommandFailed);
 }

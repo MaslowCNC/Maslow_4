@@ -30,7 +30,7 @@ def bin2header(data, var_name='var'):
 
 subprocess.run(["npm", "install"])
 subprocess.run(["npm", "audit", "fix"])
-subprocess.run(["gulp", "package"])
+subprocess.run(["npx", "gulp", "package"], check=True)
 
 with open('tool.html.gz', 'rb') as f:
     data = f.read()
