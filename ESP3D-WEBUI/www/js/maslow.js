@@ -233,9 +233,9 @@ const updateDynamicButtons = () => {
 			// No buttons are active in this state
 			break;
 		case MASLOW_STATE_TENSIONED:
-			stateLabel.innerHTML = "State: Tensioned, run Find Anchors";
+			stateLabel.innerHTML = "State: Tensioned";
 			if (mainStateLabel) {
-				mainStateLabel.innerHTML = "State: Tensioned, run Find Anchors";
+				mainStateLabel.innerHTML = "State: Tensioned";
 				if (mainStateLabelContainer) mainStateLabelContainer.style.backgroundColor = yellowBackground;
 			}
 
