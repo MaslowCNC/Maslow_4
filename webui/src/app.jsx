@@ -44,6 +44,8 @@ export function App() {
   const ctx = { d, a, setA, send, mark, openWorkArea };
 
   useEffect(() => { send("connect"); }, []);
+  // The device reads the chosen file (for the preview and Trace boundary) whenever the choice changes
+  useEffect(() => { send("chooseFile", { file: a.file }); }, [a.file]);
   // A (re)connection means the device may have changed: start setup again from Confirm the work area
   useEffect(() => { setAnswers(freshAnswers()); setChecks(FINAL_CHECKS.map(() => false)); }, [d.connectId]);
   // Once the position is confirmed, the device checks for a tool on its own

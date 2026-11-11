@@ -51,6 +51,7 @@ export function createMachine({ host = location.host } = {}) {
     maslow: null, fluid: "", statusSeen: false,
     tool: "unknown", settingZ: false, zSetCount: 0, spindle: "off", error: null,
     job: null, lastJob: null, motion: null, result: null, restored: false,
+    gcode: null,             // the chosen file, read: { file, status: "reading" | "ready" | "failed", detail?, ...readGcode() }
     workArea: { w: 0, h: 0, spoil: 0 }, stock: 0, anchorsSaved: true,
     belts: [0, 0, 0, 0], motorCurrent: null,
     pos: { x: 0, y: 0, z: 0 }, wco: { x: 0, y: 0, z: 0 },
@@ -68,6 +69,22 @@ export function createMachine({ host = location.host } = {}) {
       readings[url].catch(() => { delete readings[url]; });
     }
     return readings[url];
+  }
+
+  // The file the user has chosen, read for the preview and Trace boundary. The UI sends chooseFile whenever its
+  // choice changes; an upload has already put the file in readings, so choosing it needs no fetch.
+  let chosen = null;
+  function chooseFile(file) {
+    chosen = file || null;
+    if (!chosen) { set({ gcode: null }); return; }
+    set({ gcode: { file, status: "reading" } });
+    readFile(file).then(
+      (r) => { if (chosen === file) set({ gcode: { file, status: "ready", ...r } }); },
+      (e) => {
+        if (chosen !== file) return;
+        log(`Couldn't read ${file}: ${e.message}`);
+        set({ gcode: { file, status: "failed", detail: e.message } });
+      });
   }
 
   // Job progress: the report's SD percent is bytes read, not progress (issue 19), so progress is the running line
@@ -253,6 +270,10 @@ export function createMachine({ host = location.host } = {}) {
       input.onchange = async () => {
         const f = input.files[0];
         if (!f) return resolve(null);
+        // Read it here, from the user's own copy, so the preview has it without fetching it back from the card
+        const url = sdUrl(f.name);
+        const reading = f.text().then(readGcode);
+        reading.catch(() => {});
         const form = new FormData();
         form.append("path", "/");
         form.append(`/${f.name}S`, String(f.size));
@@ -263,9 +284,10 @@ export function createMachine({ host = location.host } = {}) {
           const r = await fetch("/upload", { method: "POST", body: form });
           if (!r.ok) throw new Error(`HTTP ${r.status}`);
           log(`${f.name} uploaded`);
-          delete readings[sdUrl(f.name)];   // the card may have had an older file of the same name
+          readings[url] = reading;   // replaces any older file of the same name
           delete lines[`/${f.name}`];
           delete lines[`/sd/${f.name}`];
+          if (chosen === f.name) chooseFile(f.name);   // the same name uploaded again: show the new one
           await listFiles();
           resolve(f.name);
         } catch (e) {
@@ -317,6 +339,7 @@ export function createMachine({ host = location.host } = {}) {
   function send(action, payload = {}) {
     if (action === "connect") { if (!m) start(); return; }
     if (action === "reconnect") { connect(); return; }
+    if (action === "chooseFile") { chooseFile(payload.file); return; }   // reads over HTTP; doesn't need the socket
     if (!m) return;
     if (action === "run") { run("run", () => m.runFile(`/${payload.file}`)); return; }
     if (action === "continueJob") {
