@@ -9,7 +9,7 @@ export const ModePill = ({ s, small }) =>
 
 export function Conn({ d }) {
   const [label, c] = !d.connected ? (d.everConnected ? ["Not responding", "var(--danger)"] : ["Connecting", "var(--warn)"])
-    : d.hotspot ? ["Hotspot", "var(--warn)"] : ["Connected", "var(--ready)"];
+    : d.hotspot ? ["Hotspot", "var(--warn)"] : [d.readOnly ? "Connected, read-only" : "Connected", "var(--ready)"];
   return <span class="conn" style={`--c:${c}`}><i></i>{label}</span>;
 }
 
@@ -99,9 +99,15 @@ export function DetailsBody({ k, d, a }) {
   } else if (tab === "belts") {
     body = d.maslow === 0 ? <p class="note">Belt lengths aren't known yet.</p> :
       <><div class={`belts${s.stale ? " stale" : ""}`}>{d.belts.map((v, i) => <><span>{BELT_NAMES[i]}</span><span class="bar"><i style={`width:${Math.min(100, v / 15)}%`}></i></span><span>{v.toFixed(1)} mm</span></>)}</div>
-        <p class="note">Live lengths need the planned firmware report. Today they come from $MINFO on request.</p></>;
+        <p class="note">Live, from the status report.</p></>;
+  } else if (d.motorCurrent) {
+    // MC is raw ADC 0–4095; the current UI converts it to mA this way (docs/protocol.md)
+    const mA = (adc) => Math.round(1000 * 3.3 * adc / 4095 / 1.5);
+    const mc = d.motorCurrent;
+    body = <><div class={`belts${s.stale ? " stale" : ""}`}>{[mc.tl, mc.tr, mc.bl, mc.br].map((v, i) => <><span>{BELT_NAMES[i]}</span><span class="bar"><i style={`width:${Math.min(100, mA(v) / 20)}%`}></i></span><span>{mA(v)} mA</span></>)}</div>
+      <p class="note">Belt motor currents, live from the status report.</p></>;
   } else {
-    body = <p class="note">Motor currents need a firmware report. Today they only go to the debug log.</p>;
+    body = <p class="note">Motor currents show here when the machine reports them.</p>;
   }
   return <>
     <div class="minis">

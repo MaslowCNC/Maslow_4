@@ -310,7 +310,7 @@ To replace the current UI on the board. The simulator isn't on this list: it sta
      `buildHttpFileCmd`, `SendFileHttp`, `BuildFileUploadFormData`, `httpCmd`,
      `http_communication_locked`): import it too, or write small stand-ins.
 2. **A socket module** (the current one is `socket.js`):
-   - open `ws://<host>/ws` with the `arduino` subprotocol;
+   - open `ws://<host>/` (the firmware's socket is at `/`) with the `arduino` subprotocol;
    - on every open, reset `wsCommands` and send `$Report/Interval=50`, `?`, `$G`, `$MINFO` and our
      setting reads;
    - pass every line to `wsCommands.handleLine` and `machine.handleLine`;

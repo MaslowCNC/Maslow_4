@@ -19,6 +19,8 @@ export const T = { setup: "var(--setup)", ready: "var(--ready)", job: "var(--job
 export const SCREENS = {
   connecting: { mode: "Connecting", tone: T.wait, sub: "", msg: "Waiting for the device to report its state", stale: true },
   lost: { mode: "Error", tone: T.error, sub: "Not responding", alert: true, stale: true, msg: "No reply from the device. Values shown are out of date" },
+  othertab: { mode: "Error", tone: T.error, sub: "Connected in another tab", alert: true, stale: true, msg: "This machine is now connected in another tab of this browser. Only one tab per browser can be connected" },
+  toomany: { mode: "Error", tone: T.error, sub: "Too many connections", alert: true, stale: true, msg: "The machine has 4 connections, and a newer one took this tab's place. Close tabs or devices you aren't using, then reconnect" },
   wifi: { mode: "Connecting", tone: T.wait, sub: "WiFi setup", nopos: true, msg: "Connected through the Maslow hotspot. Choose a network for the device to join" },
   workarea: { mode: "Setup", tone: T.setup, sub: "Confirm the work area", step: 0, nopos: true, msg: "Confirm the work area before anything moves" },
   newarea: { mode: "Setup", tone: T.setup, sub: "Confirm the work area", step: 0, nopos: true, msg: "Set the table size and the spoil board thickness in the Work area pop-up" },
@@ -60,6 +62,7 @@ export const SCREENS = {
 };
 
 export function derive(d, a) {
+  if (d.closed) return d.closed;   // the firmware closed this socket on purpose: "othertab" or "toomany"
   if (!d.connected) return d.everConnected ? "lost" : "connecting";
   if (d.hotspot) return "wifi";
   if (d.fluid === "Alarm") return "error";
@@ -77,6 +80,7 @@ export function derive(d, a) {
     case 5: return "tensioning";
     case 6: return "anchors";
     case 8: return "releasing";
+    case 10: return "tensionfail";   // TENSIONED: Apply tension measured belts that don't fit the saved anchors
     case 4: {
       const r = d.result || {};
       if (r.step === "tension" && r.outcome === "nofit") return "tensionfail";

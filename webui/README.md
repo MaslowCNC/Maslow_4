@@ -13,6 +13,18 @@ tool being found, a fault), a "Simulated device" panel asks the tester what happ
 The build is a single `index.html` with everything inlined, so it can later be gzipped and served from the board
 like the current WebUI.
 
+## Against a real machine (read-only for now)
+
+    npm run dev                              # then open http://localhost:5173/?device=machine
+    MASLOW_HOST=10.0.0.42 npm run dev        # if the machine isn't at maslow.local
+
+`?device=machine` uses the real machine through `ESP3D-WEBUI/www/js/machine.js` and `wscommands.js`, imported
+as they are (`src/device/machine.js`). The dev server forwards the socket and file requests to the machine.
+`?device=sim` forces the simulator. A production build served by the machine uses the machine by default.
+
+For now the page only reads: the setup and job buttons write "Not sent" in the Log. Stop is the exception:
+it sends the real stop (0x18, then `$STOP`) when pressed. The machine needs #1132 firmware.
+
 ## How it's put together
 
 | Folder | What's in it |

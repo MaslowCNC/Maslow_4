@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "preact/hooks";
 import { createSimulator } from "./device/simulator.js";
+import { createMachine } from "./device/machine.js";
 import { derive, freshAnswers, isSetup } from "./flow/screens.js";
 import { Desktop } from "./ui/desktop.jsx";
 import { Phone } from "./ui/phone.jsx";
@@ -7,9 +8,12 @@ import { Settings, WorkArea } from "./ui/modals.jsx";
 import { SimPanel } from "./ui/sim.jsx";
 import { FINAL_CHECKS } from "./ui/desktop.jsx";
 
-// The device behind the UI. Today it's the simulator; a firmware adapter with the same interface
-// (getState, subscribe, send) replaces it later without touching the screens.
-const device = createSimulator();
+// The device behind the UI: the real machine (machine.js) or the simulator, both with the same interface
+// (getState, subscribe, send). ?device=machine or ?device=sim picks one. Otherwise the page uses the machine
+// when the machine serves it (a production build over http), and the simulator in development.
+const choice = new URLSearchParams(location.search).get("device");
+const useMachine = choice ? choice === "machine" : import.meta.env.PROD && location.protocol.startsWith("http");
+const device = useMachine ? createMachine() : createSimulator();
 
 function useDevice() {
   const [d, setD] = useState(device.getState());

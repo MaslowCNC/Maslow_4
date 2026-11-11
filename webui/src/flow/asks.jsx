@@ -87,6 +87,8 @@ export function ask(k, ctx) {
       input: <FilePicker files={d.files} onPick={f => { mark(8); setA({ file: f }); }} onUpload={() => { const f = send("uploadFile"); mark(8); setA({ file: f }); }} /> };
     case "error": return { text: d.error?.reason || "", buttons: [B("Clear error ($X)", () => send("clearError"))] };
     case "recovery": return { text: "Clear it by re-homing Z. (To be tested on the machine.)", buttons: [B("Re-home Z", () => send("rehomeZ"))] };
+    case "othertab": return { text: "Only one tab per browser can be connected.", buttons: [B("Use this tab", () => send("reconnect"))] };
+    case "toomany": return { text: "Close tabs or devices you aren't using.", buttons: [B("Reconnect", () => send("reconnect"))] };
     case "lost": return { text: "Reconnecting automatically. If it doesn't come back, reboot the device or turn it off and on.", buttons: [B("Reboot device", () => send("reboot"), "ghost")] };
     default: return { text: "", buttons: [] };
   }
