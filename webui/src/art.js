@@ -30,7 +30,8 @@ export function stepArt(i, waLabel) {
 }
 
 export function visSvg(k, s, pos = { x: 0, y: 0 }, home = { x: 0, y: 0 }) {
-  // The sled follows the machine position, scaled to the drawing; the cross marks the user's home (work 0, 0)
+  // The sled follows the machine position, scaled to the drawing. The cross marks the user's home (work 0, 0);
+  // it's drawn over the sled and reaches past it, so it still shows when the sled sits on home.
   const toX = (x) => Math.max(40, Math.min(370, 205 + x / 4)), toY = (y) => Math.max(40, Math.min(230, 140 - y / 4));
   const sledX = toX(pos.x), sledY = toY(pos.y), hx = toX(home.x), hy = toY(home.y), unk = s.nopos && !s.moving, done = ["cutting", "stopped", "spindle"].includes(k);
   const loose = s.nopos && s.moving;
@@ -46,8 +47,8 @@ export function visSvg(k, s, pos = { x: 0, y: 0 }, home = { x: 0, y: 0 }) {
     ${k === "success" || k === "parking" ? `<path d="${path}" fill="none" stroke="var(--lilac)" stroke-width="3"/>` : ""}
     ${k === "tracing" ? `<path d="M126 86 H284 V194 H200" fill="none" stroke="var(--ready)" stroke-width="2.5" stroke-dasharray="6 4"/>` : ""}
     ${unk ? "" : belts}${anchors}
-    ${unk ? "" : `<g stroke="var(--ready)" stroke-width="1.6"><line x1="${hx - 9}" y1="${hy}" x2="${hx + 9}" y2="${hy}"/><line x1="${hx}" y1="${hy - 9}" x2="${hx}" y2="${hy + 9}"/></g><text x="${hx + 8}" y="${hy - 6}" fill="var(--ready)" font-family="var(--font-mono)" font-size="10">home</text>`}
     ${unk ? `<text x="205" y="62" text-anchor="middle" fill="var(--muted)" font-family="var(--font-mono)" font-size="12">Sled position unknown</text>` : ""}
     <rect ${unk ? 'opacity="0"' : ""} x="${sledX - 13}" y="${sledY - 13}" width="26" height="26" rx="6" fill="var(--panel)" stroke="var(--lilac)" stroke-width="2"/>
-    ${unk ? "" : `<circle cx="${sledX}" cy="${sledY}" r="3" fill="var(--lilac)"/>`}</svg>`;
+    ${unk ? "" : `<circle cx="${sledX}" cy="${sledY}" r="3" fill="var(--lilac)"/>`}
+    ${unk ? "" : `<g stroke="var(--ready)" stroke-width="1.6"><title>Your home (work 0, 0)</title><line x1="${hx - 20}" y1="${hy}" x2="${hx + 20}" y2="${hy}"/><line x1="${hx}" y1="${hy - 20}" x2="${hx}" y2="${hy + 20}"/></g>`}</svg>`;
 }

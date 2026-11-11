@@ -90,7 +90,7 @@
   .xyz div { background: var(--input); border-radius: 6px; padding: 6px 8px; display: grid; gap: 2px; }
   .xyz span { font: 600 11px var(--font-mono); color: var(--muted); }
   .xyz b { font: 700 18px var(--font-mono); font-variant-numeric: tabular-nums; }
-  .minis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; }
+  .minis { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr)); gap: 8px; }
   .mini { background: var(--sub); border: 1px solid var(--sep); border-radius: 10px; padding: 8px 10px; display: grid; gap: 4px; align-content: start; min-width: 0; }
   .mini > span { font: 600 10px var(--font-mono); color: var(--muted); letter-spacing: .04em; text-transform: uppercase; }
   .mini p { margin: 0; font-size: 13px; line-height: 1.35; }
