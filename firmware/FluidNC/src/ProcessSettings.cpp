@@ -29,6 +29,7 @@
 #include "Driver/backtrace.h"     // backtrace_get(), etc.
 #include "FileCommands.h"         // make_file_commands()
 #include "Job.h"                  // Job::active()
+#include "Maslow/JobResume.h"  // JobResume::noteStop
 #include "Maslow/Maslow.h"
 #include "Maslow/Calibration.h"
 #include "Maslow/BoardId.h"
@@ -1240,6 +1241,9 @@ static Error maslow_stop(const char* value, AuthenticationLevel auth_level, Chan
     // may hold that mutex while flushing the WebSocket TX buffer; without
     // these resets the 100 ms watchdog can fire and set State::Alarm.
     Maslow.resetUpdateWatchdog();
+    if (!state_is(State::Alarm)) {
+        JobResume::noteStop();  // a job still running (no 0x18 before this $STOP) can be resumed
+    }
     rtStopFromHold = false;  // this is the stop; a request still pending from a hold is done
     rtMaslowStop   = false;
     Maslow.stopMotors();   // Stop XY belt motors immediately
@@ -1257,6 +1261,7 @@ static Error maslow_stop(const char* value, AuthenticationLevel auth_level, Chan
     // regardless of whether the Z raise executed or the previous state.
     Maslow.saveZPos();
     Maslow.saveBeltPositions();
+    Maslow.calibration.stopTakingSlack();  // leave TAKING_SLACK (EXTENDEDOUT saves the belts itself)
     Maslow.stop();  // Complete cleanup (calibration state, arm reset, etc.)
     return Error::Ok;
 }
@@ -1498,6 +1503,15 @@ static Error maslow_takeSlack(const char* value, AuthenticationLevel auth_level,
     }
     if (maslow_motion_blocked(out)) {
         return Error::SystemGcLock;
+    }
+    // From UNKNOWN, Apply Tension recovers the belts that weren't restored at boot; refuse it
+    // here, with an error reply, when there is nothing to recover from.
+    if (Maslow.calibration.getCurrentState() == UNKNOWN) {
+        std::string why;
+        if (!Maslow.beltRecoveryPossible(why)) {
+            log_error(why);
+            return Error::SystemGcLock;
+        }
     }
     sys.set_state(State::Homing);
     Maslow.calibration.requestStateChange(TAKING_SLACK);

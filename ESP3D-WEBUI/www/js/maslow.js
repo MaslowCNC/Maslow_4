@@ -14,12 +14,9 @@ const ZM_INVALID_WARNING_PREFIX = "Maslow Zm invalid warning:";
 const MASLOW_STATE_FINDING_ANCHORS = 6;
 const MASLOW_STATE_READY_TO_CUT = 7;
 const MASLOW_STATE_FIND_ANCHORS_COMPUTING = 9;
+const MASLOW_STATE_TENSIONED = 10;
 const FIND_ANCHORS_WAYPOINT_COORDINATE_REGEX = /^\[MSG:INFO:\s*Waypoint\s+\d+\s+coordinates:\s*X=([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\s+Y=([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\]$/;
 let wasFindingAnchors = false;
-
-/** This keeps track of when we saw the last heartbeat from the machine */
-//I think this is not used anymore and can be removed now
-let lastHeartBeatTime = new Date().getTime();
 
 const err = "error: ";
 // When we can change to proper ESM - prefix these const strings and functions with 'export' (minus the quotes of course)
@@ -61,6 +58,12 @@ READY_TO_CUT 7
     -Apply Tension
     -Release Tension
     -Park (State-Dependent Button: moves to machine 0,0)
+
+TENSIONED 10 (Apply Tension done, but the belts don't fit the saved anchors)
+    -Retract All
+    -Apply Tension
+    -Calibrate (State-Dependent Button: Find Anchors)
+    -Release Tension
 */
 const updateDynamicButtons = () => {
 
@@ -93,6 +96,7 @@ const updateDynamicButtons = () => {
 	// #define READY_TO_CUT 7
 	// #define RELEASE_TENSION 8
 	// #define CALIBRATION_COMPUTING 9
+	// #define TENSIONED 10
 
 	switch (maslowStatus.state) {
 		case 0: 
@@ -228,6 +232,19 @@ const updateDynamicButtons = () => {
 
 			// No buttons are active in this state
 			break;
+		case MASLOW_STATE_TENSIONED:
+			stateLabel.innerHTML = "State: Tensioned";
+			if (mainStateLabel) {
+				mainStateLabel.innerHTML = "State: Tensioned";
+				if (mainStateLabelContainer) mainStateLabelContainer.style.backgroundColor = yellowBackground;
+			}
+
+			retractButton.style.backgroundColor = greenBackground;
+			tenseButton.style.backgroundColor = greenBackground;
+			calibrateButton.style.backgroundColor = greenBackground;
+			extendButton.style.backgroundColor = greyBackground; // Extend is refused while tensioned
+			relaxButton.style.backgroundColor = greenBackground;
+			break;
 		case 9:
 			stateLabel.innerHTML = "State: Find Anchors Computing";
 			if (mainStateLabel) {
@@ -305,11 +322,9 @@ const updateFindAnchorsView = () => {
 	}
 
 	const elementsToHide = [
-		document.getElementById('tablettab-jog-controls'),
-		document.getElementById('tablettab-file-controls'),
-		document.getElementById('tablettab-playback-controls'),
-		document.getElementById('tablettab-position-display'),
-		document.getElementById('tablettab-job-bounds-container'),
+		document.getElementById('tablettab-machine-buttons'),
+		document.getElementById('tablettab-jog-section'),
+		document.getElementById('tablettab-job-section'),
 	];
 
 	elementsToHide.forEach(el => {
@@ -324,6 +339,26 @@ const updateFindAnchorsView = () => {
 
 
 
+
+/**
+ * Record the Maslow calibration state (0-9) from the MS field of each status report (grbl.js)
+ * and refresh the buttons that depend on it when it changes. Returns false for an
+ * out-of-range value.
+ */
+let maslowStateShown = false;
+const setMaslowState = (state) => {
+	if (!Number.isInteger(state) || state < 0 || state > MASLOW_STATE_TENSIONED) {
+		console.error("Invalid state received from machine: " + state);
+		return false;
+	}
+	// maslowStatus.state starts at 0 (UNKNOWN), so also redraw on the first report.
+	if (maslowStatus.state !== state || !maslowStateShown) {
+		maslowStatus.state = state;
+		maslowStateShown = true;
+		updateDynamicButtons();
+	}
+	return true;
+};
 
 /** Perform maslow specific-ish info message handling */
 const maslowInfoMsgHandling = (msg) => {
@@ -350,27 +385,6 @@ const maslowInfoMsgHandling = (msg) => {
 		// Reset stop button colors when firmware responds to our command
 		if (typeof resetStopButtonColors === 'function') {
 			resetStopButtonColors();
-		}
-		return true;
-	}
-
-	if (msg.startsWith('[MSG:INFO: Heartbeat')) {
-		lastHeartBeatTime = new Date().getTime();
-		return true;
-	}
-
-	//Parse state messages like [MSG:INFO: Current state: 0]
-	if (msg.startsWith("[MSG:INFO: Current state:")) {
-		const m = msg.match(/Current state:\s*(\d+)/);
-		if (m) {
-			const state = Number(m[1]);
-			//If the state is in the range of 0-7, update the maslowStatus
-			if (state < 0 || state > 9) {
-				console.error("Invalid state received from machine: " + state);
-				return false;
-			}
-			maslowStatus.state = state;
-			updateDynamicButtons();
 		}
 		return true;
 	}
@@ -562,7 +576,7 @@ function showApplyTensionRetractionWarningMessage(msg) {
 	continueButton.textContent = "Continue";
 	continueButton.style.cssText = "padding: 5px 10px; cursor: pointer;";
 	continueButton.onclick = () => {
-		sendCommand("$TKSLK");
+		runMachineAction("Apply Tension", machine.applyTension);
 		modal.remove();
 	};
 

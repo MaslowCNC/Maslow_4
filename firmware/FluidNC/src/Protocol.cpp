@@ -22,6 +22,7 @@
 #include "Machine/LimitPin.h"
 #include "Job.h"
 #include "MotionControl.h"  // mc_set_drop_motion
+#include "Maslow/JobResume.h"  // JobResume::noteStop
 #include "Settings.h"       // execute_line
 #include "Driver/restart.h"
 #include "Driver/watchdog.h"
@@ -165,6 +166,40 @@ bool cmd_queue_defer(const char* line, Channel& channel) {
     return xQueueSend(cmd_queue, &item, 0) == pdTRUE;
 }
 
+void cmd_queue_drop_channel(Channel& channel) {
+    if (!cmd_queue) {
+        return;
+    }
+    // The queue is tiny (CMD_QUEUE_DEPTH), so take each waiting item off and put back any
+    // that belong to another channel, front first so their order is kept.
+    LineItem keep[CMD_QUEUE_DEPTH];
+    size_t   nkeep = 0;
+    LineItem item;
+    while (nkeep < CMD_QUEUE_DEPTH && xQueueReceive(cmd_queue, &item, 0) == pdTRUE) {
+        if (item.channel == &channel) {
+            channel.release_processing_ref();  // dropped: it will never run or be acked
+        } else {
+            keep[nkeep++] = item;
+        }
+    }
+    for (size_t i = 0; i < nkeep; i++) {
+        xQueueSend(cmd_queue, &keep[i], 0);
+    }
+}
+
+// Maslow: a reset discards every unread line (allChannels.flushRx), but the polling task may
+// already have handed the next line to cmd_queue, and it would run after the restart (STOP
+// mid-trace made the machine carry on to the next point). Drop it too.
+static void cmd_queue_drop_all() {
+    if (!cmd_queue) {
+        return;
+    }
+    LineItem item;
+    while (xQueueReceive(cmd_queue, &item, 0) == pdTRUE) {
+        item.channel->release_processing_ref();  // dropped: it will never run or be acked
+    }
+}
+
 TaskHandle_t pollingTask = nullptr;
 
 // Maslow emergency-stops when Maslow.update() is not called for 100 ms, and its message says only
@@ -278,12 +313,10 @@ void polling_loop(void* unused) {
                             Job::unnest();
                             break;
                         default: {
-                            Channel* ldr = Job::leader_channel();
-                            if (ldr) {
-                                log_error_to(*ldr,
-                                             static_cast<int>(status) << " (" << errorString(status) << ") in "
-                                                                      << channel->name() << " at line " << channel->lineNumber());
-                            }
+                            JobResume::noteStop(int32_t(channel->lineNumber()));  // Maslow: resumable from the failed line
+                            // Maslow: to every connection (it used to go only to the one that started the job)
+                            log_error(static_cast<int>(status) << " (" << errorString(status) << ") in " << channel->name()
+                                                               << " at line " << channel->lineNumber());
                             Job::abort();
                             break;
                         }
@@ -388,8 +421,9 @@ void protocol_main_loop() {
                     report_echo_line_received(item.line, allChannels);
                 }
 
-                Channel* ldr         = Job::leader_channel();
-                Channel* out_channel = ldr ? ldr : channel;
+                // Maslow: while a job runs, only its own lines come through here; their output goes to
+                // every connection. Otherwise the reply goes to the channel that sent the line.
+                Channel* out_channel = Job::active() ? static_cast<Channel*>(&allChannels) : channel;
 
                 // Commands run on the task that calls Maslow.update(), and some of them block well
                 // past its 100 ms watchdog - $SD/Run mounts the card and opens the file (650 ms
@@ -575,6 +609,7 @@ static void protocol_do_soft_restart() {
     plan_sync_position();
     gc_sync_position();
     allChannels.flushRx();
+    cmd_queue_drop_all();
     report_init_message(allChannels);
     mc_init();
 
@@ -1179,6 +1214,7 @@ static void protocol_exec_rt_suspend() {
         if (rtStopFromHold && sys.state() == State::Hold && sys.suspend().bit.holdComplete) {
             rtStopFromHold = false;
             log_info("Stopping the paused job");
+            JobResume::noteStop();
             mc_set_drop_motion(true);
             Maslow.haltMotion();
             rtMaslowStop = true;
@@ -1359,11 +1395,21 @@ static void protocol_do_fault_pin(void* arg) {
     log_info("Stopped by " << pin->legend());
 }
 void protocol_do_rt_reset() {
+    // Maslow: a reset during an SD job is the Stop button; remember where the job got to.
+    // Not in Alarm: position may not be trustworthy, so there is nothing to resume.
+    if (!state_is(State::Alarm) && !state_is(State::ConfigAlarm)) {
+        JobResume::noteStop();
+    }
     if (state_is(State::Homing)) {
         Machine::Homing::fail(ExecAlarm::HomingFailReset);
     } else if (state_is(State::Cycle) || state_is(State::Jog) || sys.step_control.executeHold || sys.step_control.executeSysMotion) {
-        Stepper::stop_stepping();  // Stop stepping immediately, possibly losing position
-        protocol_do_alarm((void*)ExecAlarm::AbortCycle);
+        Stepper::stop_stepping();  // Stop stepping immediately
+        // Maslow: a reset is the fast stop (the UI's Stop button sends it).  Upstream alarms here
+        // because a stepper machine may have lost position; the Maslow's encoders still know
+        // where the belts are.  Make the belt step counts match them, so the next move starts
+        // from where the belts really are, and go Idle instead of alarming.
+        Maslow.syncBeltsToEncoders();
+        set_state(State::Idle);
     } else if (state_is(State::Critical)) {
         if (Homing::unhomed_axes()) {
             protocol_do_alarm((void*)ExecAlarm::Unhomed);

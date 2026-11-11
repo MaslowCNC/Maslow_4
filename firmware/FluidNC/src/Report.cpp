@@ -26,6 +26,8 @@
 #include "WebUI/NotificationsService.h"  // WebUI::notificationsService
 #include "InputFile.h"
 #include "Job.h"
+#include "Maslow/Maslow.h"  // Maslow: calibration state and belts in the status report
+#include "Maslow/JobResume.h"  // Maslow: |STOPPED: for resuming a stopped job
 
 #include <map>
 #include <freertos/task.h>
@@ -496,6 +498,11 @@ void report_realtime_debug() {}
 void report_realtime_status(Channel& channel) {
     LogStream msg(channel, "<");
     msg << state_name();
+    // Maslow: per-channel report sequence number, so a client can tell a dropped report from a late
+    // one. Only for channels that asked for it (scripts/report_monitor.mjs), to keep reports short.
+    if (channel.reportSeqOn()) {
+        msg << "|N:" << channel.nextReportSeq();
+    }
 
     // Report position
 
@@ -534,6 +541,10 @@ void report_realtime_status(Channel& channel) {
         rate /= MM_PER_INCH;
     }
     msg << "|FS:" << setprecision(0) << rate << "," << sys.spindle_speed();
+
+    // Maslow: the calibration state (MaslowEnums.h, 0-9) in every report.  Clients ignore
+    // fields they don't know, so standard senders are unaffected.
+    msg << "|MS:" << Maslow.calibration.getCurrentState();
 
     if (report_pin_string.length()) {
         msg << "|Pn:" << report_pin_string;
@@ -603,6 +614,29 @@ void report_realtime_status(Channel& channel) {
             }
         }
     }
+    // Maslow: in every report, arms in the order TL,TR,BL,BR: belt lengths (BL, mm, "?" for a
+    // belt whose length is unknown), position errors (BE, mm, encoder minus target) and motor
+    // currents (MC, raw ADC 0-4095 averaged over the last 10 samples, as the debug log line).
+    {
+        msg << "|BL:";
+        for (int arm = _TL; arm < ARM_COUNT; arm++) {
+            msg << (arm ? "," : "");
+            if (Maslow.beltLengthKnown(arm)) {
+                msg << setprecision(2) << Maslow.axis[arm].getPosition();
+            } else {
+                msg << "?";
+            }
+        }
+        msg << "|BE:";
+        for (int arm = _TL; arm < ARM_COUNT; arm++) {
+            msg << (arm ? "," : "") << setprecision(3) << Maslow.axis[arm].getPositionError();
+        }
+        msg << "|MC:";
+        for (int arm = _TL; arm < ARM_COUNT; arm++) {
+            msg << (arm ? "," : "") << setprecision(0) << Maslow.axis[arm].getMotorCurrent();
+        }
+    }
+
     if (Channel* jc = Job::channel()) {
         msg << "|" << jc->_progress;
         // Maslow: append the SD file line number of the currently-executing
@@ -611,6 +645,9 @@ void report_realtime_status(Channel& channel) {
         if (cur_block != NULL && cur_block->file_line_number > 0) {
             msg << "," << cur_block->file_line_number;
         }
+    } else if (JobResume::stopped()) {
+        // Maslow: a job that ended early, and the line it got to, for the UI's Resume button
+        msg << "|STOPPED:" << JobResume::stoppedLine() << "," << JobResume::stoppedPath();
     }
 #ifdef DEBUG_STEPPER_ISR
     msg << "|ISRs:" << Stepper::isr_count;

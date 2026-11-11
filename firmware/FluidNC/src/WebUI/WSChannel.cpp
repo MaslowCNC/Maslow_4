@@ -160,6 +160,12 @@ namespace WebUI {
     // queue full, client still connected) leaves the data pending for the next
     // flush from pollLine().
     void WSChannel::flush_output(bool may_block) {
+        xSemaphoreTake(_output_mutex, portMAX_DELAY);
+        flush_output_locked(may_block);
+        xSemaphoreGive(_output_mutex);
+    }
+
+    void WSChannel::flush_output_locked(bool may_block) {
         if (_output_line.empty()) {
             return;
         }
@@ -183,22 +189,28 @@ namespace WebUI {
         // pollLine() once output goes idle, or explicitly via flush().  This
         // turns a multi-line command response from N tiny frames (each costing
         // a full-MSS oversized pbuf until ACK) into a couple of large ones.
+        xSemaphoreTake(_output_mutex, portMAX_DELAY);
         if (_output_line.empty()) {
             _output_pending_since = millis();
         }
         _output_line.append(reinterpret_cast<const char*>(buffer), size);
 
         if (_output_line.length() >= WS_OUT_FLUSH_LEN) {
-            flush_output(true);
+            flush_output_locked(true);
         }
+        xSemaphoreGive(_output_mutex);
         return size;
     }
 
     Error WSChannel::pollLine(char* line) {
         // Runs under AllChannels' poll mutex, so never spin here - a full queue
-        // just defers the flush to the next poll.
-        if (!_output_line.empty() && (int32_t)(millis() - _output_pending_since) >= (int32_t)WS_OUT_IDLE_MS) {
-            flush_output(false);
+        // just defers the flush to the next poll.  Likewise if a writer holds
+        // the output buffer, don't wait for it: flush on the next poll.
+        if (xSemaphoreTake(_output_mutex, 0) == pdTRUE) {
+            if (!_output_line.empty() && (int32_t)(millis() - _output_pending_since) >= (int32_t)WS_OUT_IDLE_MS) {
+                flush_output_locked(false);
+            }
+            xSemaphoreGive(_output_mutex);
         }
         return Channel::pollLine(line);
     }
@@ -243,7 +255,9 @@ namespace WebUI {
         Channel::autoReport();
     }
 
-    WSChannel::~WSChannel() {}
+    WSChannel::~WSChannel() {
+        vSemaphoreDelete(_output_mutex);
+    }
 
     std::vector<WSChannel*> WSChannels::_wsChannels;
     AsyncWebSocket*         WSChannels::_server = nullptr;
@@ -364,7 +378,35 @@ namespace WebUI {
 
         for (auto const channelId : channelIds) {
             if (auto oldClient = get_client(_server, channelId)) {
-                oldClient->close();
+                oldClient->close(CLOSE_REPLACED, "replaced by another tab in this browser");
+            }
+        }
+    }
+
+    void WSChannels::evictOldest(AsyncWebSocket* server, objnum_t keepId) {
+        size_t connected = server->count();  // sockets still open (not already closing)
+        if (connected <= WEBUI_MAX_WS_CLIENTS) {
+            return;
+        }
+        std::vector<objnum_t> channelIds;  // oldest first: _wsChannels is in connect order
+        {
+            xSemaphoreTake(ws_channels_mutex, portMAX_DELAY);
+            for (auto const wsChannel : _wsChannels) {
+                if (wsChannel->id() != keepId) {
+                    channelIds.push_back(wsChannel->id());
+                }
+            }
+            xSemaphoreGive(ws_channels_mutex);
+        }
+        for (auto const channelId : channelIds) {
+            if (connected <= WEBUI_MAX_WS_CLIENTS) {
+                break;
+            }
+            auto client = get_client(server, channelId);
+            if (client && client->status() == WS_CONNECTED) {
+                log_info_to(Console, "WebSocket limit of " << WEBUI_MAX_WS_CLIENTS << " reached, closing the oldest (cid#" << channelId << ")");
+                client->close(CLOSE_TOO_MANY, "too many connections");
+                --connected;
             }
         }
     }
@@ -453,6 +495,10 @@ namespace WebUI {
                     break;
                 }
                 WSChannel* newChannel = owned.get();
+                // Maslow: ?report_seq adds a sequence number to this socket's status reports
+                if (request && request->hasParam("report_seq")) {
+                    newChannel->enableReportSeq();
+                }
 
                 const char* uri = (const char*)server->url();  // borrowed, logged below; no allocation
                 IPAddress   ip  = client->remoteIP();
@@ -497,6 +543,10 @@ namespace WebUI {
                     break;  // owned destructs here -> channel freed
                 }
                 owned.release();  // ownership handed to _wsChannels / AllChannels
+
+                // Maslow: over the limit, close the oldest now and say why (4002), rather than
+                // waiting for cleanupClients(), which closes it within 10 s with no reason.
+                evictOldest(server, num);
 
                 // This tells WebUI the ID of the newly-created websocket
                 // so it can include that ID in a PAGEID= argument to

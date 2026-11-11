@@ -447,7 +447,7 @@ const toggleUnits = () => {
 
 const goAxisByValue = (axis, coordinate) => {
   tabletClick()
-  moveTo(axis + coordinate)
+  startMachineAction("Move", () => machine.moveTo(toMachineMm({ [axis]: coordinate })));
 }
 
 const setAxisByValue = (axis, coordinate) => {
@@ -636,65 +636,147 @@ const checkParams = (params = {}) => {
   return s.join("");
 }
 
-/** Perform a jog command */
+// Belt lengths and motor-current dials in the status section: refreshed on every machine.js
+// state update (each status report). Lengths are machine values, always in mm (the heading says
+// so); "unknown" when the machine reports it doesn't know a belt's length; "-" before any
+// report. The dials use the Debug tab's scale and colours (debugging.js); the mA value is in
+// the dial's tooltip.
+const BELT_ARMS = ["tl", "tr", "bl", "br"];
+const BELT_DIAL_CIRCUMFERENCE = 2 * Math.PI * 9; // r = 9 in the 24x24 dial
+const updateBeltLengths = (s) => {
+  for (const arm of BELT_ARMS) {
+    const el = document.getElementById(`belt-length-${arm}`);
+    if (!el) {
+      return; // tab not loaded yet
+    }
+    const mm = s.belts ? s.belts[arm] : undefined;
+    const unknown = mm === null;
+    el.textContent = unknown ? "unknown" : Number.isFinite(mm) ? mm.toFixed(1) : "-";
+    el.classList.toggle("belt-length-unknown", unknown);
+
+    const dial = document.getElementById(`belt-current-${arm}`);
+    const arc = dial ? dial.querySelector(".belt-current-dial-arc") : null;
+    const adc = s.motorCurrent ? s.motorCurrent[arm] : undefined;
+    if (arc && Number.isFinite(adc)) {
+      const mA = convertAdcToMilliamps(adc);
+      const percentage = Math.min((mA / MAX_CURRENT) * 100, 100);
+      arc.style.strokeDashoffset = BELT_DIAL_CIRCUMFERENCE * (1 - percentage / 100);
+      arc.style.stroke = currentGaugeColor(percentage);
+      dial.setAttribute("title", `${arm.toUpperCase()} motor: ${Math.round(mA)} mA`);
+    } else if (dial) {
+      dial.setAttribute("title", `${arm.toUpperCase()} motor: no current reading (needs current firmware)`);
+    }
+  }
+};
+if (typeof machine !== "undefined") {
+  machine.on("state", updateBeltLengths);
+}
+
+// After a job ends early the firmware reports it (STOPPED), and the job row becomes
+// [Resume from line N] [Stop] [Discard stopped job]. N starts at the stopped line; the user
+// can change it, e.g. to repeat a few lines before the problem.
+let stoppedJobShown = null; // "line,file" of the record the line box was filled from
+const showStoppedJob = (s) => {
+  const resume = id("tablettab_gcode_resume");
+  const discard = id("tablettab_gcode_discard");
+  const play = id("tablettab_gcode_play");
+  const status = id("systemStatus");
+  if (!resume || !discard || !play || !status) {
+    return;
+  }
+  const showing = !!s.stopped && !s.job && s.grbl !== "Run" && s.grbl !== "Hold";
+  const key = s.stopped ? `${s.stopped.line},${s.stopped.file}` : null;
+  if (s.stopped && key !== stoppedJobShown) {
+    id("tablettab_resume_line").value = s.stopped.line; // a new record; keep edits to the same one
+  }
+  stoppedJobShown = key;
+  const display = (el, on) => {
+    const want = on ? "" : "none";
+    if (el.style.display !== want) {
+      el.style.display = want;
+    }
+  };
+  display(play, !showing);
+  display(status, !showing);
+  display(resume, showing);
+  display(discard, showing);
+};
+if (typeof machine !== "undefined") {
+  machine.on("state", showStoppedJob);
+}
+
+const tabletResumeClick = (event) => {
+  const stepButton = event.target.closest && event.target.closest(".job-resume-steps button");
+  if (stepButton) {
+    const input = id("tablettab_resume_line");
+    const next = (Number(input.value) || 0) + Number(stepButton.dataset.step);
+    input.value = Math.max(1, next);
+    return;
+  }
+  if (event.target.closest && event.target.closest(".job-resume-line")) {
+    return; // a tap in the line box, not on the button
+  }
+  const stopped = machine.state.stopped;
+  if (!stopped) {
+    return;
+  }
+  const line = Number(id("tablettab_resume_line").value);
+  if (!Number.isInteger(line) || line < 1) {
+    alertdlg("Resume", "Enter a line number from 1.");
+    return;
+  }
+  if (!confirm(`Resume ${stopped.file} from line ${line}?\n\nThe machine raises Z, starts the spindle if the job had it on, moves to where line ${line} starts and lowers Z to it.`)) {
+    return;
+  }
+  runButtonAction(id("tablettab_gcode_resume"), `Resume ${stopped.file} from line ${line}`, () => machine.resumeFile(stopped.file, line));
+};
+
+const tabletDiscardClick = () =>
+  runButtonAction(id("tablettab_gcode_discard"), "Discard stopped job", machine.discardStopped);
+
+/** {X: 10, Y: -2} in display units → {x: 10, y: -2} in mm, for machine actions */
+const toMachineMm = (params) => {
+  const mm = {};
+  for (const [axis, value] of Object.entries(params)) {
+    mm[axis.toLowerCase()] = fromDisplayUnitsToMm(Number(value));
+  }
+  return mm;
+};
+
+/** Describe a machine action failure in the message box (a Stop needs no message). */
+const reportMachineFailure = (label) => (err) => {
+  if (err.reason !== "reset") {
+    addMessage(`${label} failed: ${err.detail ?? err.reason ?? err.message}`);
+  }
+};
+
+/** Start a machine action from a click: failures, including bad arguments, go to the message box. */
+const startMachineAction = (label, start) => {
+  try {
+    start().catch(reportMachineFailure(label));
+  } catch (err) {
+    reportMachineFailure(label)(err);
+  }
+};
+
+/** Jog by {X, Y, Z} in display units, at the jog feed rate for the axis (controls.js). */
 const jog = (params = {}) => {
-  const axisAndDistance = checkParams(params);
-  if (!axisAndDistance) {
-    return;
+  if (!checkParams(params)) {
+    return; // no axes, or X/Y with unknown belt lengths (checkParams told the user)
   }
+  const delta = toMachineMm(params);
+  const feed = JogFeedrate(Object.keys(params)[0]); // mm/min
+  addMessage(`Jog ${Object.entries(delta).map(([a, v]) => `${a.toUpperCase()}${Number(v.toFixed(3))}`).join(" ")} mm`);
+  startMachineAction("Jog", () => machine.jog(delta, { feed }));
+};
 
-  jogTo(axisAndDistance);
-}
-
-const jogTo = (axisAndDistance) => {
-  // Always force G90 mode because synchronization of gCodeModal reports is unreliable
-  // JogFeedRate is defined in controls.js
-  let feedrate = JogFeedrate(axisAndDistance);
-  if (gCodeModal.units === "G20") {
-    feedrate /= 25.4;
-    feedrate = feedrate.toFixed(2);
-  }
-
-  // For safety, always ensure firmware units match UI expectations before jogging
-  jogWithUnitsSafeguard(feedrate, axisAndDistance);
-}
-
-/** 
- * Safely execute a jog command with firmware units synchronized to UI units.
- * This prevents issues where UI is in mm but firmware is in inches (or vice versa),
- * which could cause dangerous oversized movements.
- * 
- * Strategy: Always force firmware to match UI units before jogging, then restore.
- * This is simpler and more reliable than trying to query and conditionally synchronize.
- */
-const jogWithUnitsSafeguard = (feedrate, axisAndDistance) => {
-  // Store what units the UI is currently displaying (what user expects)
-  const uiExpectedUnits = gCodeModal.units;
-
-  // Embed the units code directly in the jog command (G20/G21 are allowed within $J= commands).
-  // This avoids sending a separate G20/G21 command which would fail with
-  // Error 9 (SystemGcLock) when the firmware is still in Jog state from a previous jog.
-  const unitsLabel = uiExpectedUnits === 'G20' ? 'inch' : 'mm';
-  const cmd = `$J=G91${uiExpectedUnits}F${feedrate}${axisAndDistance}`;
-  addMessage(`JogTo: ${cmd} (${unitsLabel})`);
-  sendCommand(cmd + '\n');
-}
-
-/** Peform a move command */
+/** Rapid move to {X, Y, Z} in display units, in work coordinates. */
 const move = (params = {}) => {
-  const location = checkParams(params);
-  if (!location) {
+  if (!checkParams(params)) {
     return;
   }
-
-  moveTo(location);
-}
-
-const moveTo = (location) => {
-  // Always force G90 mode because synchronization of gCodeModal reports is unreliable
-  const cmd = `G90 G0 ${location}`;
-  sendCommand(cmd);
-}
+  startMachineAction("Move", () => machine.moveTo(toMachineMm(params)));
+};
 
 /** Perform jog or move commands based on the supplied command */
 const getMoveDistance = (isZMove, options = {}) => {
@@ -1103,7 +1185,8 @@ function tabletGrblState(grbl, response) {
   // (e.g. watchdog fired mid-stop).  Either way the machine is no longer
   // running, so continuing to send $STOP would be harmful.
   if (_stopPending && (stateName === 'Idle' || stateName === 'Alarm')) {
-    _stopPending = false;
+    setStopPending(false);
+    sendCommand('$MINFO'); // refresh Maslow status; its reply also resets the stop buttons
   }
 
   switch (stateName) {
@@ -1124,7 +1207,8 @@ function tabletGrblState(grbl, response) {
       setPlayButton(false, gray, 'Start', null)
       break
     case 'Run':
-      setPlayButton(true, orange, 'Pause', pauseGCode)
+      // No Pause button: Stop, then Resume from the stopped line, takes its place
+      setPlayButton(false, gray, 'Start', null)
       break
     case 'Check':
       setPlayButton(true, gray, 'Start', null)
@@ -1488,19 +1572,10 @@ const confirmSetZHome = () => {
 }
 // Button event handlers - Fifth Row - nothing special here, move on
 
-// Send a command directly via WebSocket to bypass PAGEID routing.
+// Send a command line over the WebSocket (wscommands.js), bypassing PAGEID routing and
+// keeping it in order with everything else sent there.
 // Returns true if the command was sent, false if the WebSocket is not open.
-const sendViaWS = (cmd) => {
-  if (ws_source && ws_source.readyState === WebSocket.OPEN) {
-    try {
-      ws_source.send(cmd);
-      return true;
-    } catch (e) {
-      console.warn("WebSocket send failed:", e);
-    }
-  }
-  return false;
-};
+const sendViaWS = (cmd) => wsCommands.send(cmd);
 
 // True when a stop has been requested but not yet confirmed delivered.
 // onWSOpenCallback sends $STOP on every WebSocket (re)connect while this
@@ -1526,60 +1601,65 @@ const onWSOpenCallback = () => {
   zLowWarningAcknowledged = false;
   zLowLastAcknowledgedResultZ = null;
   if (_stopPending) {
-    try {
-      ws_source.send("$STOP\n");
-    } catch (e) {
-      console.warn("Failed to send pending $STOP on connect:", e);
-    }
+    machine.stop().catch((err) => console.warn("Pending stop on connect failed:", err.detail ?? err.reason));
   }
-  // Refresh park settings after reconnect (e.g. after firmware restart with new maslow.yaml).
-  // A short delay lets the firmware send CURRENT_ID so PAGEID is established before querying.
-  scheduleCallback(() => {
-    loadFixedZSetting();
-    if (typeof loadParkSettings === 'function') {
-      loadParkSettings();
-    }
-    // The firmware only announces the Maslow state when it changes, so a change made while
-    // disconnected or during a restart was missed. Ask again rather than show a stale state.
-    if (!sendViaWS("$GSTATE\n")) {
-      sendCommand('$GSTATE');
-    }
-    if (!sendViaWS("$MINFO\n")) {
-      sendCommand('$MINFO');
-    }
-  }, 1000);
+  requestMachineState();
+  _wsOpenedBefore = true;
 };
 
-// Send $STOP directly via WebSocket to bypass PAGEID routing.
-// Sets _stopPending and retries every 300 ms for up to ~10 seconds.
-// _stopPending is cleared by tabletGrblState when the firmware confirms
-// the machine is Idle, or by the timeout.  onWSOpenCallback also sends
-// $STOP as the very first message on every WebSocket (re)connect while
-// the flag is set, so the command survives a TCP drop between send and
-// firmware processing.
+let _wsOpenedBefore = false;
+
+// Everything the UI needs to know about the machine, asked for on every new socket. Each socket
+// is a new firmware channel, so per-channel settings (auto-report) start off again, and log
+// lines sent while we were disconnected were missed. (The Maslow state needs no query: it is in
+// every status report.)
+const requestMachineState = () => {
+  // Auto-report is per channel. Turn it back on unless the user picked polling or none.
+  if (!_wsOpenedBefore || reportType === 'auto') {
+    tryAutoReport();
+  }
+  SendRealtimeCmd(0x3f); // ? : current state and position now
+  if (!_wsOpenedBefore) {
+    SendPrinterCommand("$SS"); // startup log into the serial monitor, once per page load
+  }
+  SendPrinterCommand("$MINFO");
+  requestModes();
+  loadFixedZSetting();
+  loadCornerValues();
+  if (typeof loadParkSettings === 'function') {
+    loadParkSettings();
+  }
+};
+
+// Stop button: machine.stop() ends running machine actions, then wsCommands.stop() sends 0x18 (soft reset: halts at once in any state, ends any
+// job) and then $STOP (raises Z, saves positions). _stopPending stays set until the
+// firmware reports Idle or Alarm (tabletGrblState), so a stop sent while the socket was down
+// is sent again on reconnect (onWSOpenCallback). It expires after STOP_PENDING_MS so an old
+// stop is never replayed much later.
+const STOP_PENDING_MS = 30000;
+let _stopPendingTimer = null;
+const setStopPending = (on) => {
+  _stopPending = on;
+  clearTimeout(_stopPendingTimer);
+  if (on) {
+    _stopPendingTimer = setTimeout(() => {
+      if (_stopPending) {
+        _stopPending = false;
+        console.warn("Stop not confirmed by the machine within 30 s; no longer resending it");
+      }
+    }, STOP_PENDING_MS);
+  }
+};
+
 const sendStopCommand = () => {
-  const RETRY_INTERVAL_MS = 300;
-  const MAX_RETRY_ATTEMPTS = 33; // 33 * 300ms ≈ 10 seconds
-  _stopPending = true;
-  sendViaWS("$STOP\n"); // Try immediately; keep _stopPending for retries
-  let attempts = 0;
-  const retryTimer = setInterval(() => {
-    if (!_stopPending) {
-      clearInterval(retryTimer);
-      return;
+  setStopPending(true);
+  machine.stop().catch((err) => {
+    if (err.reason === "not-sent") {
+      addMessage(`Stop not sent: connection to the machine is ${wsCommands.socketStatus()}. It will be sent when the connection comes back.`);
+    } else {
+      addMessage(`Stop failed: ${err.detail ?? err.reason}`);
     }
-    sendViaWS("$STOP\n");
-    if (++attempts >= MAX_RETRY_ATTEMPTS) {
-      _stopPending = false;
-      clearInterval(retryTimer);
-      console.warn("$STOP retry limit reached without firmware confirmation; machine may not have stopped");
-    }
-  }, RETRY_INTERVAL_MS);
-  scheduleCallback(() => {
-    if (!sendViaWS("$MINFO\n")) {
-      sendCommand('$MINFO');
-    }
-  }, 1000);
+  });
 };
 
 // Button event handlers - Sixth Row
@@ -1617,16 +1697,16 @@ const returnFocusToTablet = () => {
 };
 
 const tabletCalRetract = () => {
-  onCalibrationButtonsClick("$ALL", "Retract All");
+  runMachineAction("Retract All", machine.retractBelts);
   returnFocusToTablet();
 };
 const tabletCalExtend = () => {
-  onCalibrationButtonsClick("$EXT", "Extend All");
+  runMachineAction("Extend All", machine.extendBelts);
   returnFocusToTablet();
 };
 const tabletCalCalibrate = () => {
   const startCalibration = () => {
-    onCalibrationButtonsClick("$CAL", "Find Anchors");
+    runMachineAction("Find Anchors", machine.calibrate);
     scheduleCallback(() => { hideModal("calibration-popup"); }, 1000);
   };
 
@@ -1646,9 +1726,10 @@ const tabletCalCalibrate = () => {
   );
 };
 const tabletCalTense = () => {
-  onCalibrationButtonsClick("$TKSLK", "Apply Tension");
-  scheduleCallback(() => { hideModal("calibration-popup"); }, 1000);
+  runMachineAction("Apply Tension", machine.applyTension);
 };
+// From the Setup popup: the popup stays open and its state label shows the outcome.
+const tabletCalTenseClick = () => runButtonAction(id("tablettab_cal_tense"), "Apply Tension", machine.applyTension);
 // const tabletCalZHome = () => onCalibrationButtonsClick("$TKSLK", "Home Z");
 const tabletCalOpenConfig = () => {
   loadConfigValues();
@@ -1664,7 +1745,7 @@ const tabletCalStop = () => {
   returnFocusToTablet();
 };
 const tabletCalSetZStop = () => {
-  onCalibrationButtonsClick("$SETZSTOP", "Set Z-Stop");
+  runMachineAction("Set Z-Stop", machine.setZStop);
   returnFocusToTablet();
 };
 const tabletCalTest = () => {
@@ -1672,7 +1753,7 @@ const tabletCalTest = () => {
   scheduleCallback(() => { hideModal("calibration-popup"); }, 1000);
 };
 const tabletCalRelax = () => {
-  onCalibrationButtonsClick("$CMP", "Release Tension");
+  runMachineAction("Release Tension", machine.releaseTension);
   returnFocusToTablet();
 };
 
@@ -1684,14 +1765,21 @@ const handleMaslowActionButtonClick = () => {
   
   // Execute action based on Maslow state
   switch (maslowStatus.state) {
-    case 0: // UNKNOWN - Retract
-      tabletCalRetract();
+    case 0: // UNKNOWN - Apply Tension if some belt lengths are known, else Retract
+      if (unknownStateAction() === 'Apply Tension') {
+        tabletCalTense();
+      } else {
+        tabletCalRetract();
+      }
       break;
     case 2: // RETRACTED - Extend
       tabletCalExtend();
       break;
     case 4: // EXTENDEDOUT - Apply Tension
       tabletCalTense();
+      break;
+    case 10: // TENSIONED - the belts don't fit the saved anchors: Find Anchors
+      tabletCalCalibrate();
       break;
     case 7: // READY_TO_CUT - Park: lift Z to safe height (work coords), then move to park position (machine coords)
     {
@@ -2026,18 +2114,10 @@ function tabletInit() {
   setTimeout(() => {
     showVersionNumber();
 
-    // get grbl status
-    SendRealtimeCmd(0x3f); // ?
-    // print startup messages in serial
-    SendPrinterCommand("$SS");
-    // get maslow info
-    SendPrinterCommand("$MINFO");
+    // Machine queries ($SS, $MINFO, ?, $G, corner values) go over the socket from
+    // requestMachineState() once it opens. These two are HTTP request/response.
     files_refreshFiles("/");
-    requestModes();
     loadConfigValues();
-    loadCornerValues();
-
-    SendPrinterCommand("$GSTATE");
 
     numpad.attach({ target: "disM", axis: "D" });
     numpad.attach({ target: "disZ", axis: "Z" });
@@ -2128,6 +2208,8 @@ function tabletInit() {
     id("tablettab_gcode_play").addEventListener("click", doPlayButton);
     // id("tablettab_gcode_pause").addEventListener("click", doPauseButton);
     id("tablettab_gcode_stop").addEventListener("click", tabletGCodeStop);
+    id("tablettab_gcode_resume").addEventListener("click", tabletResumeClick);
+    id("tablettab_gcode_discard").addEventListener("click", tabletDiscardClick);
     id("systemStatus").addEventListener("click", clearAlarm);
     
     // New Maslow action button (below Setup)
@@ -2145,7 +2227,7 @@ function tabletInit() {
     id("tablettab_cal_retract").addEventListener("click", tabletCalRetract);
     id("tablettab_cal_extend").addEventListener("click", tabletCalExtend);
     id("tablettab_cal_calibrate").addEventListener("click", tabletCalCalibrate);
-    id("tablettab_cal_tense").addEventListener("click", tabletCalTense);
+    id("tablettab_cal_tense").addEventListener("click", tabletCalTenseClick);
     // id("tablettab_cal_homez").addEventListener("click", tabletCalZHome);
     id("tablettab_cal_config").addEventListener("click", tabletCalOpenConfig);
     id("tablettab_cal_stop").addEventListener("click", tabletCalStop);
@@ -2735,16 +2817,83 @@ const hideModal = (modalId) => {
   }
 };
 
+/**
+ * Run a machine action for a button: show its label, then say how it ended (finished, failed
+ * with the reason, or stopped). $MINFO refreshes the Maslow status 1 s after the start, as
+ * before, and again when the action ends.
+ */
+const runMachineAction = async (label, action) => {
+  addMessage(label);
+  scheduleCallback(() => { sendCommand('$MINFO'); }, 1000);
+  try {
+    await action();
+    addMessage(`${label} finished`);
+  } catch (err) {
+    addMessage(err.reason === "reset" ? `${label} stopped` : `${label} failed: ${err.detail ?? err.reason}`);
+  }
+  sendCommand('$MINFO');
+};
+
+const BUTTON_WARNING_MS = 2500;
+
+/**
+ * Run a machine action from a button that stays on screen (the Setup popup).
+ * - Until the firmware accepts the command: the button shows a spinner and ignores clicks.
+ * - Not accepted (not sent, disconnected, error:N): the button briefly shows a warning.
+ * - Accepted, then the operation fails (e.g. the firmware refused it from this state): an
+ *   error dialog with the reason. A STOP (reset) only gets a log line.
+ * - Accepted and finished: nothing more; the state label shows the new state.
+ */
+const runButtonAction = async (button, label, action) => {
+  if (!button || button.classList.contains("machine-action-busy")) {
+    return;
+  }
+  addMessage(label);
+  const op = action();
+  op.catch(() => {}); // handled below; a rejected .accepted means the operation rejects too
+  button.classList.add("machine-action-busy");
+  try {
+    await op.accepted;
+  } catch (err) {
+    addMessage(`${label} not sent: ${err.detail ?? err.reason}`);
+    showButtonWarning(button, err.reason === "rejected" ? "Rejected" : "Not sent");
+    return;
+  } finally {
+    button.classList.remove("machine-action-busy");
+  }
+  try {
+    await op;
+  } catch (err) {
+    if (err.reason === "reset") {
+      addMessage(`${label} stopped`);
+      return;
+    }
+    const detail = err.detail ?? err.reason;
+    addMessage(`${label} failed: ${detail}`);
+    alertdlg(label, detail);
+  }
+};
+
+/** Swap a button's text for a short warning, then put it back. */
+const showButtonWarning = (button, text) => {
+  if (button.classList.contains("machine-action-warning")) {
+    return;
+  }
+  const original = button.textContent;
+  button.textContent = text;
+  button.classList.add("machine-action-warning");
+  scheduleCallback(() => {
+    button.textContent = original;
+    button.classList.remove("machine-action-warning");
+  }, BUTTON_WARNING_MS);
+};
+
+// For commands that aren't machine actions ($TEST).
 const onCalibrationButtonsClick = async (command, msg = "") => {
   if (msg) {
     addMessage(msg);
   }
-  // Send via WebSocket first to bypass PAGEID-based routing, which fails
-  // silently when the WebSocket has reconnected (new channel, stale PAGEID).
-  // Falls back to HTTP if the WebSocket is not currently open.
-  if (!sendViaWS(command + "\n")) {
-    sendCommand(command);
-  }
+  sendCommand(command);
 
   //Prints out the index.html version number when test is pressed
   if (command === '$TEST') {
@@ -2795,13 +2944,7 @@ function processTabletFileDelete(answer) {
     deleteBtn.setAttribute("disabled", "true");
   }
   
-  // Build the delete command using the same pattern as files.js
-  const cmd = buildHttpFileCmd({ 
-    action: "delete", 
-    filename: gCodeFilename.split('/').pop() // Get just the filename without path
-  });
-  
-  SendGetHttp(cmd, tabletFileDeleteSuccess, tabletFileDeleteFailed);
+  machine.files.delete(gCodeFilename).then(tabletFileDeleteSuccess, tabletFileDeleteFailed);
 }
 
 function tabletFileDeleteSuccess(response) {
@@ -2829,7 +2972,7 @@ function tabletFileDeleteSuccess(response) {
   }, 500); // 500ms delay to ensure server-side delete completes
 }
 
-function tabletFileDeleteFailed(error_code, response) {
+function tabletFileDeleteFailed(err) {
   // Re-enable the delete button
   const deleteBtn = id("tablettab_gcode_delete");
   if (deleteBtn && gCodeFilename) {
@@ -2838,7 +2981,7 @@ function tabletFileDeleteFailed(error_code, response) {
     deleteBtn.removeAttribute("disabled");
   }
   
-  addMessage("Failed to delete file: " + (response || "Unknown error"));
+  addMessage("Failed to delete file: " + (err.detail ?? err.reason));
 }
 
 function updateDeleteButtonState() {

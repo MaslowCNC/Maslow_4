@@ -42,15 +42,7 @@
 #include <AsyncTCP.h>
 #include "WebDAV.h"
 
-// Upper bound on concurrent WebSocket clients. Each client carries a WSChannel
-// (line-assembly std::string) plus an AsyncWebSocket send queue of up to
-// WS_MAX_QUEUED_MESSAGES malloc'd frames, so this directly bounds WS heap use.
-// AsyncWebSocket's own default (DEFAULT_MAX_WS_CLIENTS) is 8; a CNC realistically
-// needs a browser plus a pendant or phone. cleanupClients() evicts the oldest
-// when the count exceeds this.
-#ifndef WEBUI_MAX_WS_CLIENTS
-#    define WEBUI_MAX_WS_CLIENTS 4
-#endif
+// WEBUI_MAX_WS_CLIENTS (the WebSocket client limit) is in WSChannel.h.
 
 #ifdef HAVE_DNS
 namespace WebUI {

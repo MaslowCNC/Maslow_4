@@ -9,6 +9,8 @@
 #include <list>
 #include <map>
 #include <ESPAsyncWebServer.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 
 #include "Channel.h"
 
@@ -65,19 +67,34 @@ namespace WebUI {
         static constexpr uint32_t WS_OUT_IDLE_MS   = 8;
         std::string               _output_line;
         uint32_t                  _output_pending_since = 0;
-        unsigned long             _last_queue_full      = 0;
+        // Maslow: guards _output_line and _output_pending_since.  write() runs on the output
+        // task, while pollLine() flushes from the polling task; without a lock, output appended
+        // between a flush's send and its clear was lost (whole replies, "ok" included).
+        SemaphoreHandle_t         _output_mutex    = xSemaphoreCreateMutex();
+        unsigned long             _last_queue_full = 0;
         std::atomic<uint32_t>     _lastActivityMs { 0 };
 
         // may_block=false: if the client send queue is full, give up rather than
         // spin (used from pollLine(), which runs under AllChannels' poll mutex).
         bool send_frame(const uint8_t* out, size_t outlen, bool may_block);
         void flush_output(bool may_block = true);
+        void flush_output_locked(bool may_block);  // caller holds _output_mutex
 
         // Instead of queueing realtime characters, we put them here
         // so they can be processed immediately during operations like
         // homing where GCode handling is blocked.
         int32_t _rtchar = -1;
     };
+
+    // Upper bound on concurrent WebSocket clients. Each client carries a WSChannel
+    // (line-assembly std::string) plus an AsyncWebSocket send queue of up to
+    // WS_MAX_QUEUED_MESSAGES malloc'd frames, so this directly bounds WS heap use.
+    // AsyncWebSocket's own default (DEFAULT_MAX_WS_CLIENTS) is 8; a CNC realistically
+    // needs a browser plus a pendant or phone. Over the limit, the oldest is closed
+    // (WSChannels::evictOldest, with a periodic cleanupClients() as a backstop).
+#ifndef WEBUI_MAX_WS_CLIENTS
+#    define WEBUI_MAX_WS_CLIENTS 4
+#endif
 
     class WSChannels {
     private:
@@ -95,7 +112,14 @@ namespace WebUI {
 
         static bool runGCode(uint32_t pageid, std::string_view cmd, std::string session);
         static bool sendError(uint32_t pageid, std::string error, std::string session);
+        // Maslow: WebSocket close codes for the closes the firmware makes on purpose. The UI
+        // (socket.js) shows a notice for these instead of reconnecting, so tabs don't fight.
+        static constexpr uint16_t CLOSE_REPLACED = 4001;  // a newer socket from the same browser
+        static constexpr uint16_t CLOSE_TOO_MANY = 4002;  // over WEBUI_MAX_WS_CLIENTS, oldest closed
+
         static void closeSessionChannels(const std::string& session, objnum_t exceptId = 0);
+        // Maslow: close the oldest sockets (never keepId) until at most WEBUI_MAX_WS_CLIENTS remain
+        static void evictOldest(AsyncWebSocket* server, objnum_t keepId);
         static void sendPing();
 
         // Close and remove any channel with no inbound traffic for stale_ms.

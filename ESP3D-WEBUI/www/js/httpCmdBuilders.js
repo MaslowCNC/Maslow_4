@@ -102,7 +102,9 @@ const buildHttpFileGetCmd = (filename) => `${httpCmd.fileGet}${filename}`;
 /** Build either form of the `command` GET command, fully encoding the supplied `cmd` value.
  * * Note: this includes replacing '#', because '#' is not encoded by `encodeURIComponent`.
  */
-const buildHttpCommandCmd = (cmdType, cmd) => `${httpCmd.command}?${cmdType}=${encodeURIComponent(cmd).replace("#", "%23")}&PAGEID=${pageID()}`;
+// No PAGEID: only [ESP...] and plain= requests use this now, and the firmware runs those in the
+// web server and answers in the HTTP body. Line commands go over the WebSocket (wscommands.js).
+const buildHttpCommandCmd = (cmdType, cmd) => `${httpCmd.command}?${cmdType}=${encodeURIComponent(cmd).replace("#", "%23")}`;
 
 /** Build the supplied data into a blob, then a file, ready for inclusion as form data */
 const BuildFormDataFiles = (filename, filedata, options) => {
