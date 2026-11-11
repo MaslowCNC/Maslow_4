@@ -69,6 +69,7 @@ const machine = (() => {
 		motorCurrent: null,
 	};
 	let statusCount = 0; // status reports seen, to wait for a fresh one
+	let wcoCount = 0; // status reports that carried WCO (FluidNC sends it every 10-30 reports)
 	let beltLengthsFromStatus = false; // a BL field has been seen (firmware that reports it)
 	const listeners = { state: new Set(), line: new Set() };
 
@@ -118,6 +119,7 @@ const machine = (() => {
 				wpos = xyz(value);
 			} else if (key === "WCO") {
 				state.wco = xyz(value);
+				wcoCount++;
 			} else if (key === "MS") {
 				state.maslow = Number(value);
 			} else if (key === "BL") {
@@ -259,14 +261,18 @@ const machine = (() => {
 	/**
 	 * Send one line; resolves on ok (with the collected lines if collect), rejects with a
 	 * MachineError. Quiet by default: the caller of the action reports failures, so wsCommands
-	 * doesn't also post "Machine rejected" and grbl.js doesn't treat it as a fault.
+	 * doesn't also post "Machine rejected" and grbl.js doesn't treat it as a fault. atOk runs as
+	 * the ok is read, before any line after it (the promise only settles later).
 	 */
-	const sendLine = (line, { collect = false, quiet = true } = {}) =>
+	const sendLine = (line, { collect = false, quiet = true, atOk } = {}) =>
 		new Promise((resolve, reject) => {
 			const sent = wsCommands.send(line, {
 				collect,
 				quiet,
-				onOk: (lines) => resolve(lines ?? []),
+				onOk: (lines) => {
+					atOk?.();
+					resolve(lines ?? []);
+				},
 				onError: (code) => reject(toError(line, code)),
 			});
 			if (!sent) {
@@ -524,6 +530,88 @@ const machine = (() => {
 		});
 	};
 
+	// Park position defaults, as the tablet UI uses when a Maslow_Park_* setting has no value
+	const PARK_DEFAULTS = { x: 0, y: 0, z: 2 };
+
+	/**
+	 * Move to the park position from the Maslow_Park_X/Y/Z settings (mm): Z first, in work
+	 * coordinates (that high above the Z zero), then X and Y in machine coordinates, as the tablet
+	 * UI's Park button does. Reads the settings each time. Accepted when the Z move is; done when
+	 * the machine is Idle at the park position.
+	 */
+	const park = () => {
+		if (state.maslow !== MASLOW.READY_TO_CUT) {
+			return notReady("park", "Can't park: belt lengths are unknown (machine not ready to cut)");
+		}
+		const restoreInches = state.units === "inch"; // the moves switch to G21
+		return operation("park", async ({ accept, resolve, ended }) => {
+			let over = false;
+			ended.then(() => {
+				over = true;
+			});
+			const pos = {};
+			for (const axis of ["x", "y", "z"]) {
+				const value = Number.parseFloat(await getSetting(`Maslow_Park_${axis.toUpperCase()}`));
+				pos[axis] = Number.isFinite(value) ? value : PARK_DEFAULTS[axis];
+			}
+			if (over) {
+				return;
+			}
+			const motion = trackMotion("park");
+			ended.then(motion.stop);
+			await sendLine(`G90 G21 G0 ${axisWords({ z: pos.z }).join(" ")}`);
+			accept();
+			if (over) {
+				return;
+			}
+			await sendLine(`G90 G21 G53 G0 ${axisWords({ x: pos.x, y: pos.y }).join(" ")}`);
+			if (restoreInches && !over) {
+				await sendLine("G20");
+			}
+			await motion.wait(ended);
+			resolve();
+		});
+	};
+
+	// Work coordinates
+	/**
+	 * Make the current position work 0 on the given axes (G10 L20 P0, the active coordinate
+	 * system). Done when a status report after the ok carries the new WCO, so state.wpos shows it.
+	 * FluidNC doesn't send WCO in every report (every 10th when idle), so that can take a moment.
+	 */
+	const workZeroOperation = (name, axes) =>
+		operation(name, async ({ accept, resolve, ended }) => {
+			let wcoAtOk = Number.POSITIVE_INFINITY;
+			await sendLine(`G10 L20 P0 ${axes.map((a) => `${a}0`).join(" ")}`, {
+				atOk: () => {
+					wcoAtOk = wcoCount;
+				},
+			});
+			accept();
+			wsCommands.sendRealtime(0x3f);
+			await waitFor(() => wcoCount > wcoAtOk, { what: name, ended });
+			resolve();
+		});
+
+	/** Make the current X and Y position the work origin (work X 0, Y 0). */
+	const setWorkZeroXY = () => workZeroOperation("set work zero XY", ["X", "Y"]);
+	/** Make the current Z position work Z 0. */
+	const setWorkZeroZ = () => workZeroOperation("set work zero Z", ["Z"]);
+
+	// Spindle board (the Z controller)
+	/**
+	 * A spindle board command. The status report doesn't show the spindle board's state yet, so
+	 * these are done when the firmware answers ok, which only means the board was sent the
+	 * command, not that it has finished. When the report gains a spindle board field, wait for it
+	 * here (as maslowOperation waits for MS) and these become done when the board has finished.
+	 */
+	const spindleBoardOperation = (name, line) => simpleOperation(name, line);
+
+	/** Home the spindle board's Z: raise it until the top-of-travel beam breaks. */
+	const homeSpindleZ = () => spindleBoardOperation("home spindle Z", "$Spindle/Home");
+	/** Raise the Z until the tool clears the top-of-travel beam, to take the tool out. */
+	const removeTool = () => spindleBoardOperation("remove tool", "$Spindle/RemoveTool");
+
 	// Stopping and pausing
 	/** End any running operation now: 0x18, then $STOP (raise Z, save). Done when $STOP is answered. */
 	const stop = () => {
@@ -540,6 +628,23 @@ const machine = (() => {
 				return;
 			}
 			accept();
+		});
+	};
+
+	/**
+	 * Clear an alarm ($X). Done when a status report shows the machine out of Alarm. The belt
+	 * positions may not be right after an alarm; the caller should say so.
+	 */
+	const clearAlarm = () => {
+		if (state.grbl !== "Alarm") {
+			return notReady("clear alarm", `No alarm to clear (machine is ${state.grbl || "unknown"})`);
+		}
+		return operation("clear alarm", async ({ accept, resolve, ended }) => {
+			await sendLine("$X");
+			accept();
+			wsCommands.sendRealtime(0x3f);
+			await waitFor((s) => s.grbl !== "Alarm", { what: "clear alarm", ended });
+			resolve();
 		});
 	};
 
@@ -846,6 +951,13 @@ const machine = (() => {
 		jogCancel,
 		moveTo,
 		tracePath,
+		park,
+		// work coordinates
+		setWorkZeroXY,
+		setWorkZeroZ,
+		// spindle board
+		homeSpindleZ,
+		removeTool,
 		// jobs and files
 		runFile,
 		resumeFile,
@@ -855,6 +967,7 @@ const machine = (() => {
 		stop,
 		pause,
 		resume,
+		clearAlarm,
 		// settings and status
 		getSetting,
 		setSetting,

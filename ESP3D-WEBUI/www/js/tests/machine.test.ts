@@ -402,7 +402,7 @@ describe("runFile", () => {
     reply("<Idle|MPos:0,0,0|MS:7>");
     const b = g.machine.runFile("/part.nc");
     reply("ok", run(3));
-    g.machine.stop();
+    g.machine.stop().catch(() => {}); // never answered here; a later test's stop() ends it
     await expect(b).rejects.toMatchObject({ reason: "reset" });
   });
 
@@ -543,5 +543,134 @@ describe("files", () => {
       "/upload?path=%2Fjobs%2F&action=rename&filename=a.nc&newname=b.nc",
       "/upload?path=%2Fjobs%2F&action=createdir&filename=new",
     ]);
+  });
+});
+
+describe("work zero, park, alarm, spindle board", () => {
+  test("setWorkZeroXY sends G10 L20 P0 X0 Y0; done when a report after the ok carries WCO", async () => {
+    reply("<Idle|MPos:120,80,5|FS:0,0>");
+    g.ws_source.sent.length = 0;
+    const op = g.machine.setWorkZeroXY();
+    let done = false;
+    op.then(() => (done = true));
+    expect(lastSent()).toBe("G10 L20 P0 X0 Y0\n");
+    // a WCO report before the ok is from before the change
+    reply("<Idle|MPos:120,80,5|FS:0,0|WCO:0,0,0>", "ok", "<Idle|MPos:120,80,5|FS:0,0>");
+    await op.accepted;
+    expect(lastSent()).toBe("?");
+    await tick();
+    expect(done).toBe(false);
+    reply("<Idle|MPos:120,80,5|FS:0,0|WCO:120,80,0>");
+    await op;
+    expect(g.machine.state.wpos).toEqual({ x: 0, y: 0, z: 5 });
+  });
+
+  test("ok and the WCO report arriving together finish setWorkZeroZ", async () => {
+    const op = g.machine.setWorkZeroZ();
+    expect(lastSent()).toBe("G10 L20 P0 Z0\n");
+    reply("ok", "<Idle|MPos:0,0,0|FS:0,0|WCO:0,0,0>");
+    await op;
+  });
+
+  test("a rejected work zero reports the firmware error", async () => {
+    const op = g.machine.setWorkZeroXY();
+    reply("error:9");
+    await expect(op).rejects.toMatchObject({ reason: "rejected", code: 9 });
+    await expect(op.accepted).rejects.toMatchObject({ reason: "rejected" });
+  });
+
+  test("park reads the park settings, raises Z, then moves XY in machine coordinates", async () => {
+    reply("[GC:G0 G54 G17 G21 G90 G94 M5 M9 T0 F0 S0]");
+    const op = g.machine.park();
+    expect(lastSent()).toBe("$/Maslow_Park_X\n");
+    reply("$/Maslow_Park_X=-100.500", "ok");
+    await tick();
+    expect(lastSent()).toBe("$/Maslow_Park_Y\n");
+    reply("$/Maslow_Park_Y=250", "ok");
+    await tick();
+    expect(lastSent()).toBe("$/Maslow_Park_Z\n");
+    reply("$/Maslow_Park_Z=10", "ok");
+    await tick();
+    expect(lastSent()).toBe("G90 G21 G0 Z10\n");
+    reply("ok", "<Run|MPos:0,0,5>");
+    await op.accepted;
+    await tick();
+    expect(lastSent()).toBe("G90 G21 G53 G0 X-100.5 Y250\n");
+    let done = false;
+    op.then(() => (done = true));
+    reply("ok", "<Run|MPos:-50,100,10>");
+    await tick();
+    expect(done).toBe(false);
+    reply("<Idle|MPos:-100.5,250,10>");
+    await op;
+  });
+
+  test("park uses the defaults for unset values and puts inches back", async () => {
+    reply("[GC:G0 G54 G17 G20 G90 G94 M5 M9 T0 F0 S0]");
+    const op = g.machine.park();
+    reply("$/Maslow_Park_X=", "ok");
+    await tick();
+    reply("$/Maslow_Park_Y=", "ok");
+    await tick();
+    reply("$/Maslow_Park_Z=", "ok");
+    await tick();
+    expect(lastSent()).toBe("G90 G21 G0 Z2\n");
+    reply("ok");
+    await tick();
+    expect(lastSent()).toBe("G90 G21 G53 G0 X0 Y0\n");
+    reply("ok");
+    await tick();
+    expect(lastSent()).toBe("G20\n");
+    reply("ok", "<Run|MPos:1,1,2>", "<Idle|MPos:0,0,2>");
+    await op;
+  });
+
+  test("park needs known belts", async () => {
+    reply("<Idle|MPos:0,0,0|MS:4>");
+    await expect(g.machine.park()).rejects.toMatchObject({ reason: "not-ready" });
+    expect(g.ws_source.sent).toEqual([]);
+  });
+
+  test("stop during park's Z move sends no XY move", async () => {
+    const op = g.machine.park();
+    reply("$/Maslow_Park_X=0", "ok");
+    await tick();
+    reply("$/Maslow_Park_Y=0", "ok");
+    await tick();
+    reply("$/Maslow_Park_Z=2", "ok");
+    await tick();
+    expect(lastSent()).toBe("G90 G21 G0 Z2\n");
+    g.machine.stop().catch(() => {}); // only the park matters here
+    await expect(op).rejects.toMatchObject({ reason: "reset" });
+    reply("ok", "<Idle|MPos:0,0,2>"); // the Z line's answer, if it still comes
+    await tick();
+    expect(g.ws_source.sent.filter((l: string) => l.includes("G53"))).toEqual([]);
+  });
+
+  test("clearAlarm sends $X only in Alarm; done when the machine leaves Alarm", async () => {
+    await expect(g.machine.clearAlarm()).rejects.toMatchObject({ reason: "not-ready" });
+    expect(g.ws_source.sent).toEqual([]);
+    reply("<Alarm|MPos:0,0,0|FS:0,0|MS:7>");
+    const op = g.machine.clearAlarm();
+    expect(lastSent()).toBe("$X\n");
+    let done = false;
+    op.then(() => (done = true));
+    reply("ok", "<Alarm|MPos:0,0,0|FS:0,0|MS:7>"); // a report from before the $X
+    await op.accepted;
+    await tick();
+    expect(done).toBe(false);
+    reply("<Idle|MPos:0,0,0|FS:0,0|MS:7>");
+    await op;
+  });
+
+  test("spindle board commands are done on ok (no status field for the board yet)", async () => {
+    const home = g.machine.homeSpindleZ();
+    expect(lastSent()).toBe("$Spindle/Home\n");
+    reply("ok");
+    await home;
+    const remove = g.machine.removeTool();
+    expect(lastSent()).toBe("$Spindle/RemoveTool\n");
+    reply("error:3");
+    await expect(remove).rejects.toMatchObject({ reason: "rejected", code: 3 });
   });
 });
