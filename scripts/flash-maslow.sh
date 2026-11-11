@@ -23,6 +23,9 @@
 # Env: PIO (path to pio; default `pio` on PATH, else ~/.platformio-venv/bin/pio)
 set -euo pipefail
 
+# File size in bytes; stat -c is GNU-only, so use wc -c, which works on macOS too.
+fsize() { wc -c <"$1" | tr -d " "; }
+
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FW="$REPO/firmware"
 ENV_NAME=wifi_s3
@@ -80,7 +83,7 @@ backup_config() {  # sets BACKUP_DIR
     while read -r n; do
         curl -sf -m 20 -o "$BACKUP_DIR/$n" "http://$TARGET/$n" || { echo "Download of $n failed" >&2; exit 5; }
         [[ -s "$BACKUP_DIR/$n" ]] || { echo "Downloaded $n is empty" >&2; exit 5; }
-        echo "   $n ($(stat -c %s "$BACKUP_DIR/$n") bytes)"
+        echo "   $n ($(fsize "$BACKUP_DIR/$n") bytes)"
     done <<< "$names"
     curl -sf -m 5 "http://$TARGET/command?plain=%24Config%2FFilename" | grep -o 'Config/Filename=.*' > "$BACKUP_DIR/.active" || true
 }
@@ -89,7 +92,7 @@ restore_config() {  # $1 = backup dir
     echo "== Restoring config files from $dir"
     for f in "$dir"/*.yaml; do
         n="$(basename "$f")"
-        curl -sf -m 30 -F "path=/" -F "/${n}S=$(stat -c %s "$f")" -F "myfile[]=@$f;filename=/$n" \
+        curl -sf -m 30 -F "path=/" -F "/${n}S=$(fsize "$f")" -F "myfile[]=@$f;filename=/$n" \
             "http://$TARGET/files" > /dev/null || { echo "Upload of $n failed. Backup kept in $dir" >&2; exit 6; }
         # Read it back and compare byte for byte
         if ! curl -sf -m 20 "http://$TARGET/$n" | cmp -s - "$f"; then
@@ -165,7 +168,7 @@ wait_back() {
 }
 upload_file() {  # $1 = local file, uploaded to the machine's filesystem root under its basename
     local f="$1" n; n="$(basename "$f")"
-    curl -sf -m 60 -F "path=/" -F "/${n}S=$(stat -c %s "$f")" -F "myfile[]=@$f;filename=/$n" \
+    curl -sf -m 60 -F "path=/" -F "/${n}S=$(fsize "$f")" -F "myfile[]=@$f;filename=/$n" \
         "http://$TARGET/files" > /dev/null || { echo "Upload of $n failed" >&2; exit 6; }
     curl -sf -m 60 "http://$TARGET/$n" | cmp -s - "$f" || { echo "$n on the machine does not match" >&2; exit 6; }
     echo "   $n uploaded and verified"
@@ -174,7 +177,7 @@ upload_file() {  # $1 = local file, uploaded to the machine's filesystem root un
 [[ $FS == 1 ]] && backup_config
 
 echo "== Firmware upload to http://$TARGET/updatefw"
-FWSIZE="$(stat -c %s "$BUILD/firmware.bin")"
+FWSIZE="$(fsize "$BUILD/firmware.bin")"
 RESP="$(curl -s -m 300 -F "/firmware.binS=$FWSIZE" -F "myfile[]=@$BUILD/firmware.bin;filename=/firmware.bin" \
     "http://$TARGET/updatefw")" || { echo "Firmware upload failed (curl). The machine keeps its old firmware." >&2; exit 4; }
 # UploadStatus 3 = SUCCESSFUL (WebUIServer.h); the machine reboots about a second later.
