@@ -33,7 +33,21 @@ function FilePicker({ files, onPick, onUpload }) {
   </span>;
 }
 
+// What this page's last action is doing (d.op, from the real machine; the simulator has none). While it starts,
+// its buttons are disabled so it can't be sent twice; Stop stays live. If it failed, the reason leads the text.
 export function ask(k, ctx) {
+  const q = askFor(k, ctx);
+  const op = ctx.d.op;
+  if (!op) return q;
+  if (op.phase === "starting") {
+    return { ...q, buttons: q.buttons.map(b => b.style === "stopping" ? b : { ...b, disabled: true, label: b.label }),
+      text: `Starting… ${q.text}` };
+  }
+  if (op.phase === "failed") return { ...q, alert: true, text: `${op.detail}. ${q.text}` };
+  return q;
+}
+
+function askFor(k, ctx) {
   const { d, a, setA, send, mark, openWorkArea } = ctx;
   const B = (label, onClick, style = "") => ({ label, onClick, style });
   const stop = (label = "Stop") => B(label, () => send("stop"), "stopping");
@@ -44,6 +58,8 @@ export function ask(k, ctx) {
       text: `Work area ${d.workArea.w} × ${d.workArea.h} mm, spoil board ${d.workArea.spoil} mm. Keep it to skip the steps the device already knows.`,
       buttons: [B("Keep this work area", () => setA({ workAreaConfirmed: true })), B("Set new work area", openWorkArea, "ghost")] };
     case "newarea": return { text: "Set the table's size and the spoil board thickness in the Work area pop-up.", buttons: [B("Open work area", openWorkArea)] };
+    case "recover": return { text: `${d.beltsKnown} of 4 belt lengths are still known. Apply tension holds those and pulls the others tight to recover them. Check every belt is attached first.`,
+      buttons: [B("Apply tension", () => { mark(3); send("tension"); }), B("Retract belts", () => { mark(1); send("retract"); }, "ghost")] };
     case "unknown": return { text: "Clear the area around the sled so the belts can wind in freely.", buttons: [B("Retract belts", () => { mark(1); send("retract"); })] };
     case "retracting": return { text: "Winding the belts in. Each one stops when it meets resistance. Stopping loses the belt lengths.", buttons: [stop("Stop retracting")] };
     case "retracted": return { text: "Check each arm by eye: are all four belts fully wound in?",
@@ -65,7 +81,12 @@ export function ask(k, ctx) {
     case "anchors": return { text: "Measuring the frame to find each anchor point. Keep clear of the sled and belts.", buttons: [stop("Stop finding anchors")] };
     case "noanchors": return { text: "Check each belt is hooked to its anchor, then try again.",
       buttons: [B("Find anchors again", () => send("findAnchors")), B("Retract belts", () => { setA({ retractChecked: false }); send("retract"); }, "ghost")] };
-    case "tcheck": return { text: "Checking for a tool. The spindle rises through the light beam.", buttons: [stop()] };
+    case "tcheck": return d.toolSteps === false
+      // The real machine's tool steps wait for Tristan's tool field; until then the user can go on without them
+      ? { text: "The tool check isn't connected to the machine yet. Skip it to go on, and set Z the way you do today.",
+          buttons: [{ ...B("Skip the tool check", () => { mark(5); setA({ zDone: true }); }),
+            temp: "the tool check needs the tool state the firmware is adding" }, stop()] }
+      : { text: "Checking for a tool. The spindle rises through the light beam.", buttons: [stop()] };
     case "toolq": return { text: "A bit is loaded. Have you set Z for this tool?",
       buttons: [B("Yes, Z is set", () => { mark(5); setA({ zDone: true }); }), B("No, set Z", () => { mark(5); mark(6); setA({ measuring: true, stickout: null }); }, "ghost")] };
     case "notool": return { text: "No bit loaded. Measure a tool to load one, or continue without a tool.",

@@ -25,6 +25,7 @@ export const SCREENS = {
   workarea: { mode: "Setup", tone: T.setup, sub: "Confirm the work area", step: 0, nopos: true, msg: "Confirm the work area before anything moves" },
   newarea: { mode: "Setup", tone: T.setup, sub: "Confirm the work area", step: 0, nopos: true, msg: "Set the table size and the spoil board thickness in the Work area pop-up" },
   unknown: { mode: "Setup", tone: T.setup, sub: "Belt lengths unknown", step: 1, nopos: true, msg: "No saved belt lengths, or a retract was stopped. Start by retracting the belts" },
+  recover: { mode: "Setup", tone: T.setup, sub: "Some belt lengths known", step: 3, nopos: true, msg: "Some belt lengths were restored at boot. Apply tension can recover the rest" },
   retracting: { mode: "Setup", tone: T.setup, sub: "Retracting belts", step: 1, nopos: true, moving: true, msg: "Winding each belt in until it meets resistance" },
   retracted: { mode: "Setup", tone: T.setup, sub: "Belts retracted", step: 1, nopos: true, msg: "Retract finished. Check each arm by eye before extending" },
   toextend: { mode: "Setup", tone: T.setup, sub: "Belts retracted", step: 2, nopos: true, msg: "All four belts are fully wound in. Press Extend belts when you're ready" },
@@ -73,7 +74,7 @@ export function derive(d, a) {
   if (d.motion === "tracing") return "tracing";
   if (!a.workAreaConfirmed) return a.editingWorkArea ? "newarea" : "workarea";
   switch (d.maslow) {
-    case 0: return "unknown";
+    case 0: return d.beltsKnown > 0 ? "recover" : "unknown";   // some belts known: Apply tension recovers the rest
     case 1: return "retracting";
     case 2: return a.retractChecked ? "toextend" : "retracted";
     case 3: return "extending";

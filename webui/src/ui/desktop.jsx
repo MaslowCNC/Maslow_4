@@ -1,9 +1,8 @@
 import { useState } from "preact/hooks";
 import { SCREENS, STEP_HELP, isSetup, stepName } from "../flow/screens.js";
 import { ask, mainActions } from "../flow/asks.jsx";
-import { ModePill, Conn, progress, Segs, StepArt, Frame, LogView, JogPad, DetailsBody, FilesBody } from "./parts.jsx";
+import { Btn, ModePill, Conn, progress, Segs, StepArt, Frame, LogView, JogPad, DetailsBody, FilesBody } from "./parts.jsx";
 
-const Btn = ({ b }) => <button class={`btn ${b.style}`} type="button" onClick={b.onClick} disabled={b.disabled}>{b.label}</button>;
 export const StopBtn = ({ send, label = "Stop" }) => <button class="btn danger" type="button" onClick={() => send("stop")}>{label}</button>;
 export const Gear = ({ onClick }) => <button class="gear" type="button" aria-label="Settings" onClick={onClick}>⚙</button>;
 
@@ -22,7 +21,7 @@ function SetupBar({ k, ctx, onSettings }) {
   return <div class="banner gtop">
     <div class="gthumb"><StepArt step={step} d={ctx.d} class="" /></div>
     <div class="gmeta"><span style="display:flex;align-items:center;gap:8px"><ModePill s={s} small />{label}</span><b>{stepName(k)}</b><Segs step={step} skipped={skipped} /></div>
-    <span class="gtext">{q.text}</span>
+    <span class={`gtext${q.alert ? " alert" : ""}`}>{q.text}</span>
     {q.input}
     <div class="bbtns">{q.buttons.map(b => <Btn b={b} />)}</div>
     <Conn d={ctx.d} /><Gear onClick={onSettings} />
@@ -41,7 +40,7 @@ function ModeBar({ k, ctx, onSettings, checks, setChecks }) {
   const showStop = ctx.d.connected && k !== "wifi";
   return <div class="banner combined" style={`--tone:${s.tone}`}>
     <div class="bstate"><ModePill s={s} />{s.sub && <span class="sub">{s.sub}</span>}</div>
-    <span class={`bexplain${s.alert ? " alert" : ""}`}>{q.text || s.msg}</span>
+    <span class={`bexplain${s.alert || q.alert ? " alert" : ""}`}>{q.text || s.msg}</span>
     {q.input}
     <div class="bbtns">{[...q.buttons, ...main, ...final].map(b => <Btn b={b} />)}{showStop && <StopBtn send={ctx.send} />}</div>
     <Conn d={ctx.d} /><Gear onClick={onSettings} />

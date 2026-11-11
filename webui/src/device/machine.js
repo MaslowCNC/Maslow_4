@@ -2,8 +2,10 @@
 // It has the same interface as the simulator, getState(), subscribe(fn) and send(action, payload), and builds
 // the same state shape from machine.state, so the screens don't change.
 //
-// Read-only for now: send() moves nothing. The only action it sends is Stop, because a Stop button that did
-// nothing would be the one unsafe thing on the page. The setup and job actions come in the next step.
+// Actions so far: Stop and the belt steps of Setup (retract, extend, apply tension, release tension, find
+// anchors). Each goes through a machine.js action, and its Operation is kept in state.op so the screens can show
+// "starting", then nothing (done) or why it failed. The screen itself still comes from the machine's state, so
+// every connection shows the same thing. Jogging, files, jobs and the tool steps come next.
 
 // What the firmware's close codes mean (WSChannel.h). For these the page shows a notice and doesn't reconnect.
 const CLOSE_NOTICES = { 4001: "othertab", 4002: "toomany" };
@@ -11,6 +13,12 @@ const RECONNECT_MS = 3000;
 const SETTINGS = {
   workW: "Maslow_Work_Area_X", workH: "Maslow_Work_Area_Y",
   spoil: "Maslow_spoilboardThickness", stock: "Maslow_workThickness"
+};
+
+// UI action → machine.js action, for the actions this page sends so far
+const ACTIONS = {
+  retract: "retractBelts", extend: "extendBelts", tension: "applyTension",
+  release: "releaseTension", findAnchors: "calibrate"
 };
 
 const time = () => new Date().toTimeString().slice(0, 8);
@@ -21,7 +29,10 @@ export function createMachine({ host = location.host } = {}) {
   let m = null;            // Tristan's machine object, once loaded
   let ws = null;
   let s = {
-    connected: false, everConnected: false, hotspot: false, connectId: 0, closed: null, readOnly: true,
+    connected: false, everConnected: false, hotspot: false, connectId: 0, closed: null, readOnly: false,
+    op: null,                // { action, phase: "starting" | "running" | "failed", detail, maslowAt } for this page's last action
+    beltsKnown: 0,           // how many belt lengths the machine knows (BL "?" = unknown)
+    toolSteps: false,        // the tool check, measure and load aren't connected yet (they need the tool field)
     maslow: null, fluid: "", statusSeen: false,
     tool: "unknown", settingZ: false, zSetCount: 0, spindle: "off", error: null,
     job: null, lastJob: null, motion: null, result: null, restored: false,
@@ -39,7 +50,10 @@ export function createMachine({ host = location.host } = {}) {
   function fromMachine(ms) {
     const b = ms.belts || {};
     const alarm = ms.grbl === "Alarm";
+    // A failure message belongs to the state it happened in: once the machine moves on, drop it
+    const op = s.op?.phase === "failed" && ms.maslow !== s.op.maslowAt ? null : s.op;
     return {
+      op, beltsKnown: [b.tl, b.tr, b.bl, b.br].filter(v => v != null).length,
       maslow: ms.maslow, fluid: ms.grbl,
       pos: ms.mpos || s.pos, wco: ms.wco || s.wco,
       belts: [b.tl, b.tr, b.bl, b.br].map(v => v ?? 0),
@@ -140,17 +154,43 @@ export function createMachine({ host = location.host } = {}) {
     connect();
   }
 
+  // Run a machine.js action and follow its Operation in state.op
+  function run(action, name) {
+    s = { ...s, op: { action, phase: "starting", maslowAt: s.maslow } };
+    log(`${action}: sent`);
+    emit();
+    const op = m[name]();
+    const mine = () => s.op?.action === action;   // a later action replaces this one
+    op.accepted.then(() => { if (mine() && s.op.phase === "starting") set({ op: { ...s.op, phase: "running" } }); }, () => {});
+    op.then(
+      () => { log(`${action}: done`); if (mine()) set({ op: null }); else emit(); },
+      (err) => {
+        // Ended by our own Stop: not a failure
+        if (err.reason === "reset") { if (mine()) set({ op: null }); return; }
+        const detail = err.detail || err.reason;
+        log(`${action}: ${detail}`);
+        if (mine()) set({ op: { action, phase: "failed", detail, maslowAt: s.maslow } }); else emit();
+      });
+  }
+
   function send(action) {
+    if (action === "connect") { if (!m) start(); return; }
+    if (action === "reconnect") { connect(); return; }
+    if (!m) return;
     if (action === "stop") {
-      if (!m) return;
+      s = { ...s, op: null };
       m.stop().catch(err => { log(`Stop: ${err.detail || err.reason}`); emit(); });
       return;
     }
-    if (action === "reconnect") { connect(); return; }
-    if (action === "connect") { if (!m) start(); return; }
-    // Everything else waits for the next step
+    if (ACTIONS[action]) { run(action, ACTIONS[action]); return; }
+    if (action === "doneExtending") {
+      log("Done extending needs a firmware change. Today Extend ends by itself when the belts reach their length.");
+      emit();
+      return;
+    }
+    // Everything else comes in the next steps
     if (["toolCheck", "watchForTool", "setZFromStickout"].includes(action)) return;   // automatic, not a user press
-    log(`Not sent: ${action} (read-only for now)`);
+    log(`Not sent: ${action} (not connected yet)`);
     emit();
   }
 

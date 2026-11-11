@@ -1,7 +1,7 @@
 import { useState } from "preact/hooks";
 import { SCREENS, isSetup, stepName } from "../flow/screens.js";
 import { ask, mainActions } from "../flow/asks.jsx";
-import { ModePill, Conn, progress, Segs, StepArt, Frame, LogView, JogPad, DetailsBody, FilesBody, jogLock, workPos } from "./parts.jsx";
+import { Btn, ModePill, Conn, progress, Segs, StepArt, Frame, LogView, JogPad, DetailsBody, FilesBody, jogLock, workPos } from "./parts.jsx";
 import { Gear, FinalChecks } from "./desktop.jsx";
 
 // Defined outside Phone so its children keep their state (typed values) across re-renders
@@ -10,7 +10,6 @@ function Section({ id, name, summary, sec, toggle, children }) {
     {sec === id && <div class="accbody">{children}</div>}</details>;
 }
 
-const Btn = ({ b }) => <button class={`btn ${b.style}`} type="button" onClick={b.onClick} disabled={b.disabled}>{b.label}</button>;
 
 // Phone layout B: the state is pinned on top, a small visual stays on screen, sections collapse below it,
 // and Run and Stop are pinned at the bottom.
@@ -28,7 +27,7 @@ export function Phone({ k, ctx, onSettings, checks, setChecks, overlay }) {
     <header class="p-head">
       <div class="p-top"><ModePill s={s} /><span class="sub">{s.sub}</span><Conn d={ctx.d} /><Gear onClick={onSettings} /></div>
       {setup ? <div class="p-prog"><span>{label}</span><Segs step={s.step} skipped={skipped} /></div>
-        : <div class={`p-msg${s.alert ? " alert" : ""}`}>{q.text || s.msg}</div>}
+        : <div class={`p-msg${s.alert || q.alert ? " alert" : ""}`}>{q.text || s.msg}</div>}
       {k === "finalcheck" && <FinalChecks checks={checks} setChecks={setChecks} />}
     </header>
     <main class="p-body">
@@ -36,7 +35,7 @@ export function Phone({ k, ctx, onSettings, checks, setChecks, overlay }) {
       <div class="acc">
         <Section sec={sec} toggle={toggle} id="step" name={setup ? "Setup" : "Next"} summary={setup ? stepName(k) : q.buttons.length ? q.buttons[0].label : "Nothing to do"}>
           {setup && <StepArt step={s.step} d={ctx.d} />}
-          <p class="note" style="color:var(--text)">{q.text || s.msg}</p>
+          <p class="note" style={`color:${q.alert ? "var(--danger)" : "var(--text)"}`}>{q.text || s.msg}</p>
           {q.input}
           {q.buttons.length > 0 && <div class="row">{q.buttons.map(b => <Btn b={b} />)}</div>}
         </Section>

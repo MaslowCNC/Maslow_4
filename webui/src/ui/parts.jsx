@@ -2,6 +2,11 @@ import { useState } from "preact/hooks";
 import { STEPS, SCREENS, isSetup } from "../flow/screens.js";
 import { stepArt, visSvg } from "../art.js";
 
+// A top-bar button. b.temp marks one that exists only until the firmware rewrite is finished: it shows orange,
+// tagged "Temporary", and its tooltip says what it's waiting for. Every stopgap like this should use it.
+export const Btn = ({ b }) => <button class={`btn ${b.style}${b.temp ? " temp" : ""}`} type="button" onClick={b.onClick}
+  disabled={b.disabled} title={b.temp ? `Temporary: ${b.temp}` : undefined}>{b.label}{b.temp && <span class="temptag">Temporary</span>}</button>;
+
 export const Svg = ({ html, class: c }) => <span class={c} dangerouslySetInnerHTML={{ __html: html }} />;
 
 export const ModePill = ({ s, small }) =>

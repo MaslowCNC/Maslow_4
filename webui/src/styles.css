@@ -20,6 +20,7 @@
     --job: #c4a3d5;
     --danger: #e05b5b;
     --warn: #d4a32c;
+    --temp: #f0883e;
     --font-sans: "Work Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
     --font-display: "Roboto Flex", "Work Sans", system-ui, sans-serif;
     --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -37,7 +38,7 @@
   .appshell[data-panels="light"] {
     --panel: #ffffff; --panel-border: #e4dfea; --sep: #e4dfea; --input: #f3eff6; --hover: #e9ddf2;
     --text: #26232b; --muted: #5b5462; --lilac: #8d4bb0; --sub: #f1ebf6; --on-accent: #ffffff; --on-go: #ffffff;
-    --setup: #2563eb; --ready: #15803d; --job: #8d4bb0; --danger: #b91c1c; --warn: #b45309;
+    --setup: #2563eb; --ready: #15803d; --job: #8d4bb0; --danger: #b91c1c; --warn: #b45309; --temp: #c2410c;
     --node: #3f4243; --wire: #8f8a97; --line2: #b3aebb; --canvas2: #d3c6dd;
     --shadow: 0 2px 8px rgba(20,24,31,.18);
   }
@@ -142,6 +143,10 @@
     border: 1.5px solid var(--lilac); background: var(--lilac); color: var(--on-accent); display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
   .btn.ghost { background: transparent; color: var(--lilac); }
   .btn.go { background: var(--ready); border-color: var(--ready); color: var(--on-go); }
+  /* Stopgaps that exist only until the firmware rewrite is finished */
+  .btn.temp { background: transparent; border: 1px dashed var(--temp); color: var(--temp); }
+  .btn .temptag { margin-left: 8px; padding: 1px 5px; border-radius: 4px; background: var(--temp); color: #1b1d22;
+    font: 600 10px var(--font-mono); letter-spacing: .04em; text-transform: uppercase; vertical-align: 1px; }
   .btn.danger { background: #b91c1c; border-color: #b91c1c; color: #fff; }
   .btn.stopping { background: transparent; border-color: var(--danger); color: var(--danger); }
   .btn:disabled { opacity: .4; cursor: not-allowed; }
@@ -238,6 +243,7 @@
   .gmeta span { font: 600 12px var(--font-mono); color: var(--muted); }
   .gmeta b { font: 700 15px var(--font-display); }
   .gtext { flex: 1 1 220px; min-width: 0; font-size: 13px; color: var(--muted); }
+  .gtext.alert { color: var(--danger); }
   .bar { height: 8px; border-radius: 99px; background: var(--input); overflow: hidden; }
   .bar i { display: block; height: 100%; background: var(--fill, var(--lilac)); border-radius: 99px; }
   .belts { display: grid; grid-template-columns: auto 1fr auto; gap: 6px 10px; align-items: center; font: 12px var(--font-mono); }

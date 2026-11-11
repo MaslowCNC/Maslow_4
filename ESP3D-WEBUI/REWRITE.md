@@ -73,6 +73,9 @@ machine API in [MaslowCNC/Maslow_4#1132](https://github.com/MaslowCNC/Maslow_4/p
 - **Errors are shown, not hidden,** with what to do next.
 - **Unavailable means disabled,** not just greyed (the current UI ran Retract from a grey button),
   and every state has a way out.
+- **Stopgaps are marked.** A control that exists only until the firmware work is finished (such as
+  "Skip the tool check" while the tool state isn't reported) is orange with a dashed border, tagged
+  "Temporary", and its tooltip says what it's waiting for. Stop stays beside it.
 
 ### Code
 
