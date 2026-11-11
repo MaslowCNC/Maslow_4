@@ -639,27 +639,219 @@ the emergency stop, and a full cut. See "Still to test" in `ISSUES-LOG.md`.
 
 ### Where the firmware and the UI meet
 
-What each part of the new flow needs from the firmware, and what it has today on `3448d81f`:
+Updated 2026-11-11 for the machine API in
+[MaslowCNC/Maslow_4#1132](https://github.com/MaslowCNC/Maslow_4/pull/1132), now on `Maslow-Main`
+and merged into `firmwareRewrite`. The protocol is in `docs/protocol.md`; the rules every UI change
+follows are in `.github/copilot-instructions.md` ("Maslow architecture rules").
 
-| UI state or action | UI sends | UI learns the result from | Today | Firmware change needed |
-|---|---|---|---|---|
-| Connected, Not responding | (heartbeat) | `PING` every 10 s | Board sends bare `PING`, old page wanted `PING:<id>` (issue 2) | Fixed in the page; also send a format both understand |
-| Connecting, page ID | | `CURRENT_ID` on connect | Commands before it fail with HTTP 500 (issue 14) | None, the UI must wait |
-| Any Setup or Ready state | `$GSTATE`, `$MINFO` | `Current state: N`, `MINFO` JSON | Log text and on request only | A pushed status message with the Maslow state |
-| Retract | `$ALL` | State 1, then 2 | Works | Stop a false retract under tension |
-| Extend | `$EXT` | State 3, then 4 when every belt reaches `extendDist` | Ends by itself | Done extending command, keep paying out until then; Stop keeps lengths |
-| Apply tension | `$TKSLK` | State 4 or 7, plus a `WARN` or `ERR` line for the reason | The reason is only log text | Report the result and the reason |
-| Find anchors | `$CAL` | `Measured waypoint N`, fit lines, then state 7 | No total, false save error | Report point N of total; treat `Deferred` as saved |
-| Release tension | `$CMP` | State 8, then 4 | Works | |
-| Check for a tool | `$Spindle/Home` | Spindle board log: `tool loaded` or `no tool loaded` | Works, as log text | Tool state in the XY status report |
-| Remove the tool | `$Spindle/RemoveTool` | `Tool removed: beam clear for 500ms` | Works, as log text | Same |
-| Load the tool | (none, the user inserts the bit) | `Tool loading…`, then `Tool loaded…` | Works, as log text | Same |
-| Set Z from stick-out | (new) | | Not built. The board seats the bit and sets Z to 0 itself, so how stick-out maps to cutting Z needs deciding | New command |
-| Run | `$SD/Run=<file>` | `SD:` in the status report | `SD:` percent is bytes read, not progress (issue 19) | Report the line being run, or real progress |
-| Stop | `$STOP` | State back to Idle | Belts kept moving 3.4 s after a stop (issue 18) | Halt queued motion at once; save progress |
-| Spindle fault | | Spindle board log lines, then `ready to cut` | Recovery works | Report the recovery state |
-| Device details: Belts | `$MINFO` | Belt lengths | Only on request | Push belt lengths live |
-| Device details: Motors | | Debug log only | No live view | Push motor currents, if possible |
+**What changed in the firmware and the legacy UI:**
+
+- **One command path.** Every line command goes over the WebSocket, one line at a time, through
+  `wscommands.js`, which matches each `ok` / `error:N` to its line. Only `[ESP…]`, files, firmware
+  update and login use HTTP.
+- **State comes from the status report.** The report now carries `MS` (Maslow state), `BL` (belt
+  lengths, `?` when unknown), `BE` (belt errors), `MC` (motor currents), `SD` with the running
+  line, and `STOPPED:line,file` after a job ends early. It comes every 50 ms while moving, and on
+  every change when idle; the UI sends `?` every second as a heartbeat. No more parsing
+  `Current state:` or polling `$MINFO` for state.
+- **`machine.js` is the one API.** Named actions (`retractBelts`, `extendBelts`, `applyTension`,
+  `calibrate`, `releaseTension`, `jog`, `moveTo`, `tracePath`, `runFile`, `resumeFile`, `stop`,
+  `getSetting`, `setSetting`, `files.*`) and one state store (`machine.state`,
+  `machine.on("state")`). Each action returns an **Operation**: a Promise that settles when the
+  action has *finished*, plus `.accepted` for when the firmware *took* it. Failures carry a
+  `reason`: `rejected`, `not-sent`, `disconnected`, `timeout`, `reset`, `cancelled`, `failed`,
+  `not-ready`.
+- **Stop is fast and there's no Pause.** `machine.stop()` sends 0x18 (Maslow: syncs the belts to
+  the encoders, Idle with no alarm) and then `$STOP` (raise Z, save). A stopped SD job shows as
+  `STOPPED` and continues with `resumeFile(file, line)` (`$SD/RunFrom`), from a line the user can
+  change.
+- **New state 10, TENSIONED:** Apply Tension tightened and measured the belts, but they don't fit
+  the saved anchors, so Find Anchors is next. Not saved: a reboot comes back as EXTENDEDOUT.
+- **Apply Tension recovers belts from UNKNOWN** when some belts were restored at boot.
+- **Every connection is equal.** Job output and errors go to every connection. One socket per
+  browser: a newer tab closes the older one with code 4001; a 5th connection closes the oldest
+  with 4002. Both show a notice instead of reconnecting in a loop.
+
+**This is the architecture the new UI already assumes.** The working site's device interface is
+`getState()`, `subscribe(fn)` and `send(action, payload)`, fed by a simulator. `machine.js` is the
+same shape with better results: `machine.state`, `machine.on("state", fn)`, and an action per
+call that says when it was accepted and when it finished.
+
+**Decided (2026-11-11): the real page uses Tristan's `machine.js` and `wscommands.js` as they are.**
+No copy and no fork. The page imports them from `ESP3D-WEBUI/www/js/`, the same way their bun
+tests do: set a few globals first, then `import` each file for its side effect and use
+`globalThis.machine`. Every fix to them reaches both UIs, and every new action is added there,
+with a bun test, as the agent rules require.
+
+**The simulator stays as it is.** It was built to stand in for this API, and it keeps doing that:
+the working site runs on it to show how the UI behaves, with the tester answering for the machine.
+The real page is the same screens on a second device source:
+
+- **Simulated** (today): `simulator.js`, with `getState()`, `subscribe()` and `send()`.
+- **Real** (to build): `machine.state`, `machine.on("state")` and the `machine.js` actions. Each
+  action returns an Operation: the button shows "starting" until `.accepted`, and a rejection's
+  `reason` and `detail` go in the top bar.
+
+Both feed the same `derive()` in `screens.js`, so it reads one state shape. Either the real
+source is translated into the simulator's shape, or both move to `machine.state`'s field names
+(`maslow`, `grbl`, `mpos`, `wco`, `belts`, `job`, `stopped`, `conn`) and the simulator renames
+its fields to match. The second keeps one vocabulary with the firmware and is the better
+long-term choice.
+
+**Screens come from state, never from an Operation.** Every connection is equal: a phone
+watching, or a page reloaded mid-step, has no Operation, only `machine.state`. `derive()` reads
+the state plus the user's answers on this page (work area kept, retract checked by eye, Z set,
+work piece secured, final check), which stay in the UI.
+
+`commands.js` lists what each UI action becomes on the real API (`api` column).
+
+**The state the UI needs, and where it comes from now:**
+
+| UI needs | From | Status |
+|---|---|---|
+| Maslow state | `MS` in every report | Done |
+| FluidNC state (Idle, Run, Jog, Home, Alarm…) | report state | Done |
+| Machine position and work offset (our two positions) | `MPos`, `WCO` | Done. `machine.state` already keeps `mpos`, `wpos` and `wco` |
+| Belt lengths, unknown belts | `BL` (`?` = unknown) | Done, live. The Belts tab can be real |
+| Belt errors | `BE` | Done |
+| Motor currents | `MC`, raw ADC (mA = 1000 × 3.3 × ADC / 4095 / 1.5) | Done. The Motors tab can be real |
+| Running job: file and line | `SD:pct,file,line` | Line is new. `pct` is still bytes read (issue 19), so progress = line ÷ the file's line count, which the UI can count from the file it already loads for the preview |
+| Stopped job, to continue | `STOPPED:line,file` | Done |
+| Belts don't fit the anchors | `MS:10` TENSIONED | Done. Replaces our page-side "nofit" answer and survives a reload |
+| Connection: live, quiet, lost | `wsCommands.health()` | Done |
+| Another tab took over / too many connections | close codes 4001 / 4002 | Done. Needs our own notice in the Error mode |
+| Tool loaded, removed, Z homing | Spindle board log lines | **Not in the report.** Still log text |
+| Spindle fault and its recovery | Log lines, then `STOPPED` | **Recovery state not in the report** (`_recovery` in `SpindleBoard`) |
+| Find anchors progress (point N of 33) | `Measured waypoint` log lines | **No field and no total** (issue 16) |
+| Why Apply Tension stopped (a belt wound in > 300 mm) | `log_warn` text | **Log text only** |
+| Alarm reason (position error, emergency stop) | `ALARM:N` + log text | Partly |
+
+**The actions the UI sends, and what they become:**
+
+| UI action | `machine.js` | Status |
+|---|---|---|
+| Retract, Extend, Apply tension, Find anchors, Release tension | `retractBelts`, `extendBelts`, `applyTension`, `calibrate`, `releaseTension` | Done, with start, success and failure states |
+| Done extending | none | Still planned: Extend still ends by itself at `extendDist` |
+| Jog, Set home XY, Set Z, Park, go home | `jog`, `jogCancel`, `moveTo`, `setSetting` | `jog` and `moveTo` done. Set home is G10 L20 (a line; no action yet). Park needs an action |
+| Trace boundary | `tracePath(points)` | Done. Stop leaves the machine where it stopped |
+| Run | `runFile(path)` | Done. Fails with the file's line and error code |
+| Continue a stopped job | `resumeFile(path, line)`, `discardStopped()` | Done (was planned) |
+| Stop | `stop()` | Done: 0x18 then `$STOP`, on every screen |
+| Upload, list, delete files | `machine.files.*` | Done (HTTP) |
+| Work area, spoil board, stock | `setSetting` + `saveConfig` | Done |
+| Check, remove, load the tool; re-home Z | none | Still `$Spindle/…` commands with log-text results. Needs actions, and a report field to be reliable |
+| Set Z from stick-out | none | Still planned |
+| Clear error | none | `$X` exists; needs an action |
+| Reboot | `[ESP444]RESTART` over HTTP | Exists; not in `machine.js` |
+| Pause | `pause` / `resume` exist in `machine.js` | **Not used:** no Pause, by both designs |
+
+**What this changes in our design** (updates for the map and the mockups):
+
+- **TENSIONED becomes its own Setup screen:** "The belts don't fit the saved anchors", with Find
+  anchors as the main action and Apply tension again, Release tension and Retract as the others.
+- **UNKNOWN with some belts known** offers Apply tension (to recover the rest) before Retract.
+- **Stop mid-step has defined endings:** Apply tension ends in EXTENDEDOUT (or UNKNOWN when it was
+  recovering belts); Trace boundary stops where it is; a job leaves `STOPPED`. The map's "Job
+  stopped → continue, run from the start, or choose a file" is now buildable, with the line editable.
+- **An alarm right after our own Stop is part of the stop.** A Stop during a belt operation can
+  flash `ALARM` "Homing fail reset" (backlog: belt operations run in Home state); it shouldn't open
+  the Error screen.
+- **Connection notices** (4001 another tab, 4002 too many) join "Not responding" in Error mode,
+  with a button and no auto-reconnect.
+
+### What we still need
+
+What it takes for the new UI to replace the current one on the board. The simulator isn't on this
+list: it stays as the demo.
+
+**1. Connect the screens to the machine** (ours, in `webui/`):
+
+1. **Load the two files.** Before importing them, provide the globals they read:
+   - `ws_source`: the open WebSocket that `wscommands.js` sends on;
+   - `addMessage(text)`: where `wscommands.js` reports "No reply… carrying on" (our Log panel);
+   - for `machine.files` only: `SendGetHttp`, `buildHttpFileCmd`, `SendFileHttp`,
+     `BuildFileUploadFormData`, `httpCmd` and `http_communication_locked` from the legacy `http.js`
+     (import it too, or write small stand-ins); `disablePingForUpload` and `restorePingAfterUpload`
+     are optional.
+   - `wscommands.js` sends `?` every second by itself once it loads in a browser.
+2. **A socket module** (the legacy one is `socket.js`): open `ws://<host>/ws` with the `arduino`
+   subprotocol; on every open, reset `wsCommands` and send `$Report/Interval=50`, `?`, `$G`,
+   `$MINFO` and our setting reads; pass every incoming line to `wsCommands.handleLine` and
+   `machine.handleLine`; reconnect every 3 s, except after close codes 4001 and 4002.
+3. **A switch between the two device sources:** the real one when the page is served by the
+   machine (or by `ESP3D-WEBUI/dev-server.js`, which proxies to `maslow.local`), the simulator
+   otherwise or when asked for.
+4. **`derive()` on one state shape** (above).
+5. **Operation feedback** on every button: "starting", then the result or the reason it failed.
+6. **The new screens and notices** in "What this changes in our design".
+7. **Job progress** = the report's running line ÷ the file's line count, counted from the file the
+   preview loads (the report's `pct` is bytes read, issue 19).
+8. **Belts and Motors tabs** from `belts` and `motorCurrent` (mA = 1000 × 3.3 × ADC / 4095 / 1.5).
+
+**2. Everything else the current UI does** (goal 6: no loss of features). Our screens cover the
+Maslow workflow; these parts of the current UI have no home yet, or only a placeholder in Settings:
+
+| Current UI | Where it is today | In the new UI |
+|---|---|---|
+| Toolpath preview of a G-code file | `simple-toolpath.js`, `toolpath-displayer.js` | Frame panel shows a placeholder drawing. Reuse the current preview, or the 3D view if three.js comes in |
+| File manager for the SD card | `files.js` | File panel: list, choose, upload done. Delete, rename, folders still to add (`machine.files` has them) |
+| Flash files (`maslow.yaml`, `index.html.gz`) | `SPIFFSdlg.js` | Settings › Advanced, not designed |
+| Config editor | `configtab.js` | Settings › Advanced, not designed |
+| FluidNC and ESP settings (`[ESP400]` / `[ESP401]`) | `settingstab.html`, `settings.js` | Settings › Advanced, not designed |
+| WiFi setup and scan | `setupdlg.js`, `scanwifidlg.js`, `wizard.js` | Settings › Network and the first-boot hotspot screen are placeholders |
+| Firmware update | `updatedlg.js`, `checkupdatesdlg.js` | Settings › Device has the button, not the flow |
+| Command box and full log | `commandpanel.html`, `commands.js`, `debugging.js` | Log panel shows lines; no command box |
+| Macros | `macrodlg.js` | Not designed |
+| Camera | `camera.js` | Not designed; decide whether to keep it |
+| System status (`[ESP420]`) | `statusdlg.js` | Settings › Device, not designed |
+| Restart | `restartdlg.js` | Settings › Device |
+| Login | `logindlg.js` | Off in our build; nothing needed unless it's turned on |
+| Languages | `translate.js`, `language/` | English only. Decide whether to keep translations |
+| Belt motor test, diagnostics (`$TEST`, `$CALRESET`) | `maslow.js`, `tablet.js` | Settings › Advanced, not designed |
+
+**3. Build and ship** (ours, with Tristan):
+
+- The Vite build already makes one self-contained `index.html` (about 30 KB gzipped today, before
+  any of the above). It has to be gzipped to `index.html.gz` and land in
+  `firmware/FluidNC/data/`, where the firmware serves it from flash.
+- The CI build (`compile-on-review.yml`, `release.yml`) runs `gulp package`. It needs a step for
+  the new UI, or a switch for which UI ships.
+- The current UI keeps working until the new one covers everything above. Decide whether both
+  ship for a while (the board serves any file from flash, so a second page is possible), and when
+  the new one becomes the default.
+- Test on the machine, with the same checklist as `ISSUES-LOG.md`'s "Still to test".
+
+**4. New actions in `machine.js`** (shared, so agree them with Tristan; each with a bun test). They
+need no firmware change, only the existing commands:
+
+| Action | Sends |
+|---|---|
+| Set home XY, Set Z | `G10 L20 P0 X0 Y0`, `G10 L20 P0 Z0` |
+| Park | a `moveTo()` to the park position, or its own action |
+| Clear error | `$X` |
+| Check for a tool, remove the tool, re-home Z | `$Spindle/Home`, `$Spindle/RemoveTool`; done or failed only from log text until the report says (below) |
+| Reboot | `[ESP444]RESTART` (HTTP), if it belongs in `machine.js` at all |
+
+**5. In the firmware** (Tristan; any status report change needs review from him or BarbourSmith,
+and a field sent only while it applies, like `STOPPED`, is preferred):
+
+| Need | Why | Today |
+|---|---|---|
+| Tool and spindle-board state: tool loaded or not, Z homing, recovering from a fault | The tool steps and the spindle fault screens; a page opened during recovery can't tell | Spindle board log lines only |
+| Find anchors progress, e.g. `CAL:n,total` during state 6 | About 11 minutes with no feedback (issue 16) | `Measured waypoint` log lines, no total |
+| Why an operation failed (a belt wound in more than 300 mm, an unsolvable fit) | Success and failure come from the state; the reason is only log text | `log_warn` / `log_error` text |
+| Alarm reason (position error, emergency stop) | The Error screen should say what happened | `ALARM:N` plus log text |
+| Done extending | Belts pay out until the user says they're attached | Extend ends by itself at `extendDist` |
+| Set Z from the measured stick-out | The tool step | Not built |
+
+**6. To decide with Tristan:**
+
+- **Log text for spindle state until the fields exist.** The rules say no new state reads from log
+  lines. Either the tool screens wait for the report fields, or we agree one clearly temporary
+  reader for those lines.
+- **Where the new UI lives and ships:** `webui/` next to the current UI, both loading the shared
+  files (part 3).
+- **The new actions above** go into `machine.js`, which both UIs share.
 
 ### Tested on the machine
 
@@ -843,6 +1035,8 @@ To check for the Settings pop-up:
   whether the position needs recomputing, or whether the stock should be entered before Apply tension.
 
 ### Getting status to the UI
+
+_Superseded by the status report fields in "Where the firmware and the UI meet" (PR #1132). Kept for the spindle notes below._
 
 | Data | Source | Today |
 |---|---|---|

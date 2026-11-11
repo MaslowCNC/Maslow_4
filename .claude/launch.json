@@ -20,6 +20,21 @@
         "8485"
       ],
       "port": 8485
+    },
+    {
+      "name": "webui",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "webui",
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "5199",
+        "--strictPort"
+      ],
+      "port": 5199
     }
   ]
 }
