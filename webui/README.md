@@ -9,6 +9,7 @@ tool being found, a fault), a "Simulated device" panel asks the tester what happ
     npm install
     npm run dev        # http://localhost:5173
     npm run build      # dist/index.html, one self-contained file
+    npm test           # unit tests (node --test), no extra dependencies
 
 The build is a single `index.html` with everything inlined, so it can later be gzipped and served from the board
 like the current WebUI.
@@ -32,6 +33,7 @@ it sends the real stop (0x18, then `$STOP`) when pressed. The machine needs #113
 | `src/device/` | The device. `simulator.js` holds the machine's state (Maslow state, FluidNC state, tool, job, belts) and asks the tester for every response. `commands.js` maps each action to the firmware command it will send, marked `exists` or `planned`. |
 | `src/flow/` | The setup flow. `screens.js` turns the device's state plus the user's answers into the screen to show (`derive()`), with each screen's mode, subheader and message. `asks.jsx` says what each screen asks for in the top bar and what its buttons do. |
 | `src/ui/` | The screens: desktop layout 6 (`desktop.jsx`), phone layout B (`phone.jsx`), the Settings and Work area pop-ups (`modals.jsx`), shared pieces (`parts.jsx`) and the simulator panel (`sim.jsx`). |
+| `src/gcode/` | The G-code reader (`reader.js`): a file's text → line count, moves and extent, in mm and work coordinates. Framework-free, for job progress, Trace boundary and the preview. Tests next to it: `npm test`. |
 | `src/art.js` | Step graphics and the frame drawing, carried over from the mockup. |
 
 **Swapping in the real device:** the UI only uses `getState()`, `subscribe(fn)` and `send(action, payload)`. A firmware
