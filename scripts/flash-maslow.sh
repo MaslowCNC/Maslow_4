@@ -23,6 +23,9 @@
 # Env: PIO (path to pio; default `pio` on PATH, else ~/.platformio-venv/bin/pio)
 set -euo pipefail
 
+# File size in bytes; stat -c is GNU-only, so use wc -c, which works on macOS too.
+fsize() { wc -c <"$1" | tr -d " "; }
+
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FW="$REPO/firmware"
 ENV_NAME=wifi_s3
@@ -57,10 +60,27 @@ case "$MODE" in
 esac
 
 # ---- Config (*.yaml) backup and restore over HTTP --------------------------------------
+# Requests go to ADDR; messages and backup names keep the TARGET the user gave.
+ADDR="$TARGET"
+resolve_target() {  # .local names can take ~5 s per lookup (macOS), so look up once and use the IPv4 address
+    [[ "$TARGET" == *.local ]] || return 0
+    local ip=""
+    if command -v dscacheutil >/dev/null; then
+        ip="$(dscacheutil -q host -a name "$TARGET" | awk '/^ip_address:/ {print $2; exit}')" || true
+    elif command -v getent >/dev/null; then
+        ip="$(getent ahostsv4 "$TARGET" | awk '{print $1; exit}')" || true
+    fi
+    if [[ -z "$ip" ]] && command -v avahi-resolve >/dev/null; then
+        ip="$(avahi-resolve -4 -n "$TARGET" 2>/dev/null | awk '{print $2; exit}')" || true
+    fi
+    if [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then ADDR="$ip"; echo "== $TARGET is $ADDR"; fi
+}
 reachable() {  # a few tries: the web server or mDNS sometimes misses one request
-    local i; for i in 1 2 3; do curl -s -o /dev/null -m 5 "http://$TARGET/" && return 0; sleep 1; done; return 1
+    # The first try gets longer, in case $ADDR is still a name that is slow to resolve.
+    local i; for i in 1 2 3; do curl -s -o /dev/null -m $((i == 1 ? 10 : 5)) "http://$ADDR/" && return 0; sleep 1; done; return 1
 }
 need_reachable() {
+    resolve_target
     reachable && return 0
     echo "Maslow not reachable at http://$TARGET/." >&2
     echo "If it is hosting its own 'maslow' network, join it and use 192.168.0.1." >&2
@@ -68,7 +88,7 @@ need_reachable() {
     exit 3
 }
 list_yaml() {  # names of *.yaml files in the machine's local filesystem root
-    curl -sf -m 10 "http://$TARGET/files?path=/" |
+    curl -sf -m 10 "http://$ADDR/files?path=/" |
         python3 -c 'import json,sys; [print(f["name"]) for f in json.load(sys.stdin)["files"] if f["name"].endswith(".yaml")]'
 }
 backup_config() {  # sets BACKUP_DIR
@@ -78,27 +98,27 @@ backup_config() {  # sets BACKUP_DIR
     [[ -n "$names" ]] || { echo "No .yaml files on $TARGET" >&2; exit 5; }
     echo "== Backing up config files to $BACKUP_DIR"
     while read -r n; do
-        curl -sf -m 20 -o "$BACKUP_DIR/$n" "http://$TARGET/$n" || { echo "Download of $n failed" >&2; exit 5; }
+        curl -sf -m 20 -o "$BACKUP_DIR/$n" "http://$ADDR/$n" || { echo "Download of $n failed" >&2; exit 5; }
         [[ -s "$BACKUP_DIR/$n" ]] || { echo "Downloaded $n is empty" >&2; exit 5; }
-        echo "   $n ($(stat -c %s "$BACKUP_DIR/$n") bytes)"
+        echo "   $n ($(fsize "$BACKUP_DIR/$n") bytes)"
     done <<< "$names"
-    curl -sf -m 5 "http://$TARGET/command?plain=%24Config%2FFilename" | grep -o 'Config/Filename=.*' > "$BACKUP_DIR/.active" || true
+    curl -sf -m 5 "http://$ADDR/command?plain=%24Config%2FFilename" | grep -o 'Config/Filename=.*' > "$BACKUP_DIR/.active" || true
 }
 restore_config() {  # $1 = backup dir
     local dir="$1" f n
     echo "== Restoring config files from $dir"
     for f in "$dir"/*.yaml; do
         n="$(basename "$f")"
-        curl -sf -m 30 -F "path=/" -F "/${n}S=$(stat -c %s "$f")" -F "myfile[]=@$f;filename=/$n" \
-            "http://$TARGET/files" > /dev/null || { echo "Upload of $n failed. Backup kept in $dir" >&2; exit 6; }
+        curl -sf -m 30 -F "path=/" -F "/${n}S=$(fsize "$f")" -F "myfile[]=@$f;filename=/$n" \
+            "http://$ADDR/files" > /dev/null || { echo "Upload of $n failed. Backup kept in $dir" >&2; exit 6; }
         # Read it back and compare byte for byte
-        if ! curl -sf -m 20 "http://$TARGET/$n" | cmp -s - "$f"; then
+        if ! curl -sf -m 20 "http://$ADDR/$n" | cmp -s - "$f"; then
             echo "$n on the machine does not match the backup. Backup kept in $dir" >&2; exit 6
         fi
         echo "   $n restored and verified"
     done
     echo "== Restarting so the restored config is loaded"
-    curl -s -m 5 "http://$TARGET/command?plain=%5BESP444%5DRESTART" > /dev/null || true
+    curl -s -m 5 "http://$ADDR/command?plain=%5BESP444%5DRESTART" > /dev/null || true
     sleep 5; for _ in $(seq 1 30); do reachable && break; sleep 2; done
     reachable || echo "Warning: machine did not come back after restart" >&2
 }
@@ -165,23 +185,23 @@ wait_back() {
 }
 upload_file() {  # $1 = local file, uploaded to the machine's filesystem root under its basename
     local f="$1" n; n="$(basename "$f")"
-    curl -sf -m 60 -F "path=/" -F "/${n}S=$(stat -c %s "$f")" -F "myfile[]=@$f;filename=/$n" \
-        "http://$TARGET/files" > /dev/null || { echo "Upload of $n failed" >&2; exit 6; }
-    curl -sf -m 60 "http://$TARGET/$n" | cmp -s - "$f" || { echo "$n on the machine does not match" >&2; exit 6; }
+    curl -sf -m 60 -F "path=/" -F "/${n}S=$(fsize "$f")" -F "myfile[]=@$f;filename=/$n" \
+        "http://$ADDR/files" > /dev/null || { echo "Upload of $n failed" >&2; exit 6; }
+    curl -sf -m 60 "http://$ADDR/$n" | cmp -s - "$f" || { echo "$n on the machine does not match" >&2; exit 6; }
     echo "   $n uploaded and verified"
 }
 
 [[ $FS == 1 ]] && backup_config
 
 echo "== Firmware upload to http://$TARGET/updatefw"
-FWSIZE="$(stat -c %s "$BUILD/firmware.bin")"
+FWSIZE="$(fsize "$BUILD/firmware.bin")"
 RESP="$(curl -s -m 300 -F "/firmware.binS=$FWSIZE" -F "myfile[]=@$BUILD/firmware.bin;filename=/firmware.bin" \
-    "http://$TARGET/updatefw")" || { echo "Firmware upload failed (curl). The machine keeps its old firmware." >&2; exit 4; }
+    "http://$ADDR/updatefw")" || { echo "Firmware upload failed (curl). The machine keeps its old firmware." >&2; exit 4; }
 # UploadStatus 3 = SUCCESSFUL (WebUIServer.h); the machine reboots about a second later.
 [[ "$RESP" == *'"status":"3"'* ]] || { echo "Firmware upload rejected: $RESP. The machine keeps its old firmware." >&2; exit 4; }
 echo "== Uploaded; waiting for reboot"
 wait_back || { echo "Machine did not come back after the firmware update." >&2; exit 4; }
-curl -s -m 5 "http://$TARGET/command?plain=%24I" | grep -o 'FluidNC v[^]]*' || true
+curl -s -m 5 "http://$ADDR/command?plain=%24I" | grep -o 'FluidNC v[^]]*' || true
 
 if [[ $FS == 1 ]]; then
     echo "== Uploading filesystem files"
@@ -190,6 +210,6 @@ if [[ $FS == 1 ]]; then
         upload_file "$f"
     done
     [[ $RESET_CONFIG == 1 ]] && { echo "== Restarting to load the default config"
-        curl -s -m 5 "http://$TARGET/command?plain=%5BESP444%5DRESTART" > /dev/null || true; wait_back || true; }
+        curl -s -m 5 "http://$ADDR/command?plain=%5BESP444%5DRESTART" > /dev/null || true; wait_back || true; }
 fi
 echo "Done. Reload the web UI at http://$TARGET/ (a hard refresh) to get the new UI."
