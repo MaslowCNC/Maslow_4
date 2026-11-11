@@ -26,6 +26,16 @@ machine API in [MaslowCNC/Maslow_4#1132](https://github.com/MaslowCNC/Maslow_4/p
   simulator that asks the tester what the machine reported.
 - **Next:** connect the same screens to a real machine through `machine.js` ("What we still need").
 
+**Decided (2026-11-11, from the team meetings):**
+
+- **Maslow Mini and Maslow 4.1 get different setup flows.** The UI checks which machine it's
+  connected to and picks the flow. The Mini has the spindle board (`SpindleBoard:` in its config: the
+  tool beam, Z homing, spindle faults) and no Z steppers; the 4.1 has TMC2209 Z steppers and no
+  spindle board. So the tool and Z-homing steps below are the Mini's; the 4.1's Z flow is still to
+  define. How the UI tells them apart is open (see Open questions).
+- **mo takes the tool state and Z homing** (firmware and UI), because they're part of the Mini
+  flow, which Tristan can't test. Tristan keeps the rest of the firmware work.
+
 ## Goals
 
 1. **Easier to change.** Each part of the screen is a component with clear inputs. A new feature
@@ -230,7 +240,8 @@ arrives. The full table of states, subheaders and actions is the UI modes map.
     takes it out, enters how far it sticks out of the socket, and puts it back. The machine
     detects the bit when it breaks the beam and sets Z from the measurement. No "loaded" button.
 
-  These steps need the tool and spindle fields Tristan is adding.
+  These steps are the Maslow Mini's (its spindle board). They need the tool and spindle-board state,
+  which mo is adding. The 4.1 sets Z with its own steppers; its flow is still to define.
 - **Secure the work piece** asks rather than assumes: the user may have calibrated on top of a
   large enough work piece. Its tip: belts too tight? Release tension, secure it, Apply tension
   again; the belt lengths are kept.
@@ -278,7 +289,7 @@ spindle fault. A hold is cleared with Stop instead. These incidents live in `web
 - **Spindle fault:** the machine holds, ends the job, raises and re-homes Z, and reports
   `READY_TO_CUT` again; the job leaves `STOPPED`. The UI shows **Job: Spindle fault: recovering**,
   with no Run, until recovery finishes, then the tool check. It needs the spindle-board state
-  Tristan is adding, because during recovery the machine already looks ready.
+  mo is adding, because during recovery the machine already looks ready. (Maslow Mini only.)
 - **Emergency stop** comes from the machine's button or an error it detects (such as a belt over
   15 mm off target during a job), never from the UI. Alarm wins over every other state. Motion
   stays blocked until `$X` (Clear error) or a power cycle. Z isn't raised, so the bit may be in the
@@ -389,18 +400,24 @@ them is to agree with Tristan). No firmware change needed:
 | Check for a tool, remove the tool, re-home Z | `$Spindle/Home`, `$Spindle/RemoveTool`, finished from Tristan's new tool field |
 | Reboot | `[ESP444]RESTART` (HTTP), if it belongs in `machine.js` |
 
-**5. In the firmware** (Tristan is taking these on; status report changes are reviewed by him or
-BarbourSmith, and a field sent only while it applies, like `STOPPED`, is preferred):
+**5. In the firmware** (status report changes are reviewed by Tristan or BarbourSmith, and a field
+sent only while it applies, like `STOPPED`, is preferred):
 
-| Need | For |
-|---|---|
-| Tool state and spindle-board state (Z homing, recovering from a fault) | The tool steps and the spindle fault screens. First priority |
-| Find anchors progress, e.g. point n of total | The 11-minute Find anchors step |
-| Why an operation failed, and the alarm reason | The message in the top bar and the Error screen |
-| Done extending | Belts pay out until the user says they're attached |
-| Set Z from the measured stick-out | Measure the tool |
+| Need | For | Who |
+|---|---|---|
+| Tool state and spindle-board state (Z homing, needs homing, recovering from a fault) | The Mini's tool steps and spindle fault screens; refusing jobs while Z can't move (issue 23) | mo |
+| Which machine this is (Maslow Mini or 4.1) | Picking the setup flow | To decide |
+| Find anchors progress, e.g. point n of total | The 11-minute Find anchors step | Tristan |
+| Why an operation failed, and the alarm reason | The message in the top bar and the Error screen | Tristan |
+| Done extending | Belts pay out until the user says they're attached | Tristan |
+| Set Z from the measured stick-out | The Mini's Measure the tool | mo |
 
 ## Open questions
+
+- **Telling the Mini from the 4.1:** the active config file is always `maslow.yaml`, so its name
+  doesn't say. Options: read a setting that only one has (such as the `SpindleBoard` section), the
+  spindle board's link at boot, or a small field or `$` reply from the firmware that names the
+  machine. And what the 4.1's setup flow is, step by step, in place of the Mini's tool steps.
 
 - **Work area and anchors:** should a new work area clear the anchors, and should the firmware
   record that Find anchors succeeded (and for which work area), so setup can skip it safely?

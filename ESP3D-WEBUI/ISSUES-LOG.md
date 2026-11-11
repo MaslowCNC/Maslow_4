@@ -316,6 +316,7 @@ Tested from the new UI (`webui/`, `?device=machine`) on a Maslow Mini.
 |---|---|---|
 | 21 | Firmware: the board rebooted (task watchdog) when a spindle fault followed Stop | open, cause not known |
 | 22 | Spindle: over-current on spin-up again, twice in one job (issue 17) | open |
+| 23 | Firmware: jobs run while the spindle board refuses every Z move ("Needs Homing") | open |
 
 ### 21. The board rebooted (task watchdog) when a spindle fault followed Stop
 
@@ -350,6 +351,24 @@ Tested from the new UI (`webui/`, `?device=machine`) on a Maslow Mini.
 - **Also seen:** `Skipping unsupported GCode: G37; get tool offset with ETS` and `20 (Unsupported GCode
   command) … at line 220`, the tool change at the start of the file, as in issue 20's notes.
 - **To do:** compare `/spindle_trip.csv` with the Nov 6 trip; same file family, same spin-up timing.
+
+### 23. Jobs run while the spindle board refuses every Z move
+
+- **What happened** (legacy UI, afternoon of 2026-11-11): after a spindle over-current, the spindle board
+  sat in `Needs Homing`, and every Z move was refused with `Z move to … deg refused - Z not homed since
+  the over-current stop`. Jobs still started and resumed: `$SD/Run=/rect_80mm_40passes_spinup.gcode` at
+  15:38:07 (`Needs Homing -> Spindle On`), stopped at line 228, resumed at 15:38:45, stopped at line 230,
+  run again at 15:40:51 and stopped at line 232. The spindle turned on each time, but Z never moved, so the
+  file's depths weren't cut. Stop's `Raising Z … to 2.000mm` was refused too.
+- **Then:** Remove tool at 15:42:50 (`Needs Homing -> Unloading Tool`) gave up with `Tool removal: beam
+  still blocked after 150mm - stopping`, so the board didn't wait for a new bit and automatic loading
+  didn't happen. At 15:47 a job started with `Idle - Tool Loaded` and the spindle tripped again 10 s in
+  (`driver over-current`, issue 22).
+- **Fix:** firmware. Refuse to start or resume a job (and say why) while the spindle board needs homing or
+  is in Fault; ideally re-home Z as part of clearing the fault.
+- **New UI must:** know the spindle board's state (the field mo is adding) and block Run and Continue
+  with "Re-home Z first" while it needs homing; until the field exists, this can't be detected without
+  reading log text.
 
 ## Still to test
 
