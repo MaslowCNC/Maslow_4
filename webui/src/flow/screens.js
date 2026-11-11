@@ -1,4 +1,4 @@
-// The screen the UI shows comes from two things (see "Two states the UI has to combine" in REWRITE.md):
+// The screen the UI shows comes from two things (see "Architecture" in ESP3D-WEBUI/REWRITE.md):
 // what the device reports, and what the user has answered or confirmed on this page. derive() is that rule.
 
 export const STEPS = ["Confirm the work area", "Retract belts", "Extend belts", "Apply tension", "Find anchors",

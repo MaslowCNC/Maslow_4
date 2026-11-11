@@ -319,14 +319,14 @@ Held back on 2026-11-06 so we didn't lose a good calibration before trying a cut
 - **Find anchors again,** to see whether the reset in issue 12 happens at the same point.
 - **An OTA upload,** to see whether issue 6 repeats.
 
-## From earlier testing (older firmware, recheck on 3448d81f)
+## From earlier testing (older firmware, recheck on #1132 firmware)
 
-| Issue | Where it's described |
+| Issue | Notes |
 |---|---|
-| Stale state after a reconnect: the page doesn't ask for the state again | Draft PR MaslowCNC/Maslow_4#1129 |
-| PING page ID sent as a raw byte | `REWRITE.md`, Later firmware changes |
-| The UI treats an HTTP "Error" reply as success | `REWRITE.md` |
-| Retract under tension reports success with the belts still out | `REWRITE.md`, When a Setup step goes wrong |
-| Partial belt restore at startup (only TL restored) | `REWRITE.md`, Later firmware changes |
-| `ovf` printed for a waypoint coordinate | `REWRITE.md`, Later firmware changes |
-| Stop in Alarm started a Z raise and stalled the update loop | `REWRITE.md`, Later firmware changes |
+| Stale state after a reconnect: the page doesn't ask for the state again | Fixed in #1131; with #1132 the state is in every status report |
+| PING page ID sent as a raw byte | `sendPing` was rewritten since; #1132 drops the page ID for line commands |
+| The UI treats an HTTP "Error" reply as success | #1132 sends commands over the WebSocket and matches each `ok` / `error:N` |
+| Retract under tension reports success with the belts still out | Finished in under 2 s and zeroed the lengths with the belts about 680 mm out. See `REWRITE.md`, Known machine behaviour |
+| Partial belt restore at startup (only TL restored) | #1132 restores each belt on its own and reports unknown ones as `?` in `BL` |
+| `ovf` printed for a waypoint coordinate | The waypoint coordinate log line prints `ovf` for a number |
+| Stop in Alarm started a Z raise and stalled the update loop | The loop stalled for 2.7 s; Stop shouldn't command Z motion in Alarm |
