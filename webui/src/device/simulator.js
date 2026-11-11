@@ -1,4 +1,5 @@
 import { COMMANDS } from "./commands.js";
+import { restarted, spindleFault } from "../flow/incidents.js";
 
 // A stand-in for the machine. It holds the state the firmware would report and, whenever the real device would
 // answer (a step finishing, a fault, a tool being found), it asks the tester through `pending` instead of guessing.
@@ -39,6 +40,7 @@ function initialState() {
     wco: { x: 0, y: 0, z: 0 },
     files: FILES,
     log: [],
+    incident: null,               // something the user must acknowledge first (flow/incidents.js)
     pending: null                 // the question the simulator is asking the tester
   };
 }
@@ -74,6 +76,7 @@ export function createSimulator() {
   }
 
   const actions = {
+    ackIncident() { set({ incident: null }); },
     connect() { connectQuestion(false); },
     joinNetwork() { set({ hotspot: false }); connectQuestion(false); },
 
@@ -215,7 +218,7 @@ export function createSimulator() {
       ["Spindle fault", () => { log("[MSG:WARN: SpindleBoard: driver over-current (nFAULT retries) - spindle stopped]", "[MSG:INFO: SpindleBoard: machine stopped after the spindle fault - ending the job ($STOP)]");
         set({ fluid: "Idle", spindle: "recovering", lastJob: { file: s.job.file, result: "fault", line: 1240 }, job: null });
         ask("Spindle fault: recovering", "The job ends, Z lifts and re-homes by itself. About 8 s on the machine.", [
-          ["Recovery finished", () => { log("[MSG:INFO: SpindleBoard: Z re-homed after the spindle fault; work Z zero restored - ready to cut]"); set({ spindle: "off", tool: "unknown", pending: null }); }],
+          ["Recovery finished", () => { log("[MSG:INFO: SpindleBoard: Z re-homed after the spindle fault; work Z zero restored - ready to cut]"); set({ spindle: "off", tool: "unknown", pending: null, incident: spindleFault(s.lastJob?.line) }); }],
           ["Recovery failed", () => set({ spindle: "recoveryFailed", pending: null }), "bad"]
         ]); }, "bad"],
       ["Emergency stop (position error)", () => { log("[MSG:ERR: Emergency stop! Stopping all motors]");
@@ -229,7 +232,11 @@ export function createSimulator() {
     reconnect() { connectQuestion(false); },
     emergencyStop() { log("[MSG:ERR: Emergency stop! Stopping all motors]");
       set({ fluid: "Alarm", error: { reason: "Emergency button pressed" }, job: null, motion: null, spindle: "off", pending: null }); },
-    boardReset() { log("Connection reset by the board"); set({ connected: false, pending: null }); setTimeout(() => connected(0, { belts: [0, 0, 0, 0] }), 1500); }
+    boardReset() {
+      const before = s.maslow;
+      log("Connection reset by the board"); set({ connected: false, pending: null });
+      setTimeout(() => connected(0, { belts: [0, 0, 0, 0], incident: [1, 3, 5, 6, 7, 8, 10].includes(before) ? restarted(before, 0) : null }), 1500);
+    }
   };
 
   return {

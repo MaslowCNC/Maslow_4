@@ -105,9 +105,19 @@ function askFor(k, ctx) {
       input: <StockInput value={d.stock} onSecure={n => { mark(7); send("setStock", { stock: n }); setA({ secured: true }); }} /> };
     case "releasing": return { text: "Belts are slack. Secure the work piece, then apply tension again.", buttons: [B("Apply tension", () => send("tension"))] };
     case "choosefile": return { text: "Choose a job file, or upload one.", buttons: [],
-      input: <FilePicker files={d.files} onPick={f => { mark(8); setA({ file: f }); }} onUpload={() => { const f = send("uploadFile"); mark(8); setA({ file: f }); }} /> };
+      input: <FilePicker files={d.files} onPick={f => { mark(8); setA({ file: f }); }}
+        onUpload={() => Promise.resolve(send("uploadFile")).then(f => { if (f) { mark(8); setA({ file: f }); } })} /> };
     case "error": return { text: d.error?.reason || "", buttons: [B("Clear error ($X)", () => send("clearError"))] };
     case "recovery": return { text: "Clear it by re-homing Z. (To be tested on the machine.)", buttons: [B("Re-home Z", () => send("rehomeZ"))] };
+    case "incident": {
+      const i = d.incident;
+      return { text: `${i.title}. ${i.detail} ${i.next}`,
+        // After a spindle fault the tool check runs again, so the page forgets the tool and Z answers
+        buttons: i.clearWithStop ? [stop("Stop to clear")] : [B(i.ack || "Got it", () => {
+          if (i.kind === "spindleFault") setA({ faultSeen: true, zDone: false, measuring: false, stickout: null });
+          send("ackIncident");
+        })] };
+    }
     case "othertab": return { text: "Only one tab per browser can be connected.", buttons: [B("Use this tab", () => send("reconnect"))] };
     case "toomany": return { text: "Close tabs or devices you aren't using.", buttons: [B("Reconnect", () => send("reconnect"))] };
     case "lost": return { text: "Reconnecting automatically. If it doesn't come back, reboot the device or turn it off and on.", buttons: [B("Reboot device", () => send("reboot"), "ghost")] };
@@ -117,12 +127,16 @@ function askFor(k, ctx) {
 
 // The main actions outside setup: Run and its relatives, always next to Stop
 export function mainActions(k, ctx) {
-  const { a, setA, send } = ctx;
+  const { d, a, setA, send } = ctx;
   const B = (label, onClick, style = "") => ({ label, onClick, style });
+  // Trace boundary needs the job's outline from the G-code preview, which the real machine page doesn't have yet
+  const trace = d.notYet?.trace
+    ? { ...B("Trace boundary", () => {}, "ghost"), disabled: true, title: d.notYet.trace }
+    : B("Trace boundary", () => send("trace"), "ghost");
   switch (k) {
-    case "ready": return [B("Trace boundary", () => send("trace"), "ghost"), B(`Run ${a.file}`, () => setA({ finalCheck: true }), "go")];
+    case "ready": return [trace, B(`Run ${a.file}`, () => setA({ finalCheck: true }), "go")];
     case "stopped": return [B("Run from the start", () => setA({ stoppedSeen: true, finalCheck: true }), "ghost"),
-      B("Continue from line 1,240", () => { setA({ stoppedSeen: true }); send("continueJob"); }, "go")];
+      B(`Continue from line ${(d.lastJob?.line ?? 0).toLocaleString()}`, () => { setA({ stoppedSeen: true }); send("continueJob"); }, "go")];
     default: return [];
   }
 }

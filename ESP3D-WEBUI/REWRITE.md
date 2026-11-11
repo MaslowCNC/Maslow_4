@@ -262,6 +262,19 @@ fault recovery; not after a finished or stopped job, or releasing and re-applyin
 
 ### Faults and errors
 
+**Acknowledge first.** When something happens that the user has to act on, the page doesn't jump
+straight to the next step. It shows an Error screen that says what happened and what comes next, and
+waits until the user acknowledges it ("Got it"). Then the flow carries on from the machine's state:
+setup again after a restart, Job stopped (with Continue) after a job error, the tool check after a
+spindle fault. A hold is cleared with Stop instead. These incidents live in `webui/src/flow/incidents.js`:
+
+| Incident | Raised when | After acknowledging |
+|---|---|---|
+| The machine restarted | The page reconnects and the machine is back in an earlier setup state than it left (a boot restores Belts retracted or Belts extended at best) | Setup again, from the step the state calls for |
+| The job stopped on an error | A job ends on an error in the file | Job stopped: continue from the line, or run from the start |
+| The spindle tripped | The spindle faulted and the machine ended the job and re-homed Z (simulator now; the real machine once the spindle field exists) | The tool check, then Job stopped |
+| The machine is holding | Held with no job running | Cleared with Stop |
+
 - **Spindle fault:** the machine holds, ends the job, raises and re-homes Z, and reports
   `READY_TO_CUT` again; the job leaves `STOPPED`. The UI shows **Job: Spindle fault: recovering**,
   with no Run, until recovery finishes, then the tool check. It needs the spindle-board state

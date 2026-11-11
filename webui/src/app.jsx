@@ -59,6 +59,8 @@ export function App() {
   useEffect(() => { if (d.maslow === 1) setA({ retractChecked: false }); }, [d.maslow]);
   // Tension is back on after releasing it to secure the work piece
   useEffect(() => { if (d.maslow === 7 && a.securing) setA({ securing: false }); }, [d.maslow]);
+  // A job starting means any earlier stop or fault has been dealt with, so the next one shows again
+  useEffect(() => { if (d.job) setA({ stoppedSeen: false, faultSeen: false }); }, [!!d.job]);
   // A new job starts with a fresh final check
   useEffect(() => { if (k !== "finalcheck") setChecks(FINAL_CHECKS.map(() => false)); }, [k === "finalcheck"]);
 

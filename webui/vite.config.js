@@ -27,7 +27,8 @@ export default defineConfig(async ({ command }) => {
       proxy: machine ? {
         "/ws": { target: `ws://${machine}`, ws: true, rewrite: () => "/" },   // the firmware's socket is at "/"
         "/upload": { target: `http://${machine}` },
-        "/command": { target: `http://${machine}` }
+        "/command": { target: `http://${machine}` },
+        "/SD": { target: `http://${machine}` }   // file contents, to count a job's lines
       } : undefined
     }
   };

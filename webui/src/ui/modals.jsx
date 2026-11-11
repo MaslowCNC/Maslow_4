@@ -23,7 +23,7 @@ const Row = ({ label, hint, children }) =>
 // Every device action, always in the same order. The ones the device can't do right now are greyed out,
 // and the ? says what each does and why it might be off.
 const ACT = [
-  ["retract", "Retract belts", "Winds all four belts in until they meet resistance. The belt lengths reset to zero."],
+  ["retract", "Retract belts", "Winds all four belts in until they meet resistance. Unhook the belts from the anchors first. The belt lengths reset to zero."],
   ["extend", "Extend belts", "Lets the belts pay out so you can pull them to the anchors and attach them."],
   ["tension", "Apply tension", "Takes up the slack and checks the position against the saved anchors."],
   ["release", "Release tension", "Slackens the belts a little so you can reach the work piece. The belt lengths are kept."],
@@ -42,11 +42,13 @@ function available(k, d) {
     case 0: return ["retract", "reboot"];
     case 2: return ["extend", "retract", "reboot"];
     case 4: return ["tension", "findAnchors", "retract", "reboot"];
-    case 7: return ["release", "toolCheck", "findAnchors", "retract", "reboot"];
+    // No Retract while the belts are tight: retracting under tension gives a false zero (ISSUES-LOG). Release first.
+    case 7: return ["release", "toolCheck", "findAnchors", "reboot"];
+    case 10: return ["findAnchors", "tension", "release", "reboot"];
   }
   return ["reboot"];
 }
-const NEED = { retract: "", extend: "Only once the belts are retracted.", tension: "Only once the belts are extended or tension was released.",
+const NEED = { retract: "Not while the belts are tight: release tension first.", extend: "Only once the belts are retracted.", tension: "Only once the belts are extended or tension was released.",
   release: "Only while the belts are tensioned.", findAnchors: "Only once the belts are extended or tensioned.", toolCheck: "Only once the position is confirmed.",
   clearError: "Only after an error.", reboot: "", stop: "Nothing is moving." };
 

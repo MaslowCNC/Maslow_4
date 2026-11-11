@@ -5,7 +5,7 @@ import { stepArt, visSvg } from "../art.js";
 // A top-bar button. b.temp marks one that exists only until the firmware rewrite is finished: it shows orange,
 // tagged "Temporary", and its tooltip says what it's waiting for. Every stopgap like this should use it.
 export const Btn = ({ b }) => <button class={`btn ${b.style}${b.temp ? " temp" : ""}`} type="button" onClick={b.onClick}
-  disabled={b.disabled} title={b.temp ? `Temporary: ${b.temp}` : undefined}>{b.label}{b.temp && <span class="temptag">Temporary</span>}</button>;
+  disabled={b.disabled} title={b.temp ? `Temporary: ${b.temp}` : b.title}>{b.label}{b.temp && <span class="temptag">Temporary</span>}</button>;
 
 export const Svg = ({ html, class: c }) => <span class={c} dangerouslySetInnerHTML={{ __html: html }} />;
 
@@ -60,6 +60,10 @@ export function jogLock(k, d) {
   return null;
 }
 
+// A button whose action the device may not support yet (d.notYet): then it's disabled and says why
+const NotYetBtn = ({ d, id, label, send }) => <button class="btn ghost" type="button" disabled={!!d.notYet?.[id]}
+  title={d.notYet?.[id]} onClick={() => send(id)}>{label}</button>;
+
 const STEP_SIZES = [0.1, 1, 10];
 export function JogPad({ k, d, send }) {
   // A step size is one of the presets, or "custom": the user's own value from the box at the end
@@ -82,9 +86,9 @@ export function JogPad({ k, d, send }) {
       <button type="button" aria-label="Down right" onClick={() => j(1, -1)}>↘</button>
     </div>
     <PosReadout d={d} nopos={!!lock && SCREENS[k].nopos} />
-    <div class="row"><button class="btn ghost" type="button" onClick={() => send("setHomeXY")}>Set home XY</button>
-      <button class="btn ghost" type="button" onClick={() => send("setZ")}>Set Z</button></div>
-    <div class="row"><button class="btn ghost" type="button" onClick={() => send("park")}>Park</button></div>
+    <div class="row"><NotYetBtn d={d} id="setHomeXY" label="Set home XY" send={send} />
+      <NotYetBtn d={d} id="setZ" label="Set Z" send={send} /></div>
+    <div class="row"><NotYetBtn d={d} id="park" label="Park" send={send} /></div>
     {lock && <div class="locked"><div><b>{lock[0]}</b><span>{lock[1]}</span></div></div>}
   </div>;
 }
@@ -97,8 +101,10 @@ export function DetailsBody({ k, d, a }) {
   const file = d.files.find(f => f.name === (d.job?.file || a.file));
   let body;
   if (tab === "job") {
-    body = d.job ? <><div class="bar"><i style="width:38%"></i></div>
-      <dl class="kv"><dt>File</dt><dd>{d.job.file}</dd><dt>Line</dt><dd>{d.job.line} / {d.job.total}</dd><dt>Progress</dt><dd>needs a firmware report (issue 19)</dd></dl></>
+    const pct = d.job && Number(d.job.total) > 0 ? Math.min(100, Math.round(100 * d.job.line / d.job.total)) : null;
+    body = d.job ? <><div class="bar"><i style={`width:${pct ?? 0}%`}></i></div>
+      <dl class="kv"><dt>File</dt><dd>{d.job.file}</dd><dt>Line</dt><dd>{d.job.line} / {d.job.total}</dd>
+        <dt>Progress</dt><dd>{pct == null ? "counting the file's lines…" : `${pct}% of the lines`}</dd></dl></>
       : file ? <dl class="kv"><dt>File</dt><dd>{file.name}</dd><dt>Size</dt><dd>{file.w} × {file.h} mm</dd><dt>Est. time</dt><dd>{file.minutes} min</dd><dt>Depth</dt><dd>{file.depth} mm</dd></dl>
       : <p class="note">No job yet. Stats show here once a file is chosen and running.</p>;
   } else if (tab === "belts") {
@@ -133,7 +139,7 @@ export function FilesBody({ k, d, a, setA, send, mark }) {
   const locked = SCREENS[k].mode === "Job";
   return <>
     <div class="row"><button class="btn ghost" type="button" disabled={locked}
-      onClick={() => { const f = send("uploadFile"); if (a.file || isSetup(k)) { mark(8); setA({ file: f }); } }}>Upload file</button></div>
+      onClick={() => Promise.resolve(send("uploadFile")).then(f => { if (f && (a.file || isSetup(k))) { mark(8); setA({ file: f }); } })}>Upload file</button></div>
     <ul class="files">{d.files.map(f =>
       <li class={f.name === a.file ? "sel" : ""}><button type="button" class="fbtn" disabled={locked} onClick={() => { mark(8); setA({ file: f.name }); }}>
         <span>{f.name}</span><span>{f.size}</span></button></li>)}</ul>

@@ -7,6 +7,8 @@
 // "starting", then nothing (done) or why it failed. The screen itself still comes from the machine's state, so
 // every connection shows the same thing. Jogging, files, jobs and the tool steps come next.
 
+import { restarted, jobFailed, holding } from "../flow/incidents.js";
+
 // What the firmware's close codes mean (WSChannel.h). For these the page shows a notice and doesn't reconnect.
 const CLOSE_NOTICES = { 4001: "othertab", 4002: "toomany" };
 const RECONNECT_MS = 3000;
@@ -21,7 +23,13 @@ const ACTIONS = {
   release: "releaseTension", findAnchors: "calibrate"
 };
 
+// Jog speeds, as the current UI's defaults (prefDefs.js: xy_feedrate, z_feedrate)
+const JOG_FEED = { xy: 2500, z: 300 };
+
 const time = () => new Date().toTimeString().slice(0, 8);
+const baseName = (path) => String(path || "").split("/").pop();
+// The status report names a running file as /sd/<path>; the web server serves the SD card under /SD/
+const sdUrl = (path) => `/SD/${String(path).replace(/^\/?sd\//i, "").replace(/^\//, "")}`;
 const kb = (bytes) => (bytes == null ? "" : `${Math.max(1, Math.round(bytes / 1024))} KB`);
 
 export function createMachine({ host = location.host } = {}) {
@@ -30,9 +38,16 @@ export function createMachine({ host = location.host } = {}) {
   let ws = null;
   let s = {
     connected: false, everConnected: false, hotspot: false, connectId: 0, closed: null, readOnly: false,
+    incident: null,          // something the user must acknowledge before the flow goes on (flow/incidents.js)
     op: null,                // { action, phase: "starting" | "running" | "failed", detail, maslowAt } for this page's last action
     beltsKnown: 0,           // how many belt lengths the machine knows (BL "?" = unknown)
     toolSteps: false,        // the tool check, measure and load aren't connected yet (they need the tool field)
+    notYet: {                // actions this page can't send yet, and why; their buttons are disabled with the reason
+      setHomeXY: "Needs a machine.js action (G10 L20), to add with Tristan",
+      setZ: "Needs a machine.js action (G10 L20), to add with Tristan",
+      park: "Needs a machine.js action, to add with Tristan",
+      trace: "Needs the G-code preview for the job's outline"
+    },
     maslow: null, fluid: "", statusSeen: false,
     tool: "unknown", settingZ: false, zSetCount: 0, spindle: "off", error: null,
     job: null, lastJob: null, motion: null, result: null, restored: false,
@@ -41,6 +56,20 @@ export function createMachine({ host = location.host } = {}) {
     pos: { x: 0, y: 0, z: 0 }, wco: { x: 0, y: 0, z: 0 },
     files: [], log: [], pending: null
   };
+
+  // Job progress: the report's SD percent is bytes read, not progress (issue 19), so progress is the running line
+  // out of the file's line count. The file is read once from the SD card when its job first shows up.
+  const lines = {};   // file path → line count, or "?" while it's being counted
+  function lineCount(path) {
+    if (!path) return "?";
+    if (lines[path] == null) {
+      lines[path] = "?";
+      fetch(sdUrl(path)).then(r => r.ok ? r.text() : Promise.reject(new Error(`HTTP ${r.status}`)))
+        .then(t => { lines[path] = t.split("\n").length; if (s.job) set({ job: { ...s.job, total: lines[path] } }); })
+        .catch(e => { log(`Couldn't read ${baseName(path)} to count its lines: ${e.message}`); emit(); });
+    }
+    return lines[path];
+  }
 
   const emit = () => listeners.forEach(fn => fn(s));
   const set = (patch) => { s = { ...s, ...patch }; emit(); };
@@ -52,13 +81,17 @@ export function createMachine({ host = location.host } = {}) {
     const alarm = ms.grbl === "Alarm";
     // A failure message belongs to the state it happened in: once the machine moves on, drop it
     const op = s.op?.phase === "failed" && ms.maslow !== s.op.maslowAt ? null : s.op;
+    // Held with no job running and nothing of ours in progress: the user has to clear it with Stop
+    let incident = s.incident;
+    if (ms.grbl === "Hold" && !ms.job && !op && !incident) incident = holding();
+    if (incident?.kind === "holding" && ms.grbl !== "Hold") incident = null;
     return {
-      op, beltsKnown: [b.tl, b.tr, b.bl, b.br].filter(v => v != null).length,
+      incident, op, beltsKnown: [b.tl, b.tr, b.bl, b.br].filter(v => v != null).length,
       maslow: ms.maslow, fluid: ms.grbl,
       pos: ms.mpos || s.pos, wco: ms.wco || s.wco,
       belts: [b.tl, b.tr, b.bl, b.br].map(v => v ?? 0),
       motorCurrent: ms.motorCurrent,
-      job: ms.job ? { file: ms.job.file, line: ms.job.line ?? 0, total: "?", running: true } : null,
+      job: ms.job ? { file: baseName(ms.job.file), line: ms.job.line ?? 0, total: lineCount(ms.job.file), running: true } : null,
       lastJob: ms.stopped ? { file: ms.stopped.file, result: "stopped", line: ms.stopped.line } : null,
       error: alarm ? (s.error || { reason: "The machine is in Alarm" }) : null
     };
@@ -103,7 +136,7 @@ export function createMachine({ host = location.host } = {}) {
       globalThis.wsCommands.handleLine(line);
       m.handleLine(line);
       if (line.startsWith("<")) {
-        if (!s.statusSeen) s = { ...s, statusSeen: true };
+        if (!s.statusSeen) { s = { ...s, statusSeen: true }; checkRestart(); }
       } else if (line !== "ok" && line !== "PING") {
         if (line.startsWith("ALARM:") || line.startsWith("[MSG:ERR:")) s = { ...s, error: { reason: line } };
         log(line);
@@ -111,6 +144,19 @@ export function createMachine({ host = location.host } = {}) {
     }
     health();
     emit();
+  }
+
+  // A restart happened if the machine comes back in an earlier setup state than it was in when the connection
+  // dropped: a boot restores RETRACTED or EXTENDEDOUT at best, never tension or a running step.
+  let beforeDrop = null;   // Maslow state when the socket last closed
+  const TENSIONED_OR_BUSY = [1, 3, 5, 6, 7, 8, 10];
+  function checkRestart() {
+    const after = m.state.maslow;
+    if (beforeDrop != null && TENSIONED_OR_BUSY.includes(beforeDrop) && [0, 2, 4].includes(after) && after !== beforeDrop) {
+      s = { ...s, incident: restarted(beforeDrop, after), op: null };
+      log(`The machine restarted: it was in state ${beforeDrop}, now ${after}`);
+    }
+    beforeDrop = null;
   }
 
   function connect() {
@@ -135,6 +181,7 @@ export function createMachine({ host = location.host } = {}) {
     };
     ws.onmessage = (e) => onData(e.data);
     ws.onclose = (e) => {
+      if (s.statusSeen && s.maslow != null) beforeDrop = s.maslow;
       log(`Disconnected (${e.code}${e.reason ? `: ${e.reason}` : ""})`);
       const notice = CLOSE_NOTICES[e.code];
       set({ connected: false, statusSeen: false, closed: notice || null });
@@ -154,12 +201,54 @@ export function createMachine({ host = location.host } = {}) {
     connect();
   }
 
-  // Run a machine.js action and follow its Operation in state.op
-  function run(action, name) {
+  // Upload a file the user picks to the SD card, the way the current UI does (POST /upload). Resolves with its
+  // name once it's on the card, or null if the user cancels.
+  function uploadFile() {
+    return new Promise((resolve) => {
+      const input = Object.assign(document.createElement("input"), { type: "file", accept: ".nc,.gcode,.gc,.ngc,.tap,.txt" });
+      input.onchange = async () => {
+        const f = input.files[0];
+        if (!f) return resolve(null);
+        const form = new FormData();
+        form.append("path", "/");
+        form.append(`/${f.name}S`, String(f.size));
+        form.append("myfile[]", f, `/${f.name}`);
+        log(`Uploading ${f.name}`);
+        emit();
+        try {
+          const r = await fetch("/upload", { method: "POST", body: form });
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          log(`${f.name} uploaded`);
+          await listFiles();
+          resolve(f.name);
+        } catch (e) {
+          log(`Upload of ${f.name} failed: ${e.message}`);
+          emit();
+          resolve(null);
+        }
+      };
+      input.click();
+    });
+  }
+
+  async function setStock(stock) {
+    try {
+      await m.setSetting(SETTINGS.stock, stock);
+      await m.saveConfig();
+      log(`Stock thickness saved: ${stock} mm`);
+      set({ stock });
+    } catch (err) {
+      log(`Couldn't save the stock thickness: ${err.detail || err.reason}`);
+      emit();
+    }
+  }
+
+  // Run a machine.js action and follow its Operation in state.op. start() returns the Operation.
+  function run(action, start) {
     s = { ...s, op: { action, phase: "starting", maslowAt: s.maslow } };
     log(`${action}: sent`);
     emit();
-    const op = m[name]();
+    const op = typeof start === "string" ? m[start]() : start();
     const mine = () => s.op?.action === action;   // a later action replaces this one
     op.accepted.then(() => { if (mine() && s.op.phase === "starting") set({ op: { ...s.op, phase: "running" } }); }, () => {});
     op.then(
@@ -169,14 +258,36 @@ export function createMachine({ host = location.host } = {}) {
         if (err.reason === "reset") { if (mine()) set({ op: null }); return; }
         const detail = err.detail || err.reason;
         log(`${action}: ${detail}`);
+        // A job that ended on an error is an incident to acknowledge, not just a message
+        if ((action === "run" || action === "continueJob") && err.reason === "failed") {
+          set({ op: null, incident: jobFailed(detail, m.state.stopped?.line) });
+          return;
+        }
         if (mine()) set({ op: { action, phase: "failed", detail, maslowAt: s.maslow } }); else emit();
       });
   }
 
-  function send(action) {
+  function send(action, payload = {}) {
     if (action === "connect") { if (!m) start(); return; }
     if (action === "reconnect") { connect(); return; }
     if (!m) return;
+    if (action === "run") { run("run", () => m.runFile(`/${payload.file}`)); return; }
+    if (action === "continueJob") {
+      const st = m.state.stopped;
+      if (st) run("continueJob", () => m.resumeFile(st.file, st.line));
+      return;
+    }
+    if (action === "uploadFile") return uploadFile();
+    if (action === "ackIncident") { set({ incident: null }); return; }
+    if (action === "setStock") { setStock(payload.stock); return; }
+    if (action === "jog") {
+      const delta = Object.fromEntries([["x", payload.dx], ["y", payload.dy], ["z", payload.dz]].filter(([, v]) => v));
+      if (!Object.keys(delta).length) return;
+      const feed = delta.x || delta.y ? JOG_FEED.xy : JOG_FEED.z;
+      const op = m.jog(delta, { feed });
+      op.catch(err => { if (err.reason !== "reset") { log(`Jog: ${err.detail || err.reason}`); emit(); } });
+      return;
+    }
     if (action === "stop") {
       s = { ...s, op: null };
       m.stop().catch(err => { log(`Stop: ${err.detail || err.reason}`); emit(); });
@@ -190,7 +301,7 @@ export function createMachine({ host = location.host } = {}) {
     }
     // Everything else comes in the next steps
     if (["toolCheck", "watchForTool", "setZFromStickout"].includes(action)) return;   // automatic, not a user press
-    log(`Not sent: ${action} (not connected yet)`);
+    log(`Not sent: ${action} (${s.notYet[action] || "not connected yet"})`);
     emit();
   }
 

@@ -308,6 +308,49 @@ Also seen while starting the job: `Slow command took 128 ms: $sd/run=…`, `Curr
 `20 (Unsupported GCode command) … at line 215`, probably a tool change the firmware doesn't support.
 Worth checking what line 215 is.
 
+## Session 2026-11-11, firmware firmwareRewrite ab0650f5 (Maslow-Main with #1132)
+
+Tested from the new UI (`webui/`, `?device=machine`) on a Maslow Mini.
+
+| # | Area | Status |
+|---|---|---|
+| 21 | Firmware: the board rebooted (task watchdog) when a spindle fault followed Stop | open, cause not known |
+| 22 | Spindle: over-current on spin-up again, twice in one job (issue 17) | open |
+
+### 21. The board rebooted (task watchdog) when a spindle fault followed Stop
+
+- **What happened:** a job (`50 mm circle 14 depth 12 passes_oct21.gcode`) was continued from line 223
+  after a spindle fault, then stopped from the new UI at 12:14:03 (0x18, then `$STOP`). The firmware
+  logged `Job stopped at line 1163`, the restart banner, and `Raising Z from work Z -4.670mm to 2.000mm`.
+  At 12:14:04 the spindle tripped again (`driver over-current (nFAULT retries)`, fault 2), with `Z move to
+  23.0 deg refused - Z not homed since the over-current stop` and `job paused because the spindle stopped`.
+  `$STOP` got no reply for 6.5 s. At about 12:14:09 every connection dropped (`Connection reset by peer`
+  on telnet, close 1006 on the WebSocket).
+- **Evidence:** `$SS` afterwards showed `Showing startup log from previous panic` and
+  `Reset reason: task watchdog (6)`. The machine came back as `EXTENDEDOUT` (state 4), as any boot does,
+  with the work Z offset reset to 0 (it was −9), in `Hold:0` at first. At 12:14:44:
+  `spindle fault recovery timed out (state 5) - press Stop, then re-home the Z before cutting`. A Stop at
+  12:15:41 logged `Failed to raise Z: System Reset` and `Z not homed since the over-current stop`.
+- **Cause, not known:** the spindle fault recovery (feed hold, then `$STOP`, then Z re-home) started while
+  Stop's own `$STOP` and Z raise were running, and some task stopped feeding the watchdog. The recovery
+  also restarted after the reboot, because the spindle board still reported the fault.
+- **Fix:** firmware (Tristan). Don't start the spindle fault recovery while a Stop is in progress, or let
+  it take over cleanly; find which task starved the watchdog.
+- **New UI must:** say the machine restarted and why it matters (tension released, work Z offset lost,
+  setup again from Apply tension), and let the user acknowledge it before setup resumes. See
+  "Faults and errors" in `REWRITE.md`.
+
+### 22. Spindle over-current on spin-up, twice in one job
+
+- **What happened:** 1 s after the spindle started (`Idle - Tool Loaded -> Spindle On`, 12:12:36),
+  `driver over-current (nFAULT retries)`, fault 2, before the bit reached the work. The recovery worked
+  (job stopped at line 223, Z re-homed, `work Z zero restored (-9.000 mm) - ready to cut`), and Continue
+  from line 223 cut for about 50 s. The second trip came 1 s after Stop (issue 21). Trip recordings were
+  saved to `/spindle_trip.csv` on the machine.
+- **Also seen:** `Skipping unsupported GCode: G37; get tool offset with ETS` and `20 (Unsupported GCode
+  command) … at line 220`, the tool change at the start of the file, as in issue 20's notes.
+- **To do:** compare `/spindle_trip.csv` with the Nov 6 trip; same file family, same spin-up timing.
+
 ## Still to test
 
 Held back on 2026-11-06 so we didn't lose a good calibration before trying a cut:

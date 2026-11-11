@@ -19,6 +19,7 @@ export const T = { setup: "var(--setup)", ready: "var(--ready)", job: "var(--job
 export const SCREENS = {
   connecting: { mode: "Connecting", tone: T.wait, sub: "", msg: "Waiting for the device to report its state", stale: true },
   lost: { mode: "Error", tone: T.error, sub: "Not responding", alert: true, stale: true, msg: "No reply from the device. Values shown are out of date" },
+  incident: { mode: "Error", tone: T.error, sub: "Needs your attention", alert: true, nopos: true, msg: "Something happened that you need to know about" },
   othertab: { mode: "Error", tone: T.error, sub: "Connected in another tab", alert: true, stale: true, msg: "This machine is now connected in another tab of this browser. Only one tab per browser can be connected" },
   toomany: { mode: "Error", tone: T.error, sub: "Too many connections", alert: true, stale: true, msg: "The machine has 4 connections, and a newer one took this tab's place. Close tabs or devices you aren't using, then reconnect" },
   wifi: { mode: "Connecting", tone: T.wait, sub: "WiFi setup", nopos: true, msg: "Connected through the Maslow hotspot. Choose a network for the device to join" },
@@ -65,6 +66,7 @@ export const SCREENS = {
 export function derive(d, a) {
   if (d.closed) return d.closed;   // the firmware closed this socket on purpose: "othertab" or "toomany"
   if (!d.connected) return d.everConnected ? "lost" : "connecting";
+  if (d.incident) return "incident";   // acknowledge first, then the flow carries on from the machine's state
   if (d.hotspot) return "wifi";
   if (d.fluid === "Alarm") return "error";
   if (d.spindle === "recoveryFailed") return "recovery";
