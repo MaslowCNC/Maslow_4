@@ -25,7 +25,7 @@ public:
         float to       = 1600;  // highest current level, raw ADC
         float step     = 200;   // step between levels, raw ADC
         float holdS    = 5;     // seconds each level is held and averaged (read the scale then)
-        float settleS  = 2;     // seconds to reach each level before the hold
+        float settleS  = 2;     // least seconds before the hold; it also waits (up to 15 s more) for the current to be on target with the belt still
         float moveMm   = 15;    // halt if the belt moves further than this from where it started
         float maxAdc   = 2000;  // halt if the measured current goes above this
         float maxS     = 300;   // halt after this many seconds in all
@@ -48,6 +48,7 @@ private:
     void halt(const char* reason);
     void finish();
     void beginLevel();
+    static bool onTarget(double current, double target);
     void logStep();
     bool checkSafety(double current, double pos);
 
@@ -63,6 +64,9 @@ private:
     double        _pwm        = 0;
     double        _startPos   = 0;
     double        _baseline   = 0;
+    double        _lastPos    = 0;
+    double        _speed      = 0;  // belt speed, mm/s, smoothed
+    unsigned long _stableSince = 0;  // millis() the current came on target with the belt still
 
     // Sums over the current phase (baseline or hold)
     int    _n      = 0;

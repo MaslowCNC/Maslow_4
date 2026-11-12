@@ -20,7 +20,18 @@ static constexpr unsigned long TICK_MS     = 20;   // controller period
 static constexpr unsigned long BASELINE_MS = 500;  // motor off, to record the zero-current reading
 static constexpr double        PWM_MAX     = 1023;
 static constexpr double        GAIN        = 0.04;  // PWM per ADC count of error, per tick
-static constexpr double        PWM_SLEW    = 20;    // most the PWM changes in one tick
+// The PWM rises slowly and not at all while the belt moves.  Pulling against a spring scale the
+// belt has to reel in a few mm before the force builds; a moving motor draws less current, so a
+// loop that kept raising the PWM then would overshoot hard when the spring took the load.
+static constexpr double        PWM_RISE    = 2;     // most the PWM rises in one tick (100/s)
+static constexpr double        PWM_FALL    = 20;    // most the PWM falls in one tick
+static constexpr double        MOVING_MM_S = 2.0;   // belt speed above which the PWM isn't raised
+static constexpr double        SPEED_ALPHA = 0.3;   // smoothing of the belt speed, per tick
+
+// A level's hold starts once the settle time has passed and the current has been on target with
+// the belt still for STILL_MS, or after SETTLE_EXTRA_S more if that never happens
+static constexpr unsigned long STILL_MS       = 500;
+static constexpr float         SETTLE_EXTRA_S = 15;
 
 // A dead current sense (TL's on a bad board reads 0 always) must not ramp the motor to full power
 static constexpr double        DEAD_PWM   = 300;
@@ -237,7 +248,9 @@ void TensionTest::update() {
             char buf[120];
             snprintf(buf, sizeof(buf), "TCT baseline arm=%s adc=%.1f mA=%.1f", ARM_NAMES[_p.arm], _baseline, adcToMa(_baseline));
             log_info(buf);
-            _level = 0;
+            _level   = 0;
+            _lastPos = pos;
+            _speed   = 0;
             beginLevel();
         }
         return;
@@ -245,10 +258,21 @@ void TensionTest::update() {
 
     // Integral control of the PWM on the measured current, pulling the belt in
     double target = _levels[_level];
+    _speed        = SPEED_ALPHA * (pos - _lastPos) / (TICK_MS / 1000.0) + (1 - SPEED_ALPHA) * _speed;
+    _lastPos      = pos;
+    bool   moving = std::fabs(_speed) > MOVING_MM_S;
     double delta  = GAIN * (target - current);
-    delta         = constrain(delta, -PWM_SLEW, PWM_SLEW);
+    delta         = constrain(delta, -PWM_FALL, moving ? 0.0 : PWM_RISE);
     _pwm          = constrain(_pwm + delta, 0.0, PWM_MAX);
     axis.driveIn(int(_pwm + 0.5));
+
+    if (!moving && onTarget(current, target)) {
+        if (_stableSince == 0) {
+            _stableSince = now;
+        }
+    } else {
+        _stableSince = 0;
+    }
 
     // Full PWM and still short of the target: a stuck sense, a bad driver, or a level too high
     if (_pwm >= PWM_MAX && current < 0.9 * target) {
@@ -263,7 +287,9 @@ void TensionTest::update() {
     }
 
     if (_phase == Phase::Settle) {
-        if (now - _phaseStart >= (unsigned long)(_p.settleS * 1000)) {
+        unsigned long waited = now - _phaseStart;
+        bool          ready  = waited >= (unsigned long)(_p.settleS * 1000) && _stableSince != 0 && now - _stableSince >= STILL_MS;
+        if (ready || waited >= (unsigned long)((_p.settleS + SETTLE_EXTRA_S) * 1000)) {
             _phase      = Phase::Hold;
             _phaseStart = now;
             _n          = 0;
@@ -273,14 +299,16 @@ void TensionTest::update() {
             char buf[160];
             snprintf(buf,
                      sizeof(buf),
-                     "TCT read arm=%s step=%d/%d dir=%s target_adc=%.0f target_mA=%.1f hold_s=%.1f",
+                     "TCT read arm=%s step=%d/%d dir=%s target_adc=%.0f target_mA=%.1f hold_s=%.1f settle_s=%.1f on_target=%d",
                      ARM_NAMES[_p.arm],
                      _level + 1,
                      _levelCount,
                      (_p.down && _level > 0 && _levels[_level] < _levels[_level - 1]) ? "down" : "up",
                      target,
                      adcToMa(target),
-                     _p.holdS);
+                     _p.holdS,
+                     waited / 1000.0,
+                     ready ? 1 : 0);
             log_info(buf);
         }
         return;
@@ -332,8 +360,13 @@ bool TensionTest::checkSafety(double current, double pos) {
 }
 
 void TensionTest::beginLevel() {
-    _phase      = Phase::Settle;
-    _phaseStart = millis();
+    _phase       = Phase::Settle;
+    _phaseStart  = millis();
+    _stableSince = 0;
+}
+
+bool TensionTest::onTarget(double current, double target) {
+    return std::fabs(current - target) <= std::max(10.0, 0.05 * target);
 }
 
 void TensionTest::logStep() {
@@ -345,7 +378,7 @@ void TensionTest::logStep() {
     double     pos  = axis.getPosition();
     double     tgt  = _levels[_level];
     bool       dn   = _p.down && _level > 0 && _levels[_level] < _levels[_level - 1];
-    bool       ok   = std::fabs(mean - tgt) <= std::max(10.0, 0.05 * tgt);
+    bool       ok   = onTarget(mean, tgt);
     char       buf[300];
     snprintf(buf,
              sizeof(buf),

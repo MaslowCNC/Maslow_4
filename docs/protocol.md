@@ -320,16 +320,18 @@ plus a log line `Motion is disabled: <reason>` when Maslow has blocked motion.
 
 **Belt tension / current test (`$TCT`).** Hook one belt to a scale anchored to the frame, belt
 taut, and run e.g. `$TCT=BR`. The motor pulls in, closed loop on its measured current (raw ADC,
-the `MC` units), through levels `from`, `from+step`, … `to` and back down to `from`, settling at
-each for `settle` s and then holding for `hold` s while the current is averaged. Read the scale
-during each hold. Accepted only when Idle and in Maslow state 0, 2 or 4 (release tension first);
+the `MC` units), through levels `from`, `from+step`, … `to` and back down to `from`. At each level
+it settles for at least `settle` s, until the current is on target (within 5 %) with the belt
+still for 0.5 s (giving up after 15 s more), then holds for `hold` s while the current is
+averaged. Read the scale during each hold. The motor power rises slowly (100 PWM/s) and not at
+all while the belt is moving, so taking up slack or stretching a spring scale doesn't overshoot. Accepted only when Idle and in Maslow state 0, 2 or 4 (release tension first);
 runs in the Homing state.
 
 | Key | Default | Meaning |
 |---|---|---|
 | `from`, `to`, `step` | 200, 1600, 200 | current levels, raw ADC (at most 32 going up; `from` ≥ 50) |
 | `down` | 1 | `0` skips the descending half |
-| `hold`, `settle` | 5, 2 | seconds per level (hold 0.5–60, settle 0.5–30) |
+| `hold`, `settle` | 5, 2 | seconds per level (hold 0.5–60, settle 0.5–30; settle is a minimum, see above) |
 | `move` | 15 | halt if the belt moves more than this many mm from where it started (1–50) |
 | `max` | 2000 | halt if the current goes above this (≤ 3000; `to` must be ≤ `max`) |
 | `time` | 300 | halt after this many seconds (10–900); refused up front if the levels need longer |
@@ -340,7 +342,7 @@ Maslow error or watchdog, a change of Maslow state, and on its own checks. Log l
 
 - `TCT start arm=… from=… to=… step=… levels=… hold_s=… settle_s=… move_mm=… max_adc=… max_s=… pos=…`
 - `TCT baseline arm=… adc=… mA=…`: the reading with the motor off (500 ms)
-- `TCT read arm=… step=N/M dir=up|down target_adc=… target_mA=… hold_s=…`: the hold has started, read the scale now
+- `TCT read arm=… step=N/M dir=up|down target_adc=… target_mA=… hold_s=… settle_s=… on_target=0|1`: the hold has started, read the scale now (`settle_s` is how long reaching the level took; `on_target=0` means it gave up waiting)
 - `TCT step arm=… step=N dir=… target_adc=… adc=… adc_sd=… adc_min=… adc_max=… mA=… baseline_adc=… pwm=… pos=… move_mm=… settled=0|1 t_s=…`: the averages over the hold
 - `TCT done arm=… steps=… move_mm=… t_s=…`
 - `TCT halt arm=… reason=… step=… adc=… pwm=… move_mm=… t_s=…` (WARN). Reasons: `stop`, `stopped`
