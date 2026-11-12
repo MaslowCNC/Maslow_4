@@ -388,6 +388,12 @@ void MotorUnit::driveOut(int speed) {
     _commandPWM = speed;
 }
 
+//Drives the motor inward at a specified PWM speed
+void MotorUnit::driveIn(int speed) {
+    motor.backward(speed);
+    _commandPWM = -speed;
+}
+
 //Runs the motor at full speed out
 void MotorUnit::fullOut() {
     motor.fullOut();

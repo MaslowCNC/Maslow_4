@@ -33,6 +33,7 @@ public:
     double   recomputePID();
     void     decompressBelt();
     void     driveOut(int speed);  // Drive motor outward at specified PWM speed (0-1023)
+    void     driveIn(int speed);   // Drive motor inward at specified PWM speed (0-1023)
     bool     comply();
     bool     retract();
     double   getLastRetractOffset() const;

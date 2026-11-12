@@ -316,6 +316,40 @@ plus a log line `Motion is disabled: <reason>` when Maslow has blocked motion.
 | [`$TLI`][TLI] [`$TRI`][TRI] [`$BLI`][BLI] [`$BRI`][BRI] | `Maslow/calibrateXXI` | pull that arm's belt in at full power for 200 ms (clears a jam) | no |
 | [`$TLO`][TLO] [`$TRO`][TRO] [`$BLO`][BLO] [`$BRO`][BRO] | `Maslow/calibrateXXO` | push that arm's belt out for 200 ms | no |
 | [`$SETZSTOP`][SETZSTOP] | `Maslow/setZStop` | make the current Z the Z stop | yes |
+| [`$TCT=<arm>[,key=value…]`][TCT] | `Maslow/tensionCurrentTest` | test bench: hold one belt motor at a series of current levels against a scale, to map current to belt force (below) | no |
+
+**Belt tension / current test (`$TCT`).** Hook one belt to a scale anchored to the frame, belt
+taut, and run e.g. `$TCT=BR`. The motor pulls in, closed loop on its measured current (raw ADC,
+the `MC` units), through levels `from`, `from+step`, … `to` and back down to `from`, settling at
+each for `settle` s and then holding for `hold` s while the current is averaged. Read the scale
+during each hold. Accepted only when Idle and in Maslow state 0, 2 or 4 (release tension first);
+runs in the Homing state.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `from`, `to`, `step` | 200, 1600, 200 | current levels, raw ADC (at most 32 going up; `from` ≥ 50) |
+| `down` | 1 | `0` skips the descending half |
+| `hold`, `settle` | 5, 2 | seconds per level (hold 0.5–60, settle 0.5–30) |
+| `move` | 15 | halt if the belt moves more than this many mm from where it started (1–50) |
+| `max` | 2000 | halt if the current goes above this (≤ 3000; `to` must be ≤ `max`) |
+| `time` | 300 | halt after this many seconds (10–900); refused up front if the levels need longer |
+
+The test halts with the motor off on `$STOP`, 0x18 or anything else that ends the Homing state, a
+Maslow error or watchdog, a change of Maslow state, and on its own checks. Log lines, all starting
+`TCT `, are `key=value` pairs (`scripts/tct_to_csv.py` turns them into a CSV):
+
+- `TCT start arm=… from=… to=… step=… levels=… hold_s=… settle_s=… move_mm=… max_adc=… max_s=… pos=…`
+- `TCT baseline arm=… adc=… mA=…`: the reading with the motor off (500 ms)
+- `TCT read arm=… step=N/M dir=up|down target_adc=… target_mA=… hold_s=…`: the hold has started, read the scale now
+- `TCT step arm=… step=N dir=… target_adc=… adc=… adc_sd=… adc_min=… adc_max=… mA=… baseline_adc=… pwm=… pos=… move_mm=… settled=0|1 t_s=…`: the averages over the hold
+- `TCT done arm=… steps=… move_mm=… t_s=…`
+- `TCT halt arm=… reason=… step=… adc=… pwm=… move_mm=… t_s=…` (WARN). Reasons: `stop`, `stopped`
+  (Homing ended, e.g. 0x18), `error`, `watchdog`, `state_changed`, `time_limit`, `move_limit`,
+  `over_current`, `dead_current_sense` (under 25 ADC for 1 s at PWM ≥ 300), `target_unreachable`
+  (full PWM for 1 s and under 90 % of the target), `encoder` (no reading for 300 ms)
+
+`mA` uses the UI's conversion, 1000 × 3.3 × ADC / 4095 / 1.5; `pwm` is the duty (0–1023) pulling in;
+`move_mm` is negative when the belt was reeled in.
 
 **Stopping:**
 
@@ -368,6 +402,7 @@ plus a log line `Motion is disabled: <reason>` when Maslow has blocked motion.
 [TKSLK]: https://github.com/MaslowCNC/Maslow_4/blob/3448d81fdf596451218280f18a7ec3e971985f5e/firmware/FluidNC/src/ProcessSettings.cpp#L1495
 [CALRESET]: https://github.com/MaslowCNC/Maslow_4/blob/3448d81fdf596451218280f18a7ec3e971985f5e/firmware/FluidNC/src/ProcessSettings.cpp#L1507
 [ESTOP]: https://github.com/MaslowCNC/Maslow_4/blob/3448d81fdf596451218280f18a7ec3e971985f5e/firmware/FluidNC/src/ProcessSettings.cpp#L1516
+[TCT]: https://github.com/MaslowCNC/Maslow_4/blob/Maslow-Main/firmware/FluidNC/src/Maslow/TensionTest.cpp
 [SETZSTOP]: https://github.com/MaslowCNC/Maslow_4/blob/3448d81fdf596451218280f18a7ec3e971985f5e/firmware/FluidNC/src/ProcessSettings.cpp#L1523
 [MBOARD]: https://github.com/MaslowCNC/Maslow_4/blob/3448d81fdf596451218280f18a7ec3e971985f5e/firmware/FluidNC/src/ProcessSettings.cpp#L1531
 [MINFO]: https://github.com/MaslowCNC/Maslow_4/blob/3448d81fdf596451218280f18a7ec3e971985f5e/firmware/FluidNC/src/ProcessSettings.cpp#L1537
