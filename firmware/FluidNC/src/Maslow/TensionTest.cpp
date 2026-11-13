@@ -43,8 +43,21 @@ static constexpr int           OVER_TICKS = 3;     // ticks over the current cap
 
 static const char* const ARM_NAMES[ARM_COUNT] = { "TL", "TR", "BL", "BR" };
 
+const char* TensionTest::armName(int arm) {
+    return ARM_NAMES[arm];
+}
+
+int TensionTest::armFromName(const std::string& name) {
+    for (int arm = 0; arm < ARM_COUNT; arm++) {
+        if (strcasecmp(name.c_str(), ARM_NAMES[arm]) == 0) {
+            return arm;
+        }
+    }
+    return -1;
+}
+
 // The UI's conversion (maslow.js): 3.3 V full scale, 1.5 V/A
-static double adcToMa(double adc) {
+double TensionTest::adcToMa(double adc) {
     return 1000.0 * 3.3 * adc / 4095.0 / 1.5;
 }
 
@@ -68,11 +81,7 @@ bool TensionTest::parse(const char* value, Params& p, std::string& why) {
         }
         if (first) {
             first = false;
-            for (int arm = 0; arm < ARM_COUNT; arm++) {
-                if (strcasecmp(tok.c_str(), ARM_NAMES[arm]) == 0) {
-                    p.arm = arm;
-                }
-            }
+            p.arm = armFromName(tok);
             if (p.arm < 0) {
                 why = "unknown arm '" + tok + "', use TL, TR, BL or BR";
                 return false;

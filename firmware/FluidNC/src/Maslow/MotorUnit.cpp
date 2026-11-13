@@ -394,6 +394,12 @@ void MotorUnit::driveIn(int speed) {
     _commandPWM = -speed;
 }
 
+//Drives the motor the way recomputePID() does, including DCMotor::runAtPWM's start-up offset
+void MotorUnit::runAtPWM(double signedPWM) {
+    motor.runAtPWM(signedPWM);
+    _commandPWM = signedPWM;
+}
+
 //Runs the motor at full speed out
 void MotorUnit::fullOut() {
     motor.fullOut();

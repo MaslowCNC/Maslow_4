@@ -32,6 +32,11 @@ public:
         bool  down     = true;  // after the top level, step back down to `from`
     };
 
+    // Shared with $TPO (PayOutTest)
+    static const char* armName(int arm);
+    static int         armFromName(const std::string& name);  // -1 if not TL, TR, BL or BR
+    static double      adcToMa(double adc);                   // the UI's conversion
+
     // Parses "$TCT=<arm>[,key=value...]".  On failure returns false with the reason in `why`.
     static bool parse(const char* value, Params& p, std::string& why);
 
