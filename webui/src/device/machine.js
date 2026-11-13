@@ -2,12 +2,13 @@
 // It has the same interface as the simulator, getState(), subscribe(fn) and send(action, payload), and builds
 // the same state shape from machine.state, so the screens don't change.
 //
-// Actions so far: Stop and the belt steps of Setup (retract, extend, apply tension, release tension, find
-// anchors). Each goes through a machine.js action, and its Operation is kept in state.op so the screens can show
+// Actions so far: Stop, the belt steps of Setup (retract, extend, apply tension, release tension, find
+// anchors), running a file and Trace boundary. Each goes through a machine.js action, and its Operation is kept in state.op so the screens can show
 // "starting", then nothing (done) or why it failed. The screen itself still comes from the machine's state, so
 // every connection shows the same thing. Jogging, files, jobs and the tool steps come next.
 
 import { restarted, jobFailed, holding } from "../flow/incidents.js";
+import { readGcode, boundaryPath } from "../gcode/reader.js";
 
 // What the firmware's close codes mean (WSChannel.h). For these the page shows a notice and doesn't reconnect.
 const CLOSE_NOTICES = { 4001: "othertab", 4002: "toomany" };
@@ -45,30 +46,90 @@ export function createMachine({ host = location.host } = {}) {
     notYet: {                // actions this page can't send yet, and why; their buttons are disabled with the reason
       setHomeXY: "Needs a machine.js action (G10 L20), to add with Tristan",
       setZ: "Needs a machine.js action (G10 L20), to add with Tristan",
-      park: "Needs a machine.js action, to add with Tristan",
-      trace: "Needs the G-code preview for the job's outline"
+      park: "Needs a machine.js action, to add with Tristan"
     },
     maslow: null, fluid: "", statusSeen: false,
     tool: "unknown", settingZ: false, zSetCount: 0, spindle: "off", error: null,
     job: null, lastJob: null, motion: null, result: null, restored: false,
+    gcode: null,             // the chosen file, read: { file, status: "reading" | "ready" | "failed", detail?, ...readGcode() }
     workArea: { w: 0, h: 0, spoil: 0 }, stock: 0, anchorsSaved: true,
     belts: [0, 0, 0, 0], motorCurrent: null,
     pos: { x: 0, y: 0, z: 0 }, wco: { x: 0, y: 0, z: 0 },
     files: [], log: [], pending: null
   };
 
+  // Files read from the SD card through the G-code reader (gcode/reader.js), each fetched once: url → Promise of
+  // readGcode()'s result. Job progress and Trace boundary share them. A failed read is forgotten so it can be retried.
+  const readings = {};
+  function readFile(path) {
+    const url = sdUrl(path);
+    if (!readings[url]) {
+      readings[url] = fetch(url).then(r => r.ok ? r.text() : Promise.reject(new Error(`HTTP ${r.status}`)))
+        .then(readGcode);
+      readings[url].catch(() => { delete readings[url]; });
+    }
+    return readings[url];
+  }
+
+  // The file the user has chosen, read for the preview and Trace boundary. The UI sends chooseFile whenever its
+  // choice changes; an upload has already put the file in readings, so choosing it needs no fetch.
+  let chosen = null;
+  function chooseFile(file) {
+    chosen = file || null;
+    if (!chosen) { set({ gcode: null }); return; }
+    set({ gcode: { file, status: "reading" } });
+    readFile(file).then(
+      (r) => { if (chosen === file) set({ gcode: { file, status: "ready", ...r } }); },
+      (e) => {
+        if (chosen !== file) return;
+        log(`Couldn't read ${file}: ${e.message}`);
+        set({ gcode: { file, status: "failed", detail: e.message } });
+      });
+  }
+
   // Job progress: the report's SD percent is bytes read, not progress (issue 19), so progress is the running line
-  // out of the file's line count. The file is read once from the SD card when its job first shows up.
+  // out of the file's line count. The file is read when its job first shows up (or earlier, for Trace boundary).
   const lines = {};   // file path → line count, or "?" while it's being counted
   function lineCount(path) {
     if (!path) return "?";
     if (lines[path] == null) {
       lines[path] = "?";
-      fetch(sdUrl(path)).then(r => r.ok ? r.text() : Promise.reject(new Error(`HTTP ${r.status}`)))
-        .then(t => { lines[path] = t.split("\n").length; if (s.job) set({ job: { ...s.job, total: lines[path] } }); })
+      readFile(path)
+        .then(r => { lines[path] = r.lineCount; if (s.job) set({ job: { ...s.job, total: lines[path] } }); })
         .catch(e => { log(`Couldn't read ${baseName(path)} to count its lines: ${e.message}`); emit(); });
     }
     return lines[path];
+  }
+
+  // Trace boundary: the chosen file's extent as a closed rectangle, then back to the work position, through
+  // machine.tracePath as the current UI does (toolpath-displayer.js, traceBoundary). Reading the file can take a
+  // moment, so this returns an Operation of its own whose .accepted follows tracePath's. If Stop or another action
+  // replaces this one while the file is read, nothing is sent.
+  function traceFile(file) {
+    const token = s.op;   // run() has just set it
+    let accepted;
+    const acceptedP = new Promise((resolve, reject) => { accepted = { resolve, reject }; });
+    const notReady = (detail) => Object.assign(new Error(detail), { reason: "not-ready", detail });
+    const done = (async () => {
+      if (!file) throw notReady("Choose a file first");
+      let job;
+      try {
+        job = await readFile(file);
+      } catch (e) {
+        throw notReady(`Couldn't read ${file}: ${e.message}`);
+      }
+      if (s.op !== token) throw Object.assign(new Error("stopped"), { reason: "reset" });
+      if (!job.extent) throw notReady(`${file} has no cutting moves to trace`);
+      const st = m.state;
+      const w = st.wpos || (st.mpos && st.wco
+        ? { x: st.mpos.x - st.wco.x, y: st.mpos.y - st.wco.y } : null);
+      const op = m.tracePath(boundaryPath(job.extent, w));
+      op.accepted.then(accepted.resolve, accepted.reject);
+      return op;
+    })();
+    done.catch(accepted.reject);
+    acceptedP.catch(() => {});
+    return Object.assign(done, { accepted: acceptedP });
   }
 
   const emit = () => listeners.forEach(fn => fn(s));
@@ -209,6 +270,10 @@ export function createMachine({ host = location.host } = {}) {
       input.onchange = async () => {
         const f = input.files[0];
         if (!f) return resolve(null);
+        // Read it here, from the user's own copy, so the preview has it without fetching it back from the card
+        const url = sdUrl(f.name);
+        const reading = f.text().then(readGcode);
+        reading.catch(() => {});
         const form = new FormData();
         form.append("path", "/");
         form.append(`/${f.name}S`, String(f.size));
@@ -219,6 +284,10 @@ export function createMachine({ host = location.host } = {}) {
           const r = await fetch("/upload", { method: "POST", body: form });
           if (!r.ok) throw new Error(`HTTP ${r.status}`);
           log(`${f.name} uploaded`);
+          readings[url] = reading;   // replaces any older file of the same name
+          delete lines[`/${f.name}`];
+          delete lines[`/sd/${f.name}`];
+          if (chosen === f.name) chooseFile(f.name);   // the same name uploaded again: show the new one
           await listFiles();
           resolve(f.name);
         } catch (e) {
@@ -270,6 +339,7 @@ export function createMachine({ host = location.host } = {}) {
   function send(action, payload = {}) {
     if (action === "connect") { if (!m) start(); return; }
     if (action === "reconnect") { connect(); return; }
+    if (action === "chooseFile") { chooseFile(payload.file); return; }   // reads over HTTP; doesn't need the socket
     if (!m) return;
     if (action === "run") { run("run", () => m.runFile(`/${payload.file}`)); return; }
     if (action === "continueJob") {
@@ -277,6 +347,7 @@ export function createMachine({ host = location.host } = {}) {
       if (st) run("continueJob", () => m.resumeFile(st.file, st.line));
       return;
     }
+    if (action === "trace") { run("trace", () => traceFile(payload.file)); return; }
     if (action === "uploadFile") return uploadFile();
     if (action === "ackIncident") { set({ incident: null }); return; }
     if (action === "setStock") { setStock(payload.stock); return; }

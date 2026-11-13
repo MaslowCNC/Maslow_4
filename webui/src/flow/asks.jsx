@@ -129,10 +129,10 @@ function askFor(k, ctx) {
 export function mainActions(k, ctx) {
   const { d, a, setA, send } = ctx;
   const B = (label, onClick, style = "") => ({ label, onClick, style });
-  // Trace boundary needs the job's outline from the G-code preview, which the real machine page doesn't have yet
+  // Trace boundary moves around the chosen file's extent (the real machine reads the file for it)
   const trace = d.notYet?.trace
     ? { ...B("Trace boundary", () => {}, "ghost"), disabled: true, title: d.notYet.trace }
-    : B("Trace boundary", () => send("trace"), "ghost");
+    : B("Trace boundary", () => send("trace", { file: a.file }), "ghost");
   switch (k) {
     case "ready": return [trace, B(`Run ${a.file}`, () => setA({ finalCheck: true }), "go")];
     case "stopped": return [B("Run from the start", () => setA({ stoppedSeen: true, finalCheck: true }), "ghost"),

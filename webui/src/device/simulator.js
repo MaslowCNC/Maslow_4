@@ -1,5 +1,6 @@
 import { COMMANDS } from "./commands.js";
 import { restarted, spindleFault } from "../flow/incidents.js";
+import { readGcode } from "../gcode/reader.js";
 
 // A stand-in for the machine. It holds the state the firmware would report and, whenever the real device would
 // answer (a step finishing, a fault, a tool being found), it asks the tester through `pending` instead of guessing.
@@ -16,6 +17,23 @@ const FILES = [
 
 const time = () => new Date().toTimeString().slice(0, 8);
 
+// Stand-in G-code for a demo file, so the preview has something to draw: a w × h outline with rounded corners and a
+// circle in the middle, cut in 3 mm passes down to the file's depth. Work coordinates, X 0 Y 0 at the lower left.
+export function sampleGcode({ name, w, h, depth }) {
+  const r = Math.min(20, w / 4, h / 4), R = Math.min(w, h) / 4, cx = w / 2, cy = h / 2;
+  const n = (v) => +v.toFixed(3);
+  const out = [`(${name}: simulated sample)`, "G21 G90 G17", "G0 Z5", "M3 S18000"];
+  for (let z = -Math.min(3, depth); ; z = Math.max(z - 3, -depth)) {
+    out.push(`G0 X${n(r)} Y0`, `G1 Z${n(z)} F600`, `G1 X${n(w - r)} Y0 F2000`, `G3 X${n(w)} Y${n(r)} I0 J${n(r)}`,
+      `G1 X${n(w)} Y${n(h - r)}`, `G3 X${n(w - r)} Y${n(h)} I${n(-r)} J0`, `G1 X${n(r)} Y${n(h)}`,
+      `G3 X0 Y${n(h - r)} I0 J${n(-r)}`, `G1 X0 Y${n(r)}`, `G3 X${n(r)} Y0 I${n(r)} J0`, "G0 Z5",
+      `G0 X${n(cx + R)} Y${n(cy)}`, `G1 Z${n(z)} F600`, `G2 X${n(cx + R)} Y${n(cy)} I${n(-R)} J0 F2000`, "G0 Z5");
+    if (z <= -depth) break;
+  }
+  out.push("M5", "G0 X0 Y0", "M30");
+  return out.join("\n") + "\n";
+}
+
 function initialState() {
   return {
     connected: false, everConnected: false, hotspot: false, connectId: 0,
@@ -25,6 +43,7 @@ function initialState() {
     spindle: "off",               // off | on | recovering | recoveryFailed
     error: null,                  // { reason } while in Alarm
     job: null,                    // { file, line, total, running }
+    gcode: null,                  // the chosen file, read: { file, status: "ready", ...readGcode() } (machine.js has the same)
     lastJob: null,                // { file, result: "success" | "stopped" | "fault", line }
     motion: null,                 // tracing | parking
     result: null,                 // the last setup step's result, e.g. { step: "tension", outcome: "nofit", message }
@@ -207,6 +226,11 @@ export function createSimulator() {
     // Setting a home moves the work zero, not the machine: the machine position stays as it was
     setHomeXY() { log("G10 L20 P0 X0 Y0"); set({ wco: { ...s.wco, x: s.pos.x, y: s.pos.y } }); },
     setZ() { log("G10 L20 P0 Z0"); set({ wco: { ...s.wco, z: s.pos.z } }); },
+    // The demo files aren't real, so each reads as a generated sample of its size
+    chooseFile({ file }) {
+      const f = s.files.find(x => x.name === file);
+      set({ gcode: f ? { file, status: "ready", ...readGcode(sampleGcode(f)) } : null });
+    },
     uploadFile() { const n = `upload-${s.files.length + 1}.nc`; set({ files: [...s.files, { name: n, size: "40 KB", w: 200, h: 150, minutes: 6, depth: 2 }] }); return n; }
   };
 
