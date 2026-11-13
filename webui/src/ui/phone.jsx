@@ -1,8 +1,8 @@
 import { useState } from "preact/hooks";
 import { SCREENS, isSetup, stepName } from "../flow/screens.js";
 import { ask, mainActions } from "../flow/asks.jsx";
-import { Btn, MachineTag, ModePill, Conn, progress, Segs, StepArt, Frame, LogView, JogPad, DetailsBody, FilesBody, jogLock, workPos } from "./parts.jsx";
-import { Gear, FinalChecks } from "./desktop.jsx";
+import { Btn, AppHeader, ModePill, progress, Segs, StepArt, Frame, LogView, JogPad, DetailsBody, FilesBody, jogLock, workPos } from "./parts.jsx";
+import { FinalChecks } from "./desktop.jsx";
 
 // Defined outside Phone so its children keep their state (typed values) across re-renders
 function Section({ id, name, tag, summary, sec, toggle, children }) {
@@ -25,7 +25,8 @@ export function Phone({ k, ctx, onSettings, checks, setChecks, overlay }) {
   const main = mainActions(k, ctx).map(b => ({ ...b, label: b.label.replace(/^Run .*/, "Run").replace(/^Continue from .*/, "Continue") }));
   return <div class="phoneapp">
     <header class="p-head">
-      <div class="p-top"><ModePill s={s} /><span class="sub">{s.sub}</span><Conn d={ctx.d} /><Gear onClick={onSettings} /></div>
+      <AppHeader d={ctx.d} onSettings={onSettings} />
+      <div class="p-top"><ModePill s={s} /><span class="sub">{s.sub}</span></div>
       {setup ? <div class="p-prog"><span>{label}</span><Segs step={s.step} skipped={skipped} /></div>
         : <div class={`p-msg${s.alert || q.alert ? " alert" : ""}`}>{q.text || s.msg}</div>}
       {k === "finalcheck" && <FinalChecks checks={checks} setChecks={setChecks} />}
@@ -39,7 +40,7 @@ export function Phone({ k, ctx, onSettings, checks, setChecks, overlay }) {
           {q.input}
           {q.buttons.length > 0 && <div class="row">{q.buttons.map(b => <Btn b={b} />)}</div>}
         </Section>
-        <Section sec={sec} toggle={toggle} id="details" name="Details" tag={<MachineTag d={ctx.d} />} summary={s.nopos ? "No position yet" : `Work X ${workPos(ctx.d).x.toFixed(1)}  Y ${workPos(ctx.d).y.toFixed(1)}`}>
+        <Section sec={sec} toggle={toggle} id="details" name="Details" summary={s.nopos ? "No position yet" : `Work X ${workPos(ctx.d).x.toFixed(1)}  Y ${workPos(ctx.d).y.toFixed(1)}`}>
           <DetailsBody k={k} d={ctx.d} a={ctx.a} />
         </Section>
         <Section sec={sec} toggle={toggle} id="jog" name="Jog" summary={lock ? lock[0] : "Ready to jog"}><div class="jogbox"><JogPad k={k} d={ctx.d} send={ctx.send} /></div></Section>

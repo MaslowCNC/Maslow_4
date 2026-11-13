@@ -1,6 +1,7 @@
 import { useState } from "preact/hooks";
 import { STEPS, SCREENS, isSetup } from "../flow/screens.js";
 import { stepArt, visSvg } from "../art.js";
+import logo from "../assets/maslow-logo.webp";
 
 // A top-bar button. b.temp marks one that exists only until the firmware rewrite is finished: it shows orange,
 // tagged "Temporary", and its tooltip says what it's waiting for. Every stopgap like this should use it.
@@ -94,7 +95,19 @@ export function JogPad({ k, d, send }) {
 }
 
 const BELT_NAMES = ["TL", "TR", "BL", "BR"];
-// The machine this page is connected to, as a small tag beside a panel title ("Maslow Mini")
+// The app header, above the setup or mode bar on every screen: the Maslow logo, the machine this page is
+// connected to, the connection, and Settings. These live only here.
+export function AppHeader({ d, onSettings }) {
+  return <header class="apphead">
+    <img class="logo" src={logo} alt="Maslow" />
+    <MachineTag d={d} />
+    <span class="apphead-gap" />
+    <Conn d={d} />
+    <button class="gear" type="button" aria-label="Settings" onClick={onSettings}>⚙</button>
+  </header>;
+}
+
+// The machine this page is connected to, as a small tag ("Maslow Mini")
 export const MachineTag = ({ d }) => d.machine ? <span class="machinetag" title="The machine this page is connected to">{d.machine}</span> : null;
 
 // The File card: the running job's progress, or what the chosen file will cut
@@ -117,35 +130,43 @@ function FileCard({ d, a }) {
     <small>{g?.status === "reading" ? "reading the file…" : g?.status === "failed" ? `couldn't read it: ${g.detail || ""}` : extra.join(" · ") || f.size}</small></div>;
 }
 
+// Belt lengths and motor currents, live from the status report. Desktop shows them as toggled overlays on the
+// visuals (they'll become a graphic overlay later); the phone shows them as tabs in Details.
+export function BeltsView({ k, d }) {
+  const s = SCREENS[k];
+  if (d.maslow === 0) return <p class="note">Belt lengths aren't known yet.</p>;
+  return <div class={`belts${s.stale ? " stale" : ""}`}>{d.belts.map((v, i) => <><span>{BELT_NAMES[i]}</span><span class="bar"><i style={`width:${Math.min(100, v / 15)}%`}></i></span><span>{v.toFixed(1)} mm</span></>)}</div>;
+}
+export function MotorsView({ k, d }) {
+  const s = SCREENS[k];
+  if (!d.motorCurrent) return <p class="note">Motor currents show here when the machine reports them.</p>;
+  // MC is raw ADC 0–4095; the current UI converts it to mA this way (docs/protocol.md)
+  const mA = (adc) => Math.round(1000 * 3.3 * adc / 4095 / 1.5);
+  const mc = d.motorCurrent;
+  return <div class={`belts${s.stale ? " stale" : ""}`}>{[mc.tl, mc.tr, mc.bl, mc.br].map((v, i) => <><span>{BELT_NAMES[i]}</span><span class="bar"><i style={`width:${Math.min(100, mA(v) / 20)}%`}></i></span><span>{mA(v)} mA</span></>)}</div>;
+}
+
+// The Status, Position and File cards
+export function DetailCards({ k, d, a }) {
+  const s = SCREENS[k];
+  return <div class="minis">
+    <div class="mini"><span>Status</span><p class={s.alert ? "alert" : ""}>{s.msg}</p></div>
+    <div class="mini"><span>Position</span><PosReadout d={d} nopos={s.nopos} stale={s.stale} /></div>
+    <FileCard d={d} a={a} />
+  </div>;
+}
+
+// Details on a phone: the cards, then Belts and Motors as tabs
 export function DetailsBody({ k, d, a }) {
   const [tab, setTab] = useState("belts");
   const s = SCREENS[k];
-  const nopos = s.nopos;
-  let body;
-  if (tab === "belts") {
-    body = d.maslow === 0 ? <p class="note">Belt lengths aren't known yet.</p> :
-      <><div class={`belts${s.stale ? " stale" : ""}`}>{d.belts.map((v, i) => <><span>{BELT_NAMES[i]}</span><span class="bar"><i style={`width:${Math.min(100, v / 15)}%`}></i></span><span>{v.toFixed(1)} mm</span></>)}</div>
-        <p class="note">Live, from the status report.</p></>;
-  } else if (d.motorCurrent) {
-    // MC is raw ADC 0–4095; the current UI converts it to mA this way (docs/protocol.md)
-    const mA = (adc) => Math.round(1000 * 3.3 * adc / 4095 / 1.5);
-    const mc = d.motorCurrent;
-    body = <><div class={`belts${s.stale ? " stale" : ""}`}>{[mc.tl, mc.tr, mc.bl, mc.br].map((v, i) => <><span>{BELT_NAMES[i]}</span><span class="bar"><i style={`width:${Math.min(100, mA(v) / 20)}%`}></i></span><span>{mA(v)} mA</span></>)}</div>
-      <p class="note">Belt motor currents, live from the status report.</p></>;
-  } else {
-    body = <p class="note">Motor currents show here when the machine reports them.</p>;
-  }
   return <>
-    <div class="minis">
-      <div class="mini"><span>Status</span><p class={s.alert ? "alert" : ""}>{s.msg}</p></div>
-      <div class="mini"><span>Position</span><PosReadout d={d} nopos={nopos} stale={s.stale} /></div>
-      <FileCard d={d} a={a} />
-    </div>
+    <DetailCards k={k} d={d} a={a} />
     <div class="dstats">
       <div class="dtabs" role="tablist">{[["belts", "Belts"], ["motors", "Motors"]].map(([id, n]) =>
         <button type="button" role="tab" aria-selected={id === tab} onClick={() => setTab(id)}>{n}</button>)}
         <span class={`dlive${s.stale ? " off" : ""}`}>{s.stale ? "out of date" : ""}</span></div>
-      <div class="dbody">{body}</div>
+      <div class="dbody">{tab === "belts" ? <BeltsView k={k} d={d} /> : <MotorsView k={k} d={d} />}</div>
     </div>
   </>;
 }

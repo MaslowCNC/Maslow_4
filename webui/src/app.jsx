@@ -65,8 +65,8 @@ export function App() {
   // A new job starts with a fresh final check
   useEffect(() => { if (k !== "finalcheck") setChecks(FINAL_CHECKS.map(() => false)); }, [k === "finalcheck"]);
 
-  // During setup on desktop, Stop sits in the panel the pop-up covers, so the pop-up carries its own
-  const mprops = { ctx, compact: narrow, stop: !narrow && isSetup(k) && d.connected };
+  // Stop is in the top bar, which pop-ups don't cover, so they don't carry their own
+  const mprops = { ctx, compact: narrow, stop: false };
   const overlay = modal === "settings"
     ? <Settings k={k} {...mprops} theme={theme} setTheme={setTheme} onClose={() => setModal(null)} />
     : null;

@@ -355,9 +355,37 @@
 html, body { margin: 0; }
 #app { min-height: 100vh; }
 .appshell { min-height: 100vh; background: var(--page); color: var(--text); }
-.screen.app { height: 100vh; height: 100dvh; border-radius: 0; box-shadow: none; padding: 10px; }
+.screen.app { height: 100vh; height: 100dvh; box-sizing: border-box; border-radius: 0; box-shadow: none; padding: 10px; grid-template-rows: auto minmax(0, 1fr); }
+/* Pop-ups cover the panels, under the top card */
+.screen.app > .modal-bg { grid-row: 2; }
+/* The top card: the app header, a thin line, then the setup guide or the mode bar. The card carries the mode's
+   colour on its top edge; the bar inside it is no longer a card of its own. */
+.topbox { background: var(--panel); border: 1px solid var(--panel-border); border-top: 4px solid var(--tone); border-radius: var(--r);
+  box-shadow: var(--shadow); min-width: 0; }
+.topbox .apphead { padding: 2px 12px; }
+.topbox > .banner { background: none; border: 0; border-top: 1px solid var(--sep); border-radius: 0; box-shadow: none; }
+/* App header: logo, machine, connection, Settings */
+.apphead { display: flex; align-items: center; gap: 12px; min-height: 40px; padding: 0 4px; }
+.apphead .logo { height: 24px; width: auto; display: block; }
+.apphead-gap { flex: 1; }
+.phoneapp .apphead { min-height: 34px; padding: 0 0 6px; gap: 10px; border-bottom: 1px solid var(--sep); }
+.phoneapp .apphead .logo { height: 20px; }
 .board.layout6 { grid-template-columns: 2.2fr 1fr; grid-template-rows: .7fr .7fr .8fr 1fr;
-  grid-template-areas: "vis comp" "vis comp" "vis comp" "cfg files"; }
+  grid-template-areas: "vis comp" "vis comp" "vis comp" "vis files"; }
+/* The merged visuals + device state panel: tabs and toggles, the drawing with its overlays, the cards below */
+.vis.merged { grid-template-rows: auto minmax(0, 1fr) auto; }
+.vis.merged .tabs { align-items: center; padding-right: 8px; }
+.tabs-gap { flex: 1; }
+.tgl { font: 600 12px var(--font-mono); padding: 4px 10px; border-radius: 6px; border: 1px solid var(--sep); background: none;
+  color: var(--muted); cursor: pointer; min-height: 28px; }
+.tgl.on { color: var(--lilac); border-color: var(--lilac); background: var(--input); }
+.visbody { position: relative; min-height: 0; }
+.visbody .inset { top: 10px; }
+.vovl { position: absolute; right: 10px; top: 10px; width: min(34%, 280px); display: grid; gap: 8px; align-content: start; max-height: calc(100% - 20px); overflow: auto; }
+.ovcard { background: color-mix(in srgb, var(--panel) 92%, transparent); border: 1px solid var(--sep); border-radius: 6px; overflow: hidden; }
+.ovcard .pb { padding: 8px 10px; }
+.viscards { border-top: 1px solid var(--sep); padding: 8px 10px 10px; }
+.viscards .minis { grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) minmax(0, 1fr); }
 .framesvg { display: block; min-height: 0; height: 100%; }
 .framesvg svg { width: 100%; height: 100%; display: block; }
 .linkbtn { background: none; border: 0; color: var(--muted); font: 500 11px var(--font-mono); cursor: pointer; padding: 0; }

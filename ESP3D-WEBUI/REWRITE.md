@@ -144,11 +144,17 @@ These are FluidNC's `MPos`, `WCO` and `WPos = MPos − WCO`.
 
 ## Layout
 
-**Desktop: layout 6, Tall compass** (decided 2026-11-04):
-- the frame drawing gets the largest area, on the left, with the log as a collapsible overlay;
-- Jog / Home is tall on the right, beside it, where a thumb reaches on a tablet;
-- Device details sits under the drawing, with File management beside it;
-- the top bar runs across: the setup guide during Setup, the mode and its actions otherwise.
+**Desktop: layout 6, Tall compass** (decided 2026-11-04, revised 2026-11-13):
+- the app header across the top: the Maslow logo, the connected machine ("Maslow Mini"), the
+  connection, and ⚙ Settings. These appear only here;
+- under it, the top bar: the setup guide during Setup, the mode and its actions otherwise, and
+  always Stop;
+- one large panel on the left for the visuals and the device state, sized to fit the window: the
+  Toolpath / Frame / 3D tabs, with **Belts** and **Motors** toggles on the right of that row; the
+  drawing, with the log as a collapsible overlay on the left and the Belts and Motors overlays on the
+  right when toggled on (they'll become a graphic overlay later); and the **Status, Position and
+  File** cards along the bottom. It has no Run or Stop of its own;
+- Jog / Home tall on the right, where a thumb reaches on a tablet, with File management below it.
 
 **Phone: layout B:**
 - the mode and connection in the header;
@@ -165,14 +171,10 @@ These are FluidNC's `MPos`, `WCO` and `WPos = MPos − WCO`.
 - **The setup bar expands** with an arrow on its bottom edge: a big step graphic beside fuller
   numbered instructions. It's closed by default. The big graphic is where the line art for
   first-time users goes (on hold).
-- **Device details** has the connected machine's name beside its title, as a tag ("Maslow Mini",
-  from `[ESP800]`). Below it are status, position and **File** cards, then two tabs:
-  - File card: during a job, the progress bar, line and percent; otherwise the chosen file's size,
-    depth and line count (from the G-code reader);
-  - Belts: live lengths, from `BL`;
-  - Motors: currents, from `MC`.
-
-  Values go grey with "out of date" when the machine stops answering.
+- **The Status, Position and File cards:** the File card shows the progress bar, line and percent
+  during a job, otherwise the chosen file's size, depth and line count (from the G-code reader). On a
+  phone they're in the Details section, with Belts (live lengths, `BL`) and Motors (currents, `MC`)
+  as tabs. Values go grey with "out of date" when the machine stops answering.
 - **Settings pop-up** (⚙ at the end of the top bar; draft):
 
 | Section | Holds |
