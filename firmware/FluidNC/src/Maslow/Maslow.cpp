@@ -176,6 +176,8 @@ void Maslow_::update() {
     // Both LEDs flash together so the pattern is visible from any angle.
     // Recovery: power-cycle the machine.
     if (watchdogFired) {
+        tensionTest.abort("watchdog");
+        payOutTest.abort("watchdog");
         stopMotors();
         static unsigned long wdTimer  = millis();
         static int           wdPhase  = 0;  // 0=on1, 1=off1, 2=on2, 3=pause
@@ -197,6 +199,8 @@ void Maslow_::update() {
     // The machine ignores all movement commands while in this state.
     // Recovery: fix the underlying cause (check console log for details), then power-cycle.
     if (error) {
+        tensionTest.abort("error");
+        payOutTest.abort("error");
         static unsigned long timer = millis();
         static bool          st    = true;  //This is used to blink the LED
         if (millis() - timer > 300) {
@@ -353,10 +357,18 @@ void Maslow_::update() {
         //--------Homing routines
         else if (sys.state() == State::Homing) {
             homeCallCount++;
-            calibration.home();
+            if (tensionTest.active()) {
+                tensionTest.update();  // $TCT runs instead of the calibration state machine
+            } else if (payOutTest.active()) {
+                payOutTest.update();  // and so does $TPO
+            } else {
+                calibration.home();
+            }
         } else {  //This is confusing to understand. This is an else if so this is only run if we are not in jog, cycle, or homing
             // Clear any motor override flags to ensure motors stop
             calibration.clearMotorOverrides();
+            tensionTest.abort("stopped");  // 0x18, a feed hold, or anything else that ends Homing
+            payOutTest.abort("stopped");
             Maslow.stopMotors();
         }
 
@@ -1158,6 +1170,8 @@ void Maslow_::reset_all_axis() {
 // Stop all motors and reset all state variables
 void Maslow_::stop() {
     stopMotors();
+    tensionTest.abort("stop");
+    payOutTest.abort("stop");
     calibration.calibrationInProgress = false;
     test                              = false;
     takeSlack                         = false;

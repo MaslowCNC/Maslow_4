@@ -8,6 +8,8 @@
 #include "MaslowEnums.h"
 #include "MotorUnit.h"
 #include "Calibration.h"
+#include "TensionTest.h"
+#include "PayOutTest.h"
 #include "../System.h"  // sys.*
 #include "../Planner.h"
 #include <nvs.h>
@@ -178,6 +180,8 @@ public:
     bool safetyOn = true;
 
     Calibration calibration;
+    TensionTest tensionTest;  // $TCT
+    PayOutTest  payOutTest;   // $TPO
 
     void getInfo();
     bool telemetry_enabled = false;

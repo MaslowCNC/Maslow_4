@@ -1474,6 +1474,69 @@ static Error maslow_BRI(const char* value, AuthenticationLevel auth_level, Chann
     return Error::Ok;
 }
 
+// Checks shared by the belt bench tests ($TCT, $TPO).  The belt is unhooked from the sled for these,
+// so they refuse while the belts hold the sled.  Returns Error::Ok if a test may start.
+static Error maslow_bench_test_allowed(const char* name, Channel& out) {
+    if (Maslow.using_default_config) {
+        return Error::ConfigurationInvalid;
+    }
+    if (maslow_motion_blocked(out)) {
+        return Error::SystemGcLock;
+    }
+    if (Maslow.tensionTest.active() || Maslow.payOutTest.active()) {
+        log_error(name << " refused: a test is already running ($STOP ends it)");
+        return Error::IdleError;
+    }
+    if (sys.state() != State::Idle) {
+        log_error(name << " refused: the machine must be Idle (clear an alarm with $X)");
+        return Error::IdleError;
+    }
+    int calState = Maslow.calibration.getCurrentState();
+    if (calState != UNKNOWN && calState != RETRACTED && calState != EXTENDEDOUT) {
+        log_error(name << " refused: Maslow state " << calState << "; release tension first (state must be 0, 2 or 4)");
+        return Error::IdleError;
+    }
+    return Error::Ok;
+}
+
+// $TCT=<arm>[,key=value...]: hold one belt motor at a series of current levels against a scale,
+// to map motor current to belt force.  See TensionTest.h and docs/protocol.md.
+static Error maslow_tension_test(const char* value, AuthenticationLevel auth_level, Channel& out) {
+    Error err = maslow_bench_test_allowed("TCT", out);
+    if (err != Error::Ok) {
+        return err;
+    }
+    TensionTest::Params p;
+    std::string         why;
+    if (!TensionTest::parse(value, p, why)) {
+        log_error("TCT refused: " << why.c_str());
+        return Error::InvalidValue;
+    }
+    Maslow.resetUpdateWatchdog();
+    sys.set_state(State::Homing);
+    Maslow.tensionTest.start(p);
+    return Error::Ok;
+}
+
+// $TPO=<arm>,<resistive current ADC>,<max speed>,<max dist>[,hold=s][,time=s]: pull a belt out against its
+// motor through a scale, to measure pay-out friction.  See PayOutTest.h and docs/protocol.md.
+static Error maslow_payout_test(const char* value, AuthenticationLevel auth_level, Channel& out) {
+    Error err = maslow_bench_test_allowed("TPO", out);
+    if (err != Error::Ok) {
+        return err;
+    }
+    PayOutTest::Params p;
+    std::string        why;
+    if (!PayOutTest::parse(value, p, why)) {
+        log_error("TPO refused: " << why.c_str());
+        return Error::InvalidValue;
+    }
+    Maslow.resetUpdateWatchdog();
+    sys.set_state(State::Homing);
+    Maslow.payOutTest.start(p);
+    return Error::Ok;
+}
+
 static Error maslow_safety_off(const char* value, AuthenticationLevel auth_level, Channel& out) {
     if (Maslow.using_default_config) {
         return Error::ConfigurationInvalid;
@@ -1662,6 +1725,8 @@ void make_user_commands() {
     new UserCommand("SFOFF", "Maslow/safetyOFF", maslow_safety_off, anyState);
     new UserCommand("TEST", "Maslow/test", maslow_test, anyState);
     new UserCommand("TKSLK", "Maslow/takeSlack", maslow_takeSlack, anyState);
+    new UserCommand("TCT", "Maslow/tensionCurrentTest", maslow_tension_test, anyState);
+    new UserCommand("TPO", "Maslow/payOutTest", maslow_payout_test, anyState);
     new UserCommand("CALRESET", "Maslow/resetCalibration", maslow_reset_calibration, anyState);
     new UserCommand("ESTOP", "Maslow/estop", maslow_estop, anyState);
     new UserCommand("SETZSTOP", "Maslow/setZStop", maslow_set_zStop, anyState);
