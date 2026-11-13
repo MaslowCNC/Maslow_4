@@ -31,9 +31,12 @@ export const Segs = ({ step, skipped }) =>
 export const StepArt = ({ step, d, class: c = "art" }) =>
   <div class={c}><Svg html={stepArt(step)} /></div>;
 
-export const Frame = ({ k, d }) => {
+// showLengths: label each belt with its live length (the Belts toggle). A length is unknown before the machine
+// knows it (Maslow state 0, or "?" in the report's BL).
+export const Frame = ({ k, d, showLengths = false }) => {
   const s = SCREENS[k];
-  return <Svg class="framesvg" html={visSvg(k, s, d.pos, d.wco)} />;
+  const lengths = showLengths ? d.belts.map((v, i) => d.maslow === 0 || d.beltUnknown?.[i] ? null : v) : null;
+  return <Svg class="framesvg" html={visSvg(k, s, d.pos, d.wco, lengths)} />;
 };
 
 // Work position (from the user's home) and machine position (from the anchors). WPos = MPos − WCO.

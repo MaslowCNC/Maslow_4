@@ -27,7 +27,24 @@ export function stepArt(i) {
   return `<div class="art"><svg viewBox="0 0 260 120" role="img" aria-label="${STEPS[i]}">${defs}${art}</svg></div>`;
 }
 
-export function visSvg(k, s, pos = { x: 0, y: 0 }, home = { x: 0, y: 0 }) {
+// Belt lengths as labels on the belts: lengths = [tl, tr, bl, br] in mm, null where unknown
+function beltLabels(lengths, target) {
+  const anchors = [[30, 30], [380, 30], [30, 240], [380, 240]];
+  return anchors.map(([ax, ay], i) => {
+    const v = lengths[i];
+    const text = v == null ? "?" : `${v.toFixed(1)} mm`;
+    // Along the belt from its anchor toward the sled (or the frame's centre when the sled isn't drawn), far enough
+    // in that the left-hand labels clear the log overlay
+    const t = target.onBelt ? 0.65 : 0.6;
+    const x = ax + (target.x - ax) * t, y = ay + (target.y - ay) * t;
+    const w = text.length * 6.4 + 10;
+    return `<g><rect x="${(x - w / 2).toFixed(1)}" y="${(y - 9).toFixed(1)}" width="${w.toFixed(1)}" height="17" rx="4" fill="var(--panel)" fill-opacity=".92" stroke="var(--lilac)" stroke-width="1"/>` +
+      `<text x="${x.toFixed(1)}" y="${(y + 4).toFixed(1)}" text-anchor="middle" fill="var(--text)" font-family="var(--font-mono)" font-size="11">${text}</text></g>`;
+  }).join("");
+}
+
+// lengths: when given, each belt shows its live length (the Belts toggle)
+export function visSvg(k, s, pos = { x: 0, y: 0 }, home = { x: 0, y: 0 }, lengths = null) {
   // The sled follows the machine position, scaled to the drawing. The cross marks the user's home (work 0, 0);
   // it's drawn over the sled and reaches past it, so it still shows when the sled sits on home.
   const toX = (x) => Math.max(40, Math.min(370, 205 + x / 4)), toY = (y) => Math.max(40, Math.min(230, 140 - y / 4));
@@ -48,5 +65,6 @@ export function visSvg(k, s, pos = { x: 0, y: 0 }, home = { x: 0, y: 0 }) {
     ${unk ? `<text x="205" y="62" text-anchor="middle" fill="var(--muted)" font-family="var(--font-mono)" font-size="12">Sled position unknown</text>` : ""}
     <rect ${unk ? 'opacity="0"' : ""} x="${sledX - 13}" y="${sledY - 13}" width="26" height="26" rx="6" fill="var(--panel)" stroke="var(--lilac)" stroke-width="2"/>
     ${unk ? "" : `<circle cx="${sledX}" cy="${sledY}" r="3" fill="var(--lilac)"/>`}
-    ${unk ? "" : `<g stroke="var(--ready)" stroke-width="1.6"><title>Your home (work 0, 0)</title><line x1="${hx - 20}" y1="${hy}" x2="${hx + 20}" y2="${hy}"/><line x1="${hx}" y1="${hy - 20}" x2="${hx}" y2="${hy + 20}"/></g>`}</svg>`;
+    ${unk ? "" : `<g stroke="var(--ready)" stroke-width="1.6"><title>Your home (work 0, 0)</title><line x1="${hx - 20}" y1="${hy}" x2="${hx + 20}" y2="${hy}"/><line x1="${hx}" y1="${hy - 20}" x2="${hx}" y2="${hy + 20}"/></g>`}
+    ${lengths ? beltLabels(lengths, unk ? { x: 205, y: 135, onBelt: false } : { x: sledX, y: sledY, onBelt: true }) : ""}</svg>`;
 }

@@ -157,6 +157,7 @@ export function createMachine({ host = location.host } = {}) {
       maslow: ms.maslow, fluid: ms.grbl,
       pos: ms.mpos || s.pos, wco: ms.wco || s.wco,
       belts: [b.tl, b.tr, b.bl, b.br].map(v => v ?? 0),
+      beltUnknown: [b.tl, b.tr, b.bl, b.br].map(v => v == null),
       motorCurrent: ms.motorCurrent,
       job: ms.job ? { file: baseName(ms.job.file), line: ms.job.line ?? 0, total: lineCount(ms.job.file), running: true } : null,
       lastJob: ms.stopped ? { file: ms.stopped.file, result: "stopped", line: ms.stopped.line } : null,
