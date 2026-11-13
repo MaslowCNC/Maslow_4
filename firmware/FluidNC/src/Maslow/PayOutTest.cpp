@@ -64,7 +64,7 @@ bool PayOutTest::parse(const char* value, Params& p, std::string& why) {
         pos = comma == std::string::npos ? s.size() + 1 : comma + 1;
     }
     if (toks.size() < 4) {
-        why = "use $TPO=<arm>,<target ADC>,<max speed mm/s>,<max dist mm>[,hold=s][,time=s]";
+        why = "use $TPO=<arm>,<resistive current ADC>,<max speed mm/s>,<max dist mm>[,hold=s][,time=s]";
         return false;
     }
     p.arm = TensionTest::armFromName(toks[0]);
@@ -101,7 +101,7 @@ bool PayOutTest::parse(const char* value, Params& p, std::string& why) {
         }
     }
     if (p.targetAdc != 0 && (p.targetAdc < 100 || p.targetAdc > MAX_TARGET_ADC)) {
-        why = "target must be 0 (drive mode) or 100-" + std::to_string(int(MAX_TARGET_ADC));
+        why = "resistive current must be 0 (drive mode) or 100-" + std::to_string(int(MAX_TARGET_ADC));
         return false;
     }
     if (p.speed < 0.5 || p.speed > 50 || p.dist < 1 || p.dist > 100) {

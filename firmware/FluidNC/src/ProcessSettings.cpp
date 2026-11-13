@@ -1518,7 +1518,7 @@ static Error maslow_tension_test(const char* value, AuthenticationLevel auth_lev
     return Error::Ok;
 }
 
-// $TPO=<arm>,<target ADC>,<max speed>,<max dist>[,hold=s][,time=s]: pull a belt out against its
+// $TPO=<arm>,<resistive current ADC>,<max speed>,<max dist>[,hold=s][,time=s]: pull a belt out against its
 // motor through a scale, to measure pay-out friction.  See PayOutTest.h and docs/protocol.md.
 static Error maslow_payout_test(const char* value, AuthenticationLevel auth_level, Channel& out) {
     Error err = maslow_bench_test_allowed("TPO", out);

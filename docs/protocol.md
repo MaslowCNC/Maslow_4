@@ -317,7 +317,7 @@ plus a log line `Motion is disabled: <reason>` when Maslow has blocked motion.
 | [`$TLO`][TLO] [`$TRO`][TRO] [`$BLO`][BLO] [`$BRO`][BRO] | `Maslow/calibrateXXO` | push that arm's belt out for 200 ms | no |
 | [`$SETZSTOP`][SETZSTOP] | `Maslow/setZStop` | make the current Z the Z stop | yes |
 | [`$TCT=<arm>[,key=value…]`][TCT] | `Maslow/tensionCurrentTest` | test bench: hold one belt motor at a series of current levels against a scale, to map current to belt force (below) | no |
-| [`$TPO=<arm>,<target>,<speed>,<dist>[,…]`][TPO] | `Maslow/payOutTest` | test bench: pull a belt out by hand through a scale against its motor, to measure pay-out force (below) | no |
+| [`$TPO=<arm>,<resistive current>,<speed>,<dist>[,…]`][TPO] | `Maslow/payOutTest` | test bench: pull a belt out by hand through a scale against its motor, to measure pay-out force (below) | no |
 
 **Belt tension / current test (`$TCT`).** Hook one belt to a scale anchored to the frame, belt
 taut, and run e.g. `$TCT=BR`. The motor pulls in, closed loop on its measured current (raw ADC,
@@ -356,15 +356,16 @@ Maslow error or watchdog, a change of Maslow state, and on its own checks. Log l
 
 **Belt pay-out test (`$TPO`).** The companion to `$TCT`, for the force it takes to pull a belt *out*
 against its motor. Hook the scale to the belt end and hold it by hand.
-`$TPO=<arm>,<target ADC>,<max speed mm/s>,<max dist mm>[,hold=s][,time=s]`, for example `$TPO=BL,800,5,20`.
+`$TPO=<arm>,<resistive current ADC>,<max speed mm/s>,<max dist mm>[,hold=s][,time=s]`, for example `$TPO=BL,800,5,20`.
+The resistive current is the current (raw ADC, the `MC` units) the motor holds pulling in while the belt is dragged out.
 Same preconditions and stop paths as `$TCT`.
 
-- **Current mode** (target 100–2800): the motor pulls in at the target current with `$TCT`'s
+- **Current mode** (resistive current 100–2800): the motor pulls in at the resistive current with `$TCT`'s
   loop. Hold the scale still until `TPO ready … pull the belt out now`, then pull the belt out
   steadily. Above max speed the motor adds pull to brake. At max distance it holds position with
   the machine's P loop (`MotorUnit`, P = 300) for `hold` s (default 5), ramps that down over 2 s and
   ends. Read the scale at breakaway, while moving, and during the end hold.
-- **Drive mode** (target 0): the realistic machine case. After a 3 s countdown the motor pays the
+- **Drive mode** (resistive current 0): the realistic machine case. After a 3 s countdown the motor pays the
   belt out at max speed under the machine's position control (`MotorUnit::recomputePID`), while you
   keep the scale taut. Then it holds and ramps down as above. The log shows the current it took.
 

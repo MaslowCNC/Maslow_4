@@ -10,11 +10,11 @@
 // $TPO: the belt pay-out test, the companion to $TCT.  It measures the force it takes to pull a
 // belt out against its motor, through an inline scale held by hand.
 //
-// Current mode (target > 0): the motor pulls in at the target current (raw ADC, closed loop as in
+// Current mode (resistive current > 0): the motor pulls in at that current (raw ADC, closed loop as in
 // $TCT).  Once it is on target the user pulls the belt out; past max speed the motor adds pull to
 // brake.  At max distance it holds position (the machine's own P loop), then ramps down and ends.
 //
-// Drive mode (target 0): the realistic machine case.  After a 3 s countdown the motor pays the
+// Drive mode (resistive current 0): the realistic machine case.  After a 3 s countdown the motor pays the
 // belt out at max speed under the machine's position control while the user keeps the scale
 // taut, then holds at max distance, ramps down and ends.  The log shows the current it took.
 //
@@ -24,14 +24,14 @@ class PayOutTest {
 public:
     struct Params {
         int   arm       = -1;
-        float targetAdc = 0;   // 0 = drive mode
+        float targetAdc = 0;   // resistive current, raw ADC; 0 = drive mode
         float speed     = 5;   // mm/s: brake above it (current mode), pay-out speed (drive mode)
         float dist      = 20;  // mm out from the start position
         float holdS     = 5;   // seconds holding at max distance
         float maxS      = 120;
     };
 
-    // Parses "$TPO=<arm>,<target ADC>,<max speed>,<max dist>[,hold=s][,time=s]".
+    // Parses "$TPO=<arm>,<resistive current ADC>,<max speed>,<max dist>[,hold=s][,time=s]".
     static bool parse(const char* value, Params& p, std::string& why);
 
     // Starts the test.  The caller has checked the machine state and set State::Homing.
