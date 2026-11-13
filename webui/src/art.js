@@ -1,7 +1,7 @@
 import { STEPS } from "./flow/screens.js";
 
 // Step graphics and the frame drawing, carried over from the mockup. They return SVG markup as strings.
-export function stepArt(i, waLabel) {
+export function stepArt(i) {
   const frame = `<circle cx="20" cy="14" r="5" fill="var(--node)"/><circle cx="240" cy="14" r="5" fill="var(--node)"/><circle cx="20" cy="106" r="5" fill="var(--node)"/><circle cx="240" cy="106" r="5" fill="var(--node)"/>`;
   const sled = (x, y) => `<rect x="${x - 14}" y="${y - 14}" width="28" height="28" rx="6" fill="var(--panel)" stroke="var(--lilac)" stroke-width="2"/>`;
   const belts = (x, y, dash) => [[20, 14], [240, 14], [20, 106], [240, 106]].map(([a, b]) =>
@@ -9,8 +9,6 @@ export function stepArt(i, waLabel) {
   const arrow = (x1, y1, x2, y2) => `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#3c82dc" stroke-width="2.5" marker-end="url(#ah)"/>`;
   const defs = `<defs><marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0 0L10 5L0 10z" fill="#3c82dc"/></marker></defs>`;
   const art = [
-    `<rect x="40" y="22" width="180" height="76" fill="var(--canvas2)" stroke="var(--lilac)" stroke-dasharray="4 3"/>` + arrow(130, 108, 216, 108) + arrow(130, 108, 44, 108) + arrow(232, 60, 232, 26) + arrow(232, 60, 232, 94) +
-      `<text x="130" y="64" text-anchor="middle" fill="var(--node)" font-size="12" font-family="monospace">${waLabel}</text>`,
     frame + belts(130, 60, true) + sled(130, 60) + arrow(70, 33, 105, 50) + arrow(190, 33, 155, 50) + arrow(70, 87, 105, 70) + arrow(190, 87, 155, 70),
     frame + belts(130, 60, true) + sled(130, 60) + arrow(105, 50, 60, 28) + arrow(155, 50, 200, 28) + arrow(105, 70, 60, 92) + arrow(155, 70, 200, 92),
     frame + belts(130, 60, false) + sled(130, 60) + `<text x="130" y="100" text-anchor="middle" fill="var(--muted)" font-size="11" font-family="monospace">belts tight, position checked</text>`,

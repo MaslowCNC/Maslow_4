@@ -244,6 +244,10 @@
   .gmeta b { font: 700 15px var(--font-display); }
   .gtext { flex: 1 1 220px; min-width: 0; font-size: 13px; color: var(--muted); }
   .gtext.alert { color: var(--danger); }
+  /* The connected machine's name beside a panel title */
+  .machinetag { display: inline-flex; align-items: center; padding: 1px 8px; border: 1px solid var(--lilac); border-radius: 999px;
+    color: var(--lilac); font: 600 11px var(--font-mono); letter-spacing: .02em; white-space: nowrap; text-transform: none; }
+  .mini .fname { font: 600 13px var(--font-mono); overflow-wrap: anywhere; }
   .bar { height: 8px; border-radius: 99px; background: var(--input); overflow: hidden; }
   .bar i { display: block; height: 100%; background: var(--fill, var(--lilac)); border-radius: 99px; }
   .belts { display: grid; grid-template-columns: auto 1fr auto; gap: 6px 10px; align-items: center; font: 12px var(--font-mono); }

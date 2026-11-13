@@ -1,6 +1,6 @@
 import { useState } from "preact/hooks";
 import { SCREENS } from "../flow/screens.js";
-import { ModePill, Conn, StepArt } from "./parts.jsx";
+import { ModePill, Conn } from "./parts.jsx";
 
 // Pop-ups cover the panels only, so the top bar and Stop stay visible and clickable
 function Modal({ title, small, onClose, children, foot, nav, single, compact, stop, ctx }) {
@@ -69,9 +69,9 @@ function StateSection({ k, ctx, close }) {
   </>;
 }
 
-const SECTIONS = [["state", "State"], ["device", "Device"], ["network", "Network"], ["workarea", "Work area"], ["tool", "Tool and Z"], ["display", "Display"], ["advanced", "Advanced"]];
+const SECTIONS = [["state", "State"], ["device", "Device"], ["network", "Network"], ["frame", "Frame and belts"], ["tool", "Tool and Z"], ["display", "Display"], ["advanced", "Advanced"]];
 
-export function Settings({ k, ctx, onClose, openWorkArea, theme, setTheme, compact, stop }) {
+export function Settings({ k, ctx, onClose, theme, setTheme, compact, stop }) {
   const [sec, setSec] = useState("state");
   const { d } = ctx, s = SCREENS[k];
   const busy = s.moving || s.mode === "Job" || !d.connected;
@@ -86,12 +86,7 @@ export function Settings({ k, ctx, onClose, openWorkArea, theme, setTheme, compa
     <Row label="WiFi network"><span>Workshop</span><button class="btn ghost" type="button">Change network</button></Row>
     <Row label="Hotspot"><select><option>Only when WiFi isn't connected</option><option>Always on</option><option>Off</option></select></Row>
     <p class="note">Placeholder: these depend on what the current WiFi dialog offers.</p></>;
-  else if (sec === "workarea") body = <><h4>Work area</h4>
-    <Row label="Size"><span class="mono">{d.workArea.w} × {d.workArea.h} mm</span></Row>
-    <Row label="Spoil board thickness" hint="Raises the sled, which changes the belt angles."><span class="mono">{d.workArea.spoil} mm</span></Row>
-    <Row label="Stock thickness" hint="Asked at Secure the work piece for each job."><span class="mono">{d.stock} mm</span></Row>
-    <Row label="Anchors"><span>{d.anchorsSaved ? "Saved" : "Cleared by the new work area"}</span></Row>
-    <Row label=""><button class="btn ghost" type="button" disabled={busy} onClick={() => { onClose(); openWorkArea(); }}>Change work area</button></Row></>;
+  else if (sec === "frame") body = <FrameSection ctx={ctx} busy={busy} />;
   else if (sec === "tool") body = <><h4>Tool and Z</h4>
     <Row label="Last stick-out" hint="Set when you measure a tool."><span class="mono">{d.zFromStickout ? `${d.zFromStickout} mm` : "–"}</span></Row>
     <Row label="Z after Stop" hint="How far Z lifts above work Z when you press Stop."><span class="mono">+2 mm</span><span class="note">fixed in firmware</span></Row></>;
@@ -102,17 +97,25 @@ export function Settings({ k, ctx, onClose, openWorkArea, theme, setTheme, compa
   return <Modal title="Settings" small="maslow" onClose={onClose} nav={nav} compact={compact} stop={stop} ctx={ctx}>{body}</Modal>;
 }
 
-export function WorkArea({ ctx, onClose, onSave, compact, stop }) {
-  const { d } = ctx;
-  const [w, setW] = useState(String(d.workArea.w)), [h, setH] = useState(String(d.workArea.h)), [sp, setSp] = useState(String(d.workArea.spoil));
-  const save = () => { const v = [w, h, sp].map(parseFloat); if (v[0] > 0 && v[1] > 0 && v[2] >= 0) onSave({ w: v[0], h: v[1], spoil: v[2] }); };
-  return <Modal title="Work area" single compact={compact} stop={stop} ctx={ctx} onClose={onClose}
-    foot={<><button class="btn ghost" type="button" onClick={onClose}>Cancel</button><button class="btn" type="button" onClick={save}>Save work area</button></>}>
-    <p class="note">Current work area: {d.workArea.w} × {d.workArea.h} mm</p>
-    <StepArt step={0} d={d} />
-    <Row label="Width"><input type="text" class="mono" value={w} onInput={e => setW(e.currentTarget.value)} style="width:90px" /> mm</Row>
-    <Row label="Height"><input type="text" class="mono" value={h} onInput={e => setH(e.currentTarget.value)} style="width:90px" /> mm</Row>
-    <Row label="Spoil board thickness" hint="Raises the sled, which changes the belt angles. 0 if there isn't one."><input type="text" class="mono" value={sp} onInput={e => setSp(e.currentTarget.value)} style="width:90px" /> mm</Row>
-    <div class="callout" style="--tone:var(--warn)"><b>Saving clears the anchors</b><span>Setup then runs every step. Clearing them needs a firmware change.</span></div>
-  </Modal>;
+// Frame and belts. There's no work area to confirm any more: the machine works it out from how far the belts
+// extend. Extend distance 0 means "extend until I say the belts are attached" (Done extending); a set distance is
+// for a machine standing vertically, where the belts can't be pulled out by hand.
+function FrameSection({ ctx, busy }) {
+  const { d, send } = ctx;
+  const [ext, setExt] = useState(String(d.extendDist ?? 0));
+  const [spoil, setSpoil] = useState(String(d.workArea.spoil));
+  const extN = parseFloat(ext), spoilN = parseFloat(spoil);
+  const extOk = extN >= 0 && !(extN === 0 && d.notYet?.extendUntilDone);
+  return <><h4>Frame and belts</h4>
+    <Row label="Extend distance" hint="0: the belts pay out until you press Done extending. Set a length if the machine stands vertically.">
+      <input type="text" inputmode="decimal" class="mono" value={ext} onInput={e => setExt(e.currentTarget.value)} style="width:90px" /> mm
+      <button class="btn ghost" type="button" disabled={busy || !extOk || extN === d.extendDist} onClick={() => send("setExtendDist", { mm: extN })}>Save</button></Row>
+    {extN === 0 && d.notYet?.extendUntilDone &&
+      <p class="note" style="color:var(--temp)"><b>Temporary:</b> {d.notYet.extendUntilDone}</p>}
+    <Row label="Spoil board thickness" hint="Raises the sled, which changes the belt angles. 0 if there isn't one.">
+      <input type="text" inputmode="decimal" class="mono" value={spoil} onInput={e => setSpoil(e.currentTarget.value)} style="width:90px" /> mm
+      <button class="btn ghost" type="button" disabled={busy || !(spoilN >= 0) || spoilN === d.workArea.spoil} onClick={() => send("setSpoilboard", { mm: spoilN })}>Save</button></Row>
+    <Row label="Stock thickness" hint="Asked at Secure the work piece for each job."><span class="mono">{d.stock} mm</span></Row>
+    <Row label="Work area" hint="Worked out from how far the belts extend."><span>Automatic</span></Row>
+    <Row label="Anchors"><span>{d.anchorsSaved ? "Saved" : "Not measured yet"}</span></Row></>;
 }

@@ -13,7 +13,7 @@ export const COMMANDS = {
   removeTool:     { api: null, cmd: "$Spindle/RemoveTool", status: "exists", note: "Same" },
   watchForTool:   { api: null, cmd: null, status: "exists", note: "The spindle board loads a bit by itself when it breaks the beam; nothing to send" },
   setZFromStickout: { api: null, cmd: null, status: "planned", note: "Set Z from the measured stick-out" },
-  setWorkArea:    { api: "setSetting() + saveConfig()", cmd: "$/Maslow_Work_Area_X=…, $/Maslow_Work_Area_Y=…", status: "exists", note: "Clearing the anchors on a new work area is planned" },
+  setExtendDist:  { api: "setSetting() + saveConfig()", cmd: "$/Maslow_Extend_Dist=…", status: "exists", note: "0 (extend until Done extending) needs the firmware change" },
   setSpoilboard:  { api: "setSetting()", cmd: "$/Maslow_spoilboardThickness=…", status: "exists" },
   setStock:       { api: "setSetting()", cmd: "$/Maslow_workThickness=…", status: "exists" },
   run:            { api: "runFile(path)", cmd: "$SD/Run=<file>", status: "exists" },

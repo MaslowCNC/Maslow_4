@@ -15,8 +15,10 @@ const CLOSE_NOTICES = { 4001: "othertab", 4002: "toomany" };
 const RECONNECT_MS = 3000;
 const SETTINGS = {
   workW: "Maslow_Work_Area_X", workH: "Maslow_Work_Area_Y",
-  spoil: "Maslow_spoilboardThickness", stock: "Maslow_workThickness"
+  spoil: "Maslow_spoilboardThickness", stock: "Maslow_workThickness", extend: "Maslow_Extend_Dist"
 };
+// The board type [ESP800] reports (firmware BoardId), as the machine's name. The Unified Control Board is the Mini's.
+const MACHINES = { maslow41: "Maslow 4.1", unified: "Maslow Mini", unified36v: "Maslow Mini 36 V" };
 
 // UI action → machine.js action, for the actions this page sends so far
 const ACTIONS = {
@@ -46,8 +48,12 @@ export function createMachine({ host = location.host } = {}) {
     notYet: {                // actions this page can't send yet, and why; their buttons are disabled with the reason
       setHomeXY: "Needs a machine.js action (G10 L20), to add with Tristan",
       setZ: "Needs a machine.js action (G10 L20), to add with Tristan",
-      park: "Needs a machine.js action, to add with Tristan"
+      park: "Needs a machine.js action, to add with Tristan",
+      // Extend distance 0 means "until Done extending", which today's firmware doesn't support: it would extend 0 mm
+      extendUntilDone: "0 needs the Done extending firmware change. Until then, Extend stops at the distance set here."
     },
+    machine: null,           // the machine's name from [ESP800], e.g. "Maslow Mini"; null until known
+    extendDist: null,        // Maslow_Extend_Dist, mm
     maslow: null, fluid: "", statusSeen: false,
     tool: "unknown", settingZ: false, zSetCount: 0, spindle: "off", error: null,
     job: null, lastJob: null, motion: null, result: null, restored: false,
@@ -167,8 +173,33 @@ export function createMachine({ host = location.host } = {}) {
 
   async function readSettings() {
     const read = (path) => m.getSetting(path).then(Number).catch(() => null);
-    const [w, h, spoil, stock] = await Promise.all(Object.values(SETTINGS).map(read));
-    set({ workArea: { w: w ?? 0, h: h ?? 0, spoil: spoil ?? 0 }, stock: stock ?? 0 });
+    const [w, h, spoil, stock, extend] = await Promise.all(Object.values(SETTINGS).map(read));
+    set({ workArea: { w: w ?? 0, h: h ?? 0, spoil: spoil ?? 0 }, stock: stock ?? 0, extendDist: extend });
+  }
+
+  // Which machine this is: [ESP800] reports the board ("board:unified"). Over HTTP, like the current UI.
+  async function readMachine() {
+    try {
+      const r = await fetch(`/command?plain=${encodeURIComponent("[ESP800]")}`);
+      const tag = (await r.text()).match(/board:\s*([a-z0-9]+)/i)?.[1];
+      set({ machine: MACHINES[tag] || (tag ? `Unknown board (${tag})` : "Unknown machine") });
+    } catch (e) {
+      log(`Couldn't read which machine this is: ${e.message}`);
+      emit();
+    }
+  }
+
+  // Save one Maslow setting and write the config file, as the current UI does
+  async function saveSetting(path, value, label, patch) {
+    try {
+      await m.setSetting(path, value);
+      await m.saveConfig();
+      log(`${label} saved: ${value} mm`);
+      set(patch);
+    } catch (err) {
+      log(`Couldn't save the ${label.toLowerCase()}: ${err.detail || err.reason}`);
+      emit();
+    }
   }
 
   // The SD card listing, over HTTP like the current UI (GET /upload?path=/). Read-only.
@@ -238,6 +269,7 @@ export function createMachine({ host = location.host } = {}) {
       globalThis.wsCommands.sendRealtime(0x3f);
       globalThis.wsCommands.send("$G", { quiet: true });
       readSettings();
+      readMachine();
       listFiles();
     };
     ws.onmessage = (e) => onData(e.data);
@@ -300,17 +332,7 @@ export function createMachine({ host = location.host } = {}) {
     });
   }
 
-  async function setStock(stock) {
-    try {
-      await m.setSetting(SETTINGS.stock, stock);
-      await m.saveConfig();
-      log(`Stock thickness saved: ${stock} mm`);
-      set({ stock });
-    } catch (err) {
-      log(`Couldn't save the stock thickness: ${err.detail || err.reason}`);
-      emit();
-    }
-  }
+  const setStock = (stock) => saveSetting(SETTINGS.stock, stock, "Stock thickness", { stock });
 
   // Run a machine.js action and follow its Operation in state.op. start() returns the Operation.
   function run(action, start) {
@@ -351,6 +373,12 @@ export function createMachine({ host = location.host } = {}) {
     if (action === "uploadFile") return uploadFile();
     if (action === "ackIncident") { set({ incident: null }); return; }
     if (action === "setStock") { setStock(payload.stock); return; }
+    if (action === "setSpoilboard") { saveSetting(SETTINGS.spoil, payload.mm, "Spoil board thickness", { workArea: { ...s.workArea, spoil: payload.mm } }); return; }
+    if (action === "setExtendDist") {
+      if (payload.mm === 0) { log(`Not sent: extend distance 0 (${s.notYet.extendUntilDone})`); emit(); return; }
+      saveSetting(SETTINGS.extend, payload.mm, "Extend distance", { extendDist: payload.mm });
+      return;
+    }
     if (action === "jog") {
       const delta = Object.fromEntries([["x", payload.dx], ["y", payload.dy], ["z", payload.dz]].filter(([, v]) => v));
       if (!Object.keys(delta).length) return;

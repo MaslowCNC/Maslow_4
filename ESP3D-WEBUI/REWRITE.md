@@ -32,7 +32,7 @@ machine API in [MaslowCNC/Maslow_4#1132](https://github.com/MaslowCNC/Maslow_4/p
   connected to and picks the flow. The Mini has the spindle board (`SpindleBoard:` in its config: the
   tool beam, Z homing, spindle faults) and no Z steppers; the 4.1 has TMC2209 Z steppers and no
   spindle board. So the tool and Z-homing steps below are the Mini's; the 4.1's Z flow is still to
-  define. How the UI tells them apart is open (see Open questions).
+  define. The UI tells them apart from `[ESP800]`'s `board:` field (see Open questions).
 - **mo takes the tool state and Z homing** (firmware and UI), because they're part of the Mini
   flow, which Tristan can't test. Tristan keeps the rest of the firmware work.
 
@@ -128,7 +128,7 @@ source, and there are two:
 1. **The machine's state:** the Maslow state (how far through belt setup), plus the FluidNC state
    (what it's doing right now). Idle alone doesn't mean ready: `UNKNOWN` and `READY_TO_CUT` are
    both Idle.
-2. **The user's answers on this page:** work area kept, retract checked by eye, Z set, work piece
+2. **The user's answers on this page:** retract checked by eye, Z set, work piece
    secure, final check. The machine can't store these, so a second browser or a reload asks
    again, which is safe.
 
@@ -161,20 +161,18 @@ These are FluidNC's `MPos`, `WCO` and `WPos = MPos − WCO`.
 - The mode and Stop are always in view.
 - **Prompts are completed where they're asked.** If the top bar asks for something, it can be done
   in the top bar: the stick-out, the stock thickness, the final check's four boxes. Bigger tasks
-  open a pop-up from the bar (Work area). On a phone, the header and the Setup section play this
-  part.
+  open a pop-up from the bar. On a phone, the header and the Setup section play this part.
 - **The setup bar expands** with an arrow on its bottom edge: a big step graphic beside fuller
   numbered instructions. It's closed by default. The big graphic is where the line art for
   first-time users goes (on hold).
-- **Device details** has status, position and work area cards, then three tabs:
-  - Job stats: progress, line and time during a job, otherwise the chosen file's size, time and
-    depth;
+- **Device details** has the connected machine's name beside its title, as a tag ("Maslow Mini",
+  from `[ESP800]`). Below it are status, position and **File** cards, then two tabs:
+  - File card: during a job, the progress bar, line and percent; otherwise the chosen file's size,
+    depth and line count (from the G-code reader);
   - Belts: live lengths, from `BL`;
   - Motors: currents, from `MC`.
 
   Values go grey with "out of date" when the machine stops answering.
-- **Work area pop-up:** width, height and spoil board thickness, with a warning that saving clears
-  the anchors.
 - **Settings pop-up** (⚙ at the end of the top bar; draft):
 
 | Section | Holds |
@@ -182,7 +180,7 @@ These are FluidNC's `MPos`, `WCO` and `WPos = MPos − WCO`.
 | State | The mode and every machine action in a fixed order, greyed out with a reason when unavailable |
 | Device | Name, firmware version and update, reboot |
 | Network | WiFi network, hotspot (placeholder) |
-| Work area | Size, spoil board, last stock thickness, anchors, Find anchors |
+| Frame and belts | Extend distance (0 = until Done extending), spoil board thickness, last stock thickness, work area (automatic), anchors |
 | Tool and Z | Last stick-out, default bit |
 | Display | Dark or light panels, units |
 | Advanced | Raw FluidNC and Maslow settings, `maslow.yaml` |
@@ -200,19 +198,22 @@ arrives. The full table of states, subheaders and actions is the UI modes map.
 
 ### Setup steps
 
-1. Confirm the work area
-2. Retract belts
-3. Extend belts
-4. Apply tension
-5. Find anchors
-6. Check the tool
-7. Measure the tool
-8. Secure the work piece
-9. Choose a job file
+1. Retract belts
+2. Extend belts
+3. Apply tension
+4. Find anchors
+5. Check the tool
+6. Measure the tool
+7. Secure the work piece
+8. Choose a job file
 
-- **Confirming the work area comes first,** before anything moves. Keeping it skips steps the
-  machine already knows; skipped steps show as skipped, not done. A new work area should clear the
-  anchors so every step runs (the firmware doesn't clear them yet).
+- **No work area to confirm (decided 2026-11-13).** The work area is worked out from how far the
+  belts extend, so setup starts straight from the machine's state. Steps the machine already knows
+  show as skipped, not done.
+- **Extend distance** is in Settings › Frame and belts. It defaults to **0, meaning "extend until
+  the user presses Done extending"**. A set length is for a machine standing vertically, where the
+  belts can't be pulled out by hand. Until the Done extending firmware change exists, the real
+  machine can't take 0 (it would extend 0 mm), so the page refuses to save it and says why.
 - **Setup starts from the Maslow state:**
 
 | Maslow state | Setup starts at |
@@ -230,8 +231,8 @@ arrives. The full table of states, subheaders and actions is the UI modes map.
   Today it ends by itself at `extendDist`.
 - **Spoil board and stock thickness** raise the sled above the frame, so the firmware adds both to
   every anchor's height when it works out belt lengths. A wrong value costs accuracy, most near the
-  anchors. The spoil board is set with the work area; the stock thickness is asked at Secure the
-  work piece, with the last value filled in.
+  anchors. The spoil board is set in Settings › Frame and belts; the stock thickness is asked at
+  Secure the work piece, with the last value filled in.
 - **The tool and Z steps.** Once the position is confirmed, the machine checks for a tool by
   itself: the spindle board raises the spindle through its top-of-travel light beam.
   - **A bit is found:** "Have you set Z for this tool?" Yes goes on; No leads to Measure the tool.
@@ -414,13 +415,14 @@ sent only while it applies, like `STOPPED`, is preferred):
 
 ## Open questions
 
-- **Telling the Mini from the 4.1:** the active config file is always `maslow.yaml`, so its name
-  doesn't say. Options: read a setting that only one has (such as the `SpindleBoard` section), the
-  spindle board's link at boot, or a small field or `$` reply from the firmware that names the
-  machine. And what the 4.1's setup flow is, step by step, in place of the Mini's tool steps.
-
-- **Work area and anchors:** should a new work area clear the anchors, and should the firmware
-  record that Find anchors succeeded (and for which work area), so setup can skip it safely?
+- **Telling the Mini from the 4.1: answered (2026-11-13).** The firmware identifies its board at boot
+  from a resistor divider (`firmware/FluidNC/src/Maslow/BoardId.cpp`), and `[ESP800]`, which the UI
+  already sends when it connects, reports it as `board:maslow41`, `board:unified` (the Unified Control
+  Board, the Mini's), `board:unified36v` or `board:unknown`. The test Mini reports `board:unified`.
+  Still open: whether the Unified board will only ever be in a Mini (if not, the spindle board's link is
+  a second sign), and what the 4.1's setup flow is, step by step, in place of the Mini's tool steps.
+- **Anchors:** should the firmware record that Find anchors succeeded, so setup can tell measured
+  anchors from defaults and skip Find anchors safely?
 - **Park after a successful job:** started by the UI or the firmware? It must turn the spindle off
   first.
 - **Stock thickness timing:** Apply tension uses it, but it's entered later, at Secure the work

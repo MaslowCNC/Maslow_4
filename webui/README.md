@@ -32,7 +32,7 @@ it sends the real stop (0x18, then `$STOP`) when pressed. The machine needs #113
 |---|---|
 | `src/device/` | The device. `simulator.js` holds the machine's state (Maslow state, FluidNC state, tool, job, belts) and asks the tester for every response. `commands.js` maps each action to the firmware command it will send, marked `exists` or `planned`. |
 | `src/flow/` | The setup flow. `screens.js` turns the device's state plus the user's answers into the screen to show (`derive()`), with each screen's mode, subheader and message. `asks.jsx` says what each screen asks for in the top bar and what its buttons do. |
-| `src/ui/` | The screens: desktop layout 6 (`desktop.jsx`), phone layout B (`phone.jsx`), the Settings and Work area pop-ups (`modals.jsx`), shared pieces (`parts.jsx`) and the simulator panel (`sim.jsx`). |
+| `src/ui/` | The screens: desktop layout 6 (`desktop.jsx`), phone layout B (`phone.jsx`), the Settings pop-up (`modals.jsx`), shared pieces (`parts.jsx`) and the simulator panel (`sim.jsx`). |
 | `src/gcode/` | The G-code reader (`reader.js`): a file's text → line count, moves and extent, in mm and work coordinates. Framework-free, for job progress, Trace boundary and the preview. Both devices put the chosen file, read, in `state.gcode` (`{ file, status, lineCount, moves, extent }`); the app sends `chooseFile` when the choice changes. Tests next to it: `npm test`. |
 | `src/art.js` | Step graphics and the frame drawing, carried over from the mockup. |
 
@@ -42,7 +42,7 @@ the status report, `$GSTATE`, `$MINFO` and the log. The screens don't change. Ac
 `commands.js` need the firmware changes listed in REWRITE.md before they can work.
 
 **The two states:** as in REWRITE.md, the screen comes from what the device reports *and* what the user has
-confirmed on this page (work area kept, retract checked by eye, Z set, work piece secure, file chosen). Those answers
+confirmed on this page (retract checked by eye, Z set, work piece secure, file chosen). Those answers
 live in the app and reset whenever the page (re)connects.
 
 **Two positions:** the device keeps the machine position (measured from the anchors: X 0, Y 0 is where Apply

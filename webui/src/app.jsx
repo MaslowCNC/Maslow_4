@@ -4,7 +4,7 @@ import { createMachine } from "./device/machine.js";
 import { derive, freshAnswers, isSetup } from "./flow/screens.js";
 import { Desktop } from "./ui/desktop.jsx";
 import { Phone } from "./ui/phone.jsx";
-import { Settings, WorkArea } from "./ui/modals.jsx";
+import { Settings } from "./ui/modals.jsx";
 import { SimPanel } from "./ui/sim.jsx";
 import { FINAL_CHECKS } from "./ui/desktop.jsx";
 
@@ -31,7 +31,7 @@ function useNarrow(px = 760) {
 export function App() {
   const d = useDevice();
   const [a, setAnswers] = useState(freshAnswers);
-  const [modal, setModal] = useState(null);           // "settings" | "workarea"
+  const [modal, setModal] = useState(null);           // "settings"
   const [checks, setChecks] = useState(FINAL_CHECKS.map(() => false));
   const [theme, setTheme] = useState("dark");
   const narrow = useNarrow();
@@ -39,14 +39,13 @@ export function App() {
   const setA = (patch) => setAnswers(prev => ({ ...prev, ...patch }));
   const mark = (step) => setAnswers(prev => prev.ran.includes(step) ? prev : { ...prev, ran: [...prev.ran, step] });
   const send = (action, payload) => device.send(action, payload);
-  const openWorkArea = () => { setA({ editingWorkArea: true }); setModal("workarea"); };
   const k = derive(d, a);
-  const ctx = { d, a, setA, send, mark, openWorkArea };
+  const ctx = { d, a, setA, send, mark };
 
   useEffect(() => { send("connect"); }, []);
   // The device reads the chosen file (for the preview and Trace boundary) whenever the choice changes
   useEffect(() => { send("chooseFile", { file: a.file }); }, [a.file]);
-  // A (re)connection means the device may have changed: start setup again from Confirm the work area
+  // A (re)connection means the device may have changed: setup starts again from what the machine reports
   useEffect(() => { setAnswers(freshAnswers()); setChecks(FINAL_CHECKS.map(() => false)); }, [d.connectId]);
   // Once the position is confirmed, the device checks for a tool on its own
   useEffect(() => { if (k === "tcheck" && d.tool === "unknown" && !d.pending) send("toolCheck"); }, [k, d.tool, d.pending]);
@@ -69,11 +68,8 @@ export function App() {
   // During setup on desktop, Stop sits in the panel the pop-up covers, so the pop-up carries its own
   const mprops = { ctx, compact: narrow, stop: !narrow && isSetup(k) && d.connected };
   const overlay = modal === "settings"
-    ? <Settings k={k} {...mprops} theme={theme} setTheme={setTheme} onClose={() => setModal(null)} openWorkArea={() => setModal("workarea")} />
-    : modal === "workarea"
-      ? <WorkArea {...mprops} onClose={() => { setA({ editingWorkArea: false }); setModal(null); }}
-          onSave={(wa) => { send("setWorkArea", wa); setA({ workAreaConfirmed: true, editingWorkArea: false }); setModal(null); }} />
-      : null;
+    ? <Settings k={k} {...mprops} theme={theme} setTheme={setTheme} onClose={() => setModal(null)} />
+    : null;
   const props = { k, ctx, onSettings: () => setModal("settings"), checks, setChecks, overlay };
   return <div class={`appshell${narrow ? " narrow" : ""}`} data-panels={theme}>
     {narrow ? <Phone {...props} /> : <Desktop {...props} />}

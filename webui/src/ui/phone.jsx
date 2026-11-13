@@ -1,12 +1,12 @@
 import { useState } from "preact/hooks";
 import { SCREENS, isSetup, stepName } from "../flow/screens.js";
 import { ask, mainActions } from "../flow/asks.jsx";
-import { Btn, ModePill, Conn, progress, Segs, StepArt, Frame, LogView, JogPad, DetailsBody, FilesBody, jogLock, workPos } from "./parts.jsx";
+import { Btn, MachineTag, ModePill, Conn, progress, Segs, StepArt, Frame, LogView, JogPad, DetailsBody, FilesBody, jogLock, workPos } from "./parts.jsx";
 import { Gear, FinalChecks } from "./desktop.jsx";
 
 // Defined outside Phone so its children keep their state (typed values) across re-renders
-function Section({ id, name, summary, sec, toggle, children }) {
-  return <details open={sec === id}><summary onClick={e => { e.preventDefault(); toggle(id); }}><b>{name}</b><span>{summary}</span></summary>
+function Section({ id, name, tag, summary, sec, toggle, children }) {
+  return <details open={sec === id}><summary onClick={e => { e.preventDefault(); toggle(id); }}><b>{name}</b>{tag}<span>{summary}</span></summary>
     {sec === id && <div class="accbody">{children}</div>}</details>;
 }
 
@@ -39,7 +39,7 @@ export function Phone({ k, ctx, onSettings, checks, setChecks, overlay }) {
           {q.input}
           {q.buttons.length > 0 && <div class="row">{q.buttons.map(b => <Btn b={b} />)}</div>}
         </Section>
-        <Section sec={sec} toggle={toggle} id="details" name="Details" summary={s.nopos ? "No position yet" : `Work X ${workPos(ctx.d).x.toFixed(1)}  Y ${workPos(ctx.d).y.toFixed(1)}`}>
+        <Section sec={sec} toggle={toggle} id="details" name="Details" tag={<MachineTag d={ctx.d} />} summary={s.nopos ? "No position yet" : `Work X ${workPos(ctx.d).x.toFixed(1)}  Y ${workPos(ctx.d).y.toFixed(1)}`}>
           <DetailsBody k={k} d={ctx.d} a={ctx.a} />
         </Section>
         <Section sec={sec} toggle={toggle} id="jog" name="Jog" summary={lock ? lock[0] : "Ready to jog"}><div class="jogbox"><JogPad k={k} d={ctx.d} send={ctx.send} /></div></Section>

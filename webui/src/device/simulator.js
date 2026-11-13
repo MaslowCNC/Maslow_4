@@ -48,6 +48,8 @@ function initialState() {
     motion: null,                 // tracing | parking
     result: null,                 // the last setup step's result, e.g. { step: "tension", outcome: "nofit", message }
     restored: false,              // came back from a reboot with belt lengths restored
+    machine: "Maslow Mini",       // as the real machine reports it from [ESP800]
+    extendDist: 0,                // 0 = extend until the user presses Done extending
     workArea: { w: 1200, h: 1200, spoil: 12.7 },
     stock: 6.35,
     anchorsSaved: true,
@@ -172,8 +174,8 @@ export function createSimulator() {
           wco: { ...s.wco, z: +(s.pos.z - (40 - stickout)).toFixed(3) }, pending: null })]]);
     },
 
-    setWorkArea({ w, h, spoil }) { log(`$/Maslow_Work_Area_X=${w}`, `$/Maslow_Work_Area_Y=${h}`, `$/Maslow_spoilboardThickness=${spoil}`);
-      set({ workArea: { w, h, spoil }, anchorsSaved: false }); },
+    setExtendDist({ mm }) { log(`$/Maslow_Extend_Dist=${mm}`, "$CO"); set({ extendDist: mm }); },
+    setSpoilboard({ mm }) { log(`$/Maslow_spoilboardThickness=${mm}`, "$CO"); set({ workArea: { ...s.workArea, spoil: mm } }); },
     setStock({ stock }) { log(`$/Maslow_workThickness=${stock}`); set({ stock }); },
 
     run({ file }) {

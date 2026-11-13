@@ -20,7 +20,7 @@ export function Conn({ d }) {
 
 // Setup progress: steps before the current one are done, or skipped if the device was already past them
 export function progress(step, ran) {
-  const skipped = STEPS.map((_, i) => i < step && i > 0 && !ran.includes(i));
+  const skipped = STEPS.map((_, i) => i < step && !ran.includes(i));
   const n = skipped.filter(Boolean).length;
   return { skipped, label: `${step}/${STEPS.length} done${n ? `, ${n} skipped` : ""}` };
 }
@@ -28,7 +28,7 @@ export const Segs = ({ step, skipped }) =>
   <div class="segs">{STEPS.map((_, i) => <i class={skipped[i] ? "skip" : i < step ? "done" : i === step ? "now" : ""} />)}</div>;
 
 export const StepArt = ({ step, d, class: c = "art" }) =>
-  <div class={c}><Svg html={stepArt(step, `${d.workArea.w} × ${d.workArea.h} mm`)} /></div>;
+  <div class={c}><Svg html={stepArt(step)} /></div>;
 
 export const Frame = ({ k, d }) => {
   const s = SCREENS[k];
@@ -94,20 +94,35 @@ export function JogPad({ k, d, send }) {
 }
 
 const BELT_NAMES = ["TL", "TR", "BL", "BR"];
+// The machine this page is connected to, as a small tag beside a panel title ("Maslow Mini")
+export const MachineTag = ({ d }) => d.machine ? <span class="machinetag" title="The machine this page is connected to">{d.machine}</span> : null;
+
+// The File card: the running job's progress, or what the chosen file will cut
+function FileCard({ d, a }) {
+  if (d.job) {
+    const pct = Number(d.job.total) > 0 ? Math.min(100, Math.round(100 * d.job.line / d.job.total)) : null;
+    return <div class="mini"><span>File</span><b class="fname">{d.job.file}</b>
+      <div class="bar"><i style={`width:${pct ?? 0}%`}></i></div>
+      <small>line {d.job.line} / {d.job.total} · {pct == null ? "counting the file's lines…" : `${pct}% of the lines`}</small></div>;
+  }
+  const name = a.file;
+  if (!name) return <div class="mini"><span>File</span><p class="note" style="margin:0">No file chosen yet</p></div>;
+  const f = d.files.find(x => x.name === name) || {};
+  const g = d.gcode?.file === name ? d.gcode : null;
+  const e = g?.status === "ready" && g.extent;
+  const size = e ? `${(e.max.x - e.min.x).toFixed(0)} × ${(e.max.y - e.min.y).toFixed(0)} mm` : f.w ? `${f.w} × ${f.h} mm` : null;
+  const depth = e ? `${Math.max(0, -e.min.z).toFixed(1)} mm deep` : f.depth != null ? `${f.depth} mm deep` : null;
+  const extra = [size, depth, f.minutes ? `about ${f.minutes} min` : null, g?.lineCount ? `${g.lineCount.toLocaleString()} lines` : null].filter(Boolean);
+  return <div class="mini"><span>File</span><b class="fname">{name}</b>
+    <small>{g?.status === "reading" ? "reading the file…" : g?.status === "failed" ? `couldn't read it: ${g.detail || ""}` : extra.join(" · ") || f.size}</small></div>;
+}
+
 export function DetailsBody({ k, d, a }) {
-  const [tab, setTab] = useState("job");
+  const [tab, setTab] = useState("belts");
   const s = SCREENS[k];
   const nopos = s.nopos;
-  const file = d.files.find(f => f.name === (d.job?.file || a.file));
   let body;
-  if (tab === "job") {
-    const pct = d.job && Number(d.job.total) > 0 ? Math.min(100, Math.round(100 * d.job.line / d.job.total)) : null;
-    body = d.job ? <><div class="bar"><i style={`width:${pct ?? 0}%`}></i></div>
-      <dl class="kv"><dt>File</dt><dd>{d.job.file}</dd><dt>Line</dt><dd>{d.job.line} / {d.job.total}</dd>
-        <dt>Progress</dt><dd>{pct == null ? "counting the file's lines…" : `${pct}% of the lines`}</dd></dl></>
-      : file ? <dl class="kv"><dt>File</dt><dd>{file.name}</dd><dt>Size</dt><dd>{file.w} × {file.h} mm</dd><dt>Est. time</dt><dd>{file.minutes} min</dd><dt>Depth</dt><dd>{file.depth} mm</dd></dl>
-      : <p class="note">No job yet. Stats show here once a file is chosen and running.</p>;
-  } else if (tab === "belts") {
+  if (tab === "belts") {
     body = d.maslow === 0 ? <p class="note">Belt lengths aren't known yet.</p> :
       <><div class={`belts${s.stale ? " stale" : ""}`}>{d.belts.map((v, i) => <><span>{BELT_NAMES[i]}</span><span class="bar"><i style={`width:${Math.min(100, v / 15)}%`}></i></span><span>{v.toFixed(1)} mm</span></>)}</div>
         <p class="note">Live, from the status report.</p></>;
@@ -124,10 +139,10 @@ export function DetailsBody({ k, d, a }) {
     <div class="minis">
       <div class="mini"><span>Status</span><p class={s.alert ? "alert" : ""}>{s.msg}</p></div>
       <div class="mini"><span>Position</span><PosReadout d={d} nopos={nopos} stale={s.stale} /></div>
-      <div class="mini"><span>Work area</span><b>{d.workArea.w} × {d.workArea.h} mm</b><small>spoil board {d.workArea.spoil} mm · stock {d.stock} mm</small></div>
+      <FileCard d={d} a={a} />
     </div>
     <div class="dstats">
-      <div class="dtabs" role="tablist">{[["job", "Job stats"], ["belts", "Belts"], ["motors", "Motors"]].map(([id, n]) =>
+      <div class="dtabs" role="tablist">{[["belts", "Belts"], ["motors", "Motors"]].map(([id, n]) =>
         <button type="button" role="tab" aria-selected={id === tab} onClick={() => setTab(id)}>{n}</button>)}
         <span class={`dlive${s.stale ? " off" : ""}`}>{s.stale ? "out of date" : ""}</span></div>
       <div class="dbody">{body}</div>
@@ -139,9 +154,9 @@ export function FilesBody({ k, d, a, setA, send, mark }) {
   const locked = SCREENS[k].mode === "Job";
   return <>
     <div class="row"><button class="btn ghost" type="button" disabled={locked}
-      onClick={() => Promise.resolve(send("uploadFile")).then(f => { if (f && (a.file || isSetup(k))) { mark(8); setA({ file: f }); } })}>Upload file</button></div>
+      onClick={() => Promise.resolve(send("uploadFile")).then(f => { if (f && (a.file || isSetup(k))) { mark(7); setA({ file: f }); } })}>Upload file</button></div>
     <ul class="files">{d.files.map(f =>
-      <li class={f.name === a.file ? "sel" : ""}><button type="button" class="fbtn" disabled={locked} onClick={() => { mark(8); setA({ file: f.name }); }}>
+      <li class={f.name === a.file ? "sel" : ""}><button type="button" class="fbtn" disabled={locked} onClick={() => { mark(7); setA({ file: f.name }); }}>
         <span>{f.name}</span><span>{f.size}</span></button></li>)}</ul>
     {locked && <p class="note">You can't change the file during a job.</p>}
   </>;

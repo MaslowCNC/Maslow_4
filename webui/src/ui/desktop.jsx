@@ -1,7 +1,7 @@
 import { useState } from "preact/hooks";
 import { SCREENS, STEP_HELP, isSetup, stepName } from "../flow/screens.js";
 import { ask, mainActions } from "../flow/asks.jsx";
-import { Btn, ModePill, Conn, progress, Segs, StepArt, Frame, LogView, JogPad, DetailsBody, FilesBody } from "./parts.jsx";
+import { Btn, MachineTag, ModePill, Conn, progress, Segs, StepArt, Frame, LogView, JogPad, DetailsBody, FilesBody } from "./parts.jsx";
 
 export const StopBtn = ({ send, label = "Stop" }) => <button class="btn danger" type="button" onClick={() => send("stop")}>{label}</button>;
 export const Gear = ({ onClick }) => <button class="gear" type="button" aria-label="Settings" onClick={onClick}>⚙</button>;
@@ -68,9 +68,9 @@ export function Desktop({ k, ctx, onSettings, checks, setChecks, overlay }) {
       <section class="panel" style="grid-area:comp"><div class="ph">Jog / Home<small></small></div><div class="pb"><JogPad k={k} d={ctx.d} send={ctx.send} /></div></section>
       <section class="panel" style="grid-area:cfg">
         {setup
-          ? <div class="ph pinned"><span style="display:flex;align-items:center;gap:8px;min-width:0"><ModePill s={s} small /><span class="sub" style="color:var(--text);font-family:var(--font-sans)">{s.sub}</span></span>
+          ? <div class="ph pinned"><span style="display:flex;align-items:center;gap:8px;min-width:0"><ModePill s={s} small /><span class="sub" style="color:var(--text);font-family:var(--font-sans)">{s.sub}</span><MachineTag d={ctx.d} /></span>
               <span class="hbtns"><div class="row"><button class="btn go" type="button" disabled title="Finish setup first">Run</button><StopBtn send={ctx.send} /></div></span></div>
-          : <div class="ph">Device details<small>{s.stale ? "out of date" : "live"}</small></div>}
+          : <div class="ph"><span style="display:flex;align-items:center;gap:8px">Device details<MachineTag d={ctx.d} /></span><small>{s.stale ? "out of date" : "live"}</small></div>}
         <div class="pb"><DetailsBody k={k} d={ctx.d} a={ctx.a} /></div>
       </section>
       <section class="panel" style="grid-area:files"><div class="ph">File management<small></small></div><div class="pb"><FilesBody k={k} {...ctx} /></div></section>
