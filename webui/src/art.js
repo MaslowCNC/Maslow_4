@@ -43,8 +43,27 @@ function beltLabels(lengths, target) {
   }).join("");
 }
 
-// lengths: when given, each belt shows its live length (the Belts toggle)
-export function visSvg(k, s, pos = { x: 0, y: 0 }, home = { x: 0, y: 0 }, lengths = null) {
+// Motor current as a ring around each anchor, like the current UI's dials (tablet.js, debugging.js): the ring fills
+// toward MAX_CURRENT_MA, coloured by how full it is. currents = [tl, tr, bl, br] in mA, null where there's no reading.
+const MAX_CURRENT_MA = 2200;
+const RING_R = 12, RING_C = 2 * Math.PI * RING_R;
+const currentColour = (pct) => pct > 75 ? "#F44336" : pct > 50 ? "#FF9800" : pct > 25 ? "#2196F3" : "#4CAF50";
+function currentRings(currents) {
+  const names = ["Top left", "Top right", "Bottom left", "Bottom right"];
+  return [[30, 30], [380, 30], [30, 240], [380, 240]].map(([x, y], i) => {
+    const mA = currents[i];
+    const pct = mA == null ? 0 : Math.min(100, (mA / MAX_CURRENT_MA) * 100);
+    const title = mA == null ? `${names[i]} motor: no current reading` : `${names[i]} motor: ${Math.round(mA)} mA`;
+    return `<g><title>${title}</title>` +
+      `<circle cx="${x}" cy="${y}" r="${RING_R}" fill="none" stroke="var(--line2)" stroke-width="3"/>` +
+      `<circle cx="${x}" cy="${y}" r="${RING_R}" fill="none" stroke="${currentColour(pct)}" stroke-width="3" stroke-linecap="round" ` +
+      `stroke-dasharray="${RING_C.toFixed(2)}" stroke-dashoffset="${(RING_C * (1 - pct / 100)).toFixed(2)}" transform="rotate(-90 ${x} ${y})"/></g>`;
+  }).join("");
+}
+
+// lengths: when given, each belt shows its live length (the Belts toggle).
+// currents: when given, each motor shows its current as a ring at its anchor (the Motors toggle).
+export function visSvg(k, s, pos = { x: 0, y: 0 }, home = { x: 0, y: 0 }, lengths = null, currents = null) {
   // The sled follows the machine position, scaled to the drawing. The cross marks the user's home (work 0, 0);
   // it's drawn over the sled and reaches past it, so it still shows when the sled sits on home.
   const toX = (x) => Math.max(40, Math.min(370, 205 + x / 4)), toY = (y) => Math.max(40, Math.min(230, 140 - y / 4));
@@ -61,7 +80,7 @@ export function visSvg(k, s, pos = { x: 0, y: 0 }, home = { x: 0, y: 0 }, length
     ${done ? `<path d="M130 90 H280 V190 H210" fill="none" stroke="var(--lilac)" stroke-width="3"/>` : ""}
     ${k === "success" || k === "parking" ? `<path d="${path}" fill="none" stroke="var(--lilac)" stroke-width="3"/>` : ""}
     ${k === "tracing" ? `<path d="M126 86 H284 V194 H200" fill="none" stroke="var(--ready)" stroke-width="2.5" stroke-dasharray="6 4"/>` : ""}
-    ${unk ? "" : belts}${anchors}
+    ${unk ? "" : belts}${anchors}${currents ? currentRings(currents) : ""}
     ${unk ? `<text x="205" y="62" text-anchor="middle" fill="var(--muted)" font-family="var(--font-mono)" font-size="12">Sled position unknown</text>` : ""}
     <rect ${unk ? 'opacity="0"' : ""} x="${sledX - 13}" y="${sledY - 13}" width="26" height="26" rx="6" fill="var(--panel)" stroke="var(--lilac)" stroke-width="2"/>
     ${unk ? "" : `<circle cx="${sledX}" cy="${sledY}" r="3" fill="var(--lilac)"/>`}

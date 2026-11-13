@@ -265,6 +265,19 @@ export function createSimulator() {
     }
   };
 
+  // Belt motor currents, as the real machine's MC field reports them (raw ADC, 0-4095). Made up, so the Motors
+  // view has something to show: a light hold when idle and tensioned, more while the belts or a job move.
+  const BUSY = [1, 3, 5, 6, 8];
+  setInterval(() => {
+    if (!s.connected) return;
+    const moving = BUSY.includes(s.maslow) || s.job || s.motion;
+    const base = moving ? 900 : s.maslow === 7 ? 60 : 0;
+    const jitter = () => (moving ? Math.round((Math.random() - 0.5) * 900) : Math.round(Math.random() * 10));
+    const mc = { tl: base + jitter(), tr: base + jitter(), bl: Math.round(base * 0.7) + jitter(), br: Math.round(base * 0.7) + jitter() };
+    for (const k of Object.keys(mc)) mc[k] = Math.max(0, Math.min(4095, mc[k]));
+    set({ motorCurrent: mc });
+  }, 500);
+
   return {
     getState: () => s,
     subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },

@@ -33,10 +33,13 @@ export const StepArt = ({ step, d, class: c = "art" }) =>
 
 // showLengths: label each belt with its live length (the Belts toggle). A length is unknown before the machine
 // knows it (Maslow state 0, or "?" in the report's BL).
-export const Frame = ({ k, d, showLengths = false }) => {
+// showCurrents: a ring at each anchor for its motor's current (the Motors toggle), in mA from the report's MC.
+export const Frame = ({ k, d, showLengths = false, showCurrents = false }) => {
   const s = SCREENS[k];
   const lengths = showLengths ? d.belts.map((v, i) => d.maslow === 0 || d.beltUnknown?.[i] ? null : v) : null;
-  return <Svg class="framesvg" html={visSvg(k, s, d.pos, d.wco, lengths)} />;
+  const mc = d.motorCurrent;
+  const currents = showCurrents ? (mc ? [mc.tl, mc.tr, mc.bl, mc.br].map(adcToMilliamps) : [null, null, null, null]) : null;
+  return <Svg class="framesvg" html={visSvg(k, s, d.pos, d.wco, lengths, currents)} />;
 };
 
 // Work position (from the user's home) and machine position (from the anchors). WPos = MPos − WCO.
@@ -148,6 +151,9 @@ export function MotorsView({ k, d }) {
   const mc = d.motorCurrent;
   return <div class={`belts${s.stale ? " stale" : ""}`}>{[mc.tl, mc.tr, mc.bl, mc.br].map((v, i) => <><span>{BELT_NAMES[i]}</span><span class="bar"><i style={`width:${Math.min(100, mA(v) / 20)}%`}></i></span><span>{mA(v)} mA</span></>)}</div>;
 }
+
+// MC is raw ADC 0–4095; the current UI converts it to mA this way (docs/protocol.md)
+export const adcToMilliamps = (adc) => (adc == null ? null : 1000 * 3.3 * adc / 4095 / 1.5);
 
 // The Status, Position and File cards
 export function DetailCards({ k, d, a }) {

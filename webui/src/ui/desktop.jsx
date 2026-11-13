@@ -1,7 +1,7 @@
 import { useState } from "preact/hooks";
 import { SCREENS, STEP_HELP, isSetup, stepName } from "../flow/screens.js";
 import { ask, mainActions } from "../flow/asks.jsx";
-import { Btn, AppHeader, ModePill, MotorsView, DetailCards, progress, Segs, StepArt, Frame, LogView, JogPad, DetailsBody, FilesBody } from "./parts.jsx";
+import { Btn, AppHeader, ModePill, DetailCards, progress, Segs, StepArt, Frame, LogView, JogPad, DetailsBody, FilesBody } from "./parts.jsx";
 
 export const StopBtn = ({ send, label = "Stop" }) => <button class="btn danger" type="button" onClick={() => send("stop")}>{label}</button>;
 
@@ -54,19 +54,16 @@ export function Desktop({ k, ctx, onSettings, overlay }) {
       <TopBar k={k} ctx={ctx} onSettings={onSettings} />
     </div>
     <div class="board layout6">
-      {/* The visuals and the device state in one panel: the drawing, the log and the Belts / Motors overlays on
+      {/* The visuals and the device state in one panel: the drawing (with the log, and belt lengths and motor currents when toggled) on
           top, the Status, Position and File cards along the bottom */}
       <section class="panel vis merged" style="grid-area:vis">
         <div class="tabs"><span class="on">Toolpath</span><span>Frame</span><span>3D</span><span class="tabs-gap" />
           <Toggle on={showBelts} set={setShowBelts}>Belts</Toggle><Toggle on={showMotors} set={setShowMotors}>Motors</Toggle></div>
         <div class="visbody">
-          <Frame k={k} d={ctx.d} showLengths={showBelts} />
+          <Frame k={k} d={ctx.d} showLengths={showBelts} showCurrents={showMotors} />
           <span class="viscap">{s.nopos && s.moving ? "Position isn't live while the belts move" : s.stale ? "Last known position" : ""}</span>
           <div class="inset" style={logOpen ? "" : "bottom:auto"}><div class="ph">Log<button type="button" class="linkbtn" onClick={() => setLogOpen(!logOpen)}>{logOpen ? "collapse ▾" : "expand ▸"}</button></div>
             {logOpen && <div class="pb"><LogView d={ctx.d} /></div>}</div>
-          {showMotors && <div class="vovl">
-            {showMotors && <div class="ovcard"><div class="ph">Motors<small>{s.stale ? "out of date" : "live"}</small></div><div class="pb"><MotorsView k={k} d={ctx.d} /></div></div>}
-          </div>}
         </div>
         <div class="viscards"><DetailCards k={k} d={ctx.d} a={ctx.a} /></div>
       </section>
