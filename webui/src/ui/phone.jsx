@@ -2,7 +2,6 @@ import { useState } from "preact/hooks";
 import { SCREENS, isSetup, stepName } from "../flow/screens.js";
 import { ask, mainActions } from "../flow/asks.jsx";
 import { Btn, AppHeader, ModePill, progress, Segs, StepArt, Frame, LogView, JogPad, DetailsBody, FilesBody, jogLock, workPos } from "./parts.jsx";
-import { FinalChecks } from "./desktop.jsx";
 
 // Defined outside Phone so its children keep their state (typed values) across re-renders
 function Section({ id, name, tag, summary, sec, toggle, children }) {
@@ -13,15 +12,13 @@ function Section({ id, name, tag, summary, sec, toggle, children }) {
 
 // Phone layout B: the state is pinned on top, a small visual stays on screen, sections collapse below it,
 // and Run and Stop are pinned at the bottom.
-export function Phone({ k, ctx, onSettings, checks, setChecks, overlay }) {
+export function Phone({ k, ctx, onSettings, overlay }) {
   const s = SCREENS[k], setup = isSetup(k), q = ask(k, ctx);
   const [open, setOpen] = useState(null);
   const sec = open || (setup || s.mode === "Error" || k === "wifi" ? "step" : "details");
   const toggle = (id) => setOpen(sec === id ? "none" : id);
   const { skipped, label } = setup ? progress(s.step, ctx.a.ran) : {};
   const lock = jogLock(k, ctx.d);
-  const final = k === "finalcheck" ? [{ label: "Back", onClick: () => ctx.setA({ finalCheck: false }), style: "ghost" },
-    { label: "Start", style: "go", disabled: !checks.every(Boolean), onClick: () => { ctx.send("run", { file: ctx.a.file }); ctx.setA({ finalCheck: false }); } }] : [];
   const main = mainActions(k, ctx).map(b => ({ ...b, label: b.label.replace(/^Run .*/, "Run").replace(/^Continue from .*/, "Continue") }));
   return <div class="phoneapp">
     <header class="p-head">
@@ -29,7 +26,6 @@ export function Phone({ k, ctx, onSettings, checks, setChecks, overlay }) {
       <div class="p-top"><ModePill s={s} /><span class="sub">{s.sub}</span></div>
       {setup ? <div class="p-prog"><span>{label}</span><Segs step={s.step} skipped={skipped} /></div>
         : <div class={`p-msg${s.alert || q.alert ? " alert" : ""}`}>{q.text || s.msg}</div>}
-      {k === "finalcheck" && <FinalChecks checks={checks} setChecks={setChecks} />}
     </header>
     <main class="p-body">
       <div class="accvis"><Frame k={k} d={ctx.d} /></div>
@@ -50,7 +46,7 @@ export function Phone({ k, ctx, onSettings, checks, setChecks, overlay }) {
     </main>
     {overlay}
     <footer class="p-act"><div class="row">
-      {setup ? <button class="btn go" type="button" disabled>Run</button> : [...main, ...final].map(b => <Btn b={b} />)}
+      {setup ? <button class="btn go" type="button" disabled>Run</button> : main.map(b => <Btn b={b} />)}
       {ctx.d.connected && k !== "wifi" && <button class="btn danger" type="button" onClick={() => ctx.send("stop")}>Stop</button>}
     </div></footer>
   </div>;

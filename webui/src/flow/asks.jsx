@@ -130,8 +130,8 @@ export function mainActions(k, ctx) {
     ? { ...B("Trace boundary", () => {}, "ghost"), disabled: true, title: d.notYet.trace }
     : B("Trace boundary", () => send("trace", { file: a.file }), "ghost");
   switch (k) {
-    case "ready": return [trace, B(`Run ${a.file}`, () => setA({ finalCheck: true }), "go")];
-    case "stopped": return [B("Run from the start", () => setA({ stoppedSeen: true, finalCheck: true }), "ghost"),
+    case "ready": return [trace, B(`Run ${a.file}`, () => send("run", { file: a.file }), "go")];
+    case "stopped": return [B("Run from the start", () => { setA({ stoppedSeen: true }); send("run", { file: a.file }); }, "ghost"),
       B(`Continue from line ${(d.lastJob?.line ?? 0).toLocaleString()}`, () => { setA({ stoppedSeen: true }); send("continueJob"); }, "go")];
     default: return [];
   }

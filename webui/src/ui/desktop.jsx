@@ -5,21 +5,13 @@ import { Btn, AppHeader, ModePill, BeltsView, MotorsView, DetailCards, progress,
 
 export const StopBtn = ({ send, label = "Stop" }) => <button class="btn danger" type="button" onClick={() => send("stop")}>{label}</button>;
 
-export const FINAL_CHECKS = ["The file looks right in the preview", "The material thickness matches", "The anchor points are secure", "The spoil board is in place"];
-
-export function FinalChecks({ checks, setChecks }) {
-  return <div class="bchecks" role="group" aria-label="Final check"><b>Final check</b>
-    {FINAL_CHECKS.map((c, i) => <label><input type="checkbox" checked={checks[i]} onChange={e => { const on = e.currentTarget.checked; setChecks(prev => prev.map((x, j) => j === i ? on : x)); }} /> {c}</label>)}
-    <span class="note">Start unlocks once all four are checked.</span></div>;
-}
-
 function SetupBar({ k, ctx, onSettings }) {
   const [open, setOpen] = useState(false);
   const s = SCREENS[k], step = s.step, q = ask(k, ctx);
   const { skipped, label } = progress(step, ctx.a.ran);
   return <div class="banner gtop">
-    <div class="gthumb"><StepArt step={step} d={ctx.d} class="" /></div>
     <div class="gmeta"><span style="display:flex;align-items:center;gap:8px"><ModePill s={s} small />{label}</span><b>{stepName(k)}</b><Segs step={step} skipped={skipped} /></div>
+    <div class="gthumb"><StepArt step={step} d={ctx.d} class="" /></div>
     <span class={`gtext${q.alert ? " alert" : ""}`}>{q.text}</span>
     {q.input}
     <div class="bbtns">{q.buttons.map(b => <Btn b={b} />)}
@@ -31,18 +23,14 @@ function SetupBar({ k, ctx, onSettings }) {
   </div>;
 }
 
-function ModeBar({ k, ctx, onSettings, checks, setChecks }) {
+function ModeBar({ k, ctx, onSettings }) {
   const s = SCREENS[k], q = ask(k, ctx), main = mainActions(k, ctx);
-  const allChecked = checks.every(Boolean);
-  const final = k === "finalcheck" ? [{ label: "Back", onClick: () => ctx.setA({ finalCheck: false }), style: "ghost" },
-    { label: `Start ${ctx.a.file}`, style: "go", disabled: !allChecked, onClick: () => { ctx.send("run", { file: ctx.a.file }); ctx.setA({ finalCheck: false }); } }] : [];
   const showStop = ctx.d.connected && k !== "wifi";
   return <div class="banner combined" style={`--tone:${s.tone}`}>
     <div class="bstate"><ModePill s={s} />{s.sub && <span class="sub">{s.sub}</span>}</div>
     <span class={`bexplain${s.alert || q.alert ? " alert" : ""}`}>{q.text || s.msg}</span>
     {q.input}
-    <div class="bbtns">{[...q.buttons, ...main, ...final].map(b => <Btn b={b} />)}{showStop && <StopBtn send={ctx.send} />}</div>
-    {k === "finalcheck" && <FinalChecks checks={checks} setChecks={setChecks} />}
+    <div class="bbtns">{[...q.buttons, ...main].map(b => <Btn b={b} />)}{showStop && <StopBtn send={ctx.send} />}</div>
   </div>;
 }
 
@@ -54,7 +42,7 @@ export function TopBar(props) {
 const Toggle = ({ on, set, children }) =>
   <button type="button" class={`tgl${on ? " on" : ""}`} aria-pressed={on} onClick={() => set(!on)}>{children}</button>;
 
-export function Desktop({ k, ctx, onSettings, checks, setChecks, overlay }) {
+export function Desktop({ k, ctx, onSettings, overlay }) {
   const s = SCREENS[k];
   const [logOpen, setLogOpen] = useState(true);
   const [showBelts, setShowBelts] = useState(false);
@@ -63,7 +51,7 @@ export function Desktop({ k, ctx, onSettings, checks, setChecks, overlay }) {
     {/* One card on top: the app header, a thin line, then the setup guide or the mode bar */}
     <div class="topbox" style={`--tone:${isSetup(k) ? "var(--setup)" : s.tone}`}>
       <AppHeader d={ctx.d} onSettings={onSettings} />
-      <TopBar k={k} ctx={ctx} onSettings={onSettings} checks={checks} setChecks={setChecks} />
+      <TopBar k={k} ctx={ctx} onSettings={onSettings} />
     </div>
     <div class="board layout6">
       {/* The visuals and the device state in one panel: the drawing, the log and the Belts / Motors overlays on

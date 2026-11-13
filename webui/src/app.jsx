@@ -6,7 +6,6 @@ import { Desktop } from "./ui/desktop.jsx";
 import { Phone } from "./ui/phone.jsx";
 import { Settings } from "./ui/modals.jsx";
 import { SimPanel } from "./ui/sim.jsx";
-import { FINAL_CHECKS } from "./ui/desktop.jsx";
 
 // The device behind the UI: the real machine (machine.js) or the simulator, both with the same interface
 // (getState, subscribe, send). ?device=machine or ?device=sim picks one. Otherwise the page uses the machine
@@ -32,7 +31,6 @@ export function App() {
   const d = useDevice();
   const [a, setAnswers] = useState(freshAnswers);
   const [modal, setModal] = useState(null);           // "settings"
-  const [checks, setChecks] = useState(FINAL_CHECKS.map(() => false));
   const [theme, setTheme] = useState("dark");
   const narrow = useNarrow();
 
@@ -46,7 +44,7 @@ export function App() {
   // The device reads the chosen file (for the preview and Trace boundary) whenever the choice changes
   useEffect(() => { send("chooseFile", { file: a.file }); }, [a.file]);
   // A (re)connection means the device may have changed: setup starts again from what the machine reports
-  useEffect(() => { setAnswers(freshAnswers()); setChecks(FINAL_CHECKS.map(() => false)); }, [d.connectId]);
+  useEffect(() => { setAnswers(freshAnswers()); }, [d.connectId]);
   // Once the position is confirmed, the device checks for a tool on its own
   useEffect(() => { if (k === "tcheck" && d.tool === "unknown" && !d.pending) send("toolCheck"); }, [k, d.tool, d.pending]);
   // Waiting for the bit to be put back in: the board watches the beam by itself
@@ -62,15 +60,13 @@ export function App() {
   useEffect(() => { if (d.maslow === 7 && a.securing) setA({ securing: false }); }, [d.maslow]);
   // A job starting means any earlier stop or fault has been dealt with, so the next one shows again
   useEffect(() => { if (d.job) setA({ stoppedSeen: false, faultSeen: false }); }, [!!d.job]);
-  // A new job starts with a fresh final check
-  useEffect(() => { if (k !== "finalcheck") setChecks(FINAL_CHECKS.map(() => false)); }, [k === "finalcheck"]);
 
   // Stop is in the top bar, which pop-ups don't cover, so they don't carry their own
   const mprops = { ctx, compact: narrow, stop: false };
   const overlay = modal === "settings"
     ? <Settings k={k} {...mprops} theme={theme} setTheme={setTheme} onClose={() => setModal(null)} />
     : null;
-  const props = { k, ctx, onSettings: () => setModal("settings"), checks, setChecks, overlay };
+  const props = { k, ctx, onSettings: () => setModal("settings"), overlay };
   return <div class={`appshell${narrow ? " narrow" : ""}`} data-panels={theme}>
     {narrow ? <Phone {...props} /> : <Desktop {...props} />}
     {device.isSimulated && <SimPanel d={d} device={device} />}

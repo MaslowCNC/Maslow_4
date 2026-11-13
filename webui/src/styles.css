@@ -210,13 +210,6 @@
   .flash { animation: flash .6s ease 2; }
   @keyframes flash { 50% { box-shadow: 0 0 0 3px var(--warn); } }
   .binput { display: flex; align-items: center; gap: 8px; flex: none; }
-  .bchecks { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; padding-top: 8px; border-top: 1px solid var(--sep); font-size: 13px; }
-  .bchecks b { color: var(--ready); font-size: 13px; }
-  .bchecks label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
-  .bchecks .note { margin: 0; }
-  .phone .bchecks { display: grid; gap: 6px; padding-top: 6px; }
-  .phone.land .bchecks { display: flex; gap: 2px 12px; padding-top: 4px; font-size: 12px; }
-  .phone.land .bchecks .note { display: none; }
   .actgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; }
   .actpair { display: flex; align-items: center; gap: 6px; min-width: 0; }
   .actpair .btn { flex: 1; min-height: 40px; }
@@ -437,7 +430,6 @@ html, body { margin: 0; }
 .phoneapp .p-msg.alert { color: var(--danger); }
 .phoneapp .p-prog { display: flex; align-items: center; gap: 8px; font: 600 11px var(--font-mono); color: var(--muted); }
 .phoneapp .p-prog .segs { flex: 1; }
-.phoneapp .bchecks { display: grid; gap: 6px; padding-top: 6px; }
 .phoneapp .p-body { min-height: 0; overflow: auto; }
 .phoneapp .accvis { height: 210px; margin: 8px 8px 0; border-radius: 12px; overflow: hidden; background: var(--panel); }
 .acc { display: grid; gap: 6px; padding: 8px; }

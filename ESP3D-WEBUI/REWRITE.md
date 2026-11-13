@@ -129,7 +129,7 @@ source, and there are two:
    (what it's doing right now). Idle alone doesn't mean ready: `UNKNOWN` and `READY_TO_CUT` are
    both Idle.
 2. **The user's answers on this page:** retract checked by eye, Z set, work piece
-   secure, final check. The machine can't store these, so a second browser or a reload asks
+   secure, file chosen. The machine can't store these, so a second browser or a reload asks
    again, which is safe.
 
 **Screens come from state, never from an Operation.** A phone watching, or a page reloaded
@@ -166,7 +166,7 @@ These are FluidNC's `MPos`, `WCO` and `WPos = MPos − WCO`.
 
 - The mode and Stop are always in view.
 - **Prompts are completed where they're asked.** If the top bar asks for something, it can be done
-  in the top bar: the stick-out, the stock thickness, the final check's four boxes. Bigger tasks
+  in the top bar: the stick-out, the stock thickness, the job file. Bigger tasks
   open a pop-up from the bar. On a phone, the header and the Setup section play this part.
 - **The setup bar expands** with an arrow on its bottom edge: a big step graphic beside fuller
   numbered instructions. It's closed by default. The big graphic is where the line art for
@@ -259,8 +259,8 @@ fault recovery; not after a finished or stopped job, or releasing and re-applyin
 
 - **Ready to cut** offers Trace boundary (optional), Run, jog and Park. Trace boundary is
   `tracePath()`; Stop leaves the machine where it stopped.
-- **Final check:** four boxes in the top bar (file looks right, material thickness, anchors
-  secure, spoil board in place). Start unlocks once all are checked.
+- **Run starts the file** (decided 2026-11-13): there's no final checklist before a job. The setup
+  steps already cover the stock thickness, the work piece and the file.
 - **Job: Cutting** while a file runs. Progress is the report's running line ÷ the file's line count,
   counted from the file the preview loads; the report's `SD` percent is bytes read, not progress.
 - **Stop** (`machine.stop()`) sends 0x18, which halts at once and keeps the belt positions, then

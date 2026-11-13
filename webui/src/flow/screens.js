@@ -9,7 +9,7 @@ export const STEPS = ["Retract belts", "Extend belts", "Apply tension", "Find an
 export const freshAnswers = () => ({
   retractChecked: false,
   zDone: false, measuring: false, stickout: null, zBase: null, secured: false, securing: false,
-  file: null, finalCheck: false, stoppedSeen: false, faultSeen: false, ran: []
+  file: null, stoppedSeen: false, faultSeen: false, ran: []
 });
 
 export const T = { setup: "var(--setup)", ready: "var(--ready)", job: "var(--job)", error: "var(--danger)", wait: "var(--muted)" };
@@ -50,7 +50,6 @@ export const SCREENS = {
   releasing: { mode: "Setup", tone: T.setup, sub: "Tension released", step: 6, nopos: true, msg: "The belts are slack so you can reach the work piece. Apply tension again once it's secure" },
   choosefile: { mode: "Setup", tone: T.setup, sub: "Choose a job file", step: 7, msg: "Tool, Z and work piece are ready. Choose what to cut" },
   ready: { mode: "Ready to cut", tone: T.ready, sub: "", msg: "Set home XY, trace the boundary if you like, then run" },
-  finalcheck: { mode: "Ready to cut", tone: T.ready, sub: "Final check", msg: "Check these before the job starts" },
   tracing: { mode: "Ready to cut", tone: T.ready, sub: "Tracing the boundary", moving: true, msg: "Moving around the edge of the job with Z raised" },
   parking: { mode: "Ready to cut", tone: T.ready, sub: "Parking", moving: true, msg: "Moving to the park position" },
   stopped: { mode: "Ready to cut", tone: T.ready, sub: "Job stopped", msg: "The job stopped. Z lifted, spindle off. Progress is saved, so you can continue from there" },
@@ -107,7 +106,6 @@ export function derive(d, a) {
       if (!a.secured) return "secure";
       if (!a.file) return "choosefile";
       if (d.lastJob?.result === "stopped" && !a.stoppedSeen) return "stopped";
-      if (a.finalCheck) return "finalcheck";
       return "ready";
     }
   }
