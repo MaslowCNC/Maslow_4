@@ -43,6 +43,14 @@ Format: **title** — what goes wrong, where, and how we found it.
 
 ## Medium: connection protocol (plan: all commands over the WebSocket)
 
+- [ ] **A line sent while a job runs waits, then runs after the job.** While `Job::active()`,
+  `Protocol.cpp` stops reading input channels, so a line that arrives then sits in the
+  channel and executes when the job ends. A second `$SD/Run` (from another tab clicking Start
+  in the moment before the first job shows in a status report, or a script) therefore starts
+  the file again as soon as the first run finishes. The Start button now locks from the click
+  until the job is reported, which covers one tab; the firmware could reject a `$SD/Run` that
+  was queued behind a job. Found 2026-11-15 while fixing the slow Start button.
+
 - [ ] **About 60 UI calls still send commands directly instead of through `machine.js`.**
   `sendCommand` / `SendPrinterCommand` calls remain in `tablet.js` (36), `grbl.js` (7),
   `controls.js` (6), `grblpanel.js` (4), `maslow.js` (4), `files.js` (2) and `restartdlg.js` (1),

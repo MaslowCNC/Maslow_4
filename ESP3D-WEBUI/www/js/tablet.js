@@ -1032,7 +1032,7 @@ function setPlayButton(isEnabled, color, text, click) {
       const w = canvas.width || 300;
       const h = canvas.height || 150;
       ctx.clearRect(0, 0, w, h); // Make canvas transparent so div color shows through
-      if (color !== gray) {
+      if (color !== gray && !jobStarting) {
         // Draw a centered white triangle to indicate an actionable state
         const centerX = w / 2;
         const centerY = h / 2;
@@ -1057,8 +1057,6 @@ function doPlayButton() {
   if (playButtonHandler) {
     playButtonHandler()
   }
-
-  addMessage(`Starting File: ${id('filelist').options[selectElement.selectedIndex].text}`);
 }
 
 // var pauseButtonHandler
@@ -1078,16 +1076,54 @@ const gray = "#f6f6f6";
 const orange = "#ff9500";
 const stopRed = "#ce654c";
 
+// What the Start button shows. A job counts as running for as long as the firmware reports it
+// (the SD field), not only while the machine is in Run: it is Idle for a moment whenever the
+// planner runs dry (a dwell, a spindle spin-up, a slow SD read), and the button must not come
+// back then. Every connection gets the same status report, so every tab agrees.
+//   starting: this tab sent Start and the job hasn't shown up in a status report yet
+const jobIsRunning = (s) => !!s.job || s.grbl === "Run" || s.grbl === "Hold";
+const playButtonMode = (s, { loaded, starting }) => {
+  if (starting) {
+    return "starting";
+  }
+  if (s.grbl === "Hold") {
+    return "resume";
+  }
+  if (jobIsRunning(s)) {
+    return "running";
+  }
+  if (s.grbl === "Idle" && loaded && s.maslow === MASLOW_STATE_READY_TO_CUT) {
+    return "ready";
+  }
+  return "off";
+};
+
+let jobStarting = false;
+
+if (typeof globalThis !== "undefined") {
+  globalThis.__tabletJobTestApi = { playButtonMode };
+}
+
 function setRunControls() {
-  const isReadyToCut = typeof maslowStatus !== 'undefined' && maslowStatus.state === MASLOW_STATE_READY_TO_CUT;
-  if (gCodeLoaded && isReadyToCut) {
-    // A GCode file is ready to go and Maslow is ready to cut
-    setPlayButton(true, green, 'Start', runGCode)
-    //setPauseButton(false, gray, 'Pause', null)
-  } else {
-    // Can't start: no GCode loaded or Maslow is not ready to cut
-    setPlayButton(false, gray, 'Start', null)
-    //setPauseButton(false, gray, 'Pause', null)
+  const s = typeof machine !== "undefined" ? machine.state : {};
+  const mode = playButtonMode(s, { loaded: gCodeLoaded, starting: jobStarting });
+  const playDiv = id("tablettab_gcode_play");
+  if (playDiv) {
+    playDiv.classList.toggle("machine-action-busy", mode === "starting");
+  }
+  switch (mode) {
+    case "starting":
+      setPlayButton(false, green, 'Start', null)
+      break
+    case "resume":
+      setPlayButton(true, green, 'Resume', resumeGCode)
+      break
+    case "ready":
+      setPlayButton(true, green, 'Start', runGCode)
+      break
+    default:
+      setPlayButton(false, gray, 'Start', null)
+      break
   }
 }
 
@@ -1189,32 +1225,8 @@ function tabletGrblState(grbl, response) {
     sendCommand('$MINFO'); // refresh Maslow status; its reply also resets the stop buttons
   }
 
-  switch (stateName) {
-    case 'Sleep':
-    case 'Alarm':
-      setPlayButton(true, gray, 'Start', null)
-      //setPauseButton(false, gray, 'Pause', null)
-      break
-    case 'Idle':
-      setRunControls()
-      break
-    case 'Hold':
-      setPlayButton(true, green, 'Resume', resumeGCode)
-      //setPauseButton(true, red, 'Stop', stopAndRecover)
-      break
-    case 'Jog':
-    case 'Home':
-      setPlayButton(false, gray, 'Start', null)
-      break
-    case 'Run':
-      // No Pause button: Stop, then Resume from the stopped line, takes its place
-      setPlayButton(false, gray, 'Start', null)
-      break
-    case 'Check':
-      setPlayButton(true, gray, 'Start', null)
-      //setPauseButton(true, red, 'Stop', stopAndRecover)
-      break
-  }
+  // The job row follows the job, not the momentary state (Idle between moves mid-job)
+  setRunControls()
 
   if (grbl.spindleDirection) {
     switch (grbl.spindleDirection) {
@@ -2357,13 +2369,50 @@ function scrollToLine(lineNumber) {
   gCodeLines.setSelectionRange(start, end);
 }
 
+// Start the loaded file. The button shows a spinner from the click until a status report shows
+// the job running (or the start fails), and ignores clicks meanwhile: a second $SD/Run sent while
+// the first job runs would wait in the firmware and start the file again when the job ends.
+// The firmware starts the moves itself; no cycle start is needed.
 function runGCode() {
-  if (gCodeFilename) {
-    const cmd = `$sd/run=${gCodeFilename}`;
-    sendCommand(cmd);
+  if (jobStarting || !gCodeFilename) {
+    return;
   }
-  setTimeout(() => { SendRealtimeCmd(0x7e); }, 1500);
-  // expandVisualizer()
+  const path = gCodeFilename;
+  const label = `Start ${path}`;
+  addMessage(`Starting File: ${path}`);
+  let started = false;
+  const finishStarting = () => {
+    if (jobStarting) {
+      jobStarting = false;
+      setRunControls();
+    }
+  };
+  const offState = machine.on("state", (s) => {
+    if (jobIsRunning(s) && !started) {
+      started = true;
+      finishStarting();
+    }
+  });
+  jobStarting = true;
+  setRunControls();
+  const op = machine.runFile(path);
+  op.then(
+    () => {},
+    (err) => {
+      if (err.reason === "reset") {
+        addMessage(`${label} stopped`);
+        return;
+      }
+      const detail = err.detail ?? err.reason;
+      addMessage(`${label} failed: ${detail}`);
+      if (!started) {
+        alertdlg(label, detail); // a job error after the start is in the log of every connection
+      }
+    },
+  ).finally(() => {
+    offState();
+    finishStarting();
+  });
 }
 
 function finalizeGCodePreviewLoad() {
