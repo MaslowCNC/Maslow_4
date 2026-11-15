@@ -1,7 +1,7 @@
 import { useState } from "preact/hooks";
 import { SCREENS, STEP_HELP, isSetup, stepName } from "../flow/screens.js";
 import { ask, mainActions } from "../flow/asks.jsx";
-import { Btn, ModePill, Conn, progress, Segs, StepArt, Frame, LogView, JogPad, DetailsBody, FilesBody } from "./parts.jsx";
+import { Btn, ModePill, Conn, progress, Segs, StepArt, Frame, LogView, JogPad, DetailsBody, FilesBody, UploadBtn } from "./parts.jsx";
 
 export const StopBtn = ({ send, label = "Stop" }) => <button class="btn danger" type="button" onClick={() => send("stop")}>{label}</button>;
 export const Gear = ({ onClick }) => <button class="gear" type="button" aria-label="Settings" onClick={onClick}>⚙</button>;
@@ -73,7 +73,7 @@ export function Desktop({ k, ctx, onSettings, checks, setChecks, overlay }) {
           : <div class="ph">Device details<small>{s.stale ? "out of date" : "live"}</small></div>}
         <div class="pb"><DetailsBody k={k} d={ctx.d} a={ctx.a} /></div>
       </section>
-      <section class="panel" style="grid-area:files"><div class="ph">File management<small></small></div><div class="pb"><FilesBody k={k} {...ctx} /></div></section>
+      <section class="panel" style="grid-area:files"><div class="ph">File management<UploadBtn k={k} {...ctx} /></div><div class="pb"><FilesBody k={k} {...ctx} /></div></section>
     </div>
     {overlay}
   </div>;

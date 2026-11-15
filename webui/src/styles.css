@@ -251,7 +251,6 @@
   .files { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
   .files li { display: flex; justify-content: space-between; gap: 8px; padding: 7px 10px; border-radius: 6px; font-size: 13px; }
   .files li.sel { background: color-mix(in srgb, var(--lilac) 18%, transparent); outline: 1px solid var(--lilac); }
-  .files li span:last-child { font-family: var(--font-mono); color: var(--muted); }
 
   .compass { display: grid; grid-template-columns: repeat(3, 1fr) 14px 1fr; gap: 6px; }
   .compass button { min-height: 44px; font: 700 16px var(--font-mono); color: var(--text); background: var(--input);
@@ -453,3 +452,32 @@ html, body { margin: 0; }
 .chipin span { font: 600 11px var(--font-mono); color: var(--muted); }
 .chipin.on { border-color: var(--lilac); }
 .chipin:focus-within { outline: 2px solid var(--lilac); outline-offset: 1px; }
+
+/* File management: upload icon in the header, hover on each file, a trash that slides in from the right */
+.iconbtn { position: relative; flex: none; width: 36px; height: 36px; display: grid; place-items: center; padding: 0; cursor: pointer;
+  border-radius: 8px; border: 1px solid var(--sep); background: var(--input); color: var(--lilac); }
+.iconbtn::after { content: ""; position: absolute; inset: -4px; } /* 44 px touch target */
+.iconbtn:hover:not(:disabled) { border-color: var(--lilac); background: color-mix(in srgb, var(--lilac) 14%, var(--input)); }
+.iconbtn:disabled { opacity: .4; cursor: not-allowed; }
+.ph .iconbtn { margin: -4px -4px -4px 0; }
+.fhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--muted); }
+.files li { position: relative; padding: 0; overflow: hidden; transition: background .15s ease; }
+.files li .fbtn { min-height: 40px; padding: 7px 10px; align-items: center; }
+.files li:hover, .files li:focus-within { background: var(--hover); }
+.files li.sel:hover { background: color-mix(in srgb, var(--lilac) 26%, var(--panel)); }
+.files li.sel .ftrash { background: linear-gradient(to right, transparent, color-mix(in srgb, var(--lilac) 26%, var(--panel)) 14px); }
+.ftrash { position: absolute; top: 0; right: 0; bottom: 0; display: inline-flex; align-items: center; gap: 6px; padding: 0 12px 0 18px;
+  border: 0; cursor: pointer; color: var(--danger); font: 600 12px var(--font-sans);
+  background: linear-gradient(to right, transparent, var(--hover) 14px);
+  transform: translateX(100%); transition: transform .18s ease, background .15s ease, color .15s ease; }
+.files li:hover .ftrash, .files li:focus-within .ftrash, .files li.armed .ftrash { transform: none; }
+.files li .ftrash:hover:not(:disabled), .files li.armed .ftrash { background: var(--danger); color: #fff; padding-left: 12px; }
+.ftrash:focus-visible { outline: 2px solid var(--danger); outline-offset: -2px; }
+.ftrash:disabled { color: var(--muted); cursor: not-allowed; }
+.files li .ftrash span { font: inherit; color: inherit; }
+/* No hover on touch screens: the trash stays in the row */
+@media (hover: none) {
+  .files li { display: flex; }
+  .files li .fbtn { flex: 1; min-height: 44px; }
+  .ftrash { position: static; transform: none; background: none; padding: 0 12px; min-width: 44px; justify-content: center; }
+}

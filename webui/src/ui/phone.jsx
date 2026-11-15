@@ -43,7 +43,7 @@ export function Phone({ k, ctx, onSettings, checks, setChecks, overlay }) {
           <DetailsBody k={k} d={ctx.d} a={ctx.a} />
         </Section>
         <Section sec={sec} toggle={toggle} id="jog" name="Jog" summary={lock ? lock[0] : "Ready to jog"}><div class="jogbox"><JogPad k={k} d={ctx.d} send={ctx.send} /></div></Section>
-        <Section sec={sec} toggle={toggle} id="files" name="Files" summary={ctx.a.file || "No file chosen"}><FilesBody k={k} {...ctx} /></Section>
+        <Section sec={sec} toggle={toggle} id="files" name="Files" summary={ctx.a.file || "No file chosen"}><FilesBody k={k} {...ctx} upload /></Section>
         <Section sec={sec} toggle={toggle} id="log" name="Log" summary={(ctx.d.log.at(-1) || "").slice(9, 50)}><LogView d={ctx.d} /></Section>
       </div>
     </main>

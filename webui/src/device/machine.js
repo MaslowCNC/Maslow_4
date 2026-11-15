@@ -278,6 +278,11 @@ export function createMachine({ host = location.host } = {}) {
       return;
     }
     if (action === "uploadFile") return uploadFile();
+    if (action === "deleteFile") {
+      m.files.delete(`/${payload.name}`).then(() => { log(`${payload.name} deleted`); return listFiles(); })
+        .catch(err => { log(`Delete ${payload.name}: ${err.detail || err.message}`); emit(); });
+      return;
+    }
     if (action === "ackIncident") { set({ incident: null }); return; }
     if (action === "setStock") { setStock(payload.stock); return; }
     if (action === "jog") {

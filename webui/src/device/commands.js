@@ -24,6 +24,7 @@ export const COMMANDS = {
   clearError:     { api: null, cmd: "$X", status: "exists", note: "Needs a machine.js action" },
   rehomeZ:        { api: null, cmd: "$Spindle/Home", status: "exists", note: "Needs a machine.js action" },
   reboot:         { api: null, cmd: "[ESP444]RESTART", status: "exists", note: "HTTP; not in machine.js" },
+  deleteFile:     { api: "files.delete(path)", cmd: "GET /upload?action=delete", status: "exists", note: "HTTP, like the current UI" },
   jog:            { api: "jog(delta, {feed})", cmd: "$J=G91 G21 …", status: "exists" },
   setHomeXY:      { api: null, cmd: "G10 L20 P0 X0 Y0", status: "exists", note: "Needs a machine.js action" },
   setZ:           { api: null, cmd: "G10 L20 P0 Z0", status: "exists", note: "Needs a machine.js action" },

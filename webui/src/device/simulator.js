@@ -207,6 +207,7 @@ export function createSimulator() {
     // Setting a home moves the work zero, not the machine: the machine position stays as it was
     setHomeXY() { log("G10 L20 P0 X0 Y0"); set({ wco: { ...s.wco, x: s.pos.x, y: s.pos.y } }); },
     setZ() { log("G10 L20 P0 Z0"); set({ wco: { ...s.wco, z: s.pos.z } }); },
+    deleteFile({ name }) { log(`Deleted ${name}`); set({ files: s.files.filter(f => f.name !== name) }); },
     uploadFile() { const n = `upload-${s.files.length + 1}.nc`; set({ files: [...s.files, { name: n, size: "40 KB", w: 200, h: 150, minutes: 6, depth: 2 }] }); return n; }
   };
 

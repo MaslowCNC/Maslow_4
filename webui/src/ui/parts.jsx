@@ -147,14 +147,42 @@ export function DetailsBody({ k, d, a }) {
   </>;
 }
 
-export function FilesBody({ k, d, a, setA, send, mark }) {
+const UploadIcon = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+  <path d="M12 15V4M7 9l5-5 5 5M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4" /></svg>;
+const TrashIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+  <path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-12M9 7V4h6v3" /></svg>;
+
+// The upload icon, for the File management header (desktop) or the top of the Files section (phone)
+export function UploadBtn({ k, a, setA, send, mark }) {
   const locked = SCREENS[k].mode === "Job";
+  return <button type="button" class="iconbtn" aria-label="Upload a file" title={locked ? "You can't upload during a job" : "Upload a file"} disabled={locked}
+    onClick={() => Promise.resolve(send("uploadFile")).then(f => { if (f && (a.file || isSetup(k))) { mark(8); setA({ file: f }); } })}><UploadIcon /></button>;
+}
+
+export function FilesBody({ k, d, a, setA, send, mark, upload = false }) {
+  const locked = SCREENS[k].mode === "Job";
+  // Deleting can't be undone, so the trash asks once: the first press arms it ("Delete"), the second deletes
+  const [armed, setArmed] = useState(null);
+  const del = name => {
+    if (armed !== name) { setArmed(name); return; }
+    setArmed(null);
+    if (a.file === name) setA({ file: null });
+    send("deleteFile", { name });
+  };
   return <>
-    <div class="row"><button class="btn ghost" type="button" disabled={locked}
-      onClick={() => Promise.resolve(send("uploadFile")).then(f => { if (f && (a.file || isSetup(k))) { mark(8); setA({ file: f }); } })}>Upload file</button></div>
-    <ul class="files">{d.files.map(f =>
-      <li class={f.name === a.file ? "sel" : ""}><button type="button" class="fbtn" disabled={locked} onClick={() => { mark(8); setA({ file: f.name }); }}>
-        <span>{f.name}</span><span>{f.size}</span></button></li>)}</ul>
-    {locked && <p class="note">You can't change the file during a job.</p>}
+    {upload && <div class="fhead"><span>{d.files.length} file{d.files.length === 1 ? "" : "s"} on the SD card</span>
+      <UploadBtn k={k} a={a} setA={setA} send={send} mark={mark} /></div>}
+    {!d.files.length && <p class="note">No files yet. Upload one with the upload icon.</p>}
+    <ul class="files">{d.files.map(f => {
+      const running = d.job?.file === f.name;
+      return <li class={`${f.name === a.file ? "sel" : ""}${armed === f.name ? " armed" : ""}`} onMouseLeave={() => armed === f.name && setArmed(null)}>
+        <button type="button" class="fbtn" disabled={locked} onClick={() => { mark(8); setA({ file: f.name }); }}>
+          <span>{f.name}</span><span>{f.size}</span></button>
+        <button type="button" class="ftrash" disabled={locked || running} onBlur={() => armed === f.name && setArmed(null)}
+          aria-label={armed === f.name ? `Confirm: delete ${f.name}` : `Delete ${f.name}`} title={armed === f.name ? "Press again to delete" : "Delete this file"}
+          onClick={() => del(f.name)}><TrashIcon />{armed === f.name && <span>Delete</span>}</button>
+      </li>;
+    })}</ul>
+    {locked && <p class="note">You can't change or delete files during a job.</p>}
   </>;
 }
