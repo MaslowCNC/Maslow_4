@@ -1,7 +1,7 @@
 import { useState } from "preact/hooks";
 import { SCREENS, STEP_HELP, isSetup, stepName } from "../flow/screens.js";
 import { ask, mainActions } from "../flow/asks.jsx";
-import { Btn, AppHeader, ModePill, DetailCards, progress, Segs, StepArt, Frame, LogView, JogPad, DetailsBody, FilesBody } from "./parts.jsx";
+import { Btn, AppHeader, ModePill, DetailCards, progress, Segs, StepArt, Frame, LogView, JogPad, DetailsBody, FilesBody, UploadBtn } from "./parts.jsx";
 
 export const StopBtn = ({ send, label = "Stop" }) => <button class="btn danger" type="button" onClick={() => send("stop")}>{label}</button>;
 
@@ -68,7 +68,7 @@ export function Desktop({ k, ctx, onSettings, overlay }) {
         <div class="viscards"><DetailCards k={k} d={ctx.d} a={ctx.a} /></div>
       </section>
       <section class="panel" style="grid-area:comp"><div class="ph">Jog / Home<small></small></div><div class="pb"><JogPad k={k} d={ctx.d} send={ctx.send} /></div></section>
-      <section class="panel" style="grid-area:files"><div class="ph">File management<small></small></div><div class="pb"><FilesBody k={k} {...ctx} /></div></section>
+      <section class="panel" style="grid-area:files"><div class="ph">File management<UploadBtn k={k} {...ctx} /></div><div class="pb"><FilesBody k={k} {...ctx} /></div></section>
     </div>
     {overlay}
   </div>;

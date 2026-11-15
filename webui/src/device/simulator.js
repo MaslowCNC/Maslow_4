@@ -233,6 +233,7 @@ export function createSimulator() {
       const f = s.files.find(x => x.name === file);
       set({ gcode: f ? { file, status: "ready", ...readGcode(sampleGcode(f)) } : null });
     },
+    deleteFile({ name }) { log(`Deleted ${name}`); set({ files: s.files.filter(f => f.name !== name) }); },
     uploadFile() { const n = `upload-${s.files.length + 1}.nc`; set({ files: [...s.files, { name: n, size: "40 KB", w: 200, h: 150, minutes: 6, depth: 2 }] }); return n; }
   };
 
