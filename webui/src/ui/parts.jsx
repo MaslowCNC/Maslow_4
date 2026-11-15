@@ -64,26 +64,38 @@ export function jogLock(k, d) {
 const NotYetBtn = ({ d, id, label, send }) => <button class="btn ghost" type="button" disabled={!!d.notYet?.[id]}
   title={d.notYet?.[id]} onClick={() => send(id)}>{label}</button>;
 
-const STEP_SIZES = [0.1, 1, 10];
+const STEP_SIZES = [5, 10];
 export function JogPad({ k, d, send }) {
-  // A step size is one of the presets, or "custom": the user's own value from the box at the end
-  const [choice, setChoice] = useState(1);
-  const [custom, setCustom] = useState("50");
+  // A step size is one of the presets, or "custom": the user's own value from the box at the end (the default, 10 mm)
+  const [choice, setChoice] = useState("custom");
+  const [custom, setCustom] = useState("10");
   const customMm = parseFloat(custom);
   const size = choice === "custom" ? (customMm > 0 ? customMm : 0) : choice;
+  // Z has its own step, typed between Z+ and Z−; the chips above only set the XY step
+  const [zStep, setZStep] = useState("5");
+  const zMm = parseFloat(zStep) > 0 ? parseFloat(zStep) : 0;
   const lock = jogLock(k, d);
-  const j = (dx, dy, dz = 0) => send("jog", { dx: dx * size, dy: dy * size, dz: dz * size });
+  const j = (dx, dy) => send("jog", { dx: dx * size, dy: dy * size, dz: 0 });
+  const jz = dir => send("jog", { dx: 0, dy: 0, dz: dir * zMm });
   return <div class="jogwrap">
     <div class="chips">{STEP_SIZES.map(v => <button type="button" class={v === choice ? "on" : ""} onClick={() => setChoice(v)}>{v}</button>)}
-      <label class={`chipin${choice === "custom" ? " on" : ""}`}><input type="text" inputmode="decimal" value={custom} aria-label="Your own step size in mm"
+      <label class={`chipin${choice === "custom" ? " on" : ""}`}><input type="text" inputmode="decimal" value={custom} aria-label="Your own XY step size in mm"
         onFocus={() => setChoice("custom")} onClick={() => setChoice("custom")} onInput={e => { setCustom(e.currentTarget.value); setChoice("custom"); }} /><span>mm</span></label></div>
     <div class="compass">
-      <button type="button" aria-label="Up left" onClick={() => j(-1, 1)}>↖</button><button type="button" aria-label="Up" onClick={() => j(0, 1)}>↑</button>
-      <button type="button" aria-label="Up right" onClick={() => j(1, 1)}>↗</button><span></span><button type="button" class="z" aria-label="Z up" onClick={() => j(0, 0, 1)}>Z+</button>
-      <button type="button" aria-label="Left" onClick={() => j(-1, 0)}>←</button><button type="button" class="home" title="Go to your home (work 0, 0)" onClick={() => send("jog", { dx: d.wco.x - d.pos.x, dy: d.wco.y - d.pos.y })}>HOME</button>
-      <button type="button" aria-label="Right" onClick={() => j(1, 0)}>→</button><span></span><button type="button" class="z" aria-label="Z down" onClick={() => j(0, 0, -1)}>Z−</button>
-      <button type="button" aria-label="Down left" onClick={() => j(-1, -1)}>↙</button><button type="button" aria-label="Down" onClick={() => j(0, -1)}>↓</button>
-      <button type="button" aria-label="Down right" onClick={() => j(1, -1)}>↘</button>
+      <div class="xy">
+        <button type="button" aria-label="Up left" onClick={() => j(-1, 1)}>↖</button><button type="button" aria-label="Up" onClick={() => j(0, 1)}>↑</button>
+        <button type="button" aria-label="Up right" onClick={() => j(1, 1)}>↗</button>
+        <button type="button" aria-label="Left" onClick={() => j(-1, 0)}>←</button><button type="button" class="home" title="Go to your home (work 0, 0)" onClick={() => send("jog", { dx: d.wco.x - d.pos.x, dy: d.wco.y - d.pos.y })}>HOME</button>
+        <button type="button" aria-label="Right" onClick={() => j(1, 0)}>→</button>
+        <button type="button" aria-label="Down left" onClick={() => j(-1, -1)}>↙</button><button type="button" aria-label="Down" onClick={() => j(0, -1)}>↓</button>
+        <button type="button" aria-label="Down right" onClick={() => j(1, -1)}>↘</button>
+      </div>
+      <div class="zcol">
+        <button type="button" class="z" aria-label={`Z up ${zMm} mm`} disabled={!zMm} onClick={() => jz(1)}>Z+</button>
+        <label class="zstep"><input type="text" inputmode="decimal" value={zStep} aria-label="Z step size in mm"
+          onInput={e => setZStep(e.currentTarget.value)} /><span>mm</span></label>
+        <button type="button" class="z" aria-label={`Z down ${zMm} mm`} disabled={!zMm} onClick={() => jz(-1)}>Z−</button>
+      </div>
     </div>
     <PosReadout d={d} nopos={!!lock && SCREENS[k].nopos} />
     <div class="row"><NotYetBtn d={d} id="setHomeXY" label="Set home XY" send={send} />

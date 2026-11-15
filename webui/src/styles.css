@@ -257,7 +257,17 @@
   .compass button { min-height: 44px; font: 700 16px var(--font-mono); color: var(--text); background: var(--input);
     border: 1px solid var(--sep); border-radius: 6px; cursor: pointer; }
   .compass .home { color: var(--lilac); font-size: 12px; }
-  .compass .z { grid-column: 5; }
+  .compass { grid-template-columns: 3fr 1fr; gap: 14px; }
+  .compass .xy { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .compass .zcol { display: grid; grid-template-rows: repeat(3, 1fr); gap: 6px; }
+  .compass .z:disabled { opacity: .4; cursor: not-allowed; }
+  /* The Z step: its own value, between Z+ and Z− */
+  .zstep { display: flex; align-items: center; gap: 2px; padding: 0 6px; min-height: 44px; border-radius: 6px; background: var(--input);
+    border: 1.5px solid var(--lilac); cursor: text; }
+  .zstep input { width: 100%; min-width: 0; background: none; border: 0; color: var(--text); font: 700 15px var(--font-mono); text-align: right; padding: 0; }
+  .zstep input:focus { outline: none; }
+  .zstep span { font: 600 11px var(--font-mono); color: var(--muted); }
+  .zstep:focus-within { outline: 2px solid var(--lilac); outline-offset: 1px; }
   .chips { display: flex; gap: 4px; }
   .chips span { flex: 1; text-align: center; font: 600 12px var(--font-mono); padding: 6px 0; border-radius: 6px; background: var(--input); color: var(--muted); }
   .chips span.on { background: var(--lilac); color: var(--on-accent); }
