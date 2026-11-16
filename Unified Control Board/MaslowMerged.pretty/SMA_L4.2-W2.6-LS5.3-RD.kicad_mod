@@ -143,7 +143,7 @@
 		)
 	)
 	(pad "1" smd rect
-		(at -2.5653 0 270)
+		(at -2.5653 0)
 		(size 2.2 1.7)
 		(layers "F.Cu" "F.Mask" "F.Paste")
 		(net "U16_1")
@@ -152,7 +152,7 @@
 		(thermal_bridge_angle 0)
 	)
 	(pad "2" smd rect
-		(at 2.5655 0 270)
+		(at 2.5655 0)
 		(size 2.2 1.7)
 		(layers "F.Cu" "F.Mask" "F.Paste")
 		(net "USB5V")

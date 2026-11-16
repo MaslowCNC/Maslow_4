@@ -40,6 +40,11 @@ DESIGN STATUS
   is 7% higher than on the DRV8876 board); C160-C163 100 nF/100 V at the DRV8251A VM pins;
   GVDD caps C104/C124 = 10 uF/25 V; C5/C9/C16 = 100 nF/100 V; C34 (NRST) moved next to U20;
   D5 moved beside U9's SW pin (no In2 detour on the switch node).
+  Footprint fix (2026-11-16, after JLCPCB DFM feedback on the first build): C28/C74/C75
+  (10 mm electrolytics, C116211/C178596) and D5 (SMA) had their pads turned 90 deg inside the
+  footprint, so the leads overhung the pads. Pads now run along the lead axis like C27/D1/D2;
+  C74 moved 0.75 mm left, C75 1.45 mm up, SWCLK/INHC1 bends and one DETECTORLED via nudged
+  to clear the longer pads. Library footprints in MaslowMerged.pretty corrected too.
   CN10 (fan/vacuum) pin 2 is VCC 36 V: only plug in a 36 V-rated device.
   Bottom-side parts stay clear of the r18 / r27 contact circles (connectors CN1/2/5/7/9/11 as on
   Maslow-Main).

@@ -170,7 +170,7 @@
 		)
 	)
 	(pad "1" smd rect
-		(at -2.67 0 90)
+		(at -2.67 0)
 		(size 3.5 1.2)
 		(layers "F.Cu" "F.Mask" "F.Paste")
 		(net "3V3")
@@ -179,7 +179,7 @@
 		(thermal_bridge_angle 0)
 	)
 	(pad "2" smd rect
-		(at 2.6698 0 90)
+		(at 2.6698 0)
 		(size 3.5 1.2)
 		(layers "F.Cu" "F.Mask" "F.Paste")
 		(net "GND")
