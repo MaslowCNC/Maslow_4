@@ -1015,7 +1015,10 @@ left: 50%;
 right: auto;
 width: 28px;
 height: 28px;
-margin: -16px 0 0 -16px;
+margin: -18px 0 0 -18px;
+border-width: 4px;
+border-color: rgba(0, 0, 0, 0.12);
+border-top-color: #555;
 }
 @keyframes machine-action-spin {
 to { transform: rotate(360deg); }

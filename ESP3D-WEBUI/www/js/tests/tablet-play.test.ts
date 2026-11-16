@@ -44,4 +44,11 @@ describe("Start button mode", () => {
   test("Resume in a feed hold", () => {
     expect(mode({ grbl: "Hold", maslow: 7, job })).toBe("resume");
   });
+
+  test("the spinner waits for the first move, not just the job being reported", () => {
+    const moved = g.__tabletJobTestApi.jobHasMoved;
+    expect(moved({ grbl: "Idle", job })).toBe(false); // file open, spindle spinning up
+    expect(moved({ grbl: "Run", job })).toBe(true);
+    expect(moved({ grbl: "Hold", job })).toBe(true);
+  });
 });

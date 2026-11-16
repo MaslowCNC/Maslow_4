@@ -1080,7 +1080,10 @@ const stopRed = "#ce654c";
 // (the SD field), not only while the machine is in Run: it is Idle for a moment whenever the
 // planner runs dry (a dwell, a spindle spin-up, a slow SD read), and the button must not come
 // back then. Every connection gets the same status report, so every tab agrees.
-//   starting: this tab sent Start and the job hasn't shown up in a status report yet
+//   starting: this tab sent Start and the machine hasn't moved yet. The job shows in the report
+//   as soon as the file is open, but a spindle spin-up or dwell at the top of the file can keep
+//   it Idle for seconds after that; the spinner stays until the first move (Run or Hold).
+const jobHasMoved = (s) => s.grbl === "Run" || s.grbl === "Hold";
 const jobIsRunning = (s) => !!s.job || s.grbl === "Run" || s.grbl === "Hold";
 const playButtonMode = (s, { loaded, starting }) => {
   if (starting) {
@@ -1101,7 +1104,7 @@ const playButtonMode = (s, { loaded, starting }) => {
 let jobStarting = false;
 
 if (typeof globalThis !== "undefined") {
-  globalThis.__tabletJobTestApi = { playButtonMode };
+  globalThis.__tabletJobTestApi = { playButtonMode, jobHasMoved };
 }
 
 function setRunControls() {
@@ -1113,7 +1116,7 @@ function setRunControls() {
   }
   switch (mode) {
     case "starting":
-      setPlayButton(false, green, 'Start', null)
+      setPlayButton(false, gray, 'Start', null) // grey, as while running, plus the spinner
       break
     case "resume":
       setPlayButton(true, green, 'Resume', resumeGCode)
@@ -2369,8 +2372,8 @@ function scrollToLine(lineNumber) {
   gCodeLines.setSelectionRange(start, end);
 }
 
-// Start the loaded file. The button shows a spinner from the click until a status report shows
-// the job running (or the start fails), and ignores clicks meanwhile: a second $SD/Run sent while
+// Start the loaded file. The button shows a spinner from the click until the machine moves
+// (or the job ends or fails), and ignores clicks meanwhile: a second $SD/Run sent while
 // the first job runs would wait in the firmware and start the file again when the job ends.
 // The firmware starts the moves itself; no cycle start is needed.
 function runGCode() {
@@ -2388,7 +2391,7 @@ function runGCode() {
     }
   };
   const offState = machine.on("state", (s) => {
-    if (jobIsRunning(s) && !started) {
+    if (jobHasMoved(s) && !started) {
       started = true;
       finishStarting();
     }
