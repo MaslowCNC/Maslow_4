@@ -731,6 +731,22 @@ const tabletResumeClick = (event) => {
   runButtonAction(id("tablettab_gcode_resume"), `Resume ${stopped.file} from line ${line}`, () => machine.resumeFile(stopped.file, line));
 };
 
+// Picking another file in the job selector drops a stopped job, so its Resume button can't then
+// start partway into a file the user has moved on from. Picking the same file keeps it.
+const samePath = (a, b) => a.replace(/^\/+/, "") === b.replace(/^\/+/, "");
+const discardStoppedForOtherFile = (path) => {
+  const stopped = typeof machine !== "undefined" ? machine.state.stopped : null;
+  if (!stopped || samePath(stopped.file, path)) {
+    return;
+  }
+  addMessage(`Discarding the stopped job (${stopped.file}): another file was selected`);
+  machine.discardStopped().catch((err) => addMessage(`Discard stopped job failed: ${err.detail ?? err.reason}`));
+};
+
+if (typeof globalThis !== "undefined") {
+  globalThis.__tabletStoppedTestApi = { samePath };
+}
+
 const tabletDiscardClick = () =>
   runButtonAction(id("tablettab_gcode_discard"), "Discard stopped job", machine.discardStopped);
 
@@ -2595,7 +2611,9 @@ function selectFile() {
     clearGCodeState();
     files_enter_dir(filename);
   } else {
-    tabletLoadGCodeFile(`${files_currentPath()}${filename}`, file.size);
+    const path = `${files_currentPath()}${filename}`;
+    discardStoppedForOtherFile(path);
+    tabletLoadGCodeFile(path, file.size);
   }
   updateDeleteButtonState();
 }

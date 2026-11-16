@@ -52,3 +52,13 @@ describe("Start button mode", () => {
     expect(moved({ grbl: "Hold", job })).toBe(true);
   });
 });
+
+describe("stopped job and the job selector", () => {
+  test("the same file, with or without a leading slash, keeps the stopped job", () => {
+    const same = g.__tabletStoppedTestApi.samePath;
+    expect(same("/part.nc", "/part.nc")).toBe(true);
+    expect(same("part.nc", "/part.nc")).toBe(true);
+    expect(same("/part.nc", "/other.nc")).toBe(false);
+    expect(same("/jobs/part.nc", "/part.nc")).toBe(false);
+  });
+});
