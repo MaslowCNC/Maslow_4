@@ -487,7 +487,6 @@ let zLowLastAcknowledgedResultZ = null;
 // Whether the one-time startup Z safety check has already fired this connection.
 // Reset on every WebSocket reconnect so the warning re-fires after a firmware restart.
 let startupZCheckDone = false;
-let setZHomeInputTracksMachineZ = false;
 
 // fixedZ makes the reported Z position irrelevant to Maslow kinematics.  Keep safety checks
 // enabled until the firmware setting has been received on this connection.
@@ -1295,7 +1294,6 @@ function tabletGrblState(grbl, response) {
       const axisName = axisNames[index].toUpperCase();
       setTextContent(`mpos-${axisNames[index]}`, `|${axisName}m: ${Number(pos * factor).toFixed(index > 2 ? 2 : digits)}|`);
     })
-    syncSetZHomeInputWithMachineZ();
   }
 
   // On the first status update that has both WCO and MPOS data, proactively
@@ -1408,167 +1406,87 @@ const tabletMoveBottomLeft = () => sendMove("X-Y-");
 const tabletMoveBottom = () => sendMove("Y-");
 const tabletMoveBottomRight = () => sendMove("X+Y-");
 // Button event handlers - Fourth Row
-const getMachineZPosition = () => MPOS && MPOS.length >= 3 ? MPOS[2] : null;
+const Z_STOP_INFO_TEXT =
+  "When z-stop is 0, the stepper motors cannot move down any more without running in to the " +
+  "router assembly. This gets set at the start of Find Anchors or by clicking Options &gt; Set Z-Stop." +
+  "<br><br>Z-home cannot be set below the Z-Stop because the machine thinks it is physically unreachable.";
 
-/** Report whether the Set Z Home popup is currently visible. */
-const isSetZHomePopupOpen = () => {
-  const popup = id("set-z-home-popup");
-  return !!popup && popup.style.display !== "none";
+/** Explain the z-stop (the "z-stop" links in the Set Z Home popup). */
+const showZStopInfo = (event) => {
+  event.preventDefault();
+  alertdlg("Z-Stop", Z_STOP_INFO_TEXT);
 }
 
-/** Keep the popup Z input aligned with the current machine Z while tracking is enabled. */
-const syncSetZHomeInputWithMachineZ = () => {
-  const machineZ = getMachineZPosition();
-  if (!setZHomeInputTracksMachineZ || !isSetZHomePopupOpen() || machineZ === null) {
-    return;
-  }
+const formatZMm = (mm) => Number.isFinite(mm) ? mm.toFixed(3) : "?";
 
+/**
+ * Check a Z home typed in the Set Z Home popup. It is machine Z in mm, which $SETZSTOP sets
+ * to 0 at the z-stop, so it is also the height above the z-stop. Returns {zHome} or {error}.
+ * The Mini's spindle board has its own Z range, so there it only has to be a number.
+ */
+const checkZHome = (rawValue, mini = false) => {
+  const zHome = parseNumericInput(rawValue);
+  if (!Number.isFinite(zHome)) {
+    return { error: "Enter the Z home in mm." };
+  }
+  if (!mini && zHome < Z_HOME_MIN_SAFE_MM) {
+    return {
+      error: `Z home can't be below the z-stop: ${formatZMm(zHome)} mm is ${formatZMm(-zHome)} mm under it, ` +
+        "where the machine can't reach.",
+    };
+  }
+  if (!mini && zHome > Z_HOME_MAX_SAFE_MM) {
+    return { error: `Z home can't be more than ${Z_HOME_MAX_SAFE_MM} mm above the z-stop.` };
+  }
+  return { zHome };
+}
+
+if (typeof globalThis !== "undefined") {
+  globalThis.__tabletZHomeTestApi = { checkZHome };
+}
+
+const closeSetZHomePopup = () => hideModal("set-z-home-popup");
+
+/** Show the typed Z as mm above the z-stop, in red when it can't be used. */
+const updateSetZHomeAbove = () => {
   const zInput = id("setHomeZ");
-  if (zInput) {
-    zInput.value = machineZ.toFixed(3);
-  }
-}
-
-/** Close the popup and stop live machine-Z tracking for the input field. */
-const closeSetZHomePopup = () => {
-  setZHomeInputTracksMachineZ = false;
-  hideModal("set-z-home-popup");
-}
-
-/** Close the popup after focus leaves it so in-popup actions do not dismiss it. */
-const handleSetZHomePopupFocusOut = () => {
-  scheduleCallback(() => {
-    const popupContent = id("set_z_home_popup_content");
-    if (isSetZHomePopupOpen() && popupContent && !popupContent.contains(document.activeElement)) {
-      closeSetZHomePopup();
-    }
-  }, 0);
-}
-
-/** Backdrop clicks should dismiss the popup by moving focus out of it. */
-const handleSetZHomePopupBackdropClick = (event) => {
-  if (event.target !== event.currentTarget) {
+  const above = id("setHomeZAbove");
+  if (!zInput || !above) {
     return;
   }
-
-  const popupContent = id("set_z_home_popup_content");
-  if (popupContent && popupContent.contains(document.activeElement)) {
-    document.activeElement.blur();
-    return;
-  }
-
-  closeSetZHomePopup();
-}
-
-/** Let the user keep a manually typed Z home value without live MPOS updates overwriting it. */
-const handleSetZHomeManualInput = () => {
-  setZHomeInputTracksMachineZ = false;
-}
-
-/** Update the popup's context label with the currently defined Z home position. */
-const updateSetZHomeLabel = (zHome = WCO && WCO.length >= 3 ? WCO[2] : 0) => {
-  const zHomeLabel = id("currentZHomeLabel");
-  if (zHomeLabel) {
-    const zHomeValue = Number.isFinite(zHome) ? zHome : 0;
-    zHomeLabel.textContent = `Z Home: ${zHomeValue.toFixed(3)} mm`;
-  }
-}
-
-/** Return the popup's default Z jog step in current display units. */
-const getDefaultSetZHomeJogDistance = () => {
-  const mainUiDistance = Number(getText("disZ"));
-  return mainUiDistance > 0 ? mainUiDistance : 5;
-}
-
-/** Return the popup-specific Z jog step in the current display units. */
-const getSetZHomeJogDistance = () => {
-  const popupDistance = getValueFloat("setHomeZStep");
-  if (popupDistance > 0) {
-    return popupDistance;
-  }
-
-  return getDefaultSetZHomeJogDistance();
-}
-
-/** Jog Z from the Set Z Home popup using the popup-specific step value. */
-const moveSetZHomePopupZ = (direction) => {
-  const distance = getSetZHomeJogDistance();
-  if (distance <= 0) {
-    return;
-  }
-
-  setZHomeInputTracksMachineZ = true;
-  sendMove(direction, { distance });
+  above.textContent = formatZMm(parseNumericInput(zInput.value));
+  above.parentElement.classList.toggle("set-z-home-invalid", !!checkZHome(zInput.value, maslowIsMini()).error);
 }
 
 const openSetZHomePopup = () => {
   tabletClick();
-  const { unitLabel } = getUnitInfo();
-  const machineZ = getMachineZPosition();
-  const zCurrent = machineZ === null ? "0" : machineZ.toFixed(3);
+  const { mpos, wco } = machine.state;
   const zInput = id("setHomeZ");
   if (zInput) {
-    // Pre-fill with current machine Z position so confirming sets Z zero here.
-    zInput.value = zCurrent;
-    if (maslowIsMini()) {
-      // No min/max: the spindle board's Z travel differs from the Maslow 4 range
-      zInput.removeAttribute("min");
-      zInput.removeAttribute("max");
-      zInput.title = "Machine Z to use as Z zero (default: the current position)";
-    } else {
-      zInput.min = Z_HOME_MIN_SAFE_MM;
-      zInput.max = Z_HOME_MAX_SAFE_MM;
-      zInput.title = `Z: ${Z_HOME_MIN_SAFE_MM} to ${Z_HOME_MAX_SAFE_MM} mm`;
-    }
+    // Pre-fill with the current machine Z, so Set Home without changes puts Z home here.
+    zInput.value = mpos ? formatZMm(mpos.z) : "";
   }
-  const zStepInput = id("setHomeZStep");
-  if (zStepInput) {
-    zStepInput.value = getDefaultSetZHomeJogDistance();
-    zStepInput.title = `Jog step in ${unitLabel}`;
-  }
-  setTextContent("setHomeZStepUnit", `(${unitLabel})`);
-  setZHomeInputTracksMachineZ = true;
-  // Context label shows the previously defined Z home value (WCO[2]).
-  updateSetZHomeLabel();
+  setTextContent("currentZHomeValue", formatZMm(wco ? wco.z : NaN));
+  updateSetZHomeAbove();
   openModal("set-z-home-popup");
   scheduleCallback(() => {
-    if (zInput) {
-      zInput.focus();
-      zInput.select();
-    } else {
-      id("set_z_home_popup_content")?.focus();
-    }
+    zInput?.focus();
+    zInput?.select();
   }, 0);
 }
 
-const moveToZHome = () => {
-  const machineZ = getMachineZPosition();
-  const workZeroZ = WCO && WCO.length >= 3 ? WCO[2] : null;
-  const zDelta = (machineZ !== null && workZeroZ !== null) ? workZeroZ - machineZ : 0;
-  checkZHomeAndProceed(() => {
-    sendCommand("G90 G0 Z0");
-    addMessage("Moving to Z Home position");
-  }, zDelta);
-}
-
 const confirmSetZHome = () => {
-  const zInput = id("setHomeZ");
-  const rawZ = zInput ? parseNumericInput(zInput.value) : NaN;
-  let zVal = isNaN(rawZ) ? 0 : rawZ;
-  // The Maslow 4 range does not apply to the Mini: the spindle board's Z travel is different
-  if (!maslowIsMini()) {
-    zVal = Math.max(Z_HOME_MIN_SAFE_MM, Math.min(Z_HOME_MAX_SAFE_MM, zVal));
+  const { zHome, error } = checkZHome(id("setHomeZ")?.value, maslowIsMini());
+  if (error) {
+    alertdlg("Set Z Home", error);
+    return;
   }
-
-  if (!isNaN(rawZ) && zVal !== rawZ) {
-    addMessage(`Z Home value clamped to range: Z=${zVal}`);
-  }
-
-  const mposZ = getMachineZPosition() ?? 0;
-  sendCommand(`G10 L20 P0 Z${mposZ - zVal}`);
-  addMessage(`Z Home pos set: Z=${zVal}mm`);
-  updateSetZHomeLabel(mposZ);
-  refreshGcode();
+  closeSetZHomePopup();
+  startMachineAction("Set Z home", () =>
+    machine.setWorkZero({ z: zHome }).then(() => {
+      addMessage(`Z home set ${formatZMm(zHome)} mm above the z-stop`);
+      refreshGcode();
+    }));
 }
 // Button event handlers - Fifth Row - nothing special here, move on
 
@@ -2188,15 +2106,11 @@ function tabletInit() {
     id("tablettab_set_home_confirm").addEventListener("click", confirmSetHome);
 
     // Buttons - Set Z Home Pop-up
-    id("set-z-home-popup").addEventListener("click", handleSetZHomePopupBackdropClick);
+    id("set-z-home-popup").addEventListener("click", closeSetZHomePopup);
     id("set_z_home_popup_content").addEventListener("click", tabletPopupStopProp);
-    id("set_z_home_popup_content").addEventListener("focusout", handleSetZHomePopupFocusOut);
-    id("setHomeZ").addEventListener("input", handleSetZHomeManualInput);
-    // These popup jog buttons use the popup-specific step from the setHomeZStep input.
-    id("tablettab_set_z_home_up").addEventListener("click", () => moveSetZHomePopupZ(Z_JOG_UP));
-    id("tablettab_set_z_home_down").addEventListener("click", () => moveSetZHomePopupZ(Z_JOG_DOWN));
-    id("tablettab_set_z_home_cancel").addEventListener("click", () => closeSetZHomePopup());
-    id("tablettab_move_to_z_home").addEventListener("click", moveToZHome);
+    id("setHomeZ").addEventListener("input", updateSetZHomeAbove);
+    document.querySelectorAll("#set-z-home-popup .z-stop-link").forEach((link) => link.addEventListener("click", showZStopInfo));
+    id("tablettab_set_z_home_cancel").addEventListener("click", closeSetZHomePopup);
     id("tablettab_set_z_home_confirm").addEventListener("click", confirmSetZHome);
 
     // Controls - Fifth Row
