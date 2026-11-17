@@ -1589,7 +1589,7 @@ const requestMachineState = () => {
 };
 
 // Stop button: machine.stop() ends running machine actions, then wsCommands.stop() sends 0x18 (soft reset: halts at once in any state, ends any
-// job) and then $STOP (raises Z, saves positions). _stopPending stays set until the
+// job) and then $STOP (saves positions; Z stays where it stopped). _stopPending stays set until the
 // firmware reports Idle or Alarm (tabletGrblState), so a stop sent while the socket was down
 // is sent again on reconnect (onWSOpenCallback). It expires after STOP_PENDING_MS so an old
 // stop is never replayed much later.

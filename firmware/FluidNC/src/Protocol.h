@@ -56,9 +56,6 @@ extern volatile bool rtStopFromHold;
 // stop-from-hold (a $STOP line from another channel is refused while the job is still active)
 // and by the spindle-fault recovery.  Cleared by maslow_stop().
 extern volatile bool rtMaslowStop;
-// The last reset (0x18) interrupted a jog, so the $STOP after it leaves Z where it stopped instead
-// of raising it.  Set by protocol_do_rt_reset(), cleared by maslow_stop().
-extern volatile bool rtResetStoppedJog;
 
 extern volatile bool runLimitLoop;
 

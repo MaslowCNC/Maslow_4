@@ -204,8 +204,8 @@ const wsCommands = (() => {
 	 *    stepping, ends any job, stops the spindle and belt motors. On a Maslow it syncs the
 	 *    belts to the encoders and goes Idle rather than alarming (Protocol.cpp
 	 *    protocol_do_rt_reset), since the encoders still know where the belts are.
-	 * 2. $STOP once the firmware has restarted (its banner arrives): raises Z clear of the work
-	 *    and saves positions. Sent after the restart because the restart discards every
+	 * 2. $STOP once the firmware has restarted (its banner arrives): saves positions (Z stays
+	 *    where it stopped). Sent after the restart because the restart discards every
 	 *    channel's unread input.
 	 * Returns false if the socket isn't open.
 	 */

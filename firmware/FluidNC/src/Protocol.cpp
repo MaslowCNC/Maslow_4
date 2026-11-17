@@ -74,9 +74,8 @@ volatile bool runLimitLoop;  // Interface to show_limits()
 // Uses acquire/release semantics to guarantee visibility on dual-core ESP32-S3.
 static std::atomic<bool> feedHoldPending { false };
 
-volatile bool rtStopFromHold    = false;
-volatile bool rtMaslowStop      = false;
-volatile bool rtResetStoppedJog = false;
+volatile bool rtStopFromHold = false;
+volatile bool rtMaslowStop   = false;
 
 static void protocol_exec_rt_suspend();
 static void protocol_do_initiate_cycle();  // Forward declaration for auto cycle start handler
@@ -407,8 +406,7 @@ void protocol_main_loop() {
         // Back at the top level, so any line interrupted by a stop-from-hold has unwound.
         mc_set_drop_motion(false);
         if (rtMaslowStop) {
-            rtMaslowStop      = false;
-            rtResetStoppedJog = false;  // this stop ends a job, not a jog: raise the Z
+            rtMaslowStop = false;
             execute_line("$STOP", allChannels, AuthenticationLevel::LEVEL_ADMIN, true);
         }
         // A line collected by the polling task.  xQueueReceive supplies the
@@ -1212,7 +1210,7 @@ static void protocol_exec_rt_suspend() {
         // the belts already at rest, instead of resuming it.  haltMotion() clears the suspend and
         // sets Idle, so this loop exits; the drop flag keeps the G-code line that was waiting for
         // planner space from queuing the rest of its motion as it unwinds.  The main loop then
-        // runs $STOP to raise the Z and save the positions.
+        // runs $STOP to save the positions.
         if (rtStopFromHold && sys.state() == State::Hold && sys.suspend().bit.holdComplete) {
             rtStopFromHold = false;
             log_info("Stopping the paused job");
@@ -1397,7 +1395,6 @@ static void protocol_do_fault_pin(void* arg) {
     log_info("Stopped by " << pin->legend());
 }
 void protocol_do_rt_reset() {
-    rtResetStoppedJog = state_is(State::Jog);  // Maslow: see maslow_stop()
     // Maslow: a reset during an SD job is the Stop button; remember where the job got to.
     // Not in Alarm: position may not be trustworthy, so there is nothing to resume.
     if (!state_is(State::Alarm) && !state_is(State::ConfigAlarm)) {

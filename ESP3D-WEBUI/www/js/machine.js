@@ -555,7 +555,7 @@ const machine = (() => {
 	};
 
 	// Stopping and pausing
-	/** End any running operation now: 0x18, then $STOP (raise Z, save). Done when $STOP is answered. */
+	/** End any running operation now: 0x18, then $STOP (save; Z stays where it is). Done when $STOP is answered. */
 	const stop = () => {
 		for (const entry of [...running]) {
 			entry.reject(machineError("reset", entry.name, { detail: `${entry.name}: stopped` }));

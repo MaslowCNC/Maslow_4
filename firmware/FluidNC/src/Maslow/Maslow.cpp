@@ -1178,9 +1178,6 @@ void Maslow_::stopMotors() {
     axis[_TL].stop();
 }
 
-// Safe Z height in mm above Z home to raise to after stop (prevents workpiece damage)
-static constexpr float Z_SAFE_HEIGHT_MM = 2.0f;
-
 void Maslow_::haltMotion() {
     // Always stop streaming and clear the planner/stepper immediately, regardless of Z height.
     // If we only stop the job without clearing, any moves already in the planner buffer
@@ -1219,32 +1216,6 @@ void Maslow_::syncBeltsToEncoders() {
 
     gc_sync_position();
     plan_sync_position();
-}
-
-// Raises Z axis to Z home + Z_SAFE_HEIGHT_MM to prevent workpiece damage after stop
-void Maslow_::raiseZ() {
-    haltMotion();
-
-    float* mpos  = get_mpos();
-    float* wco   = get_wco();
-    float  workZ = mpos[Z_AXIS] - wco[Z_AXIS];  // Work Z = machine Z minus WCO
-    if (workZ >= Z_SAFE_HEIGHT_MM) {
-        return;  // Z is already at or above safe height in work coordinates
-    }
-    log_info("Raising Z from work Z " << workZ << "mm to " << Z_SAFE_HEIGHT_MM << "mm (Z home + " << Z_SAFE_HEIGHT_MM << "mm)");
-
-    // Command Z to raise to Z_SAFE_HEIGHT_MM in work coordinates.
-    // Convert to the current unit system so the G-code interpreter moves the
-    // correct distance regardless of whether G20 (inches) or G21 (mm) is active.
-    char  zRaise[20];
-    float safeHeight = (gc_state.modal.units == Units::Inches) ? Z_SAFE_HEIGHT_MM / MM_PER_INCH : Z_SAFE_HEIGHT_MM;
-    snprintf(zRaise, sizeof(zRaise), "G90 G0 Z%.4f", safeHeight);
-    Error result = gc_execute_line(zRaise);
-    if (result == Error::Ok) {
-        protocol_buffer_synchronize();  // Wait for Z to reach target
-    } else {
-        log_error("Failed to raise Z: " << errorString(result));
-    }
 }
 
 static void stopEverything() {
