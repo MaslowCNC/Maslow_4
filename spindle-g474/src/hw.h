@@ -1,0 +1,47 @@
+#pragma once
+// Peripheral bring-up for the spindle drive: TIM1/TIM8 complementary PWM, OPAMP PGAs, ADC
+// injected sampling, COMP + DAC hardware over-current break, slow analog (VBUS, NTCs), fan PWM,
+// beam/LED GPIO and the independent watchdog.  The control maths lives in foc.cpp.
+
+#include <Arduino.h>
+
+namespace hw {
+    // Configure everything with both bridges OFF (MOE = 0, all gate inputs driven low).  Returns
+    // false if a peripheral failed to start; the reason goes to *why.
+    bool init(const char** why);
+
+    // Start the PWM timers (outputs still off) and the sampling interrupt.
+    bool start(const char** why);
+
+    // Outputs.  enableOutputs sets MOE (the gate drivers follow the duty registers); it fails
+    // while a break is latched.  disableOutputs clears MOE: all six FETs of that bridge turn off.
+    bool enableOutputs(int motor);
+    void disableOutputs(int motor);
+    bool outputsEnabled(int motor);
+    void writeDuty(int motor, uint16_t a, uint16_t b, uint16_t c);
+
+    // Hardware over-current: the comparator tripped the timer's break input.  Latched until
+    // clearBreak (which only succeeds once the comparator output is low again).
+    bool breakLatched(int motor);
+    bool clearBreak(int motor);
+    uint8_t comparatorOutputs();   // bit per phase: m1 a,b,c = bits 0-2, m2 = bits 3-5
+
+    // Set the comparator threshold (phase amps in the low-side conduction direction).
+    void setHardwareTripAmps(float amps);
+
+    // Raw injected samples of the last PWM period, motor m, phase p.
+    uint16_t rawCurrent(int m, int p);
+
+    // Slow analog, round robin, call from the main loop.  Values are filtered.
+    void serviceSlowAnalog();
+    float vbus();          // V
+    float temperature(int n);  // deg C, NTC 0 or 1; NaN if open/shorted
+
+    void setFanDuty(uint8_t duty);   // 0..255 on VAC_CONTROL
+
+    void watchdogStart();
+    void watchdogKick();
+
+    // Where the timer update event lands; written at start() for the boot log.
+    extern const char* g_update_phase;
+}
