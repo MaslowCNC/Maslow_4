@@ -2,6 +2,7 @@
 // Use of this source code is governed by a GPLv3 license that can be found in the LICENSE file.
 
 #include "SpindleBoard.h"
+#include "G474Flasher.h"
 
 #include "../Machine/MachineConfig.h"  // config->_uarts
 #include "../System.h"                 // sys
@@ -12,6 +13,7 @@
 #include "../Maslow/Maslow.h"          // Maslow.resetUpdateWatchdog
 #include "../Settings.h"               // Sta/SSID and Sta/Password, looked up by name
 #include "../FluidPath.h"               // LocalFS
+#include "../Maslow/BoardId.h"          // the 36 V board's G474 spindle
 
 #include <cstdio>   // snprintf
 #include <cstdlib>  // strtol
@@ -143,7 +145,7 @@ namespace Spindles {
     }
 
     void SpindleBoard::sendSpeed(uint32_t rpm) {
-        if (!_uart || rpm == _last_sent_rpm) {
+        if (!_uart || _flasher || rpm == _last_sent_rpm) {
             return;
         }
         _last_sent_rpm = rpm;
@@ -155,7 +157,7 @@ namespace Spindles {
     }
 
     void SpindleBoard::sendPhase(float deg) {
-        if (!_uart) {
+        if (!_uart || _flasher) {
             return;
         }
         if (_deg_sent && fabsf(deg - _last_sent_deg) < 0.05f) {
@@ -171,7 +173,7 @@ namespace Spindles {
     }
 
     void SpindleBoard::sendFan(int level) {
-        if (!_uart) {
+        if (!_uart || _flasher) {
             return;
         }
         if (level < 0) {
@@ -191,7 +193,7 @@ namespace Spindles {
     }
 
     void SpindleBoard::sendBeltCooling(bool active) {
-        if (!_uart || (int)active == _last_sent_belt) {
+        if (!_uart || _flasher || (int)active == _last_sent_belt) {
             return;
         }
         _last_sent_belt = (int)active;
@@ -200,13 +202,17 @@ namespace Spindles {
     }
 
     void SpindleBoard::sendHoldRelease() {
-        if (!_uart) {
+        if (!_uart || _flasher) {
             return;
         }
         _uart->write((const uint8_t*)"D\n", 2);
     }
 
     void SpindleBoard::sendHome() {
+        if (_flasher) {
+            log_error(name() << ": cannot home spindle Z - the spindle MCU is being flashed");
+            return;
+        }
         if (!_uart) {
             log_error(name() << ": cannot home spindle Z - no link to the spindle board");
             return;
@@ -216,6 +222,10 @@ namespace Spindles {
     }
 
     void SpindleBoard::sendRemoveTool() {
+        if (_flasher) {
+            log_error(name() << ": cannot remove tool - the spindle MCU is being flashed");
+            return;
+        }
         if (!_uart) {
             log_error(name() << ": cannot remove tool - no link to the spindle board");
             return;
@@ -238,6 +248,11 @@ namespace Spindles {
 #endif
 
     void SpindleBoard::sendEnableOTA() {
+        if (BoardId::board() == BoardId::Board::Unified36V) {
+            log_error(name() << ": the 36 V board's spindle MCU (STM32G474) has no WiFi - update it with "
+                                "$Spindle/G474=FLASH <file.bin> instead");
+            return;
+        }
         if (!_uart) {
             log_error(name() << ": cannot enable spindle OTA - no link to the spindle board");
             return;
@@ -266,6 +281,10 @@ namespace Spindles {
     }
 
     void SpindleBoard::sendTripRequest(bool test) {
+        if (_flasher) {
+            log_error(name() << ": cannot request the trip recording - the spindle MCU is being flashed");
+            return;
+        }
         if (!_uart) {
             log_error(name() << ": cannot request the trip recording - no link to the spindle board");
             return;
@@ -410,6 +429,10 @@ namespace Spindles {
 
     void SpindleBoard::update(float zPositionMM, bool beltMotionActive, int fanSpeed) {
         if (!_uart) {
+            return;
+        }
+        if (_flasher) {
+            serviceFlasher();
             return;
         }
         _belt_motion_active = beltMotionActive;
@@ -658,6 +681,97 @@ namespace Spindles {
             _trip_refetch = false;
             sendTripRequest(false);
         }
+    }
+
+    // ---------------------------------------------------------------- 36 V board (G474 spindle)
+
+    bool SpindleBoard::startFlash(const char* path, Channel& out) {
+        if (BoardId::board() != BoardId::Board::Unified36V) {
+            log_string(out, "Spindle flashing over the link is only for the 36 V board (STM32G474 spindle)");
+            return false;
+        }
+        if (!_uart) {
+            log_string(out, "No link to the spindle board");
+            return false;
+        }
+        if (_flasher) {
+            log_string(out, "The spindle MCU is already being flashed");
+            return false;
+        }
+        if (!path || !*path) {
+            log_string(out, "Usage: $Spindle/G474=FLASH <file.bin on the local filesystem>");
+            return false;
+        }
+        State st = sys.state();
+        if (!machineAtRest() || (st != State::Idle && st != State::Alarm) || _current_state != SpindleState::Disable) {
+            log_string(out, "Refused: the machine must be at rest (Idle or Alarm) with the spindle off");
+            return false;
+        }
+        _flasher = new G474Flasher(_uart, path);
+        log_info(name() << ": flashing the spindle MCU from " << path << " (the Z drivers are off meanwhile)");
+        return true;
+    }
+
+    void SpindleBoard::serviceFlasher() {
+        if (_flasher->service()) {
+            return;
+        }
+        if (_flasher->succeeded()) {
+            log_info(name() << ": spindle MCU flashed; waiting for it to start");
+        } else {
+            log_error(name() << ": spindle flash FAILED: " << _flasher->error());
+        }
+        delete _flasher;
+        _flasher = nullptr;
+        _uart->restoreMode();
+        _uart->flushRx();
+        _rx_len = 0;
+        // The spindle restarted: send it everything again, and expect a fresh hello.
+        _last_sent_rpm  = 0xFFFFFFFF;
+        _last_sent_fan  = -1;
+        _last_sent_belt = -1;
+        _deg_sent       = false;
+        _hold_released  = false;
+        _link_confirmed = false;
+        _last_rx_ms     = 0;
+        _last_fault     = 0;
+    }
+
+    bool SpindleBoard::resetSpindleMcu(Channel& out) {
+        if (BoardId::board() != BoardId::Board::Unified36V) {
+            log_string(out, "Only the 36 V board's XY board can reset its spindle MCU");
+            return false;
+        }
+        if (_flasher) {
+            log_string(out, "Refused: the spindle MCU is being flashed");
+            return false;
+        }
+        G474Flasher::resetToApplication();
+        _last_sent_rpm  = 0xFFFFFFFF;
+        _last_sent_fan  = -1;
+        _last_sent_belt = -1;
+        _deg_sent       = false;
+        _last_fault     = 0;
+        log_info(name() << ": spindle MCU reset");
+        return true;
+    }
+
+    bool SpindleBoard::sendRaw(const char* line, Channel& out) {
+        if (!_uart) {
+            log_string(out, "No link to the spindle board");
+            return false;
+        }
+        if (_flasher) {
+            log_string(out, "Refused: the spindle MCU is being flashed");
+            return false;
+        }
+        if (!line || !*line) {
+            log_string(out, "Usage: $Spindle/G474=SEND <line>, e.g. $Spindle/G474=SEND #STAT");
+            return false;
+        }
+        _uart->write((const uint8_t*)line, strlen(line));
+        _uart->write((const uint8_t*)"\n", 1);
+        return true;
     }
 
     // Configuration registration

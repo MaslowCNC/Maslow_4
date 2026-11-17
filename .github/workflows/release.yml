@@ -201,7 +201,8 @@ jobs:
           cp "$HOME/.platformio/packages/framework-arduinoespressif32/tools/partitions/boot_app0.bin" "$STAGE_DIR/common/"
           cp ESP3D-WEBUI/dist/index.html.gz "$STAGE_DIR/webui/index.html.gz"
           # The released maslow.yaml is the Maslow 4 template.  The firmware copies the template
-          # for its own board (maslow-m4.yaml or maslow-mini.yaml) when no config file exists.
+          # for its own board (maslow-m4.yaml, maslow-mini.yaml or maslow-mini-36v.yaml) when no config
+          # file exists.
           if [ -f firmware/FluidNC/data/maslow-m4.yaml ]; then
             cp firmware/FluidNC/data/maslow-m4.yaml "$STAGE_DIR/config/maslow.yaml"
           else
