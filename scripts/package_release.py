@@ -151,6 +151,8 @@ def build_host_package(
     repo_root = manifest_path.parent
     firmware_root = repo_root / "firmware"
     install_root = firmware_root / "install_scripts"
+    # Maslow's own S3 scripts. The posix/ and win64/ folders next to it are upstream FluidNC's.
+    maslow_scripts = install_root / "maslow" / platform
     fluidterm_root = firmware_root / "fluidterm"
     env_root = source_dir / "targets" / env
     zip_root_name = f"fluidnc-maslow4-{version}-{platform}"
@@ -168,10 +170,8 @@ def build_host_package(
             zip_path = dist_dir / archive_name
             log(f"Creating host package {archive_name}")
             with ZipFile(zip_path, "w", compression=ZIP_DEFLATED) as zip_file:
-                zip_file.write(install_root / platform / "HOWTO-INSTALL.txt", arcname=f"{zip_root_name}/HOWTO-INSTALL.txt")
+                zip_file.write(maslow_scripts / "HOWTO-INSTALL.txt", arcname=f"{zip_root_name}/HOWTO-INSTALL.txt")
                 zip_file.write(source_dir / "common" / "boot_app0.bin", arcname=f"{zip_root_name}/common/boot_app0.bin")
-                for fuse_name in ["SecurityFusesOK.bin", "SecurityFusesOK0.bin"]:
-                    zip_file.write(install_root / "common" / fuse_name, arcname=f"{zip_root_name}/common/{fuse_name}")
 
                 zip_file.write(env_root / "bootloader.bin", arcname=f"{zip_root_name}/{env}/bootloader.bin")
                 zip_file.write(env_root / "firmware.bin", arcname=f"{zip_root_name}/{env}/firmware.bin")
@@ -179,13 +179,13 @@ def build_host_package(
                 zip_file.write(env_root / "littlefs.bin", arcname=f"{zip_root_name}/{env}/littlefs.bin")
                 zip_file.write(source_dir / "webui" / "index.html.gz", arcname=f"{zip_root_name}/{env}/index.html.gz")
 
-                install_script = install_root / platform / f"install-{env}{config['script_extension']}"
+                install_script = maslow_scripts / f"install-{env}{config['script_extension']}"
                 copy_script_to_zip(zip_file, install_script, f"{zip_root_name}/{install_script.name}")
-                for script_name in ["full-install", "install-fs", "fluidterm", "checksecurity", "erase", "tools"]:
-                    source_script = install_root / platform / f"{script_name}{config['script_extension']}"
+                for script_name in ["full-install", "install-fs", "fluidterm", "erase", "tools"]:
+                    source_script = maslow_scripts / f"{script_name}{config['script_extension']}"
                     copy_script_to_zip(zip_file, source_script, f"{zip_root_name}/{source_script.name}")
                 if platform == "posix":
-                    copy_script_to_zip(zip_file, install_root / platform / "full-install.command", f"{zip_root_name}/full-install.command")
+                    copy_script_to_zip(zip_file, maslow_scripts / "full-install.command", f"{zip_root_name}/full-install.command")
 
                 for fluidterm_name in ["fluidterm.py", "README-FluidTerm.md"]:
                     zip_file.write(fluidterm_root / fluidterm_name, arcname=f"{zip_root_name}/common/{fluidterm_name}")

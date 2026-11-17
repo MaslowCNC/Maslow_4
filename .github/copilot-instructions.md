@@ -239,7 +239,7 @@ This repository has TWO web UI systems:
 - **Configurations**: `firmware/FluidNC/data/` - Example machine configurations
 - **Libraries**: `firmware/libraries/` - Custom libraries and dependencies
 - **Build output**: `firmware/.pio/build/wifi_s3/` - Compiled firmware and filesystem
-- **Install scripts**: `firmware/install_scripts/` - Platform-specific installation helpers
+- **Install scripts**: `firmware/install_scripts/maslow/` - the USB install scripts packaged into releases (the other folders there are upstream FluidNC's and are not used)
 
 ### Adding New Features
 1. **C++ changes**: Modify files in `firmware/FluidNC/src/`
