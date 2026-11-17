@@ -1,0 +1,3 @@
+Maslow remote 2026-11-17-4a97d10c2
+Board: 4.0" ESP32-S3 Hosyond / lcdwiki ES3C40P
+esptool v4.10.0
