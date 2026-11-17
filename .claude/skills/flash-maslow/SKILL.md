@@ -105,9 +105,9 @@ results, and anything unexpected. If the config was reset (USB `--fs`, `--erase`
   2026-10-26 the connection was reset at 7%. `/updatefw` feeds the watchdog.
 - **Never use `pio run -t nobuild -t uploadfs`.** With the pinned platform it OTA-writes
   `firmware.bin` into the filesystem partition.
-- **`firmware/install_scripts/*/install-wifi_s3.sh` is wrong for this board.** It's an unedited
-  copy of the plain-ESP32 script (`--chip esp32`, bootloader at `0x1000`). The S3 bootloader
-  goes at `0x0`.
+- **`firmware/install_scripts/` is upstream FluidNC's and wrong for this board** (plain-ESP32 chip
+  or offsets). Maslow's release install scripts are in `scripts/release/install/`. The S3
+  bootloader goes at `0x0`.
 - **USB offsets** (from `firmware/max_littlefs.csv`): bootloader `0x0`, partitions `0x8000`,
   `boot_app0` `0xe000`, firmware `0x10000`, littlefs `0x5F0000` (2 MB). `boot_app0` makes the
   board boot the new firmware even when an earlier OTA update left it on the second firmware slot.
