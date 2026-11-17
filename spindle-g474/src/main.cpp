@@ -38,12 +38,12 @@ bool linkWriteIfRoom(const char* line, int n) {
 }
 
 void linkEvent(const char* level, const char* fmt, ...) {
-    char    buf[160];
+    char    buf[240];   // the XY board reads lines up to 400 bytes (SpindleBoard _rx_buf)
     va_list ap;
     va_start(ap, fmt);
     vsnprintf(buf, sizeof(buf), fmt, ap);
     va_end(ap);
-    char line[176];
+    char line[256];
     int  n = snprintf(line, sizeof(line), "%s:%s\n", level, buf);
     if (n >= (int)sizeof(line)) {
         n            = sizeof(line) - 1;
@@ -454,6 +454,9 @@ static void maintenance(const char* line) {
         tu.pos_kp = a;
         tu.pos_kd = b;
         tu.pos_ki = c;
+    } else if (!strcmp(word, "POSBW") && n >= 3 && a > 0 && a <= 1 && b > CL_EXIT_RPM && b <= MAX_COMMAND_RPM) {
+        tu.pos_bw_min      = a;
+        tu.pos_bw_full_rpm = b;
     } else if (!strcmp(word, "OLKI") && n >= 2 && a >= 0 && a <= 1000) {
         tu.ol_ki = a;
     } else if (!strcmp(word, "DTC") && n >= 2 && a >= 0 && a <= 1000) {
@@ -476,15 +479,16 @@ static void maintenance(const char* line) {
     } else if (!strcmp(word, "VER")) {
         linkEvent("MSG", "spindle firmware %s, %s %s", FW_VERSION, __DATE__, __TIME__);
     } else {
-        linkEvent("MSG", "# commands: STAT LOG <ms> ALIGN [V] CL <0|1> CUR <kp> <ki> POS <kp> <kd> <ki> OLKI <ki> DTC <ns> "
-                         "IHOLD/ISPIN/IBOOST/ILIM <A> OBS <R> <L> <flux> TRIP <sw A> [hw A] VER");
+        linkEvent("MSG", "# commands: STAT LOG <ms> ALIGN [V] CL <0|1> CUR <kp> <ki> POS <kp> <kd> <ki> "
+                         "POSBW <min> <full rpm> OLKI <ki> DTC <ns> IHOLD/ISPIN/IBOOST/ILIM <A> OBS <R> <L> <flux> "
+                         "TRIP <sw A> [hw A] VER");
         return;
     }
     if (strcmp(word, "STAT") && strcmp(word, "VER") && strcmp(word, "ALIGN")) {
-        linkEvent("MSG", "tuning: cur %.3f/%.0f pos %.2f/%.3f/%.1f olki %.1f I hold %.1f spin %.1f boost %.1f lim %.1f "
-                         "obs R %.3f L %.1fuH flux %.2fmWb trip %.1f A dtc %.0f ns CL %d",
-                  tu.cur_kp, tu.cur_ki, tu.pos_kp, tu.pos_kd, tu.pos_ki, tu.ol_ki, tu.hold_a, tu.spin_a, tu.boost_a,
-                  tu.iq_limit,
+        linkEvent("MSG", "tuning: cur %.3f/%.0f pos %.2f/%.3f/%.1f bw %.2f/%.0f olki %.1f I hold %.1f spin %.1f "
+                         "boost %.1f lim %.1f obs R %.3f L %.1fuH flux %.2fmWb trip %.1f A dtc %.0f ns CL %d",
+                  tu.cur_kp, tu.cur_ki, tu.pos_kp, tu.pos_kd, tu.pos_ki, tu.pos_bw_min, tu.pos_bw_full_rpm, tu.ol_ki,
+                  tu.hold_a, tu.spin_a, tu.boost_a, tu.iq_limit,
                   tu.r, tu.l * 1e6f, tu.flux * 1e3f, tu.sw_trip_a, tu.deadtime_ns, (int)tu.closed_loop_allowed);
     }
 }

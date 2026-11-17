@@ -60,12 +60,19 @@ constexpr float IQ_LIMIT_A      = 8.0f;      // GUESS: closed-loop torque curren
 // Closed loop holds each rotor's ANGLE on its reference (PID, D on the observer speed), which keeps
 // the Z.  The ESC1's speed-only loop (P 0.01 A per rad/s, I 0.2 A/rad) let a 15 mNm load step pull
 // the rotors ~50 deg apart in the simulation (test/sim).  Chosen in the simulation over rotor
-// inertias 3e-6..5e-5 kg m^2 (the real one is unknown) and +-20-30 % motor-constant errors: retune
-// on the bench (#POS).  Softer gains (6/0.08/60) went unstable near the hand-back when the real R
-// was 20 % below PHASE_R_OHM.
+// inertias 3e-6..5e-5 kg m^2 (the real one is unknown) and motor-constant errors: retune on the
+// bench (#POS).  These are the gains at and above POS_BW_FULL_RPM.
 constexpr float POS_KP          = 10.0f;     // A per rad of angle error
 constexpr float POS_KD          = 0.12f;     // A per rad/s of speed error
 constexpr float POS_KI          = 100.0f;    // A per rad s
+// Below POS_BW_FULL_RPM the angle loop's bandwidth b falls linearly to POS_BW_MIN at CL_EXIT_RPM
+// (Kp*b^2, Kd*b, Ki*b^3: same damping, foc.cpp posGains).  At full gains the loop limit-cycled
+// between 1500 and 3000 RPM in the simulation (+-5 A bursts at ~25 Hz: the observer is weakest at
+// low back-EMF), and with R or the flux 5-20 % off a third of the runs slipped a rotor at the
+// hand-back; scaled, none did (test/sim/sweep.sh).  Load steps below 4000 RPM move the Z more.
+// GUESS: tune on the bench (#POSBW).
+constexpr float POS_BW_MIN      = 0.5f;
+constexpr float POS_BW_FULL_RPM = 4000.0f;
 constexpr float CL_ANGLE_TRIP_RAD = 1.57f;   // GUESS: closed loop, a rotor 90 deg off its reference = stop
 // Open loop: the rotor lags its current vector by the load angle (pull-out at 90 deg); past 150 deg
 // it has slipped.  Followed only above OBS_TRUST_RPM once the observer tracks within OBS_TRUST_TOL.

@@ -36,7 +36,7 @@ the KiCad netlist (needs `kicad-cli`).
 | Link | USART 115200 8N1, `S Z E ? H C B D G R T W` in, `T:...` status every 50 ms, `ZHOMED`, `MSG:/WARN:/ERR:`, trip recording | identical; `W` (WiFi OTA) answers `OTA_ERR:` |
 | Commutation | SimpleFOC open loop in a FreeRTOS task, calibrated voltage LUT | FOC in the ADC interrupt at 20 kHz (`foc.cpp`) |
 | Standstill Z hold / moves, spin-up | voltage vector from the LUT, +1 V while the Z moves | current vector (I/f): 2.5 A hold, 3 A spin-up, +1 A while the Z moves, driven as a voltage (R·I + back-EMF feed-forward) with a slow trim onto the current, so the rotors keep the back-EMF damping the ESP32 drive had |
-| Running | open loop | closed loop above 2000 RPM on the MXLEMMING flux observer (ESC1 bench): each rotor's angle is held on its reference by a PID (the Z is the rotors' relative angle) |
+| Running | open loop | closed loop above 2000 RPM on the MXLEMMING flux observer (ESC1 bench): each rotor's angle is held on its reference by a PID (the Z is the rotors' relative angle), its bandwidth halved at the 1500 RPM hand-back and full from 4000 RPM |
 | Current sense | ESP32 ADC on the MP6541A SOx | 6 shunts → OPAMP1-6 (PGA ×16) → ADC1-5 injected, sampled at the PWM peak, two-shunt rebuild of the highest-duty phase |
 | Over-current | software RMS (6 A), driver OCP via nFAULT | comparators COMP1/2/4 + COMP6/7/5 (DAC3/DAC4 thresholds, 20 A) into the TIM1/TIM8 break inputs; software 15 A × 3 periods per sample; 9 A RMS for 200 ms |
 | Other protection | nFAULT over-temperature | bus voltage 20-44 V, two NTCs (85 °C warn, 100 °C stop), observer lock and speed, rotor slip (angle off its reference: 90° closed loop, 150° open loop above 1000 RPM), independent watchdog |
@@ -76,16 +76,29 @@ c++ -std=c++17 -O2 -I. -I../../src sim_main.cpp ../../src/foc.cpp -o sim
 ./sim [J_kgm2] [flux_factor] [R_factor]      # model motor vs. the firmware's constants
 TRACE=23.3,24.2 ./sim                         # a state line every 5 ms in that window
 POS=10,0.12,100 OLKI=12 ./sim                 # try gains
+./sweep.sh                                    # 75 runs: J 5e-6..2e-5 x R 0.8..1.3 x flux 0.93..1.07
 ```
 
-Results (2026-11-17): all checks pass with the firmware's own constants, for rotor inertias
-3e-6 to 5e-5 kg m² (the real one is unknown; 1e-5 assumed), and for a flux or R off by 7-30 %
-one at a time. Z error at steady speed < 0.2°, peak 5° of phase (0.1 mm) on a 36 mNm load step.
-Weak spots it shows: closed loop between ~1500 and ~3000 RPM jitters (±10 % speed, ±4 A) and the
-hand-back leaves a transient Z swing of up to ~50° (1 mm) that settles in ~0.2 s; with the real R
-20 % below `PHASE_R_OHM` **and** a second error (very low inertia or flux 7 % low) it trips there.
-An inertia of 1e-4 kg m² stalls the open-loop spin-up (caught as a slip). These are what to look
-at first on the bench (BRINGUP.md).
+In zsh, `./sim $c` passes a case held in a variable as one argument (J only): use `./sim ${=c}`.
+
+Results (2026-11-17), with the firmware's own constants: all checks pass for rotor inertias 3e-6
+to 5e-5 kg m² (the real one is unknown; 1e-5 assumed). Z error at steady speed < 0.2°, peak 5° of
+phase (0.1 mm) on a 36 mNm load step at 6000 RPM, and 5° through the hand-back at spin-down.
+
+With the model motor's constants off (`sweep.sh`): 68 of 75 cases pass every check and none slips
+a rotor; the Z swings up to ~30° (0.7 mm) through the hand-back. The 7 that miss one check have the
+lightest rotor (5e-6), or R 20 % low together with the flux 7 % low: at 6000 RPM one motor hunts
+100-300 RPM, or a load step moves the Z 10-30°. An inertia of 1e-4 kg m² stalls the open-loop
+spin-up (caught as a slip).
+
+What the sweep changed: with the angle loop at full gains down to the hand-back, the closed loop
+limit-cycled between ~1500 and ~3000 RPM (±5 A bursts at ~25 Hz, where the observer is weakest),
+and a third of the cases - any with R 10-20 % low or the flux 3-7 % low - slipped a rotor or tripped
+on over-current at the hand-back. The angle loop's bandwidth is now scaled down below 4000 RPM
+(`POS_BW_MIN`, `#POSBW`), so load steps there move the Z more than the figures above; a higher
+hand-over band did not help. The hand-back also no longer counts the open loop's feed-forward
+twice (it was a back-EMF's worth of voltage step) and carries the angle loop's integral rather than
+the iq of that instant. These are what to look at first on the bench (BRINGUP.md).
 
 ### Files
 
@@ -113,7 +126,8 @@ at reset.
 | `#ALIGN [V]` | bring-up: a fixed voltage (default 0.5 V) on phase A's axis of both motors for 300 ms, then `#STAT` (sign/phase check) |
 | `#CL 0\|1` | allow the closed-loop hand-over (1 = default; 0 = stay open loop at any speed) |
 | `#CUR kp ki` | closed-loop current PI |
-| `#POS kp kd ki` | closed-loop angle PID (A/rad, A per rad/s, A/(rad·s)) |
+| `#POS kp kd ki` | closed-loop angle PID at full bandwidth (A/rad, A per rad/s, A/(rad·s)) |
+| `#POSBW min rpm` | the angle loop's bandwidth scale b at the 1500 RPM hand-back (default 0.5), rising to 1 at `rpm` (default 4000): Kp·b², Kd·b, Ki·b³ |
 | `#OLKI ki` | open-loop current trim integrator (V/(A·s)) |
 | `#DTC ns` | dead-time compensation (0 = off) |
 | `#IHOLD A`, `#ISPIN A`, `#IBOOST A`, `#ILIM A` | open-loop hold / spin-up / Z-move boost currents, closed-loop Iq limit |

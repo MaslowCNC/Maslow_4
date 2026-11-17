@@ -16,8 +16,9 @@ an assumption the next one relies on. Stop at the first surprise.
 - The XY firmware (`firmware/`, env `wifi_s3`) builds with the 36 V changes. Static RAM is unchanged
   against the unmodified branch (132,392 bytes both); flash +7.7 KB (94.6 % used).
 - `test/sim` runs the real `foc.cpp` against a two-motor model: sign conventions, hand-overs, Z
-  holding and load steps behave (README.md, "Simulation"). A model is not the motor: the inertia,
-  friction and the real dead-time shape are guesses.
+  holding and load steps behave (README.md, "Simulation"); `test/sim/sweep.sh` repeats it over 75
+  combinations of rotor inertia and motor-constant errors. A model is not the motor: the inertia,
+  friction, sense noise and the real dead-time shape are guesses.
 
 ## Untested — the assumptions most likely to be wrong
 
@@ -33,9 +34,9 @@ an assumption the next one relies on. Stop at the first surprise.
 | ISR time | both motors' FOC + observer in well under the 50 µs period | `#STAT` isr > ~35 µs; jitter, then current spikes at speed | 2, 6 |
 | Open loop (I/f) | 2.5 A holds the Z, 3 A spins up a loaded spindle, +1 A for Z moves | rotors slip at spin-up or Z moves stall | 5, 8 |
 | Observer | R 0.39 Ω, L 75 µH, flux 7.84 mWb (ESC1 bench, one loose motor, 24 V); locks within 10 % at 2000 RPM | `observer did not lock at the closed-loop hand-over speed` | 6 |
-| Closed loop | current PI from the ESC1 (0.2/1000); angle PID 10 / 0.12 / 100 chosen in the simulation with a GUESSED inertia of 1e-5 kg m² — never run | speed hunting, `observer lost lock`, `rotor fell ... off its reference` | 6, 8 |
-| Low-speed closed loop | the sim jitters between ~1500 and ~3000 RPM and trips there if R is 20 % low plus another error | iq bursts in `#STAT` around 2000-3000 RPM; a slip stop on spin-down | 6 |
-| Hand-back | at 1500 RPM open loop takes over on the same reference; the sim shows a ~1 mm transient Z swing that settles in ~0.2 s | a Z twitch when the spindle stops | 6, 8 |
+| Closed loop | current PI from the ESC1 (0.2/1000); angle PID 10 / 0.12 / 100 at and above 4000 RPM, chosen in the simulation with a GUESSED inertia of 1e-5 kg m² — never run | speed hunting, `observer lost lock`, `rotor fell ... off its reference` | 6, 8 |
+| Low-speed closed loop | below 4000 RPM the angle loop's bandwidth is scaled down, to half at the 1500 RPM hand-back (`#POSBW 0.5 4000`). At full gains the sim limit-cycled between ~1500 and ~3000 RPM (±5 A bursts at ~25 Hz) and a third of the sweep slipped a rotor at the hand-back; scaled, none did. The real observer may be noisier than the model's | iq bursts in `#STAT` between 1500 and 4000 RPM; a slip stop on spin-down | 6 |
+| Hand-back | at 1500 RPM open loop takes over on the same reference, carrying the angle loop's integral (the steady load); the sim's Z swing there is 5° nominal, up to ~30° (0.7 mm) with the motor constants off | a Z twitch when the spindle stops | 6, 8 |
 | Open loop | voltage drive + 5 Hz current trim (`#OLKI`), dead-time compensation 250 ns (`#DTC`) | hold current off its target in `#STAT`; rotors ringing after Z moves | 5 |
 | Rotor inertia | assumed 1e-5 kg m²; above ~1e-4 the 250 rad/s² open-loop spin-up stalls | `rotor fell ... off its reference angle in open loop` at spin-up | 6 |
 | 36 V headroom | 0.82 V per 1000 RPM back-EMF: ~22k RPM before the voltage limit; firmware cap 18k | Iq can no longer hold speed above some RPM | 7 |
@@ -106,10 +107,12 @@ there is no config yet. Check `$MBOARD` reports the 36 V board (~0.60 V).
 2. Step 6000, 9000, 12000. Watch iq, the voltage (`v`) against vbus/√3 × 0.95, isr time.
    Measure the rotor inertia while you are there: at a steady speed, `S` a step of a few thousand
    RPM and read iq during the 500 rad/s² ramp: J ≈ 0.0118 × iq / 500 (kg m², minus friction).
-   Rerun `test/sim` with it (`./sim <J>`) before changing `#POS`.
-3. Watch 1500-3000 RPM closely (`#LOG 100` while ramping 4000 → 0): iq bursts there are the weak
-   spot the simulation found. If they show, try measuring R/flux (`#OBS`), `#DTC`, or a higher
-   `CL_ENTER_RPM`/`CL_EXIT_RPM` band.
+   Rerun `test/sim` with it (`./sim <J>`, then `J=<J> ./sweep.sh`) before changing `#POS`.
+3. Watch 1500-4000 RPM closely (`#LOG 100` while ramping 4000 → 0): iq bursts there are the weak
+   spot the simulation found (the angle loop feeding on the observer's low-speed error). If they
+   show, lower the low-speed bandwidth further (`#POSBW 0.35 5000`; it also softens the 2000 RPM
+   hand-over, so watch the spin-up angle error), then check R/flux (`#OBS`) and `#DTC`. A higher
+   `CL_ENTER_RPM`/`CL_EXIT_RPM` band did not help in the simulation.
 4. `S1000`: `open loop below 1500 RPM`. `S0`: stops.
 5. Load a rotor by hand (gloves, ESC1-style) at 6000: iq rises, speed holds, no trip.
 

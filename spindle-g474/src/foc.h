@@ -72,7 +72,8 @@ namespace foc {
     // Run-time tuning (the '#' link commands).
     struct Tuning {
         float cur_kp, cur_ki;
-        float pos_kp, pos_kd, pos_ki;   // closed-loop angle PID: A/rad, A/(rad/s), A/(rad s)
+        float pos_kp, pos_kd, pos_ki;   // closed-loop angle PID: A/rad, A/(rad/s), A/(rad s), at full speed
+        float pos_bw_min, pos_bw_full_rpm;   // its bandwidth scale at CL_EXIT_RPM, rising to 1 at this speed
         float ol_ki;                    // open-loop current trim integrator, V/(A s)
         float hold_a, spin_a, boost_a;
         float iq_limit;

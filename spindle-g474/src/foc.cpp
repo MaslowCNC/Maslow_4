@@ -97,7 +97,7 @@ namespace foc {
         volatile uint32_t g_isr_count      = 0;
 
         Tuning g_tun = {
-            CUR_KP, CUR_KI, POS_KP, POS_KD, POS_KI, OL_CUR_KI,
+            CUR_KP, CUR_KI, POS_KP, POS_KD, POS_KI, POS_BW_MIN, POS_BW_FULL_RPM, OL_CUR_KI,
             HOLD_CURRENT_A, SPINUP_CURRENT_A, Z_MOVE_BOOST_A, IQ_LIMIT_A,
             PHASE_R_OHM, PHASE_L_H, FLUX_WB, SW_TRIP_A, DEADTIME_COMP_NS, true,
         };
@@ -254,7 +254,23 @@ namespace foc {
             *vq = -m.valpha * s + m.vbeta * c;
         }
 
+        // Closed-loop angle PID gains at the present speed.  Below pos_bw_full_rpm the loop's bandwidth
+        // b falls linearly to pos_bw_min at the hand-back speed; Kp*b^2, Kd*b, Ki*b^3 keep its damping.
+        // The observer is weakest at low back-EMF, and at full gains the loop limit-cycled there in the
+        // simulation, which made the hand-back a gamble (config.h POS_BW_MIN).
+        void posGains(float* kp, float* kd, float* ki) {
+            float rpm  = g_omega_cmd * (1.0f / RPM_TO_RAD);
+            float span = fmaxf(g_tun.pos_bw_full_rpm - CL_EXIT_RPM, 1.0f);
+            float bmin = g_tun.pos_bw_min;
+            float b    = clampf(bmin + (1.0f - bmin) * (rpm - CL_EXIT_RPM) / span, bmin, 1.0f);
+            *kp = g_tun.pos_kp * b * b;
+            *kd = g_tun.pos_kd * b;
+            *ki = g_tun.pos_ki * b * b * b;
+        }
+
         void handoverToClosed() {
+            float kp, kd, ki;
+            posGains(&kp, &kd, &ki);
             for (int k = 0; k < 2; k++) {
                 Motor& m  = mot[k];
                 float  s  = sinf(m.obs_angle), c = cosf(m.obs_angle);
@@ -271,30 +287,36 @@ namespace foc {
                 if (!m.eps_valid) m.eps = wrapPi(m.ref - m.obs_angle);
                 m.eps_valid = true;
                 float wref = m.dir * g_omega_cmd + g_phi_rate;
-                m.pos_int = clampf(iq - g_tun.pos_kp * m.eps - g_tun.pos_kd * (wref - m.obs_w), -g_tun.iq_limit,
-                                   g_tun.iq_limit);
+                m.pos_int = clampf(iq - kp * m.eps - kd * (wref - m.obs_w), -g_tun.iq_limit, g_tun.iq_limit);
                 m.id_cl   = id;   // fades to 0
             }
             g_mode = Mode::Closed;
         }
 
         void handbackToOpen() {
-            // Open loop drives the same reference angle (the rotor is on it, within eps).  Its d
-            // current ramps up from what is there while the closed loop's torque current fades out.
-            float idmax = 0;
+            // Open loop drives the same reference angle (the rotor is on it, within eps), while the
+            // closed loop's torque current fades out (iq_carry).
             for (int k = 0; k < 2; k++) {
                 Motor& m = mot[k];
                 float  s = sinf(m.ref), c = cosf(m.ref);
                 float  id = m.ial * c + m.ibe * s;
                 float  iq = -m.ial * s + m.ibe * c;
-                voltageIn(m, m.ref, &m.int_d, &m.int_q);
-                m.iq_carry = iq;
-                if (id > idmax) idmax = id;
+                float  vd, vq;
+                voltageIn(m, m.ref, &vd, &vq);
+                // The soft loop applies trim + feed-forward (currentLoop): start the trims from the
+                // voltage already applied LESS the feed-forward for the current already flowing, so
+                // the feed-forward is not counted twice (that was a whole back-EMF, ~1.2 V on q at
+                // 1500 RPM, as a step).  The one step left is the intended one, below.
+                float we = m.dir * g_omega_cmd + g_phi_rate;   // the speed the open loop feeds forward
+                m.int_d    = vd - (g_tun.r * id - we * g_tun.l * iq);
+                m.int_q    = vq - (g_tun.r * iq + we * g_tun.l * id + we * g_tun.flux);
+                // Carry the angle loop's integral - the steady load - not the iq of this instant,
+                // which may be the peak of a swing that the open loop's d current cannot hold.
+                m.iq_carry = clampf(m.pos_int, -g_tun.spin_a, g_tun.spin_a);
             }
             // Full spin current at once: the d current is what holds each rotor to its reference
             // in open loop (the closed loop's id was ~0).  The soft loop's R*I feed-forward makes the
             // step a voltage step, so the current follows within L/R (~0.2 ms).
-            (void)idmax;
             g_ol_current = g_tun.spin_a;
             g_mode       = Mode::Open;
         }
@@ -431,9 +453,10 @@ namespace foc {
                     // speed.  The angle (not just the speed) is held, so each rotor keeps its place and
                     // the Z - the two rotors' relative angle - stays where the phase offset puts it.
                     float werr = wref - m.obs_w;
-                    m.pos_int  = clampf(m.pos_int + g_tun.pos_ki * m.eps * DT, -g_tun.iq_limit, g_tun.iq_limit);
-                    m.iq_ref   = clampf(g_tun.pos_kp * m.eps + g_tun.pos_kd * werr + m.pos_int, -g_tun.iq_limit,
-                                        g_tun.iq_limit);
+                    float kp, kd, ki;
+                    posGains(&kp, &kd, &ki);
+                    m.pos_int  = clampf(m.pos_int + ki * m.eps * DT, -g_tun.iq_limit, g_tun.iq_limit);
+                    m.iq_ref   = clampf(kp * m.eps + kd * werr + m.pos_int, -g_tun.iq_limit, g_tun.iq_limit);
                     m.id_cl    = slew(m.id_cl, 0.0f, CL_ID_RAMP_A_S * DT);
                     m.id_ref   = m.id_cl;
                     m.theta    = m.obs_angle;
