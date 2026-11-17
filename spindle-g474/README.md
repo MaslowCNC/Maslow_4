@@ -19,7 +19,9 @@ pio run -t upload          # ST-LINK on the TC2030 pad J1 (needs the sandbox off
 
 Arduino STM32 core 2.12 (`framework-arduinoststm32@4.21200.0`, the one the ESC1 bench used) on
 platform `ststm32@20.0.0`; the board definition is `boards/maslow_g474rb.json` (generic G474RB,
-HSI16 → 170 MHz, no crystal). Use PlatformIO Core 6.2 (`~/.platformio/penv/bin/pio`).
+HSI16 → 170 MHz, no crystal). Use PlatformIO Core 6.2 (`~/.platformio/penv/bin/pio`). The
+cables (USB-C for the XY board, an ST-LINK with a Tag-Connect TC2030-NL cable for J1) are listed in
+[BRINGUP.md](BRINGUP.md#what-you-need).
 
 From the XY board, once the 36 V XY firmware is on it: upload `.pio/build/g474/firmware.bin` to its
 local filesystem (WebUI file manager), then `$Spindle/G474=FLASH /firmware.bin`. The XY board puts

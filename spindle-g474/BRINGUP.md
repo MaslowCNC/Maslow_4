@@ -52,28 +52,74 @@ load-sense / adaptive-voltage / guard diagnostics (closed-loop current control r
 nFAULT monitoring (the DRV8300 has no fault pin), USB console commands, WiFi OTA. The `L:` status
 bits now mean "Iq above 90 % of its limit for 200 ms" per motor.
 
+## What you need
+
+- **A USB-C cable that carries data**, for the XY ESP32-S3: USB1 goes straight to its built-in USB
+  (U8 IO19/IO20) and has the 5.1 kΩ CC pull-downs, so a C-to-C cable works as well as A-to-C. By the
+  schematic, USB alone also powers the 3.3 V rail - both MCUs - through D2 into the TPS54360B buck
+  while the 36 V side stays dead (on the 24 V board it does), so steps 1-2.3 need no other supply.
+  VSUP is then ~4.6 V, just above the buck's 4.5 V minimum: use a good port and a short cable.
+- **An ST-LINK and a Tag-Connect cable** for the G474's SWD pad J1: a TC2030 no-legs footprint on the
+  top side, 12 mm from the G474 (U20), wired in Tag-Connect's standard SWD order: 1 = 3.3 V,
+  2 = SWDIO, 3 = NRST, 4 = SWCLK, 5 = GND (6 = SWO, not connected).
+  - STLINK-V3MINIE (or STLINK-V3SET) with a **TC2030-CTX-NL-STDC14** cable (formerly sold as
+    TC2030-CTX-NL-ST14). The legged TC2030-CTX-STDC14 does not fit: J1 has no holes for its clips.
+  - Optional: a TC2030-CLIP holds the plug from under the board (the underside by J1 is clear).
+    Without it, press the plug onto the pads for the few seconds a flash takes.
+  - Or an ST-LINK/V2 (clones work) or a Nucleo board's on-board ST-LINK, with a TC2030-IDC-NL cable
+    and jumper wires to the five signals above.
+  - The probe does not power the board: keep the USB-C cable (or the 36 V supply) connected.
+  - `pio run -t upload` drives the ST-LINK through OpenOCD; the board file also sets up `pio debug`.
+  - Once the XY board runs this branch, `$Spindle/G474=FLASH` can update the G474 without the cable
+    (step 9). That path is untested, and if it fails or the G474 does not start, SWD is the only
+    other way in: the G474 has no USB.
+- A current-limited 36 V bench supply (from step 2.4), a multimeter and an oscilloscope (step 3).
+
+Buttons, all on the underside: SW1 = ESP32 BOOT (IO0), by the USB-C connector; SW2 = G474 reset and
+SW3 = G474 BOOT0, by J1 (hold SW3 while tapping SW2 to start the G474's ROM bootloader).
+
 ## Bring-up
 
-Use a current-limited 36 V bench supply for steps 1-7. Keep the hardware E-stop/power switch in
-reach. **Run the first spins with both motors loose on the bench, not in the spindle**: in the
-spindle any difference between the motors moves the Z.
+Steps 1 to 2.3 run on USB power alone, with the motor side unpowered. From step 2.4 to step 7 use a
+current-limited 36 V bench supply. Keep the hardware E-stop/power switch in reach. **Run the first
+spins with both motors loose on the bench, not in the spindle**: in the spindle any difference
+between the motors moves the Z.
 
 ### 1. XY side first
 
-Flash the XY board with this branch's firmware. On a 36 V board its config must not put `uart1` on
-gpio.1/gpio.2: those are now the G474's NRST and BOOT0, and UART traffic there would reset it. The
-firmware raises a config alarm if it finds that, and copies `maslow-mini-36v.yaml` (no `uart1`) when
-there is no config yet. Check `$MBOARD` reports the 36 V board (~0.60 V).
+On USB power, flash the XY board with this branch's firmware. A new board's ESP32-S3 is blank and
+`pio run -e wifi_s3 -t upload` writes only the app (seen on the 24 V board), so the first time write
+the whole image - bootloader, partition table, boot_app0 and app - then the filesystem, from
+`firmware/`:
 
-### 2. First power-up, no motors connected
+```
+pio run -e wifi_s3
+pio pkg exec -p tool-esptoolpy -- esptool.py --chip esp32s3 --port <port> write-flash 0x0 .pio/build/wifi_s3/firmware.factory.bin
+pio run -e wifi_s3 -t uploadfs
+```
 
-1. Supply limit 0.3 A. Flash `g474-bench` over SWD (`pio run -e g474-bench -t upload`): nothing moves
-   at boot in this build.
+`<port>` is the board's USB serial port (`/dev/cu.usbmodem…` on a Mac). After that, `-t upload` and
+WiFi updates work as usual. On the 24 V board the first boot or two panicked on the empty settings
+store, then it booted.
+
+On a 36 V board its config must not put `uart1` on gpio.1/gpio.2: those are now the G474's NRST and
+BOOT0, and UART traffic there would reset it. The firmware raises a config alarm if it finds that,
+and copies `maslow-mini-36v.yaml` (no `uart1`) when there is no config yet. Check `$MBOARD` reports
+the 36 V board (~0.60 V).
+
+### 2. First power-up on USB, then 36 V, no motors connected
+
+1. USB-C only, no 36 V: the bridges and gate drivers are unpowered, so nothing on the motor side can
+   switch. Put the Tag-Connect plug on J1 and flash `g474-bench` over SWD
+   (`pio run -e g474-bench -t upload` in `spindle-g474/`): nothing moves at boot in this build.
 2. XY log should show `spindle reset reason: ...` then
    `spindle g474-0.1 ready: G474 FOC, PWM 20000 Hz, update on the valley`, then the link handshake
    and `T:IDLE,...` status lines. An `init failed: <why>` line names the peripheral that did not start.
-3. `$Spindle/G474=SEND #STAT`: currents within ±0.1 A of 0 on all six phases, vbus within 0.5 V of a
-   multimeter on VCC (else fix `VBUS_DIVIDER`), temperatures near room, isr below ~35 µs.
+3. `$Spindle/G474=SEND #STAT`: currents within ±0.1 A of 0 on all six phases, temperatures near
+   room, isr below ~35 µs, vbus ~0 V. Anything that would drive the motors is refused for now
+   (`... refused: bus 0.0 V outside 20-44 V`).
+4. Connect the 36 V bench supply, limit 0.3 A. `#STAT`: vbus within 0.5 V of a multimeter on VCC
+   (else fix `VBUS_DIVIDER`). Note the supply's idle current.
 
 ### 3. Gate drive, no motors
 
