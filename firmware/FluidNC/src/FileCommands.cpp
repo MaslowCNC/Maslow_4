@@ -7,6 +7,8 @@
 #include "Configuration/JsonGenerator.h"
 #include "InputFile.h"    // InputFile
 #include "Job.h"          // Job::
+#include "Maslow/JobResume.h"  // JobResume::
+#include "Maslow/Maslow.h"     // Maslow.calibration (READY_TO_CUT check)
 #include "xmodem.h"       // xmodemReceive(), xmodemTransmit()
 #include "Protocol.h"     // pollingPaused
 #include "string_util.h"  // split_prefix()
@@ -255,14 +257,71 @@ static Error runFile(const Volume& fs, const char* parameter, AuthenticationLeve
         log_string(out, "Alarm");
         return Error::IdleError;
     }
+    bool topLevel = !Job::active();
     Job::save();
     InputFile* theFile;
     if ((err = openFile(fs, parameter, out, theFile)) != Error::Ok) {
         Job::restore();
         return err;
     }
-    Job::nest(theFile, &out);
+    if (topLevel && &fs == &SD) {
+        JobResume::jobStarted(theFile, parameter);
+    }
+    Job::nest(theFile);
 
+    return Error::Ok;
+}
+
+// $SD/RunFrom=<line>,<path>: run an SD file from a line, as Resume does after a stop.  The
+// lines before it are read without moving, then the machine moves to where the line starts.
+static Error runSDFileFrom(const char* parameter, AuthenticationLevel auth_level, Channel& out) {
+    if (!state_is(State::Idle) || Job::active()) {
+        log_error_to(out, "Resume: the machine must be idle");
+        return Error::IdleError;
+    }
+    if (Maslow.calibration.getCurrentState() != READY_TO_CUT) {
+        log_error_to(out, "Resume: belt lengths are not known (not ready to cut)");
+        return Error::IdleError;
+    }
+    char*   rest;
+    long    line = strtol(parameter, &rest, 10);
+    if (rest == parameter || *rest != ',' || line < 1) {
+        log_error_to(out, "Resume: use $SD/RunFrom=<line>,<path>");
+        return Error::InvalidValue;
+    }
+    std::string path(rest + 1);
+    if (path.empty()) {
+        log_error_to(out, "Resume: missing file name");
+        return Error::InvalidValue;
+    }
+    if (path[0] != '/') {
+        path = "/" + path;
+    }
+    InputFile* theFile;
+    Error      err = openFile(SD, path.c_str(), out, theFile);
+    if (err != Error::Ok) {
+        return err;
+    }
+    // The stopped record for this file is only good for the file as it was
+    if (JobResume::stopped() && path == JobResume::stoppedPath() && theFile->size() != JobResume::stoppedSize()) {
+        log_error_to(out, "Resume: " << path << " has changed since the job stopped; discarding the stopped job");
+        JobResume::discard();
+        delete theFile;
+        return Error::InvalidValue;
+    }
+    err = JobResume::skipTo(theFile, int32_t(line), out);
+    if (err != Error::Ok) {
+        delete theFile;
+        return err;
+    }
+    JobResume::jobStarted(theFile, path.c_str());
+    Job::nest(theFile);
+    return Error::Ok;
+}
+
+// $SD/Discard: forget the stopped job, so the status report no longer offers to resume it
+static Error discardStoppedJob(const char* parameter, AuthenticationLevel auth_level, Channel& out) {
+    JobResume::discard();
     return Error::Ok;
 }
 
@@ -689,6 +748,8 @@ void make_file_commands() {
     new WebCommand("path", WEBCMD, WU, NULL, "File/ShowHash", fileShowHash);
     new WebCommand("path", WEBCMD, WU, "ESP221", "SD/Show", showSDFile);
     new WebCommand("path", WEBCMD, WU, "ESP220", "SD/Run", runSDFile, nullptr);
+    new WebCommand("line,path", WEBCMD, WU, NULL, "SD/RunFrom", runSDFileFrom, nullptr);
+    new WebCommand(NULL, WEBCMD, WU, NULL, "SD/Discard", discardStoppedJob, nullptr);
     new WebCommand("file_or_directory_path", WEBCMD, WU, "ESP215", "SD/Delete", deleteSDObject);
     new WebCommand("path", WEBCMD, WU, NULL, "SD/Rename", renameSDObject);
     new WebCommand(NULL, WEBCMD, WU, "ESP210", "SD/List", listSDFiles);

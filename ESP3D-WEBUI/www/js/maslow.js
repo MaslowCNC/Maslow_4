@@ -6,18 +6,17 @@ let maslowStatus = { homed: false, extended: false, state: 0 };
 const APPLY_TENSION_WARNING_PREFIX = "Maslow Apply Tension deviation warning:";
 const APPLY_TENSION_RETRACTION_WARNING_PREFIX = "Maslow Apply Tension retraction warning:";
 const Z_HOME_RESET_WARNING_PREFIX = "Maslow Z home reset warning:";
+// Apply Tension couldn't confirm the position against the saved anchors; Find Anchors fixes both
+const APPLY_TENSION_FAILED_PREFIXES = ["Apply Tension failed:", "Center point deviation over"];
 const ZM_INVALID_WARNING_PREFIX = "Maslow Zm invalid warning:";
 
 /** Maslow state constants (mirror firmware Maslow.h defines) */
 const MASLOW_STATE_FINDING_ANCHORS = 6;
 const MASLOW_STATE_READY_TO_CUT = 7;
 const MASLOW_STATE_FIND_ANCHORS_COMPUTING = 9;
+const MASLOW_STATE_TENSIONED = 10;
 const FIND_ANCHORS_WAYPOINT_COORDINATE_REGEX = /^\[MSG:INFO:\s*Waypoint\s+\d+\s+coordinates:\s*X=([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\s+Y=([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\]$/;
 let wasFindingAnchors = false;
-
-/** This keeps track of when we saw the last heartbeat from the machine */
-//I think this is not used anymore and can be removed now
-let lastHeartBeatTime = new Date().getTime();
 
 const err = "error: ";
 // When we can change to proper ESM - prefix these const strings and functions with 'export' (minus the quotes of course)
@@ -59,6 +58,12 @@ READY_TO_CUT 7
     -Apply Tension
     -Release Tension
     -Park (State-Dependent Button: moves to machine 0,0)
+
+TENSIONED 10 (Apply Tension done, but the belts don't fit the saved anchors)
+    -Retract All
+    -Apply Tension
+    -Calibrate (State-Dependent Button: Find Anchors)
+    -Release Tension
 */
 const updateDynamicButtons = () => {
 
@@ -91,6 +96,7 @@ const updateDynamicButtons = () => {
 	// #define READY_TO_CUT 7
 	// #define RELEASE_TENSION 8
 	// #define CALIBRATION_COMPUTING 9
+	// #define TENSIONED 10
 
 	switch (maslowStatus.state) {
 		case 0: 
@@ -226,6 +232,19 @@ const updateDynamicButtons = () => {
 
 			// No buttons are active in this state
 			break;
+		case MASLOW_STATE_TENSIONED:
+			stateLabel.innerHTML = "State: Tensioned";
+			if (mainStateLabel) {
+				mainStateLabel.innerHTML = "State: Tensioned";
+				if (mainStateLabelContainer) mainStateLabelContainer.style.backgroundColor = yellowBackground;
+			}
+
+			retractButton.style.backgroundColor = greenBackground;
+			tenseButton.style.backgroundColor = greenBackground;
+			calibrateButton.style.backgroundColor = greenBackground;
+			extendButton.style.backgroundColor = greyBackground; // Extend is refused while tensioned
+			relaxButton.style.backgroundColor = greenBackground;
+			break;
 		case 9:
 			stateLabel.innerHTML = "State: Find Anchors Computing";
 			if (mainStateLabel) {
@@ -303,11 +322,9 @@ const updateFindAnchorsView = () => {
 	}
 
 	const elementsToHide = [
-		document.getElementById('tablettab-jog-controls'),
-		document.getElementById('tablettab-file-controls'),
-		document.getElementById('tablettab-playback-controls'),
-		document.getElementById('tablettab-position-display'),
-		document.getElementById('tablettab-job-bounds-container'),
+		document.getElementById('tablettab-machine-buttons'),
+		document.getElementById('tablettab-jog-section'),
+		document.getElementById('tablettab-job-section'),
 	];
 
 	elementsToHide.forEach(el => {
@@ -322,6 +339,26 @@ const updateFindAnchorsView = () => {
 
 
 
+
+/**
+ * Record the Maslow calibration state (0-9) from the MS field of each status report (grbl.js)
+ * and refresh the buttons that depend on it when it changes. Returns false for an
+ * out-of-range value.
+ */
+let maslowStateShown = false;
+const setMaslowState = (state) => {
+	if (!Number.isInteger(state) || state < 0 || state > MASLOW_STATE_TENSIONED) {
+		console.error("Invalid state received from machine: " + state);
+		return false;
+	}
+	// maslowStatus.state starts at 0 (UNKNOWN), so also redraw on the first report.
+	if (maslowStatus.state !== state || !maslowStateShown) {
+		maslowStatus.state = state;
+		maslowStateShown = true;
+		updateDynamicButtons();
+	}
+	return true;
+};
 
 /** Perform maslow specific-ish info message handling */
 const maslowInfoMsgHandling = (msg) => {
@@ -352,27 +389,6 @@ const maslowInfoMsgHandling = (msg) => {
 		return true;
 	}
 
-	if (msg.startsWith('[MSG:INFO: Heartbeat')) {
-		lastHeartBeatTime = new Date().getTime();
-		return true;
-	}
-
-	//Parse state messages like [MSG:INFO: Current state: 0]
-	if (msg.startsWith("[MSG:INFO: Current state:")) {
-		const m = msg.match(/Current state:\s*(\d+)/);
-		if (m) {
-			const state = Number(m[1]);
-			//If the state is in the range of 0-7, update the maslowStatus
-			if (state < 0 || state > 9) {
-				console.error("Invalid state received from machine: " + state);
-				return false;
-			}
-			maslowStatus.state = state;
-			updateDynamicButtons();
-		}
-		return true;
-	}
-
 	if (msg.startsWith("[MSG:INFO: Waypoint ")) {
 		const waypointMatch = msg.match(FIND_ANCHORS_WAYPOINT_COORDINATE_REGEX);
 		if (waypointMatch) {
@@ -399,6 +415,10 @@ const maslowInfoMsgHandling = (msg) => {
 
 	if (msg.startsWith(`[MSG:WARN: ${APPLY_TENSION_RETRACTION_WARNING_PREFIX}`)) {
 		showApplyTensionRetractionWarningMessage(msg);
+	}
+
+	if (APPLY_TENSION_FAILED_PREFIXES.some((prefix) => msg.startsWith(`[MSG:ERR: ${prefix}`))) {
+		showApplyTensionFailedMessage(msg);
 	}
 
 	if (msg.startsWith(`[MSG:WARN: ${Z_HOME_RESET_WARNING_PREFIX}`)) {
@@ -556,7 +576,7 @@ function showApplyTensionRetractionWarningMessage(msg) {
 	continueButton.textContent = "Continue";
 	continueButton.style.cssText = "padding: 5px 10px; cursor: pointer;";
 	continueButton.onclick = () => {
-		sendCommand("$TKSLK");
+		runMachineAction("Apply Tension", machine.applyTension);
 		modal.remove();
 	};
 
@@ -569,7 +589,88 @@ function showApplyTensionRetractionWarningMessage(msg) {
 	document.body.appendChild(modal);
 }
 
+function showApplyTensionFailedMessage(msg) {
+	const modalId = "apply-tension-failed-modal";
+	const existingModal = document.getElementById(modalId);
+	if (existingModal) {
+		existingModal.remove();
+	}
+
+	const errorMatch = msg.match(/^\[MSG:ERR:\s*(.*)\]$/);
+	const errorText = errorMatch ? errorMatch[1].trim() : msg;
+
+	const modal = document.createElement("div");
+	modal.id = modalId;
+	modal.style.cssText = `
+		position: fixed;
+		inset: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background-color: rgba(0, 0, 0, 0.45);
+		z-index: 2000;
+		padding: 20px;
+	`;
+
+	const dialog = document.createElement("div");
+	dialog.style.cssText = `
+		background-color: white;
+		padding: 20px;
+		border: 1px solid black;
+		box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+		max-width: 520px;
+		width: 100%;
+	`;
+
+	const heading = document.createElement("h3");
+	heading.textContent = "Couldn't confirm the machine's position";
+	heading.style.marginTop = "0";
+
+	const messageElement = document.createElement("p");
+	messageElement.textContent =
+		"The belt lengths don't match the saved anchor points, so the anchors may have moved. " +
+		"Run Find Anchors to measure them again. The belts are still attached, so there's no need to retract.";
+
+	const detailElement = document.createElement("p");
+	detailElement.textContent = errorText;
+	detailElement.style.cssText = "font-size: 0.85em; color: #555;";
+
+	const actions = document.createElement("div");
+	actions.style.cssText = "display: flex; gap: 10px; justify-content: flex-end;";
+
+	const cancelButton = document.createElement("button");
+	cancelButton.textContent = "Not now";
+	cancelButton.style.cssText = "padding: 5px 10px; cursor: pointer;";
+	cancelButton.onclick = () => modal.remove();
+
+	const findAnchorsButton = document.createElement("button");
+	findAnchorsButton.textContent = "Find Anchors";
+	findAnchorsButton.style.cssText = "padding: 5px 10px; cursor: pointer;";
+	findAnchorsButton.onclick = () => {
+		modal.remove();
+		// Same path as the Find Anchor Locations button, including the Z check
+		if (typeof tabletCalCalibrate === "function") {
+			tabletCalCalibrate();
+		} else {
+			sendCommand("$CAL");
+		}
+	};
+
+	actions.appendChild(cancelButton);
+	actions.appendChild(findAnchorsButton);
+	dialog.appendChild(heading);
+	dialog.appendChild(messageElement);
+	dialog.appendChild(detailElement);
+	dialog.appendChild(actions);
+	modal.appendChild(dialog);
+	document.body.appendChild(modal);
+}
+
 function showZHomeResetWarningMessage(msg) {
+	if (typeof maslowFixedZEnabled === "function" && maslowFixedZEnabled()) {
+		return;
+	}
+
 	const warningMatch = msg.match(/^\[MSG:WARN:\s*(.*)\]$/);
 	if (!warningMatch) {
 		return;
@@ -588,6 +689,10 @@ function showZHomeResetWarningMessage(msg) {
 }
 
 function showZmInvalidWarningMessage(msg) {
+	if (typeof maslowFixedZEnabled === "function" && maslowFixedZEnabled()) {
+		return;
+	}
+
 	const warningMatch = msg.match(/^\[MSG:WARN:\s*(.*)\]$/);
 	if (!warningMatch) {
 		return;
@@ -739,6 +844,14 @@ const maslowMsgHandling = (msg) => {
 	return "";
 }
 
+const processMaslowConfigResponse = (response) => {
+	response.split(/\r?\n/).forEach((msg) => {
+		if (msg.startsWith("$/Maslow_") || msg.startsWith("$/maslow_")) {
+			maslowMsgHandling(msg.substring(9));
+		}
+	});
+};
+
 // Helper functions for setValue and loadedValues
 globalThis.setValue = globalThis.setValue || function(id, value) {
 	const element = document.getElementById(id);
@@ -787,7 +900,10 @@ const loadConfigValues = () => {
 	allConfigKeys().forEach((key) => {
 		const cfgVal = cfgDef[key];
 		const cmd = `$/${cfgVal.cmd || `${M}_${key}`}`;
-		SendPrinterCommand(cmd);
+		SendGetHttp(
+			buildHttpCommandCmd(httpCmdType.commandText, cmd),
+			processMaslowConfigResponse
+		);
 	});
 
 	// Load WiFi settings separately
@@ -922,5 +1038,5 @@ const saveWiFiSettings = () => {
 
 //removeIf(production)
 // ESM exports for unit testing - stripped from production builds by the gulp pipeline
-export { MaslowErrMsgKeyValueCantUse, MaslowErrMsgNoKey, MaslowErrMsgNoValue, MaslowErrMsgNoMatchingKey, MaslowErrMsgKeyValueSuffix, maslowMsgHandling };
+export { MaslowErrMsgKeyValueCantUse, MaslowErrMsgNoKey, MaslowErrMsgNoValue, MaslowErrMsgNoMatchingKey, MaslowErrMsgKeyValueSuffix, maslowMsgHandling, processMaslowConfigResponse };
 //endRemoveIf(production)

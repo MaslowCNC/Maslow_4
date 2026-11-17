@@ -21,6 +21,20 @@ const convertAdcToMilliamps = (adcValue) => {
     return 1000 * ((3.3 * (adcValue / 4095)) / 1.5);
 };
 
+/** Gauge colour for a current as a percentage of MAX_CURRENT (also used by the Maslow tab's dials). */
+const currentGaugeColor = (percentage) => {
+    if (percentage > 75) {
+        return '#F44336'; // Red for high current
+    }
+    if (percentage > 50) {
+        return '#FF9800'; // Orange for medium current
+    }
+    if (percentage > 25) {
+        return '#2196F3'; // Blue for low-medium current
+    }
+    return '#4CAF50'; // Green for low current
+};
+
 /**
  * Show the debug tab by removing the hide_it class
  */
@@ -75,17 +89,7 @@ const updateMotorCurrentDisplay = () => {
         const gaugeElement = id(`${motor.toLowerCase()}-gauge-progress`);
         if (gaugeElement) {
             gaugeElement.style.strokeDashoffset = offset;
-            
-            // Change color based on current level
-            let color = '#4CAF50'; // Green for low current
-            if (percentage > 75) {
-                color = '#F44336'; // Red for high current
-            } else if (percentage > 50) {
-                color = '#FF9800'; // Orange for medium current
-            } else if (percentage > 25) {
-                color = '#2196F3'; // Blue for low-medium current
-            }
-            gaugeElement.style.stroke = color;
+            gaugeElement.style.stroke = currentGaugeColor(percentage);
         }
         
         // Update gauge value text

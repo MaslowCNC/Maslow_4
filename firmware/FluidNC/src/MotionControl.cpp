@@ -28,6 +28,11 @@
 // this is needed if a jogCancel comes along after we have already parsed a jog and it is in-flight.
 static volatile void* mc_pl_data_inflight;  // holds a plan_line_data_t while mc_move_motors has taken ownership of a line motion
 
+static volatile bool mc_drop_motion = false;  // see mc_set_drop_motion()
+void                 mc_set_drop_motion(bool drop) {
+    mc_drop_motion = drop;
+}
+
 void mc_init() {
     mc_pl_data_inflight = NULL;
 }
@@ -47,6 +52,10 @@ void mc_init() {
 // returns true if line was submitted to planner, or false if intentionally dropped.
 bool mc_move_motors(float* target, plan_line_data_t* pl_data) {
     bool submitted_result = false;
+    // A paused job was stopped: the rest of the line it was in the middle of must not move.
+    if (mc_drop_motion) {
+        return submitted_result;
+    }
     // store the plan data so it can be cancelled by the protocol system if needed
     mc_pl_data_inflight = pl_data;
 
@@ -76,14 +85,14 @@ bool mc_move_motors(float* target, plan_line_data_t* pl_data) {
         // commands and other situations that could cause state changes.
         protocol_execute_realtime();
         protocol_auto_cycle_start();  // Auto-cycle start when buffer is full.
-        if (sys.abort()) {
+        if (sys.abort() || mc_drop_motion) {
             mc_pl_data_inflight = NULL;
-            return submitted_result;  // Bail, if system abort.
+            return submitted_result;  // Bail, if system abort or the job was stopped.
         }
     }
 
     // Plan and queue motion into planner buffer
-    if (mc_pl_data_inflight == pl_data) {
+    if (mc_pl_data_inflight == pl_data && !mc_drop_motion) {
         plan_buffer_line(target, pl_data);
         submitted_result = true;
     }

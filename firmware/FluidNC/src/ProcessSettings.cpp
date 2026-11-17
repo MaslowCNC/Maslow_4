@@ -29,8 +29,10 @@
 #include "Driver/backtrace.h"     // backtrace_get(), etc.
 #include "FileCommands.h"         // make_file_commands()
 #include "Job.h"                  // Job::active()
+#include "Maslow/JobResume.h"  // JobResume::noteStop
 #include "Maslow/Maslow.h"
 #include "Maslow/Calibration.h"
+#include "Maslow/BoardId.h"
 
 #include "FluidPath.h"
 #include "HashFS.h"
@@ -1239,20 +1241,25 @@ static Error maslow_stop(const char* value, AuthenticationLevel auth_level, Chan
     // may hold that mutex while flushing the WebSocket TX buffer; without
     // these resets the 100 ms watchdog can fire and set State::Alarm.
     Maslow.resetUpdateWatchdog();
-    Maslow.stopMotors();  // Stop XY belt motors immediately
-    Maslow.raiseZ();      // Raise Z to Z home + 2mm to prevent workpiece damage
+    if (!state_is(State::Alarm)) {
+        JobResume::noteStop();  // a job still running (no 0x18 before this $STOP) can be resumed
+    }
+    rtStopFromHold = false;  // this is the stop; a request still pending from a hold is done
+    rtMaslowStop   = false;
+    Maslow.stopMotors();   // Stop XY belt motors immediately
+    Maslow.stopSpindle();  // Stop means everything: a running spindle would carry on into the next job
+    Maslow.haltMotion();   // Stop means stop: Z stays where it is (resuming a job raises it first)
     Maslow.resetUpdateWatchdog();
     sys.set_state(State::Idle);
     // Explicitly save current belt and Z positions to NVS before cleanup.
     // The automatic save in Maslow.update() only fires on Cycle/Jog→Idle
-    // transitions that occur inside the update() loop; when raizeZ() returns
-    // without calling protocol_buffer_synchronize() (Z already at safe height),
-    // update() is not called inside maslow_stop() and the auto-save would only
-    // happen on the next protocol_execute_realtime() cycle — after Maslow.stop()
-    // has already run. Saving here guarantees positions are always persisted,
-    // regardless of whether the Z raise executed or the previous state.
+    // transitions that occur inside the update() loop, and update() is not called
+    // inside maslow_stop(), so the auto-save would only happen on the next
+    // protocol_execute_realtime() cycle — after Maslow.stop() has already run.
+    // Saving here guarantees positions are always persisted.
     Maslow.saveZPos();
     Maslow.saveBeltPositions();
+    Maslow.calibration.stopTakingSlack();  // leave TAKING_SLACK (EXTENDEDOUT saves the belts itself)
     Maslow.stop();  // Complete cleanup (calibration state, arm reset, etc.)
     return Error::Ok;
 }
@@ -1307,6 +1314,63 @@ static Error maslow_start_calibration(const char* value, AuthenticationLevel aut
     return Error::Ok;
 }
 
+// Save the running config to `filename` without going through the output task.
+//
+// dump_config() queues every line through send_line(), and that queue is drained by the task
+// that also writes to the telnet and WebSocket clients.  When a client stalled, the main loop sat
+// waiting for queue space, stopped feeding the 5 s task watchdog, and the board reset with the
+// config file opened but never written - leaving an empty maslow.yaml (end of Find Anchors,
+// 2026-10-19).  Here each line is written straight to a temporary file, which is then renamed
+// over the old one, so a save never waits on a network client and a failure leaves the old file
+// intact.  Lines go to the file as they are generated: the whole YAML is never held in memory.
+static Error save_config_file(const char* filename) {
+    std::error_code ec;
+    FluidPath       target(filename, LocalFS, ec);
+    if (ec) {
+        return Error::FsFailedOpenFile;
+    }
+    FluidPath temp(std::string(filename) + ".tmp", LocalFS, ec);
+    if (ec) {
+        return Error::FsFailedOpenFile;
+    }
+
+    bool ok = true;
+    try {
+        FileStream                file(temp, "w");
+        Configuration::Generator generator(file, 0, true);
+        config->group(generator);
+        ok = generator.allWritten();
+    } catch (Error err) {
+        log_error("Config save: cannot create " << temp.c_str());
+        return err;
+    } catch (std::exception& ex) {
+        log_error("Config save: could not generate config: " << ex.what());
+        ok = false;
+    }
+    // The FileStream is closed here, so the size on flash is final
+    auto size = stdfs::file_size(temp, ec);
+    if (!ok || ec || size == 0) {
+        log_error("Config save: writing " << temp.c_str() << " failed; " << filename << " not changed");
+        stdfs::remove(temp, ec);
+        return Error::FsFailedCreateFile;
+    }
+
+    stdfs::rename(temp, target, ec);
+    if (ec) {
+        // Not every filesystem renames over an existing file.  This leaves a moment with no
+        // config file, but the complete new one is already on flash as the .tmp file.
+        std::error_code removeEc;
+        stdfs::remove(target, removeEc);
+        ec.clear();
+        stdfs::rename(temp, target, ec);
+    }
+    if (ec) {
+        log_error("Config save: cannot rename " << temp.c_str() << " to " << filename << ": " << ec.message());
+        return Error::FsFailedCreateFile;
+    }
+    return Error::Ok;
+}
+
 static Error overwrite_config(const char* value, AuthenticationLevel auth_level, Channel& out) {
     if (Maslow.using_default_config) {
         return Error::ConfigurationInvalid;
@@ -1314,7 +1378,7 @@ static Error overwrite_config(const char* value, AuthenticationLevel auth_level,
     // Writing to LittleFS can block the main loop for hundreds of milliseconds.
     // Reset the update watchdog before and after to prevent a false emergency stop.
     Maslow.resetUpdateWatchdog();
-    Error result = dump_config(config_filename->get(), auth_level, out);
+    Error result = save_config_file(config_filename->get());
     Maslow.resetUpdateWatchdog();
     return result;
 }
@@ -1438,6 +1502,15 @@ static Error maslow_takeSlack(const char* value, AuthenticationLevel auth_level,
     if (maslow_motion_blocked(out)) {
         return Error::SystemGcLock;
     }
+    // From UNKNOWN, Apply Tension recovers the belts that weren't restored at boot; refuse it
+    // here, with an error reply, when there is nothing to recover from.
+    if (Maslow.calibration.getCurrentState() == UNKNOWN) {
+        std::string why;
+        if (!Maslow.beltRecoveryPossible(why)) {
+            log_error(why);
+            return Error::SystemGcLock;
+        }
+    }
     sys.set_state(State::Homing);
     Maslow.calibration.requestStateChange(TAKING_SLACK);
     return Error::Ok;
@@ -1463,6 +1536,13 @@ static Error maslow_set_zStop(const char* value, AuthenticationLevel auth_level,
     sys.set_state(State::Homing);
     Maslow.setZStop();
     sys.set_state(State::Idle);
+    return Error::Ok;
+}
+
+// The board found from the BoardVersion divider at boot (see BoardId::detect())
+static Error maslow_board(const char* value, AuthenticationLevel auth_level, Channel& out) {
+    log_string(out, std::string("Board: ") + BoardId::boardName(BoardId::board()) + " (BoardVersion " +
+                        std::to_string(BoardId::millivolts()) + " mV)");
     return Error::Ok;
 }
 
@@ -1584,6 +1664,7 @@ void make_user_commands() {
     new UserCommand("ESTOP", "Maslow/estop", maslow_estop, anyState);
     new UserCommand("SETZSTOP", "Maslow/setZStop", maslow_set_zStop, anyState);
     new UserCommand("MINFO", "Maslow/getInfo", maslow_get_info, anyState);
+    new UserCommand("MBOARD", "Maslow/board", maslow_board, anyState);
     new UserCommand("GSTATE", "Maslow/gstate", maslow_get_state, anyState);
 
     new ReportCommand("RI", "Report/Interval", setReportInterval, anyState);

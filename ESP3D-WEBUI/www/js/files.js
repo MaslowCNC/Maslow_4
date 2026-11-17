@@ -1,4 +1,4 @@
-// import - get_icon_svg, displayBlock, displayInline, displayNone, id, stdErrMsg, setHTML, alertdlg, confirmdlg, inputdlg, SendPrinterCommand, tryAutoReport, SendFileHttp, SendGetHttp, translate_text_item, Monitor_output_Update
+// import - get_icon_svg, displayBlock, displayInline, displayNone, id, stdErrMsg, setHTML, alertdlg, confirmdlg, inputdlg, SendPrinterCommand, tryAutoReport, translate_text_item, Monitor_output_Update, machine, addMessage
 
 let files_current_path = "/";
 /** get/set the current path used for files */
@@ -23,7 +23,6 @@ let files_file_list = [];
 let files_status_list = [];
 let files_current_file_index = -1;
 let files_error_status = "";
-let files_last_uploaded_gcode = null;
 let tfiles_filters;
 const tft_sd = "SD:";
 const tft_usb = "U:";
@@ -238,7 +237,15 @@ function files_print_filename(path) {
 	if (reportType === "none") {
 		tryAutoReport(); // will fall back to polled if autoreport fails
 	}
-	SendPrinterCommand(`$SD/Run=${path}`);
+	Monitor_output_Update(`[#]$SD/Run=${path}\n`);
+	const job = machine.runFile(path);
+	// The job's end shows in the status; only say why it didn't start, or what stopped it.
+	job.accepted.catch((err) => addMessage(`Run ${path}: ${err.detail ?? err.reason}`));
+	job.catch((err) => {
+		if (err.reason === "failed") {
+			addMessage(`Job failed: ${err.detail ?? err.reason}`);
+		}
+	});
 }
 
 const files_Createdir = () => inputdlg(translate_text_item("Please enter directory name"), translate_text_item("Name:"), process_files_Createdir);
@@ -256,8 +263,7 @@ function files_create_dir(name) {
 
 	displayBlock("files_nav_loader");
 
-	const cmd = buildHttpFileCmd({ action: "createdir", filename: name });
-	SendGetHttp(cmd, files_list_success, files_list_failed);
+	machine.files.createDir(files_joinPath(files_currentPath(), name)).then(files_show_listing, files_action_failed);
 }
 
 function files_delete(event) {
@@ -285,15 +291,19 @@ function files_delete_file(index) {
 
 	// Log deletion start
 	Monitor_output_Update(`[Delete] Deleting ${fFile.isdir ? 'directory' : 'file'}: ${fFile.name}\n`);
-	
-	// Disable ping monitoring during delete (can take long for large files)
-	disablePingForUpload();
 
 	displayBlock("files_nav_loader");
 
-	const action = fFile.isdir ? "deletedir" : "delete";
-	const cmd = buildHttpFileCmd({ action: action, filename: fFile.sdname });
-	SendGetHttp(cmd, files_delete_success, files_delete_failed);
+	machine.files
+		.delete(files_joinPath(files_currentPath(), fFile.sdname), { dir: fFile.isdir })
+		.then((listing) => {
+			Monitor_output_Update("[Delete] Deletion completed successfully\n");
+			files_show_listing(listing);
+		})
+		.catch((err) => {
+			Monitor_output_Update(`[Delete] Deletion failed: ${err.detail ?? err.reason}\n`);
+			files_action_failed(err);
+		});
 }
 
 const files_is_clickable = (index) => files_file_list[index].isdir ? true : direct_sd;
@@ -316,8 +326,9 @@ function process_files_rename(new_file_name) {
 
 	displayBlock("files_nav_loader");
 
-	const cmd = buildHttpFileCmd({ action: "rename", filename: old_file_name, newname: new_file_name });
-	SendGetHttp(cmd, files_list_success, files_list_failed);
+	machine.files
+		.rename(files_joinPath(files_currentPath(), old_file_name), new_file_name)
+		.then(files_show_listing, files_action_failed);
 }
 
 const buildFileHref = (index) => encodeURIComponent(`SD/${files_currentPath()}${files_file_list[index].sdname}`.replace("//", "/"));
@@ -392,8 +403,7 @@ function files_refreshFiles(path) {
 
 	//this is pure direct SD
 	if (direct_sd) {
-		const cmd = buildHttpFileCmd({ path: cmdpath });
-		SendGetHttp(cmd, files_list_success, files_list_failed);
+		machine.files.list(cmdpath).then(files_show_listing, files_action_failed);
 	}
 }
 
@@ -476,69 +486,28 @@ const populateTabletFileSelector = (files, path) => {
 	}
 };
 
-const files_list_success = (response_text) => {
-	// Note: Ping restore is NOT done here because this callback is used for multiple operations
-	// Upload completion calls this via files_upload_success which handles ping restore
-	// Delete completion calls this via files_delete_success which handles ping restore
-	// Regular list refreshes don't need ping restore
-	
+/** Show a directory listing from machine.files in the files panel and the tablet's file selector. */
+const files_show_listing = (listing) => {
 	displayBlock("files_navigation_buttons");
-	let error = false;
-	let response;
-	try {
-		if (response_text.length) {
-			response = JSON.parse(response_text);
-		} else {
-			response = {files: []}
-		}
-	} catch (e) {
-		console.error(`Parsing error: ${e}\n${response_text}`);
-		error = true;
-	}
-	if (error || typeof response.status === "undefined") {
-		files_list_failed(406, translate_text_item("Wrong data", true));
-		return;
-	}
-	// Process files first to build files_file_list
-	files_file_list = [];
-	if (Array.isArray(response.files)) {
-		for (let i = 0; i < response.files.length; i++) {
-			const file = response.files[i];
-			const file_name = file.name;
-			const isdirectory = file.size === "-1";
-			files_file_list.push({
-				name: file_name,
-				sdname: file_name,
-				size: !isdirectory ? file.size : "",
-				isdir: isdirectory,
-				datetime: file.datetime,
-				isprintable: files_isgcode(file_name, isdirectory),
-			});
-		}
-	}
+	files_file_list = listing.files.map((file) => ({
+		name: file.name,
+		sdname: file.name,
+		size: file.isdir ? "" : file.size,
+		isdir: file.isdir,
+		datetime: file.datetime,
+		isprintable: files_isgcode(file.name, file.isdir),
+	}));
 	files_file_list.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
-	
+
 	// Now populate the tablet file selector with the processed file list
 	populateTabletFileSelector(files_file_list, files_currentPath());
-	let vtotal = "-1";
-	let vused = "-1";
-	let voccupation = "-1";
-	if (typeof response.total !== "undefined") {
-		vtotal = response.total;
-	}
-	if (typeof response.used !== "undefined") {
-		vused = response.used;
-	}
-	if (typeof response.occupation !== "undefined") {
-		voccupation = response.occupation;
-	}
 	files_status_list = [];
 	files_status_list.push({
-		status: translate_text_item(response.status),
-		path: response.path,
-		used: vused,
-		total: vtotal,
-		occupation: voccupation,
+		status: translate_text_item(listing.status),
+		path: listing.path,
+		used: listing.used ?? "-1",
+		total: listing.total ?? "-1",
+		occupation: listing.occupation ?? "-1",
 	});
 	files_build_display_filelist();
 };
@@ -549,7 +518,16 @@ const alertEspError = () => {
 	esp_error_code = 0;
 };
 
-function files_list_failed(error_code, response) {
+/**
+ * A machine.files action failed. If the firmware still sent the listing (it refused the action),
+ * show it: its status line says what went wrong. Otherwise say there's no connection.
+ */
+const files_action_failed = (err) => {
+	if (err.listing) {
+		files_show_listing(err.listing);
+		return;
+	}
+	console.warn(`files: ${err.detail ?? err.reason}`);
 	displayBlock("files_navigation_buttons");
 	if (esp_error_code !== 0) {
 		alertEspError();
@@ -557,47 +535,7 @@ function files_list_failed(error_code, response) {
 		alertdlg(translate_text_item("Error"), translate_text_item("No connection"));
 	}
 	files_build_display_filelist(false);
-}
-
-const files_delete_success = (response_text) => {
-	// Restore ping monitoring after delete completes
-	restorePingAfterUpload();
-	
-	// Log deletion completion
-	Monitor_output_Update("[Delete] Deletion completed successfully\n");
-	
-	// Reuse the list success handler
-	files_list_success(response_text);
 };
-
-const files_delete_failed = (error_code, response) => {
-	// Restore ping monitoring after delete fails
-	restorePingAfterUpload();
-	
-	// Log deletion failure
-	Monitor_output_Update(`[Delete] Deletion failed: ${error_code}\n`);
-	
-	// Reuse the list failed handler
-	files_list_failed(error_code, response);
-};
-
-function files_directSD_upload_failed(error_code, response) {
-	files_last_uploaded_gcode = null;
-
-	// Restore ping monitoring after upload fails
-	restorePingAfterUpload();
-	
-	// Log upload failure
-	Monitor_output_Update(`[Upload] Upload failed: ${error_code}\n`);
-	
-	if (esp_error_code !== 0) {
-		alertEspError();
-	} else {
-		alertdlg(translate_text_item("Error"), translate_text_item("Upload failed"));
-	}
-	displayNone("files_uploading_msg");
-	displayBlock("files_navigation_buttons");
-}
 
 const need_up_level = () => files_currentPath() !== "/";
 
@@ -770,7 +708,10 @@ function files_start_upload() {
 		return;
 	}
 
-	const formData = BuildFileUploadFormData(files_currentPath(), files, FileUploadNotice);
+	const dir = files_currentPath();
+	for (const file of files) {
+		FileUploadNotice(file);
+	}
 
 	// Reset progress logging
 	FilesUploadProgressDisplay.lastLoggedPercent = -1;
@@ -779,38 +720,30 @@ function files_start_upload() {
 	const fileName = files[0].name;
 	const fileSize = (files[0].size / 1024 / 1024).toFixed(2);
 	Monitor_output_Update(`[Upload] Starting upload of ${fileName} (${fileSize} MB)\n`);
-	files_last_uploaded_gcode = {
+	const uploadedFile = {
 		name: fileName,
-		path: files_joinPath(files_currentPath(), fileName),
+		path: files_joinPath(dir, fileName),
 		size: files[0].size,
 	};
-
-	// Disable ping monitoring during upload
-	disablePingForUpload();
 
 	displayBlock("files_uploading_msg");
 	displayNone("files_navigation_buttons");
 	if (direct_sd) {
-		SendFileHttp(httpCmd.fileUpload, formData, FilesUploadProgressDisplay, files_upload_success, files_directSD_upload_failed);
-		//console.log("send file");
+		machine.files
+			.upload(dir, files, { onProgress: FilesUploadProgressDisplay })
+			.then((listing) => files_upload_success(listing, uploadedFile))
+			.catch(files_upload_failed);
 	}
 	setValue("files_input_file", "");
 }
 
-const files_upload_success = (response_text) => {
-	const uploadedFile = files_last_uploaded_gcode;
-	files_last_uploaded_gcode = null;
-
-	// Restore ping monitoring after upload completes
-	restorePingAfterUpload();
-	
+const files_upload_success = (listing, uploadedFile) => {
 	// Log upload completion
 	Monitor_output_Update("[Upload] Upload completed successfully\n");
-	
-	// Reuse the list success handler
-	files_list_success(response_text);
 
-	if (!uploadedFile || typeof tabletLoadGCodeFile !== "function") {
+	files_show_listing(listing);
+
+	if (typeof tabletLoadGCodeFile !== "function") {
 		return;
 	}
 
@@ -822,6 +755,24 @@ const files_upload_success = (response_text) => {
 		tabletLoadGCodeFile(uploadedFile.path, fileEntry.size ?? uploadedFile.size);
 	}
 };
+
+function files_upload_failed(err) {
+	// Log upload failure
+	Monitor_output_Update(`[Upload] Upload failed: ${err.detail ?? err.reason}\n`);
+
+	if (err.listing) {
+		// The firmware answered "Upload failed" with the listing; its status line shows that.
+		files_show_listing(err.listing);
+		return;
+	}
+	if (esp_error_code !== 0) {
+		alertEspError();
+	} else {
+		alertdlg(translate_text_item("Error"), translate_text_item("Upload failed"));
+	}
+	displayNone("files_uploading_msg");
+	displayBlock("files_navigation_buttons");
+}
 
 function FilesUploadProgressDisplay(oEvent) {
 	if (oEvent.lengthComputable) {

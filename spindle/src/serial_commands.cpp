@@ -1,0 +1,657 @@
+#include "serial_commands.h"
+#include "pins.h"
+#include "config.h"
+#include "ota_service.h"
+#include "trip_recorder.h"
+#include "load_sense.h"
+#include "usb_console.h"
+#include "sync_sense.h"
+#include <string.h>
+
+static const uint8_t fan_default_level = 49;
+static uint8_t fan_speed_index = fan_default_level;  // level being applied (0..FAN_LEVEL_COUNT-1)
+static bool fan_enabled = false;                       // whether the fan is being driven
+static float fan_current_pwm = 0.0f;
+static float fan_target_pwm = 0.0f;
+
+// USB manual override ('f' toggles, 'F' raises the level by FAN_MANUAL_STEP).  While on, the fan runs at
+// fan_manual_level whatever the motors are doing; while off, applyFanForMotorState() decides.
+static bool    fan_manual_on    = false;
+static uint8_t fan_manual_level = fan_default_level;
+static const uint8_t FAN_MANUAL_STEP = 5;  // levels per 'F' press
+
+static uint8_t fanDutyForLevel(uint8_t level) {
+    if (FAN_LEVEL_COUNT <= 1) return FAN_MAX_DUTY;
+    uint16_t span = (uint16_t)(FAN_MAX_DUTY - FAN_MIN_DUTY);
+    uint16_t scaled = (uint16_t)((uint32_t)span * level / (uint32_t)(FAN_LEVEL_COUNT - 1));
+    return (uint8_t)(FAN_MIN_DUTY + scaled);
+}
+
+static void writeFanOutput(float pwm) {
+    if (pwm < 0.0f) pwm = 0.0f;
+    if (pwm > 255.0f) pwm = 255.0f;
+    ledcWrite(FAN_PWM_CHANNEL, (uint8_t)(pwm + 0.5f));
+}
+
+static void updateFanTarget() {
+    fan_target_pwm = fan_enabled ? fanDutyForLevel(fan_speed_index) : 0.0f;
+}
+
+void initFanControl() {
+    pinMode(FAN_PWM_PIN, OUTPUT);
+    ledcSetup(FAN_PWM_CHANNEL, FAN_PWM_FREQUENCY, FAN_PWM_RESOLUTION_BITS);
+    ledcAttachPin(FAN_PWM_PIN, FAN_PWM_CHANNEL);
+
+    fan_enabled = false;
+    fan_current_pwm = 0.0f;
+    updateFanTarget();
+    writeFanOutput(fan_current_pwm);
+}
+
+void updateFanControl(float dt) {
+    if (dt <= 0.0f) return;
+
+    float err = fan_target_pwm - fan_current_pwm;
+    if (fabsf(err) < 0.5f) {
+        fan_current_pwm = fan_target_pwm;
+        writeFanOutput(fan_current_pwm);
+        return;
+    }
+
+    float max_step = FAN_PWM_RAMP_UNITS_PER_SEC * dt;
+    if (fabsf(err) <= max_step) {
+        fan_current_pwm = fan_target_pwm;
+    } else {
+        fan_current_pwm += (err > 0.0f) ? max_step : -max_step;
+    }
+    writeFanOutput(fan_current_pwm);
+}
+
+// Drive the fan automatically whenever local spindle/Z motors or the XY belt motors need
+// cooling, unless the USB manual override is on.  Called every housekeeping pass;
+// updateFanControl() ramps toward the target.
+void applyFanForMotorState(bool localMotorsEnabled) {
+    if (fan_manual_on) {
+        fan_speed_index = fan_manual_level;
+        fan_enabled     = true;
+    } else if ((localMotorsEnabled || g_belt_cooling_requested) && g_suction_level > 0) {
+        // Map the 0-100 suction percentage onto the fan's level index (0..FAN_LEVEL_COUNT-1).
+        fan_speed_index = (uint8_t)((uint32_t)g_suction_level * (FAN_LEVEL_COUNT - 1) / 100u);
+        fan_enabled     = true;
+    } else {
+        fan_enabled = false;
+    }
+    updateFanTarget();
+}
+
+int active_motor = 2;  // 0 = motor 1, 1 = motor 2, 2 = both (default: the keys drive the spindle)
+PhaseOffset phase_offset;
+volatile uint8_t g_fault_code = 0;  // 0 = OK, 1 = driver fault (nFAULT), 2 = over-current stop
+volatile bool    g_z_reference_valid = false;  // true once homing establishes the phase zero
+
+// Suction/cooling fan power (0-100), configured by the XY board over the link via
+// the 'C' command.  The fan runs at this level whenever local motors are enabled or
+// the XY board reports active belt motors.
+volatile uint8_t g_suction_level = 100;
+volatile bool    g_belt_cooling_requested = false;
+
+// Set true when the XY board reports the machine is idle (the 'D' command) so the
+// Z-axis BLDC drivers may be powered down once their phase move has settled.  Cleared
+// as soon as any new motion command (spindle speed or Z target) arrives.
+volatile bool g_hold_release_requested = false;
+volatile bool g_home_requested = false;
+volatile bool g_remove_tool_requested = false;
+
+// Identity string returned to the XY board in response to a handshake ('H') request.
+static const char* LINK_IDENTITY = "I:Maslow-Spindle,proto=1";
+// Set true the first time a valid command arrives over the inter-board link, so we
+// announce first contact on the USB console exactly once.
+static bool g_link_seen = false;
+
+void printCommandHelp() {
+    Serial.println(F("\nInter-board link protocol (also accepted on USB, newline terminated):"));
+    Serial.println(F("  'S<rpm>' set spindle speed (0 = stop)"));
+    Serial.println(F("  'Z<deg>' set absolute target phase offset in degrees (Z position)"));
+    Serial.println(F("  'E'      emergency stop (disable both motors)"));
+    Serial.println(F("  '?'      request a status report"));
+    Serial.println(F("  'H'      handshake: reply with identity string"));
+    Serial.println(F("  'C<lvl>' set suction/cooling fan power (0-100); fan auto-runs while motors enabled"));
+    Serial.println(F("  'D'      machine idle: power down the Z-axis drivers once the move has settled"));
+    Serial.println(F("  'G'      run the Z homing cycle (raise until the top-of-travel beam breaks)"));
+    Serial.println(F("  'R'      remove tool: raise the Z until the loaded tool clears the beam"));
+    Serial.println(F("\nTrip recorder (USB only): the last ~2 s are dumped as TRIPCSV lines when a fault stops the motors"));
+    Serial.println(F("  'TRIP'   print the captured recording again"));
+    Serial.println(F("  'REARM'  discard it and start recording again"));
+    Serial.println(F("  'TRIPTEST' trigger a recording now (no fault) to test the dump"));
+    Serial.println(F("  'WHY'      print why the board last reset"));
+    Serial.println(F("\nLoad-sense diagnostic (USB only, takes no protective action):"));
+    Serial.println(F("  'LOAD'    toggle the [LOAD] lines (every 250 ms); sensing + warnings always run"));
+    Serial.println(F("  'ADAPT'   toggle adaptive voltage (on at boot): per-motor trim holding Iq at ~2 A"));
+    Serial.println(F("  'RTEST'   standstill check: verifies sign/angle and measures phase R"));
+    Serial.println(F("  'VSWEEP'  at the current steady speed, step the voltage down; log current + lag"));
+#ifdef SYNC_CURRENT_SENSE
+    Serial.println(F("  'SYNC'    synchronised sampling stats (timing, valid %, zero, noise); 'SYNCRESET' clears"));
+    Serial.println(F("  'SYNCLOG' toggle [SYNC] lines: currents, Id/Iq, observer load angle (4/s per motor)"));
+    Serial.println(F("  'SYNCSET lead=<us> mid=<us> settle=<us> hold=<us>'  sample timing (until reboot)"));
+    Serial.println(F("  'SETTLE'  middle-phase residual vs time since its low side turned on / until off"));
+    Serial.println(F("  'SYNCCAP [periods]'  capture raw samples of both motors, then dump CSV"));
+    Serial.println(F("  'OBS [R=<ohm>] [L=<H>] [F=<Wb>]'  observer parameters (shadow mode only)"));
+#endif
+    Serial.println(F("  'LOADREF' no-load baseline sweep 1000 RPM..max (spins the spindle, no cutting)"));
+    Serial.println(F("\nLegacy single-character commands (USB maintenance/calibration):"));
+    Serial.println(F("  'q' select motor 1 (default)"));
+    Serial.println(F("  'w' select motor 2 (spins opposite direction)"));
+    Serial.println(F("  'e' select both motors (motor 2 spins opposite to motor 1)"));
+    Serial.println(F("  '+' step angle forward (active motor)"));
+    Serial.println(F("  '-' step angle backward (active motor)"));
+    Serial.println(F("  'r' start/stop continuous rotation (active motor)"));
+    Serial.println(F("  's' set angle to 0 (stop and reset) (active motor)"));
+    Serial.println(F("  'p' advance relative phase between motors (+45 deg)"));
+    Serial.println(F("  'l' retard  relative phase between motors (-45 deg)"));
+    Serial.println(F("  'i' print current angle and status (active motor)"));
+    Serial.println(F("  'a' print status of all motors"));
+
+    Serial.println(F("  '0-9' set velocity in 2000 RPM steps (0=0RPM, 1=2000RPM, ..., 6=12000RPM; 7-9 capped at MAX_COMMAND_RPM)"));
+    Serial.println(F("  'f'   toggle manual fan override (on = run now; off = automatic)"));
+    Serial.println(F("  'F'   raise the manual fan level by 5 (wraps past 100) and turn the override on"));
+    Serial.println(F("  'C'   auto-calibrate voltage LUT"));
+    Serial.println(F("  'Q'   manual calibration Motor 1"));
+    Serial.println(F("  'W'   manual calibration Motor 2"));
+    Serial.println(F("  'B'   resume manual calibration from first unrecorded step"));
+    Serial.println(F("          't'/'g' = voltage +/-0.05V  |  'y'/'h' = +/-0.01V"));
+    Serial.println(F("          SPACE = record and advance to next step"));
+    Serial.println(F("  'x'   emergency stop: disable both motors, zero velocity"));
+    Serial.println();
+}
+
+static bool affectsMotor(int idx) {
+    return active_motor == idx || active_motor == 2;
+}
+
+static void printMotorStatus(MotorController& mc, int idx) {
+    Serial.printf("Motor %d - Target: %.1f deg | Continuous: %s | Status: %s\n",
+                  idx + 1,
+                  mc.target_angle * 180.0f / PI,
+                  mc.continuous_rotation ? "YES" : "NO",
+                  mc.enabled ? "ENABLED" : "DISABLED");
+}
+
+void handleSerialCommand(char cmd, MotorController& mc1, MotorController& mc2, Calibration& cal) {
+    MotorController* motors[] = { &mc1, &mc2 };
+    if (cmd == '\r' || cmd == '\n') return;
+
+    // Manual calibration input takes priority
+    if (cmd == 't' || cmd == 'g' || cmd == 'y' || cmd == 'h' || cmd == ' ') {
+        cal.handleManualInput(cmd, mc1, mc2);
+        return;
+    }
+
+    // Motor selection
+    if (cmd == 'q') {
+        active_motor = 0;
+        Serial.println(F("Active motor: 1"));
+    }
+    else if (cmd == 'w') {
+        active_motor = 1;
+        Serial.println(F("Active motor: 2"));
+    }
+    else if (cmd == 'e') {
+        active_motor = 2;
+        Serial.println(F("Active motor: BOTH"));
+    }
+
+    // Angle step forward
+    else if (cmd == '+') {
+        for (int i = 0; i < 2; i++) {
+            if (affectsMotor(i) && motors[i]->enabled) {
+                motors[i]->target_angle += motors[i]->angle_increment * motors[i]->direction;
+                motors[i]->motor.target = motors[i]->target_angle;
+                motors[i]->continuous_rotation = false;
+            }
+        }
+    }
+
+    // Angle step backward
+    else if (cmd == '-') {
+        for (int i = 0; i < 2; i++) {
+            if (affectsMotor(i) && motors[i]->enabled) {
+                motors[i]->target_angle -= motors[i]->angle_increment * motors[i]->direction;
+                motors[i]->motor.target = motors[i]->target_angle;
+                motors[i]->continuous_rotation = false;
+            }
+        }
+    }
+
+    // Toggle continuous rotation
+    else if (cmd == 'r') {
+        for (int i = 0; i < 2; i++) {
+            if (affectsMotor(i) && motors[i]->enabled) {
+                motors[i]->continuous_rotation = !motors[i]->continuous_rotation;
+                Serial.printf("Motor %d: %s continuous rotation\n",
+                              i + 1, motors[i]->continuous_rotation ? "Started" : "Stopped");
+            }
+        }
+    }
+
+    // Emergency stop
+    else if (cmd == 'x') {
+        if (cal.isActive()) {
+            cal.abort(mc1, mc2, "user emergency stop");
+        }
+        loadSenseAbort("emergency stop");
+        mc1.emergencyStop();
+        mc2.emergencyStop();
+        fan_manual_on = false;  // back to automatic: with the motors stopped, that is off
+        Serial.println(F("STOP: both motors disabled, velocity zeroed."));
+    }
+
+    // Reset angle to 0
+    else if (cmd == 's') {
+        for (int i = 0; i < 2; i++) {
+            if (affectsMotor(i) && motors[i]->enabled) {
+                motors[i]->target_angle = 0.0f;
+                motors[i]->motor.target = 0.0f;
+                motors[i]->continuous_rotation = false;
+                Serial.printf("Motor %d: Angle reset to 0 degrees\n", i + 1);
+            }
+        }
+    }
+
+    // Velocity commands (0-9)
+    else if (cmd >= '0' && cmd <= '9') {
+        int rpm;
+        if      (cmd == '0') rpm = 0;
+        else                 rpm = (cmd - '0') * 2000;
+        if (rpm > MAX_COMMAND_RPM) rpm = MAX_COMMAND_RPM;  // '9' (18000) is above the usable range
+        if (rpm > 0) tripRecorderArmOnStart();  // a spindle start records afresh for the next trip
+
+        for (int i = 0; i < 2; i++) {
+            if (affectsMotor(i)) {
+                motors[i]->target_velocity = rpm * 2.0f * PI / 60.0f * motors[i]->direction;
+                motors[i]->velocity_mode = true;
+                motors[i]->continuous_rotation = false;
+                Serial.printf("Motor %d velocity set to: %d RPM\n", i + 1, rpm);
+            }
+        }
+    }
+
+    // Phase offset adjust
+    else if (cmd == 'p' || cmd == 'l') {
+        float dir = (cmd == 'p') ? 1.0f : -1.0f;
+        phase_offset.target += dir * PHASE_OFFSET_STEP;
+
+        // Re-enable motors if disabled so ramp can take effect
+        for (int i = 0; i < 2; i++) {
+            if (!motors[i]->enabled) {
+                motors[i]->resetFilterState();
+                motors[i]->reached_speed = false;
+                motors[i]->motor.controller = MotionControlType::angle_openloop;
+                motors[i]->enable();
+            }
+        }
+
+        Serial.printf("[p/l] target phase offset: %+.1f deg  (current: %+.1f deg)\n",
+                      phase_offset.target * 180.0f / PI,
+                      phase_offset.current * 180.0f / PI);
+    }
+
+    // Print status
+    else if (cmd == 'i') {
+        if (active_motor == 2) {
+            printMotorStatus(mc1, 0);
+            printMotorStatus(mc2, 1);
+        } else {
+            printMotorStatus(*motors[active_motor], active_motor);
+        }
+    }
+    else if (cmd == 'a') {
+        Serial.println(F("=== ALL MOTOR STATUS ==="));
+        printMotorStatus(mc1, 0);
+        printMotorStatus(mc2, 1);
+        Serial.println(F("========================"));
+    }
+
+    // Fan control
+    else if (cmd == 'f') {
+        fan_manual_on = !fan_manual_on;
+        if (fan_manual_on) {
+            Serial.printf("Fan: ON (manual, %d/100)\n", fan_manual_level + 1);
+        } else {
+            Serial.println(F("Fan: manual override OFF (automatic: runs while motors are enabled)"));
+        }
+    }
+    else if (cmd == 'F') {
+        fan_manual_level = (uint8_t)((fan_manual_level + FAN_MANUAL_STEP) % FAN_LEVEL_COUNT);
+        fan_manual_on    = true;
+        Serial.printf("Fan: ON (manual, %d/100)\n", fan_manual_level + 1);
+    }
+
+    // Calibration commands
+    else if (cmd == 'C') {
+        cal.startAuto(mc1, mc2);
+    }
+    else if (cmd == 'Q') {
+        cal.startManual(0, mc1, mc2);
+    }
+    else if (cmd == 'W') {
+        cal.startManual(1, mc1, mc2);
+    }
+    else if (cmd == 'B') {
+        cal.resumeManual(mc1, mc2);
+    }
+}
+
+// ------------------- Line-based inter-board protocol -------------------
+
+// Set spindle speed on both motors (rpm; 0 = stop).
+static void setSpindleSpeed(float rpm, MotorController& mc1, MotorController& mc2) {
+    if (rpm < 0.0f) rpm = 0.0f;
+    if (rpm > MAX_COMMAND_RPM) rpm = MAX_COMMAND_RPM;
+
+    // A fresh non-zero speed is the operator's deliberate restart after an over-current stop,
+    // so it clears the latched fault.  S0 does not: the XY board sends it as it raises the
+    // fault's alarm, and clearing the fault then would let the next speed it sends restart the
+    // spindle on its own.  (The Z reference is NOT restored here - only a homing cycle can do
+    // that.)
+    if (rpm > 0.0f) g_fault_code = 0;
+    if (rpm > 0.0f) tripRecorderArmOnStart();  // restarting: record afresh for the next trip
+
+    MotorController* motors[] = { &mc1, &mc2 };
+    // S0 only spins down a motor that is spinning.  On a stopped one it would enter velocity
+    // mode for one FOC pass - reported as "Spindle On" (the XY board sends S0 on every boot) -
+    // and the ramp's "velocity at 0" power-down would then drop a Z hold or Z move in progress.
+    if (rpm == 0.0f && !mc1.velocity_mode && !mc2.velocity_mode && !mc1.continuous_rotation &&
+        !mc2.continuous_rotation) {
+        return;
+    }
+    g_hold_release_requested = false;  // motion commanded: cancel any pending Z-hold release
+    for (int i = 0; i < 2; i++) {
+        motors[i]->target_velocity = rpm * 2.0f * PI / 60.0f * motors[i]->direction;
+        motors[i]->velocity_mode   = true;
+        motors[i]->continuous_rotation = false;
+    }
+}
+
+// Set the absolute target phase offset (Z position) in degrees.
+static void setPhaseTarget(float deg, MotorController& mc1, MotorController& mc2) {
+    float new_target = deg * PI / 180.0f;
+
+    // After an over-current the rotor slipped, so the phase offset no longer corresponds to a
+    // real Z position: moving to a commanded Z would drive the axis somewhere arbitrary.  Refuse
+    // until a homing cycle re-establishes the zero.  The XY board keeps streaming Z targets, so
+    // warn at most once every few seconds rather than on every one.
+    if (!g_z_reference_valid) {
+        static uint32_t last_refusal_ms = 0;
+        uint32_t        now             = millis();
+        if (last_refusal_ms == 0 || now - last_refusal_ms > 5000) {
+            last_refusal_ms = now;
+            char line[128];
+            int  n = snprintf(line, sizeof(line),
+                              "WARN:Z move to %.1f deg refused - Z not homed since the over-current stop\n", deg);
+            // Write only when the whole line already fits, exactly as reportEvent() does: a
+            // blocked write would stall this task's command handling.
+            if (n > 0 && Serial1.availableForWrite() >= n) {
+                Serial1.write(reinterpret_cast<const uint8_t*>(line), n);
+            }
+            if (n > 0) usbWriteIfRoom(line, n);
+        }
+        return;  // note: does NOT clear g_fault_code - the alarm must stand until the operator acts
+    }
+
+    // Ignore a redundant target equal to where the Z already is (e.g. the XY board
+    // re-sending its Z on connect, or its home matching the post-homing zero).  Acting on
+    // it would clear the idle hold-release and needlessly energize the motors, leaving them
+    // locked in position with the fan running until the next idle release - which never
+    // arrives while the XY board sits in its boot alarm.
+    if (fabsf(new_target - phase_offset.current) <= PHASE_MOVE_COMPLETE_EPS_RAD) {
+        phase_offset.target = new_target;
+        return;
+    }
+
+    g_fault_code = 0;  // a fresh move clears any latched fault
+    g_hold_release_requested = false;  // a new Z move cancels any pending Z-hold release
+
+    phase_offset.target = new_target;
+
+    // Re-enable motors if disabled so the ramp can take effect (matches 'p'/'l').
+    MotorController* motors[] = { &mc1, &mc2 };
+    for (int i = 0; i < 2; i++) {
+        if (!motors[i]->enabled) {
+            motors[i]->resetFilterState();
+            motors[i]->reached_speed = false;
+            motors[i]->motor.controller = MotionControlType::angle_openloop;
+            motors[i]->enable();
+        }
+    }
+}
+
+void sendStatus(Stream& out, MotorController& mc1, MotorController& mc2) {
+    const char* state = g_fault_code ? "FAULT" : ((mc1.enabled || mc2.enabled) ? "RUN" : "IDLE");
+    float phase_deg = phase_offset.current * 180.0f / PI;
+    float rpm = fabsf(mc1.enabled ? mc1.current_velocity : 0.0f) * 60.0f / (2.0f * PI);
+    // L: advisory load-warning bits (1 = motor 1, 2 = motor 2), after F: so the XY board's
+    // strstr("F:") parser is unaffected.
+    out.printf("T:%s,P:%.1f,R:%.0f,F:%u,L:%u\n", state, phase_deg, rpm, (unsigned)g_fault_code,
+               (unsigned)loadWarnMask());
+}
+
+// Process one complete command line from either the USB or the inter-board link.
+// allowLegacy is true only for the USB console: single-character maintenance /
+// calibration commands are NEVER honored on the inter-board link, so electrical
+// noise on the link cannot toggle the fan, start a calibration, or move a motor.
+static void processCommandLine(const char* line, size_t len,
+                               MotorController& mc1, MotorController& mc2, Calibration& cal,
+                               Stream& reply, bool allowLegacy) {
+    if (len == 0) return;
+
+    // Announce first contact over the link on the USB console (once).
+    if (!allowLegacy && !g_link_seen) {
+        g_link_seen = true;
+        Serial.printf("Link: first command received from XY board: '%s'\n", line);
+    }
+
+    // USB-only maintenance word-commands.  These are multi-character so they do not
+    // collide with the single-letter inter-board protocol (e.g. auto-calibration 'C'
+    // would otherwise be shadowed by the 'C' fan-power command).  Never honored on the
+    // link so line noise cannot start a calibration.
+    if (allowLegacy) {
+        if (strcmp(line, "CAL") == 0) {
+            if (loadSenseBusy()) {
+                Serial.println(F("CAL refused: RTEST/LOADREF is running ('x' to stop it)"));
+                return;
+            }
+            // Force the cooling/suction fan to full for the whole calibration run so the
+            // motors and drivers stay cool while sweeping to high RPM.
+            g_suction_level = 100;
+            Serial.println(F("Cooling/suction fan forced ON (100%) for calibration."));
+            cal.startAuto(mc1, mc2);
+            return;
+        }
+#ifdef SYNC_CURRENT_SENSE
+        if (syncSenseCommand(line)) return;   // SYNC, SYNCLOG, SYNCSET, SETTLE, SYNCCAP, OBS, SYNCRESET
+#endif
+        if (strcmp(line, "WHY") == 0) {
+            extern char g_reset_reason[];
+            Serial.printf("[BOOT] last reset: %s, %lu s ago\n", g_reset_reason,
+                          (unsigned long)(millis() / 1000));
+            return;
+        }
+        if (strcmp(line, "TRIP") == 0) {
+            tripRecorderRequestDump();
+            return;
+        }
+        // Load-sense diagnostic (see load_sense.h).  Takes no protective action.
+        if (strcmp(line, "LOAD") == 0) {
+            loadSenseToggle();
+            return;
+        }
+        if (strcmp(line, "ADAPT") == 0) {
+            adaptToggle();
+            return;
+        }
+        if (strcmp(line, "VSWEEP") == 0) {
+            if (cal.isActive()) {
+                Serial.println(F("Refused: calibration is running"));
+                return;
+            }
+            loadSenseStartVSweep(mc1, mc2);
+            return;
+        }
+        if (strcmp(line, "RTEST") == 0 || strcmp(line, "LOADREF") == 0) {
+            if (cal.isActive()) {
+                Serial.println(F("Refused: calibration is running"));
+                return;
+            }
+            if (line[0] == 'R') loadSenseStartRTest(mc1, mc2);
+            else                loadSenseStartBaseline(mc1, mc2);
+            return;
+        }
+        if (strcmp(line, "TRIPTEST") == 0) {
+            // Trigger a recording with no fault, to exercise the dump path on the bench.
+            tripRecorderTrigger("manual test (TRIPTEST)");  // prints whether it was captured
+            return;
+        }
+        if (strcmp(line, "REARM") == 0) {
+            tripRecorderArm();
+            Serial.println(F("[TRIP] recorder re-armed"));
+            return;
+        }
+        if (strcmp(line, "DUMP") == 0) {
+            Serial.println(F("\n===== MOTOR 1 voltage LUT ====="));
+            cal.printResults(mc1);
+            Serial.println(F("\n===== MOTOR 2 voltage LUT ====="));
+            cal.printResults(mc2);
+            return;
+        }
+    }
+
+    char cmd = line[0];
+
+    // While a calibration sweep is running, ignore motion setpoints arriving over the
+    // inter-board link so the XY board cannot disturb it.  Emergency stop ('E') is left
+    // working on purpose.
+    if (!allowLegacy && (cal.isActive() || loadSenseBusy()) && (cmd == 'S' || cmd == 'Z')) {
+        return;
+    }
+
+    switch (cmd) {
+        case 'S':  // set spindle speed
+            setSpindleSpeed(strtof(line + 1, nullptr), mc1, mc2);
+            break;
+        case 'Z':  // set absolute target phase offset (Z position)
+            setPhaseTarget(strtof(line + 1, nullptr), mc1, mc2);
+            break;
+        case 'E':  // emergency stop
+            handleSerialCommand('x', mc1, mc2, cal);
+            break;
+        case '?':  // status request
+            sendStatus(reply, mc1, mc2);
+            break;
+        case 'C': {  // set suction/cooling fan power (0-100)
+            long lvl = strtol(line + 1, nullptr, 10);
+            if (lvl < 0) lvl = 0;
+            if (lvl > 100) lvl = 100;
+            g_suction_level = (uint8_t)lvl;
+            break;
+        }
+        case 'B':  // XY belt motors active: request vacuum cooling
+            g_belt_cooling_requested = line[1] == '1';
+            break;
+        case 'D':  // machine idle: power the Z-axis drivers down once the move has settled
+            g_hold_release_requested = true;
+            break;
+        case 'G':  // (re-)run the Z homing cycle (raise until the top-of-travel beam breaks)
+            g_home_requested = true;
+            break;
+        case 'R':  // remove tool: raise the Z until the loaded tool clears the beam
+            g_remove_tool_requested = true;
+            break;
+        case 'T':  // trip recording over the link: "T" re-sends the last one, "T!" records a test one
+#ifdef SLIP_TEST
+            // Bench build: "T!" ($Spindle/Trip=TEST) runs the slip test instead; it ends in a recording.
+            if (line[1] == '!' && !cal.isActive()) { loadSenseStartSlipTest(mc1, mc2); break; }
+#endif
+            if (line[1] == '!') tripRecorderLinkTest();
+            else tripRecorderRequestLinkDump();
+            break;
+        case 'H':  // handshake / identity request
+            reply.print(LINK_IDENTITY);
+            reply.print('\n');
+            if (!allowLegacy) {
+                Serial.println(F("Link: handshake request received from XY board -> replied identity"));
+            }
+            break;
+        case 'W': {  // enable WiFi + OTA using credentials pushed by the XY board
+            // Payload is "<ssid>\t<password>" (tab-delimited, since neither field can
+            // contain a tab).  The XY board sends this in response to $Spindle/EnableOTA.
+            const char* rest = line + 1;
+            const char* tab  = strchr(rest, '\t');
+            if (!tab) {
+                // No "<ssid>\t<pass>" payload -> not an OTA request.  On the USB console a
+                // bare 'W' is the legacy manual-calibration (Motor 2) command; the link
+                // never triggers calibration, so ignore it there.
+                if (allowLegacy && len == 1) {
+                    handleSerialCommand('W', mc1, mc2, cal);
+                }
+                break;
+            }
+            char   ssid[33];
+            char   pass[65];
+            size_t slen = (size_t)(tab - rest);
+            if (slen > sizeof(ssid) - 1) {
+                slen = sizeof(ssid) - 1;
+            }
+            memcpy(ssid, rest, slen);
+            ssid[slen] = '\0';
+            strncpy(pass, tab + 1, sizeof(pass) - 1);
+            pass[sizeof(pass) - 1] = '\0';
+            requestSpindleOTA(ssid, pass);
+            if (!allowLegacy) {
+                Serial.println(F("Link: OTA enable request received from XY board"));
+            }
+            break;
+        }
+        default:
+            // Single-character legacy commands are honored ONLY on the USB console.
+            if (allowLegacy && len == 1) {
+                handleSerialCommand(cmd, mc1, mc2, cal);
+            }
+            break;
+    }
+}
+
+// Shared line-buffer size for the USB console and the inter-board link.  It must be
+// large enough for the longest command, which is the 'W' OTA request carrying the XY
+// board's WiFi SSID (<=32) and password (<=63) separated by a tab.
+static constexpr size_t CMD_LINE_BUF_SIZE = 160;
+
+// Accumulate bytes from a stream into a line buffer and dispatch on newline.
+static void feedStream(Stream& in, char* buf, size_t& len,
+                       MotorController& mc1, MotorController& mc2, Calibration& cal,
+                       bool allowLegacy) {
+    while (in.available()) {
+        char c = (char)in.read();
+        if (c == '\r') {
+            continue;
+        }
+        if (c == '\n') {
+            buf[len] = '\0';
+            processCommandLine(buf, len, mc1, mc2, cal, in, allowLegacy);
+            len = 0;
+        } else if (len < CMD_LINE_BUF_SIZE - 1) {
+            buf[len++] = c;
+        } else {
+            len = 0;  // overflow: drop the malformed line
+        }
+    }
+}
+
+void handleSerialCommands(MotorController& mc1, MotorController& mc2, Calibration& cal) {
+    static char   usb_buf[CMD_LINE_BUF_SIZE];
+    static size_t usb_len = 0;
+    static char   link_buf[CMD_LINE_BUF_SIZE];
+    static size_t link_len = 0;
+
+    feedStream(Serial, usb_buf, usb_len, mc1, mc2, cal, /*allowLegacy=*/true);
+    feedStream(Serial1, link_buf, link_len, mc1, mc2, cal, /*allowLegacy=*/false);
+}

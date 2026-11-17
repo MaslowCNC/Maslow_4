@@ -100,6 +100,11 @@ const getFWdata = (response) => {
 		}
 	}
 
+	if (tlist.length > 9) {
+		sublist = tlist[9].split(":");
+		if (sublist[0].trim() === "board") maslowBoard = sublist[1].trim();
+	}
+
 	EventListenerSetup();
 	startSocket();
 

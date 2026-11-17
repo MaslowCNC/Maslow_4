@@ -1,5 +1,6 @@
 #include "Calibration.h"
 #include "Maslow.h"
+#include "BoardId.h"
 #include "../Kinematics/MaslowKinematics.h"
 #include "../Serial.h"
 #include "../Settings.h"
@@ -302,6 +303,7 @@ static Kinematics::MaslowKinematics* getKinematics() {
 // #define READY_TO_CUT 7
 // #define RELEASE_TENSION 8
 // #define CALIBRATION_COMPUTING 9
+// #define TENSIONED 10
 
 // Constructor
 Calibration::Calibration() {
@@ -321,6 +323,26 @@ int Calibration::getCurrentState() {
 //Prints the machine's current state
 void Calibration::printCurrentState() {
     log_info("Current state: " << currentState);
+}
+
+// $STOP during Apply Tension: nothing else leaves TAKING_SLACK once the update loop stops
+// running it, and $TKSLK is refused from there. Go where a failed run would go, so the user
+// can apply tension again: EXTENDEDOUT for a normal run, UNKNOWN when recovering belts.
+void Calibration::stopTakingSlack() {
+    if (currentState != TAKING_SLACK) {
+        return;
+    }
+    bool recovering = recoveringBelts;
+    takeSlack       = false;
+    recoveringBelts = false;
+    if (recovering) {
+        requestStateChange(UNKNOWN);
+    } else {
+        if (calibration_data) {
+            deallocateCalibrationMemory();
+        }
+        requestStateChange(EXTENDEDOUT);
+    }
 }
 
 // Set extended state variables (used when restoring from NVS)
@@ -344,6 +366,10 @@ bool Calibration::requestStateChange(int newState) {
             break;
         case RETRACTING:  //We can enter retracting from any state
             currentState = RETRACTING;
+            // A retract re-measures every belt: a belt restored at boot is no longer known until it ends.
+            for (int arm = _TL; arm < ARM_COUNT; arm++) {
+                Maslow.beltRestored[arm] = false;
+            }
 
             retracting[_TL] = true;
             retracting[_TR] = true;
@@ -358,6 +384,11 @@ bool Calibration::requestStateChange(int newState) {
         case RETRACTED:  //We can enter retracted from retracting only
             if (currentState == RETRACTING) {
                 currentState = RETRACTED;
+                for (int axis = 0; axis < ARM_COUNT; axis++) {
+                    set_steps(static_cast<axis_t>(axis), motor_pos_to_steps(0.0f, axis));
+                }
+                gc_sync_position();
+                plan_sync_position();
                 sys.set_state(State::Idle);
                 // Explicitly save belt positions now that belts are retracted and tight
                 Maslow.saveBeltPositions();
@@ -396,9 +427,42 @@ bool Calibration::requestStateChange(int newState) {
             } else {
                 break;
             }
-        case TAKING_SLACK:  //We can enter taking slack from extended or ready to cut
-            if (currentState == EXTENDEDOUT || currentState == READY_TO_CUT) {
+        case TENSIONED:  // Apply Tension measured the belts but they don't fit the saved anchors
+            if (currentState == TAKING_SLACK) {
+                currentState = TENSIONED;
+                sys.set_state(State::Idle);
+                Maslow.saveBeltPositions();  // the belts are tight at measured lengths
+                success = true;
+            }
+            break;
+        case TAKING_SLACK:  //We can enter taking slack from extended, tensioned or ready to cut, or from unknown to recover belts
+            if (currentState == UNKNOWN) {
+                // Some belts were restored at boot and others weren't (their spools turned while
+                // the power was off).  Hold the restored ones and pull the others tight, which
+                // should bring them back to their saved lengths; recoverBeltsFunc() checks.
+                std::string why;
+                if (!Maslow.beltRecoveryPossible(why)) {
+                    log_error(why);
+                    break;
+                }
+                currentState       = TAKING_SLACK;
+                recoveringBelts    = true;
+                takeSlack          = true;
+                recoverArm         = _TL;
+                recoverSettleStart = 0;
+                for (int arm = _TL; arm < ARM_COUNT; arm++) {
+                    Maslow.axis[arm].reset();
+                    Maslow.axis[arm].setTarget(Maslow.axis[arm].getPosition());
+                    recoverStartPos[arm] = Maslow.axis[arm].getPosition();
+                    recoverPulling[arm]  = false;
+                }
+                log_info("Apply Tension: holding the known belts and pulling the unknown ones tight");
+                success = true;
+                break;
+            }
+            if (currentState == EXTENDEDOUT || currentState == TENSIONED || currentState == READY_TO_CUT) {
                 currentState = TAKING_SLACK;
+                recoveringBelts = false;
 
                 //Reset the axis targets at the beginning of taking slack
                 Maslow.axis[_TL].setTarget(Maslow.axis[_TL].getPosition());
@@ -425,8 +489,9 @@ bool Calibration::requestStateChange(int newState) {
                 log_info("Cannot take slack until the belts have been extended");
                 break;
             }
-        case CALIBRATION_IN_PROGRESS:  //We can enter calibration in progress from EXTENDEDOUT, READY_TO_CUT, or CALIBRATION_COMPUTING
-            if (currentState == EXTENDEDOUT || currentState == READY_TO_CUT || currentState == CALIBRATION_COMPUTING) {
+        case CALIBRATION_IN_PROGRESS:  //We can enter calibration in progress from EXTENDEDOUT, TENSIONED, READY_TO_CUT, or CALIBRATION_COMPUTING
+            if (currentState == EXTENDEDOUT || currentState == TENSIONED || currentState == READY_TO_CUT ||
+                currentState == CALIBRATION_COMPUTING) {
                 // If we're coming from CALIBRATION_COMPUTING and calibration is already complete,
                 // go directly to READY_TO_CUT instead of cycling through CALIBRATION_IN_PROGRESS
                 if (currentState == CALIBRATION_COMPUTING && waypoint > pointCount && pointCount > 0) {
@@ -436,10 +501,10 @@ bool Calibration::requestStateChange(int newState) {
                     return requestStateChange(READY_TO_CUT);
                 }
 
-                // When entering from EXTENDEDOUT this is always a fresh calibration start (either
-                // the first run or a re-run after a failure).  Reset waypoint counters and fitness
+                // When entering from EXTENDEDOUT or TENSIONED this is always a fresh calibration start
+                // (either the first run or a re-run after a failure).  Reset waypoint counters and fitness
                 // tracking so stale data from any previous run cannot affect this run.
-                if (currentState == EXTENDEDOUT) {
+                if (currentState == EXTENDEDOUT || currentState == TENSIONED) {
                     waypoint            = 0;
                     recomputeCountIndex = 0;
                     previousFitnessRms  = -1.0;
@@ -462,13 +527,6 @@ bool Calibration::requestStateChange(int newState) {
                     orientationDetectionDone = false;  // Reset orientation detection flag for new calibration
                     orientationDetectTimer   = 0;      // Reset timer so detection starts fresh
 
-                    if (!generate_calibration_grid()) {  //Fail out if the grid cannot be generated
-                        return false;
-                    }
-                }
-                //We have just finished the first six points and have updated anchor locations so it's time to generate the grid again
-                //if the user has selected for it to be generated automatically
-                if (waypoint == 6 && calibration_grid_width_mm_X == 0 && calibration_grid_height_mm_Y == 0) {
                     if (!generate_calibration_grid()) {  //Fail out if the grid cannot be generated
                         return false;
                     }
@@ -586,7 +644,7 @@ bool Calibration::requestStateChange(int newState) {
                 break;
             }
         case RELEASE_TENSION:  //We can enter release tension from any stable state (the machine is not currently performing an action)
-            if (currentState == READY_TO_CUT || currentState == UNKNOWN || currentState == EXTENDEDOUT ||
+            if (currentState == READY_TO_CUT || currentState == UNKNOWN || currentState == EXTENDEDOUT || currentState == TENSIONED ||
                 currentState == CALIBRATION_COMPUTING || currentState == RELEASE_TENSION) {
                 previousState   = (currentState != RELEASE_TENSION) ? currentState : previousState;
                 currentState    = RELEASE_TENSION;
@@ -610,6 +668,9 @@ bool Calibration::requestStateChange(int newState) {
 
     if (success) {
         log_info("Succeeded");
+        if (currentState != TAKING_SLACK) {
+            recoveringBelts = false;
+        }
     }
 
     printCurrentState();
@@ -662,6 +723,10 @@ void Calibration::home() {
 
             //Once the limits are hit switch to the next state
             if (!retracting[_TL] && !retracting[_BL] && !retracting[_BR] && !retracting[_TR]) {
+                log_info("Belts pulled tight with offsets TL:" << Maslow.axis[_TL].getLastRetractOffset()
+                                                               << " TR:" << Maslow.axis[_TR].getLastRetractOffset()
+                                                               << " BL:" << Maslow.axis[_BL].getLastRetractOffset()
+                                                               << " BR:" << Maslow.axis[_BR].getLastRetractOffset());
                 requestStateChange(RETRACTED);
             }
 
@@ -695,7 +760,11 @@ void Calibration::home() {
             }
             break;
         case TAKING_SLACK:
-            if (takeSlackFunc()) {  //Returns true. Requests correct state transition within function
+            if (recoveringBelts) {
+                if (recoverBeltsFunc()) {  // Returns true when done; it requests the next state itself
+                    takeSlack = false;
+                }
+            } else if (takeSlackFunc()) {  //Returns true. Requests correct state transition within function
                 takeSlack = false;
                 deallocateCalibrationMemory();
             }
@@ -731,7 +800,8 @@ void Calibration::home() {
 
                     // If the machine was in READY_TO_CUT, EXTENDEDOUT, or CALIBRATION_COMPUTING state before releasing tension,
                     // return to EXTENDEDOUT state, otherwise go to UNKNOWN
-                    if (previousState == READY_TO_CUT || previousState == EXTENDEDOUT || previousState == CALIBRATION_COMPUTING) {
+                    if (previousState == READY_TO_CUT || previousState == EXTENDEDOUT || previousState == TENSIONED ||
+                        previousState == CALIBRATION_COMPUTING) {
                         requestStateChange(EXTENDEDOUT);
                     } else {
                         requestStateChange(UNKNOWN);
@@ -1232,6 +1302,16 @@ void Calibration::calibration_loop() {
                     requestStateChange(EXTENDEDOUT);
                     return;
                 }
+                //The first six points have given us a rough estimate of the anchor locations, so size the rest of the grid from them
+                //(unless the user has set a fixed grid size). Points 0-6 are kept, everything after is replaced.
+                if (recomputeCountIndex == 0 && calibration_grid_width_mm_X == 0 && calibration_grid_height_mm_Y == 0) {
+                    if (!generate_calibration_grid()) {
+                        log_error("Find Anchors could not size the calibration grid from the first estimate");
+                        resetCalibrationState();
+                        requestStateChange(EXTENDEDOUT);
+                        return;
+                    }
+                }
                 recomputeCountIndex++;
             } else {
                 hold(150);  // Reduced from 250ms to 150ms for faster calibration
@@ -1306,16 +1386,22 @@ bool Calibration::takeSlackFunc() {
 
             float x = 0;
             float y = 0;
+            // Returning true alone would leave the state stuck in TAKING_SLACK, so fall back to EXTENDEDOUT
             if (!computeXYfromLengths(calibration_data[0][0], calibration_data[0][1], x, y)) {
-                log_error("Failed to compute XY from lengths");
+                log_error("Apply Tension failed: the measured belt lengths (TL: " << calibration_data[0][0] << " TR: " << calibration_data[0][1]
+                                                                                 << ") do not fit the anchor locations, maybe try running Find Anchors again?");
+                takeSlackState               = 0;
                 retractionMonitorInitialized = false;
+                requestStateChange(TENSIONED);  // belts are tight; Find Anchors is the next step
                 return true;
             }
 
             auto kinematics = getKinematics();
-            if (!kinematics)
-            {
+            if (!kinematics) {
+                log_error("Apply Tension failed: no Maslow kinematics");
+                takeSlackState               = 0;
                 retractionMonitorInitialized = false;
+                requestStateChange(EXTENDEDOUT);
                 return true;
             }
 
@@ -1350,7 +1436,7 @@ bool Calibration::takeSlackFunc() {
                 //Reset
                 takeSlackState = 0;
                 retractionMonitorInitialized = false;
-                requestStateChange(EXTENDEDOUT);
+                requestStateChange(TENSIONED);  // belts are tight; Find Anchors is the next step
                 return true;
             } else {
                 if (maxDeviation > accurateThreshold) {
@@ -1419,6 +1505,88 @@ bool Calibration::takeSlackFunc() {
 }
 
 /*
+* Apply Tension from UNKNOWN, when some belts were restored at boot and others weren't.
+* Holds the restored belts at their lengths and pulls each unknown belt tight in turn (TL, TR, BL,
+* BR), holding it once tight.  Then every belt's encoder is checked against its saved angle
+* (restoreBeltFromSaved): if all are within 1/4 turn, the belts are back at their saved lengths and
+* the machine is READY_TO_CUT; otherwise the ones that don't match are unknown and it goes back
+* to UNKNOWN.  The encoder only measures within one turn, so a belt that is a whole number of
+* turns off would pass; the same holds for the restore at boot.
+* Returns true when it is finished, whatever the result.
+*/
+bool Calibration::recoverBeltsFunc() {
+    constexpr unsigned long settleMs = 500;  // hold everything this long before checking the encoders
+
+    // Hold the restored belts and the ones already pulled tight; leave the rest alone for now.
+    for (int arm = _TL; arm < ARM_COUNT; arm++) {
+        if (Maslow.beltRestored[arm] || (recoverPulling[arm] && arm < recoverArm)) {
+            Maslow.axis[arm].recomputePID();
+        } else if (arm != recoverArm) {
+            Maslow.axis[arm].stop();
+        }
+    }
+
+    // Pull the current unknown belt tight
+    while (recoverArm < ARM_COUNT && Maslow.beltRestored[recoverArm]) {
+        recoverArm++;
+    }
+    if (recoverArm < ARM_COUNT) {
+        const int arm = recoverArm;
+        if (!recoverPulling[arm]) {
+            recoverPulling[arm]  = true;
+            recoverStartPos[arm] = Maslow.axis[arm].getPosition();
+            log_info("Apply Tension: pulling the " << Maslow.axis_id_to_label(arm).c_str() << " belt tight");
+        }
+        const float retractedAmount = recoverStartPos[arm] - Maslow.axis[arm].getPosition();
+        if (applyTensionAllowLimiting && retractedAmount > applyTensionBeltRetractionLimitMm) {
+            Maslow.stopMotors();
+            log_warn("Maslow Apply Tension retraction warning: Belt "
+                     << Maslow.axis_id_to_label(arm).c_str() << " retracted " << retractedAmount
+                     << "mm while applying tension (limit " << applyTensionBeltRetractionLimitMm
+                     << "mm). A belt may not be anchored. Continue to keep retracting or Cancel to stop.");
+            requestStateChange(UNKNOWN);
+            sys.set_state(State::Idle);
+            return true;
+        }
+        if (Maslow.axis[arm].pull_tight(retractCurrentThreshold)) {
+            Maslow.axis[arm].setTarget(Maslow.axis[arm].getPosition());
+            recoverArm++;
+        }
+        return false;
+    }
+
+    // All belts tight: let them settle, then check every encoder against its saved angle.
+    if (recoverSettleStart == 0) {
+        recoverSettleStart = millis();
+        return false;
+    }
+    if (millis() - recoverSettleStart < settleMs) {
+        return false;
+    }
+
+    bool allKnown = true;
+    for (int arm = _TL; arm < ARM_COUNT; arm++) {
+        Maslow.beltRestored[arm] = Maslow.restoreBeltFromSaved(arm);
+        allKnown                 = allKnown && Maslow.beltRestored[arm];
+    }
+    gc_sync_position();
+    plan_sync_position();
+
+    if (allKnown) {
+        log_info("Apply Tension: all belt lengths recovered");
+        setExtendedState(true, true, true, true);
+        sys.set_state(State::Idle);
+        requestStateChange(READY_TO_CUT);
+    } else {
+        Maslow.stopMotors();
+        log_error("Apply Tension: unexpected encoder position after tension applied, full retract required");
+        requestStateChange(UNKNOWN);
+        sys.set_state(State::Idle);
+    }
+    return true;
+}
+
+/*
 *Computes the current xy cordinates of the sled based on the lengths of the upper two belts
 */
 bool Calibration::computeXYfromLengths(double TL, double TR, float& x, float& y) {
@@ -1437,7 +1605,6 @@ bool Calibration::computeXYfromLengths(double TL, double TR, float& x, float& y)
 
     double d = sqrt((tlX - trX) * (tlX - trX) + (tlY - trY) * (tlY - trY));
     if (d > tlLength + trLength || d < abs(tlLength - trLength)) {
-        log_info("Unable to determine machine position");
         return false;
     }
 
@@ -1923,19 +2090,21 @@ bool Calibration::take_measurement_avg_with_check(int waypoint, int dir) {
 
                 log_info("Machine Position computed as X: " << x << " Y: " << y);
 
-                //Recompute the first four waypoint locations based on the current position
+                //Recompute the first four waypoint locations based on the current position.  The
+                //Mini's frame (Unified Control Board) is too small for the Maslow 4's 150 mm ring.
+                const float ring = BoardId::board() == BoardId::Board::Maslow41 ? 150 : 50;
                 calibrationGrid[0][0] =
                     x;  //This first point is never really used because we've already measured here, but it shouldn't be left undefined
                 calibrationGrid[0][1] = y;
-                calibrationGrid[1][0] = x + 150;
+                calibrationGrid[1][0] = x + ring;
                 calibrationGrid[1][1] = y;
-                calibrationGrid[2][0] = x + 150;
-                calibrationGrid[2][1] = y + 150;
+                calibrationGrid[2][0] = x + ring;
+                calibrationGrid[2][1] = y + ring;
                 calibrationGrid[3][0] = x;
-                calibrationGrid[3][1] = y + 150;
-                calibrationGrid[4][0] = x - 150;
-                calibrationGrid[4][1] = y + 150;
-                calibrationGrid[5][0] = x - 150;
+                calibrationGrid[3][1] = y + ring;
+                calibrationGrid[4][0] = x - ring;
+                calibrationGrid[4][1] = y + ring;
+                calibrationGrid[5][0] = x - ring;
                 calibrationGrid[5][1] = y;
             }
 
@@ -2193,26 +2362,50 @@ bool Calibration::generate_calibration_grid() {
     float xSpacing = calibration_grid_width_mm_X / (calibrationGridSize - 1);
     float ySpacing = calibration_grid_height_mm_Y / (calibrationGridSize - 1);
 
-    //If either dimension is set to zero we automatically compute it as half the frame size
+    //If either dimension is set to zero we automatically size the grid from the current anchor locations. This runs once at the
+    //start with the configured anchors (only points 0-6 of that grid are used) and again once the first six points have been
+    //fitted. The grid is centered on (0,0), the center of the anchors. A work area the user has set (non-zero) is respected so
+    //the sled stays on the workpiece; one left at 0 (auto) plays no part in calibration.
     if (calibration_grid_height_mm_Y == 0 || calibration_grid_width_mm_X == 0) {
-        float frameWidth  = getKinematics()->getTrX() - getKinematics()->getTlX();
-        float frameHeight = getKinematics()->getTlY() - getKinematics()->getBlY();
-
-        // Calculate initial grid size based on frame dimensions
-        float gridWidth  = frameWidth * 0.5;
-        float gridHeight = frameHeight * 0.2;
-
-        // Constrain grid to be at most 200mm less than work area to ensure it stays within bounds
-        float maxGridWidth  = Maslow.workAreaX - 200.0;
-        float maxGridHeight = Maslow.workAreaY - 200.0;
-
-        if (gridWidth > maxGridWidth) {
-            gridWidth = maxGridWidth;
-            log_info("Grid width constrained to work area: " << gridWidth << " mm (work area X: " << Maslow.workAreaX << " mm)");
+        auto kinematics = getKinematics();
+        if (!kinematics) {
+            log_error("generate_calibration_grid: MaslowKinematics not available");
+            return false;
         }
-        if (gridHeight > maxGridHeight) {
-            gridHeight = maxGridHeight;
-            log_info("Grid height constrained to work area: " << gridHeight << " mm (work area Y: " << Maslow.workAreaY << " mm)");
+
+        float frameWidth, frameHeight;
+        kinematics->getFrameSize(frameWidth, frameHeight);
+
+        if (frameWidth <= 0 || frameHeight <= 0) {
+            log_error("Cannot size the calibration grid: anchors give a " << frameWidth << " x " << frameHeight << " mm frame");
+            return false;
+        }
+
+        // Calculate grid size based on frame dimensions
+        float gridWidth  = frameWidth * 0.4;
+        float gridHeight = frameHeight * 0.4;
+
+        // Keep every point at least 100mm inside a work area the user has set. The grid is centered on (0,0), so the
+        // work area's center offset eats into the room on one side.
+        const float workAreaMarginMm = 100.0;
+        if (Maslow.workAreaX > 0) {
+            float maxGridWidth = Maslow.workAreaX - 2 * (fabsf(Maslow.workAreaCenterOffsetX) + workAreaMarginMm);
+            if (gridWidth > maxGridWidth) {
+                gridWidth = maxGridWidth;
+                log_info("Grid width constrained to work area: " << gridWidth << " mm (work area X: " << Maslow.workAreaX << " mm)");
+            }
+        }
+        if (Maslow.workAreaY > 0) {
+            float maxGridHeight = Maslow.workAreaY - 2 * (fabsf(Maslow.workAreaCenterOffsetY) + workAreaMarginMm);
+            if (gridHeight > maxGridHeight) {
+                gridHeight = maxGridHeight;
+                log_info("Grid height constrained to work area: " << gridHeight << " mm (work area Y: " << Maslow.workAreaY << " mm)");
+            }
+        }
+        if (gridWidth <= 0 || gridHeight <= 0) {
+            log_error("Cannot fit a calibration grid inside the " << Maslow.workAreaX << " x " << Maslow.workAreaY
+                                                               << " mm work area. Check the work area, or set it to 0 for automatic");
+            return false;
         }
 
         // Automatically select the grid spacing (3x3, 5x5, 7x7, or 9x9) such that
@@ -2238,6 +2431,9 @@ bool Calibration::generate_calibration_grid() {
 
         xSpacing = gridWidth / (calibrationGridSize - 1);
         ySpacing = gridHeight / (calibrationGridSize - 1);
+
+        log_info("Calibration grid: " << calibrationGridSize << "x" << calibrationGridSize << ", " << gridWidth << " x " << gridHeight
+                                      << " mm from a " << frameWidth << " x " << frameHeight << " mm frame");
     }
 
     int numberOfCycles = 0;
@@ -2345,7 +2541,7 @@ bool Calibration::adjustFrameSizeToMatchFirstMeasurement() {
     // The algorithm works for any interior point E inside the square
     double L = SquareCalculation::calculateSquareSideLength(tlLen, trLen, blLen, brLen);
 
-    if (L < 500.0 || L > 5500.0) {  // Sanity check on square size
+    if (L < 400.0 || L > 5500.0) {  // Sanity check on square size
         log_error("Unable to adjust frame size. Calculated size " << L << "mm is outside reasonable range");
         return false;
     }

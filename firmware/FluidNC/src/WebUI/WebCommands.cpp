@@ -15,6 +15,10 @@
 #include "Driver/SysStats.h"
 #include "Module.h"
 
+#include "../Spindles/SpindleBoard.h"  // Spindles::SpindleBoard (for $Spindle/EnableOTA)
+
+#include <strings.h>  // strcasecmp
+
 namespace WebUI {
 
     class WebCommands : public Module {
@@ -216,6 +220,57 @@ namespace WebUI {
             return Error::Ok;
         }
 
+        // Tell the spindle/Z controller board to join WiFi and start its ArduinoOTA server so
+        // it can be reflashed wirelessly.  The XY board's own station credentials are pushed
+        // over the inter-board link; the spindle then reports its IP back.
+        static Error enableSpindleOTA(const char* parameter, AuthenticationLevel auth_level, Channel& out) {
+            if (Spindles::SpindleBoard::instance == nullptr) {
+                log_string(out, "No SpindleBoard spindle is configured");
+                return Error::InvalidValue;
+            }
+            Spindles::SpindleBoard::instance->sendEnableOTA();
+            return Error::Ok;
+        }
+
+        // Fetch the spindle board's trip recording (the ~2 s of motor state before its last
+        // over-current or driver fault) into /spindle_trip.csv.  "$Spindle/Trip=TEST" records a
+        // test one instead, to check the path end to end.
+        static Error spindleTrip(const char* parameter, AuthenticationLevel auth_level, Channel& out) {
+            if (Spindles::SpindleBoard::instance == nullptr) {
+                log_string(out, "No SpindleBoard spindle is configured");
+                return Error::InvalidValue;
+            }
+            bool test = parameter && strcasecmp(parameter, "TEST") == 0;
+            if (parameter && *parameter && !test) {
+                log_string(out, "Usage: $Spindle/Trip or $Spindle/Trip=TEST");
+                return Error::InvalidValue;
+            }
+            Spindles::SpindleBoard::instance->sendTripRequest(test);
+            return Error::Ok;
+        }
+
+        // Tell the spindle/Z controller board to run its Z homing cycle (raise the Z until the
+        // top-of-travel beam breaks).  Exposed as $Spindle/Home for the web UI test button.
+        static Error homeSpindle(const char* parameter, AuthenticationLevel auth_level, Channel& out) {
+            if (Spindles::SpindleBoard::instance == nullptr) {
+                log_string(out, "No SpindleBoard spindle is configured");
+                return Error::InvalidValue;
+            }
+            Spindles::SpindleBoard::instance->sendHome();
+            return Error::Ok;
+        }
+
+        // Tell the spindle/Z controller board to remove the loaded tool (raise the Z until the
+        // tool clears the top-of-travel beam).  Exposed as $Spindle/RemoveTool for the web UI.
+        static Error removeSpindleTool(const char* parameter, AuthenticationLevel auth_level, Channel& out) {
+            if (Spindles::SpindleBoard::instance == nullptr) {
+                log_string(out, "No SpindleBoard spindle is configured");
+                return Error::InvalidValue;
+            }
+            Spindles::SpindleBoard::instance->sendRemoveTool();
+            return Error::Ok;
+        }
+
         void init() override {
             // If authentication enabled, display_settings skips or displays <Authentication Required>
             // RU - need user or admin password to read
@@ -230,6 +285,11 @@ namespace WebUI {
             new WebReportCommand(NULL, WEBCMD, WU, "ESP400", "WebUI/List", listSettings, anyState);
             new WebReportCommand(NULL, WEBCMD, WG, "ESP0", "WebUI/Help", showWebHelp, anyState);
             new WebReportCommand(NULL, WEBCMD, WG, "ESP", "WebUI/Help", showWebHelp, anyState);
+
+            new WebCommand(NULL, WEBCMD, WA, "ESP810", "Spindle/EnableOTA", enableSpindleOTA);
+            new WebCommand(NULL, WEBCMD, WU, "ESP811", "Spindle/Home", homeSpindle);
+            new WebCommand(NULL, WEBCMD, WU, "ESP812", "Spindle/RemoveTool", removeSpindleTool);
+            new WebCommand(NULL, WEBCMD, WU, "ESP813", "Spindle/Trip", spindleTrip);
         }
     };
     ModuleFactory::InstanceBuilder<WebCommands> web_commands_module __attribute__((init_priority(103))) ("web_commands", true);

@@ -1,0 +1,24 @@
+Unified Control Board - JLCPCB order notes
+Generated 2026-09-24 from Unified Control Board.kicad_pcb (KiCad 10.0.5)
+
+FILES
+  UnifiedControlBoard_Gerbers.zip   -> upload on the PCB quote page (gerbers + PTH/NPTH drill)
+  UnifiedControlBoard_BOM_JLCPCB.csv -> PCB Assembly: BOM (50 lines, 166 parts, all with LCSC numbers)
+  UnifiedControlBoard_CPL_JLCPCB.csv -> PCB Assembly: CPL / pick-and-place (166 parts: 55 top, 111 bottom)
+
+PCB SETTINGS
+  Layers: 4 (F.Cu / In1.Cu VCC / In2.Cu 3V3 / B.Cu)
+  Thickness: 1.6 mm
+  Size: ~101.6 x 120.8 mm
+  Min track/space: 0.2 / 0.1 mm (0.1 mm only inside MP6541A U11/U12 footprints)
+  Vias: 0.6 / 0.3 mm
+  Via covering: Epoxy filled & capped (51 vias sit inside SMD pads)
+
+ASSEMBLY SETTINGS
+  Type: Standard PCBA, BOTH sides (parts on top and bottom)
+  Through-hole parts in BOM: XT60 (U1), JST connectors CN1-CN11, C39, C60
+  Fiducials: 3 per side (FID1-FID6), not in BOM/CPL
+
+CHECK BEFORE CONFIRMING
+  Review part rotations in JLCPCB's placement preview, especially ICs, diodes,
+  LEDs, the USB-C connectors and bottom-side parts.

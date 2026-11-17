@@ -36,6 +36,7 @@ const CONFIG_TOOLTIPS = {
   Maslow_Scale_X: "Sets the scale factor for the x axis",
   Maslow_Scale_Y: "Sets the scale factor for the y axis",
   Maslow_Extend_Dist: "Sets the distance to extend the belts during the calibration process. Max 4,250mm.",
+  Maslow_Dust_Fan_Speed: "Speed (0-100) of the dust collection fan when it runs during moves or while the spindle is on. 0 turns it off. Takes effect immediately.",
 }
 
 function refreshSettings(hide_setting_list) {

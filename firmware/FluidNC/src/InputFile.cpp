@@ -5,6 +5,7 @@
 
 #include "Report.h"
 #include "GCode.h"
+#include "Maslow/JobResume.h"  // JobResume::fileClosed
 
 InputFile::InputFile(const Volume& defaultFs, const char* path) : FileStream(path, "r", defaultFs) {}
 /*
@@ -134,5 +135,6 @@ const char* InputFile::getMotionCommandString() {
 }
 
 InputFile::~InputFile() {
+    JobResume::fileClosed(this);
     _current_line_num = 0;
 }

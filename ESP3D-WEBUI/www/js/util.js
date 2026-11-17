@@ -138,7 +138,9 @@ const getValueTrimmed = (name) => String(getValue(name) || "").trim();
  * * does not have a `value` or `innerText` value or
  * * can't be converted to a float
  */
-const getValueFloat = (name) => Number.parseFloat(getValue(name) || "");
+const parseFloatWithDecimalComma = (value) => Number.parseFloat(String(value ?? "").replace(/,/g, "."));
+
+const getValueFloat = (name) => parseFloatWithDecimalComma(getValue(name));
 
 /** Gets an element's `value` value, or its `innerText` value.
  * And then tries to treat it as an integer.
@@ -148,7 +150,7 @@ const getValueFloat = (name) => Number.parseFloat(getValue(name) || "");
  * * does not have a `value` or `innerText` value or
  * * can't be converted to an integer
  */
-const getValueInt = (name) => Number.parseInt(getValue(name) || "");
+const getValueInt = (name) => Number.parseInt(String(getValue(name) ?? "").replace(/,/g, "."));
 
 /** Return an element's `innerText` value, or its `value` value.
  * If the element does not exist or does not have a `value` or `innerText` value `undefined` is returned.

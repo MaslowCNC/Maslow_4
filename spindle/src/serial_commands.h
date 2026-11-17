@@ -1,0 +1,65 @@
+#pragma once
+
+#include "motor_controller.h"
+#include "calibration.h"
+
+// Phase offset state (shared between serial commands and main loop)
+struct PhaseOffset {
+    float current = 0.0f;
+    float target = 0.0f;
+};
+
+// Active motor selection: 0 = motor 1, 1 = motor 2, 2 = both
+extern int active_motor;
+extern PhaseOffset phase_offset;
+
+// Fault code reported to the XY board over the link:
+//   0 = OK, 1 = driver hardware fault (nFAULT), 2 = over-current stop
+// Both non-zero codes alarm the XY board (it raises ExecAlarm::SpindleControl on a 0 ->
+// non-zero transition), so a code must stay latched until the operator acts on it.
+extern volatile uint8_t g_fault_code;
+
+// False once an over-current has stopped the motors: the open-loop rotor slipped, so the
+// relative phase between the two motors - which IS the Z position - no longer means anything.
+// Z targets are refused until a homing cycle re-establishes the zero.
+extern volatile bool g_z_reference_valid;
+
+// Suction/cooling fan power (0-100), set by the XY board over the link ('C' command).
+extern volatile uint8_t g_suction_level;
+
+// Set by the XY board's B<0|1> command while its belt motors need vacuum cooling.
+extern volatile bool g_belt_cooling_requested;
+
+// Set true by the XY board's 'D' (machine idle) command so the Z-axis BLDC drivers can
+// be powered down once their phase move has settled.  Cleared by any new motion command.
+extern volatile bool g_hold_release_requested;
+
+// Set true by the XY board's 'G' (home) command so the power-up Z homing cycle is re-run
+// on demand (e.g. from the web UI test button).  Cleared once homing restarts.
+extern volatile bool g_home_requested;
+
+// Set true by the XY board's 'R' (remove tool) command so the Z axis raises until the
+// loaded tool clears the top-of-travel beam, then returns to the "no tool loaded" state.
+// Cleared once the removal cycle starts.
+extern volatile bool g_remove_tool_requested;
+
+void initFanControl();
+void updateFanControl(float dt);
+
+// Run cooling at g_suction_level while either local motors or XY belt motors are active.
+void applyFanForMotorState(bool localMotorsEnabled);
+
+// Line-based command protocol (shared by USB Serial and the inter-board link).
+// Supported commands (newline terminated):
+//   S<rpm>  set spindle speed (0 = stop)
+//   Z<deg>  set absolute target phase offset in degrees (Z-axis position)
+//   B<0|1>  XY belt motors idle/active (vacuum cooling request)
+//   E       emergency stop (disable both motors)
+//   D       machine idle: power down the Z-axis drivers once the move has settled
+//   ?       request a status report immediately
+void handleSerialCommands(MotorController& mc1, MotorController& mc2, Calibration& cal);
+
+// Emit a status line ("T:<state>,P:<deg>,R:<rpm>,F:<code>,L:<load-warn bits>") to the given stream.
+void sendStatus(Stream& out, MotorController& mc1, MotorController& mc2);
+
+void printCommandHelp();

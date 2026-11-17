@@ -78,6 +78,11 @@ namespace Kinematics {
         float getCenterX() const { return _centerX; }
         float getCenterY() const { return _centerY; }
 
+        // The frame need not be a perfect rectangle, so this is the narrower of its two widths and the shorter of its two heights
+        void getFrameSize(float& width, float& height) const;
+        // The area jobs are limited to. An axis left at 0 (the default) is sized automatically from the frame
+        void getWorkArea(float& width, float& height) const;
+
         // Forward kinematics methods for position synchronization
         bool  computeXYfromBeltLengths(float tlLength, float trLength, float& x, float& y) const;
         float measurementToXYPlane(float measurement, float zHeight) const;

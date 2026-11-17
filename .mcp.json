@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "maslow": {
+      "command": "sh",
+      "args": ["tools/maslow-mcp/run.sh"],
+      "env": {
+        "MASLOW_HOST": "${MASLOW_HOST:-maslow.local}",
+        "MASLOW_ALLOW_MOTION": "${MASLOW_ALLOW_MOTION:-0}"
+      }
+    }
+  }
+}

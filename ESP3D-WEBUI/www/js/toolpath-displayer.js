@@ -2098,39 +2098,37 @@ var traceBoundary = function() {
     const bbox = getJobBoundingBox();
     const currentPos = arrayToXYZ(WPOS);
 
-    // Create the boundary tracing commands
-    var originalUnits = (gCodeModal && gCodeModal.units) ? gCodeModal.units : 'G21'; // Save current unit mode to restore later
-    var commands = [`G21`, `G90`]; // Switch to mm, absolute positioning
-
-    // Use envelope points if available (shaped boundary), otherwise fall back to rectangle
+    // The points to visit, closing the shape and then returning to where the machine was.
+    // machine.tracePath sends one move at a time, so Stop leaves the machine where it stopped.
+    var points = [];
     if (jobEnvelopePoints.length > 0) {
         // Trace the shaped envelope
         for (var i = 0; i < jobEnvelopePoints.length; i++) {
-            commands.push(`G0 X${jobEnvelopePoints[i].x.toFixed(3)} Y${jobEnvelopePoints[i].y.toFixed(3)}`);
+            points.push({ x: jobEnvelopePoints[i].x, y: jobEnvelopePoints[i].y });
         }
-        // Return to first point to close the shape
-        commands.push(`G0 X${jobEnvelopePoints[0].x.toFixed(3)} Y${jobEnvelopePoints[0].y.toFixed(3)}`);
+        points.push({ x: jobEnvelopePoints[0].x, y: jobEnvelopePoints[0].y });
     } else {
         // Fallback to simple rectangle
-        commands.push(`G0 X${bbox.min.x.toFixed(3)} Y${bbox.min.y.toFixed(3)}`); // Move to bottom-left corner
-        commands.push(`G0 X${bbox.max.x.toFixed(3)} Y${bbox.min.y.toFixed(3)}`); // Move to bottom-right corner
-        commands.push(`G0 X${bbox.max.x.toFixed(3)} Y${bbox.max.y.toFixed(3)}`); // Move to top-right corner
-        commands.push(`G0 X${bbox.min.x.toFixed(3)} Y${bbox.max.y.toFixed(3)}`); // Move to top-left corner
-        commands.push(`G0 X${bbox.min.x.toFixed(3)} Y${bbox.min.y.toFixed(3)}`); // Back to bottom-left corner
+        points.push({ x: bbox.min.x, y: bbox.min.y }); // bottom-left
+        points.push({ x: bbox.max.x, y: bbox.min.y }); // bottom-right
+        points.push({ x: bbox.max.x, y: bbox.max.y }); // top-right
+        points.push({ x: bbox.min.x, y: bbox.max.y }); // top-left
+        points.push({ x: bbox.min.x, y: bbox.min.y }); // back to bottom-left
     }
-
-    // Return to original position
-    commands.push(`G0 X${currentPos.x.toFixed(3)} Y${currentPos.y.toFixed(3)}`);
-
-    // Restore original unit mode
-    commands.push(originalUnits === 'G20' ? `G20` : `G21`);
+    points.push({ x: currentPos.x, y: currentPos.y });
 
     // Confirm before starting
     var pointCount = jobEnvelopePoints.length > 0 ? jobEnvelopePoints.length : 4;
     if (confirm(`Trace boundary? This will move the machine around the job perimeter using ${pointCount} points.\n\nBounds: ${bbox.min.x.toFixed(1)},${bbox.min.y.toFixed(1)} to ${bbox.max.x.toFixed(1)},${bbox.max.y.toFixed(1)}\n\nZ-axis will not move.`)) {
-        // Send all commands as a single G-code string for smooth, continuous execution
-        var gcode = commands.join('\n');
-        SendPrinterCommand(gcode);
+        machine.tracePath(points).catch(function(err) {
+            if (err.reason === "reset") {
+                addMessage("Trace boundary stopped");
+                return;
+            }
+            var detail = err.detail || err.reason;
+            addMessage(`Trace boundary failed: ${detail}`);
+            alertdlg("Trace boundary", detail);
+        });
     }
 }
 

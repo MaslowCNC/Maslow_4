@@ -11,8 +11,6 @@
 
 std::vector<JobSource*> job;
 
-Channel* Job::leader = nullptr;
-
 // The job's channel cannot be deleted here.  unnest() runs on the polling task as soon as the file
 // reaches EOF, while protocol_main_loop is usually still executing the last line, holding a
 // processing ref and about to call ack() on this channel; abort() can likewise race a queued line.
@@ -26,7 +24,7 @@ JobSource::~JobSource() {
     }
 }
 
-// Guards `job` and `leader`.  See the note in Job.h.
+// Guards `job`.  See the note in Job.h.
 static SemaphoreHandle_t s_job_mutex = xSemaphoreCreateMutex();
 
 namespace {
@@ -72,12 +70,11 @@ void Job::restore() {
     JobLock lock;
     restore_nl();
 }
-void Job::nest(Channel* in_channel, Channel* out_channel) {
+// Maslow: a job no longer records the channel that started it (the "leader"). Its output goes to
+// every connection (Protocol.cpp), so nothing points at a connection that may have closed.
+void Job::nest(Channel* in_channel) {
     JobLock lock;
     auto source = new JobSource(in_channel);
-    if (out_channel && job.empty()) {
-        leader = out_channel;
-    }
     job.push_back(source);
 }
 // Caller holds s_job_mutex.
@@ -85,9 +82,6 @@ void Job::pop() {
     auto source = job.back();
     job.pop_back();
     delete source;
-    if (job.empty()) {
-        leader = nullptr;
-    }
 }
 void Job::unnest() {
     JobLock lock;
@@ -120,10 +114,6 @@ bool Job::param_exists(const std::string& name) {
 Channel* Job::channel() {
     JobLock lock;
     return job.empty() ? nullptr : job.back()->channel();
-}
-Channel* Job::leader_channel() {
-    JobLock lock;
-    return job.empty() ? nullptr : leader;
 }
 
 const std::vector<JobSource*>& Job::jobs_stack() {

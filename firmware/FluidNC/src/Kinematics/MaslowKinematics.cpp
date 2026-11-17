@@ -87,6 +87,30 @@ namespace Kinematics {
         //log_info("Maslow center calculated: X=" << _centerX << " Y=" << _centerY);
     }
 
+    void MaslowKinematics::getFrameSize(float& width, float& height) const {
+        width  = std::min(anchor_location[_TR][Coord_X] - anchor_location[_TL][Coord_X],
+                         anchor_location[_BR][Coord_X] - anchor_location[_BL][Coord_X]);
+        height = std::min(anchor_location[_TL][Coord_Y] - anchor_location[_BL][Coord_Y],
+                          anchor_location[_TR][Coord_Y] - anchor_location[_BR][Coord_Y]);
+    }
+
+    void MaslowKinematics::getWorkArea(float& width, float& height) const {
+        width  = Maslow.workAreaX;
+        height = Maslow.workAreaY;
+        if (width > 0 && height > 0) {
+            return;
+        }
+        //Auto: about a 4x8 sheet on a standard ~3000 x 2100 mm frame
+        float frameWidth, frameHeight;
+        getFrameSize(frameWidth, frameHeight);
+        if (width <= 0) {
+            width = std::max(frameWidth * 0.8f, 0.0f);
+        }
+        if (height <= 0) {
+            height = std::max(frameHeight * 0.6f, 0.0f);
+        }
+    }
+
     bool MaslowKinematics::cartesian_to_motors(float* target, plan_line_data_t* pl_data, float* position) {
         auto n_axis = config->_axes->_numberAxis;
 
@@ -98,8 +122,10 @@ namespace Kinematics {
 
         // Apply work area constraints to the target position
         // Calculate work area bounds
-        float halfWidth  = Maslow.workAreaX / 2.0f;
-        float halfHeight = Maslow.workAreaY / 2.0f;
+        float workWidth, workHeight;
+        getWorkArea(workWidth, workHeight);
+        float halfWidth  = workWidth / 2.0f;
+        float halfHeight = workHeight / 2.0f;
         float minX       = -halfWidth + Maslow.workAreaCenterOffsetX;
         float maxX       = halfWidth + Maslow.workAreaCenterOffsetX;
         float minY       = -halfHeight + Maslow.workAreaCenterOffsetY;
@@ -188,6 +214,7 @@ namespace Kinematics {
                     // This is similar to how arc segmentation works - use mc_linear()
                     // which will call cartesian_to_motors() for proper kinematics transformation
                     if (!mc_linear(intermediate_target, &segment_pl_data, segment_position)) {
+                        _isSegmenting = false;
                         return false;  // If any segment fails, fail the whole move
                     }
 
@@ -538,8 +565,8 @@ void MaslowKinematics::validateAndCorrectAnchorCoordinates() {
         coordinatesCorrected          = true;
     }
 
-    // Check side lengths - minimum 500mm, maximum 5500mm
-    const float MIN_SIDE_LENGTH = 500.0f;
+    // Check side lengths - minimum 400mm, maximum 5500mm
+    const float MIN_SIDE_LENGTH = 400.0f;
     const float MAX_SIDE_LENGTH = 5500.0f;
 
     // Calculate distances for each side of the frame
@@ -565,7 +592,7 @@ void MaslowKinematics::validateAndCorrectAnchorCoordinates() {
         char* buffer = getLogBuffer();
         snprintf(buffer,
                  1400,
-                 "Frame side lengths are outside valid range (500-5500mm). "
+                 "Frame side lengths are outside valid range (400-5500mm). "
                  "Top=%gmm, Right=%gmm, Bottom=%gmm, Left=%gmm. Calibration cannot proceed with these dimensions.",
                  topSideLength,
                  rightSideLength,

@@ -285,6 +285,8 @@ const checkLoadedJobWithinWorkArea = (homeX, homeY, sourceLabel, showPopup = fal
   return false;
 }
 
+const parseNumericInput = (value) => Number.parseFloat(String(value ?? "").replace(/,/g, "."));
+
 const resetLoadBoundsWarningState = () => {
   lastLoadBoundsWarning = "";
 }
@@ -293,6 +295,7 @@ if (typeof globalThis !== "undefined") {
   globalThis.__tabletBoundsTestApi = {
     checkLoadedJobWithinWorkArea,
     getCurrentHomeInMm,
+    parseNumericInput,
     resetLoadBoundsWarningState,
   };
 }
@@ -300,10 +303,23 @@ if (typeof globalThis !== "undefined") {
 const fromMmToDisplayUnits = (mm) => gCodeModal.units === 'G20' ? mm / MM_PER_INCH : mm;
 const fromDisplayUnitsToMm = (distance) => gCodeModal.units === 'G20' ? distance * MM_PER_INCH : distance;
 
+// A work area axis set to 0 is sized automatically from the frame, matching MaslowKinematics::getWorkArea() in the firmware
+const getAutoWorkArea = () => {
+  const ig = globalThis.initialGuess || {};
+  const coord = (anchor, axis) => parseFloat(ig[anchor]?.[axis]) || 0;
+  const frameWidth = Math.min(coord("tr", "x") - coord("tl", "x"), coord("br", "x") - coord("bl", "x"));
+  const frameHeight = Math.min(coord("tl", "y") - coord("bl", "y"), coord("tr", "y") - coord("br", "y"));
+  return {
+    x: frameWidth > 0 ? frameWidth * 0.8 : workAreaDefaults.x,
+    y: frameHeight > 0 ? frameHeight * 0.6 : workAreaDefaults.y,
+  };
+}
+
 const getWorkAreaBounds = () => {
   const lv = globalThis.loadedValues || {};
-  const areaX = parseFloat(lv.workAreaX) || workAreaDefaults.x;
-  const areaY = parseFloat(lv.workAreaY) || workAreaDefaults.y;
+  const auto = getAutoWorkArea();
+  const areaX = parseFloat(lv.workAreaX) || auto.x;
+  const areaY = parseFloat(lv.workAreaY) || auto.y;
   const offX = parseFloat(lv.workAreaCenterOffsetX) || workAreaDefaults.offX;
   const offY = parseFloat(lv.workAreaCenterOffsetY) || workAreaDefaults.offY;
   return {
@@ -357,8 +373,8 @@ const confirmSetHome = () => {
   const { toDisplay } = getUnitInfo();
 
   // Clamp entered values to work area boundary (values are in current display units)
-  const rawX = parseFloat(id("setHomeX").value);
-  const rawY = parseFloat(id("setHomeY").value);
+  const rawX = parseNumericInput(id("setHomeX").value);
+  const rawY = parseNumericInput(id("setHomeY").value);
   const dispMinX = toDisplay(bounds.minX);
   const dispMaxX = toDisplay(bounds.maxX);
   const dispMinY = toDisplay(bounds.minY);
@@ -431,7 +447,7 @@ const toggleUnits = () => {
 
 const goAxisByValue = (axis, coordinate) => {
   tabletClick()
-  moveTo(axis + coordinate)
+  startMachineAction("Move", () => machine.moveTo(toMachineMm({ [axis]: coordinate })));
 }
 
 const setAxisByValue = (axis, coordinate) => {
@@ -471,7 +487,28 @@ let zLowLastAcknowledgedResultZ = null;
 // Whether the one-time startup Z safety check has already fired this connection.
 // Reset on every WebSocket reconnect so the warning re-fires after a firmware restart.
 let startupZCheckDone = false;
-let setZHomeInputTracksMachineZ = false;
+
+// fixedZ makes the reported Z position irrelevant to Maslow kinematics.  Keep safety checks
+// enabled until the firmware setting has been received on this connection.
+let fixedZSettingLoaded = false;
+let fixedZEnabled = false;
+
+const maslowFixedZEnabled = () => fixedZSettingLoaded && fixedZEnabled;
+
+// The Maslow Mini runs on a Unified Control Board ([ESP800] board field, see connectdlg.js)
+const maslowIsMini = () => maslowBoard === "unified" || maslowBoard === "unified36v";
+
+// Show the spindle controls only on the Mini: the Maslow 4 has no spindle board to drive
+const tabletShowBoardControls = () => {
+  const spindleControls = id("tablettab_spindle_controls");
+  if (spindleControls) {
+    spindleControls.style.display = maslowIsMini() ? "" : "none";
+  }
+};
+
+const loadFixedZSetting = () => {
+  SendPrinterCommand("$/kinematics/MaslowKinematics/fixedZ");
+};
 
 /**
  * If a movement would cause the machine Z position to exceed Z_HOME_MAX_SAFE_MM,
@@ -493,6 +530,11 @@ let setZHomeInputTracksMachineZ = false;
  *                               For moves to a fixed target, pass targetMachineZ - MPOS[2].
  */
 const checkZHomeAndProceed = (callback, zDeltaMm = 0) => {
+  if (maslowFixedZEnabled()) {
+    callback();
+    return;
+  }
+
   const machineZMm = MPOS && MPOS.length >= 3 ? MPOS[2] : null;
   if (machineZMm === null) {
     // Position data unavailable - cannot evaluate safety; proceed without check
@@ -593,65 +635,163 @@ const checkParams = (params = {}) => {
   return s.join("");
 }
 
-/** Perform a jog command */
+// Belt lengths and motor-current dials in the status section: refreshed on every machine.js
+// state update (each status report). Lengths are machine values, always in mm (the heading says
+// so); "unknown" when the machine reports it doesn't know a belt's length; "-" before any
+// report. The dials use the Debug tab's scale and colours (debugging.js); the mA value is in
+// the dial's tooltip.
+const BELT_ARMS = ["tl", "tr", "bl", "br"];
+const BELT_DIAL_CIRCUMFERENCE = 2 * Math.PI * 9; // r = 9 in the 24x24 dial
+const updateBeltLengths = (s) => {
+  for (const arm of BELT_ARMS) {
+    const el = document.getElementById(`belt-length-${arm}`);
+    if (!el) {
+      return; // tab not loaded yet
+    }
+    const mm = s.belts ? s.belts[arm] : undefined;
+    const unknown = mm === null;
+    el.textContent = unknown ? "unknown" : Number.isFinite(mm) ? mm.toFixed(1) : "-";
+    el.classList.toggle("belt-length-unknown", unknown);
+
+    const dial = document.getElementById(`belt-current-${arm}`);
+    const arc = dial ? dial.querySelector(".belt-current-dial-arc") : null;
+    const adc = s.motorCurrent ? s.motorCurrent[arm] : undefined;
+    if (arc && Number.isFinite(adc)) {
+      const mA = convertAdcToMilliamps(adc);
+      const percentage = Math.min((mA / MAX_CURRENT) * 100, 100);
+      arc.style.strokeDashoffset = BELT_DIAL_CIRCUMFERENCE * (1 - percentage / 100);
+      arc.style.stroke = currentGaugeColor(percentage);
+      dial.setAttribute("title", `${arm.toUpperCase()} motor: ${Math.round(mA)} mA`);
+    } else if (dial) {
+      dial.setAttribute("title", `${arm.toUpperCase()} motor: no current reading (needs current firmware)`);
+    }
+  }
+};
+if (typeof machine !== "undefined") {
+  machine.on("state", updateBeltLengths);
+}
+
+// After a job ends early the firmware reports it (STOPPED), and the job row becomes
+// [Resume from line N] [Stop] [Discard stopped job]. N starts at the stopped line; the user
+// can change it, e.g. to repeat a few lines before the problem.
+let stoppedJobShown = null; // "line,file" of the record the line box was filled from
+const showStoppedJob = (s) => {
+  const resume = id("tablettab_gcode_resume");
+  const discard = id("tablettab_gcode_discard");
+  const play = id("tablettab_gcode_play");
+  const status = id("systemStatus");
+  if (!resume || !discard || !play || !status) {
+    return;
+  }
+  const showing = !!s.stopped && !s.job && s.grbl !== "Run" && s.grbl !== "Hold";
+  const key = s.stopped ? `${s.stopped.line},${s.stopped.file}` : null;
+  if (s.stopped && key !== stoppedJobShown) {
+    id("tablettab_resume_line").value = s.stopped.line; // a new record; keep edits to the same one
+  }
+  stoppedJobShown = key;
+  const display = (el, on) => {
+    const want = on ? "" : "none";
+    if (el.style.display !== want) {
+      el.style.display = want;
+    }
+  };
+  display(play, !showing);
+  display(status, !showing);
+  display(resume, showing);
+  display(discard, showing);
+};
+if (typeof machine !== "undefined") {
+  machine.on("state", showStoppedJob);
+}
+
+const tabletResumeClick = (event) => {
+  const stepButton = event.target.closest && event.target.closest(".job-resume-steps button");
+  if (stepButton) {
+    const input = id("tablettab_resume_line");
+    const next = (Number(input.value) || 0) + Number(stepButton.dataset.step);
+    input.value = Math.max(1, next);
+    return;
+  }
+  if (event.target.closest && event.target.closest(".job-resume-line")) {
+    return; // a tap in the line box, not on the button
+  }
+  const stopped = machine.state.stopped;
+  if (!stopped) {
+    return;
+  }
+  const line = Number(id("tablettab_resume_line").value);
+  if (!Number.isInteger(line) || line < 1) {
+    alertdlg("Resume", "Enter a line number from 1.");
+    return;
+  }
+  if (!confirm(`Resume ${stopped.file} from line ${line}?\n\nThe machine raises Z, starts the spindle if the job had it on, moves to where line ${line} starts and lowers Z to it.`)) {
+    return;
+  }
+  runButtonAction(id("tablettab_gcode_resume"), `Resume ${stopped.file} from line ${line}`, () => machine.resumeFile(stopped.file, line));
+};
+
+// Picking another file in the job selector drops a stopped job, so its Resume button can't then
+// start partway into a file the user has moved on from. Picking the same file keeps it.
+const samePath = (a, b) => a.replace(/^\/+/, "") === b.replace(/^\/+/, "");
+const discardStoppedForOtherFile = (path) => {
+  const stopped = typeof machine !== "undefined" ? machine.state.stopped : null;
+  if (!stopped || samePath(stopped.file, path)) {
+    return;
+  }
+  addMessage(`Discarding the stopped job (${stopped.file}): another file was selected`);
+  machine.discardStopped().catch((err) => addMessage(`Discard stopped job failed: ${err.detail ?? err.reason}`));
+};
+
+if (typeof globalThis !== "undefined") {
+  globalThis.__tabletStoppedTestApi = { samePath };
+}
+
+const tabletDiscardClick = () =>
+  runButtonAction(id("tablettab_gcode_discard"), "Discard stopped job", machine.discardStopped);
+
+/** {X: 10, Y: -2} in display units → {x: 10, y: -2} in mm, for machine actions */
+const toMachineMm = (params) => {
+  const mm = {};
+  for (const [axis, value] of Object.entries(params)) {
+    mm[axis.toLowerCase()] = fromDisplayUnitsToMm(Number(value));
+  }
+  return mm;
+};
+
+/** Describe a machine action failure in the message box (a Stop needs no message). */
+const reportMachineFailure = (label) => (err) => {
+  if (err.reason !== "reset") {
+    addMessage(`${label} failed: ${err.detail ?? err.reason ?? err.message}`);
+  }
+};
+
+/** Start a machine action from a click: failures, including bad arguments, go to the message box. */
+const startMachineAction = (label, start) => {
+  try {
+    start().catch(reportMachineFailure(label));
+  } catch (err) {
+    reportMachineFailure(label)(err);
+  }
+};
+
+/** Jog by {X, Y, Z} in display units, at the jog feed rate for the axis (controls.js). */
 const jog = (params = {}) => {
-  const axisAndDistance = checkParams(params);
-  if (!axisAndDistance) {
-    return;
+  if (!checkParams(params)) {
+    return; // no axes, or X/Y with unknown belt lengths (checkParams told the user)
   }
+  const delta = toMachineMm(params);
+  const feed = JogFeedrate(Object.keys(params)[0]); // mm/min
+  addMessage(`Jog ${Object.entries(delta).map(([a, v]) => `${a.toUpperCase()}${Number(v.toFixed(3))}`).join(" ")} mm`);
+  startMachineAction("Jog", () => machine.jog(delta, { feed }));
+};
 
-  jogTo(axisAndDistance);
-}
-
-const jogTo = (axisAndDistance) => {
-  // Always force G90 mode because synchronization of gCodeModal reports is unreliable
-  // JogFeedRate is defined in controls.js
-  let feedrate = JogFeedrate(axisAndDistance);
-  if (gCodeModal.units === "G20") {
-    feedrate /= 25.4;
-    feedrate = feedrate.toFixed(2);
-  }
-
-  // For safety, always ensure firmware units match UI expectations before jogging
-  jogWithUnitsSafeguard(feedrate, axisAndDistance);
-}
-
-/** 
- * Safely execute a jog command with firmware units synchronized to UI units.
- * This prevents issues where UI is in mm but firmware is in inches (or vice versa),
- * which could cause dangerous oversized movements.
- * 
- * Strategy: Always force firmware to match UI units before jogging, then restore.
- * This is simpler and more reliable than trying to query and conditionally synchronize.
- */
-const jogWithUnitsSafeguard = (feedrate, axisAndDistance) => {
-  // Store what units the UI is currently displaying (what user expects)
-  const uiExpectedUnits = gCodeModal.units;
-
-  // Embed the units code directly in the jog command (G20/G21 are allowed within $J= commands).
-  // This avoids sending a separate G20/G21 command which would fail with
-  // Error 9 (SystemGcLock) when the firmware is still in Jog state from a previous jog.
-  const unitsLabel = uiExpectedUnits === 'G20' ? 'inch' : 'mm';
-  const cmd = `$J=G91${uiExpectedUnits}F${feedrate}${axisAndDistance}`;
-  addMessage(`JogTo: ${cmd} (${unitsLabel})`);
-  sendCommand(cmd + '\n');
-}
-
-/** Peform a move command */
+/** Rapid move to {X, Y, Z} in display units, in work coordinates. */
 const move = (params = {}) => {
-  const location = checkParams(params);
-  if (!location) {
+  if (!checkParams(params)) {
     return;
   }
-
-  moveTo(location);
-}
-
-const moveTo = (location) => {
-  // Always force G90 mode because synchronization of gCodeModal reports is unreliable
-  const cmd = `G90 G0 ${location}`;
-  sendCommand(cmd);
-}
+  startMachineAction("Move", () => machine.moveTo(toMachineMm(params)));
+};
 
 /** Perform jog or move commands based on the supplied command */
 const getMoveDistance = (isZMove, options = {}) => {
@@ -777,8 +917,18 @@ function tabletShowMessage(msg, collecting) {
 
   let errMsg = "";
 
-  //Hide kinematics commands from being displayed in the user log
+  // Hide kinematics commands from the user log.  Capture fixedZ first because it controls
+  // whether reported Z positions are meaningful enough to warrant safety warnings.
   if (valueStartsWith(msg, ["$/kinematics"])) {
+    const fixedZPrefix = "$/kinematics/MaslowKinematics/fixedZ=";
+    if (msg.startsWith(fixedZPrefix)) {
+      fixedZEnabled = ["true", "1"].includes(msg.substring(fixedZPrefix.length).trim().toLowerCase());
+      fixedZSettingLoaded = true;
+      if (!fixedZEnabled && !startupZCheckDone && WCO && MPOS && MPOS.length >= 3) {
+        startupZCheckDone = true;
+        checkZHomeAndProceed(() => {}, 0);
+      }
+    }
     return; //We don't want to display these messages
   }
 
@@ -897,7 +1047,7 @@ function setPlayButton(isEnabled, color, text, click) {
       const w = canvas.width || 300;
       const h = canvas.height || 150;
       ctx.clearRect(0, 0, w, h); // Make canvas transparent so div color shows through
-      if (color !== gray) {
+      if (color !== gray && !jobStarting) {
         // Draw a centered white triangle to indicate an actionable state
         const centerX = w / 2;
         const centerY = h / 2;
@@ -922,8 +1072,6 @@ function doPlayButton() {
   if (playButtonHandler) {
     playButtonHandler()
   }
-
-  addMessage(`Starting File: ${id('filelist').options[selectElement.selectedIndex].text}`);
 }
 
 // var pauseButtonHandler
@@ -943,16 +1091,57 @@ const gray = "#f6f6f6";
 const orange = "#ff9500";
 const stopRed = "#ce654c";
 
+// What the Start button shows. A job counts as running for as long as the firmware reports it
+// (the SD field), not only while the machine is in Run: it is Idle for a moment whenever the
+// planner runs dry (a dwell, a spindle spin-up, a slow SD read), and the button must not come
+// back then. Every connection gets the same status report, so every tab agrees.
+//   starting: this tab sent Start and the machine hasn't moved yet. The job shows in the report
+//   as soon as the file is open, but a spindle spin-up or dwell at the top of the file can keep
+//   it Idle for seconds after that; the spinner stays until the first move (Run or Hold).
+const jobHasMoved = (s) => s.grbl === "Run" || s.grbl === "Hold";
+const jobIsRunning = (s) => !!s.job || s.grbl === "Run" || s.grbl === "Hold";
+const playButtonMode = (s, { loaded, starting }) => {
+  if (starting) {
+    return "starting";
+  }
+  if (s.grbl === "Hold") {
+    return "resume";
+  }
+  if (jobIsRunning(s)) {
+    return "running";
+  }
+  if (s.grbl === "Idle" && loaded && s.maslow === MASLOW_STATE_READY_TO_CUT) {
+    return "ready";
+  }
+  return "off";
+};
+
+let jobStarting = false;
+
+if (typeof globalThis !== "undefined") {
+  globalThis.__tabletJobTestApi = { playButtonMode, jobHasMoved };
+}
+
 function setRunControls() {
-  const isReadyToCut = typeof maslowStatus !== 'undefined' && maslowStatus.state === MASLOW_STATE_READY_TO_CUT;
-  if (gCodeLoaded && isReadyToCut) {
-    // A GCode file is ready to go and Maslow is ready to cut
-    setPlayButton(true, green, 'Start', runGCode)
-    //setPauseButton(false, gray, 'Pause', null)
-  } else {
-    // Can't start: no GCode loaded or Maslow is not ready to cut
-    setPlayButton(false, gray, 'Start', null)
-    //setPauseButton(false, gray, 'Pause', null)
+  const s = typeof machine !== "undefined" ? machine.state : {};
+  const mode = playButtonMode(s, { loaded: gCodeLoaded, starting: jobStarting });
+  const playDiv = id("tablettab_gcode_play");
+  if (playDiv) {
+    playDiv.classList.toggle("machine-action-busy", mode === "starting");
+  }
+  switch (mode) {
+    case "starting":
+      setPlayButton(false, gray, 'Start', null) // grey, as while running, plus the spinner
+      break
+    case "resume":
+      setPlayButton(true, green, 'Resume', resumeGCode)
+      break
+    case "ready":
+      setPlayButton(true, green, 'Start', runGCode)
+      break
+    default:
+      setPlayButton(false, gray, 'Start', null)
+      break
   }
 }
 
@@ -1050,34 +1239,12 @@ function tabletGrblState(grbl, response) {
   // (e.g. watchdog fired mid-stop).  Either way the machine is no longer
   // running, so continuing to send $STOP would be harmful.
   if (_stopPending && (stateName === 'Idle' || stateName === 'Alarm')) {
-    _stopPending = false;
+    setStopPending(false);
+    sendCommand('$MINFO'); // refresh Maslow status; its reply also resets the stop buttons
   }
 
-  switch (stateName) {
-    case 'Sleep':
-    case 'Alarm':
-      setPlayButton(true, gray, 'Start', null)
-      //setPauseButton(false, gray, 'Pause', null)
-      break
-    case 'Idle':
-      setRunControls()
-      break
-    case 'Hold':
-      setPlayButton(true, green, 'Resume', resumeGCode)
-      //setPauseButton(true, red, 'Stop', stopAndRecover)
-      break
-    case 'Jog':
-    case 'Home':
-      setPlayButton(false, gray, 'Start', null)
-      break
-    case 'Run':
-      setPlayButton(true, orange, 'Pause', pauseGCode)
-      break
-    case 'Check':
-      setPlayButton(true, gray, 'Start', null)
-      //setPauseButton(true, red, 'Stop', stopAndRecover)
-      break
-  }
+  // The job row follows the job, not the momentary state (Idle between moves mid-job)
+  setRunControls()
 
   if (grbl.spindleDirection) {
     switch (grbl.spindleDirection) {
@@ -1092,6 +1259,9 @@ function tabletGrblState(grbl, response) {
 
   spindleSpeed = grbl.spindleSpeed ? Number(grbl.spindleSpeed) : "";
   //setText('spindle-speed', spindleSpeed);
+  if (Number.isFinite(grbl.spindleSpeed)) {
+    tabletShowSpindleState(grbl.spindleSpeed > 0);
+  }
 
   const now = new Date();
   //setText('time-of-day', now.getHours() + ':' + String(now.getMinutes()).padStart(2, '0'));
@@ -1155,14 +1325,13 @@ function tabletGrblState(grbl, response) {
       const axisName = axisNames[index].toUpperCase();
       setTextContent(`mpos-${axisNames[index]}`, `|${axisName}m: ${Number(pos * factor).toFixed(index > 2 ? 2 : digits)}|`);
     })
-    syncSetZHomeInputWithMachineZ();
   }
 
   // On the first status update that has both WCO and MPOS data, proactively
   // show the Z safety popup if machine Z is already above the safe threshold.
   // This catches a corrupted Z position before the user touches any button.
   // WCO availability is used as the signal that full position data has arrived.
-  if (!startupZCheckDone && WCO && MPOS && MPOS.length >= 3) {
+  if (!startupZCheckDone && fixedZSettingLoaded && WCO && MPOS && MPOS.length >= 3) {
     startupZCheckDone = true;
     checkZHomeAndProceed(() => {}, 0);
   }
@@ -1268,172 +1437,102 @@ const tabletMoveBottomLeft = () => sendMove("X-Y-");
 const tabletMoveBottom = () => sendMove("Y-");
 const tabletMoveBottomRight = () => sendMove("X+Y-");
 // Button event handlers - Fourth Row
-const getMachineZPosition = () => MPOS && MPOS.length >= 3 ? MPOS[2] : null;
+const Z_STOP_INFO_TEXT =
+  "z-stop is the lowest z position the machine can physically reach. " + 
+  "<br><br>To change Z-stop, jog the z axis as low as possible, then Options &gt; Set Z-Stop";
 
-/** Report whether the Set Z Home popup is currently visible. */
-const isSetZHomePopupOpen = () => {
-  const popup = id("set-z-home-popup");
-  return !!popup && popup.style.display !== "none";
+/** Explain the z-stop (the "z-stop" links in the Set Z Home popup). */
+const showZStopInfo = (event) => {
+  event.preventDefault();
+  alertdlg("Z-Stop", Z_STOP_INFO_TEXT);
 }
 
-/** Keep the popup Z input aligned with the current machine Z while tracking is enabled. */
-const syncSetZHomeInputWithMachineZ = () => {
-  const machineZ = getMachineZPosition();
-  if (!setZHomeInputTracksMachineZ || !isSetZHomePopupOpen() || machineZ === null) {
+const formatZMm = (mm) => Number.isFinite(mm) ? mm.toFixed(3) : "?";
+
+/**
+ * Check a new Z home from the Set Z Home popup. It is machine Z in mm, which $SETZSTOP sets
+ * to 0 at the z-stop, so it is also the height above the z-stop. Returns {zHome} or {error}.
+ * The Mini's spindle board has its own Z range, so there it only has to be a number.
+ */
+const checkZHome = (rawValue, mini = false) => {
+  const zHome = parseNumericInput(rawValue);
+  if (!Number.isFinite(zHome)) {
+    return { error: "Enter the Z home in mm." };
+  }
+  if (!mini && zHome < Z_HOME_MIN_SAFE_MM) {
+    return {
+      error: `Z home can't be below the z-stop: ${formatZMm(zHome)} mm is ${formatZMm(-zHome)} mm under it, ` +
+        "where the machine can't reach.",
+    };
+  }
+  if (!mini && zHome > Z_HOME_MAX_SAFE_MM) {
+    return { error: `Z home can't be more than ${Z_HOME_MAX_SAFE_MM} mm above the z-stop.` };
+  }
+  return { zHome };
+}
+
+if (typeof globalThis !== "undefined") {
+  globalThis.__tabletZHomeTestApi = { checkZHome };
+}
+
+const closeSetZHomePopup = () => hideModal("set-z-home-popup");
+
+/**
+ * The Z typed in the Set Z Home popup is relative to the current Z home (the Z readout), so
+ * add the current home's machine Z to get the new home in machine Z (mm above the z-stop).
+ */
+const typedZHomeMachineZ = () => {
+  const { wco } = machine.state;
+  return wco ? wco.z + parseNumericInput(id("setHomeZ")?.value) : NaN;
+}
+
+/** Show the typed Z as mm above the z-stop, in red when it can't be used. */
+const updateSetZHomeAbove = () => {
+  const above = id("setHomeZAbove");
+  if (!above) {
     return;
   }
-
-  const zInput = id("setHomeZ");
-  if (zInput) {
-    zInput.value = machineZ.toFixed(3);
-  }
-}
-
-/** Close the popup and stop live machine-Z tracking for the input field. */
-const closeSetZHomePopup = () => {
-  setZHomeInputTracksMachineZ = false;
-  hideModal("set-z-home-popup");
-}
-
-/** Close the popup after focus leaves it so in-popup actions do not dismiss it. */
-const handleSetZHomePopupFocusOut = () => {
-  scheduleCallback(() => {
-    const popupContent = id("set_z_home_popup_content");
-    if (isSetZHomePopupOpen() && popupContent && !popupContent.contains(document.activeElement)) {
-      closeSetZHomePopup();
-    }
-  }, 0);
-}
-
-/** Backdrop clicks should dismiss the popup by moving focus out of it. */
-const handleSetZHomePopupBackdropClick = (event) => {
-  if (event.target !== event.currentTarget) {
-    return;
-  }
-
-  const popupContent = id("set_z_home_popup_content");
-  if (popupContent && popupContent.contains(document.activeElement)) {
-    document.activeElement.blur();
-    return;
-  }
-
-  closeSetZHomePopup();
-}
-
-/** Let the user keep a manually typed Z home value without live MPOS updates overwriting it. */
-const handleSetZHomeManualInput = () => {
-  setZHomeInputTracksMachineZ = false;
-}
-
-/** Update the popup's context label with the currently defined Z home position. */
-const updateSetZHomeLabel = (zHome = WCO && WCO.length >= 3 ? WCO[2] : 0) => {
-  const zHomeLabel = id("currentZHomeLabel");
-  if (zHomeLabel) {
-    const zHomeValue = Number.isFinite(zHome) ? zHome : 0;
-    zHomeLabel.textContent = `Z Home: ${zHomeValue.toFixed(3)} mm`;
-  }
-}
-
-/** Return the popup's default Z jog step in current display units. */
-const getDefaultSetZHomeJogDistance = () => {
-  const mainUiDistance = Number(getText("disZ"));
-  return mainUiDistance > 0 ? mainUiDistance : 5;
-}
-
-/** Return the popup-specific Z jog step in the current display units. */
-const getSetZHomeJogDistance = () => {
-  const popupDistance = getValueFloat("setHomeZStep");
-  if (popupDistance > 0) {
-    return popupDistance;
-  }
-
-  return getDefaultSetZHomeJogDistance();
-}
-
-/** Jog Z from the Set Z Home popup using the popup-specific step value. */
-const moveSetZHomePopupZ = (direction) => {
-  const distance = getSetZHomeJogDistance();
-  if (distance <= 0) {
-    return;
-  }
-
-  setZHomeInputTracksMachineZ = true;
-  sendMove(direction, { distance });
+  const zHome = typedZHomeMachineZ();
+  above.textContent = formatZMm(zHome);
+  above.parentElement.classList.toggle("set-z-home-invalid", !!checkZHome(zHome, maslowIsMini()).error);
 }
 
 const openSetZHomePopup = () => {
   tabletClick();
-  const { unitLabel } = getUnitInfo();
-  const machineZ = getMachineZPosition();
-  const zCurrent = machineZ === null ? "0" : machineZ.toFixed(3);
+  const { mpos, wco } = machine.state;
   const zInput = id("setHomeZ");
   if (zInput) {
-    // Pre-fill with current machine Z position so the user sees where Z is now.
-    zInput.value = zCurrent;
-    zInput.min = Z_HOME_MIN_SAFE_MM;
-    zInput.max = Z_HOME_MAX_SAFE_MM;
-    zInput.title = `Z: ${Z_HOME_MIN_SAFE_MM} to ${Z_HOME_MAX_SAFE_MM} mm`;
+    // Pre-fill with the current Z, so Set Home without changes puts Z home here.
+    zInput.value = mpos && wco ? formatZMm(mpos.z - wco.z) : "";
   }
-  const zStepInput = id("setHomeZStep");
-  if (zStepInput) {
-    zStepInput.value = getDefaultSetZHomeJogDistance();
-    zStepInput.title = `Jog step in ${unitLabel}`;
-  }
-  setTextContent("setHomeZStepUnit", `(${unitLabel})`);
-  setZHomeInputTracksMachineZ = true;
-  // Context label shows the previously defined Z home value (WCO[2]).
-  updateSetZHomeLabel();
+  setTextContent("currentZHomeValue", formatZMm(wco ? wco.z : NaN));
+  updateSetZHomeAbove();
   openModal("set-z-home-popup");
   scheduleCallback(() => {
-    if (zInput) {
-      zInput.focus();
-      zInput.select();
-    } else {
-      id("set_z_home_popup_content")?.focus();
-    }
+    zInput?.focus();
+    zInput?.select();
   }, 0);
 }
 
-const moveToZHome = () => {
-  const machineZ = getMachineZPosition();
-  const workZeroZ = WCO && WCO.length >= 3 ? WCO[2] : null;
-  const zDelta = (machineZ !== null && workZeroZ !== null) ? workZeroZ - machineZ : 0;
-  checkZHomeAndProceed(() => {
-    sendCommand("G90 G0 Z0");
-    addMessage("Moving to Z Home position");
-  }, zDelta);
-}
-
 const confirmSetZHome = () => {
-  const zInput = id("setHomeZ");
-  const rawZ = zInput ? parseFloat(zInput.value) : NaN;
-  const zVal = isNaN(rawZ) ? 0 : Math.max(Z_HOME_MIN_SAFE_MM, Math.min(Z_HOME_MAX_SAFE_MM, rawZ));
-
-  if (!isNaN(rawZ) && zVal !== rawZ) {
-    addMessage(`Z Home value clamped to range: Z=${zVal}`);
+  const { zHome, error } = checkZHome(typedZHomeMachineZ(), maslowIsMini());
+  if (error) {
+    alertdlg("Set Z Home", error);
+    return;
   }
-
-  const mposZ = getMachineZPosition() ?? 0;
-  sendCommand(`G10 L20 P0 Z${mposZ - zVal}`);
-  addMessage(`Z Home pos set: Z=${zVal}mm`);
-  updateSetZHomeLabel(mposZ);
-  refreshGcode();
+  closeSetZHomePopup();
+  startMachineAction("Set Z home", () =>
+    machine.setWorkZero({ z: zHome }).then(() => {
+      addMessage(`Z home set ${formatZMm(zHome)} mm above the z-stop`);
+      refreshGcode();
+    }));
 }
 // Button event handlers - Fifth Row - nothing special here, move on
 
-// Send a command directly via WebSocket to bypass PAGEID routing.
+// Send a command line over the WebSocket (wscommands.js), bypassing PAGEID routing and
+// keeping it in order with everything else sent there.
 // Returns true if the command was sent, false if the WebSocket is not open.
-const sendViaWS = (cmd) => {
-  if (ws_source && ws_source.readyState === WebSocket.OPEN) {
-    try {
-      ws_source.send(cmd);
-      return true;
-    } catch (e) {
-      console.warn("WebSocket send failed:", e);
-    }
-  }
-  return false;
-};
+const sendViaWS = (cmd) => wsCommands.send(cmd);
 
 // True when a stop has been requested but not yet confirmed delivered.
 // onWSOpenCallback sends $STOP on every WebSocket (re)connect while this
@@ -1445,60 +1544,79 @@ let _stopPending = false;
 // Does NOT clear _stopPending — tabletGrblState clears it once the firmware
 // confirms the machine is no longer running (stateName === 'Idle').
 const onWSOpenCallback = () => {
+  // [ESP800] has been read by now, so the board is known
+  tabletShowBoardControls();
+
   // Reset startup Z check so the safety popup re-fires if machine Z is unsafe
   // after a reconnect or firmware restart.
   startupZCheckDone = false;
+  fixedZSettingLoaded = false;
+  fixedZEnabled = false;
   // Reset Z safety acknowledgment state so warnings re-fire after reconnect.
   zHomeWarningAcknowledged = false;
   zHomeLastAcknowledgedResultZ = null;
   zLowWarningAcknowledged = false;
   zLowLastAcknowledgedResultZ = null;
   if (_stopPending) {
-    try {
-      ws_source.send("$STOP\n");
-    } catch (e) {
-      console.warn("Failed to send pending $STOP on connect:", e);
-    }
+    machine.stop().catch((err) => console.warn("Pending stop on connect failed:", err.detail ?? err.reason));
   }
-  // Refresh park settings after reconnect (e.g. after firmware restart with new maslow.yaml).
-  // A short delay lets the firmware send CURRENT_ID so PAGEID is established before querying.
-  scheduleCallback(() => {
-    if (typeof loadParkSettings === 'function') {
-      loadParkSettings();
-    }
-  }, 1000);
+  requestMachineState();
+  _wsOpenedBefore = true;
 };
 
-// Send $STOP directly via WebSocket to bypass PAGEID routing.
-// Sets _stopPending and retries every 300 ms for up to ~10 seconds.
-// _stopPending is cleared by tabletGrblState when the firmware confirms
-// the machine is Idle, or by the timeout.  onWSOpenCallback also sends
-// $STOP as the very first message on every WebSocket (re)connect while
-// the flag is set, so the command survives a TCP drop between send and
-// firmware processing.
+let _wsOpenedBefore = false;
+
+// Everything the UI needs to know about the machine, asked for on every new socket. Each socket
+// is a new firmware channel, so per-channel settings (auto-report) start off again, and log
+// lines sent while we were disconnected were missed. (The Maslow state needs no query: it is in
+// every status report.)
+const requestMachineState = () => {
+  // Auto-report is per channel. Turn it back on unless the user picked polling or none.
+  if (!_wsOpenedBefore || reportType === 'auto') {
+    tryAutoReport();
+  }
+  SendRealtimeCmd(0x3f); // ? : current state and position now
+  if (!_wsOpenedBefore) {
+    SendPrinterCommand("$SS"); // startup log into the serial monitor, once per page load
+  }
+  SendPrinterCommand("$MINFO");
+  requestModes();
+  loadFixedZSetting();
+  loadCornerValues();
+  if (typeof loadParkSettings === 'function') {
+    loadParkSettings();
+  }
+};
+
+// Stop button: machine.stop() ends running machine actions, then wsCommands.stop() sends 0x18 (soft reset: halts at once in any state, ends any
+// job) and then $STOP (saves positions; Z stays where it stopped). _stopPending stays set until the
+// firmware reports Idle or Alarm (tabletGrblState), so a stop sent while the socket was down
+// is sent again on reconnect (onWSOpenCallback). It expires after STOP_PENDING_MS so an old
+// stop is never replayed much later.
+const STOP_PENDING_MS = 30000;
+let _stopPendingTimer = null;
+const setStopPending = (on) => {
+  _stopPending = on;
+  clearTimeout(_stopPendingTimer);
+  if (on) {
+    _stopPendingTimer = setTimeout(() => {
+      if (_stopPending) {
+        _stopPending = false;
+        console.warn("Stop not confirmed by the machine within 30 s; no longer resending it");
+      }
+    }, STOP_PENDING_MS);
+  }
+};
+
 const sendStopCommand = () => {
-  const RETRY_INTERVAL_MS = 300;
-  const MAX_RETRY_ATTEMPTS = 33; // 33 * 300ms ≈ 10 seconds
-  _stopPending = true;
-  sendViaWS("$STOP\n"); // Try immediately; keep _stopPending for retries
-  let attempts = 0;
-  const retryTimer = setInterval(() => {
-    if (!_stopPending) {
-      clearInterval(retryTimer);
-      return;
+  setStopPending(true);
+  machine.stop().catch((err) => {
+    if (err.reason === "not-sent") {
+      addMessage(`Stop not sent: connection to the machine is ${wsCommands.socketStatus()}. It will be sent when the connection comes back.`);
+    } else {
+      addMessage(`Stop failed: ${err.detail ?? err.reason}`);
     }
-    sendViaWS("$STOP\n");
-    if (++attempts >= MAX_RETRY_ATTEMPTS) {
-      _stopPending = false;
-      clearInterval(retryTimer);
-      console.warn("$STOP retry limit reached without firmware confirmation; machine may not have stopped");
-    }
-  }, RETRY_INTERVAL_MS);
-  scheduleCallback(() => {
-    if (!sendViaWS("$MINFO\n")) {
-      sendCommand('$MINFO');
-    }
-  }, 1000);
+  });
 };
 
 // Button event handlers - Sixth Row
@@ -1536,29 +1654,39 @@ const returnFocusToTablet = () => {
 };
 
 const tabletCalRetract = () => {
-  onCalibrationButtonsClick("$ALL", "Retract All");
+  runMachineAction("Retract All", machine.retractBelts);
   returnFocusToTablet();
 };
 const tabletCalExtend = () => {
-  onCalibrationButtonsClick("$EXT", "Extend All");
+  runMachineAction("Extend All", machine.extendBelts);
   returnFocusToTablet();
 };
 const tabletCalCalibrate = () => {
+  const startCalibration = () => {
+    runMachineAction("Find Anchors", machine.calibrate);
+    scheduleCallback(() => { hideModal("calibration-popup"); }, 1000);
+  };
+
+  if (maslowFixedZEnabled()) {
+    startCalibration();
+    return;
+  }
+
   confirmdlg(
     "Find Anchors",
     "Please confirm Z is fully lowered to continue",
     (response) => {
       if (response === "yes") {
-        onCalibrationButtonsClick("$CAL", "Find Anchors");
-        scheduleCallback(() => { hideModal("calibration-popup"); }, 1000);
+        startCalibration();
       }
     }
   );
 };
 const tabletCalTense = () => {
-  onCalibrationButtonsClick("$TKSLK", "Apply Tension");
-  scheduleCallback(() => { hideModal("calibration-popup"); }, 1000);
+  runMachineAction("Apply Tension", machine.applyTension);
 };
+// From the Setup popup: the popup stays open and its state label shows the outcome.
+const tabletCalTenseClick = () => runButtonAction(id("tablettab_cal_tense"), "Apply Tension", machine.applyTension);
 // const tabletCalZHome = () => onCalibrationButtonsClick("$TKSLK", "Home Z");
 const tabletCalOpenConfig = () => {
   loadConfigValues();
@@ -1574,7 +1702,7 @@ const tabletCalStop = () => {
   returnFocusToTablet();
 };
 const tabletCalSetZStop = () => {
-  onCalibrationButtonsClick("$SETZSTOP", "Set Z-Stop");
+  runMachineAction("Set Z-Stop", machine.setZStop);
   returnFocusToTablet();
 };
 const tabletCalTest = () => {
@@ -1582,7 +1710,7 @@ const tabletCalTest = () => {
   scheduleCallback(() => { hideModal("calibration-popup"); }, 1000);
 };
 const tabletCalRelax = () => {
-  onCalibrationButtonsClick("$CMP", "Release Tension");
+  runMachineAction("Release Tension", machine.releaseTension);
   returnFocusToTablet();
 };
 
@@ -1594,14 +1722,21 @@ const handleMaslowActionButtonClick = () => {
   
   // Execute action based on Maslow state
   switch (maslowStatus.state) {
-    case 0: // UNKNOWN - Retract
-      tabletCalRetract();
+    case 0: // UNKNOWN - Apply Tension if some belt lengths are known, else Retract
+      if (unknownStateAction() === 'Apply Tension') {
+        tabletCalTense();
+      } else {
+        tabletCalRetract();
+      }
       break;
     case 2: // RETRACTED - Extend
       tabletCalExtend();
       break;
     case 4: // EXTENDEDOUT - Apply Tension
       tabletCalTense();
+      break;
+    case 10: // TENSIONED - the belts don't fit the saved anchors: Find Anchors
+      tabletCalCalibrate();
       break;
     case 7: // READY_TO_CUT - Park: lift Z to safe height (work coords), then move to park position (machine coords)
     {
@@ -1636,12 +1771,52 @@ const tabletConfigPopupHide = () => hideModal("configuration-popup");
 const tabletOptionalSettingsPopupHide = () => hideModal("optional-settings-popup");
 const tabletCalOpenOptionalSettings = () => openModal("optional-settings-popup");
 
+// Control event handlers - Spindle Toggle
+// The button follows the spindle speed the machine reports (the FS: field of each status
+// report), not its own click history: a job or a stop also turns the spindle on and off, and a
+// button that only remembered its last click would send M3 to a spindle that is already running.
+let tabletSpindleOn = false;
+const TABLET_SPINDLE_RPM = 12000; // the spindle board's top commanded speed
+
+const tabletShowSpindleState = (on) => {
+  tabletSpindleOn = on;
+  const btn = id("tablettab_spindle_toggle");
+  if (btn) {
+    btn.textContent = on ? "Spindle Off" : "Spindle On";
+    btn.classList.toggle("stop-button", on);
+    btn.classList.toggle("green-button", !on);
+  }
+};
+
+const tabletToggleSpindle = () => {
+  if (tabletSpindleOn) {
+    sendCommand("M5");
+    addMessage("Spindle OFF");
+  } else {
+    sendCommand(`M3 S${TABLET_SPINDLE_RPM}`);
+    addMessage(`Spindle ON (${TABLET_SPINDLE_RPM} RPM)`);
+  }
+  tabletShowSpindleState(!tabletSpindleOn);
+};
+
+// Control event handler - Spindle Z Homing (test button next to Spindle On/Off)
+const tabletSpindleHome = () => {
+  sendCommand("$Spindle/Home");
+  addMessage("Spindle Z homing triggered");
+};
+
+// Control event handler - Remove Tool (raise the Z until the tool clears the beam)
+const tabletSpindleRemoveTool = () => {
+  sendCommand("$Spindle/RemoveTool");
+  addMessage("Tool removal triggered");
+};
+
 // Control event handlers - Work Area Popup
 const getWorkAreaValues = () => {
   const lv = globalThis.loadedValues || {};
   return {
-    areaX: parseFloat(lv.workAreaX) || workAreaDefaults.x,
-    areaY: parseFloat(lv.workAreaY) || workAreaDefaults.y,
+    areaX: parseFloat(lv.workAreaX) || 0,
+    areaY: parseFloat(lv.workAreaY) || 0,
     offX: parseFloat(lv.workAreaCenterOffsetX) || workAreaDefaults.offX,
     offY: parseFloat(lv.workAreaCenterOffsetY) || workAreaDefaults.offY,
   };
@@ -1664,7 +1839,9 @@ const tabletOpenWorkAreaPopup = () => {
   if (elY) elY.value = areaY;
   if (elOffX) elOffX.value = offX;
   if (elOffY) elOffY.value = offY;
-  if (elCurrent) elCurrent.textContent = `Current: ${areaX}, ${areaY}, ${offX}, ${offY}`;
+  const auto = getAutoWorkArea();
+  const showArea = (area, autoArea) => area || `auto (${Math.round(autoArea)})`;
+  if (elCurrent) elCurrent.textContent = `Current: ${showArea(areaX, auto.x)}, ${showArea(areaY, auto.y)}, ${offX}, ${offY}`;
 
   openModal("work-area-popup");
 };
@@ -1894,18 +2071,10 @@ function tabletInit() {
   setTimeout(() => {
     showVersionNumber();
 
-    // get grbl status
-    SendRealtimeCmd(0x3f); // ?
-    // print startup messages in serial
-    SendPrinterCommand("$SS");
-    // get maslow info
-    SendPrinterCommand("$MINFO");
+    // Machine queries ($SS, $MINFO, ?, $G, corner values) go over the socket from
+    // requestMachineState() once it opens. These two are HTTP request/response.
     files_refreshFiles("/");
-    requestModes();
     loadConfigValues();
-    loadCornerValues();
-
-    SendPrinterCommand("$GSTATE");
 
     numpad.attach({ target: "disM", axis: "D" });
     numpad.attach({ target: "disZ", axis: "Z" });
@@ -1976,15 +2145,11 @@ function tabletInit() {
     id("tablettab_set_home_confirm").addEventListener("click", confirmSetHome);
 
     // Buttons - Set Z Home Pop-up
-    id("set-z-home-popup").addEventListener("click", handleSetZHomePopupBackdropClick);
+    id("set-z-home-popup").addEventListener("click", closeSetZHomePopup);
     id("set_z_home_popup_content").addEventListener("click", tabletPopupStopProp);
-    id("set_z_home_popup_content").addEventListener("focusout", handleSetZHomePopupFocusOut);
-    id("setHomeZ").addEventListener("input", handleSetZHomeManualInput);
-    // These popup jog buttons use the popup-specific step from the setHomeZStep input.
-    id("tablettab_set_z_home_up").addEventListener("click", () => moveSetZHomePopupZ(Z_JOG_UP));
-    id("tablettab_set_z_home_down").addEventListener("click", () => moveSetZHomePopupZ(Z_JOG_DOWN));
-    id("tablettab_set_z_home_cancel").addEventListener("click", () => closeSetZHomePopup());
-    id("tablettab_move_to_z_home").addEventListener("click", moveToZHome);
+    id("setHomeZ").addEventListener("input", updateSetZHomeAbove);
+    document.querySelectorAll("#set-z-home-popup .z-stop-link").forEach((link) => link.addEventListener("click", showZStopInfo));
+    id("tablettab_set_z_home_cancel").addEventListener("click", closeSetZHomePopup);
     id("tablettab_set_z_home_confirm").addEventListener("click", confirmSetZHome);
 
     // Controls - Fifth Row
@@ -1996,6 +2161,8 @@ function tabletInit() {
     id("tablettab_gcode_play").addEventListener("click", doPlayButton);
     // id("tablettab_gcode_pause").addEventListener("click", doPauseButton);
     id("tablettab_gcode_stop").addEventListener("click", tabletGCodeStop);
+    id("tablettab_gcode_resume").addEventListener("click", tabletResumeClick);
+    id("tablettab_gcode_discard").addEventListener("click", tabletDiscardClick);
     id("systemStatus").addEventListener("click", clearAlarm);
     
     // New Maslow action button (below Setup)
@@ -2013,7 +2180,7 @@ function tabletInit() {
     id("tablettab_cal_retract").addEventListener("click", tabletCalRetract);
     id("tablettab_cal_extend").addEventListener("click", tabletCalExtend);
     id("tablettab_cal_calibrate").addEventListener("click", tabletCalCalibrate);
-    id("tablettab_cal_tense").addEventListener("click", tabletCalTense);
+    id("tablettab_cal_tense").addEventListener("click", tabletCalTenseClick);
     // id("tablettab_cal_homez").addEventListener("click", tabletCalZHome);
     id("tablettab_cal_config").addEventListener("click", tabletCalOpenConfig);
     id("tablettab_cal_stop").addEventListener("click", tabletCalStop);
@@ -2027,6 +2194,9 @@ function tabletInit() {
     id("tablettab_cal_work_area").addEventListener("click", tabletOpenWorkAreaPopup);
     id("tablettab_cal_park").addEventListener("click", tabletOpenParkPopup);
     id("tablettab_cal_scale_thickness").addEventListener("click", tabletOpenScaleThicknessPopup);
+    id("tablettab_spindle_toggle").addEventListener("click", tabletToggleSpindle);
+    id("tablettab_spindle_home").addEventListener("click", tabletSpindleHome);
+    id("tablettab_spindle_remove_tool").addEventListener("click", tabletSpindleRemoveTool);
     id("tablettab_cal_apply_tension_limit").addEventListener("click", tabletOpenApplyTensionLimitPopup);
 
     // Buttons - Work Area Pop-up
@@ -2140,13 +2310,50 @@ function scrollToLine(lineNumber) {
   gCodeLines.setSelectionRange(start, end);
 }
 
+// Start the loaded file. The button shows a spinner from the click until the machine moves
+// (or the job ends or fails), and ignores clicks meanwhile: a second $SD/Run sent while
+// the first job runs would wait in the firmware and start the file again when the job ends.
+// The firmware starts the moves itself; no cycle start is needed.
 function runGCode() {
-  if (gCodeFilename) {
-    const cmd = `$sd/run=${gCodeFilename}`;
-    sendCommand(cmd);
+  if (jobStarting || !gCodeFilename) {
+    return;
   }
-  setTimeout(() => { SendRealtimeCmd(0x7e); }, 1500);
-  // expandVisualizer()
+  const path = gCodeFilename;
+  const label = `Start ${path}`;
+  addMessage(`Starting File: ${path}`);
+  let started = false;
+  const finishStarting = () => {
+    if (jobStarting) {
+      jobStarting = false;
+      setRunControls();
+    }
+  };
+  const offState = machine.on("state", (s) => {
+    if (jobHasMoved(s) && !started) {
+      started = true;
+      finishStarting();
+    }
+  });
+  jobStarting = true;
+  setRunControls();
+  const op = machine.runFile(path);
+  op.then(
+    () => {},
+    (err) => {
+      if (err.reason === "reset") {
+        addMessage(`${label} stopped`);
+        return;
+      }
+      const detail = err.detail ?? err.reason;
+      addMessage(`${label} failed: ${detail}`);
+      if (!started) {
+        alertdlg(label, detail); // a job error after the start is in the log of every connection
+      }
+    },
+  ).finally(() => {
+    offState();
+    finishStarting();
+  });
 }
 
 function finalizeGCodePreviewLoad() {
@@ -2326,7 +2533,9 @@ function selectFile() {
     clearGCodeState();
     files_enter_dir(filename);
   } else {
-    tabletLoadGCodeFile(`${files_currentPath()}${filename}`, file.size);
+    const path = `${files_currentPath()}${filename}`;
+    discardStoppedForOtherFile(path);
+    tabletLoadGCodeFile(path, file.size);
   }
   updateDeleteButtonState();
 }
@@ -2600,16 +2809,83 @@ const hideModal = (modalId) => {
   }
 };
 
+/**
+ * Run a machine action for a button: show its label, then say how it ended (finished, failed
+ * with the reason, or stopped). $MINFO refreshes the Maslow status 1 s after the start, as
+ * before, and again when the action ends.
+ */
+const runMachineAction = async (label, action) => {
+  addMessage(label);
+  scheduleCallback(() => { sendCommand('$MINFO'); }, 1000);
+  try {
+    await action();
+    addMessage(`${label} finished`);
+  } catch (err) {
+    addMessage(err.reason === "reset" ? `${label} stopped` : `${label} failed: ${err.detail ?? err.reason}`);
+  }
+  sendCommand('$MINFO');
+};
+
+const BUTTON_WARNING_MS = 2500;
+
+/**
+ * Run a machine action from a button that stays on screen (the Setup popup).
+ * - Until the firmware accepts the command: the button shows a spinner and ignores clicks.
+ * - Not accepted (not sent, disconnected, error:N): the button briefly shows a warning.
+ * - Accepted, then the operation fails (e.g. the firmware refused it from this state): an
+ *   error dialog with the reason. A STOP (reset) only gets a log line.
+ * - Accepted and finished: nothing more; the state label shows the new state.
+ */
+const runButtonAction = async (button, label, action) => {
+  if (!button || button.classList.contains("machine-action-busy")) {
+    return;
+  }
+  addMessage(label);
+  const op = action();
+  op.catch(() => {}); // handled below; a rejected .accepted means the operation rejects too
+  button.classList.add("machine-action-busy");
+  try {
+    await op.accepted;
+  } catch (err) {
+    addMessage(`${label} not sent: ${err.detail ?? err.reason}`);
+    showButtonWarning(button, err.reason === "rejected" ? "Rejected" : "Not sent");
+    return;
+  } finally {
+    button.classList.remove("machine-action-busy");
+  }
+  try {
+    await op;
+  } catch (err) {
+    if (err.reason === "reset") {
+      addMessage(`${label} stopped`);
+      return;
+    }
+    const detail = err.detail ?? err.reason;
+    addMessage(`${label} failed: ${detail}`);
+    alertdlg(label, detail);
+  }
+};
+
+/** Swap a button's text for a short warning, then put it back. */
+const showButtonWarning = (button, text) => {
+  if (button.classList.contains("machine-action-warning")) {
+    return;
+  }
+  const original = button.textContent;
+  button.textContent = text;
+  button.classList.add("machine-action-warning");
+  scheduleCallback(() => {
+    button.textContent = original;
+    button.classList.remove("machine-action-warning");
+  }, BUTTON_WARNING_MS);
+};
+
+// For commands that aren't machine actions ($TEST).
 const onCalibrationButtonsClick = async (command, msg = "") => {
   if (msg) {
     addMessage(msg);
   }
-  // Send via WebSocket first to bypass PAGEID-based routing, which fails
-  // silently when the WebSocket has reconnected (new channel, stale PAGEID).
-  // Falls back to HTTP if the WebSocket is not currently open.
-  if (!sendViaWS(command + "\n")) {
-    sendCommand(command);
-  }
+  sendCommand(command);
 
   //Prints out the index.html version number when test is pressed
   if (command === '$TEST') {
@@ -2660,13 +2936,7 @@ function processTabletFileDelete(answer) {
     deleteBtn.setAttribute("disabled", "true");
   }
   
-  // Build the delete command using the same pattern as files.js
-  const cmd = buildHttpFileCmd({ 
-    action: "delete", 
-    filename: gCodeFilename.split('/').pop() // Get just the filename without path
-  });
-  
-  SendGetHttp(cmd, tabletFileDeleteSuccess, tabletFileDeleteFailed);
+  machine.files.delete(gCodeFilename).then(tabletFileDeleteSuccess, tabletFileDeleteFailed);
 }
 
 function tabletFileDeleteSuccess(response) {
@@ -2694,7 +2964,7 @@ function tabletFileDeleteSuccess(response) {
   }, 500); // 500ms delay to ensure server-side delete completes
 }
 
-function tabletFileDeleteFailed(error_code, response) {
+function tabletFileDeleteFailed(err) {
   // Re-enable the delete button
   const deleteBtn = id("tablettab_gcode_delete");
   if (deleteBtn && gCodeFilename) {
@@ -2703,7 +2973,7 @@ function tabletFileDeleteFailed(error_code, response) {
     deleteBtn.removeAttribute("disabled");
   }
   
-  addMessage("Failed to delete file: " + (response || "Unknown error"));
+  addMessage("Failed to delete file: " + (err.detail ?? err.reason));
 }
 
 function updateDeleteButtonState() {

@@ -4,6 +4,7 @@
 
 #pragma once
 #include <Arduino.h>
+#include <string>
 #include "MaslowEnums.h"
 #include "MotorUnit.h"
 #include "Calibration.h"
@@ -14,6 +15,14 @@
 #include "semphr.h"
 
 #define TCAADDR 0x70
+
+// Set to 1 to bench-test the controller without motors and encoders attached.
+// When 1, the boot self-test does not latch an error for missing hardware, and
+// the runtime encoder-read watchdog is suppressed (no spammy failure warnings and
+// no panic when encoders cannot be read). Set back to 0 for normal operation.
+#ifndef MASLOW_DISABLE_BOOT_SELFTEST
+#    define MASLOW_DISABLE_BOOT_SELFTEST 0
+#endif
 
 #define CALIBRATION_GRID_SIZE_MAX (10 * 10) + 2
 
@@ -107,8 +116,29 @@ public:
     void markBeltPositionsStale();
 
     void stopMotors();
-    /** Raises Z axis to Z home + 2mm to prevent workpiece damage after stop */
-    void raiseZ();
+    /** Switches the spindle off as M5 would (used by every stop path) */
+    void stopSpindle();
+    // End the job, clear the planner and stepper, hold the belts (and Z) where they are, clear any
+    // feed hold and go Idle.  Does not block, so it is safe to call from inside the hold.
+    void haltMotion();
+    // Make the belt step counts match the encoders and clear the belt PIDs, so the next move
+    // starts from where the belts really are.  Call with stepping stopped.
+    void syncBeltsToEncoders();
+    // True if this belt's length is known (see Maslow.cpp); reported in the status report's BL.
+    bool beltLengthKnown(int arm);
+    // Belts whose saved length was restored at boot (loadBeltPositions); each is checked alone.
+    bool beltRestored[ARM_COUNT] = { false, false, false, false };
+    // The belt lengths and encoder angles saved in NVS, as read at boot.  Apply Tension from
+    // UNKNOWN uses them to restore the belts that weren't restored at boot.
+    float   savedBeltPos[ARM_COUNT]       = { 0, 0, 0, 0 };
+    int32_t savedBeltAngle[ARM_COUNT]     = { 0, 0, 0, 0 };
+    bool    savedBeltAvailable[ARM_COUNT] = { false, false, false, false };
+    bool    savedAngleAvailable[ARM_COUNT] = { false, false, false, false };
+    // Restore one belt's length from its saved value if its encoder is within 1/4 turn of the
+    // saved angle (the difference is added).  Returns false, leaving the belt alone, otherwise.
+    bool restoreBeltFromSaved(int arm);
+    // Whether Apply Tension can recover the unknown belts from UNKNOWN; if not, why.
+    bool beltRecoveryPossible(std::string& why);
 
     void   stop();
     void   eStop(String message = "Emergency stop triggered.");
@@ -196,9 +226,9 @@ public:
     float  scaleX = 1.0;
     float  scaleY = 1.0;
 
-    // Work area constraints
-    float workAreaX             = 2440.0;
-    float workAreaY             = 1220.0;
+    // Work area constraints. 0 (the default) sizes that axis from the frame, see MaslowKinematics::getWorkArea()
+    float workAreaX             = 0.0;
+    float workAreaY             = 0.0;
     float workAreaCenterOffsetX = 0.0;
     float workAreaCenterOffsetY = 0.0;
 
@@ -206,6 +236,10 @@ public:
     float parkZ = 2.0;
     float parkX = 0.0;
     float parkY = 0.0;
+
+    // Dust collection fan speed (0-100, 0 = off) used whenever the fan runs: during moves and
+    // while the spindle is on.  Streamed live to the spindle board, so changes apply at once.
+    int32_t dustFanSpeed = 100;
 
     bool test         = false;
     bool debugEnabled = false;
@@ -226,6 +260,9 @@ private:
 
     //Stores a reference to the global system runtime function to be called when blocking operations are needed
     void (*_sys_rt)() = nullptr;
+
+    // Stream Z, the fan level and the belt-cooling request to the spindle board and read its replies.
+    void updateSpindleBoard(bool beltMotionActive);
 
     //Used to overide and drive motors directly...dangerous
     bool          TLIOveride   = false;

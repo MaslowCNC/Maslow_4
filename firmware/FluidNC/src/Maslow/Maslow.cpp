@@ -11,6 +11,8 @@
 #include "../FileStream.h"
 #include "../Kinematics/MaslowKinematics.h"
 #include "../GCode.h"
+#include "../Spindles/SpindleBoard.h"
+#include "BoardId.h"
 #include "../Job.h"        // Job::abort()
 #include "../FluidPath.h"  // SD volume
 #include <cmath>
@@ -72,8 +74,10 @@ extern const char* VERSION_NUMBER;
 #define WIFILED 35
 #define REDLED 14
 
-// Maximum allowed interval between Maslow.update() calls before triggering emergency stop
-#define UPDATE_WATCHDOG_MS 100
+// Maximum interval between Maslow.update() calls. Reporting and network startup can
+// briefly block the protocol task while belts are idle, but belt motion must remain strict.
+#define ACTIVE_UPDATE_WATCHDOG_MS 100
+#define IDLE_UPDATE_WATCHDOG_MS 500
 
 int ENCODER_READ_FREQUENCY_HZ = 1000;  //max frequency for polling the encoders
 
@@ -85,6 +89,14 @@ int ENCODER_READ_FREQUENCY_HZ = 1000;  //max frequency for polling the encoders
 void Maslow_::begin(void (*sys_rt)()) {
     Wire.begin(5, 4, 200000);
     I2CMux.begin(TCAADDR, Wire);
+
+    // Every board has the BoardVersion divider, so a reading outside all the bands is a fault.
+    // The belt motors' direction depends on the board: they stay off, and $X cannot clear this.
+    if (BoardId::board() == BoardId::Board::Unknown) {
+        error        = true;
+        errorMessage = "Control board not recognised (BoardVersion " + String(BoardId::millivolts()) +
+                       " mV), so the belt motor direction is unknown. Check the divider on GPIO17";
+    }
 
     axis[_TL].begin(tlIn1Pin, tlIn2Pin, tlADCPin, TLEncoderLine, tlIn1Channel, tlIn2Channel);
     axis[_TR].begin(trIn1Pin, trIn2Pin, trADCPin, TREncoderLine, trIn1Channel, trIn2Channel);
@@ -175,6 +187,7 @@ void Maslow_::update() {
             digitalWrite(WIFILED, ledsOn ? HIGH : LOW);
             wdTimer = millis();
         }
+        updateSpindleBoard(false);
         return;
     }
 
@@ -196,6 +209,7 @@ void Maslow_::update() {
                 errorMessageLogged = true;
             }
         }
+        updateSpindleBoard(false);
         return;
     }
 
@@ -210,9 +224,10 @@ void Maslow_::update() {
     //Save the z-axis position if the prevous state was jog or cycle and the current state is idle
     if ((prevState == State::Jog || prevState == State::Cycle) && sys.state() == State::Idle) {
         saveZPos();
-        // Only save belt positions when in READY_TO_CUT, RETRACTED, or EXTENDEDOUT state (belts are tight and valid)
+        // Only save belt positions when in READY_TO_CUT, RETRACTED, EXTENDEDOUT or TENSIONED state (belts are tight and valid)
         int currentMaslowState = calibration.getCurrentState();
-        if (currentMaslowState == READY_TO_CUT || currentMaslowState == RETRACTED || currentMaslowState == EXTENDEDOUT) {
+        if (currentMaslowState == READY_TO_CUT || currentMaslowState == RETRACTED || currentMaslowState == EXTENDEDOUT ||
+            currentMaslowState == TENSIONED) {
             saveBeltPositions();
         }
     }
@@ -221,9 +236,11 @@ void Maslow_::update() {
     static int prevMaslowState    = calibration.getCurrentState();
     int        currentMaslowState = calibration.getCurrentState();
     if (prevMaslowState != currentMaslowState) {
-        // If we're leaving READY_TO_CUT, RETRACTED, or EXTENDEDOUT, mark positions as stale
-        if ((prevMaslowState == READY_TO_CUT || prevMaslowState == RETRACTED || prevMaslowState == EXTENDEDOUT) &&
-            (currentMaslowState != READY_TO_CUT && currentMaslowState != RETRACTED && currentMaslowState != EXTENDEDOUT)) {
+        // If we're leaving READY_TO_CUT, RETRACTED, EXTENDEDOUT or TENSIONED, mark positions as stale
+        auto beltsValid = [](int state) {
+            return state == READY_TO_CUT || state == RETRACTED || state == EXTENDEDOUT || state == TENSIONED;
+        };
+        if (beltsValid(prevMaslowState) && !beltsValid(currentMaslowState)) {
             markBeltPositionsStale();
         }
         prevMaslowState = currentMaslowState;
@@ -236,18 +253,44 @@ void Maslow_::update() {
         unsigned long now = millis();
         //if the update function is not being called enough, stop everything to prevent damage
         // Skip the watchdog check during file/firmware uploads: flash write operations stall
-        // both CPU cores, so update() may not run for > UPDATE_WATCHDOG_MS through no fault
+        // both CPU cores, so update() may not run for longer than the watchdog limit through no fault
         // of the motion system.  lastCallToUpdate is still refreshed so the watchdog does not
         // trigger immediately after the upload finishes.
-        if (!uploadInProgress && now - lastCallToUpdate > UPDATE_WATCHDOG_MS) {
+        //
+        // Also skip the very first call after boot: lastCallToUpdate is set in begin(), but
+        // there can be a long gap (WiFi connect, etc.) before the update loop starts running.
+        // That startup gap must not be treated as a stalled motion loop.
+        static bool firstUpdateCall = true;
+        bool        skipWatchdog    = firstUpdateCall;
+        if (firstUpdateCall) {
+            firstUpdateCall = false;
+        }
+        int  calibrationState = calibration.getCurrentState();
+        bool beltMotionActive = sys.state() == State::Cycle || sys.state() == State::Jog || sys.state() == State::Hold ||
+                                sys.state() == State::Homing || calibrationState == RETRACTING || calibrationState == EXTENDING ||
+                                calibrationState == TAKING_SLACK || calibrationState == CALIBRATION_IN_PROGRESS ||
+                                calibrationState == RELEASE_TENSION;
+        unsigned int watchdogLimit = beltMotionActive ? ACTIVE_UPDATE_WATCHDOG_MS : IDLE_UPDATE_WATCHDOG_MS;
+        if (!skipWatchdog && !uploadInProgress && now - lastCallToUpdate > watchdogLimit) {
             unsigned int elapsedTime = now - lastCallToUpdate;
-            log_error("Emergency stop. Update function not being called enough. " << elapsedTime << "ms since last call");
+#if MASLOW_DISABLE_BOOT_SELFTEST
+            // Bench-test mode: the update loop can legitimately stall longer than
+            // UPDATE_WATCHDOG_MS (WiFi activity, jog parsing, etc.) when no motors are
+            // attached.  Warn instead of triggering an emergency stop so Z streaming and
+            // other update() work below this check still runs.
+            log_warn("Update loop slow: " << elapsedTime << "ms since last call (watchdog panic suppressed in bench-test mode)");
+#else
+            log_error("Emergency stop. Update loop stalled for " << elapsedTime << "ms (limit " << watchdogLimit
+                                                                  << "ms, belt motion " << (beltMotionActive ? "active" : "idle") << ")");
             watchdogFired = true;
             Maslow.panic();
+#endif
         }
         lastCallToUpdate = now;
 
         Maslow.updateEncoderPositions();  //We always update encoder positions in any state,
+
+        updateSpindleBoard(beltMotionActive);
 
         for (int arm = _TL; arm < ARM_COUNT; arm++) {
             axis[arm].update();  //update motor currents and belt speeds like this for now
@@ -385,6 +428,10 @@ bool Maslow_::updateEncoderPositions() {
         for (int i = 0; i < 4; i++) {
             //turn i into proper label
             String label = axis_id_to_label(i);
+#if MASLOW_DISABLE_BOOT_SELFTEST
+            // Bench-test mode: encoders may be absent, so don't warn or panic on read failures.
+            (void)label;
+#else
             if (encoderFailCounter[i] > 0.1 * ENCODER_READ_FREQUENCY_HZ) {
                 // log error statement with appropriate label
                 log_error("Failure on " << label.c_str() << " encoder, failed to read " << encoderFailCounter[i]
@@ -394,6 +441,7 @@ bool Maslow_::updateEncoderPositions() {
                 log_warn("Bad connection on " << label.c_str() << " encoder, failed to read " << encoderFailCounter[i]
                                               << " times in the last second");
             }
+#endif
             encoderFailCounter[i] = 0;
             encoderFailTimer      = millis();
         }
@@ -543,6 +591,7 @@ void Maslow_::loadZPos() {
     // Read
     int32_t value2;
     ret = nvs_get_i32(nvsHandle, "zPos", &value2);
+    nvs_close(nvsHandle);
     if (ret != ESP_OK) {
         log_info("Error " + std::string(esp_err_to_name(ret)) + " reading from NVS!");
     } else {
@@ -639,8 +688,8 @@ void Maslow_::setZStop() {
 void Maslow_::saveBeltPositions() {
     // Only save if in a valid state (belts are tight and at known positions)
     int currentState = calibration.getCurrentState();
-    if (currentState != READY_TO_CUT && currentState != RETRACTED && currentState != EXTENDEDOUT) {
-        log_debug("Belt positions NOT saved - invalid state (not READY_TO_CUT, RETRACTED, or EXTENDEDOUT), currentState=" << currentState);
+    if (currentState != READY_TO_CUT && currentState != RETRACTED && currentState != EXTENDEDOUT && currentState != TENSIONED) {
+        log_debug("Belt positions NOT saved - invalid state (not READY_TO_CUT, RETRACTED, EXTENDEDOUT or TENSIONED), currentState=" << currentState);
         return;
     }
 
@@ -739,6 +788,16 @@ void Maslow_::saveBeltPositions() {
 
     nvs_close(nvsHandle);
 
+    // Keep the in-memory copy current, for Apply Tension from UNKNOWN (restoreBeltFromSaved).
+    const float    savedPos[ARM_COUNT]   = { tlPos, trPos, blPos, brPos };
+    const uint16_t savedAngle[ARM_COUNT] = { tlAngle, trAngle, blAngle, brAngle };
+    for (int arm = _TL; arm < ARM_COUNT; arm++) {
+        savedBeltPos[arm]        = savedPos[arm];
+        savedBeltAngle[arm]      = savedAngle[arm];
+        savedBeltAvailable[arm]  = true;
+        savedAngleAvailable[arm] = true;
+    }
+
     // Up to nine NVS writes; one that has to erase a flash sector can block for longer than the
     // update watchdog.  This is only called with the machine stopped, so the wait is intentional.
     resetUpdateWatchdog();
@@ -751,6 +810,65 @@ void Maslow_::saveBeltPositions() {
 }
 
 //This function loads the belt positions from non-volatile storage
+// A belt's length is known after a retract (every state but UNKNOWN and RETRACTING follows a
+// retract or a full restore), or if that belt was restored on its own at boot.
+bool Maslow_::beltLengthKnown(int arm) {
+    int state = calibration.getCurrentState();
+    // Apply Tension recovering from UNKNOWN: only the restored belts are known until it finishes.
+    if (state == TAKING_SLACK && calibration.isRecoveringBelts()) {
+        return beltRestored[arm];
+    }
+    return (state != UNKNOWN && state != RETRACTING) || beltRestored[arm];
+}
+
+static const char* const beltArmNames[ARM_COUNT] = { "TL", "TR", "BL", "BR" };
+
+bool Maslow_::restoreBeltFromSaved(int arm) {
+    if (!savedBeltAvailable[arm]) {
+        return false;
+    }
+    float pos = savedBeltPos[arm];
+    if (savedAngleAvailable[arm]) {
+        int32_t angleDiff = int32_t(axis[arm].getRawEncoderAngle()) - savedBeltAngle[arm];
+        // Handle wrap-around: if difference is > 2048, it wrapped the other direction
+        if (angleDiff > 2048)
+            angleDiff -= 4096;
+        if (angleDiff < -2048)
+            angleDiff += 4096;
+
+        if (abs(angleDiff) >= 1024) {
+            log_info(beltArmNames[arm] << " encoder moved " << angleDiff << " counts since the belt positions were saved; "
+                                       << beltArmNames[arm] << " belt length is unknown");
+            return false;
+        }
+        pos += (angleDiff / 4096.0f) * axis[arm].getMmPerRevolution() * -1.0f;
+    }
+
+    // Belt motor axes are A-D = motors 0-3, in arm order
+    set_steps(static_cast<axis_t>(arm), motor_pos_to_steps(pos, arm));
+    axis[arm].setTarget(pos);
+    // Initialize encoder cumulative position to match adjusted belt length
+    axis[arm].setPosition(pos);
+    return true;
+}
+
+bool Maslow_::beltRecoveryPossible(std::string& why) {
+    int restored = 0;
+    for (int arm = _TL; arm < ARM_COUNT; arm++) {
+        if (beltRestored[arm]) {
+            restored++;
+        } else if (!savedBeltAvailable[arm] || !savedAngleAvailable[arm]) {
+            why = std::string("Apply Tension: no saved length for the ") + beltArmNames[arm] + " belt, full retract required";
+            return false;
+        }
+    }
+    if (restored == 0) {
+        why = "Apply Tension: no belt lengths known, full retract required";
+        return false;
+    }
+    return true;
+}
+
 void Maslow_::loadBeltPositions() {
     nvs_handle_t nvsHandle;
     esp_err_t    ret = nvs_open("maslow", NVS_READWRITE, &nvsHandle);
@@ -780,166 +898,33 @@ void Maslow_::loadBeltPositions() {
         int32_t i;
     };
 
-    // Load TL belt position
-    int32_t tlValue;
-    ret         = nvs_get_i32(nvsHandle, "tlPos", &tlValue);
-    float tlPos = 0;
-    if (ret == ESP_OK) {
-        FloatInt32 tlFi;
-        tlFi.i = tlValue;
-        tlPos  = tlFi.f;
-
-        // Load saved encoder angle and compare with current
-        int32_t savedTLAngle;
-        ret = nvs_get_i32(nvsHandle, "tlAngle", &savedTLAngle);
-        if (ret == ESP_OK) {
-            uint16_t currentTLAngle = axis[_TL].getRawEncoderAngle();
-            int32_t  angleDiff      = currentTLAngle - savedTLAngle;
-
-            // Handle wrap-around: if difference is > 2048, it wrapped the other direction
-            if (angleDiff > 2048)
-                angleDiff -= 4096;
-            if (angleDiff < -2048)
-                angleDiff += 4096;
-
-            // If angle difference is within 1/4 turn (1024 counts), adjust belt position for small movement
-            if (abs(angleDiff) < 1024) {
-                float movementMM = (angleDiff / 4096.0f) * axis[_TL].getMmPerRevolution() * -1.0f;
-                tlPos += movementMM;
-            } else {
-                log_info("TL encoder angle difference too large (" << angleDiff << " counts), treating belt positions as stale");
-                nvs_close(nvsHandle);
-                return;
+    // Each belt is restored on its own.  While the motors are off a belt can turn its spool
+    // (the upper belts in vertical mode, under the sled's weight); if its encoder moved more than
+    // 1/4 turn since the save, that belt's length is unknown and it is left alone, but the others
+    // are still restored.  Within 1/4 turn the movement is added to the saved length.  The saved
+    // values are kept: Apply Tension from UNKNOWN pulls the unknown belts tight and checks again.
+    static const char* posKeys[ARM_COUNT]   = { "tlPos", "trPos", "blPos", "brPos" };
+    static const char* angleKeys[ARM_COUNT] = { "tlAngle", "trAngle", "blAngle", "brAngle" };
+    float              beltPos[ARM_COUNT]   = { 0, 0, 0, 0 };
+    for (int arm = _TL; arm < ARM_COUNT; arm++) {
+        int32_t value;
+        ret = nvs_get_i32(nvsHandle, posKeys[arm], &value);
+        if (ret != ESP_OK) {
+            if (ret != ESP_ERR_NVS_NOT_FOUND) {
+                log_info("Error " + std::string(esp_err_to_name(ret)) + " reading " << beltArmNames[arm] << " belt position from NVS!");
             }
+            continue;
         }
+        FloatInt32 fi;
+        fi.i                     = value;
+        savedBeltPos[arm]        = fi.f;
+        savedBeltAvailable[arm]  = true;
+        savedAngleAvailable[arm] = nvs_get_i32(nvsHandle, angleKeys[arm], &savedBeltAngle[arm]) == ESP_OK;
 
-        // Set motor steps directly for TL belt (A axis = motor 0)
-        set_steps(static_cast<axis_t>(0), motor_pos_to_steps(tlPos, 0));
-        axis[_TL].setTarget(tlPos);
-        // Initialize encoder cumulative position to match adjusted belt length
-        axis[_TL].setPosition(tlPos);
-    } else if (ret != ESP_ERR_NVS_NOT_FOUND) {
-        log_info("Error " + std::string(esp_err_to_name(ret)) + " reading TL belt position from NVS!");
-    }
-
-    // Load TR belt position
-    int32_t trValue;
-    ret         = nvs_get_i32(nvsHandle, "trPos", &trValue);
-    float trPos = 0;
-    if (ret == ESP_OK) {
-        FloatInt32 trFi;
-        trFi.i = trValue;
-        trPos  = trFi.f;
-
-        // Load saved encoder angle and compare with current
-        int32_t savedTRAngle;
-        ret = nvs_get_i32(nvsHandle, "trAngle", &savedTRAngle);
-        if (ret == ESP_OK) {
-            uint16_t currentTRAngle = axis[_TR].getRawEncoderAngle();
-            int32_t  angleDiff      = currentTRAngle - savedTRAngle;
-
-            // Handle wrap-around
-            if (angleDiff > 2048)
-                angleDiff -= 4096;
-            if (angleDiff < -2048)
-                angleDiff += 4096;
-
-            if (abs(angleDiff) < 1024) {
-                float movementMM = (angleDiff / 4096.0f) * axis[_TR].getMmPerRevolution() * -1.0f;
-                trPos += movementMM;
-            } else {
-                log_info("TR encoder angle difference too large (" << angleDiff << " counts), treating belt positions as stale");
-                nvs_close(nvsHandle);
-                return;
-            }
+        if (restoreBeltFromSaved(arm)) {
+            beltPos[arm]      = axis[arm].getTarget();
+            beltRestored[arm] = true;
         }
-
-        // Set motor steps directly for TR belt (B axis = motor 1)
-        set_steps(static_cast<axis_t>(1), motor_pos_to_steps(trPos, 1));
-        axis[_TR].setTarget(trPos);
-        axis[_TR].setPosition(trPos);
-    } else if (ret != ESP_ERR_NVS_NOT_FOUND) {
-        log_info("Error " + std::string(esp_err_to_name(ret)) + " reading TR belt position from NVS!");
-    }
-
-    // Load BL belt position
-    int32_t blValue;
-    ret         = nvs_get_i32(nvsHandle, "blPos", &blValue);
-    float blPos = 0;
-    if (ret == ESP_OK) {
-        FloatInt32 blFi;
-        blFi.i = blValue;
-        blPos  = blFi.f;
-
-        // Load saved encoder angle and compare with current
-        int32_t savedBLAngle;
-        ret = nvs_get_i32(nvsHandle, "blAngle", &savedBLAngle);
-        if (ret == ESP_OK) {
-            uint16_t currentBLAngle = axis[_BL].getRawEncoderAngle();
-            int32_t  angleDiff      = currentBLAngle - savedBLAngle;
-
-            // Handle wrap-around
-            if (angleDiff > 2048)
-                angleDiff -= 4096;
-            if (angleDiff < -2048)
-                angleDiff += 4096;
-
-            if (abs(angleDiff) < 1024) {
-                float movementMM = (angleDiff / 4096.0f) * axis[_BL].getMmPerRevolution() * -1.0f;
-                blPos += movementMM;
-            } else {
-                log_info("BL encoder angle difference too large (" << angleDiff << " counts), treating belt positions as stale");
-                nvs_close(nvsHandle);
-                return;
-            }
-        }
-
-        // Set motor steps directly for BL belt (C axis = motor 2)
-        set_steps(static_cast<axis_t>(2), motor_pos_to_steps(blPos, 2));
-        axis[_BL].setTarget(blPos);
-        axis[_BL].setPosition(blPos);
-    } else if (ret != ESP_ERR_NVS_NOT_FOUND) {
-        log_info("Error " + std::string(esp_err_to_name(ret)) + " reading BL belt position from NVS!");
-    }
-
-    // Load BR belt position
-    int32_t brValue;
-    ret         = nvs_get_i32(nvsHandle, "brPos", &brValue);
-    float brPos = 0;
-    if (ret == ESP_OK) {
-        FloatInt32 brFi;
-        brFi.i = brValue;
-        brPos  = brFi.f;
-
-        // Load saved encoder angle and compare with current
-        int32_t savedBRAngle;
-        ret = nvs_get_i32(nvsHandle, "brAngle", &savedBRAngle);
-        if (ret == ESP_OK) {
-            uint16_t currentBRAngle = axis[_BR].getRawEncoderAngle();
-            int32_t  angleDiff      = currentBRAngle - savedBRAngle;
-
-            // Handle wrap-around
-            if (angleDiff > 2048)
-                angleDiff -= 4096;
-            if (angleDiff < -2048)
-                angleDiff += 4096;
-
-            if (abs(angleDiff) < 1024) {
-                float movementMM = (angleDiff / 4096.0f) * axis[_BR].getMmPerRevolution() * -1.0f;
-                brPos += movementMM;
-            } else {
-                log_info("BR encoder angle difference too large (" << angleDiff << " counts), treating belt positions as stale");
-                nvs_close(nvsHandle);
-                return;
-            }
-        }
-
-        // Set motor steps directly for BR belt (D axis = motor 3)
-        set_steps(static_cast<axis_t>(3), motor_pos_to_steps(brPos, 3));
-        axis[_BR].setTarget(brPos);
-        axis[_BR].setPosition(brPos);
-    } else if (ret != ESP_ERR_NVS_NOT_FOUND) {
-        log_info("Error " + std::string(esp_err_to_name(ret)) + " reading BR belt position from NVS!");
     }
 
     nvs_close(nvsHandle);
@@ -948,12 +933,30 @@ void Maslow_::loadBeltPositions() {
     gc_sync_position();
     plan_sync_position();
 
+    float tlPos = beltPos[_TL];
+    float trPos = beltPos[_TR];
+    float blPos = beltPos[_BL];
+    float brPos = beltPos[_BR];
+
+    if (!(beltRestored[_TL] && beltRestored[_TR] && beltRestored[_BL] && beltRestored[_BR])) {
+        // Some belt lengths are unknown: stay in UNKNOWN.  The restored ones are reported as known
+        // (beltLengthKnown); the rest become known once the belts are retracted, or once Apply
+        // Tension pulls them tight and their encoders match the saved angles again.
+        log_info("Belt lengths restored: TL " << (beltRestored[_TL] ? "yes" : "no") << ", TR " << (beltRestored[_TR] ? "yes" : "no")
+                                              << ", BL " << (beltRestored[_BL] ? "yes" : "no") << ", BR "
+                                              << (beltRestored[_BR] ? "yes" : "no") << " - retract the belts, or Apply Tension to recover the others");
+        return;
+    }
+
     // Determine the state based on belt lengths
     // If all belt lengths are near zero (within threshold), go to RETRACTED state, otherwise EXTENDEDOUT
     // Loading into EXTENDEDOUT requires the user to press "Apply Tension" to enter READY_TO_CUT state,
     // which allows the machine to measure its frame and verify everything is as expected
-    // Use threshold of 0.5mm to account for encoder drift and small movements during save/restore
-    const float retractedThreshold = 0.5;  // mm
+    // The threshold has to cover the encoder adjustment above, not just drift: once the motors
+    // power down after a retract the spools relax by a fraction of a turn, and that is added back
+    // here (up to 1/4 turn, ~11 mm).  0.5 mm was too tight - a retracted TR read 0.8 mm and booted
+    // into EXTENDEDOUT.  Extended belts are hundreds of mm, so 15 mm cannot misread a real extension.
+    const float retractedThreshold = 15.0;  // mm
     bool        allNearZero = (fabs(tlPos) < retractedThreshold && fabs(trPos) < retractedThreshold && fabs(blPos) < retractedThreshold &&
                         fabs(brPos) < retractedThreshold);
     int         newState    = allNearZero ? RETRACTED : EXTENDEDOUT;
@@ -987,6 +990,13 @@ void Maslow_::loadBeltPositions() {
 
 //This function marks the belt positions in NVS as stale/invalid
 void Maslow_::markBeltPositionsStale() {
+    // The in-memory copy goes stale too: the belts are moving from a known state, so neither the
+    // boot restore nor the saved lengths describe them any more.
+    for (int arm = _TL; arm < ARM_COUNT; arm++) {
+        beltRestored[arm]       = false;
+        savedBeltAvailable[arm] = false;
+    }
+
     nvs_handle_t nvsHandle;
     esp_err_t    ret = nvs_open("maslow", NVS_READWRITE, &nvsHandle);
     if (ret != ESP_OK) {
@@ -1168,11 +1178,7 @@ void Maslow_::stopMotors() {
     axis[_TL].stop();
 }
 
-// Safe Z height in mm above Z home to raise to after stop (prevents workpiece damage)
-static constexpr float Z_SAFE_HEIGHT_MM = 2.0f;
-
-// Raises Z axis to Z home + Z_SAFE_HEIGHT_MM to prevent workpiece damage after stop
-void Maslow_::raiseZ() {
+void Maslow_::haltMotion() {
     // Always stop streaming and clear the planner/stepper immediately, regardless of Z height.
     // If we only stop the job without clearing, any moves already in the planner buffer
     // will resume executing after maslow_stop() returns, causing the machine to keep moving.
@@ -1181,6 +1187,18 @@ void Maslow_::raiseZ() {
     plan_reset();
     Stepper::reset();
 
+    syncBeltsToEncoders();
+
+    // Clear any pending suspend bits (e.g. holdComplete from a prior feed hold) before
+    // transitioning to Idle.  If left set, protocol_exec_rt_suspend() would loop indefinitely
+    // after maslow_stop() returns, preventing any further commands from being processed.
+    auto suspend  = sys.suspend();
+    suspend.value = 0;
+    sys.set_suspend(suspend);
+    sys.set_state(State::Idle);
+}
+
+void Maslow_::syncBeltsToEncoders() {
     // Sync belt motor step positions to actual encoder positions.
     // Maslow.update() uses get_axis_steps() as belt PID targets.  If the
     // commanded step position is ahead of the encoder position when stop is pressed
@@ -1198,35 +1216,6 @@ void Maslow_::raiseZ() {
 
     gc_sync_position();
     plan_sync_position();
-
-    // Clear any pending suspend bits (e.g. holdComplete from a prior feed hold) before
-    // transitioning to Idle.  If left set, protocol_exec_rt_suspend() would loop indefinitely
-    // after maslow_stop() returns, preventing any further commands from being processed.
-    auto suspend  = sys.suspend();
-    suspend.value = 0;
-    sys.set_suspend(suspend);
-    sys.set_state(State::Idle);
-
-    float* mpos  = get_mpos();
-    float* wco   = get_wco();
-    float  workZ = mpos[Z_AXIS] - wco[Z_AXIS];  // Work Z = machine Z minus WCO
-    if (workZ >= Z_SAFE_HEIGHT_MM) {
-        return;  // Z is already at or above safe height in work coordinates
-    }
-    log_info("Raising Z from work Z " << workZ << "mm to " << Z_SAFE_HEIGHT_MM << "mm (Z home + " << Z_SAFE_HEIGHT_MM << "mm)");
-
-    // Command Z to raise to Z_SAFE_HEIGHT_MM in work coordinates.
-    // Convert to the current unit system so the G-code interpreter moves the
-    // correct distance regardless of whether G20 (inches) or G21 (mm) is active.
-    char  zRaise[20];
-    float safeHeight = (gc_state.modal.units == Units::Inches) ? Z_SAFE_HEIGHT_MM / MM_PER_INCH : Z_SAFE_HEIGHT_MM;
-    snprintf(zRaise, sizeof(zRaise), "G90 G0 Z%.4f", safeHeight);
-    Error result = gc_execute_line(zRaise);
-    if (result == Error::Ok) {
-        protocol_buffer_synchronize();  // Wait for Z to reach target
-    } else {
-        log_error("Failed to raise Z: " << errorString(result));
-    }
 }
 
 static void stopEverything() {
@@ -1238,7 +1227,29 @@ static void stopEverything() {
 void Maslow_::panic() {
     panicCount++;
     stop();
+    stopSpindle();
     stopEverything();
+}
+
+// Switch the spindle off as M5 would.  Clearing the modal state as well means no later planner
+// block can carry the old speed back to the spindle.
+void Maslow_::stopSpindle() {
+    gc_state.modal.spindle = SpindleState::Disable;
+    if (spindle) {
+        spindle->stop();
+    }
+}
+
+// Stream the planned Z position to the spindle/Z controller board (if configured), which turns it
+// into the BLDC phase offset that moves the Z axis, along with the fan level and the belt-cooling
+// request, and read the board's replies.  This keeps running after a watchdog or emergency stop:
+// otherwise the board never hears that the belts have stopped, so the dust fan runs until a power
+// cycle, and its faults and trip recordings go unread.
+void Maslow_::updateSpindleBoard(bool beltMotionActive) {
+    if (Spindles::SpindleBoard::instance) {
+        float zPositionMM = steps_to_motor_pos(get_axis_steps(static_cast<axis_t>(4)), 4);  // Z from Z axis (axis 4)
+        Spindles::SpindleBoard::instance->update(zPositionMM, beltMotionActive, dustFanSpeed);
+    }
 }
 
 // Reset the update watchdog timer to prevent false emergency stops during
@@ -1253,6 +1264,11 @@ void Maslow_::resetUpdateWatchdog() {
 // command the user already reaches for to acknowledge an alarm, so it clears them
 // here.  Returns true if a latched condition was actually cleared.
 bool Maslow_::clearError() {
+    if (BoardId::board() == BoardId::Board::Unknown) {
+        log_error("Motion stays disabled: the control board was not recognised at boot (BoardVersion " << BoardId::millivolts() << " mV)");
+        return false;
+    }
+
     // The LED is driven low unconditionally: if nothing is latched it is already off,
     // and this also picks up the case where a blink left it mid-cycle.
     digitalWrite(REDLED, LOW);
@@ -1299,6 +1315,7 @@ void Maslow_::eStop(String message) {
     log_error("Emergency stop! Stopping all motors");
     log_warn("The machine will not respond until turned off and back on again");
     stop();
+    stopSpindle();
     error              = true;
     errorMessage       = message;
     errorMessageLogged = false;

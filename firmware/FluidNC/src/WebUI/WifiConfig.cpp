@@ -21,6 +21,7 @@
 #include <cstring>
 #include "WifiImpl.h"
 #include "NetSettings.h"
+#include "Maslow/BoardId.h"
 #include <time.h>
 
 namespace WebUI {
@@ -373,6 +374,9 @@ namespace WebUI {
 
             //to save time in decoding `?`
             s << " # axis:" << Axes::_numberAxis;
+
+            // Lets the web UI show only the controls this machine has
+            s << " # board:" << BoardId::boardTag(BoardId::board());
             return Error::Ok;
         }
 
