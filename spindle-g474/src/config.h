@@ -27,6 +27,9 @@ constexpr float MAX_COMMAND_RPM = 18000.0f;
 constexpr float SPIN_RAMP_RAD_S2      = 500.0f;   // BENCH (ESP32): ~4800 RPM/s ...
 constexpr float SPIN_RAMP_HIGH_RAD_S2 = 150.0f;   // ... and ~1400 RPM/s above
 constexpr float SPIN_RAMP_SLOW_ABOVE_RPM = 14000.0f;
+// Open-loop spin-up to the hand-over is gentler: I/f at 3 A gives ~35 mNm, and in the simulation
+// a rotor with 5x the guessed inertia lost sync at 500 rad/s^2.  ~0.8 s to 2000 RPM.
+constexpr float SPIN_RAMP_OPEN_RAD_S2 = 250.0f;
 
 // ---- Open loop (I/f): standstill Z holds and moves, spin-up below the closed-loop hand-over ----
 // The ESP32 drove a calibrated VOLTAGE; with real current sensing the G474 drives a current
@@ -41,6 +44,10 @@ constexpr float OL_CURRENT_SLEW_A_S = 50.0f; // open-loop current changes ramp a
 constexpr float CUR_KP          = 0.2f;      // V/A
 constexpr float CUR_KI          = 1000.0f;   // V/(A s)
 constexpr float MAX_MODULATION  = 0.95f;     // of the linear SVPWM limit Vbus/sqrt(3)
+// GUESS: effective dead time to compensate (the DRV8300's 200 ns plus the timer's 100 ns, minus
+// FET switching overlap); measure it at bring-up (#DTC) - the ESC1 fit put the loss at ~0.42 V.
+constexpr float DEADTIME_COMP_NS = 250.0f;
+constexpr float DT_COMP_KNEE_A  = 0.2f;      // ESP32 sync-sense: SYNC_DT_COMP_KNEE_A
 
 // ---- Sensorless closed loop ----
 constexpr float CL_ENTER_RPM    = 2000.0f;   // BENCH: the observer is not trusted below this
@@ -49,14 +56,27 @@ constexpr float CL_LOCK_TOL     = 0.10f;     // BENCH: observer within 10% of th
 constexpr uint32_t CL_LOCK_MS   = 100;       // ... for this long before the hand-over
 constexpr uint32_t CL_LOCK_TIMEOUT_MS = 1500;// GUESS: no lock this long after reaching CL_ENTER = fault
 constexpr float CL_ID_RAMP_A_S  = 40.0f;     // the open loop's d current fades out at this rate
-constexpr float VEL_KP          = 0.01f;     // BENCH: A per rad/s (soft; tune with #VEL)
-constexpr float VEL_KI          = 0.2f;      // BENCH: A per rad
-constexpr float VEL_IQ_RAMP_A_S = 200.0f;    // BENCH: velocity loop output slew
 constexpr float IQ_LIMIT_A      = 8.0f;      // GUESS: closed-loop torque current limit per motor
-// Z in closed loop: the two rotors' observed angles must keep the sum the phase offset sets.
-// Each motor's speed reference gets -Z_KP * error (rad/s per rad of angle-sum error).
-constexpr float Z_KP            = 10.0f;     // GUESS
-constexpr float Z_ERR_TRIP_RAD  = 3.14f;     // GUESS: angle-sum error = 2 x phase error; 3.14 rad ~ 2 mm
+// Closed loop holds each rotor's ANGLE on its reference (PID, D on the observer speed), which keeps
+// the Z.  The ESC1's speed-only loop (P 0.01 A per rad/s, I 0.2 A/rad) let a 15 mNm load step pull
+// the rotors ~50 deg apart in the simulation (test/sim).  Chosen in the simulation over rotor
+// inertias 3e-6..5e-5 kg m^2 (the real one is unknown) and +-20-30 % motor-constant errors: retune
+// on the bench (#POS).  Softer gains (6/0.08/60) went unstable near the hand-back when the real R
+// was 20 % below PHASE_R_OHM.
+constexpr float POS_KP          = 10.0f;     // A per rad of angle error
+constexpr float POS_KD          = 0.12f;     // A per rad/s of speed error
+constexpr float POS_KI          = 100.0f;    // A per rad s
+constexpr float CL_ANGLE_TRIP_RAD = 1.57f;   // GUESS: closed loop, a rotor 90 deg off its reference = stop
+// Open loop: the rotor lags its current vector by the load angle (pull-out at 90 deg); past 150 deg
+// it has slipped.  Followed only above OBS_TRUST_RPM once the observer tracks within OBS_TRUST_TOL.
+constexpr float OL_SLIP_TRIP_RAD = 2.62f;
+constexpr float OBS_TRUST_RPM   = 1000.0f;
+constexpr float OBS_TRUST_TOL   = 0.2f;
+// Open loop is a voltage drive (R*I + back-EMF feed-forward) trimmed onto the target current by an
+// integrator of ~5 Hz (Ki = R * 2 pi * 5).  Slow on purpose: the rotor's swings keep the back-EMF
+// damping a stiff current loop would cancel (see foc.cpp currentLoop).
+constexpr float OL_CUR_KI       = 12.0f;     // V per A s
+constexpr float OL_CARRY_FADE_A_S = 40.0f;   // closed-loop torque current fades at hand-back
 constexpr float OBS_SPEED_TAU_S = 0.005f;    // BENCH: observer speed filter
 constexpr float LOST_FRACTION   = 0.30f;     // BENCH: observer this far off the command ...
 constexpr uint32_t LOST_MS      = 100;       // ... this long = lost lock (stop)
@@ -80,6 +100,9 @@ constexpr uint32_t LOAD_WARN_MS = 200;       // ... this long
 
 // ---- Z axis (unchanged from spindle/src/config.h) ----
 constexpr float PHASE_OFFSET_RAMP_RAD_S = 400.0f * (float)M_PI / 180.0f;
+// GUESS: 400 deg/s reached in 0.1 s.  The ESP32 stepped straight to 400 deg/s, which rings the rotors
+// on a current vector (test/sim).  The XY board plans the Z at 10 mm/s^2 = 450 deg/s^2: unaffected.
+constexpr float PHASE_OFFSET_ACCEL_RAD_S2 = 4000.0f * (float)M_PI / 180.0f;
 constexpr float PHASE_MOVE_COMPLETE_EPS_RAD = 0.001f;
 constexpr float PHASE_DEG_PER_MM   = 45.0f;
 constexpr float Z_HOMING_MAX_MM    = 70.0f;

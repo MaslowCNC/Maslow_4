@@ -450,11 +450,14 @@ static void maintenance(const char* line) {
     } else if (!strcmp(word, "CUR") && n >= 3) {
         tu.cur_kp = a;
         tu.cur_ki = b;
-    } else if (!strcmp(word, "VEL") && n >= 3) {
-        tu.vel_kp = a;
-        tu.vel_ki = b;
-    } else if (!strcmp(word, "ZKP") && n >= 2) {
-        tu.z_kp = a;
+    } else if (!strcmp(word, "POS") && n >= 4) {
+        tu.pos_kp = a;
+        tu.pos_kd = b;
+        tu.pos_ki = c;
+    } else if (!strcmp(word, "OLKI") && n >= 2 && a >= 0 && a <= 1000) {
+        tu.ol_ki = a;
+    } else if (!strcmp(word, "DTC") && n >= 2 && a >= 0 && a <= 1000) {
+        tu.deadtime_ns = a;
     } else if (!strcmp(word, "IHOLD") && n >= 2 && a >= 0 && a <= 6) {
         tu.hold_a = a;
     } else if (!strcmp(word, "ISPIN") && n >= 2 && a >= 0 && a <= 8) {
@@ -473,15 +476,16 @@ static void maintenance(const char* line) {
     } else if (!strcmp(word, "VER")) {
         linkEvent("MSG", "spindle firmware %s, %s %s", FW_VERSION, __DATE__, __TIME__);
     } else {
-        linkEvent("MSG", "# commands: STAT LOG <ms> ALIGN [V] CL <0|1> CUR <kp> <ki> VEL <kp> <ki> ZKP <k> "
+        linkEvent("MSG", "# commands: STAT LOG <ms> ALIGN [V] CL <0|1> CUR <kp> <ki> POS <kp> <kd> <ki> OLKI <ki> DTC <ns> "
                          "IHOLD/ISPIN/IBOOST/ILIM <A> OBS <R> <L> <flux> TRIP <sw A> [hw A] VER");
         return;
     }
     if (strcmp(word, "STAT") && strcmp(word, "VER") && strcmp(word, "ALIGN")) {
-        linkEvent("MSG", "tuning: cur %.3f/%.0f vel %.4f/%.3f zkp %.1f I hold %.1f spin %.1f boost %.1f lim %.1f "
-                         "obs R %.3f L %.1fuH flux %.2fmWb trip %.1f A CL %d",
-                  tu.cur_kp, tu.cur_ki, tu.vel_kp, tu.vel_ki, tu.z_kp, tu.hold_a, tu.spin_a, tu.boost_a, tu.iq_limit,
-                  tu.r, tu.l * 1e6f, tu.flux * 1e3f, tu.sw_trip_a, (int)tu.closed_loop_allowed);
+        linkEvent("MSG", "tuning: cur %.3f/%.0f pos %.2f/%.3f/%.1f olki %.1f I hold %.1f spin %.1f boost %.1f lim %.1f "
+                         "obs R %.3f L %.1fuH flux %.2fmWb trip %.1f A dtc %.0f ns CL %d",
+                  tu.cur_kp, tu.cur_ki, tu.pos_kp, tu.pos_kd, tu.pos_ki, tu.ol_ki, tu.hold_a, tu.spin_a, tu.boost_a,
+                  tu.iq_limit,
+                  tu.r, tu.l * 1e6f, tu.flux * 1e3f, tu.sw_trip_a, tu.deadtime_ns, (int)tu.closed_loop_allowed);
     }
 }
 
@@ -636,9 +640,16 @@ static void superviseSpin() {
                 g_lost_since = 0;
             }
         }
-        if (fabsf(foc::zErrorRad()) > Z_ERR_TRIP_RAD) {
-            char d[80];
-            snprintf(d, sizeof(d), "closed-loop Z error %.0f deg of rotor angle", rad2deg(foc::zErrorRad()));
+    }
+
+    // A rotor too far off its reference angle has slipped (open loop: past pull-out) or the closed
+    // loop has lost it: the Z is no longer known.
+    if (foc::enabled() && foc::mode() != foc::Mode::Off) {
+        float lim = foc::mode() == foc::Mode::Closed ? CL_ANGLE_TRIP_RAD : OL_SLIP_TRIP_RAD;
+        if (foc::maxAngleErrorRad() > lim) {
+            char d[96];
+            snprintf(d, sizeof(d), "a rotor fell %.0f deg off its reference angle in %s loop (slip)",
+                     rad2deg(foc::maxAngleErrorRad()), foc::mode() == foc::Mode::Closed ? "closed" : "open");
             stopForOverCurrent(d);
             return;
         }

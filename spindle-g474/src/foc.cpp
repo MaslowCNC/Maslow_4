@@ -11,7 +11,13 @@ namespace foc {
         constexpr float SQRT3     = 1.7320508f;
         constexpr float INV_SQRT3 = 0.57735027f;
         constexpr float DT        = PWM_PERIOD_S;
-        constexpr float DUTY_MAX  = 0.97f;   // leaves the low side on >= 1.5 us per period (bootstrap)
+        // SVPWM at MAX_MODULATION reaches a duty of 0.5 + 0.95/2 = 0.975: clamp just above it.  The low
+        // side then stays on >= 1 us per period (bootstrap refresh); the highest-duty phase's sample
+        // is never used (two-shunt rebuild).
+        constexpr float DUTY_MAX  = 0.98f;
+        // The voltage computed now is applied from the next valley for a whole period: on average
+        // 1.5 periods after the sample the angle was measured at.
+        constexpr float PWM_DELAY_PERIODS = 1.5f;
 
         inline float wrapPi(float a) {
             while (a > PI_F) a -= TWO_PI_F;
@@ -35,14 +41,22 @@ namespace foc {
             float flux_a, flux_b;
             float ial_prev, ibe_prev;
             float obs_angle, obs_w;       // rad, rad/s (electrical = mechanical, 1 pole pair)
+            float obs_da;                 // observer angle step this period
             // control
             float theta;
             float id, iq, id_ref, iq_ref;
             float int_d, int_q;
             float vd, vq;
             float valpha, vbeta;          // last commanded voltage (the observer's input next period)
-            float vel_int, iq_cmd, id_cl;
-            float c;                      // open-loop angle constant
+            // Both modes drive toward the same reference angle, ref = dir*alpha + phi + c: open loop
+            // puts the current vector there, closed loop steers the observed rotor angle onto it.
+            float c;                      // reference angle constant
+            float ref;                    // reference angle this period (wrapped)
+            float eps;                    // reference minus observed angle, unwrapped (rad); see eps_valid
+            bool  eps_valid;              // eps is tracked: closed loop, or open loop with the observer locked
+            float pos_int;                // closed loop: integral term (A)
+            float id_cl;                  // closed loop: the open loop's d current, fading out
+            float iq_carry;               // open loop: the closed loop's torque current, fading out
             float speed_err_frac;
             int   over_count;
             // telemetry since the last take()
@@ -62,9 +76,8 @@ namespace foc {
         float          g_phi_rate     = 0;
         volatile bool  g_z_moving     = false;
         float          g_ol_current   = 0;
-        float          g_sum          = 0;   // running sum of both observers' angle increments
-        float          g_zref         = 0;
-        volatile float g_zerr         = 0;
+        volatile float g_zerr         = 0;   // closed loop: mean of the two angle errors (= phase error)
+        volatile float g_angle_err_max = 0;  // closed loop: worse of the two |angle errors|
         volatile float g_vbus         = 36.0f;
         uint32_t       g_precharge    = 0;
         volatile bool  g_req_closed   = false;
@@ -84,9 +97,9 @@ namespace foc {
         volatile uint32_t g_isr_count      = 0;
 
         Tuning g_tun = {
-            CUR_KP, CUR_KI, VEL_KP, VEL_KI, Z_KP,
+            CUR_KP, CUR_KI, POS_KP, POS_KD, POS_KI, OL_CUR_KI,
             HOLD_CURRENT_A, SPINUP_CURRENT_A, Z_MOVE_BOOST_A, IQ_LIMIT_A,
-            PHASE_R_OHM, PHASE_L_H, FLUX_WB, SW_TRIP_A, true,
+            PHASE_R_OHM, PHASE_L_H, FLUX_WB, SW_TRIP_A, DEADTIME_COMP_NS, true,
         };
 
         void resetControl(Motor& m) {
@@ -95,7 +108,9 @@ namespace foc {
             m.obs_w = 0;
             m.int_d = m.int_q = 0;
             m.vd = m.vq = m.valpha = m.vbeta = 0;
-            m.vel_int = m.iq_cmd = m.id_cl = 0;
+            m.pos_int = m.id_cl = m.iq_carry = 0;
+            m.eps       = 0;
+            m.eps_valid = false;
             m.over_count = 0;
             m.speed_err_frac = 0;
         }
@@ -155,11 +170,16 @@ namespace foc {
             float da = wrapPi(a - m.obs_angle);
             m.obs_angle = a;
             m.obs_w += (da / DT - m.obs_w) * fminf(DT / OBS_SPEED_TAU_S, 1.0f);
-            g_sum += da;
+            m.obs_da = da;
         }
 
-        // dq current loops + SVPWM for one motor at angle m.theta, electrical speed we.
-        void currentLoop(int k, float we, bool emf_ff) {
+        // dq current loops for one motor at angle m.theta, electrical speed we.
+        //   soft = false (closed loop): PI current loops, ~400 Hz (ESC1 gains), decoupling + EMF feed-forward.
+        //   soft = true  (open loop): a voltage drive - R*I, L and back-EMF feed-forward - trimmed by a
+        //   slow integrator onto the target current.  The rotor's swings about the current vector then
+        //   see the motor's own back-EMF through R, the electrical damping the ESP32's voltage drive
+        //   had; a stiff current loop would cancel it and leave an undamped spring (test/sim).
+        void currentLoop(int k, float we, bool emf_ff, bool soft) {
             Motor&      m    = mot[k];
             const float vmax = MAX_MODULATION * g_vbus * INV_SQRT3;
             float       s = sinf(m.theta), c = cosf(m.theta);
@@ -167,13 +187,23 @@ namespace foc {
             m.iq = -m.ial * s + m.ibe * c;
 
             const float L = g_tun.l;
-            float vd_ff = -we * L * m.iq;
-            float vq_ff = we * L * m.id + (emf_ff ? we * g_tun.flux : 0.0f);
             float ed = m.id_ref - m.id, eq = m.iq_ref - m.iq;
-            float int_d = clampf(m.int_d + g_tun.cur_ki * ed * DT, -vmax, vmax);
-            float int_q = clampf(m.int_q + g_tun.cur_ki * eq * DT, -vmax, vmax);
-            float vd = g_tun.cur_kp * ed + int_d + vd_ff;
-            float vq = g_tun.cur_kp * eq + int_q + vq_ff;
+            float vd, vq, int_d, int_q;
+            if (soft) {
+                float vd_ff = g_tun.r * m.id_ref - we * L * m.iq_ref;
+                float vq_ff = g_tun.r * m.iq_ref + we * L * m.id_ref + (emf_ff ? we * g_tun.flux : 0.0f);
+                int_d = clampf(m.int_d + g_tun.ol_ki * ed * DT, -vmax, vmax);
+                int_q = clampf(m.int_q + g_tun.ol_ki * eq * DT, -vmax, vmax);
+                vd = int_d + vd_ff;
+                vq = int_q + vq_ff;
+            } else {
+                float vd_ff = -we * L * m.iq;
+                float vq_ff = we * L * m.id + (emf_ff ? we * g_tun.flux : 0.0f);
+                int_d = clampf(m.int_d + g_tun.cur_ki * ed * DT, -vmax, vmax);
+                int_q = clampf(m.int_q + g_tun.cur_ki * eq * DT, -vmax, vmax);
+                vd = g_tun.cur_kp * ed + int_d + vd_ff;
+                vq = g_tun.cur_kp * eq + int_q + vq_ff;
+            }
             float mag = sqrtf(vd * vd + vq * vq);
             if (mag > vmax) {
                 float k2 = vmax / mag;
@@ -186,22 +216,42 @@ namespace foc {
             }
             m.vd = vd;
             m.vq = vq;
-            m.valpha = vd * c - vq * s;
-            m.vbeta  = vd * s + vq * c;
+            // Rotate back at the angle the rotor will have while this voltage is applied.
+            float th = m.theta + we * PWM_DELAY_PERIODS * DT;
+            float s2 = sinf(th), c2 = cosf(th);
+            m.valpha = vd * c2 - vq * s2;
+            m.vbeta  = vd * s2 + vq * c2;
         }
 
-        void modulate(int k) {
+        void modulate(int k, bool dt_comp) {
             Motor& m  = mot[k];
             float  va = m.valpha;
             float  vb = -0.5f * m.valpha + 0.5f * SQRT3 * m.vbeta;
             float  vc = -0.5f * m.valpha - 0.5f * SQRT3 * m.vbeta;
             float  vcm = 0.5f * (fmaxf(va, fmaxf(vb, vc)) + fminf(va, fminf(vb, vc)));
             float  inv = 1.0f / fmaxf(g_vbus, 5.0f);
-            m.duty[0] = clampf(0.5f + (va - vcm) * inv, 0.0f, DUTY_MAX);
-            m.duty[1] = clampf(0.5f + (vb - vcm) * inv, 0.0f, DUTY_MAX);
-            m.duty[2] = clampf(0.5f + (vc - vcm) * inv, 0.0f, DUTY_MAX);
+            // Dead-time compensation: during the dead time a leg follows its current's body diode,
+            // which costs dt/T * Vbus against the current.  Add it back, softened through zero
+            // current (knee as the ESP32 sync-sense build).  The observer reads the commanded
+            // voltage, so it needs the applied one to match it.
+            float  comp[3] = { 0, 0, 0 };
+            if (dt_comp) {
+                float vdt = g_tun.deadtime_ns * 1e-9f / PWM_PERIOD_S;   // as a duty
+                const float i[3] = { m.ia, m.ib, m.ic };
+                for (int x = 0; x < 3; x++) comp[x] = vdt * clampf(i[x] / DT_COMP_KNEE_A, -1.0f, 1.0f);
+            }
+            m.duty[0] = clampf(0.5f + (va - vcm) * inv + comp[0], 0.0f, DUTY_MAX);
+            m.duty[1] = clampf(0.5f + (vb - vcm) * inv + comp[1], 0.0f, DUTY_MAX);
+            m.duty[2] = clampf(0.5f + (vc - vcm) * inv + comp[2], 0.0f, DUTY_MAX);
             hw::writeDuty(k, (uint16_t)(m.duty[0] * PWM_ARR), (uint16_t)(m.duty[1] * PWM_ARR),
                           (uint16_t)(m.duty[2] * PWM_ARR));
+        }
+
+        // Rotate the last applied voltage into the frame at angle th, for loop integrators.
+        void voltageIn(const Motor& m, float th, float* vd, float* vq) {
+            float s = sinf(th), c = cosf(th);
+            *vd = m.valpha * c + m.vbeta * s;
+            *vq = -m.valpha * s + m.vbeta * c;
         }
 
         void handoverToClosed() {
@@ -210,35 +260,42 @@ namespace foc {
                 float  s  = sinf(m.obs_angle), c = cosf(m.obs_angle);
                 float  id = m.ial * c + m.ibe * s;
                 float  iq = -m.ial * s + m.ibe * c;
-                float  vd = m.valpha * c + m.vbeta * s;
-                float  vq = -m.valpha * s + m.vbeta * c;
-                float  we = m.obs_w;
-                // Start the loops from the voltage and current already there: no step at the hand-over.
-                m.int_d   = vd - (-we * g_tun.l * iq);
-                m.int_q   = vq - (we * g_tun.l * id + we * g_tun.flux);
-                m.vel_int = iq;
-                m.iq_cmd  = iq;
+                float  vd, vq;
+                voltageIn(m, m.obs_angle, &vd, &vq);
+                float we = m.obs_w;
+                // Start every loop from the voltage and current already there: no step at the hand-over.
+                m.int_d = vd - (-we * g_tun.l * iq);
+                m.int_q = vq - (we * g_tun.l * id + we * g_tun.flux);
+                // The rotor lags the open-loop vector by its load angle: that is the starting error,
+                // so the closed loop pulls the rotor onto the same reference and the Z does not move.
+                if (!m.eps_valid) m.eps = wrapPi(m.ref - m.obs_angle);
+                m.eps_valid = true;
+                float wref = m.dir * g_omega_cmd + g_phi_rate;
+                m.pos_int = clampf(iq - g_tun.pos_kp * m.eps - g_tun.pos_kd * (wref - m.obs_w), -g_tun.iq_limit,
+                                   g_tun.iq_limit);
                 m.id_cl   = id;   // fades to 0
             }
-            g_zref = g_sum - 2.0f * g_phi;
             g_mode = Mode::Closed;
         }
 
         void handbackToOpen() {
-            g_alpha    = 0;
-            float imag = 0;
+            // Open loop drives the same reference angle (the rotor is on it, within eps).  Its d
+            // current ramps up from what is there while the closed loop's torque current fades out.
+            float idmax = 0;
             for (int k = 0; k < 2; k++) {
-                Motor& m   = mot[k];
-                float  mag = sqrtf(m.ial * m.ial + m.ibe * m.ibe);
-                // Put the open-loop current vector where the current already is.
-                float ang = mag > 0.3f ? atan2f(m.ibe, m.ial) : m.obs_angle;
-                m.c       = wrapPi(ang - g_phi);
-                float s = sinf(ang), c = cosf(ang);
-                m.int_d = m.valpha * c + m.vbeta * s;
-                m.int_q = -m.valpha * s + m.vbeta * c;
-                if (mag > imag) imag = mag;
+                Motor& m = mot[k];
+                float  s = sinf(m.ref), c = cosf(m.ref);
+                float  id = m.ial * c + m.ibe * s;
+                float  iq = -m.ial * s + m.ibe * c;
+                voltageIn(m, m.ref, &m.int_d, &m.int_q);
+                m.iq_carry = iq;
+                if (id > idmax) idmax = id;
             }
-            g_ol_current = fmaxf(imag, 0.5f);
+            // Full spin current at once: the d current is what holds each rotor to its reference
+            // in open loop (the closed loop's id was ~0).  The soft loop's R*I feed-forward makes the
+            // step a voltage step, so the current follows within L/R (~0.2 ms).
+            (void)idmax;
+            g_ol_current = g_tun.spin_a;
             g_mode       = Mode::Open;
         }
 
@@ -290,7 +347,7 @@ namespace foc {
                 for (int k = 0; k < 2; k++) {
                     mot[k].valpha = g_align_volts;
                     mot[k].vbeta  = 0;
-                    modulate(k);
+                    modulate(k, false);   // raw: the align test reads the sense, not the drive
                 }
                 return;
             }
@@ -299,19 +356,52 @@ namespace foc {
             float target = g_omega_target;
             if (g_mode == Mode::Open && g_tun.closed_loop_allowed) target = fminf(target, CL_ENTER_RPM * RPM_TO_RAD);
             float rate = g_omega_cmd >= SPIN_RAMP_SLOW_ABOVE_RPM * RPM_TO_RAD ? SPIN_RAMP_HIGH_RAD_S2 : SPIN_RAMP_RAD_S2;
+            if (g_mode == Mode::Open) rate = fminf(rate, SPIN_RAMP_OPEN_RAD_S2);
             g_omega_cmd = slew(g_omega_cmd, target, rate * DT);
             g_alpha     = wrapPi(g_alpha + g_omega_cmd * DT);
 
-            // Phase offset (Z) ramp.
-            float phi    = g_phi;
-            float newphi = slew(phi, g_phi_target, PHASE_OFFSET_RAMP_RAD_S * DT);
-            g_phi_rate   = (newphi - phi) / DT;
-            g_phi        = newphi;
+            // Phase offset (Z) ramp: trapezoidal, so a big move (homing, tool load) does not start or
+            // stop with a speed step - that rings the rotors on their current vectors.  The XY board's
+            // own streamed Z is far gentler than this limit.
+            {
+                float err   = g_phi_target - g_phi;
+                float vstop = sqrtf(2.0f * PHASE_OFFSET_ACCEL_RAD_S2 * fabsf(err));
+                float vwant = copysignf(fminf(PHASE_OFFSET_RAMP_RAD_S, vstop), err);
+                g_phi_rate  = slew(g_phi_rate, vwant, PHASE_OFFSET_ACCEL_RAD_S2 * DT);
+                float stepd = g_phi_rate * DT;
+                if (fabsf(err) <= 1e-5f || (stepd * err > 0 && fabsf(stepd) >= fabsf(err))) {
+                    g_phi      = g_phi_target;   // arrived (or would pass it this period)
+                    g_phi_rate = fabsf(err) <= 1e-5f ? 0.0f : err / DT;
+                    if (fabsf(err) <= 1e-5f) g_phi_rate = 0;
+                } else {
+                    g_phi += stepd;
+                }
+            }
 
             // Open-loop current: hold, spin, plus the Z-move boost.
             float ol_target = (g_omega_cmd > 0.0f || g_omega_target > 0.0f) ? g_tun.spin_a : g_tun.hold_a;
             if (g_z_moving) ol_target += g_tun.boost_a;
             g_ol_current = slew(g_ol_current, ol_target, OL_CURRENT_SLEW_A_S * DT);
+
+            // Each rotor's angle against its reference: always in closed loop; in open loop once the
+            // observer is trusted (above OBS_TRUST_RPM and tracking), so an open-loop slip is seen too.
+            bool fast = g_omega_cmd > OBS_TRUST_RPM * RPM_TO_RAD;
+            for (int k = 0; k < 2; k++) {
+                Motor& m = mot[k];
+                observerUpdate(m);
+                float ref  = wrapPi(m.dir * g_alpha + g_phi + m.c);
+                float dref = wrapPi(ref - m.ref);
+                m.ref      = ref;
+                if (m.eps_valid) {
+                    m.eps += dref - m.obs_da;
+                    if (g_mode == Mode::Open && !fast) m.eps_valid = false;
+                } else if (g_mode == Mode::Open && fast &&
+                           fabsf(m.obs_w - m.dir * g_omega_cmd) < OBS_TRUST_TOL * g_omega_cmd) {
+                    m.eps       = wrapPi(m.ref - m.obs_angle);   // the load angle, now followed unwrapped
+                    m.eps_valid = true;
+                }
+                if (!m.eps_valid) m.eps = 0;
+            }
 
             if (g_req_closed) {
                 g_req_closed = false;
@@ -322,34 +412,35 @@ namespace foc {
                 if (g_mode == Mode::Closed) handbackToOpen();
             }
 
-            for (int k = 0; k < 2; k++) observerUpdate(mot[k]);
-
-            if (g_mode == Mode::Closed) g_zerr = g_sum - (g_zref + 2.0f * g_phi);
-            else g_zerr = 0;
+            g_zerr          = 0.5f * (mot[0].eps + mot[1].eps);
+            g_angle_err_max = fmaxf(fabsf(mot[0].eps), fabsf(mot[1].eps));
 
             for (int k = 0; k < 2; k++) {
                 Motor& m = mot[k];
+                float wref = m.dir * g_omega_cmd + g_phi_rate;   // the reference angle's own speed
                 if (g_mode == Mode::Open) {
-                    m.theta  = wrapPi(m.dir * g_alpha + g_phi + m.c);
+                    // The rotor runs (nearly) synchronous with the vector, so its back-EMF is fed
+                    // forward on q; the slow trim absorbs the load angle's share and the dead time.
+                    m.iq_carry = slew(m.iq_carry, 0.0f, OL_CARRY_FADE_A_S * DT);
+                    m.theta  = m.ref;
                     m.id_ref = g_ol_current;
-                    m.iq_ref = 0;
-                    currentLoop(k, m.dir * g_omega_cmd + g_phi_rate, false);
+                    m.iq_ref = m.iq_carry;
+                    currentLoop(k, wref, true, true);
                 } else {
-                    // Closed loop: speed reference = the spin, the Z ramp's own rate, and the Z loop's
-                    // correction shared between the motors (each turns the sum by its own angle).
-                    float wref = m.dir * g_omega_cmd + g_phi_rate - 0.5f * g_tun.z_kp * g_zerr;
-                    float verr = wref - m.obs_w;
-                    m.vel_int  = clampf(m.vel_int + g_tun.vel_ki * verr * DT, -g_tun.iq_limit, g_tun.iq_limit);
-                    float iq   = clampf(g_tun.vel_kp * verr + m.vel_int, -g_tun.iq_limit, g_tun.iq_limit);
-                    m.iq_cmd   = slew(m.iq_cmd, iq, VEL_IQ_RAMP_A_S * DT);
+                    // Closed loop: PID on the rotor's angle against the reference, D on the observer's
+                    // speed.  The angle (not just the speed) is held, so each rotor keeps its place and
+                    // the Z - the two rotors' relative angle - stays where the phase offset puts it.
+                    float werr = wref - m.obs_w;
+                    m.pos_int  = clampf(m.pos_int + g_tun.pos_ki * m.eps * DT, -g_tun.iq_limit, g_tun.iq_limit);
+                    m.iq_ref   = clampf(g_tun.pos_kp * m.eps + g_tun.pos_kd * werr + m.pos_int, -g_tun.iq_limit,
+                                        g_tun.iq_limit);
                     m.id_cl    = slew(m.id_cl, 0.0f, CL_ID_RAMP_A_S * DT);
-                    m.iq_ref   = m.iq_cmd;
                     m.id_ref   = m.id_cl;
                     m.theta    = m.obs_angle;
-                    m.speed_err_frac = fabsf(verr) / fmaxf(g_omega_cmd, 1.0f);
-                    currentLoop(k, m.obs_w, true);
+                    m.speed_err_frac = fabsf(werr) / fmaxf(g_omega_cmd, 1.0f);
+                    currentLoop(k, m.obs_w, true, false);
                 }
-                modulate(k);
+                modulate(k, true);
             }
         }
     }
@@ -467,10 +558,10 @@ namespace foc {
     void zeroPhase() {
         __disable_irq();
         float phi = g_phi;
-        // theta = dir*alpha + phi + c: fold phi into c so nothing moves.
+        // ref = dir*alpha + phi + c: fold phi into c so nothing moves.
         for (int k = 0; k < 2; k++) mot[k].c = wrapPi(mot[k].c + phi);
-        g_zref += 2.0f * phi;
         g_phi = g_phi_target = 0;
+        g_phi_rate = 0;
         __enable_irq();
     }
 
@@ -491,6 +582,7 @@ namespace foc {
     }
 
     float zErrorRad() { return g_zerr; }
+    float maxAngleErrorRad() { return g_angle_err_max; }
 
     float maxSpeedErrorFraction() {
         return fmaxf(mot[0].speed_err_frac, mot[1].speed_err_frac);

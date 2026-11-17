@@ -5,14 +5,17 @@
 //
 // Drive modes (both motors together, as on the ESP32 board):
 //   Off     - MOE clear, all six FETs of each bridge off, the motors coast.
-//   Open    - "I/f": a current vector of fixed size at the commanded angle.  Used for standstill
-//             Z holds and moves, for spin-up below the hand-over speed and for spin-down.
+//   Open    - "I/f": a current vector of fixed size at the commanded angle, driven as a voltage
+//             (R*I + back-EMF feed-forward) with a slow trim onto the current, which keeps the
+//             back-EMF damping of the ESP32's voltage drive.  Used for standstill Z holds and
+//             moves, for spin-up below the hand-over speed and for spin-down.
 //   Closed  - sensorless FOC on the MXLEMMING flux observer's angle (ported from the ESC1 bench):
-//             dq current loops, a speed loop per motor, and a Z loop that keeps the SUM of the
-//             two rotors' angles where the phase offset says (the Z is their relative angle).
+//             dq current loops and, per motor, a PID that steers the observed rotor angle onto the
+//             same reference angle the open loop drives - so the Z (the rotors' relative angle)
+//             is held in angle, not just in speed, and survives both hand-overs.
 //
-// Angles: each motor has its own electrical frame; motor i's commanded angle in open loop is
-//   theta_i = dir_i * alpha + phi + c_i
+// Angles: each motor has its own electrical frame; motor i's reference angle in both modes is
+//   ref_i = dir_i * alpha + phi + c_i
 // alpha = the integrated spin angle, phi = the phase offset (Z), c_i = a constant set at each
 // hand-back.  The motors turn in opposite senses (dir = +-1), so phi adds to both and
 // theta_1 + theta_2 = 2 phi + const: exactly the ESP32 firmware's convention.
@@ -52,7 +55,9 @@ namespace foc {
     void requestClosedLoop();
     void requestOpenLoop();
     bool observersTracking(float tol);   // both observers within tol of the command
-    float zErrorRad();                   // closed loop: angle-sum error (rad); 0 otherwise
+    float zErrorRad();                   // mean rotor angle error = phase (Z) error, rad (0 when not tracked)
+    float maxAngleErrorRad();            // the worse motor's |angle error| against its reference, rad:
+                                         // closed loop always, open loop above OBS_TRUST_RPM
     float maxSpeedErrorFraction();       // closed loop: worst |obs - ref| / command
 
     // Faults the interrupt detected (it has already turned the outputs off).  Read-and-clear.
@@ -67,12 +72,13 @@ namespace foc {
     // Run-time tuning (the '#' link commands).
     struct Tuning {
         float cur_kp, cur_ki;
-        float vel_kp, vel_ki;
-        float z_kp;
+        float pos_kp, pos_kd, pos_ki;   // closed-loop angle PID: A/rad, A/(rad/s), A/(rad s)
+        float ol_ki;                    // open-loop current trim integrator, V/(A s)
         float hold_a, spin_a, boost_a;
         float iq_limit;
         float r, l, flux;
         float sw_trip_a;
+        float deadtime_ns;              // dead-time compensation (0 = off)
         bool  closed_loop_allowed;
     };
     Tuning& tuning();
