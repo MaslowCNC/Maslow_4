@@ -150,9 +150,9 @@ def build_host_package(
     config = PLATFORM_CONFIG[platform]
     repo_root = manifest_path.parent
     firmware_root = repo_root / "firmware"
-    install_root = firmware_root / "install_scripts"
-    # Maslow's own S3 scripts. The posix/ and win64/ folders next to it are upstream FluidNC's.
-    maslow_scripts = install_root / "maslow" / platform
+    # Maslow's own S3 install scripts. firmware/install_scripts/ is upstream FluidNC's and is not used.
+    install_root = repo_root / "scripts" / "release" / "install"
+    maslow_scripts = install_root / platform
     fluidterm_root = firmware_root / "fluidterm"
     env_root = source_dir / "targets" / env
     zip_root_name = f"fluidnc-maslow4-{version}-{platform}"

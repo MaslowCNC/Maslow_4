@@ -105,8 +105,8 @@ results, and anything unexpected. If the config was reset (USB `--fs`, `--erase`
   2026-10-26 the connection was reset at 7%. `/updatefw` feeds the watchdog.
 - **Never use `pio run -t nobuild -t uploadfs`.** With the pinned platform it OTA-writes
   `firmware.bin` into the filesystem partition.
-- **Only `firmware/install_scripts/maslow/` is right for this board.** The `posix/`, `win64/` and
-  `linux-python3/` folders beside it are upstream FluidNC's (plain-ESP32 chip or offsets). The S3
+- **`firmware/install_scripts/` is upstream FluidNC's and wrong for this board** (plain-ESP32 chip
+  or offsets). Maslow's release install scripts are in `scripts/release/install/`. The S3
   bootloader goes at `0x0`.
 - **USB offsets** (from `firmware/max_littlefs.csv`): bootloader `0x0`, partitions `0x8000`,
   `boot_app0` `0xe000`, firmware `0x10000`, littlefs `0x5F0000` (2 MB). `boot_app0` makes the
