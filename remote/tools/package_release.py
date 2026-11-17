@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """Package the remote firmware for release.
 
-Needs the three boards built first (pio run -e cyd -e cyd4 -e es3c40p, in remote/), which
-leaves a merged firmware.factory.bin (bootloader + partitions + app, written at 0x0) per board.
+Needs the firmware built first (pio run, in remote/), which leaves a merged
+firmware.factory.bin (bootloader + partitions + app, written at 0x0).
 
 Writes to --dist-dir:
   maslow-remote-<version>-windows.zip   Full-Install.bat + esptool.exe
   maslow-remote-<version>-macos.zip     Full-Install.command / .sh + esptool (arm64, x86_64)
   maslow-remote-<version>-linux.zip     Full-Install.sh + esptool (x86_64, aarch64)
-Each zip carries firmware/<env>.bin for every board, so nothing has to be installed.
+Each zip carries firmware/maslow-remote.bin, so nothing has to be installed.
 
-With --web-dir, also writes <env>.bin and manifest-<env>.json there for the browser
+With --web-dir, also writes maslow-remote.bin and manifest.json there for the browser
 installer (docs/remote-installer/, ESP Web Tools).
 """
 
@@ -29,11 +29,8 @@ ESPTOOL_URL = "https://github.com/espressif/esptool/releases/download/{v}/esptoo
 REMOTE_DIR = Path(__file__).resolve().parent.parent
 INSTALL_DIR = REMOTE_DIR / "install"
 
-BOARDS = {
-    "cyd": {"chip": "ESP32", "name": '2.8" Cheap Yellow Display (ESP32-2432S028R)'},
-    "cyd4": {"chip": "ESP32", "name": '4.0" ESP32-32E / E32R40T'},
-    "es3c40p": {"chip": "ESP32-S3", "name": '4.0" ESP32-S3 (Hosyond / lcdwiki ES3C40P)'},
-}
+ENV = "es3c40p"  # the only board: 4.0" ESP32-S3 Hosyond / lcdwiki ES3C40P
+IMAGE = "maslow-remote.bin"
 
 # platform -> (scripts, [(esptool asset, tools/ subfolder)])
 PLATFORMS = {
@@ -100,12 +97,10 @@ def main() -> None:
     p.add_argument("--web-dir", type=Path, help="also write the browser installer's files here")
     args = p.parse_args()
 
-    images = {}
-    for env in BOARDS:
-        image = args.build_dir / env / "firmware.factory.bin"
-        if not image.is_file():
-            raise SystemExit(f"Missing {image}: build it with pio run -e {env}")
-        images[env] = image.read_bytes()
+    factory = args.build_dir / ENV / "firmware.factory.bin"
+    if not factory.is_file():
+        raise SystemExit(f"Missing {factory}: build it with pio run (in remote/)")
+    image = factory.read_bytes()
 
     args.dist_dir.mkdir(parents=True, exist_ok=True)
     for platform, (scripts, tools) in PLATFORMS.items():
@@ -121,8 +116,7 @@ def main() -> None:
                 if script.endswith(".bat"):
                     text = text.replace("\r\n", "\n").replace("\n", "\r\n")
                 add(z, f"{root}/{script}", text.encode(), executable=not script.endswith(".bat"))
-            for env, data in images.items():
-                add(z, f"{root}/firmware/{env}.bin", data)
+            add(z, f"{root}/firmware/{IMAGE}", image)
             for asset, folder in tools:
                 url = ESPTOOL_URL.format(v=ESPTOOL_VERSION, asset=asset)
                 for name, data in esptool_files(fetch(asset, args.cache_dir)).items():
@@ -132,15 +126,14 @@ def main() -> None:
 
     if args.web_dir:
         args.web_dir.mkdir(parents=True, exist_ok=True)
-        for env, board in BOARDS.items():
-            (args.web_dir / f"{env}.bin").write_bytes(images[env])
-            manifest = {
-                "name": f"Maslow remote: {board['name']}",
-                "version": args.version,
-                "new_install_prompt_erase": True,
-                "builds": [{"chipFamily": board["chip"], "parts": [{"path": f"{env}.bin", "offset": 0}]}],
-            }
-            (args.web_dir / f"manifest-{env}.json").write_text(json.dumps(manifest, indent=2) + "\n")
+        (args.web_dir / IMAGE).write_bytes(image)
+        manifest = {
+            "name": "Maslow remote",
+            "version": args.version,
+            "new_install_prompt_erase": True,
+            "builds": [{"chipFamily": "ESP32-S3", "parts": [{"path": IMAGE, "offset": 0}]}],
+        }
+        (args.web_dir / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
         print(f"Wrote the browser installer files to {args.web_dir}", flush=True)
 
 

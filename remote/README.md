@@ -1,19 +1,15 @@
-# Maslow 4.1 ESP-NOW remote
+# Maslow ESP-NOW remote
 
-Firmware for a handheld remote built on ELEGOO's ESP32 touch displays:
+Firmware for a handheld remote built on one display board: the **4.0" ESP32-S3
+IPS touch display sold by Hosyond** (lcdwiki ES3C40P). It has an ESP32-S3 with
+16 MB flash and 8 MB PSRAM, a 320x480 ST7796S panel, FT6336U capacitive touch,
+a WS2812 LED and native USB-C. Pins are listed in `src/Display.h`.
 
-| Board | Build env |
-| --- | --- |
-| 2.8" ESP32-2432S028R "Cheap Yellow Display" (240x320 ILI9341, XPT2046) | `cyd` (default) |
-| 4.0" ESP32-32E / E32R40T (320x480 ST7796, XPT2046 on the panel bus) | `cyd4` |
-| 4.0" ESP32-S3 Hosyond / lcdwiki ES3C40P (320x480 ST7796S, FT6336U touch, native USB) | `es3c40p` |
-
-All of them use the same layout, drawn for 240x320 and scaled to the panel, with
-larger fonts on the 4" boards. It talks to the Maslow over ESP-NOW using
+The layout is drawn for 240x320 and scaled to the panel. It talks to the Maslow over ESP-NOW using
 the FluidNC `ESPNowChannel` (`firmware/FluidNC/esp32/ESPNow`), so it needs
 no WiFi network and keeps working when the WebUI is closed.
 
-To put the firmware on a board without building it, see [Installing](#installing):
+To put the firmware on a display without building it, see [Installing](#installing):
 a browser installer, or a Full-Install package that needs nothing installed.
 
 ## Screens
@@ -36,12 +32,12 @@ The remote reads the Maslow state from the `MS` field of the status report
 | **Job** | SD card file list. Start (with confirmation; shows Starting... until the job moves, so it can't be sent twice), Pause/Resume, Delete, progress bar and feed override. After a job stops early, Start becomes **Resume line N** (`$SD/RunFrom`, the line can be changed) and Delete becomes **Discard** (`$SD/Discard`); picking another file discards it. |
 | **Setup** | Maslow state, Retract All, Extend All, Apply Tension, Release Tension, Find Anchors, Set Z-Stop, Test, Park, Unlock and **Settings** (work area (0 = auto), park position, scale, thicknesses, tension limits, retraction force, WiFi SSID/password; numeric changes are saved to maslow.yaml with `$CO`). In the Tensioned state (Apply Tension couldn't match the saved anchors) Find Anchors is offered; in Unknown, Apply Tension is offered when some belt lengths are known. While Find Anchors runs, this tab shows its progress messages. |
 | **Log** | Machine messages, a keyboard to send any command, and a list of quick commands. |
-| **More** | Unlock, spindle off, feed/rapid/spindle overrides, config macros, jog speeds, brightness, touch calibration, link info, pair or forget the machine. |
+| **More** | Unlock, spindle off, feed/rapid/spindle overrides, config macros, jog speeds, display and sleep settings, link info, pair or forget the machine. |
 
 Warnings that pop up in the WebUI (Apply Tension deviation and retraction
 warnings, Apply Tension failed with a Find Anchors button, Z home reset, Zm
 invalid, calibration complete) pop up here too.
-The RGB LED is green when connected, red in Alarm or when disconnected,
+The LED is green when connected, red in Alarm or when disconnected,
 and blinks blue while pairing.
 
 The WebUI's G-code preview, job bounds check, file upload, full config
@@ -57,26 +53,28 @@ installing anything on their computer. There are two ways.
 Open **<https://documentation.maslowcnc.com/remote-installer/>** in Chrome or
 Edge on a computer (Firefox and Safari can't reach USB serial ports).
 
-1. Unplug the Maslow's USB cable, then plug in the display with a USB data cable.
-2. Click **Install** next to your board, pick the display's port and click
-   Connect.
+1. Unplug the Maslow's USB cable (its controller is an ESP32-S3 too, so it
+   would show up in the port list), then plug in the display with a USB-C data
+   cable.
+2. Click **Install**, pick the display's port and click Connect.
 3. Choose **Erase** when asked. It takes about a minute.
 
 The page uses [ESP Web Tools](https://esphome.github.io/esp-web-tools/) and the
-images the release workflow copies to `web-assets/remote/latest/`. The page
+image the release workflow copies to `web-assets/remote/latest/`. The page
 source is `docs/remote-installer/index.html`.
 
 ### With the Full-Install package
 
 Every release has a zip for each operating system:
 `maslow-remote-<version>-windows.zip`, `-macos.zip` and `-linux.zip`. Each one
-holds every board's firmware, a Full-Install script, and Espressif's
+holds the firmware, a Full-Install script, and Espressif's
 stand-alone `esptool` program for that system, so Python isn't needed.
 
 1. Download the zip for your computer from the
    [latest release](https://github.com/MaslowCNC/Maslow_4/releases/latest)
    and unpack the whole thing.
-2. Unplug the Maslow's USB cable, then plug in the display with a USB data cable.
+2. Unplug the Maslow's USB cable, then plug in the display with a USB-C data
+   cable.
 3. Run the installer:
 
    | System | How |
@@ -85,37 +83,35 @@ stand-alone `esptool` program for that system, so Python isn't needed.
    | macOS | Double-click `Full-Install.command`. If macOS says it can't check the file, open System Settings > Privacy & Security, click **Open Anyway**, and double-click it again. Or run `sh Full-Install.sh` in Terminal. |
    | Linux | `sh Full-Install.sh` (your user needs serial port access: `sudo usermod -aG dialout $USER`, then log in again) |
 
-4. The installer finds the board and shows its port, chip and MAC. The
-   ESP32-S3 board is recognised by itself. For an ESP32 board it asks which
-   display you have (2.8" or 4.0" ESP32-32E). Type `y` to install.
+4. The installer finds the board and shows its port, chip and MAC. It
+   refuses anything that isn't an ESP32-S3. The Maslow's controller is an
+   ESP32-S3 too, which is why the Maslow has to be unplugged. Type `y` to
+   install.
 
 Full-Install erases the whole board first, as the Maslow's Full-Install
-does, so the remote forgets its pairing and touch calibration.
+does, so the remote forgets its pairing.
 
-After either way of installing, the remote restarts and offers touch
-calibration for 6 seconds (it can be done later under More > Calibrate
-touch). Then pair it (below).
+After either way of installing, the remote restarts by itself. Then pair it
+(below).
 
-If the board isn't found: use a cable that carries data, close other programs
-that have the port open, and on Windows let it install the CH340 driver for the
-2.8" and ESP32-32E boards (Windows 10 and 11 do it themselves the first time).
-As a last resort, hold the board's BOOT button while plugging it in.
+If the board isn't found, use a cable that carries data and close other
+programs that have the port open. As a last resort, hold the board's BOOT
+button while plugging it in.
 
-The images are merged (bootloader, partition table and app), so they can also
-be written by hand at offset 0:
-`esptool --chip esp32s3 write_flash 0x0 es3c40p.bin` (`--chip esp32` for
-`cyd.bin` and `cyd4.bin`).
+The image is merged (bootloader, partition table and app), so it can also be
+written by hand at offset 0:
+`esptool --chip esp32s3 write_flash 0x0 maslow-remote.bin`.
 
 ### Making the packages
 
 The release workflow (`.github/workflows/release.yml`, job `build-remote`)
-builds the three boards and runs `tools/package_release.py`. The scripts and
+builds the firmware and runs `tools/package_release.py`. The scripts and
 instructions that go into the zips are in `install/`. To build the packages
 locally:
 
 ```sh
 cd remote
-pio run -e cyd -e cyd4 -e es3c40p
+pio run
 python3 tools/package_release.py --version 1.2.3 --dist-dir dist --web-dir dist/web
 ```
 
@@ -137,23 +133,18 @@ pairing. `$EL` on the Maslow lists paired remotes; `$EU=<n>` removes one.
 
 ```sh
 cd remote
-pio run -e cyd -t upload     # 2.8"
-pio run -e cyd4 -t upload    # 4.0" ESP32-32E
-pio run -e es3c40p -t upload # 4.0" ES3C40P (ESP32-S3)
+pio run -t upload
 ```
-
-The first boot asks you to touch the screen to calibrate touch (it skips
-after 6 seconds). To recalibrate later, use More > Calibrate touch, or
-hold the top bar left of STOP for 4 seconds.
 
 ## Development tools
 
-Opening the CYD's serial port resets the ESP32, so `tools/serial_hub.py`
-owns the port and shares it on localhost:4568, logging to `logs/`:
+`tools/serial_hub.py` owns the display's USB serial port and shares it on
+localhost:4568, logging to `logs/`, so several tools can use the console at
+once:
 
 ```sh
 nohup ~/.platformio/penv/bin/python tools/serial_hub.py > logs/hub.out 2>&1 &
-tools/flash.sh -e cyd4              # pauses the hub while flashing
+tools/flash.sh                      # pauses the hub while flashing
 ~/.platformio/penv/bin/python tools/remote_cli.py shot screen.png
 ~/.platformio/penv/bin/python tools/remote_cli.py cmd "tap 120 200"
 ```

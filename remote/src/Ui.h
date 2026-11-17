@@ -1,8 +1,7 @@
 // Small retained-mode touch UI for portrait displays.
 //
-// Layouts are written for a 240x320 logical screen.  Gfx maps them onto the
-// physical panel (240x320 on the 2.8" board, 320x480 on the 4"), and the 4"
-// board uses larger fonts, so one layout serves both.
+// Layouts are written for a 240x320 logical screen, and Gfx scales them onto
+// the 320x480 panel.
 //
 // Layout: a 30 px top bar (machine state, Maslow state, link, STOP) that is
 // always visible, a content area, and a 34 px tab bar.  Dialogs cover the
@@ -166,7 +165,6 @@ namespace Ui {
     uint16_t darken(uint16_t c);
     void     dashedRule(int y);  // dashed separator across the screen
     void drawArrow(Gfx& g, int cx, int cy, Icon dir, int size, uint16_t color);
-    void calibrateTouch();
     void setBrightness(uint8_t level);  // saved
     uint8_t brightness();
 }

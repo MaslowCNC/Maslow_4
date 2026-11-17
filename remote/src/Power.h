@@ -3,8 +3,8 @@
 // After the screen timeout the backlight goes off; the radio stays up, so the
 // link and STOP keep working and the next touch turns the screen back on.
 // After the sleep timeout, and only while the machine is not running a job or
-// a Maslow belt operation, the remote deep-sleeps.  The XPT2046 touch
-// controller pulls PENIRQ (GPIO 36) low on a touch, which wakes the ESP32;
+// a Maslow belt operation, the remote deep-sleeps.  The FT6336U touch
+// controller pulls INT (GPIO 17) low on a touch, which wakes the ESP32-S3;
 // waking is a reboot, and the link reconnects in about a second.
 
 #pragma once

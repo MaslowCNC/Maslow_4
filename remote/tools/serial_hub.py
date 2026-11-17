@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Own the remote's USB serial port and share it on localhost:4568.
 
-Opening the CYD's CH340 port resets the ESP32, so tools connect here instead
-of opening the port themselves.  Every client sees everything the remote
+Tools connect here instead of opening the port themselves, so several can use
+the console at once without one closing it under another.  Every client sees everything the remote
 prints; whatever a client sends goes to the remote.  All output is logged with
 timestamps to remote/logs/hub-<date>.log.
 
@@ -28,7 +28,8 @@ PORT = 4568
 
 
 def find_port():
-    ports = glob.glob("/dev/cu.usbserial-*") + glob.glob("/dev/cu.usbmodem*") + glob.glob("/dev/ttyUSB*") + glob.glob("/dev/ttyACM*")
+    # The ES3C40P's native USB shows up as a USB modem (ACM) port.
+    ports = glob.glob("/dev/cu.usbmodem*") + glob.glob("/dev/ttyACM*")
     return ports[0] if ports else None
 
 

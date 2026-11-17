@@ -9,19 +9,11 @@
 #include <math.h>
 
 namespace Ui {
-#ifdef LARGE_PANEL
     const lgfx::IFont* F_SMALL = &fonts::DejaVu18;
     const lgfx::IFont* F_BTN   = &fonts::FreeSans12pt7b;
     const lgfx::IFont* F_BTN_SMALL = &fonts::FreeSans9pt7b;
     const lgfx::IFont* F_BOLD  = &fonts::FreeSansBold12pt7b;
     const lgfx::IFont* F_BIG   = &fonts::FreeSansBold18pt7b;
-#else
-    const lgfx::IFont* F_SMALL = &fonts::Font2;
-    const lgfx::IFont* F_BTN   = &fonts::FreeSans9pt7b;
-    const lgfx::IFont* F_BTN_SMALL = &fonts::Font2;
-    const lgfx::IFont* F_BOLD  = &fonts::FreeSansBold9pt7b;
-    const lgfx::IFont* F_BIG   = &fonts::FreeSansBold12pt7b;
-#endif
     Gfx gfx(lcd);
 }
 
@@ -278,12 +270,6 @@ namespace {
         if (stopTouched) {
             stopFlash = false;
             topChanges = 0xFFFFFFFF;  // redraw
-            return;
-        }
-        // Long press on the top bar (left of STOP): recalibrate the touch panel,
-        // in case the calibration is so far off nothing else can be reached.
-        if (downY < TOP_H && downX < STOP_X && millis() - downAt > 4000) {
-            calibrateTouch();
             return;
         }
         if (downY >= TABS_Y && !top()->modal() && downY < H) {
@@ -683,15 +669,10 @@ namespace Ui {
     void begin() {
         Preferences p;
         p.begin("ui", true);
-        uint16_t cal[8];
-        bool     haveCal = p.getBytes("touchcal", cal, sizeof(cal)) == sizeof(cal);
-        uint8_t  bright  = p.getUChar("bright", 200);
+        uint8_t bright = p.getUChar("bright", 200);
         p.end();
         lcd.init();
         lcd.setRotation(0);
-        if (haveCal && !TOUCH_CAPACITIVE) {
-            lcd.setTouchCalibrate(cal);
-        }
         setBrightness(bright);
         topBar.setColorDepth(16);
         topBar.createSprite(LCD_W, Gfx::py(TOP_H));
@@ -699,34 +680,6 @@ namespace Ui {
             tabs[i] = makeTab(i);
         }
         gfx.fillScreen(C::bg);
-        if (!haveCal && !TOUCH_CAPACITIVE && !Power::wokeFromSleep()) {
-            // First boot: offer touch calibration; carry on with the defaults
-            // if nobody touches the screen.
-            gfx.setFont(F_BTN);
-            gfx.setTextColor(C::text);
-            gfx.setTextDatum(textdatum_t::middle_center);
-            gfx.drawString("Touch the screen to", W / 2, 130);
-            gfx.drawString("calibrate touch", W / 2, 152);
-            gfx.setFont(F_SMALL);
-            gfx.setTextColor(C::dim);
-            gfx.drawString("(skips in 6 s)", W / 2, 180);
-            uint32_t t0 = millis();
-            int32_t  x, y;
-            bool     touched = false;
-            while (millis() - t0 < 6000) {
-                if (lcd.getTouch(&x, &y)) {
-                    touched = true;
-                    break;
-                }
-                Debug::poll();
-                delay(20);
-            }
-            if (touched) {
-                while (lcd.getTouch(&x, &y)) delay(20);
-                calibrateTouch();
-                return;
-            }
-        }
         redrawAll();
     }
 
@@ -947,27 +900,6 @@ namespace Ui {
         P(-size, -hw, x3, y3);
         g.fillTriangle(x0, y0, x1, y1, x2, y2, color);
         g.fillTriangle(x1, y1, x2, y2, x3, y3, color);
-    }
-
-    void calibrateTouch() {
-        if (TOUCH_CAPACITIVE) {
-            Machine::toast("Capacitive touch needs no calibration");
-            return;
-        }
-        uint16_t cal[8];
-        gfx.fillScreen(C::bg);
-        gfx.setFont(F_BTN);
-        gfx.setTextColor(C::text);
-        gfx.setTextDatum(textdatum_t::middle_center);
-        gfx.drawString("Touch the arrow tips", W / 2, H / 2 - 12);
-        gfx.drawString("in each corner", W / 2, H / 2 + 12);
-        lcd.calibrateTouch(cal, C::text, C::bg, 24);
-        Preferences p;
-        p.begin("ui", false);
-        p.putBytes("touchcal", cal, sizeof(cal));
-        p.end();
-        DLOG("UI touch calibration saved\n");
-        redrawAll();
     }
 
     static uint8_t currentBrightness = 200;

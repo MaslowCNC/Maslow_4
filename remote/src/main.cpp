@@ -1,4 +1,4 @@
-// Maslow 4.1 ESP-NOW remote: firmware for the ESP32-2432S028R display.
+// Maslow ESP-NOW remote: firmware for the 4.0" ESP32-S3 ES3C40P display.
 
 #include <Arduino.h>
 

@@ -221,7 +221,7 @@ jobs:
           path: release-staging/
           if-no-files-found: error
 
-  # The ESP-NOW remote (remote/): three display boards, packaged with esptool so users
+  # The ESP-NOW remote (remote/, 4.0" ESP32-S3 ES3C40P display), packaged with esptool so users
   # need nothing installed (remote/tools/package_release.py), plus the browser installer's files.
   build-remote:
     needs: prepare
@@ -252,7 +252,7 @@ jobs:
 
       - name: Build remote firmware
         working-directory: remote
-        run: pio run -e cyd -e cyd4 -e es3c40p
+        run: pio run
 
       - name: Package remote firmware
         run: |

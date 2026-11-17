@@ -69,31 +69,16 @@ fi
 rm -f "$log"
 
 case "$chip" in
-    ESP32-S3*)
-        env=es3c40p
-        board='4.0" ESP32-S3 display (Hosyond / lcdwiki ES3C40P)'
-        espchip=esp32s3
-        ;;
-    ESP32-D0* | ESP32-U4* | ESP32-PICO* | "ESP32 "*)
-        espchip=esp32
-        echo "Found an ESP32 board on $port.  Which display is it?"
-        echo "  1) 2.8\" Cheap Yellow Display (ESP32-2432S028R, 240x320)"
-        echo "  2) 4.0\" ESP32-32E / E32R40T (320x480)"
-        printf 'Enter 1 or 2: '
-        read -r pick
-        case "$pick" in
-            1) env=cyd; board='2.8" Cheap Yellow Display (ESP32-2432S028R)' ;;
-            2) env=cyd4; board='4.0" ESP32-32E / E32R40T' ;;
-            *) echo "Nothing installed."; finish 1 ;;
-        esac
-        ;;
+    ESP32-S3*) ;;
     *)
-        echo "Found $chip on $port, which isn't one of the remote's boards.  Nothing installed."
+        echo "Found $chip on $port.  The remote runs on the 4.0\" ESP32-S3 display"
+        echo "(Hosyond / lcdwiki ES3C40P), so this isn't it.  Nothing installed."
         finish 1
         ;;
 esac
+board='4.0" ESP32-S3 display (Hosyond / lcdwiki ES3C40P)'
 
-image="firmware/$env.bin"
+image=firmware/maslow-remote.bin
 if [ ! -f "$image" ]; then
     echo "Missing $image.  Unpack the whole zip file and run the installer from there."
     finish 1
@@ -103,6 +88,8 @@ echo
 echo "Board:  $board"
 echo "Port:   $port"
 echo "Chip:   $chip  (MAC $mac)"
+echo
+echo "The Maslow's controller is an ESP32-S3 too: if this is the Maslow, answer n."
 echo
 echo "This erases everything on that board, then installs the remote firmware."
 echo "Afterwards the remote has to be paired with the Maslow again."
@@ -116,20 +103,19 @@ esac
 # ---- Erase and install ------------------------------------------------------
 echo
 echo "Erasing..."
-if ! "$esptool" --chip "$espchip" --port "$port" --baud 460800 erase_flash; then
+if ! "$esptool" --chip esp32s3 --port "$port" --baud 460800 erase_flash; then
     echo "Erasing failed."
     finish 1
 fi
 echo
 echo "Installing..."
-if ! "$esptool" --chip "$espchip" --port "$port" --baud 460800 --after hard_reset write_flash 0x0 "$image"; then
+if ! "$esptool" --chip esp32s3 --port "$port" --baud 460800 --after hard_reset write_flash 0x0 "$image"; then
     echo "Installing failed.  Try again; if it keeps failing, try another USB port or cable."
     finish 1
 fi
 
 echo
 echo "Installation successful!"
-echo "The remote restarts by itself.  It offers to calibrate the touch screen: touch the"
-echo "screen within 6 seconds to do it, or wait to skip.  Then pair: turn the Maslow off"
-echo "and on again and, within 2 minutes, tap Pair on the remote."
+echo "The remote restarts by itself.  Then pair it: turn the Maslow off and on again"
+echo "and, within 2 minutes, tap Pair on the remote."
 finish 0

@@ -65,7 +65,7 @@
 <body>
 <main>
   <h1>Maslow Remote Installer</h1>
-  <p class="lede">Install the ESP-NOW remote firmware on a touch display straight from this page. Nothing to download or install.</p>
+  <p class="lede">Install the ESP-NOW remote firmware on the 4.0" ESP32-S3 touch display straight from this page. Nothing to download or install.</p>
 
   <div class="note" id="unsupported" hidden>
     This browser can't talk to USB serial ports. Open this page in <strong>Chrome</strong> or <strong>Edge</strong> on a
@@ -74,41 +74,19 @@
 
   <h2>1. Plug in the display</h2>
   <ol>
-    <li>Unplug the Maslow's own USB cable from the computer, if it is plugged in.</li>
-    <li>Plug the display board in with a USB <em>data</em> cable (some cables only charge).</li>
+    <li>Unplug the Maslow's own USB cable from the computer, if it is plugged in. Its controller is an ESP32-S3 too, so it would show up in the port list.</li>
+    <li>Plug the display in with a USB-C <em>data</em> cable (some cables only charge).</li>
   </ol>
 
-  <h2>2. Pick your board and click Install</h2>
+  <h2>2. Click Install</h2>
   <p>A window lists the serial ports: pick the display's port and click Connect. Choose <strong>Erase</strong> when asked; it takes about a minute.</p>
   <div class="boards">
     <div class="board">
       <div>
-        <h3>4.0" ESP32-S3 display</h3>
-        <p>Hosyond / lcdwiki ES3C40P, capacitive touch, USB-C</p>
+        <h3>4.0" ESP32-S3 touch display</h3>
+        <p>Hosyond / lcdwiki ES3C40P: 320×480 IPS, capacitive touch, USB-C</p>
       </div>
-      <esp-web-install-button manifest="https://raw.githubusercontent.com/MaslowCNC/Maslow_4/Maslow-Main/web-assets/remote/latest/manifest-es3c40p.json">
-        <button slot="activate" class="install">Install</button>
-        <span slot="unsupported"></span>
-        <span slot="not-allowed">Needs https</span>
-      </esp-web-install-button>
-    </div>
-    <div class="board">
-      <div>
-        <h3>2.8" Cheap Yellow Display</h3>
-        <p>ESP32-2432S028R, 240×320, resistive touch</p>
-      </div>
-      <esp-web-install-button manifest="https://raw.githubusercontent.com/MaslowCNC/Maslow_4/Maslow-Main/web-assets/remote/latest/manifest-cyd.json">
-        <button slot="activate" class="install">Install</button>
-        <span slot="unsupported"></span>
-        <span slot="not-allowed">Needs https</span>
-      </esp-web-install-button>
-    </div>
-    <div class="board">
-      <div>
-        <h3>4.0" ESP32-32E display</h3>
-        <p>E32R40T, 320×480, resistive touch</p>
-      </div>
-      <esp-web-install-button manifest="https://raw.githubusercontent.com/MaslowCNC/Maslow_4/Maslow-Main/web-assets/remote/latest/manifest-cyd4.json">
+      <esp-web-install-button manifest="https://raw.githubusercontent.com/MaslowCNC/Maslow_4/Maslow-Main/web-assets/remote/latest/manifest.json">
         <button slot="activate" class="install">Install</button>
         <span slot="unsupported"></span>
         <span slot="not-allowed">Needs https</span>
@@ -116,16 +94,12 @@
     </div>
   </div>
 
-  <h2>3. Calibrate and pair</h2>
-  <ol>
-    <li>The remote restarts by itself and offers to calibrate the touch screen: touch the screen within 6 seconds to do it, or wait to skip (it can be done later under More &gt; Calibrate touch).</li>
-    <li>Turn the Maslow off and on again. Within 2 minutes, tap <strong>Pair</strong> on the remote.</li>
-  </ol>
+  <h2>3. Pair</h2>
+  <p>The remote restarts by itself. Turn the Maslow off and on again, and within 2 minutes tap <strong>Pair</strong> on the remote.</p>
 
   <h2>If the port doesn't show up</h2>
   <ul>
     <li>Try another USB cable or port, and close any other program that has the port open.</li>
-    <li>Windows: the 2.8" and ESP32-32E boards use a CH340 USB chip. Windows 10 and 11 usually install its driver the first time the board is plugged in.</li>
     <li>Hold the board's BOOT button while plugging it in, then click Install again.</li>
   </ul>
   <p>Prefer a program? The <a href="https://github.com/MaslowCNC/Maslow_4/releases/latest">latest release</a> has

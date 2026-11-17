@@ -9,20 +9,8 @@
 #include <esp_sleep.h>
 
 namespace {
-    constexpr gpio_num_t PIN_PENIRQ = (gpio_num_t)PIN_TOUCH_IRQ;
+    constexpr gpio_num_t PIN_TOUCH_INT = (gpio_num_t)PIN_TOUCH_IRQ;
     constexpr gpio_num_t PIN_BL     = (gpio_num_t)PIN_BACKLIGHT;
-#ifndef BOARD_ES3C40P
-    // RGB LED, active low
-    constexpr gpio_num_t LEDS[] = { (gpio_num_t)PIN_LED_R, (gpio_num_t)PIN_LED_G, (gpio_num_t)PIN_LED_B };
-#endif
-    // XPT2046 bus (bit-banged for the power-down command)
-#if defined(BOARD_ES3C40P)
-    constexpr int T_CLK = -1, T_MOSI = -1, T_MISO = -1, T_CS = -1;  // capacitive: not used
-#elif defined(BOARD_CYD4)
-    constexpr int T_CLK = 14, T_MOSI = 13, T_MISO = 12, T_CS = 33;  // shared with the panel
-#else
-    constexpr int T_CLK = 25, T_MOSI = 32, T_MISO = 39, T_CS = 33;
-#endif
 
     uint16_t screenSec  = 60;
     uint16_t sleepMin   = 10;
@@ -38,43 +26,13 @@ namespace {
         p.end();
     }
 
-    // A conversion command with PD1:PD0 = 00 leaves the XPT2046 powered down
-    // between conversions with PENIRQ enabled, which is what wakes us.
-    void touchPowerDownWithIrq() {
-        pinMode(T_CS, OUTPUT);
-        pinMode(T_CLK, OUTPUT);
-        pinMode(T_MOSI, OUTPUT);
-        pinMode(T_MISO, INPUT);
-        digitalWrite(T_CLK, LOW);
-        digitalWrite(T_CS, LOW);
-        uint8_t cmd = 0xD0;  // start, X position, 12 bit, differential, PD=00
-        for (int i = 7; i >= 0; --i) {
-            digitalWrite(T_MOSI, (cmd >> i) & 1);
-            delayMicroseconds(2);
-            digitalWrite(T_CLK, HIGH);
-            delayMicroseconds(2);
-            digitalWrite(T_CLK, LOW);
-        }
-        digitalWrite(T_MOSI, LOW);
-        for (int i = 0; i < 16; ++i) {  // clock out the result
-            delayMicroseconds(2);
-            digitalWrite(T_CLK, HIGH);
-            delayMicroseconds(2);
-            digitalWrite(T_CLK, LOW);
-        }
-        digitalWrite(T_CS, HIGH);
-    }
-
-    bool touched() { return gpio_get_level(PIN_PENIRQ) == 0; }
+    bool touched() { return gpio_get_level(PIN_TOUCH_INT) == 0; }
 }
 
 namespace Power {
     void begin() {
         // Pins held through the last deep sleep must be released before use.
         gpio_hold_dis(PIN_BL);
-#ifndef BOARD_ES3C40P
-        for (auto p : LEDS) gpio_hold_dis(p);
-#endif
         gpio_deep_sleep_hold_dis();
 
         Preferences p;
@@ -86,7 +44,7 @@ namespace Power {
         woke = esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT0;
         if (woke) {
             // The waking touch must not land on a button: wait for the release.
-            pinMode((int)PIN_PENIRQ, INPUT);
+            pinMode((int)PIN_TOUCH_INT, INPUT);
             uint32_t t0 = millis();
             while (touched() && millis() - t0 < 3000) delay(10);
             delay(50);
@@ -159,25 +117,15 @@ namespace Power {
         Serial.flush();
         lcd.setBrightness(0);
         lcd.sleep();
-        // The FT6336U keeps signalling touches on INT in its monitor mode;
-        // the XPT2046 needs a command to leave PENIRQ enabled.
-        if (!TOUCH_CAPACITIVE) touchPowerDownWithIrq();
+        // The FT6336U keeps signalling touches on INT in its monitor mode.
 
         // Keep the backlight off and the LED dark while asleep.
         gpio_set_level(PIN_BL, 0);
         gpio_hold_en(PIN_BL);
-#ifdef BOARD_ES3C40P
         boardLed(false, false, false);
-#else
-        for (auto p : LEDS) {
-            pinMode((int)p, OUTPUT);
-            digitalWrite((int)p, HIGH);
-            gpio_hold_en(p);
-        }
-#endif
         gpio_deep_sleep_hold_en();
 
-        esp_sleep_enable_ext0_wakeup(PIN_PENIRQ, 0);
+        esp_sleep_enable_ext0_wakeup(PIN_TOUCH_INT, 0);
         esp_deep_sleep_start();
     }
 }

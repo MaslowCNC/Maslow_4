@@ -1237,7 +1237,6 @@ namespace {
                 { "Macros", macrosMenu, C::button },
                 { "Jog speeds", jogSpeeds, C::button },
                 { "Display &\npower", displayMenu, C::button },
-                { "Calibrate\ntouch", [] { calibrateTouch(); }, C::button },
                 { "Link info", linkInfo, C::button },
                 { "Pair\nmachine", showPairing, C::select },
                 { "Forget\nmachine", [] {
@@ -1248,7 +1247,7 @@ namespace {
                              });
                  }, C::button },
             };
-            for (int i = 0; i < 10; ++i) {
+            for (int i = 0; i < (int)(sizeof(defs) / sizeof(defs[0])); ++i) {
                 buttons.push_back({ (int16_t)(2 + (i % 2) * 119), (int16_t)(33 + (i / 2) * 49), 117, 45, defs[i].label,
                                     defs[i].color, defs[i].fn });
             }
