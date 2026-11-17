@@ -35,3 +35,21 @@ The workflow matrix is generated from the manifest, so adding a new target there
 - **Release assets not updating on rerun**: reruns reuse the same tag and replace existing assets with `gh release upload --clobber` after deleting stale assets.
 - **Release notes look incomplete**: the notes generator prefers git history and commit metadata. Make sure the workflow has full tag history (`fetch-depth: 0` and `fetch-tags: true`).
 - **Web UI mismatch**: the workflow rebuilds `ESP3D-WEBUI/dist/index.html.gz` and copies it into `firmware/FluidNC/data/index.html.gz` before `buildfs` so the filesystem image and standalone UI asset stay aligned.
+
+## Browser firmware installer
+
+`docs/firmware-installer/index.html` (published at `https://documentation.maslowcnc.com/firmware-installer/`)
+installs a release over USB with Web Serial and esptool-js. It loads the files the workflow mirrors into
+`web-assets/latest/` on the default branch (raw.githubusercontent.com serves them with CORS):
+`bootloader.bin`, `partitions.bin`, `boot_app0.bin`, `firmware.bin`, `littlefs.bin` and `index.html.gz`, checked
+against the sizes and SHA-256 hashes in `manifest.json`.
+
+- **Update, keep my settings** checks that the board's filesystem partition matches the new partition table,
+  writes the bootloader, partition table, `boot_app0.bin` (so the board boots app0 even after OTA updates) and
+  firmware, leaves NVS and the filesystem alone, then uploads the new `index.html.gz` over the USB console with
+  `$Xmodem/Receive`.
+- **Clean install** erases the flash and writes everything including `littlefs.bin`.
+
+Both read `maslow.yaml` over the console first (`$LocalFS/Show`) and offer it as a download. Add `?base=<url>/` to
+the page URL to install from another folder with the same files, for example a local build.
+

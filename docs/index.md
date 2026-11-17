@@ -37,6 +37,7 @@ Step-by-step instructions for building your Maslow 4:
 
 ## Interactive Tools
 
+- [Firmware Installer](firmware-installer/) - Install the Maslow firmware on the control board over USB from Chrome or Edge, keeping maslow.yaml or as a clean install
 - [Calibration Simulator](calibration-simulation/) - Interactive calibration simulation tool
   - [Quick Start Guide](calibration-simulation/QUICKSTART.md)
   - [Full Documentation](calibration-simulation/README.md)

@@ -4,6 +4,10 @@ These scripts install the firmware on a Maslow 4 / 4.1 / Mini control board (ESP
 over a USB-C cable. To update a machine that is already running Maslow firmware, the
 web UI's firmware update over WiFi is easier and keeps everything on the machine.
 
+Chrome or Edge can do the same without these scripts: open
+https://documentation.maslowcnc.com/firmware-installer/ and choose to keep
+maslow.yaml or to erase everything.
+
 You need Python 3. The first run creates a Python environment in ~/.fluidnc_venv and
 installs esptool into it, which can take a few minutes.
 
