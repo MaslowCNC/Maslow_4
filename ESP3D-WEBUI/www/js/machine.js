@@ -524,8 +524,38 @@ const machine = (() => {
 		});
 	};
 
+	/**
+	 * Put the work origin (home, WPos 0) at machine position {x, y, z} mm; leave out an axis
+	 * to keep its origin. Uses the MPos of the last status report, so the machine must be
+	 * Idle. Done when the firmware accepts the G10.
+	 */
+	const setWorkZero = (machinePos) => {
+		const words = axisWords(machinePos); // checks the numbers
+		if (!words.length) {
+			throw new TypeError("machine.setWorkZero: no axis given");
+		}
+		if (state.grbl !== "Idle" || !state.mpos) {
+			return notReady("set home", "Can't set home while the machine is busy or its position is unknown");
+		}
+		// G10 L20 sets the current position's work coordinate: here mpos - origin
+		const current = {};
+		for (const a of ["x", "y", "z"]) {
+			if (machinePos[a] !== undefined) {
+				current[a] = state.mpos[a] - machinePos[a];
+			}
+		}
+		const restoreInches = state.units === "inch"; // the G21 below switches to mm
+		return operation("set home", async ({ resolve }) => {
+			await sendLine(`G21 G10 L20 P0 ${axisWords(current).join(" ")}`);
+			if (restoreInches) {
+				await sendLine("G20");
+			}
+			resolve();
+		});
+	};
+
 	// Stopping and pausing
-	/** End any running operation now: 0x18, then $STOP (raise Z, save). Done when $STOP is answered. */
+	/** End any running operation now: 0x18, then $STOP (save; Z stays where it is). Done when $STOP is answered. */
 	const stop = () => {
 		for (const entry of [...running]) {
 			entry.reject(machineError("reset", entry.name, { detail: `${entry.name}: stopped` }));
@@ -846,6 +876,7 @@ const machine = (() => {
 		jogCancel,
 		moveTo,
 		tracePath,
+		setWorkZero,
 		// jobs and files
 		runFile,
 		resumeFile,

@@ -43,6 +43,14 @@ Format: **title** — what goes wrong, where, and how we found it.
 
 ## Medium: connection protocol (plan: all commands over the WebSocket)
 
+- [ ] **A line sent while a job runs waits, then runs after the job.** While `Job::active()`,
+  `Protocol.cpp` stops reading input channels, so a line that arrives then sits in the
+  channel and executes when the job ends. A second `$SD/Run` (from another tab clicking Start
+  in the moment before the first job shows in a status report, or a script) therefore starts
+  the file again as soon as the first run finishes. The Start button now locks from the click
+  until the job is reported, which covers one tab; the firmware could reject a `$SD/Run` that
+  was queued behind a job. Found 2026-11-15 while fixing the slow Start button.
+
 - [ ] **About 60 UI calls still send commands directly instead of through `machine.js`.**
   `sendCommand` / `SendPrinterCommand` calls remain in `tablet.js` (36), `grbl.js` (7),
   `controls.js` (6), `grblpanel.js` (4), `maslow.js` (4), `files.js` (2) and `restartdlg.js` (1),
@@ -121,6 +129,9 @@ Format: **title** — what goes wrong, where, and how we found it.
 - [ ] **One UI test fails: `maslowInfoMsgHandling is not defined`** (`maslow.test.ts:167`).
   The test calls it as a global, but `maslow.js:327` declares it as a module `const` and
   never puts it on `globalThis`. Predates the 2026-10-26 work (107/108 pass on 2026-11-04).
+- [ ] **`bun test` reports an unhandled error `$STOP: disconnected`.** `wscommands.test.ts:25`
+  calls `reset()`, which rejects the `$STOP` that `machine.stop()` (`machine.js:566`) queued,
+  and nothing catches it. Tests still pass; seen 2026-11-17.
 - [ ] **`firmware/install_scripts/*/install-wifi_s3.sh` is the plain-ESP32 script** (wrong
   chip, bootloader at 0x1000).
 - [ ] **`/flash-maslow` doesn't load as a skill.** It is in `.claude/skills/flash-maslow`, but

@@ -487,7 +487,6 @@ let zLowLastAcknowledgedResultZ = null;
 // Whether the one-time startup Z safety check has already fired this connection.
 // Reset on every WebSocket reconnect so the warning re-fires after a firmware restart.
 let startupZCheckDone = false;
-let setZHomeInputTracksMachineZ = false;
 
 // fixedZ makes the reported Z position irrelevant to Maslow kinematics.  Keep safety checks
 // enabled until the firmware setting has been received on this connection.
@@ -730,6 +729,22 @@ const tabletResumeClick = (event) => {
   }
   runButtonAction(id("tablettab_gcode_resume"), `Resume ${stopped.file} from line ${line}`, () => machine.resumeFile(stopped.file, line));
 };
+
+// Picking another file in the job selector drops a stopped job, so its Resume button can't then
+// start partway into a file the user has moved on from. Picking the same file keeps it.
+const samePath = (a, b) => a.replace(/^\/+/, "") === b.replace(/^\/+/, "");
+const discardStoppedForOtherFile = (path) => {
+  const stopped = typeof machine !== "undefined" ? machine.state.stopped : null;
+  if (!stopped || samePath(stopped.file, path)) {
+    return;
+  }
+  addMessage(`Discarding the stopped job (${stopped.file}): another file was selected`);
+  machine.discardStopped().catch((err) => addMessage(`Discard stopped job failed: ${err.detail ?? err.reason}`));
+};
+
+if (typeof globalThis !== "undefined") {
+  globalThis.__tabletStoppedTestApi = { samePath };
+}
 
 const tabletDiscardClick = () =>
   runButtonAction(id("tablettab_gcode_discard"), "Discard stopped job", machine.discardStopped);
@@ -1032,7 +1047,7 @@ function setPlayButton(isEnabled, color, text, click) {
       const w = canvas.width || 300;
       const h = canvas.height || 150;
       ctx.clearRect(0, 0, w, h); // Make canvas transparent so div color shows through
-      if (color !== gray) {
+      if (color !== gray && !jobStarting) {
         // Draw a centered white triangle to indicate an actionable state
         const centerX = w / 2;
         const centerY = h / 2;
@@ -1057,8 +1072,6 @@ function doPlayButton() {
   if (playButtonHandler) {
     playButtonHandler()
   }
-
-  addMessage(`Starting File: ${id('filelist').options[selectElement.selectedIndex].text}`);
 }
 
 // var pauseButtonHandler
@@ -1078,16 +1091,57 @@ const gray = "#f6f6f6";
 const orange = "#ff9500";
 const stopRed = "#ce654c";
 
+// What the Start button shows. A job counts as running for as long as the firmware reports it
+// (the SD field), not only while the machine is in Run: it is Idle for a moment whenever the
+// planner runs dry (a dwell, a spindle spin-up, a slow SD read), and the button must not come
+// back then. Every connection gets the same status report, so every tab agrees.
+//   starting: this tab sent Start and the machine hasn't moved yet. The job shows in the report
+//   as soon as the file is open, but a spindle spin-up or dwell at the top of the file can keep
+//   it Idle for seconds after that; the spinner stays until the first move (Run or Hold).
+const jobHasMoved = (s) => s.grbl === "Run" || s.grbl === "Hold";
+const jobIsRunning = (s) => !!s.job || s.grbl === "Run" || s.grbl === "Hold";
+const playButtonMode = (s, { loaded, starting }) => {
+  if (starting) {
+    return "starting";
+  }
+  if (s.grbl === "Hold") {
+    return "resume";
+  }
+  if (jobIsRunning(s)) {
+    return "running";
+  }
+  if (s.grbl === "Idle" && loaded && s.maslow === MASLOW_STATE_READY_TO_CUT) {
+    return "ready";
+  }
+  return "off";
+};
+
+let jobStarting = false;
+
+if (typeof globalThis !== "undefined") {
+  globalThis.__tabletJobTestApi = { playButtonMode, jobHasMoved };
+}
+
 function setRunControls() {
-  const isReadyToCut = typeof maslowStatus !== 'undefined' && maslowStatus.state === MASLOW_STATE_READY_TO_CUT;
-  if (gCodeLoaded && isReadyToCut) {
-    // A GCode file is ready to go and Maslow is ready to cut
-    setPlayButton(true, green, 'Start', runGCode)
-    //setPauseButton(false, gray, 'Pause', null)
-  } else {
-    // Can't start: no GCode loaded or Maslow is not ready to cut
-    setPlayButton(false, gray, 'Start', null)
-    //setPauseButton(false, gray, 'Pause', null)
+  const s = typeof machine !== "undefined" ? machine.state : {};
+  const mode = playButtonMode(s, { loaded: gCodeLoaded, starting: jobStarting });
+  const playDiv = id("tablettab_gcode_play");
+  if (playDiv) {
+    playDiv.classList.toggle("machine-action-busy", mode === "starting");
+  }
+  switch (mode) {
+    case "starting":
+      setPlayButton(false, gray, 'Start', null) // grey, as while running, plus the spinner
+      break
+    case "resume":
+      setPlayButton(true, green, 'Resume', resumeGCode)
+      break
+    case "ready":
+      setPlayButton(true, green, 'Start', runGCode)
+      break
+    default:
+      setPlayButton(false, gray, 'Start', null)
+      break
   }
 }
 
@@ -1189,32 +1243,8 @@ function tabletGrblState(grbl, response) {
     sendCommand('$MINFO'); // refresh Maslow status; its reply also resets the stop buttons
   }
 
-  switch (stateName) {
-    case 'Sleep':
-    case 'Alarm':
-      setPlayButton(true, gray, 'Start', null)
-      //setPauseButton(false, gray, 'Pause', null)
-      break
-    case 'Idle':
-      setRunControls()
-      break
-    case 'Hold':
-      setPlayButton(true, green, 'Resume', resumeGCode)
-      //setPauseButton(true, red, 'Stop', stopAndRecover)
-      break
-    case 'Jog':
-    case 'Home':
-      setPlayButton(false, gray, 'Start', null)
-      break
-    case 'Run':
-      // No Pause button: Stop, then Resume from the stopped line, takes its place
-      setPlayButton(false, gray, 'Start', null)
-      break
-    case 'Check':
-      setPlayButton(true, gray, 'Start', null)
-      //setPauseButton(true, red, 'Stop', stopAndRecover)
-      break
-  }
+  // The job row follows the job, not the momentary state (Idle between moves mid-job)
+  setRunControls()
 
   if (grbl.spindleDirection) {
     switch (grbl.spindleDirection) {
@@ -1295,7 +1325,6 @@ function tabletGrblState(grbl, response) {
       const axisName = axisNames[index].toUpperCase();
       setTextContent(`mpos-${axisNames[index]}`, `|${axisName}m: ${Number(pos * factor).toFixed(index > 2 ? 2 : digits)}|`);
     })
-    syncSetZHomeInputWithMachineZ();
   }
 
   // On the first status update that has both WCO and MPOS data, proactively
@@ -1408,167 +1437,95 @@ const tabletMoveBottomLeft = () => sendMove("X-Y-");
 const tabletMoveBottom = () => sendMove("Y-");
 const tabletMoveBottomRight = () => sendMove("X+Y-");
 // Button event handlers - Fourth Row
-const getMachineZPosition = () => MPOS && MPOS.length >= 3 ? MPOS[2] : null;
+const Z_STOP_INFO_TEXT =
+  "z-stop is the lowest z position the machine can physically reach. " + 
+  "<br><br>To change Z-stop, jog the z axis as low as possible, then Options &gt; Set Z-Stop";
 
-/** Report whether the Set Z Home popup is currently visible. */
-const isSetZHomePopupOpen = () => {
-  const popup = id("set-z-home-popup");
-  return !!popup && popup.style.display !== "none";
+/** Explain the z-stop (the "z-stop" links in the Set Z Home popup). */
+const showZStopInfo = (event) => {
+  event.preventDefault();
+  alertdlg("Z-Stop", Z_STOP_INFO_TEXT);
 }
 
-/** Keep the popup Z input aligned with the current machine Z while tracking is enabled. */
-const syncSetZHomeInputWithMachineZ = () => {
-  const machineZ = getMachineZPosition();
-  if (!setZHomeInputTracksMachineZ || !isSetZHomePopupOpen() || machineZ === null) {
+const formatZMm = (mm) => Number.isFinite(mm) ? mm.toFixed(3) : "?";
+
+/**
+ * Check a new Z home from the Set Z Home popup. It is machine Z in mm, which $SETZSTOP sets
+ * to 0 at the z-stop, so it is also the height above the z-stop. Returns {zHome} or {error}.
+ * The Mini's spindle board has its own Z range, so there it only has to be a number.
+ */
+const checkZHome = (rawValue, mini = false) => {
+  const zHome = parseNumericInput(rawValue);
+  if (!Number.isFinite(zHome)) {
+    return { error: "Enter the Z home in mm." };
+  }
+  if (!mini && zHome < Z_HOME_MIN_SAFE_MM) {
+    return {
+      error: `Z home can't be below the z-stop: ${formatZMm(zHome)} mm is ${formatZMm(-zHome)} mm under it, ` +
+        "where the machine can't reach.",
+    };
+  }
+  if (!mini && zHome > Z_HOME_MAX_SAFE_MM) {
+    return { error: `Z home can't be more than ${Z_HOME_MAX_SAFE_MM} mm above the z-stop.` };
+  }
+  return { zHome };
+}
+
+if (typeof globalThis !== "undefined") {
+  globalThis.__tabletZHomeTestApi = { checkZHome };
+}
+
+const closeSetZHomePopup = () => hideModal("set-z-home-popup");
+
+/**
+ * The Z typed in the Set Z Home popup is relative to the current Z home (the Z readout), so
+ * add the current home's machine Z to get the new home in machine Z (mm above the z-stop).
+ */
+const typedZHomeMachineZ = () => {
+  const { wco } = machine.state;
+  return wco ? wco.z + parseNumericInput(id("setHomeZ")?.value) : NaN;
+}
+
+/** Show the typed Z as mm above the z-stop, in red when it can't be used. */
+const updateSetZHomeAbove = () => {
+  const above = id("setHomeZAbove");
+  if (!above) {
     return;
   }
-
-  const zInput = id("setHomeZ");
-  if (zInput) {
-    zInput.value = machineZ.toFixed(3);
-  }
-}
-
-/** Close the popup and stop live machine-Z tracking for the input field. */
-const closeSetZHomePopup = () => {
-  setZHomeInputTracksMachineZ = false;
-  hideModal("set-z-home-popup");
-}
-
-/** Close the popup after focus leaves it so in-popup actions do not dismiss it. */
-const handleSetZHomePopupFocusOut = () => {
-  scheduleCallback(() => {
-    const popupContent = id("set_z_home_popup_content");
-    if (isSetZHomePopupOpen() && popupContent && !popupContent.contains(document.activeElement)) {
-      closeSetZHomePopup();
-    }
-  }, 0);
-}
-
-/** Backdrop clicks should dismiss the popup by moving focus out of it. */
-const handleSetZHomePopupBackdropClick = (event) => {
-  if (event.target !== event.currentTarget) {
-    return;
-  }
-
-  const popupContent = id("set_z_home_popup_content");
-  if (popupContent && popupContent.contains(document.activeElement)) {
-    document.activeElement.blur();
-    return;
-  }
-
-  closeSetZHomePopup();
-}
-
-/** Let the user keep a manually typed Z home value without live MPOS updates overwriting it. */
-const handleSetZHomeManualInput = () => {
-  setZHomeInputTracksMachineZ = false;
-}
-
-/** Update the popup's context label with the currently defined Z home position. */
-const updateSetZHomeLabel = (zHome = WCO && WCO.length >= 3 ? WCO[2] : 0) => {
-  const zHomeLabel = id("currentZHomeLabel");
-  if (zHomeLabel) {
-    const zHomeValue = Number.isFinite(zHome) ? zHome : 0;
-    zHomeLabel.textContent = `Z Home: ${zHomeValue.toFixed(3)} mm`;
-  }
-}
-
-/** Return the popup's default Z jog step in current display units. */
-const getDefaultSetZHomeJogDistance = () => {
-  const mainUiDistance = Number(getText("disZ"));
-  return mainUiDistance > 0 ? mainUiDistance : 5;
-}
-
-/** Return the popup-specific Z jog step in the current display units. */
-const getSetZHomeJogDistance = () => {
-  const popupDistance = getValueFloat("setHomeZStep");
-  if (popupDistance > 0) {
-    return popupDistance;
-  }
-
-  return getDefaultSetZHomeJogDistance();
-}
-
-/** Jog Z from the Set Z Home popup using the popup-specific step value. */
-const moveSetZHomePopupZ = (direction) => {
-  const distance = getSetZHomeJogDistance();
-  if (distance <= 0) {
-    return;
-  }
-
-  setZHomeInputTracksMachineZ = true;
-  sendMove(direction, { distance });
+  const zHome = typedZHomeMachineZ();
+  above.textContent = formatZMm(zHome);
+  above.parentElement.classList.toggle("set-z-home-invalid", !!checkZHome(zHome, maslowIsMini()).error);
 }
 
 const openSetZHomePopup = () => {
   tabletClick();
-  const { unitLabel } = getUnitInfo();
-  const machineZ = getMachineZPosition();
-  const zCurrent = machineZ === null ? "0" : machineZ.toFixed(3);
+  const { mpos, wco } = machine.state;
   const zInput = id("setHomeZ");
   if (zInput) {
-    // Pre-fill with current machine Z position so confirming sets Z zero here.
-    zInput.value = zCurrent;
-    if (maslowIsMini()) {
-      // No min/max: the spindle board's Z travel differs from the Maslow 4 range
-      zInput.removeAttribute("min");
-      zInput.removeAttribute("max");
-      zInput.title = "Machine Z to use as Z zero (default: the current position)";
-    } else {
-      zInput.min = Z_HOME_MIN_SAFE_MM;
-      zInput.max = Z_HOME_MAX_SAFE_MM;
-      zInput.title = `Z: ${Z_HOME_MIN_SAFE_MM} to ${Z_HOME_MAX_SAFE_MM} mm`;
-    }
+    // Pre-fill with the current Z, so Set Home without changes puts Z home here.
+    zInput.value = mpos && wco ? formatZMm(mpos.z - wco.z) : "";
   }
-  const zStepInput = id("setHomeZStep");
-  if (zStepInput) {
-    zStepInput.value = getDefaultSetZHomeJogDistance();
-    zStepInput.title = `Jog step in ${unitLabel}`;
-  }
-  setTextContent("setHomeZStepUnit", `(${unitLabel})`);
-  setZHomeInputTracksMachineZ = true;
-  // Context label shows the previously defined Z home value (WCO[2]).
-  updateSetZHomeLabel();
+  setTextContent("currentZHomeValue", formatZMm(wco ? wco.z : NaN));
+  updateSetZHomeAbove();
   openModal("set-z-home-popup");
   scheduleCallback(() => {
-    if (zInput) {
-      zInput.focus();
-      zInput.select();
-    } else {
-      id("set_z_home_popup_content")?.focus();
-    }
+    zInput?.focus();
+    zInput?.select();
   }, 0);
 }
 
-const moveToZHome = () => {
-  const machineZ = getMachineZPosition();
-  const workZeroZ = WCO && WCO.length >= 3 ? WCO[2] : null;
-  const zDelta = (machineZ !== null && workZeroZ !== null) ? workZeroZ - machineZ : 0;
-  checkZHomeAndProceed(() => {
-    sendCommand("G90 G0 Z0");
-    addMessage("Moving to Z Home position");
-  }, zDelta);
-}
-
 const confirmSetZHome = () => {
-  const zInput = id("setHomeZ");
-  const rawZ = zInput ? parseNumericInput(zInput.value) : NaN;
-  let zVal = isNaN(rawZ) ? 0 : rawZ;
-  // The Maslow 4 range does not apply to the Mini: the spindle board's Z travel is different
-  if (!maslowIsMini()) {
-    zVal = Math.max(Z_HOME_MIN_SAFE_MM, Math.min(Z_HOME_MAX_SAFE_MM, zVal));
+  const { zHome, error } = checkZHome(typedZHomeMachineZ(), maslowIsMini());
+  if (error) {
+    alertdlg("Set Z Home", error);
+    return;
   }
-
-  if (!isNaN(rawZ) && zVal !== rawZ) {
-    addMessage(`Z Home value clamped to range: Z=${zVal}`);
-  }
-
-  const mposZ = getMachineZPosition() ?? 0;
-  sendCommand(`G10 L20 P0 Z${mposZ - zVal}`);
-  addMessage(`Z Home pos set: Z=${zVal}mm`);
-  updateSetZHomeLabel(mposZ);
-  refreshGcode();
+  closeSetZHomePopup();
+  startMachineAction("Set Z home", () =>
+    machine.setWorkZero({ z: zHome }).then(() => {
+      addMessage(`Z home set ${formatZMm(zHome)} mm above the z-stop`);
+      refreshGcode();
+    }));
 }
 // Button event handlers - Fifth Row - nothing special here, move on
 
@@ -1632,7 +1589,7 @@ const requestMachineState = () => {
 };
 
 // Stop button: machine.stop() ends running machine actions, then wsCommands.stop() sends 0x18 (soft reset: halts at once in any state, ends any
-// job) and then $STOP (raises Z, saves positions). _stopPending stays set until the
+// job) and then $STOP (saves positions; Z stays where it stopped). _stopPending stays set until the
 // firmware reports Idle or Alarm (tabletGrblState), so a stop sent while the socket was down
 // is sent again on reconnect (onWSOpenCallback). It expires after STOP_PENDING_MS so an old
 // stop is never replayed much later.
@@ -2188,15 +2145,11 @@ function tabletInit() {
     id("tablettab_set_home_confirm").addEventListener("click", confirmSetHome);
 
     // Buttons - Set Z Home Pop-up
-    id("set-z-home-popup").addEventListener("click", handleSetZHomePopupBackdropClick);
+    id("set-z-home-popup").addEventListener("click", closeSetZHomePopup);
     id("set_z_home_popup_content").addEventListener("click", tabletPopupStopProp);
-    id("set_z_home_popup_content").addEventListener("focusout", handleSetZHomePopupFocusOut);
-    id("setHomeZ").addEventListener("input", handleSetZHomeManualInput);
-    // These popup jog buttons use the popup-specific step from the setHomeZStep input.
-    id("tablettab_set_z_home_up").addEventListener("click", () => moveSetZHomePopupZ(Z_JOG_UP));
-    id("tablettab_set_z_home_down").addEventListener("click", () => moveSetZHomePopupZ(Z_JOG_DOWN));
-    id("tablettab_set_z_home_cancel").addEventListener("click", () => closeSetZHomePopup());
-    id("tablettab_move_to_z_home").addEventListener("click", moveToZHome);
+    id("setHomeZ").addEventListener("input", updateSetZHomeAbove);
+    document.querySelectorAll("#set-z-home-popup .z-stop-link").forEach((link) => link.addEventListener("click", showZStopInfo));
+    id("tablettab_set_z_home_cancel").addEventListener("click", closeSetZHomePopup);
     id("tablettab_set_z_home_confirm").addEventListener("click", confirmSetZHome);
 
     // Controls - Fifth Row
@@ -2357,13 +2310,50 @@ function scrollToLine(lineNumber) {
   gCodeLines.setSelectionRange(start, end);
 }
 
+// Start the loaded file. The button shows a spinner from the click until the machine moves
+// (or the job ends or fails), and ignores clicks meanwhile: a second $SD/Run sent while
+// the first job runs would wait in the firmware and start the file again when the job ends.
+// The firmware starts the moves itself; no cycle start is needed.
 function runGCode() {
-  if (gCodeFilename) {
-    const cmd = `$sd/run=${gCodeFilename}`;
-    sendCommand(cmd);
+  if (jobStarting || !gCodeFilename) {
+    return;
   }
-  setTimeout(() => { SendRealtimeCmd(0x7e); }, 1500);
-  // expandVisualizer()
+  const path = gCodeFilename;
+  const label = `Start ${path}`;
+  addMessage(`Starting File: ${path}`);
+  let started = false;
+  const finishStarting = () => {
+    if (jobStarting) {
+      jobStarting = false;
+      setRunControls();
+    }
+  };
+  const offState = machine.on("state", (s) => {
+    if (jobHasMoved(s) && !started) {
+      started = true;
+      finishStarting();
+    }
+  });
+  jobStarting = true;
+  setRunControls();
+  const op = machine.runFile(path);
+  op.then(
+    () => {},
+    (err) => {
+      if (err.reason === "reset") {
+        addMessage(`${label} stopped`);
+        return;
+      }
+      const detail = err.detail ?? err.reason;
+      addMessage(`${label} failed: ${detail}`);
+      if (!started) {
+        alertdlg(label, detail); // a job error after the start is in the log of every connection
+      }
+    },
+  ).finally(() => {
+    offState();
+    finishStarting();
+  });
 }
 
 function finalizeGCodePreviewLoad() {
@@ -2543,7 +2533,9 @@ function selectFile() {
     clearGCodeState();
     files_enter_dir(filename);
   } else {
-    tabletLoadGCodeFile(`${files_currentPath()}${filename}`, file.size);
+    const path = `${files_currentPath()}${filename}`;
+    discardStoppedForOtherFile(path);
+    tabletLoadGCodeFile(path, file.size);
   }
   updateDeleteButtonState();
 }
