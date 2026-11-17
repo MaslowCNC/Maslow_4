@@ -1,0 +1,56 @@
+Installing the Maslow remote firmware
+=====================================
+
+Nothing needs to be installed on your computer: this package carries the
+esptool program that writes the firmware.
+
+1. Unpack this whole zip file.
+2. Unplug the Maslow's USB cable from the computer, if it is plugged in.
+3. Plug the remote's display board into the computer with a USB data cable.
+4. Run the installer:
+     Windows: double-click Full-Install.bat
+     macOS:   double-click Full-Install.command
+              If macOS says it can't check the file for malicious software,
+              open System Settings > Privacy & Security, click "Open Anyway"
+              next to Full-Install.command, and double-click it again.
+              Or open Terminal and type:  sh <drag Full-Install.sh here>
+     Linux:   in a terminal, run:  sh Full-Install.sh
+5. The installer finds the board. For the ESP32 boards it asks which
+   display you have (2.8" or 4.0" ESP32-32E); the ESP32-S3 board is
+   recognised by itself. Type y to confirm.
+
+Full-Install erases everything on the board first, including an earlier
+pairing and touch calibration.
+
+After installing, the remote offers to calibrate the touch screen: touch
+the screen within 6 seconds to do it, or wait to skip (it can be done
+later under More > Calibrate touch). Then pair: turn the Maslow off and on
+again and, within 2 minutes, tap Pair on the remote.
+
+Supported boards
+  2.8" ESP32-2432S028R "Cheap Yellow Display"        firmware/cyd.bin
+  4.0" ESP32-32E / E32R40T                           firmware/cyd4.bin
+  4.0" ESP32-S3 Hosyond / lcdwiki ES3C40P            firmware/es3c40p.bin
+
+If the board isn't found
+  - Use a USB cable that carries data (some only charge).
+  - Close any other program that has the board's port open (Arduino, a
+    serial monitor, the Maslow WebUI's serial tools).
+  - Windows: the 2.8" and ESP32-32E boards use a CH340 USB chip. Windows
+    10 and 11 usually install its driver by themselves the first time the
+    board is plugged in.
+  - Linux: allow your user to use serial ports:
+      sudo usermod -aG dialout $USER     (then log out and back in)
+  - Hold the board's BOOT button while plugging it in, then try again.
+
+No zip needed: in Chrome or Edge, the browser installer at
+  https://documentation.maslowcnc.com/remote-installer/
+does the same from a web page.
+
+The images can also be written by hand at offset 0x0, e.g.
+  esptool --chip esp32s3 erase_flash
+  esptool --chip esp32s3 write_flash 0x0 firmware/es3c40p.bin
+(--chip esp32 for cyd.bin and cyd4.bin).
+
+esptool is from Espressif (https://github.com/espressif/esptool), GPL-2.0;
+its license is in the tools folder.

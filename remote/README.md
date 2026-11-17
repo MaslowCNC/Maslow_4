@@ -8,10 +8,13 @@ Firmware for a handheld remote built on ELEGOO's ESP32 touch displays:
 | 4.0" ESP32-32E / E32R40T (320x480 ST7796, XPT2046 on the panel bus) | `cyd4` |
 | 4.0" ESP32-S3 Hosyond / lcdwiki ES3C40P (320x480 ST7796S, FT6336U touch, native USB) | `es3c40p` |
 
-Both use the same layout, drawn for 240x320 and scaled to the panel, with
-larger fonts on the 4". It talks to the Maslow over ESP-NOW using
+All of them use the same layout, drawn for 240x320 and scaled to the panel, with
+larger fonts on the 4" boards. It talks to the Maslow over ESP-NOW using
 the FluidNC `ESPNowChannel` (`firmware/FluidNC/esp32/ESPNow`), so it needs
 no WiFi network and keeps working when the WebUI is closed.
+
+To put the firmware on a board without building it, see [Installing](#installing):
+a browser installer, or a Full-Install package that needs nothing installed.
 
 ## Screens
 
@@ -44,6 +47,78 @@ and blinks blue while pairing.
 The WebUI's G-code preview, job bounds check, file upload, full config
 tree editing and firmware update are not on the remote.
 
+## Installing
+
+Users install the remote firmware without building it and without
+installing anything on their computer. There are two ways.
+
+### In the browser (Chrome or Edge)
+
+Open **<https://documentation.maslowcnc.com/remote-installer/>** in Chrome or
+Edge on a computer (Firefox and Safari can't reach USB serial ports).
+
+1. Unplug the Maslow's USB cable, then plug in the display with a USB data cable.
+2. Click **Install** next to your board, pick the display's port and click
+   Connect.
+3. Choose **Erase** when asked. It takes about a minute.
+
+The page uses [ESP Web Tools](https://esphome.github.io/esp-web-tools/) and the
+images the release workflow copies to `web-assets/remote/latest/`. The page
+source is `docs/remote-installer/index.html`.
+
+### With the Full-Install package
+
+Every release has a zip for each operating system:
+`maslow-remote-<version>-windows.zip`, `-macos.zip` and `-linux.zip`. Each one
+holds every board's firmware, a Full-Install script, and Espressif's
+stand-alone `esptool` program for that system, so Python isn't needed.
+
+1. Download the zip for your computer from the
+   [latest release](https://github.com/MaslowCNC/Maslow_4/releases/latest)
+   and unpack the whole thing.
+2. Unplug the Maslow's USB cable, then plug in the display with a USB data cable.
+3. Run the installer:
+
+   | System | How |
+   | --- | --- |
+   | Windows | Double-click `Full-Install.bat` |
+   | macOS | Double-click `Full-Install.command`. If macOS says it can't check the file, open System Settings > Privacy & Security, click **Open Anyway**, and double-click it again. Or run `sh Full-Install.sh` in Terminal. |
+   | Linux | `sh Full-Install.sh` (your user needs serial port access: `sudo usermod -aG dialout $USER`, then log in again) |
+
+4. The installer finds the board and shows its port, chip and MAC. The
+   ESP32-S3 board is recognised by itself. For an ESP32 board it asks which
+   display you have (2.8" or 4.0" ESP32-32E). Type `y` to install.
+
+Full-Install erases the whole board first, as the Maslow's Full-Install
+does, so the remote forgets its pairing and touch calibration.
+
+After either way of installing, the remote restarts and offers touch
+calibration for 6 seconds (it can be done later under More > Calibrate
+touch). Then pair it (below).
+
+If the board isn't found: use a cable that carries data, close other programs
+that have the port open, and on Windows let it install the CH340 driver for the
+2.8" and ESP32-32E boards (Windows 10 and 11 do it themselves the first time).
+As a last resort, hold the board's BOOT button while plugging it in.
+
+The images are merged (bootloader, partition table and app), so they can also
+be written by hand at offset 0:
+`esptool --chip esp32s3 write_flash 0x0 es3c40p.bin` (`--chip esp32` for
+`cyd.bin` and `cyd4.bin`).
+
+### Making the packages
+
+The release workflow (`.github/workflows/release.yml`, job `build-remote`)
+builds the three boards and runs `tools/package_release.py`. The scripts and
+instructions that go into the zips are in `install/`. To build the packages
+locally:
+
+```sh
+cd remote
+pio run -e cyd -e cyd4 -e es3c40p
+python3 tools/package_release.py --version 1.2.3 --dist-dir dist --web-dir dist/web
+```
+
 ## Pairing
 
 1. Turn the Maslow off and on again.
@@ -58,7 +133,7 @@ old way.
 The remote finds the Maslow's WiFi channel by itself and remembers the
 pairing. `$EL` on the Maslow lists paired remotes; `$EU=<n>` removes one.
 
-## Building and flashing
+## Building and flashing (development)
 
 ```sh
 cd remote

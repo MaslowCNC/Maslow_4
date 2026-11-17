@@ -29,6 +29,15 @@ Update `release-manifest.json`.
 
 The workflow matrix is generated from the manifest, so adding a new target there automatically updates the build job list.
 
+## ESP-NOW remote
+
+The `build-remote` job builds the remote firmware (`remote/`, envs `cyd`, `cyd4`, `es3c40p`) and runs
+`remote/tools/package_release.py`, which makes `maslow-remote-<version>-windows.zip`, `-macos.zip` and
+`-linux.zip`. Each holds every board's merged image, a Full-Install script and esptool for that OS, so
+users need nothing installed. They are listed under `optional_release_assets` in `release-manifest.json`.
+The mirror step also copies the images and their ESP Web Tools manifests to `web-assets/remote/latest/`,
+which the browser installer (`docs/remote-installer/`) loads.
+
 ## Troubleshooting
 
 - **Missing staged artifacts**: check the `Validate staged inputs` log lines in the packaging job. The workflow prints every required glob and fails fast if one is missing.
