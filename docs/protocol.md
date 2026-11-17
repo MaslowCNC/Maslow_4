@@ -215,9 +215,9 @@ channels.
 1. Send **0x18**. It is realtime, so it acts the moment it arrives, even behind queued lines or
    a running job, and it works from every channel.
 2. Wait for the start message (`Grbl …`), with a timeout.
-3. Send **`$STOP`**. It raises Z to 2 mm if lower and saves positions. Sending it before the
-   restart would be useless: the reset discards unread input, so `$STOP` would be dropped
-   unanswered.
+3. Send **`$STOP`**. It raises Z to 2 mm if lower (not when the stop ended a jog) and saves
+   positions. Sending it before the restart would be useless: the reset discards unread input,
+   so `$STOP` would be dropped unanswered.
 
 `$STOP` alone is not a fast stop: it is queued like other `$` commands, so it waits behind
 running motion. 0x85 stops only a jog (`!` holds, it doesn't stop). Our UI still uses 0x85 for
@@ -321,7 +321,7 @@ plus a log line `Motion is disabled: <reason>` when Maslow has blocked motion.
 
 | Command | Name | What it does | UI sends it |
 |---|---|---|---|
-| [`$STOP`][STOP] | `Maslow/stop` | stop belts, spindle and any job; sync positions; raise Z to 2 mm if lower; save state. During Apply Tension it ends in EXTENDEDOUT (4), or UNKNOWN (0) when recovering belts. Queued like other `$` commands, so it waits behind running motion (backlog). The UI sends 0x18 first and `$STOP` after the restart (section 3, how to stop) | yes |
+| [`$STOP`][STOP] | `Maslow/stop` | stop belts, spindle and any job; sync positions; raise Z to 2 mm if lower, unless the stop ended a jog; save state. During Apply Tension it ends in EXTENDEDOUT (4), or UNKNOWN (0) when recovering belts. Queued like other `$` commands, so it waits behind running motion (backlog). The UI sends 0x18 first and `$STOP` after the restart (section 3, how to stop) | yes |
 | [`$ESTOP`][ESTOP] | `Maslow/estop` | emergency stop: Alarm state, motors and spindle off; the machine ignores further commands until power-cycled | no |
 
 **State and diagnostics (read-only):**

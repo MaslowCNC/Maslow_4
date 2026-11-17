@@ -74,8 +74,9 @@ volatile bool runLimitLoop;  // Interface to show_limits()
 // Uses acquire/release semantics to guarantee visibility on dual-core ESP32-S3.
 static std::atomic<bool> feedHoldPending { false };
 
-volatile bool rtStopFromHold = false;
-volatile bool rtMaslowStop   = false;
+volatile bool rtStopFromHold    = false;
+volatile bool rtMaslowStop      = false;
+volatile bool rtResetStoppedJog = false;
 
 static void protocol_exec_rt_suspend();
 static void protocol_do_initiate_cycle();  // Forward declaration for auto cycle start handler
@@ -406,7 +407,8 @@ void protocol_main_loop() {
         // Back at the top level, so any line interrupted by a stop-from-hold has unwound.
         mc_set_drop_motion(false);
         if (rtMaslowStop) {
-            rtMaslowStop = false;
+            rtMaslowStop      = false;
+            rtResetStoppedJog = false;  // this stop ends a job, not a jog: raise the Z
             execute_line("$STOP", allChannels, AuthenticationLevel::LEVEL_ADMIN, true);
         }
         // A line collected by the polling task.  xQueueReceive supplies the
@@ -1395,6 +1397,7 @@ static void protocol_do_fault_pin(void* arg) {
     log_info("Stopped by " << pin->legend());
 }
 void protocol_do_rt_reset() {
+    rtResetStoppedJog = state_is(State::Jog);  // Maslow: see maslow_stop()
     // Maslow: a reset during an SD job is the Stop button; remember where the job got to.
     // Not in Alarm: position may not be trustworthy, so there is nothing to resume.
     if (!state_is(State::Alarm) && !state_is(State::ConfigAlarm)) {

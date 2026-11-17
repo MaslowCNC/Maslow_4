@@ -1241,6 +1241,10 @@ static Error maslow_stop(const char* value, AuthenticationLevel auth_level, Chan
     // may hold that mutex while flushing the WebSocket TX buffer; without
     // these resets the 100 ms watchdog can fire and set State::Alarm.
     Maslow.resetUpdateWatchdog();
+    // A stop that ends a jog (the 0x18 before this $STOP interrupted one, or a jog is still
+    // running) leaves Z where it stopped: raising it would look like the jog carrying on.
+    bool endsJog      = state_is(State::Jog) || (rtResetStoppedJog && state_is(State::Idle));
+    rtResetStoppedJog = false;
     if (!state_is(State::Alarm)) {
         JobResume::noteStop();  // a job still running (no 0x18 before this $STOP) can be resumed
     }
@@ -1248,7 +1252,11 @@ static Error maslow_stop(const char* value, AuthenticationLevel auth_level, Chan
     rtMaslowStop   = false;
     Maslow.stopMotors();   // Stop XY belt motors immediately
     Maslow.stopSpindle();  // Stop means everything: a running spindle would carry on into the next job
-    Maslow.raiseZ();       // Raise Z to Z home + 2mm to prevent workpiece damage
+    if (endsJog) {
+        Maslow.haltMotion();  // what raiseZ() does first, without the raise
+    } else {
+        Maslow.raiseZ();  // Raise Z to Z home + 2mm to prevent workpiece damage
+    }
     Maslow.resetUpdateWatchdog();
     sys.set_state(State::Idle);
     // Explicitly save current belt and Z positions to NVS before cleanup.

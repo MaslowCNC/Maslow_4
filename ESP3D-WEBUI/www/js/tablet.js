@@ -1409,7 +1409,8 @@ const tabletMoveBottomRight = () => sendMove("X+Y-");
 const Z_STOP_INFO_TEXT =
   "When z-stop is 0, the stepper motors cannot move down any more without running in to the " +
   "router assembly. This gets set at the start of Find Anchors or by clicking Options &gt; Set Z-Stop." +
-  "<br><br>Z-home cannot be set below the Z-Stop because the machine thinks it is physically unreachable.";
+  "<br><br>Z-home cannot be set below the Z-Stop because the machine thinks it is physically unreachable." +
+  "To change Z-stop, jog the z axis until the z-steppers are as low as possible, the go to Options &gt; Set Z-Stop.";
 
 /** Explain the z-stop (the "z-stop" links in the Set Z Home popup). */
 const showZStopInfo = (event) => {
