@@ -1,0 +1,16 @@
+{
+  "name": "Maslow remote",
+  "version": "2026-11-17-4a97d10c2",
+  "new_install_prompt_erase": true,
+  "builds": [
+    {
+      "chipFamily": "ESP32-S3",
+      "parts": [
+        {
+          "path": "maslow-remote.bin",
+          "offset": 0
+        }
+      ]
+    }
+  ]
+}
