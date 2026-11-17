@@ -423,7 +423,7 @@ static void printStat() {
     }
 }
 
-// Maintenance commands, "#..." on the link (the XY board's $Spindle/Send passes them through).
+// Maintenance commands, "#..." on the link ($Spindle/G474=SEND <line> on the XY board passes them through).
 // The ESP32 firmware ignores lines starting with '#', so the XY side can send them to either board.
 static void maintenance(const char* line) {
     foc::Tuning& tu = foc::tuning();
@@ -516,7 +516,7 @@ static void processLine(const char* line, size_t len) {
         case 'W':
             // The ESP32 joined WiFi for OTA.  This MCU has no radio: the XY board flashes it.
             {
-                static const char msg[] = "OTA_ERR:the 36 V spindle (STM32G474) has no WiFi - update it with $Spindle/Flash\n";
+                static const char msg[] = "OTA_ERR:the 36 V spindle (STM32G474) has no WiFi - update it with $Spindle/G474=FLASH <file.bin>\n";
                 linkWriteIfRoom(msg, sizeof(msg) - 1);
             }
             break;
@@ -564,6 +564,7 @@ static void updateFan(float dt) {
 static uint32_t g_lock_since      = 0;
 static uint32_t g_at_handover_ms  = 0;
 static uint32_t g_closed_since    = 0;
+static bool     g_handback_pending = false;
 static uint32_t g_lost_since      = 0;
 static uint32_t g_rms_over_since  = 0;
 static float    g_rms[2]          = { 0, 0 };
@@ -579,7 +580,9 @@ static void superviseSpin() {
         if (!foc::enabled() && foc::speedTargetRpm() > 0) enableDrive("spindle start");
         if (foc::enabled() && foc::speedTargetRpm() == 0 && foc::speedCommandRpm() == 0 &&
             foc::mode() == foc::Mode::Open) {
-            disableDrive(false);
+            // Spun down.  Power down as the ESP32 did - unless a Z move is still under way, which
+            // the hold release ('D') then ends once it has settled.
+            if (fabsf(foc::phaseTarget() - foc::phaseCurrent()) < PHASE_MOVE_COMPLETE_EPS_RAD) disableDrive(false);
             g_spinning = false;
         }
         if (!foc::enabled() && foc::speedTargetRpm() == 0) g_spinning = false;
@@ -594,6 +597,7 @@ static void superviseSpin() {
             if (!g_lock_since) g_lock_since = now;
             else if (now - g_lock_since >= CL_LOCK_MS) {
                 foc::requestClosedLoop();
+                linkEvent("MSG", "closed loop: observers locked at %.0f RPM", foc::speedCommandRpm());
                 g_closed_since = now;
                 g_lost_since   = 0;
                 g_lock_since   = 0;
@@ -612,8 +616,15 @@ static void superviseSpin() {
         g_lock_since     = 0;
     }
 
+    if (foc::mode() != foc::Mode::Closed) g_handback_pending = false;
     if (foc::enabled() && foc::mode() == foc::Mode::Closed) {
-        if (foc::speedTargetRpm() < CL_EXIT_RPM && foc::speedCommandRpm() <= CL_EXIT_RPM) foc::requestOpenLoop();
+        if (foc::speedTargetRpm() < CL_EXIT_RPM && foc::speedCommandRpm() <= CL_EXIT_RPM) {
+            // The interrupt switches on its next pass; announce it once.
+            if (!g_handback_pending) linkEvent("MSG", "open loop below %.0f RPM", CL_EXIT_RPM);
+            g_handback_pending = true;
+            foc::requestOpenLoop();
+            return;
+        }
         if (now - g_closed_since > CL_SETTLE_MS) {
             if (foc::maxSpeedErrorFraction() > LOST_FRACTION) {
                 if (!g_lost_since) g_lost_since = now;

@@ -64,6 +64,10 @@ constexpr uint32_t PWM_FREQUENCY_HZ = 20000;
 // Centre-aligned: the counter goes 0 -> ARR -> 0 once per PWM period.
 constexpr uint32_t PWM_ARR          = TIMER_CLOCK_HZ / (2 * PWM_FREQUENCY_HZ);   // 4250
 constexpr float    PWM_PERIOD_S     = 1.0f / PWM_FREQUENCY_HZ;
+// The ADC trigger (TIM1 OC4REF on TRGO2) is high while CNT > ARR - SAMPLE_LEAD_TICKS: it rises
+// 118 ns before the peak and stays high 235 ns, several ADC clocks (23.5 ns at 42.5 MHz), so the
+// ADCs cannot miss it.  The 0.29 us sampling window then sits about centred on the peak.
+constexpr uint32_t SAMPLE_LEAD_TICKS = 20;
 // The DRV8300 (DT pin open) adds its own 200 ns.  The timer's dead time is on top of it, so a
 // timer whose outputs are ever driven straight to FETs elsewhere is never left without one.
 constexpr uint32_t DEADTIME_NS      = 100;

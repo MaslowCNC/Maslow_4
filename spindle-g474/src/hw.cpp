@@ -56,8 +56,9 @@ namespace hw {
             h.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
             if (HAL_TIM_PWM_Init(&h) != HAL_OK) { *why = "TIM PWM init"; return false; }
 
-            // TRGO2 = OC4REF: channel 4 in PWM mode 2 goes active as the counter passes ARR-1 on its
-            // way up, i.e. just before the peak, when every low side of BOTH bridges is on.  All five
+            // TRGO2 = OC4REF: channel 4 in PWM mode 2 goes active as the counter passes
+            // ARR - SAMPLE_LEAD_TICKS on its way up, i.e. just before the peak, when every low side of
+            // BOTH bridges is on.  All five
             // ADCs start their injected conversion on TIM1's TRGO2 rising edge.
             TIM_MasterConfigTypeDef mc = {};
             mc.MasterOutputTrigger  = TIM_TRGO_RESET;
@@ -78,7 +79,7 @@ namespace hw {
                 if (HAL_TIM_PWM_ConfigChannel(&h, &oc, ch[i]) != HAL_OK) { *why = "TIM channel"; return false; }
             }
             oc.OCMode = TIM_OCMODE_PWM2;
-            oc.Pulse  = PWM_ARR - 1;
+            oc.Pulse  = PWM_ARR - SAMPLE_LEAD_TICKS;
             if (HAL_TIM_PWM_ConfigChannel(&h, &oc, TIM_CHANNEL_4) != HAL_OK) { *why = "TIM channel 4"; return false; }
 
             TIM_BreakDeadTimeConfigTypeDef bd = {};
