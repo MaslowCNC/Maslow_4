@@ -8,11 +8,8 @@ Nothing needs to be installed on your computer: this package carries the
 esptool program that writes the firmware.
 
 1. Unpack this whole zip file.
-2. Unplug the Maslow's USB cable from the computer, if it is plugged in.
-   The Maslow's controller is an ESP32-S3 too, so the installer could
-   otherwise find it instead of the display.
-3. Plug the display into the computer with a USB-C data cable.
-4. Run the installer:
+2. Plug the display into the computer with a USB-C data cable.
+3. Run the installer:
      Windows: double-click Full-Install.bat
      macOS:   double-click Full-Install.command
               If macOS says it can't check the file for malicious software,
@@ -20,7 +17,7 @@ esptool program that writes the firmware.
               next to Full-Install.command, and double-click it again.
               Or open Terminal and type:  sh <drag Full-Install.sh here>
      Linux:   in a terminal, run:  sh Full-Install.sh
-5. The installer finds the board and shows its port, chip and MAC address.
+4. The installer finds the board and shows its port, chip and MAC address.
    Type y to install.
 
 Full-Install erases everything on the board first, including an earlier

@@ -1,23 +1,30 @@
 #!/usr/bin/env python3
-"""Package the remote firmware for release.
+"""Build the remote firmware and refresh the files users download, in remote/downloads/.
 
-Needs the firmware built first (pio run, in remote/), which leaves a merged
-firmware.factory.bin (bootloader + partitions + app, written at 0x0).
+Run by hand when the remote changes, then commit remote/downloads/:
 
-Writes to --dist-dir:
-  maslow-remote-<version>-windows.zip   Full-Install.bat + esptool.exe
-  maslow-remote-<version>-macos.zip     Full-Install.command / .sh + esptool (arm64, x86_64)
-  maslow-remote-<version>-linux.zip     Full-Install.sh + esptool (x86_64, aarch64)
-Each zip carries firmware/maslow-remote.bin, so nothing has to be installed.
+  cd remote
+  python3 tools/make_downloads.py
 
-With --web-dir, also writes maslow-remote.bin and manifest.json there for the browser
-installer (docs/remote-installer/, ESP Web Tools).
+It runs `pio run` (skip with --no-build), which leaves a merged firmware.factory.bin
+(bootloader + partitions + app, written at 0x0), and writes:
+  maslow-remote-windows.zip   Full-Install.bat + esptool.exe
+  maslow-remote-macos.zip     Full-Install.command / .sh + esptool (arm64, x86_64)
+  maslow-remote-linux.zip     Full-Install.sh + esptool (x86_64, aarch64)
+  maslow-remote.bin           the image, for the browser installer
+  manifest.json               ESP Web Tools manifest for the browser installer
+                              (docs/remote-installer/index.html loads it from GitHub)
+  VERSION.txt                 what was built
+Each zip carries firmware/maslow-remote.bin and esptool, so users install nothing.
 """
 
 from __future__ import annotations
 
 import argparse
+import datetime
 import json
+import shutil
+import subprocess
 import tarfile
 import urllib.request
 from pathlib import Path
@@ -88,29 +95,55 @@ def add(z: ZipFile, name: str, data: bytes, executable: bool = False) -> None:
     z.writestr(info, data)
 
 
+def git(*args: str) -> str:
+    return subprocess.run(["git", *args], cwd=REMOTE_DIR, capture_output=True, text=True).stdout.strip()
+
+
+def default_version() -> str:
+    """<date>-<commit>, with -modified when remote/ has uncommitted changes."""
+    commit = git("rev-parse", "--short", "HEAD") or "unknown"
+    dirty = git("status", "--porcelain", "--", "src", "platformio.ini", "install")
+    return f"{datetime.date.today():%Y-%m-%d}-{commit}" + ("-modified" if dirty else "")
+
+
+def build() -> None:
+    # PlatformIO's own install first: a stray older pio on PATH can use other tool versions.
+    penv = Path.home() / ".platformio" / "penv" / "bin" / "pio"
+    pio = str(penv) if penv.exists() else shutil.which("pio") or "pio"
+    print(f"Building: {pio} run", flush=True)
+    subprocess.run([pio, "run"], cwd=REMOTE_DIR, check=True)
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--version", required=True, help="release version, e.g. 1.27.0")
+    p.add_argument("--version", help="version label (default: <date>-<commit>)")
+    p.add_argument("--no-build", action="store_true", help="package the existing build")
     p.add_argument("--build-dir", type=Path, default=REMOTE_DIR / ".pio" / "build")
-    p.add_argument("--dist-dir", type=Path, required=True)
+    p.add_argument("--out-dir", type=Path, default=REMOTE_DIR / "downloads")
     p.add_argument("--cache-dir", type=Path, default=REMOTE_DIR / ".release-cache")
-    p.add_argument("--web-dir", type=Path, help="also write the browser installer's files here")
     args = p.parse_args()
+    version = args.version or default_version()
+
+    if not args.no_build:
+        build()
 
     factory = args.build_dir / ENV / "firmware.factory.bin"
     if not factory.is_file():
         raise SystemExit(f"Missing {factory}: build it with pio run (in remote/)")
     image = factory.read_bytes()
 
-    args.dist_dir.mkdir(parents=True, exist_ok=True)
+    out_dir = args.out_dir
+    out_dir.mkdir(parents=True, exist_ok=True)
+    version_text = f"Maslow remote {version}\nBoard: 4.0\" ESP32-S3 Hosyond / lcdwiki ES3C40P\nesptool {ESPTOOL_VERSION}\n"
     for platform, (scripts, tools) in PLATFORMS.items():
-        root = f"maslow-remote-{args.version}-{platform}"
-        out = args.dist_dir / f"{root}.zip"
+        root = f"maslow-remote-{platform}"
+        out = out_dir / f"{root}.zip"
         with ZipFile(out, "w") as z:
             howto = (INSTALL_DIR / "HOWTO-INSTALL.txt").read_text()
             if platform == "windows":
                 howto = howto.replace("\n", "\r\n")
             add(z, f"{root}/HOWTO-INSTALL.txt", howto.encode())
+            add(z, f"{root}/VERSION.txt", version_text.encode())
             for script in scripts:
                 text = (INSTALL_DIR / script).read_text()
                 if script.endswith(".bat"):
@@ -124,17 +157,17 @@ def main() -> None:
                 add(z, f"{root}/tools/{folder}/README-ESPTOOL.txt", ESPTOOL_README.format(v=ESPTOOL_VERSION, url=url).encode())
         print(f"Wrote {out} ({out.stat().st_size // 1024} KB)", flush=True)
 
-    if args.web_dir:
-        args.web_dir.mkdir(parents=True, exist_ok=True)
-        (args.web_dir / IMAGE).write_bytes(image)
-        manifest = {
-            "name": "Maslow remote",
-            "version": args.version,
-            "new_install_prompt_erase": True,
-            "builds": [{"chipFamily": "ESP32-S3", "parts": [{"path": IMAGE, "offset": 0}]}],
-        }
-        (args.web_dir / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
-        print(f"Wrote the browser installer files to {args.web_dir}", flush=True)
+    (out_dir / IMAGE).write_bytes(image)
+    manifest = {
+        "name": "Maslow remote",
+        "version": version,
+        "new_install_prompt_erase": True,
+        "builds": [{"chipFamily": "ESP32-S3", "parts": [{"path": IMAGE, "offset": 0}]}],
+    }
+    (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    (out_dir / "VERSION.txt").write_text(version_text)
+    print(f"Wrote {IMAGE}, manifest.json and VERSION.txt ({version}) to {out_dir}", flush=True)
+    print("Commit remote/downloads/ to publish them.", flush=True)
 
 
 if __name__ == "__main__":

@@ -41,7 +41,6 @@ echo "Maslow remote installer"
 echo "======================="
 echo
 echo "Plug the remote into this computer with a USB data cable."
-echo "Unplug the Maslow's own USB cable first, so the installer can't pick it by mistake."
 echo
 printf 'Press Enter when the remote is plugged in...'
 read -r _
@@ -88,8 +87,6 @@ echo
 echo "Board:  $board"
 echo "Port:   $port"
 echo "Chip:   $chip  (MAC $mac)"
-echo
-echo "The Maslow's controller is an ESP32-S3 too: if this is the Maslow, answer n."
 echo
 echo "This erases everything on that board, then installs the remote firmware."
 echo "Afterwards the remote has to be paired with the Maslow again."

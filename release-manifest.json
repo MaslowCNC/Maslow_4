@@ -45,9 +45,6 @@
     "fluidnc-maslow4-{version}-win64.zip"
   ],
   "optional_release_assets": [
-    "maslow.yaml",
-    "maslow-remote-{version}-windows.zip",
-    "maslow-remote-{version}-macos.zip",
-    "maslow-remote-{version}-linux.zip"
+    "maslow.yaml"
   ]
 }

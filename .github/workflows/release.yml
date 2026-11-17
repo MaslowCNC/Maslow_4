@@ -221,56 +221,8 @@ jobs:
           path: release-staging/
           if-no-files-found: error
 
-  # The ESP-NOW remote (remote/, 4.0" ESP32-S3 ES3C40P display), packaged with esptool so users
-  # need nothing installed (remote/tools/package_release.py), plus the browser installer's files.
-  build-remote:
-    needs: prepare
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.prepare.outputs.checkout_ref }}
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Cache PlatformIO
-        uses: actions/cache@v4
-        with:
-          path: ~/.platformio
-          key: ${{ runner.os }}-platformio-remote-${{ hashFiles('remote/platformio.ini') }}
-          restore-keys: |
-            ${{ runner.os }}-platformio-remote-
-
-      - name: Install PlatformIO
-        run: |
-          python -m pip install --upgrade pip
-          pip install --upgrade platformio
-
-      - name: Build remote firmware
-        working-directory: remote
-        run: pio run
-
-      - name: Package remote firmware
-        run: |
-          python3 remote/tools/package_release.py \
-            --version '${{ needs.prepare.outputs.version }}' \
-            --dist-dir remote-dist/release \
-            --web-dir remote-dist/web
-          ls -lah remote-dist/release remote-dist/web
-
-      - name: Upload remote packages
-        uses: actions/upload-artifact@v4
-        with:
-          name: remote-release
-          path: remote-dist/
-          if-no-files-found: error
-
   package:
-    needs: [prepare, build, build-remote]
+    needs: [prepare, build]
     runs-on: ubuntu-latest
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -302,17 +254,6 @@ jobs:
             --dist-dir dist/release \
             --version '${{ needs.prepare.outputs.version }}' \
             --tag '${{ needs.prepare.outputs.tag }}'
-
-      - name: Add the remote packages
-        uses: actions/download-artifact@v4
-        with:
-          name: remote-release
-          path: remote-dist
-
-      - name: Stage the remote packages
-        run: |
-          cp remote-dist/release/*.zip dist/release/
-          (cd dist/release && sha256sum maslow-remote-*.zip >> SHA256SUMS.txt)
 
       - name: List packaged assets
         run: |
@@ -468,13 +409,6 @@ jobs:
           cp "$SOURCE_DIR/firmware.bin" "$VERSIONED_DIR/firmware.bin"
           cp "$SOURCE_DIR/index.html.gz" "$VERSIONED_DIR/index.html.gz"
 
-          # The remote's images and ESP Web Tools manifests, for docs/remote-installer/
-          REMOTE_LATEST='web-assets/remote/latest'
-          REMOTE_VERSIONED="web-assets/remote/$SAFE_TAG"
-          mkdir -p "$REMOTE_LATEST" "$REMOTE_VERSIONED"
-          cp ../remote-dist/web/* "$REMOTE_LATEST/"
-          cp ../remote-dist/web/* "$REMOTE_VERSIONED/"
-
           python3 - <<PY
           import hashlib
           import json
@@ -522,9 +456,7 @@ jobs:
             "$LATEST_DIR/manifest.json" \
             "$VERSIONED_DIR/firmware.bin" \
             "$VERSIONED_DIR/index.html.gz" \
-            "$VERSIONED_DIR/manifest.json" \
-            "$REMOTE_LATEST" \
-            "$REMOTE_VERSIONED"
+            "$VERSIONED_DIR/manifest.json"
 
           if git diff --cached --quiet; then
             echo 'No mirrored asset changes detected; skipping commit'

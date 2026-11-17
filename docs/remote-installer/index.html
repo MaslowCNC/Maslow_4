@@ -69,14 +69,11 @@
 
   <div class="note" id="unsupported" hidden>
     This browser can't talk to USB serial ports. Open this page in <strong>Chrome</strong> or <strong>Edge</strong> on a
-    computer, or use the <a href="https://github.com/MaslowCNC/Maslow_4/releases/latest">download package</a> instead.
+    computer, or use a <a href="#packages">Full-Install package</a> instead.
   </div>
 
   <h2>1. Plug in the display</h2>
-  <ol>
-    <li>Unplug the Maslow's own USB cable from the computer, if it is plugged in. Its controller is an ESP32-S3 too, so it would show up in the port list.</li>
-    <li>Plug the display in with a USB-C <em>data</em> cable (some cables only charge).</li>
-  </ol>
+  <p>Plug the display into the computer with a USB-C <em>data</em> cable (some cables only charge).</p>
 
   <h2>2. Click Install</h2>
   <p>A window lists the serial ports: pick the display's port and click Connect. Choose <strong>Erase</strong> when asked; it takes about a minute.</p>
@@ -86,7 +83,7 @@
         <h3>4.0" ESP32-S3 touch display</h3>
         <p>Hosyond / lcdwiki ES3C40P: 320×480 IPS, capacitive touch, USB-C</p>
       </div>
-      <esp-web-install-button manifest="https://raw.githubusercontent.com/MaslowCNC/Maslow_4/Maslow-Main/web-assets/remote/latest/manifest.json">
+      <esp-web-install-button manifest="https://raw.githubusercontent.com/MaslowCNC/Maslow_4/Maslow-Main/remote/downloads/manifest.json">
         <button slot="activate" class="install">Install</button>
         <span slot="unsupported"></span>
         <span slot="not-allowed">Needs https</span>
@@ -102,9 +99,14 @@
     <li>Try another USB cable or port, and close any other program that has the port open.</li>
     <li>Hold the board's BOOT button while plugging it in, then click Install again.</li>
   </ul>
-  <p>Prefer a program? The <a href="https://github.com/MaslowCNC/Maslow_4/releases/latest">latest release</a> has
-    <code>maslow-remote-…-windows.zip</code>, <code>-macos.zip</code> and <code>-linux.zip</code>: unpack and run Full-Install.
-    Details are in <a href="https://github.com/MaslowCNC/Maslow_4/tree/Maslow-Main/remote#installing">remote/README.md</a>.</p>
+  <h2 id="packages">Prefer a program?</h2>
+  <p>Download the package for your computer, unpack the whole zip and run Full-Install. Each package carries everything it needs.</p>
+  <ul>
+    <li><a href="https://github.com/MaslowCNC/Maslow_4/raw/Maslow-Main/remote/downloads/maslow-remote-windows.zip">Windows</a>: double-click <code>Full-Install.bat</code></li>
+    <li><a href="https://github.com/MaslowCNC/Maslow_4/raw/Maslow-Main/remote/downloads/maslow-remote-macos.zip">macOS</a>: double-click <code>Full-Install.command</code></li>
+    <li><a href="https://github.com/MaslowCNC/Maslow_4/raw/Maslow-Main/remote/downloads/maslow-remote-linux.zip">Linux</a>: run <code>sh Full-Install.sh</code></li>
+  </ul>
+  <p>Details are in <a href="https://github.com/MaslowCNC/Maslow_4/tree/Maslow-Main/remote#installing">remote/README.md</a>.</p>
 </main>
 <script>
   if (!("serial" in navigator)) {

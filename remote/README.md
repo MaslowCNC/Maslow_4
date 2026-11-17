@@ -53,28 +53,33 @@ installing anything on their computer. There are two ways.
 Open **<https://documentation.maslowcnc.com/remote-installer/>** in Chrome or
 Edge on a computer (Firefox and Safari can't reach USB serial ports).
 
-1. Unplug the Maslow's USB cable (its controller is an ESP32-S3 too, so it
-   would show up in the port list), then plug in the display with a USB-C data
-   cable.
+1. Plug in the display with a USB-C data cable.
 2. Click **Install**, pick the display's port and click Connect.
 3. Choose **Erase** when asked. It takes about a minute.
 
-The page uses [ESP Web Tools](https://esphome.github.io/esp-web-tools/) and the
-image the release workflow copies to `web-assets/remote/latest/`. The page
-source is `docs/remote-installer/index.html`.
+The page uses [ESP Web Tools](https://esphome.github.io/esp-web-tools/) and
+loads `downloads/manifest.json` and `downloads/maslow-remote.bin` from this
+branch on GitHub. Its source, `docs/remote-installer/index.html`, is the only
+file of the remote outside this folder: the docs site is the repository's only
+HTTPS host.
 
 ### With the Full-Install package
 
-Every release has a zip for each operating system:
-`maslow-remote-<version>-windows.zip`, `-macos.zip` and `-linux.zip`. Each one
-holds the firmware, a Full-Install script, and Espressif's
-stand-alone `esptool` program for that system, so Python isn't needed.
+Download the zip for your computer:
 
-1. Download the zip for your computer from the
-   [latest release](https://github.com/MaslowCNC/Maslow_4/releases/latest)
-   and unpack the whole thing.
-2. Unplug the Maslow's USB cable, then plug in the display with a USB-C data
-   cable.
+| System | Download |
+| --- | --- |
+| Windows | [maslow-remote-windows.zip](https://github.com/MaslowCNC/Maslow_4/raw/Maslow-Main/remote/downloads/maslow-remote-windows.zip) |
+| macOS | [maslow-remote-macos.zip](https://github.com/MaslowCNC/Maslow_4/raw/Maslow-Main/remote/downloads/maslow-remote-macos.zip) |
+| Linux | [maslow-remote-linux.zip](https://github.com/MaslowCNC/Maslow_4/raw/Maslow-Main/remote/downloads/maslow-remote-linux.zip) |
+
+Each one holds the firmware, a Full-Install script, and Espressif's
+stand-alone `esptool` program for that system, so Python isn't needed.
+They are in [`downloads/`](downloads), with `VERSION.txt` saying which build
+they are.
+
+1. Download the zip and unpack the whole thing.
+2. Plug in the display with a USB-C data cable.
 3. Run the installer:
 
    | System | How |
@@ -84,9 +89,7 @@ stand-alone `esptool` program for that system, so Python isn't needed.
    | Linux | `sh Full-Install.sh` (your user needs serial port access: `sudo usermod -aG dialout $USER`, then log in again) |
 
 4. The installer finds the board and shows its port, chip and MAC. It
-   refuses anything that isn't an ESP32-S3. The Maslow's controller is an
-   ESP32-S3 too, which is why the Maslow has to be unplugged. Type `y` to
-   install.
+   refuses anything that isn't an ESP32-S3. Type `y` to install.
 
 Full-Install erases the whole board first, as the Maslow's Full-Install
 does, so the remote forgets its pairing.
@@ -102,18 +105,23 @@ The image is merged (bootloader, partition table and app), so it can also be
 written by hand at offset 0:
 `esptool --chip esp32s3 write_flash 0x0 maslow-remote.bin`.
 
-### Making the packages
+### Updating the downloads
 
-The release workflow (`.github/workflows/release.yml`, job `build-remote`)
-builds the firmware and runs `tools/package_release.py`. The scripts and
-instructions that go into the zips are in `install/`. To build the packages
-locally:
+The files in `downloads/` are built by hand and committed; nothing in the
+repository's release workflow touches them. After changing the remote:
 
 ```sh
 cd remote
-pio run
-python3 tools/package_release.py --version 1.2.3 --dist-dir dist --web-dir dist/web
+python3 tools/make_downloads.py
+git add downloads && git commit -m "Remote: update downloads"
 ```
+
+`make_downloads.py` runs `pio run`, then writes the three zips, the
+browser installer's `maslow-remote.bin` and `manifest.json`, and
+`VERSION.txt` (date and commit, plus `-modified` if the remote's source had
+uncommitted changes). The Full-Install scripts and instructions that go into
+the zips are in `install/`. esptool v4.10.0 is downloaded once into
+`.release-cache/`.
 
 ## Pairing
 
