@@ -129,6 +129,9 @@ Format: **title** — what goes wrong, where, and how we found it.
 - [ ] **One UI test fails: `maslowInfoMsgHandling is not defined`** (`maslow.test.ts:167`).
   The test calls it as a global, but `maslow.js:327` declares it as a module `const` and
   never puts it on `globalThis`. Predates the 2026-10-26 work (107/108 pass on 2026-11-04).
+- [ ] **`bun test` reports an unhandled error `$STOP: disconnected`.** `wscommands.test.ts:25`
+  calls `reset()`, which rejects the `$STOP` that `machine.stop()` (`machine.js:566`) queued,
+  and nothing catches it. Tests still pass; seen 2026-11-17.
 - [ ] **`firmware/install_scripts/*/install-wifi_s3.sh` is the plain-ESP32 script** (wrong
   chip, bootloader at 0x1000).
 - [ ] **`/flash-maslow` doesn't load as a skill.** It is in `.claude/skills/flash-maslow`, but
