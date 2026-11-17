@@ -871,7 +871,8 @@ background-color: #4caf50!important;
 }
 
 .set-z-home-above {
-  white-space: nowrap;
+  text-align: center;
+  margin-top: 5px;
 }
 
 .set-z-home-invalid {

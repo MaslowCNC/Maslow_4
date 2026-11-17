@@ -1438,10 +1438,8 @@ const tabletMoveBottom = () => sendMove("Y-");
 const tabletMoveBottomRight = () => sendMove("X+Y-");
 // Button event handlers - Fourth Row
 const Z_STOP_INFO_TEXT =
-  "When z-stop is 0, the stepper motors cannot move down any more without running in to the " +
-  "router assembly. This gets set at the start of Find Anchors or by clicking Options &gt; Set Z-Stop." +
-  "<br><br>Z-home cannot be set below the Z-Stop because the machine thinks it is physically unreachable." +
-  "<br><br>To change Z-stop, jog the z axis until the z-steppers are as low as possible, then go to Options &gt; Set Z-Stop.";
+  "z-stop is the lowest z position the machine can physically reach. " + 
+  "<br><br>To change Z-stop, jog the z axis as low as possible, then Options &gt; Set Z-Stop";
 
 /** Explain the z-stop (the "z-stop" links in the Set Z Home popup). */
 const showZStopInfo = (event) => {
@@ -1452,7 +1450,7 @@ const showZStopInfo = (event) => {
 const formatZMm = (mm) => Number.isFinite(mm) ? mm.toFixed(3) : "?";
 
 /**
- * Check a Z home typed in the Set Z Home popup. It is machine Z in mm, which $SETZSTOP sets
+ * Check a new Z home from the Set Z Home popup. It is machine Z in mm, which $SETZSTOP sets
  * to 0 at the z-stop, so it is also the height above the z-stop. Returns {zHome} or {error}.
  * The Mini's spindle board has its own Z range, so there it only has to be a number.
  */
@@ -1479,15 +1477,24 @@ if (typeof globalThis !== "undefined") {
 
 const closeSetZHomePopup = () => hideModal("set-z-home-popup");
 
+/**
+ * The Z typed in the Set Z Home popup is relative to the current Z home (the Z readout), so
+ * add the current home's machine Z to get the new home in machine Z (mm above the z-stop).
+ */
+const typedZHomeMachineZ = () => {
+  const { wco } = machine.state;
+  return wco ? wco.z + parseNumericInput(id("setHomeZ")?.value) : NaN;
+}
+
 /** Show the typed Z as mm above the z-stop, in red when it can't be used. */
 const updateSetZHomeAbove = () => {
-  const zInput = id("setHomeZ");
   const above = id("setHomeZAbove");
-  if (!zInput || !above) {
+  if (!above) {
     return;
   }
-  above.textContent = formatZMm(parseNumericInput(zInput.value));
-  above.parentElement.classList.toggle("set-z-home-invalid", !!checkZHome(zInput.value, maslowIsMini()).error);
+  const zHome = typedZHomeMachineZ();
+  above.textContent = formatZMm(zHome);
+  above.parentElement.classList.toggle("set-z-home-invalid", !!checkZHome(zHome, maslowIsMini()).error);
 }
 
 const openSetZHomePopup = () => {
@@ -1495,8 +1502,8 @@ const openSetZHomePopup = () => {
   const { mpos, wco } = machine.state;
   const zInput = id("setHomeZ");
   if (zInput) {
-    // Pre-fill with the current machine Z, so Set Home without changes puts Z home here.
-    zInput.value = mpos ? formatZMm(mpos.z) : "";
+    // Pre-fill with the current Z, so Set Home without changes puts Z home here.
+    zInput.value = mpos && wco ? formatZMm(mpos.z - wco.z) : "";
   }
   setTextContent("currentZHomeValue", formatZMm(wco ? wco.z : NaN));
   updateSetZHomeAbove();
@@ -1508,7 +1515,7 @@ const openSetZHomePopup = () => {
 }
 
 const confirmSetZHome = () => {
-  const { zHome, error } = checkZHome(id("setHomeZ")?.value, maslowIsMini());
+  const { zHome, error } = checkZHome(typedZHomeMachineZ(), maslowIsMini());
   if (error) {
     alertdlg("Set Z Home", error);
     return;
