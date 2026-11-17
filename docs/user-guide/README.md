@@ -112,26 +112,30 @@ You can configure Maslow to join your home WiFi for networked access from any de
 ### Running a G-code File
 
 1. Select the uploaded file from the list
-2. Press **Start** (the green button in the job row). The machine must be ready to cut.
+2. Press **Start** (the green button in the job row). The machine must be ready to cut. The
+   button turns grey and shows a spinner until the machine starts moving, which can take a few
+   seconds while the file is opened.
 3. Monitor progress from the dashboard. While the job runs, the left button is grey: there is no
    Pause button. To interrupt a job, press **Stop** (see below).
 
 ### Stopping and Resuming a Job
 
-**Stop** halts the machine at once, wherever it is in the job. It also stops the router, raises Z
-to 2 mm above the work if it's lower, and saves the machine's position.
+**Stop** halts the machine at once, wherever it is in the job. It also stops the router and saves
+the machine's position. Z stays where it is, so the bit may still be in the work.
 
 After a stop, the job row changes to three buttons:
 
 - **Resume from [line]:** runs the job again from the line where it stopped. You can change the
   line number first, using the box or its arrows, for example to repeat a few lines before a
-  problem. After you confirm, the machine reads the file up to that line without moving, raises Z,
-  starts the router if the job had it on, moves to where the line starts, lowers Z slowly and
-  carries on.
+  problem. After you confirm, the machine reads the file up to that line without moving, raises Z
+  (to at least 2 mm above Z home, or higher if the job had been higher), starts the router if the
+  job had it on, moves to where the line starts, lowers Z slowly and carries on.
 - **Stop.**
-- **Discard stopped job:** forgets the stopped job, and the row goes back to Start.
+- **Discard stopped job:** forgets the stopped job, and the row goes back to Start. Choosing a
+  different file does the same.
 
-You can re-tension the belts or change the bit before resuming. The stopped job is also kept
+You can re-tension the belts or change the bit before resuming. Raise Z first if the bit is
+still in the work. The stopped job is also kept
 after a job ends on an error in the file, or on a spindle fault, but not after an alarm.
 Switching the machine off forgets it.
 
