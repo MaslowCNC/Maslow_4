@@ -4,6 +4,10 @@ These scripts install the firmware on a Maslow 4 / 4.1 / Mini control board (ESP
 over a USB-C cable. To update a machine that is already running Maslow firmware, the
 web UI's firmware update over WiFi is easier and keeps everything on the machine.
 
+Chrome or Edge can do the same without these scripts: open
+https://documentation.maslowcnc.com/firmware-installer/ and choose to keep
+maslow.yaml or to erase everything.
+
 Unzip this file, plug the board into USB, then double-click one of:
 
   full-install.bat       Fresh install: erases the board, then installs the

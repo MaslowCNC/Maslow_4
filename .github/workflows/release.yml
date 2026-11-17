@@ -409,6 +409,16 @@ jobs:
           cp "$SOURCE_DIR/firmware.bin" "$VERSIONED_DIR/firmware.bin"
           cp "$SOURCE_DIR/index.html.gz" "$VERSIONED_DIR/index.html.gz"
 
+          # The browser installer (docs/firmware-installer/) also needs the images a USB install writes.
+          STAGED_DIR='../release-staging'
+          INSTALL_FILES=(bootloader.bin partitions.bin boot_app0.bin littlefs.bin)
+          for out_dir in "$LATEST_DIR" "$VERSIONED_DIR"; do
+            cp "$STAGED_DIR/targets/wifi_s3/bootloader.bin" "$out_dir/bootloader.bin"
+            cp "$STAGED_DIR/targets/wifi_s3/partitions.bin" "$out_dir/partitions.bin"
+            cp "$STAGED_DIR/common/boot_app0.bin" "$out_dir/boot_app0.bin"
+            cp "$STAGED_DIR/targets/wifi_s3/littlefs.bin" "$out_dir/littlefs.bin"
+          done
+
           python3 - <<PY
           import hashlib
           import json
@@ -432,14 +442,18 @@ jobs:
               "tag_name": tag,
               "published_at": published_at,
               "files": {
-                  "firmware.bin": {
-                      "sha256": sha256(latest_dir / "firmware.bin"),
-                      "size_bytes": (latest_dir / "firmware.bin").stat().st_size,
-                  },
-                  "index.html.gz": {
-                      "sha256": sha256(latest_dir / "index.html.gz"),
-                      "size_bytes": (latest_dir / "index.html.gz").stat().st_size,
-                  },
+                  name: {
+                      "sha256": sha256(latest_dir / name),
+                      "size_bytes": (latest_dir / name).stat().st_size,
+                  }
+                  for name in (
+                      "firmware.bin",
+                      "index.html.gz",
+                      "bootloader.bin",
+                      "partitions.bin",
+                      "boot_app0.bin",
+                      "littlefs.bin",
+                  )
               },
           }
 
@@ -457,6 +471,9 @@ jobs:
             "$VERSIONED_DIR/firmware.bin" \
             "$VERSIONED_DIR/index.html.gz" \
             "$VERSIONED_DIR/manifest.json"
+          for name in "${INSTALL_FILES[@]}"; do
+            git add "$LATEST_DIR/$name" "$VERSIONED_DIR/$name"
+          done
 
           if git diff --cached --quiet; then
             echo 'No mirrored asset changes detected; skipping commit'
