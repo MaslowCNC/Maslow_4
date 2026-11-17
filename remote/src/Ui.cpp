@@ -834,7 +834,7 @@ namespace Ui {
                 alert(a.title, a.text);
             } else {
                 std::string cmd = a.confirmCommand;
-                confirm(a.title, a.text, "Continue", [cmd] { Machine::send(cmd.c_str()); });
+                confirm(a.title, a.text, a.confirmLabel.c_str(), [cmd] { Machine::send(cmd.c_str()); });
             }
         }
     }

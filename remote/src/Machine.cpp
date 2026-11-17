@@ -10,21 +10,28 @@ namespace Machine {
     int    maslowState = -1;
     bool   inches      = false;
     bool   homed = false, extended = false, calibrating = false;
+    bool   mini = false, fixedZ = false;
+
+    bool Status::jobRunning() const {
+        return sdPercent >= 0 || !strncmp(state, "Run", 3) || !strncmp(state, "Hold", 4);
+    }
 }
 
 namespace {
     using namespace Machine;
 
+    constexpr uint32_t COMMAND_TIMEOUT = 10000;
+
     struct Pending {
         std::string line;
         Done        done;
+        uint32_t    timeout = COMMAND_TIMEOUT;
     };
     std::deque<Pending> queue;
     bool                outstanding     = false;
     Pending             current;
     uint32_t            sentAt          = 0;
     int                 skipAcks        = 0;  // acks owed to sendNow() lines
-    constexpr uint32_t  COMMAND_TIMEOUT = 10000;
 
     uint32_t changeCount = 0;
 
@@ -48,12 +55,39 @@ namespace {
     int      wcoBurst       = 0;
     uint32_t wcoBurstAt     = 0;
 
-    // $STOP retry (WebUI sendStopCommand): every 300 ms for up to ~10 s,
-    // until the machine reports Idle or Alarm.
-    bool     stopPending  = false;
-    int      stopAttempts = 0;
-    uint32_t stopAt       = 0;
-    uint32_t minfoAt      = 0;
+    // Stop (WebUI wsCommands.stop): 0x18, wait up to 1.5 s for the restart
+    // banner, then $STOP.  ESP-NOW has no retransmission of its own, so 0x18 is
+    // repeated every 500 ms until the banner comes, and $STOP is retried if it
+    // gets no reply.
+    bool     stopWaitBanner = false;
+    int      stopResets     = 0;
+    int      stopTries      = 0;
+    uint32_t stopAt         = 0;
+    uint32_t minfoAt        = 0;
+    constexpr int      STOP_RESETS     = 3;
+    constexpr uint32_t STOP_RESET_MS   = 500;
+    constexpr uint32_t STOP_REPLY_MS   = 2000;
+    constexpr int      STOP_TRIES      = 3;
+
+    // Start (WebUI runFile): from $SD/Run until the job moves (Run or Hold).
+    bool                      startPending = false;
+    bool                      startAccepted = false;
+    uint32_t                  startAt      = 0;
+    uint32_t                  startReports = 0;
+    std::function<void(bool)> startDone;
+    constexpr uint32_t        START_WAIT_MS = 30000;  // a spindle spin-up or dwell can keep it Idle
+
+    void finishStart(bool ok) {
+        if (!startPending) {
+            return;
+        }
+        startPending = false;
+        auto d       = startDone;
+        startDone    = nullptr;
+        if (d) {
+            d(ok);
+        }
+    }
 
     void changed() { ++changeCount; }
 
@@ -104,6 +138,25 @@ namespace {
         sentAt      = millis();
     }
 
+    void sendStopLine() {
+        stopWaitBanner = false;
+        if (outstanding && current.line != "$STOP") {
+            finishCurrent(false, "Reset");  // the reset dropped it
+        }
+        if (++stopTries > STOP_TRIES) {
+            Machine::toast("No reply to $STOP");
+            return;
+        }
+        Pending p { "$STOP", [](bool ok, const char* err) {
+                       if (!ok && err && !strcmp(err, "Timeout")) {
+                           sendStopLine();
+                       }
+                   }, STOP_REPLY_MS };
+        queue.push_front(p);
+        pump();
+        minfoAt = millis() + 1000;
+    }
+
     // Splits "a,b,c" into up to n floats.
     int parseFloats(const char* s, float* out, int n) {
         int i = 0;
@@ -123,7 +176,7 @@ namespace {
         if (!s.empty() && s.back() == '>') {
             s.pop_back();
         }
-        bool  sawSD = false, sawWPos = false;
+        bool  sawSD = false, sawWPos = false, sawStopped = false;
         float wpos[3] = {};
         size_t start = 0;
         int    field = 0;
@@ -155,10 +208,39 @@ namespace {
                     st.ovr[i] = (int)o[i];
                 }
             } else if (startsWith(f.c_str(), "SD:")) {
+                // SD:<pct>,<file>[,<line>]
                 sawSD        = true;
                 st.sdPercent = strtof(f.c_str() + 3, nullptr);
-                size_t comma = f.find(',');
-                strlcpy(st.sdFile, comma == std::string::npos ? "" : f.c_str() + comma + 1, sizeof(st.sdFile));
+                size_t      comma = f.find(',');
+                std::string file  = comma == std::string::npos ? "" : f.substr(comma + 1);
+                size_t      last  = file.rfind(',');
+                if (last != std::string::npos && last + 1 < file.size() &&
+                    file.find_first_not_of("0123456789", last + 1) == std::string::npos) {
+                    file.resize(last);
+                }
+                strlcpy(st.sdFile, file.c_str(), sizeof(st.sdFile));
+            } else if (startsWith(f.c_str(), "STOPPED:")) {
+                // STOPPED:<line>,<file> (the file may contain commas)
+                sawStopped     = true;
+                st.stoppedLine = atoi(f.c_str() + 8);
+                size_t comma   = f.find(',');
+                strlcpy(st.stoppedFile, comma == std::string::npos ? "" : f.c_str() + comma + 1, sizeof(st.stoppedFile));
+            } else if (startsWith(f.c_str(), "MS:")) {
+                int m = atoi(f.c_str() + 3);
+                if (m >= 0 && m <= MS_TENSIONED) {
+                    maslowState = m;
+                }
+            } else if (startsWith(f.c_str(), "BL:")) {
+                // BL:tl,tr,bl,br; "?" for a belt whose length is unknown
+                int         known = 0;
+                const char* p     = f.c_str() + 3;
+                for (int i = 0; i < 4 && *p; ++i) {
+                    if (*p != '?') ++known;
+                    p = strchr(p, ',');
+                    if (!p) break;
+                    ++p;
+                }
+                st.beltsKnown = known;
             }
             if (bar == std::string::npos) {
                 break;
@@ -176,9 +258,20 @@ namespace {
             st.sdPercent = -1;
             st.sdFile[0] = 0;
         }
+        if (!sawStopped) {
+            st.stoppedLine    = 0;
+            st.stoppedFile[0] = 0;
+        }
         st.updated = millis();
-        if (stopPending && (stateIs("Idle") || stateIs("Alarm"))) {
-            stopPending = false;
+        ++st.reports;
+        if (startPending) {
+            if (stateIs("Run") || stateIs("Hold")) {
+                finishStart(true);
+            } else if (stateIs("Alarm")) {
+                finishStart(false);
+            } else if (startAccepted && stateIs("Idle") && st.sdPercent < 0 && st.reports - startReports >= 3) {
+                finishStart(true);  // a file too short to see running
+            }
         }
         changed();
     }
@@ -258,6 +351,21 @@ namespace {
                 return;
             }
         }
+        // Apply Tension couldn't confirm the position against the saved anchors (state
+        // TENSIONED): Find Anchors measures them again (WebUI showApplyTensionFailedMessage).
+        if (startsWith(line, "[MSG:ERR: Apply Tension failed:") || startsWith(line, "[MSG:ERR: Center point deviation over")) {
+            std::string detail(line + 10);
+            if (!detail.empty() && detail.back() == ']') {
+                detail.pop_back();
+            }
+            Alert a { "Couldn't confirm position",
+                      "The belts don't fit the saved anchors, which may have moved. Find Anchors measures them again "
+                      "(no need to retract). Lower Z fully first.\n" +
+                          detail,
+                      "$CAL", "Find Anchors" };
+            alerts.push_back(a);
+            return;
+        }
         if (startsWith(line, "[MSG:INFO: Calibration complete")) {
             alerts.push_back({ "Calibration complete",
                                "You do not need to calibrate again unless your frame changes size. Consider backing "
@@ -270,6 +378,22 @@ namespace {
         if (line[0] == '<') {
             parseStatus(line);
             return;
+        }
+        if (startsWith(line, "Grbl ")) {
+            // Restart banner: the reset dropped every unread line, so nothing
+            // sent before it will be answered.
+            skipAcks = 0;
+            if (outstanding) {
+                finishCurrent(false, "Reset");
+            }
+            if (stopWaitBanner) {
+                sendStopLine();
+            }
+            addLog(LogKind::Info, line);
+            return;
+        }
+        if (stopWaitBanner && (!strcmp(line, "ok") || startsWith(line, "error:"))) {
+            return;  // a stray reply to a line taken before the reset (protocol.md)
         }
         if (!strcmp(line, "ok")) {
             if (skipAcks > 0) {
@@ -318,7 +442,7 @@ namespace {
         }
         if (startsWith(line, "[MSG:INFO: Current state:")) {
             int s = atoi(line + strlen("[MSG:INFO: Current state:"));
-            if (s >= 0 && s <= 9) {
+            if (s >= 0 && s <= MS_TENSIONED) {
                 maslowState = s;
                 changed();
             }
@@ -328,12 +452,23 @@ namespace {
         if (startsWith(line, "[MSG:INFO: Heartbeat")) {
             return;
         }
+        if (startsWith(line, "[MSG:INFO: Board: ")) {
+            bool m = startsWith(line + 18, "Unified");
+            if (m != mini) {
+                mini = m;
+                changed();
+            }
+        }
         // Setting echoes: "$/Maslow_Park_X=0.000" (config) or "$Sta/SSID=name" (NVS)
         if (line[0] == '$') {
             const char* eq = strchr(line, '=');
             if (eq) {
                 const char* key = line[1] == '/' ? line + 2 : line + 1;
-                settings[std::string(key, eq - key)] = eq + 1;
+                std::string k(key, eq - key);
+                settings[k] = eq + 1;
+                if (!strcasecmp(k.c_str(), "kinematics/MaslowKinematics/fixedZ")) {
+                    fixedZ = !strcasecmp(eq + 1, "true");
+                }
                 changed();
             }
         }
@@ -357,9 +492,16 @@ namespace {
         clearQueue();
         skipAcks = 0;
         st       = Status();
+        mini     = false;
+        fixedZ   = false;
+        // The Maslow state is in every status report (MS) on current firmware;
+        // $GSTATE is for older firmware, which only logs it.
+        Link::sendRealtime('?');
         send("$GSTATE");
         send("$MINFO");
         send("$G");
+        send("$MBOARD");
+        requestSetting("kinematics/MaslowKinematics/fixedZ");
         requestSetting("Maslow_Park_X");
         requestSetting("Maslow_Park_Y");
         requestSetting("Maslow_Park_Z");
@@ -377,6 +519,8 @@ namespace Machine {
 
     bool connected() { return Link::state() == Link::State::Connected; }
 
+    void injectLine(const char* line) { handleLine(line); }
+
     void loop() {
         bool c = connected();
         if (c != wasConnected) {
@@ -392,7 +536,8 @@ namespace Machine {
                         p.done(false, "Not connected");
                     }
                 }
-                stopPending = false;
+                stopWaitBanner = false;
+                finishStart(false);
                 changed();
             }
         }
@@ -400,10 +545,12 @@ namespace Machine {
             return;
         }
         uint32_t now = millis();
-        if (outstanding && (uint32_t)(now - sentAt) > COMMAND_TIMEOUT) {
-            char t[120];
-            snprintf(t, sizeof(t), "No reply to %s", current.line.c_str());
-            toast(t);
+        if (outstanding && (uint32_t)(now - sentAt) > current.timeout) {
+            if (current.line != "$STOP") {
+                char t[120];
+                snprintf(t, sizeof(t), "No reply to %s", current.line.c_str());
+                toast(t);
+            }
             finishCurrent(false, "Timeout");
         }
         pump();
@@ -420,13 +567,17 @@ namespace Machine {
             lastStatusPoll = now;
             Link::sendRealtime('?');
         }
-        if (stopPending && (uint32_t)(now - stopAt) >= 300) {
-            if (++stopAttempts > 33) {
-                stopPending = false;
-            } else {
+        if (stopWaitBanner && (uint32_t)(now - stopAt) >= STOP_RESET_MS) {
+            if (stopResets < STOP_RESETS) {
+                ++stopResets;
                 stopAt = now;
-                sendNow("$STOP");
+                Link::sendRealtime(0x18);
+            } else {
+                sendStopLine();  // no banner (or $Start/Message changed): send it anyway
             }
+        }
+        if (startPending && (uint32_t)(now - startAt) > START_WAIT_MS) {
+            finishStart(st.jobRunning());
         }
         if (minfoAt && (int32_t)(now - minfoAt) >= 0) {
             minfoAt = 0;
@@ -474,14 +625,39 @@ namespace Machine {
             toast("Not connected");
             return;
         }
-        addLog(LogKind::Sent, "$STOP");
+        addLog(LogKind::Sent, "Stop (0x18, then $STOP)");
         clearQueue();
-        stopPending  = true;
-        stopAttempts = 0;
-        stopAt       = millis();
-        sendNow("$STOP");
-        minfoAt = millis() + 1000;
+        finishStart(false);
+        // The reset drops every unread line; its banner fails the outstanding one.
+        Link::sendRealtime(0x18);
+        stopWaitBanner = true;
+        stopResets     = 1;
+        stopTries      = 0;
+        stopAt         = millis();
     }
+
+    void runJob(const std::string& line, std::function<void(bool)> done) {
+        if (startPending) {
+            return;  // one Start at a time: a second $SD/Run would run the file again
+        }
+        startPending  = true;
+        startAccepted = false;
+        startDone     = done;
+        startAt      = millis();
+        startReports = st.reports;
+        changed();
+        send(line.c_str(), [](bool ok, const char*) {
+            if (!ok) {
+                finishStart(false);
+            } else {
+                startAccepted = true;
+                startReports  = st.reports;
+                Link::sendRealtime('?');
+            }
+        });
+    }
+
+    bool starting() { return startPending; }
 
     void requestFiles() {
         fileList.clear();
@@ -551,6 +727,7 @@ namespace Machine {
             case MS_READY_TO_CUT: return "Ready to Cut";
             case MS_RELEASE_TENSION: return "Releasing Tension";
             case MS_ANCHORS_COMPUTING: return "Computing Anchors";
+            case MS_TENSIONED: return "Tensioned";
             default: return "--";
         }
     }

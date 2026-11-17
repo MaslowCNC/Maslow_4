@@ -21,6 +21,7 @@ namespace Machine {
         MS_READY_TO_CUT     = 7,
         MS_RELEASE_TENSION  = 8,
         MS_ANCHORS_COMPUTING = 9,
+        MS_TENSIONED        = 10,  // Apply Tension done, but the belts don't fit the saved anchors
     };
 
     // Same limits as the WebUI's Z safety check (tablet.js).
@@ -38,7 +39,12 @@ namespace Machine {
         int      ovr[3]      = { 100, 100, 100 };  // feed, rapid, spindle
         float    sdPercent   = -1;                 // -1: no file job
         char     sdFile[96]  = "";
+        int      stoppedLine = 0;   // STOPPED:<line>,<file>: a job that ended early, 0 if none
+        char     stoppedFile[96] = "";
+        int      beltsKnown  = -1;  // BL field: belts with a known length, -1 before a report has one
         uint32_t updated     = 0;
+        uint32_t reports     = 0;   // status reports received
+        bool     jobRunning() const;  // SD field present, or Run/Hold
         float    wpos(int axis) const { return mpos[axis] - wco[axis]; }
     };
 
@@ -53,9 +59,12 @@ namespace Machine {
     extern int    maslowState;  // -1 until known
     extern bool   inches;       // G20 modal
     extern bool   homed, extended, calibrating;
+    extern bool   mini;         // Maslow Mini (Unified Control Board), from $MBOARD
+    extern bool   fixedZ;       // kinematics/MaslowKinematics/fixedZ: skip the Z safety checks
 
     void begin();
     void loop();
+    void injectLine(const char* line);  // debug console: handle a line as if the machine sent it
 
     bool connected();
 
@@ -67,8 +76,14 @@ namespace Machine {
     void realtime(uint8_t cmd);
     void clearQueue();
 
-    // $STOP with the WebUI's retry until the machine reports Idle/Alarm.
+    // The WebUI's stop: 0x18 (stops at once, ends any job), wait for the restart
+    // banner, then $STOP (saves positions; Z stays where it is).
     void stop();
+
+    // Start an SD job with line ($SD/Run=..., $SD/RunFrom=...); done(ok) once
+    // the job has moved (Run/Hold) or failed.  Ignored while one is starting.
+    void runJob(const std::string& line, std::function<void(bool ok)> done);
+    bool starting();  // runJob() sent, the job hasn't moved yet
 
     // Files on the SD card.
     void                          requestFiles();
@@ -104,7 +119,8 @@ namespace Machine {
     struct Alert {
         std::string title;
         std::string text;
-        std::string confirmCommand;  // non-empty: offer Continue, which sends it
+        std::string confirmCommand;  // non-empty: offer a button that sends it
+        std::string confirmLabel = "Continue";
     };
     bool takeAlert(Alert& out);
 

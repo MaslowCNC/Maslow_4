@@ -29,6 +29,8 @@ static void debugCommand(const char* c) {
         Link::forget();
     } else if (!strncmp(c, "send ", 5)) {
         Machine::send(c + 5);
+    } else if (!strncmp(c, "inject ", 7)) {
+        Machine::injectLine(c + 7);  // as if the machine had sent it
     } else if (!strncmp(c, "rt ", 3)) {
         Machine::realtime((uint8_t)strtol(c + 3, nullptr, 16));
     } else if (!strncmp(c, "tab ", 4)) {
@@ -45,10 +47,13 @@ static void debugCommand(const char* c) {
              Link::peerMac(), Link::channel(), Link::rssi(), (unsigned)Link::txPackets(), (unsigned)Link::rxPackets(),
              (unsigned)Link::txFailures());
     } else if (!strcmp(c, "state")) {
-        DLOG("STATE %s maslow=%d inches=%d mpos=%.3f,%.3f,%.3f wco=%d %.3f,%.3f,%.3f sd=%.1f ovr=%d,%d,%d\n",
+        DLOG("STATE %s maslow=%d inches=%d mpos=%.3f,%.3f,%.3f wco=%d %.3f,%.3f,%.3f sd=%.1f,%s ovr=%d,%d,%d "
+             "stopped=%d,%s belts=%d mini=%d fixedZ=%d starting=%d\n",
              Machine::st.state, Machine::maslowState, Machine::inches, Machine::st.mpos[0], Machine::st.mpos[1],
              Machine::st.mpos[2], Machine::st.haveWco, Machine::st.wco[0], Machine::st.wco[1], Machine::st.wco[2],
-             Machine::st.sdPercent, Machine::st.ovr[0], Machine::st.ovr[1], Machine::st.ovr[2]);
+             Machine::st.sdPercent, Machine::st.sdFile, Machine::st.ovr[0], Machine::st.ovr[1], Machine::st.ovr[2],
+             Machine::st.stoppedLine, Machine::st.stoppedFile, Machine::st.beltsKnown, Machine::mini, Machine::fixedZ,
+             Machine::starting());
     } else {
         DLOG("? %s\n", c);
     }

@@ -66,7 +66,7 @@ namespace {
     // Warn before a move that leaves machine Z outside 0..72 mm, like
     // checkZHomeAndProceed(): once acknowledged, only re-ask when it gets worse.
     void zCheck(float deltaMm, std::function<void()> action) {
-        if (!st.havePos) {
+        if (!st.havePos || Machine::fixedZ) {
             action();
             return;
         }
@@ -151,6 +151,28 @@ namespace {
         if (Machine::inches) Machine::send("G20");
     }
 
+    // A Z home is machine Z in mm, which $SETZSTOP makes 0 at the z-stop, so it is
+    // also the height above the z-stop.  On the Maslow 4 it must be 0-72 mm (WebUI
+    // checkZHome); the Mini's spindle board has its own Z range.  Refused, not clamped.
+    void setZHome(float zHome) {
+        if (!Machine::stateIs("Idle") || !st.havePos) {
+            alert("Set Z Home", "Can't set home while the machine is busy or its position is unknown.");
+            return;
+        }
+        if (!Machine::mini && zHome < Machine::Z_MIN_SAFE_MM) {
+            alert("Set Z Home", "Z home can't be below the z-stop: " + fmt(zHome, 2) + " mm is " + fmt(-zHome, 2) +
+                                    " mm under it, where the machine can't reach.");
+            return;
+        }
+        if (!Machine::mini && zHome > Machine::Z_MAX_SAFE_MM) {
+            alert("Set Z Home", "Z home can't be more than " + fmt(Machine::Z_MAX_SAFE_MM, 0) + " mm above the z-stop.");
+            return;
+        }
+        Machine::send(("G21 G10 L20 P0 Z" + num(st.mpos[2] - zHome)).c_str());
+        if (Machine::inches) Machine::send("G20");
+        Machine::toast(("Z home set " + fmt(zHome, 2) + " mm above the z-stop").c_str());
+    }
+
     void homeMenu() {
         menu("Home", { "Define XY home here", "Set XY home position", "Set Z home here", "Set Z home value",
                        "Go to XY home", "Go to Z home", "Park" },
@@ -175,14 +197,19 @@ namespace {
                          break;
                      }
                      case 2:
-                         Machine::send("G10 L20 P0 Z0");
+                         setZHome(st.mpos[2]);
                          break;
                      case 3:
-                         numpad("Z home (machine, mm, 0-72)", fmt(st.wco[2], 2), [](const std::string& zs) {
-                             float z = constrain(strtof(zs.c_str(), nullptr), Machine::Z_MIN_SAFE_MM, Machine::Z_MAX_SAFE_MM);
-                             Machine::send(("G21 G10 L20 P0 Z" + num(st.mpos[2] - z)).c_str());
-                             if (Machine::inches) Machine::send("G20");
-                         });
+                         numpad(Machine::mini ? "Z home (mm above z-stop)" : "Z home (mm above z-stop, 0-72)",
+                                fmt(st.wco[2], 2), [](const std::string& zs) {
+                                    char* end = nullptr;
+                                    float z   = strtof(zs.c_str(), &end);
+                                    if (end == zs.c_str()) {
+                                        alert("Set Z Home", "Enter the Z home in mm.");
+                                        return;
+                                    }
+                                    setZHome(z);
+                                });
                          break;
                      case 4:
                          moveXYHome();
@@ -341,14 +368,34 @@ namespace {
         int         scroll = 0;
         std::string selected;
         uint32_t    drawn = 0xFFFFFFFF;
-        std::string lastStart;
+        std::string lastMode;
         int         lastOvr = -1;
         static constexpr int LIST_Y = 58, ROW = 24, ROWS = 5, LIST_W = 206;
 
-        std::string startLabel() {
-            if (Machine::stateIs("Run")) return "Pause";
-            if (Machine::stateIs("Hold")) return "Resume";
-            return "Start";
+        // A job that ended early (STOPPED), shown as Resume / Discard while no job runs.
+        static bool stoppedShown() {
+            return st.stoppedLine > 0 && !st.jobRunning() && !Machine::starting();
+        }
+
+        static bool samePath(const std::string& a, const std::string& b) {
+            size_t i = a.find_first_not_of('/'), j = b.find_first_not_of('/');
+            return a.substr(i == std::string::npos ? a.size() : i) == b.substr(j == std::string::npos ? b.size() : j);
+        }
+
+        // What the Start button shows (WebUI playButtonMode): a job counts as running
+        // while the firmware reports it (SD field), not only in Run, since it is Idle for
+        // a moment whenever the planner runs dry.
+        std::string mode() {
+            if (Machine::starting()) return "starting";
+            if (Machine::stateIs("Hold")) return "resume";
+            if (Machine::stateIs("Run")) return "pause";
+            if (st.jobRunning()) return "running";
+            if (stoppedShown()) return "stopped:" + std::to_string(st.stoppedLine) + "," + st.stoppedFile;
+            return "start";
+        }
+
+        bool canStart() {
+            return !selected.empty() && Machine::stateIs("Idle") && Machine::maslowState == Machine::MS_READY_TO_CUT;
         }
 
     public:
@@ -366,42 +413,66 @@ namespace {
                                    drawList();
                                }, nullptr, ARROW_S });
 
-            std::string s = startLabel();
-            lastStart     = s;
-            Button start { 2, 208, 150, 40, s };
-            if (s == "Pause") {
+            std::string m = mode();
+            lastMode      = m;
+            Button start { 2, 208, 150, 40, "Start" };
+            start.color = C::green;
+            if (m == "starting") {
+                start.label  = "Starting...";
+                start.color  = C::grey;
+                start.dimmed = true;
+            } else if (m == "pause") {
+                start.label = "Pause";
                 start.color = C::orange;
                 start.onTap = [] { Machine::realtime('!'); };
-            } else if (s == "Resume") {
-                start.color = C::green;
+            } else if (m == "resume") {
+                start.label = "Resume";
                 start.onTap = [] { Machine::realtime('~'); };
+            } else if (m == "running") {
+                start.label  = "Running";
+                start.color  = C::grey;
+                start.dimmed = true;
+            } else if (m != "start") {
+                start.label  = "Resume line " + std::to_string(st.stoppedLine);
+                start.dimmed = !(Machine::stateIs("Idle") && Machine::maslowState == Machine::MS_READY_TO_CUT);
+                start.onTap  = [] { resumeStopped(); };
             } else {
-                bool ok      = !selected.empty() && Machine::stateIs("Idle") &&
-                          Machine::maslowState == Machine::MS_READY_TO_CUT;
-                start.color  = C::green;
-                start.dimmed = !ok;
+                start.dimmed = !canStart();
                 start.onTap  = [this] { startJob(); };
             }
             buttons.push_back(start);
-            buttons.push_back({ 156, 208, 82, 40, "Delete", C::red, [this] {
-                                   if (selected.empty()) {
-                                       Machine::toast("Select a file first");
-                                       return;
-                                   }
-                                   std::string f = selected;
-                                   confirm("Delete file", "Delete " + f + " from the SD card?", "Delete", [this, f] {
-                                       Machine::send(("$SD/Delete=/" + f).c_str());
-                                       selected.clear();
-                                       Machine::requestFiles();
-                                   });
-                               } });
-            buttons.back().dimmed = selected.empty();
+            if (m.rfind("stopped:", 0) == 0) {
+                buttons.push_back({ 156, 208, 82, 40, "Discard", C::button, [] {
+                                       confirm("Discard stopped job",
+                                               std::string("Forget where ") + st.stoppedFile +
+                                                   " stopped? It can then only be run from the start.",
+                                               "Discard", [] { Machine::send("$SD/Discard"); });
+                                   } });
+            } else {
+                buttons.push_back({ 156, 208, 82, 40, "Delete", C::red, [this] {
+                                       if (selected.empty()) {
+                                           Machine::toast("Select a file first");
+                                           return;
+                                       }
+                                       std::string f = selected;
+                                       confirm("Delete file", "Delete " + f + " from the SD card?", "Delete", [this, f] {
+                                           Machine::send(("$SD/Delete=/" + f).c_str());
+                                           selected.clear();
+                                           Machine::requestFiles();
+                                       });
+                                   } });
+                buttons.back().dimmed = selected.empty();
+            }
 
             lastOvr = st.ovr[0];
             buttons.push_back({ 2, 252, 52, 32, "F-", C::button, [] { Machine::realtime(0x92); } });
             buttons.push_back({ 58, 252, 124, 32, "Feed " + std::to_string(st.ovr[0]) + "%", C::cream,
                                 [] { Machine::realtime(0x90); } });
             buttons.push_back({ 186, 252, 52, 32, "F+", C::button, [] { Machine::realtime(0x91); } });
+        }
+
+        static void startFailed(bool ok) {
+            if (!ok) Machine::toast("The job didn't start");
         }
 
         void startJob() {
@@ -418,10 +489,30 @@ namespace {
                 return;
             }
             std::string f = selected;
-            confirm("Start job", "Run " + f + "?", "Start", [f] {
-                Machine::send(("$SD/Run=/" + f).c_str());
-                // tablet.js sends a cycle start 1.5 s after the run command.
-                after(1500, [] { Machine::realtime('~'); });
+            confirm("Start job", "Run " + f + "?", "Start", [f] { Machine::runJob("$SD/Run=/" + f, startFailed); });
+        }
+
+        // $SD/RunFrom: the firmware reads the lines before it without moving, raises Z,
+        // restores the spindle, moves to where the line starts and plunges.
+        static void resumeStopped() {
+            if (Machine::maslowState != Machine::MS_READY_TO_CUT || !Machine::stateIs("Idle")) {
+                Machine::toast("Resume needs Idle and Ready to Cut");
+                return;
+            }
+            std::string file = st.stoppedFile;
+            numpad("Resume from line", std::to_string(st.stoppedLine), [file](const std::string& v) {
+                long line = strtol(v.c_str(), nullptr, 10);
+                if (line < 1) {
+                    alert("Resume", "Enter a line number from 1.");
+                    return;
+                }
+                confirm("Resume job",
+                        "Resume " + file + " from line " + std::to_string(line) +
+                            "?\nThe machine raises Z, starts the spindle if the job had it on, moves to where the line "
+                            "starts and lowers Z to it.",
+                        "Resume", [file, line] {
+                            Machine::runJob("$SD/RunFrom=" + std::to_string(line) + "," + file, startFailed);
+                        });
             });
         }
 
@@ -488,6 +579,11 @@ namespace {
                 gfx.setTextColor(C::text);
                 gfx.setTextDatum(textdatum_t::middle_center);
                 gfx.drawString(t, W / 2, y + 12);
+            } else if (stoppedShown()) {
+                gfx.setTextColor(C::warnText);
+                std::string s = "Stopped at line " + std::to_string(st.stoppedLine) + ": " + st.stoppedFile;
+                while (s.size() > 2 && gfx.textWidth(s.c_str()) > W - 8) s.pop_back();
+                gfx.drawString(s.c_str(), 4, y + 12);
             } else {
                 gfx.setTextColor(selected.empty() ? C::dim : C::text);
                 std::string s = selected.empty() ? "No file selected" : selected;
@@ -506,7 +602,7 @@ namespace {
         }
 
         void update() override {
-            if (startLabel() != lastStart || st.ovr[0] != lastOvr) {
+            if (mode() != lastMode || st.ovr[0] != lastOvr) {
                 redraw();
                 return;
             }
@@ -515,9 +611,11 @@ namespace {
                 drawHeader();
                 drawList();
                 drawInfo();
-                // Start button enablement depends on state too.
-                bool ok = !selected.empty() && Machine::stateIs("Idle") && Machine::maslowState == Machine::MS_READY_TO_CUT;
-                if (lastStart == "Start" && buttons.size() > 3 && buttons[3].dimmed == ok) {
+                // Start / Resume enablement depends on state too.
+                bool ok = lastMode == "start" ? canStart()
+                                              : Machine::stateIs("Idle") && Machine::maslowState == Machine::MS_READY_TO_CUT;
+                bool dimmable = lastMode == "start" || lastMode.rfind("stopped:", 0) == 0;
+                if (dimmable && buttons.size() > 3 && buttons[3].dimmed == ok) {
                     buttons[3].dimmed = !ok;
                     drawButton(buttons[3]);
                 }
@@ -530,6 +628,13 @@ namespace {
             auto& files = Machine::files();
             if (i < (int)files.size()) {
                 selected = files[i].path == selected ? "" : files[i].path;
+                // Picking another file drops a stopped job, so Resume can't then run
+                // partway into a file other than the one selected (WebUI).
+                if (!selected.empty() && stoppedShown() && !samePath(st.stoppedFile, selected)) {
+                    Machine::addLog(Machine::LogKind::Info, ("Discarding the stopped job (" + std::string(st.stoppedFile) +
+                                                             "): another file was selected").c_str());
+                    Machine::send("$SD/Discard");
+                }
                 redraw();
             }
         }
@@ -568,10 +673,14 @@ namespace {
                 return;  // the log takes the space; STOP stays in the top bar
             }
             // Which actions are "available" (green) per state, as updateDynamicButtons() does.
-            bool retract = s == 0 || s == 2 || s == 4 || s == 7 || s < 0;
+            // TENSIONED: Apply Tension measured belts that don't fit the saved anchors, so
+            // Find Anchors is next; Extend is refused.  UNKNOWN: Apply Tension can recover the
+            // belts that weren't restored at boot if any belt length is known (BL field).
+            const int T  = Machine::MS_TENSIONED;
+            bool retract = s == 0 || s == 2 || s == 4 || s == 7 || s == T || s < 0;
             bool extend  = s == 0 || s == 2 || s == 4;
-            bool tense   = s == 4;
-            bool cal     = s == 4;
+            bool tense   = s == 4 || s == T || (s == 0 && st.beltsKnown > 0);
+            bool cal     = s == 4 || s == T;
             struct Def {
                 const char*           label;
                 bool                  on;
@@ -614,7 +723,7 @@ namespace {
             if (Machine::connected()) {
                 if (s == 0 || s < 0) c = C::bannerRed;
                 else if (s == 2 || s == 7) c = C::bannerGreen;
-                else if (s == 4) c = C::bannerYellow;
+                else if (s == 4 || s == Machine::MS_TENSIONED) c = C::bannerYellow;
                 else c = C::bannerBlue;
             }
             gfx.fillRect(2, 32, W - 4, 28, c);
@@ -655,8 +764,11 @@ namespace {
         void update() override {
             static bool wasAlarm = false;
             bool        alarm    = Machine::stateIs("Alarm");
-            if (shownState != Machine::maslowState || alarm != wasAlarm) {
+            static int  wasKnown = -2;
+            if (shownState != Machine::maslowState || alarm != wasAlarm ||
+                (Machine::maslowState == 0 && (st.beltsKnown > 0) != (wasKnown > 0))) {
                 wasAlarm = alarm;
+                wasKnown = st.beltsKnown;
                 redraw();
             } else if (finding() && shownLog != Machine::logSerial()) {
                 shownLog = Machine::logSerial();
