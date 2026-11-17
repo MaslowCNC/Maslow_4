@@ -13,7 +13,11 @@ an assumption the next one relies on. Stop at the first surprise.
   networks, the VBUS divider, the NTC pull-ups and the 10k/2.2k BoardVersion divider.
 - Alternate functions come from the Arduino core's `PeripheralPins.c`; OPAMP VINP indices,
   comparator inputs and DAC pairings from ST's HAL headers.
-- The XY firmware (`firmware/`, env `wifi_s3`) builds with the 36 V changes.
+- The XY firmware (`firmware/`, env `wifi_s3`) builds with the 36 V changes. Static RAM is unchanged
+  against the unmodified branch (132,392 bytes both); flash +7.7 KB (94.6 % used).
+- `test/sim` runs the real `foc.cpp` against a two-motor model: sign conventions, hand-overs, Z
+  holding and load steps behave (README.md, "Simulation"). A model is not the motor: the inertia,
+  friction and the real dead-time shape are guesses.
 
 ## Untested — the assumptions most likely to be wrong
 
@@ -29,8 +33,11 @@ an assumption the next one relies on. Stop at the first surprise.
 | ISR time | both motors' FOC + observer in well under the 50 µs period | `#STAT` isr > ~35 µs; jitter, then current spikes at speed | 2, 6 |
 | Open loop (I/f) | 2.5 A holds the Z, 3 A spins up a loaded spindle, +1 A for Z moves | rotors slip at spin-up or Z moves stall | 5, 8 |
 | Observer | R 0.39 Ω, L 75 µH, flux 7.84 mWb (ESC1 bench, one loose motor, 24 V); locks within 10 % at 2000 RPM | `observer did not lock at the closed-loop hand-over speed` | 6 |
-| Closed loop | ESC1 gains (current 0.2/1000, speed 0.01/0.2); untried on two motors, on 36 V, or with the Z loop (`Z_KP` 10) | speed hunting, `observer lost lock`, `closed-loop Z error` | 6, 8 |
-| Hand-back | at 1500 RPM the open-loop vector restarts where the current is, no Z jump | a click / Z step when the spindle slows | 6, 8 |
+| Closed loop | current PI from the ESC1 (0.2/1000); angle PID 10 / 0.12 / 100 chosen in the simulation with a GUESSED inertia of 1e-5 kg m² — never run | speed hunting, `observer lost lock`, `rotor fell ... off its reference` | 6, 8 |
+| Low-speed closed loop | the sim jitters between ~1500 and ~3000 RPM and trips there if R is 20 % low plus another error | iq bursts in `#STAT` around 2000-3000 RPM; a slip stop on spin-down | 6 |
+| Hand-back | at 1500 RPM open loop takes over on the same reference; the sim shows a ~1 mm transient Z swing that settles in ~0.2 s | a Z twitch when the spindle stops | 6, 8 |
+| Open loop | voltage drive + 5 Hz current trim (`#OLKI`), dead-time compensation 250 ns (`#DTC`) | hold current off its target in `#STAT`; rotors ringing after Z moves | 5 |
+| Rotor inertia | assumed 1e-5 kg m²; above ~1e-4 the 250 rad/s² open-loop spin-up stalls | `rotor fell ... off its reference angle in open loop` at spin-up | 6 |
 | 36 V headroom | 0.82 V per 1000 RPM back-EMF: ~22k RPM before the voltage limit; firmware cap 18k | Iq can no longer hold speed above some RPM | 7 |
 | Bus/NTC scaling | 100k/6.8k divider, NCP18XH103 (B 3380) | `#STAT` vbus/temperature off a multimeter/thermometer | 2 |
 | Fan output | VAC_CONTROL (PB6) is driven as 25 kHz 3.3 V push-pull PWM like the ESP32's fan pin, straight to CN10 pin 1; **CN10 pin 2 is 36 V**. If the vacuum's control input pulls up to 36 V, PB6 is damaged. Check the device before connecting it | — | 3 |
@@ -97,8 +104,14 @@ there is no config yet. Check `$MBOARD` reports the 36 V board (~0.60 V).
    - `observer did not lock`: check flux ≈ 1.0 in `#STAT` during the open-loop hold; adjust with
      `#OBS` (the ESP32 VSWEEP gave 7.28 mWb, the ESC1 7.84 on another motor).
 2. Step 6000, 9000, 12000. Watch iq, the voltage (`v`) against vbus/√3 × 0.95, isr time.
-3. `S1000`: `open loop below 1500 RPM`, no click. `S0`: stops.
-4. Load a rotor by hand (gloves, ESC1-style) at 6000: iq rises, speed holds, no trip.
+   Measure the rotor inertia while you are there: at a steady speed, `S` a step of a few thousand
+   RPM and read iq during the 500 rad/s² ramp: J ≈ 0.0118 × iq / 500 (kg m², minus friction).
+   Rerun `test/sim` with it (`./sim <J>`) before changing `#POS`.
+3. Watch 1500-3000 RPM closely (`#LOG 100` while ramping 4000 → 0): iq bursts there are the weak
+   spot the simulation found. If they show, try measuring R/flux (`#OBS`), `#DTC`, or a higher
+   `CL_ENTER_RPM`/`CL_EXIT_RPM` band.
+4. `S1000`: `open loop below 1500 RPM`. `S0`: stops.
+5. Load a rotor by hand (gloves, ESC1-style) at 6000: iq rises, speed holds, no trip.
 
 ### 7. Up to speed
 
