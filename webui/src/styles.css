@@ -342,9 +342,6 @@
   .srow .btn { min-height: 38px; }
   .srow .setfield { display: inline-flex; align-items: center; gap: 4px; }
   .srow .setfield span { color: var(--muted); font: 12px var(--font-mono); }
-  .more-settings { display: grid; gap: 14px; }
-  .more-settings > summary { cursor: pointer; color: var(--lilac); font-size: 14px; padding: 4px 0; }
-  .more-settings[open] > summary { margin-bottom: 4px; }
   .modal.single { width: min(520px, 100%); height: auto; max-height: 100%; grid-template-columns: 1fr; grid-template-rows: auto 1fr auto; }
   .modal.single .mhead { grid-column: 1; }
   .modal .art { max-width: 260px; }

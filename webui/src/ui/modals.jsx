@@ -120,25 +120,23 @@ function FrameSection({ ctx, busy }) {
       <input type="text" inputmode="decimal" class="mono" value={stock} onInput={e => setStock(e.currentTarget.value)} style="width:90px" /> mm
       <button class="btn ghost" type="button" disabled={busy || !(stockN >= 0) || stockN === d.stock} onClick={() => send("setStock", { stock: stockN })}>Save</button></Row>
     <WorkAreaRow ctx={ctx} busy={busy} />
+    <SettingGroup ctx={ctx} busy={busy} label="Work area centre offset" name="Work area centre offset" keys={[["offX", "X"], ["offY", "Y"]]}
+      hint="Moves the work area off the frame's centre. Usually 0." />
     <SettingGroup ctx={ctx} busy={busy} label="Park position" name="Park position" keys={[["parkX", "X"], ["parkY", "Y"], ["parkZ", "Z"]]}
       hint="Where Park moves the sled. Z first, to this height above work Z 0; then X and Y, as machine position (0, 0 is where Apply tension leaves the sled)." />
     <SettingGroup ctx={ctx} busy={busy} label="Belt retraction limit" name="Belt retraction limit" keys={[["retractLimit"]]}
       hint="Apply tension stops if a belt winds in more than this. Default 300 mm." />
+    <SettingGroup ctx={ctx} busy={busy} label="Retraction force" name="Retraction force" keys={[["retractForce"]]}
+      hint="How hard the motors pull before a belt counts as tight, when retracting and measuring. Default 1300." />
+    <SettingGroup ctx={ctx} busy={busy} label="Scale" name="Scale" keys={[["scaleX", "X"], ["scaleY", "Y"]]}
+      hint="Corrects cuts that come out a little too big or small. 1 is no change; 1.01 cuts 1 % larger. 0.8 to 1.2." />
     <Row label="Workspace tolerance" hint="The Workspace overlay shows where cuts should land within this, and whether the job stays inside. Remembered in this browser.">
       <select value={String(ctx.tolerance)} onChange={e => ctx.setTolerance(parseFloat(e.currentTarget.value))}>
         {[0.5, 1, 2, 3, 5].map(v => <option value={String(v)}>±{v} mm</option>)}</select></Row>
     {d.frame?.vertical && <Row label="Sled weight" hint="The sled with the router fitted. On a vertical frame its weight stretches the belts, so the Workspace overlay needs it. Remembered in this browser.">
       <select value={String(ctx.sledMass)} onChange={e => ctx.setSledMass(parseFloat(e.currentTarget.value))}>
         {[4, 6, 8, 10, 12, 15].map(v => <option value={String(v)}>{v} kg</option>)}</select></Row>}
-    <Row label="Anchors"><span>{d.anchorsSaved ? "Saved" : "Not measured yet"}</span></Row>
-    <details class="more-settings"><summary>More: centre offset, scale, retraction force</summary>
-      <SettingGroup ctx={ctx} busy={busy} label="Work area centre offset" name="Work area centre offset" keys={[["offX", "X"], ["offY", "Y"]]}
-        hint="Moves the work area off the frame's centre. Usually 0." />
-      <SettingGroup ctx={ctx} busy={busy} label="Scale" name="Scale" keys={[["scaleX", "X"], ["scaleY", "Y"]]}
-        hint="Corrects cuts that come out a little too big or small. 1 is no change; 1.01 cuts 1 % larger. 0.8 to 1.2." />
-      <SettingGroup ctx={ctx} busy={busy} label="Retraction force" name="Retraction force" keys={[["retractForce"]]}
-        hint="How hard the motors pull before a belt counts as tight, when retracting and measuring. Default 1300." />
-    </details></>;
+    <Row label="Anchors"><span>{d.anchorsSaved ? "Saved" : "Not measured yet"}</span></Row></>;
 }
 
 // The work area: 0 on an axis means automatic, which the firmware works out from the anchors the belts measured

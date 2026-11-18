@@ -182,7 +182,7 @@ These are FluidNC's `MPos`, `WCO` and `WPos = MPos − WCO`.
 | State | The mode and every machine action in a fixed order, greyed out with a reason when unavailable |
 | Device | Name, firmware version and update, reboot |
 | Network | WiFi network, hotspot (placeholder) |
-| Frame and belts | Extend distance (0 = until Done extending), spoil board thickness, stock thickness (optional), work area (0 = automatic), park position, belt retraction limit, anchors; under More: work area centre offset, scale, retraction force |
+| Frame and belts | Extend distance (0 = until Done extending), spoil board thickness, stock thickness (optional), work area (0 = automatic), park position, belt retraction limit, anchors, work area centre offset, scale, retraction force |
 | Tool and Z | Last stick-out, default bit |
 | Display | Dark or light panels, units |
 | Advanced | Raw FluidNC and Maslow settings, `maslow.yaml` |
@@ -383,11 +383,11 @@ current UI's popups do:
 | Setting | Firmware setting | Current UI | In the new UI |
 |---|---|---|---|
 | Work area X / Y, 0 = automatic | `Maslow_Work_Area_X/Y` | Set Work Area | Done. Shows the automatic size (80 % × 60 % of the frame) |
-| Work area centre offset X / Y | `Maslow_Work_Area_Center_Offset_X/Y` | Set Work Area | Done, under More |
+| Work area centre offset X / Y | `Maslow_Work_Area_Center_Offset_X/Y` | Set Work Area | Done |
 | Park X / Y / Z | `Maslow_Park_X/Y/Z` | Set Park | Done |
-| Scale X / Y | `Maslow_Scale_X/Y` | Set Scale and Thickness | Done, under More |
+| Scale X / Y | `Maslow_Scale_X/Y` | Set Scale and Thickness | Done |
 | Belt retraction limit | `Maslow_Apply_Tension_Belt_Retraction_Limit` | Apply Tension Belt Limit | Done |
-| Retraction force | `Maslow_Retract_Current_Threshold` | Calibration › Config | Done, under More |
+| Retraction force | `Maslow_Retract_Current_Threshold` | Calibration › Config | Done |
 | Spoil board, stock thickness, extend distance | `Maslow_spoilboardThickness`, `Maslow_workThickness`, `Maslow_Extend_Dist` | Set Scale and Thickness, Config | Done earlier |
 
 Checked against the simulator only, not yet on a machine.
