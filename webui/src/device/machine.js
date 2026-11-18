@@ -3,8 +3,8 @@
 // the same state shape from machine.state, so the screens don't change.
 //
 // Actions so far: Stop, the belt steps of Setup (retract, extend, apply tension, release tension, find
-// anchors), running a file, Trace boundary, jogging, Set home XY, Set Z, Park, Clear error, and on the Mini Home Z
-// and Remove tool. Each goes through a machine.js action, and its Operation is kept in state.op so the screens can
+// anchors), running a file, Trace boundary, jogging, Set home XY, Set Z, Park, Clear error, the belt motor test, and
+// on the Mini Home Z, Remove tool and Spindle on / off. Each goes through a machine.js action, and its Operation is kept in state.op so the screens can
 // show "starting", then nothing (done) or why it failed. The screen itself still comes from the machine's state, so
 // every connection shows the same thing. The tool steps come next: they need the spindle board's status field.
 
@@ -28,7 +28,8 @@ const ACTIONS = {
   retract: "retractBelts", extend: "extendBelts", tension: "applyTension",
   release: "releaseTension", findAnchors: "calibrate",
   park: "park", clearError: "clearAlarm",
-  rehomeZ: "homeSpindleZ", removeTool: "removeTool"
+  rehomeZ: "homeSpindleZ", removeTool: "removeTool",
+  spindleOn: "spindleOn", spindleOff: "spindleOff"
 };
 // The spindle board's actions, Mini only. Their Operation ends when the firmware answers ok, which only means the
 // board was sent the command: it finishes 1 to 40 s later, and can fail (a tool removal that can't clear the beam).
@@ -36,6 +37,9 @@ const ACTIONS = {
 // lines tell the rest. When the field exists, machine.js waits for it and these become ordinary actions.
 const SPINDLE_BOARD = ["rehomeZ", "removeTool"];
 const NO_SPINDLE_BOARD = "This machine has no spindle board (the Maslow 4.1's Z is set by eye)";
+// Mini-only actions: the spindle board's, and switching the spindle (the 4.1's config has no spindle to drive)
+const MINI_ONLY = [...SPINDLE_BOARD, "spindleOn", "spindleOff"];
+const NO_SPINDLE = "This machine's spindle isn't controlled by the board (the Maslow 4.1 has no spindle output)";
 const isMini = (name) => /^Maslow Mini/.test(name || "");
 
 // Jog speeds, as the current UI's defaults (prefDefs.js: xy_feedrate, z_feedrate)
@@ -61,6 +65,8 @@ export function createMachine({ host = location.host } = {}) {
       // Until [ESP800] says which machine this is; readMachine() then enables them on a Mini
       rehomeZ: "Waiting to learn which machine this is",
       removeTool: "Waiting to learn which machine this is",
+      spindleOn: "Waiting to learn which machine this is",
+      spindleOff: "Waiting to learn which machine this is",
       // Extend distance 0 means "until Done extending", which today's firmware doesn't support: it would extend 0 mm
       extendUntilDone: "0 needs the Done extending firmware change. Until then, Extend stops at the distance set here."
     },
@@ -68,6 +74,7 @@ export function createMachine({ host = location.host } = {}) {
     extendDist: null,        // Maslow_Extend_Dist, mm
     maslow: null, fluid: "", statusSeen: false,
     tool: "unknown", settingZ: false, zSetCount: 0, spindle: "off", error: null,
+    motorTest: null,         // the last belt motor test: { passed: [arm], failed: [{ arm, problem }] }
     job: null, lastJob: null, motion: null, result: null, restored: false,
     gcode: null,             // the chosen file, read: { file, status: "reading" | "ready" | "failed", detail?, ...readGcode() }
     workArea: { spoil: 0 }, stock: 0, anchorsSaved: true,
@@ -173,6 +180,8 @@ export function createMachine({ host = location.host } = {}) {
       belts: [b.tl, b.tr, b.bl, b.br].map(v => v ?? 0),
       beltUnknown: [b.tl, b.tr, b.bl, b.br].map(v => v == null),
       motorCurrent: ms.motorCurrent,
+      // On while the report's spindle speed (FS) is above 0: a job, Stop or another connection changes it too
+      spindle: ms.spindleSpeed > 0 ? "on" : "off",
       job: ms.job ? { file: baseName(ms.job.file), line: ms.job.line ?? 0, total: lineCount(ms.job.file), running: true } : null,
       lastJob: ms.stopped ? { file: ms.stopped.file, result: "stopped", line: ms.stopped.line } : null,
       error: alarm ? (s.error || { reason: "The machine is in Alarm" }) : null
@@ -215,8 +224,8 @@ export function createMachine({ host = location.host } = {}) {
       const tag = (await r.text()).match(/board:\s*([a-z0-9]+)/i)?.[1];
       const machine = MACHINES[tag] || (tag ? `Unknown board (${tag})` : "Unknown machine");
       const notYet = { ...s.notYet };
-      for (const a of SPINDLE_BOARD) {
-        if (isMini(machine)) delete notYet[a]; else notYet[a] = NO_SPINDLE_BOARD;
+      for (const a of MINI_ONLY) {
+        if (isMini(machine)) delete notYet[a]; else notYet[a] = SPINDLE_BOARD.includes(a) ? NO_SPINDLE_BOARD : NO_SPINDLE;
       }
       set({ machine, notYet });
     } catch (e) {
@@ -518,6 +527,20 @@ export function createMachine({ host = location.host } = {}) {
       // payload: the new home in machine coordinates ({x, y} or {z}); without one, here
       const q = payload || {};
       run(action, () => m.setWorkZero(action === "setZ" ? { z: q.z ?? p.z } : { x: q.x ?? p.x, y: q.y ?? p.y }));
+      return;
+    }
+    // Belt motor test ($TEST): the result comes back in the firmware's log lines, kept in state.motorTest
+    if (action === "motorTest") {
+      set({ motorTest: null });
+      run("motorTest", () => {
+        const op = m.testMotors();
+        op.then((r) => {
+          const bad = r.failed.map((f) => `${f.problem} on ${f.arm}`);
+          log(bad.length ? `Motor test: ${bad.join("; ")}` : `Motor test: all ${r.passed.length} arms passed`);
+          set({ motorTest: { passed: r.passed, failed: r.failed } });
+        }, () => {});
+        return op;
+      });
       return;
     }
     if (ACTIONS[action]) { run(action, ACTIONS[action]); return; }

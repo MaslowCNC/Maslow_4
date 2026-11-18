@@ -669,3 +669,54 @@ describe("park, alarm, spindle board", () => {
     await expect(remove).rejects.toMatchObject({ reason: "rejected", code: 3 });
   });
 });
+
+describe("spindle and motor test", () => {
+  test("the spindle speed comes from the report's FS field", () => {
+    reply("<Idle|MPos:0,0,0|FS:0,12000|MS:7>");
+    expect(g.machine.state.spindleSpeed).toBe(12000);
+    reply("<Idle|MPos:0,0,0|FS:0,0|MS:7>");
+    expect(g.machine.state.spindleSpeed).toBe(0);
+  });
+
+  test("spindleOn sends M3 at 12000 RPM by default, spindleOff sends M5; done on ok", async () => {
+    const on = g.machine.spindleOn();
+    expect(lastSent()).toBe("M3 S12000\n");
+    reply("ok");
+    await on;
+    const off = g.machine.spindleOff();
+    expect(lastSent()).toBe("M5\n");
+    reply("ok");
+    await off;
+  });
+
+  test("the spindle can't be switched during a job or while moving", async () => {
+    reply("<Run|MPos:0,0,0|FS:500,12000|MS:7|SD:10,/sd/a.nc,5>");
+    await expect(g.machine.spindleOn()).rejects.toMatchObject({ reason: "not-ready" });
+    await expect(g.machine.spindleOff()).rejects.toMatchObject({ reason: "not-ready" });
+    reply("<Jog|MPos:0,0,0|FS:500,0|MS:7>");
+    await expect(g.machine.spindleOn()).rejects.toMatchObject({ reason: "not-ready" });
+    expect(g.ws_source.sent).toEqual([]);
+  });
+
+  test("testMotors runs $TEST only with slack belts and reads the results", async () => {
+    await expect(g.machine.testMotors()).rejects.toMatchObject({ reason: "not-ready" }); // tensioned (MS:7)
+    expect(g.ws_source.sent).toEqual([]);
+    reply("<Idle|MPos:0,0,0|FS:0,0|MS:4>");
+    const op = g.machine.testMotors();
+    expect(lastSent()).toBe("$TEST\n");
+    reply(
+      "[MSG:INFO: Firmware Version: v1.0]",
+      "[MSG:INFO: All tests passed on Top Left]",
+      "[MSG:WARN: Encoder not found on Top Right]",
+      "[MSG:WARN: Magnet not detected on Bottom Left]",
+      "[MSG:INFO: All tests passed on Bottom Right]",
+      "ok",
+    );
+    const r = await op;
+    expect(r.passed).toEqual(["Top Left", "Bottom Right"]);
+    expect(r.failed).toEqual([
+      { arm: "Top Right", problem: "Encoder not found" },
+      { arm: "Bottom Left", problem: "Magnet not detected" },
+    ]);
+  });
+});

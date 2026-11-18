@@ -42,6 +42,7 @@ function initialState() {
     tool: "unknown",              // unknown | checking | loaded | none | removing | removed | waiting
     settingZ: false, zFromStickout: null, zSetCount: 0,  // zSetCount goes up each time Z is set from a stick-out
     spindle: "off",               // off | on | recovering | recoveryFailed
+    motorTest: null,              // the last belt motor test: { passed: [arm], failed: [{ arm, problem }] }
     error: null,                  // { reason } while in Alarm
     job: null,                    // { file, line, total, running }
     gcode: null,                  // the chosen file, read: { file, status: "ready", ...readGcode() } (machine.js has the same)
@@ -251,11 +252,31 @@ export function createSimulator() {
       if (m === 1) { set({ maslow: state(0), fluid: "Idle", belts: [0, 0, 0, 0], pending: null }); return; }        // a stopped retract loses the lengths
       if (m === 3) { set({ maslow: state(4), fluid: "Idle", result: { step: "extend", outcome: "stopped" }, pending: null }); return; }
       if (m === 5 || m === 6 || m === 8) { set({ maslow: state(4), fluid: "Idle", result: { step: m === 6 ? "anchors" : "tension", outcome: "stopped" }, pending: null }); return; }
-      set({ pending: null });
+      set({ spindle: "off", pending: null });   // $STOP turns the spindle off
     },
     clearError() {
       log("$X");
       set({ fluid: "Idle", error: null, maslow: state(4), result: { step: "error", outcome: "cleared" } });
+    },
+    // Spindle on / off from the jog pad (M3 S12000 / M5); the real machine reports it in the status report's FS field
+    spindleOn() { log("M3 S12000"); set({ spindle: "on" }); },
+    spindleOff() { log("M5"); set({ spindle: "off" }); },
+    // The belt motor test ($TEST): each motor pays its belt out for at most 100 ms, then encoder and magnet are checked
+    motorTest() {
+      log("$TEST");
+      set({ motorTest: null });
+      const ARMS = ["Top Left", "Top Right", "Bottom Left", "Bottom Right"];
+      const done = (failed) => {
+        const passed = ARMS.filter(a => !failed.some(f => f.arm === a));
+        log(...passed.map(a => `[MSG:INFO: All tests passed on ${a}]`), ...failed.map(f => `[MSG:WARN: ${f.problem} on ${f.arm}]`));
+        set({ motorTest: { passed, failed }, pending: null,
+          ...(failed.some(f => f.problem !== "Magnet not detected") ? { fluid: "Alarm", error: { reason: `${failed[0].problem} on ${failed[0].arm}` } } : {}) });
+      };
+      ask("Testing the belt motors", "Each motor runs outward for at most 100 ms, then its encoder and magnet are checked. Under a second.", [
+        ["All four arms pass", () => done([])],
+        ["Encoder missing on Top Right", () => done([{ arm: "Top Right", problem: "Encoder not found" }]), "bad"],
+        ["Magnet not detected on Bottom Left", () => done([{ arm: "Bottom Left", problem: "Magnet not detected" }]), "bad"]
+      ]);
     },
     rehomeZ() {
       log("$Spindle/Home");

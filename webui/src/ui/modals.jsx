@@ -1,6 +1,6 @@
 import { useState } from "preact/hooks";
 import { SCREENS } from "../flow/screens.js";
-import { ModePill, Conn } from "./parts.jsx";
+import { ModePill, Conn, SpindleBtn, spindleLock } from "./parts.jsx";
 import { MACHINE_SETTINGS, settingError, effectiveWorkArea } from "../device/settings.js";
 
 // Pop-ups cover the panels only, so the top bar and Stop stay visible and clickable
@@ -89,14 +89,45 @@ export function Settings({ k, ctx, onClose, theme, setTheme, compact, stop }) {
     <p class="note">Placeholder: these depend on what the current WiFi dialog offers.</p></>;
   else if (sec === "frame") body = <FrameSection ctx={ctx} busy={busy} />;
   else if (sec === "tool") body = <><h4>Tool and Z</h4>
+    {/* The Maslow 4.1 has no spindle output, so this only shows on a Mini (or before the machine is known) */}
+    {!(d.machine && !/^Maslow Mini/.test(d.machine)) && <>
+      <Row label="Spindle" hint="Runs the spindle at 12,000 RPM outside a job: to check the bit runs true, or to cut by hand while you jog. Stop also turns it off.">
+        <span class="mono">{d.spindle === "on" ? "Running" : "Off"}</span><SpindleBtn k={k} d={d} send={ctx.send} /></Row>
+      {spindleLock(k, d) && <p class="note" style="margin:0">{spindleLock(k, d)}.</p>}</>}
     <Row label="Last stick-out" hint="Set when you measure a tool."><span class="mono">{d.zFromStickout ? `${d.zFromStickout} mm` : "–"}</span></Row>
     <Row label="Z after Stop" hint="Stop leaves Z where it is, so the bit may stay in the work. Continue lifts it to at least 2 mm above work Z 0 before moving."><span>Stays put</span><span class="note">set in firmware</span></Row></>;
   else if (sec === "display") body = <><h4>Display</h4>
     <Row label="Panels"><select value={theme} onChange={e => setTheme(e.currentTarget.value)}><option value="dark">Dark</option><option value="light">Light</option></select></Row></>;
   else body = <><h4>Advanced</h4><p class="note">The raw FluidNC and Maslow settings. Not designed yet.</p>
     <Row label="Command box" hint="A box under the log that sends a line to the machine as typed, for support. No checks: motion and calibration commands run too. Remembered in this browser.">
-      <label class="check"><input type="checkbox" checked={ctx.commandBox} onChange={e => ctx.setCommandBox(e.currentTarget.checked)} /> Show</label></Row></>;
+      <label class="check"><input type="checkbox" checked={ctx.commandBox} onChange={e => ctx.setCommandBox(e.currentTarget.checked)} /> Show</label></Row>
+    <MotorTest k={k} ctx={ctx} /></>;
   return <Modal title="Settings" small="maslow" onClose={onClose} nav={nav} compact={compact} stop={stop} ctx={ctx}>{body}</Modal>;
+}
+
+// The belt motor test ($TEST), a diagnostic. Each arm's motor pays its belt out at full power until it draws current
+// (at most 100 ms), then the encoder and magnet are checked. Only while idle with the belts slack: with the belts tight
+// the pull would jerk the sled. A missing motor or encoder stops motion until the error is cleared.
+const SLACK = [0, 2, 4];   // Maslow states UNKNOWN, RETRACTED, EXTENDEDOUT
+function MotorTest({ k, ctx }) {
+  const { d } = ctx, s = SCREENS[k];
+  const why = !d.connected ? "Waiting for the device to answer."
+    : d.fluid === "Alarm" ? "Clear the error first (Settings › State › Clear error)."
+    : d.job || s.moving || d.fluid !== "Idle" ? "Not while the machine is busy."
+    : !SLACK.includes(d.maslow) ? "Only while the belts are slack: retracted, extended, or before setup. Release tension first."
+    : null;
+  const running = d.op?.action === "motorTest" && d.op.phase !== "failed";
+  const r = d.motorTest;
+  return <>
+    <Row label="Belt motor test" hint="Runs each belt motor outward for a moment (under 0.1 s) and checks its encoder and magnet. For finding a loose cable or a dead motor. The belts must be slack.">
+      <button class="btn ghost" type="button" disabled={!!why || running} title={why || "Send $TEST"} onClick={() => ctx.send("motorTest")}>
+        {running ? "Testing…" : "Test motors"}</button></Row>
+    {why && <p class="note" style="margin:0">{why}</p>}
+    {r && <ul class="mtest">{r.passed.map(a => <li class="ok">{a}: passed</li>)}
+      {r.failed.map(f => <li class="bad">{f.arm}: {f.problem.toLowerCase()}</li>)}</ul>}
+    {r?.failed.some(f => f.problem !== "Magnet not detected") &&
+      <p class="note alert" style="margin:0">Motion is disabled until you fix the cause and clear the error ($X).</p>}
+  </>;
 }
 
 // Frame and belts. There's no work area to confirm any more: the machine works it out from how far the belts

@@ -377,8 +377,8 @@ currents; Extend distance, spoil board and stock thickness, Reboot.
 
 | Current UI | Where it is today | In the new UI |
 |---|---|---|
-| Spindle on / off | Spindle controls | Missing |
-| Belt motor test (Test) | Calibration popup | Missing |
+| Spindle on / off | Spindle controls | **Done** (2026-11-18): Settings › Tool and Z, Mini only (the 4.1 has `NoSpindle`). `machine.spindleOn()` (`M3 S12000`) / `spindleOff()` (`M5`); follows the report's `FS` speed, with a "Spindle running" tag in the header. Off during a job and while moving; `$STOP` turns it off |
+| Belt motor test (Test) | Calibration popup | **Done** (2026-11-18): Settings › Advanced, `machine.testMotors()` (`$TEST`). Only while Idle with slack belts (Maslow 0, 2, 4): each motor pays its belt out at full power for up to 100 ms; shows each arm's result |
 | Set Z-Stop | Calibration popup | Not used on the Mini; the 4.1 needs it (its flow isn't defined) |
 | Set home by typing X / Y / Z | Set Home, Set Z Home popups | **Done** (2026-11-18): Set home XY / Set Z open a box filled in with "here"; XY in machine coordinates, Z relative to the current Z home |
 | mm / inch | Units toggle | mm only |
@@ -400,8 +400,8 @@ currents; Extend distance, spoil board and stock thickness, Reboot.
 | Feed override, motors off, probe | Main › GRBL and Controls panels | Probably not needed on a Maslow; decide |
 | Camera, preferences, languages, login, UI lock, macros, credits | navbar, dialogs | Mostly unused; decide to keep or drop |
 
-Most needed first: the command box and saving the log (support), Park and work area settings
-(people set these today), spindle on / off, and the belt motor test.
+Most needed first, all done on 2026-11-18 (simulator only so far): the command box and saving the log,
+Park and work area settings, spindle on / off, and the belt motor test.
 
 *Machine settings* (Settings › Frame and belts; names, ranges and defaults in `webui/src/device/settings.js`).
 Each is read on connect and saved with `setSetting()` for what changed, then `saveConfig()` (`$CO`), as the
