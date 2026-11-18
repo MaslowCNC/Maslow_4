@@ -1,7 +1,7 @@
 import { useState } from "preact/hooks";
 import { STEPS, SCREENS, isSetup } from "../flow/screens.js";
 import { stepArt, visSvg, frameMap, toolpathSvg } from "../art.js";
-import { makeFrame, accuracyMap, safeRect, checkJob, TOLERANCE } from "../accuracy.js";
+import { makeFrame, accuracyMap, safeRect, checkJob, startRing, TOLERANCE, SLED_MASS } from "../accuracy.js";
 import logo from "../assets/maslow-logo.webp";
 
 // A top-bar button. b.temp marks one that exists only until the firmware rewrite is finished: it shows orange,
@@ -37,12 +37,12 @@ export const StepArt = ({ step, d, class: c = "art" }) =>
 // showCurrents: a ring at each anchor for its motor's current (the Motors toggle), in mA from the report's MC.
 // showWorkspace: the area where cuts land within the tolerance (mm, Settings → Frame and belts) and whether the
 // chosen job fits it (the Workspace toggle), from the anchors.
-export const Frame = ({ k, d, showLengths = false, showCurrents = false, showWorkspace = false, tolerance = TOLERANCE }) => {
+export const Frame = ({ k, d, showLengths = false, showCurrents = false, showWorkspace = false, tolerance = TOLERANCE, sledMass = SLED_MASS }) => {
   const s = SCREENS[k];
   const lengths = showLengths ? d.belts.map((v, i) => d.maslow === 0 || d.beltUnknown?.[i] ? null : v) : null;
   const mc = d.motorCurrent;
   const currents = showCurrents ? (mc ? [mc.tl, mc.tr, mc.bl, mc.br].map(adcToMilliamps) : [null, null, null, null]) : null;
-  const acc = accuracyFor(d, tolerance);
+  const acc = accuracyFor(d, tolerance, sledMass);
   return <Svg class="framesvg" html={visSvg(k, s, d.pos, d.wco, lengths, currents, showWorkspace ? acc.overlay : null, acc.size,
     toolpathFor(d, acc.size))} />;
 };
@@ -64,27 +64,30 @@ function toolpathFor(d, size) {
   return pathCache.value;
 }
 
-// The accuracy map takes a few ms, so it's kept until the anchors, the spoil board or the tolerance change
+// The accuracy map takes a few ms, so it's kept until the anchors, the spoil board, the tolerance, the board or (on a
+// vertical frame) the sled's weight change
 let accCache = { key: null, value: null };
-function accuracyFor(d, tol) {
+function accuracyFor(d, tol, mass) {
   const f = d.frame;
   // The real machine reports the anchors a moment after connecting: until then there's nothing to work out
   if (!f) return { size: null, overlay: { note: "The workspace needs the anchors" } };
-  const key = JSON.stringify([f, d.workArea?.spoil, tol]);
+  const ring = startRing(d.machine), key = JSON.stringify([f, d.workArea?.spoil, tol, ring, f.vertical && mass]);
   if (key !== accCache.key) {
-    const frame = f && makeFrame({ ...f, spoil: d.workArea?.spoil ?? 0 });
-    const map = frame && !f.vertical ? accuracyMap(frame) : null;
+    const frame = f && makeFrame({ ...f, spoil: d.workArea?.spoil ?? 0, ring, vertical: !!f.vertical, mass });
+    const map = frame && accuracyMap(frame);
     accCache = { key, value: { frame, map, rect: map && safeRect(map, tol) } };
   }
   const { frame, map, rect } = accCache.value;
   const size = frame ? { w: frame.width, h: frame.height } : null;
   if (!frame) return { size, overlay: { note: "The workspace needs the anchors" } };
-  if (f.vertical) return { size, overlay: { note: "The workspace isn't worked out for a vertical frame yet" } };
+  // On a vertical frame even the centre can need more than the motors hold
+  if (!map) return { size, overlay: { note: `A ${mass} kg sled is more than the motors hold, even at the centre` } };
+  const hanging = f.vertical ? mass : null;
   // The job's extent is in work coordinates; machine = work + WCO
   const e = d.gcode?.status === "ready" ? d.gcode.extent : null, w = d.wco;
   const job = e && e.max.x > e.min.x && e.max.y > e.min.y
     ? checkJob(map, { min: { x: e.min.x + w.x, y: e.min.y + w.y }, max: { x: e.max.x + w.x, y: e.max.y + w.y } }, tol) : null;
-  return { size, overlay: { tol, rect, job } };
+  return { size, overlay: { tol, rect, job, hanging } };
 }
 
 // Work position (from the user's home) and machine position (from the anchors). WPos = MPos − WCO.

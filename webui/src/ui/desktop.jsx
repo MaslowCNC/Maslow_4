@@ -62,7 +62,7 @@ export function Desktop({ k, ctx, onSettings, overlay }) {
           <Toggle on={showBelts} set={setShowBelts}>Belts</Toggle><Toggle on={showMotors} set={setShowMotors}>Motors</Toggle>
           <Toggle on={showWorkspace} set={setShowWorkspace}>Workspace</Toggle></div>
         <div class="visbody">
-          <Frame k={k} d={ctx.d} showLengths={showBelts} showCurrents={showMotors} showWorkspace={showWorkspace} tolerance={ctx.tolerance} />
+          <Frame k={k} d={ctx.d} showLengths={showBelts} showCurrents={showMotors} showWorkspace={showWorkspace} tolerance={ctx.tolerance} sledMass={ctx.sledMass} />
           <span class="viscap">{s.nopos && s.moving ? "Position isn't live while the belts move" : s.stale ? "Last known position" : ""}</span>
           <div class="inset" style={logOpen ? "" : "bottom:auto"}><div class="ph">Log<button type="button" class="linkbtn" onClick={() => setLogOpen(!logOpen)}>{logOpen ? "collapse ▾" : "expand ▸"}</button></div>
             {logOpen && <div class="pb"><LogView d={ctx.d} /></div>}</div>

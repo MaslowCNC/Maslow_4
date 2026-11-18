@@ -1,6 +1,6 @@
 # Workspace accuracy: replacing the legacy colour map
 
-Exploration for the new web UI (`webui/`). Nothing here is wired into the UI or firmware.
+Exploration for the new web UI (`webui/`). The map it led to runs in `webui/src/accuracy.js`; `README.md` says how it is calculated today.
 
 Files in this folder:
 
@@ -125,7 +125,7 @@ So:
   A "part-size-aware" variant would use δp(p) − δp(q) for points q within the part.
 - Validate against a real cut: measure a test pattern at a few positions and compare with E95.
 
-### Vertical (hanging) machines: not modelled yet
+### Vertical (hanging) machines (now in the UI: see README.md, "Vertical frames")
 
 The model above assumes a **flat** machine, where gravity doesn't act in the frame's plane. The firmware also
 supports a vertical setup, with the same four belts:

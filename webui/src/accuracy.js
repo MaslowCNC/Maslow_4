@@ -1,7 +1,7 @@
 // Where on the frame cuts land within a tolerance: the overlay on the drawing (the Workspace toggle).
 // Replaces the current UI's red→green squares (toolpath-displayer.js, computPositonGradient) with an error in mm worked
 // out from the anchors. Plain JS with no UI code. The model, its evidence and the numbers behind the defaults are in
-// tools/workspace-accuracy/REPORT.md (the prototype there is accuracy-model.mjs).
+// tools/workspace-accuracy/REPORT.md (the prototype there is accuracy-model.mjs); README.md there says how it runs.
 //
 // For each point p it estimates the 95% error relative to the frame centre:
 //   e95(p) = |systematic(p) − systematic(centre)| + 2.45 · σmax(p)
@@ -12,8 +12,11 @@
 // - Systematic belt errors (spoil board thickness, belt scale) bias calibration too, so the fit absorbs part of them.
 //
 // Estimates until the firmware saves them (see REPORT.md, "Inputs and firmware data"): the calibration fit RMS
-// (CAL_RMS) and the grid that was measured (the firmware's auto rule is repeated here). Flat machines only: a vertical
-// machine also needs the weight of the sled (REPORT.md, "Vertical machines").
+// (CAL_RMS) and the grid that was measured (the firmware's auto rule is repeated here).
+//
+// Vertical frames (Maslow_vertical) add the sled's weight: it sets each belt's tension, which stretches the belt (a
+// bias calibration partly absorbs, like the others), can leave a bottom belt slack (it then stops holding the sled), and
+// can pass what a motor holds (the point isn't usable). See tensions() and README.md, "Vertical frames".
 
 export const TOLERANCE = 2;          // mm, the default tolerance (Settings → Frame and belts changes it)
 const CAL_RMS = 0.5;                 // mm, calibration fit RMS ("Find Anchors fit: rms=")
@@ -23,6 +26,20 @@ const BELT_SCALE = 0.0005;           // belt pitch / stretch scale error
 const ARM = 153.4;                   // beltEndExtension + armLength, mm (defaults; replaced by the config's values)
 const MIN_BELT = 100;                // mm of belt beyond the arm, closer than this to an anchor isn't usable
 const STEP = 50;                     // mm between map points
+
+// Vertical frames only. All guesses until measured (README.md, "Assumed values")
+export const SLED_MASS = 8;          // kg, sled + router: the default (Settings → Frame and belts changes it)
+const TILT = 90;                     // degrees from horizontal; Maslow_vertical is only yes / no, so upright is assumed
+const BELT_EA = 20000;               // N, belt stiffness (force for 100% stretch)
+const PRELOAD = 20;                  // N, tension the belts are held at before the weight is added (Apply Tension)
+const MAX_TENSION = 150;             // N, the most a motor holds; a point needing more isn't usable
+
+/**
+ * The 6-point ring Find anchors measures first, in mm. A firmware constant, not a setting: 150 mm on a Maslow 4.1 and
+ * 50 mm on any other board, as the Mini's frame is too small (Calibration.cpp). Until the board is known, 150 mm.
+ * @param {string|null} machine the machine's name from [ESP800], as machine.js gives it ("Maslow 4.1", "Maslow Mini", ...)
+ */
+export const startRing = (machine) => (machine == null || machine === "Maslow 4.1" ? 150 : 50);
 
 const inv2 = ([[a, b], [c, d]]) => { const det = a * d - b * c; return [[d / det, -b / det], [-c / det, a / det]]; };
 const mul = (A, B) => A.map((r) => B[0].map((_, j) => r.reduce((s, v, k) => s + v * B[k][j], 0)));
@@ -43,17 +60,20 @@ function invN(M) {
 
 /**
  * The frame as the firmware's solver sees it, from the config.
- * @param {{ tl:[x,y], tr:[x,y], bl:[x,y], br:[x,y], z?: number[4], spoil?: number, arm?: number }} c
- *   anchors in mm (BL is normally 0,0), z = [tl, tr, bl, br] anchor heights, arm = beltEndExtension + armLength
+ * @param {{ tl:[x,y], tr:[x,y], bl:[x,y], br:[x,y], z?: number[4], spoil?: number, arm?: number, ring?: number }} c
+ *   anchors in mm (BL is normally 0,0), z = [tl, tr, bl, br] anchor heights, arm = beltEndExtension + armLength,
+ *   ring = the starting ring's size (startRing()), vertical = Maslow_vertical (the sled hangs on the belts),
+ *   mass = the sled's mass with the router, kg (vertical frames only)
  * @returns the frame, or null if the anchors don't make one
  */
-export function makeFrame({ tl, tr: trA, bl = [0, 0], br, z = [0, 0, 0, 0], spoil = 0, arm = ARM }) {
+export function makeFrame({ tl, tr: trA, bl = [0, 0], br, z = [0, 0, 0, 0], spoil = 0, arm = ARM, ring = 150, vertical = false, mass = SLED_MASS }) {
   const width = Math.min(trA[0] - tl[0], br[0] - bl[0]), height = Math.min(tl[1] - bl[1], trA[1] - br[1]);
   if (!(width > 300 && height > 300)) return null;
   // centre = where the diagonals cross (MaslowKinematics::calculateCenter); machine X 0, Y 0 is here
   const A = (trA[1] - bl[1]) / (trA[0] - bl[0]), B = (br[1] - tl[1]) / (br[0] - tl[0]);
   const cx = (br[1] - B * br[0] + A * trA[0] - trA[1]) / (A - B), cy = A * (cx - trA[0]) + trA[1];
-  return { anchors: [tl, trA, bl, br], z: z.map((v) => v + spoil), arm, center: [cx, cy], width, height };
+  const weight = vertical ? mass * 9.81 * Math.sin((TILT * Math.PI) / 180) : 0;   // N, in the frame's plane, down
+  return { anchors: [tl, trA, bl, br], z: z.map((v) => v + spoil), arm, ring, weight, center: [cx, cy], width, height };
 }
 
 const units = (f, s) => f.anchors.map((a) => { const dx = s[0] - a[0], dy = s[1] - a[1], d = Math.hypot(dx, dy); return [dx / d, dy / d]; });
@@ -64,16 +84,46 @@ const dTheta = (f, s) => units(f, s).map((u, i) => {
   if (i === 0) { row[0] = -u[0]; row[1] = -u[1]; } else if (i === 1) { row[2] = -u[0]; row[3] = -u[1]; } else if (i === 3) row[4] = -u[0];
   return row;
 });
-const bias = (f, s) => dists(f, s).map((d, i) => { const L = Math.max(d - f.arm, 1); return (f.z[i] * SPOIL_ERROR) / L + BELT_SCALE * L; });
+// Each belt's tension in N with the sled hanging at s, or null where a motor would have to hold more than MAX_TENSION.
+// Flat frames: no weight, so all belts taut and no tensions worked out.
+// - The belts are held at fixed lengths, so the weight sags the sled by δ with K δ = W, K = Σ kᵢ uᵢuᵢᵀ, kᵢ = EA / Lᵢ,
+//   and each belt's tension changes by kᵢ uᵢ·δ (uᵢ points from the anchor to the sled).
+// - Before the weight, the belts carry PRELOAD, spread so it balances by itself (projected onto U's null space).
+// - A belt that would go below 0 N is slack: it's taken out and the rest solved again.
+function tensions(f, s) {
+  if (!f.weight) return { T: [0, 0, 0, 0], taut: [true, true, true, true] };
+  const u = units(f, s), k = dists(f, s).map((d) => BELT_EA / Math.max(d - f.arm, 50)), taut = [true, true, true, true];
+  for (;;) {
+    const on = [0, 1, 2, 3].filter((i) => taut[i]);
+    const K = [0, 1].map((r) => [0, 1].map((c) => on.reduce((t, i) => t + k[i] * u[i][r] * u[i][c], 0)));
+    const UU = [0, 1].map((r) => [0, 1].map((c) => on.reduce((t, i) => t + u[i][r] * u[i][c], 0)));
+    if (Math.abs(K[0][0] * K[1][1] - K[0][1] * K[1][0]) < 1e-9) return null;   // the belts left can't hold it
+    const Ki = inv2(K), UUi = inv2(UU), F = [0, -f.weight];
+    const dl = [Ki[0][0] * F[0] + Ki[0][1] * F[1], Ki[1][0] * F[0] + Ki[1][1] * F[1]];
+    const Up = [0, 1].map((r) => on.reduce((t, i) => t + u[i][r] * PRELOAD, 0)), m = [UUi[0][0] * Up[0] + UUi[0][1] * Up[1], UUi[1][0] * Up[0] + UUi[1][1] * Up[1]];
+    const T = [0, 1, 2, 3].map((i) => (taut[i] ? PRELOAD - (u[i][0] * m[0] + u[i][1] * m[1]) + k[i] * (u[i][0] * dl[0] + u[i][1] * dl[1]) : 0));
+    const low = on.reduce((w, i) => (T[i] < T[w] ? i : w), on[0]);
+    if (T[low] < 0 && on.length > 2) { taut[low] = false; continue; }
+    if (T[low] < 0 || Math.max(...T) > MAX_TENSION) return null;
+    return { T, taut };
+  }
+}
+
+// What each belt's length is off by, mm: spoil board thickness and belt scale, plus on a vertical frame the stretch
+// from its tension (T·L / EA)
+const bias = (f, s, t = tensions(f, s)) => dists(f, s).map((d, i) => {
+  const L = Math.max(d - f.arm, 1);
+  return (f.z[i] * SPOIL_ERROR) / L + BELT_SCALE * L + (t ? (t.T[i] * L) / BELT_EA : 0);
+});
 
 // The firmware's auto grid (Calibration::generate_calibration_grid): 40% of the frame, 3/5/7/9 points a side with
-// at most 260 mm between them, plus the 150 mm ring it starts with
+// at most 260 mm between them, plus the ring it starts with (startRing())
 function grid(f) {
   const gw = f.width * 0.4, gh = f.height * 0.4, pts = [], [cx, cy] = f.center;
   let n = 9; for (const t of [3, 5, 7, 9]) if (Math.max(gw, gh) / (t - 1) <= 260) { n = t; break; }
   const h = (n - 1) / 2;
   for (let i = -h; i <= h; i++) for (let j = -h; j <= h; j++) pts.push([cx + (i * gw) / (n - 1), cy + (j * gh) / (n - 1)]);
-  for (const [dx, dy] of [[0, 0], [150, 0], [150, 150], [0, 150], [-150, 150], [-150, 0]]) pts.push([cx + dx, cy + dy]);
+  for (const [dx, dy] of [[0, 0], [1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0]]) pts.push([cx + dx * f.ring, cy + dy * f.ring]);
   return pts;
 }
 
@@ -95,22 +145,28 @@ function calibrate(f) {
 /**
  * The accuracy map of a frame: e95 in mm at points STEP apart, in machine coordinates (X 0, Y 0 at the centre).
  * @returns {{ xs: number[], ys: number[], e95: number[][] }} e95[j][i] at (xs[i], ys[j]); Infinity where a belt
- *   would be shorter than MIN_BELT
+ *   would be shorter than MIN_BELT or a motor would hold more than MAX_TENSION. null for a vertical frame whose
+ *   centre already needs more than that.
  */
 export function accuracyMap(f) {
   const cal = calibrate(f);
-  const at = (s) => {
-    const u = units(f, s), w = dists(f, s).map((d) => 1 / Math.max(d - f.arm, 50));
+  const at = (s, t = tensions(f, s)) => {
+    // a slack belt doesn't hold the sled, so it plays no part in where the sled goes
+    const u = units(f, s), w = dists(f, s).map((d, i) => (t.taut[i] ? 1 / Math.max(d - f.arm, 50) : 0));
     const Ji = inv2([0, 1].map((r) => [0, 1].map((c) => u.reduce((t, ui, i) => t + w[i] * ui[r] * ui[c], 0))));
     const G = [0, 1].map((r) => u.map((ui, i) => w[i] * (Ji[r][0] * ui[0] + Ji[r][1] * ui[1])));
-    const M = mul(G, dTheta(f, s)), b = bias(f, s);
+    const M = mul(G, dTheta(f, s)), b = bias(f, s, t);
     const dp = [0, 1].map((r) => M[r].reduce((t, v, k) => t + v * cal.shift[k], 0) - G[r].reduce((t, v, i) => t + v * b[i], 0));
     return { G, M, dp };
   };
-  const c = at(f.center), GGc = mul(c.G, tr(c.G));
+  const tc = tensions(f, f.center);
+  if (!tc) return null;   // even the centre needs more than a motor holds
+  const c = at(f.center, tc), GGc = mul(c.G, tr(c.G));
   const point = (s) => {
     if (Math.min(...dists(f, s)) - f.arm < MIN_BELT) return Infinity;
-    const p = at(s), Md = sub(p.M, c.M);
+    const t = tensions(f, s);
+    if (!t) return Infinity;
+    const p = at(s, t), Md = sub(p.M, c.M);
     const C = add(mul(mul(Md, cal.cov), tr(Md)), add(mul(p.G, tr(p.G)), GGc).map((r) => r.map((v) => v * RUN_SIGMA ** 2)));
     return Math.hypot(p.dp[0] - c.dp[0], p.dp[1] - c.dp[1]) + 2.45 * Math.sqrt(eigMax2(C));
   };
