@@ -28,5 +28,6 @@ export const COMMANDS = {
   jog:            { api: "jog(delta, {feed})", cmd: "$J=G91 G21 …", status: "exists" },
   setHomeXY:      { api: "setWorkZero({x, y})", cmd: "G21 G10 L20 P0 X… Y…", status: "exists", note: "The current machine position as the origin; needs Idle" },
   setZ:           { api: "setWorkZero({z})", cmd: "G21 G10 L20 P0 Z…", status: "exists", note: "The current machine Z as work Z 0; needs Idle" },
-  joinNetwork:    { api: null, cmd: "WiFi settings ([ESP401])", status: "exists", note: "HTTP; placeholder until the WiFi dialog is designed" }
+  command:        { api: null, cmd: "the typed line, as typed", status: "exists", note: "Command box: wsCommands.send (one line at a time), [ESP…] over HTTP, ? ! ~ as realtime bytes. No machine.js action: it's the user's own raw command" },
+  joinNetwork:   { api: null, cmd: "WiFi settings ([ESP401])", status: "exists", note: "HTTP; placeholder until the WiFi dialog is designed" }
 };

@@ -280,7 +280,7 @@
   .tabs span.on { color: var(--lilac); background: var(--input); }
   .vis svg { width: 100%; height: 100%; display: block; min-height: 0; }
   .viscap { position: absolute; right: 12px; bottom: 10px; font: 12px var(--font-mono); color: var(--muted); }
-  .inset { position: absolute; left: 10px; top: 46px; bottom: 10px; width: min(34%, 260px); background: color-mix(in srgb, var(--panel) 88%, transparent);
+  .inset { position: absolute; left: 10px; top: 46px; bottom: 10px; width: min(38%, 300px); background: color-mix(in srgb, var(--panel) 88%, transparent);
     border: 1px solid var(--sep); border-radius: 6px; display: grid; grid-template-rows: auto 1fr; overflow: hidden; }
   .overlay { position: absolute; left: 10px; bottom: 10px; width: min(46%, 300px); background: color-mix(in srgb, var(--panel) 94%, transparent);
     border: 1px solid var(--sep); border-radius: var(--r); padding: 10px; display: grid; gap: 8px; box-shadow: var(--shadow); }
@@ -526,3 +526,15 @@ html, body { margin: 0; }
 /* The workspace estimate: small, at the bottom right of the drawing; "Last known position" moves up above it */
 .wscap { position: absolute; right: 12px; bottom: 10px; font: 11px var(--font-mono); color: var(--muted); white-space: nowrap; pointer-events: auto; }
 .visbody .wscap ~ .viscap { bottom: 28px; }
+
+/* The log with its command box: the log scrolls, the box stays under it */
+.logbody { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+.logbody .log { flex: 1 1 auto; }
+.acc .logbody .log { max-height: 40vh; }
+.logbtns { display: flex; gap: 10px; }
+.linkbtn:disabled { opacity: .4; cursor: not-allowed; }
+.cmdbox { display: flex; gap: 6px; flex: none; }
+.cmdbox input { flex: 1 1 auto; min-width: 0; background: var(--input); border: 1px solid var(--sep); border-radius: 6px; color: var(--text);
+  font: 12px var(--font-mono); padding: 0 8px; min-height: 36px; }
+.cmdbox input:focus { outline: 2px solid var(--lilac); outline-offset: -1px; }
+.cmdbox .btn { min-height: 36px; padding: 0 10px; font-size: 13px; }
