@@ -695,6 +695,34 @@ var drawFindAnchorsTrace = function() {
     tp.lineWidth = 0.5 / scaler;
 }
 
+// The encoder-implied path of the running (or last) job, in red over the planned G-code
+// (job-trace.js). pts are machine coordinates, like the G-code drawn at WPOS + WCO.
+var drawJobTrace = function(pts) {
+    if (typeof jobTrace === 'undefined' || pts.length < 2) {
+        return;
+    }
+
+    tp.beginPath();
+    tp.strokeStyle = 'red';
+    tp.lineWidth = 1.0 / scaler;
+    const first = projection(pts[0]);
+    tp.moveTo(first.x, first.y);
+    for (let i = 1; i < pts.length; i++) {
+        const p = projection(pts[i]);
+        tp.lineTo(p.x, p.y);
+    }
+    tp.stroke();
+    tp.lineWidth = 0.5 / scaler;
+}
+
+var drawWholeJobTrace = function() {
+    if (typeof jobTrace === 'undefined') {
+        return;
+    }
+    drawJobTrace(jobTrace.points());
+    jobTrace.markDrawn();
+}
+
 var drawJobBoundingBox = function() {
     if (!bboxIsSet || !jobBboxExists()) {
         return;
@@ -1810,10 +1838,11 @@ ToolpathDisplayer.prototype.showToolpath = function(gcode, modal, initialPositio
     displayHandlers.modal = modal;
     new Toolpath(displayHandlers).loadFromLinesSync(gcodeLines);
 
-    drawTool(initialPosition);
-
-    // Draw job bounding box if available
+    // Draw job bounding box if available, then the job trace over it
     drawJobBoundingBox();
+    drawWholeJobTrace();
+
+    drawTool(initialPosition);
 
     if(drawBounds){
         drawMachineBounds(); //Actually draws the bounding box
@@ -1826,6 +1855,10 @@ ToolpathDisplayer.prototype.showToolpath = function(gcode, modal, initialPositio
 ToolpathDisplayer.prototype.reDrawTool = function(modal, dpos) {
     if (toolSave != null) {
         tp.putImageData(toolSave, toolX, toolY);
+        if (typeof jobTrace !== 'undefined') {
+            drawJobTrace(jobTrace.undrawn());
+            jobTrace.markDrawn();
+        }
         drawTool(dpos);
     } else {
         // If no toolSave exists (no GCode loaded), initialize canvas and draw tool position
@@ -1896,6 +1929,7 @@ ToolpathDisplayer.prototype.showToolPosition = function(modal, position) {
 
         // Draw job bounding box if available (updates with WCO changes)
         drawJobBoundingBox();
+        drawWholeJobTrace();
 
         // Draw the tool at current position
         drawTool(position);
@@ -1912,6 +1946,19 @@ ToolpathDisplayer.prototype.cycleCameraAngle = function(gcode, modal, position) 
 }
 
 let displayer = new ToolpathDisplayer();
+
+// Record the job trace from every status report; reDrawTool draws the new points.
+if (typeof machine !== 'undefined' && typeof jobTrace !== 'undefined') {
+    machine.on('state', (s) => {
+        updateAnchorPointsFromConfig();
+        jobTrace.addSample(s, {
+            tl: { x: tlX, y: tlY },
+            tr: { x: trX, y: trY },
+            bl: { x: blX, y: blY },
+            br: { x: brX, y: brY },
+        });
+    });
+}
 
 const tpDisplayer = () => {
 	if (!displayer) {
