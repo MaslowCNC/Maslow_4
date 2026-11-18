@@ -522,3 +522,7 @@ html, body { margin: 0; }
 .compass .jlabel { font: 700 11px var(--font-mono); color: var(--muted); line-height: 1; }
 .compass .home { color: var(--lilac); }
 .compass button:disabled { opacity: .4; cursor: not-allowed; }
+
+/* The workspace estimate: small, at the bottom right of the drawing; "Last known position" moves up above it */
+.wscap { position: absolute; right: 12px; bottom: 10px; font: 11px var(--font-mono); color: var(--muted); white-space: nowrap; pointer-events: auto; }
+.visbody .wscap ~ .viscap { bottom: 28px; }

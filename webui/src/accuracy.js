@@ -18,7 +18,7 @@
 // bias calibration partly absorbs, like the others), can leave a bottom belt slack (it then stops holding the sled), and
 // can pass what a motor holds (the point isn't usable). See tensions() and README.md, "Vertical frames".
 
-export const TOLERANCE = 2;          // mm, the default tolerance (Settings → Frame and belts changes it)
+export const TOLERANCE = 3;          // mm, the default tolerance (Settings → Frame and belts changes it)
 const CAL_RMS = 0.5;                 // mm, calibration fit RMS ("Find Anchors fit: rms=")
 const RUN_SIGMA = 0.1;               // mm, belt following error while cutting (the report's BE)
 const SPOIL_ERROR = 3;               // mm, spoil board thickness entered wrong by this much

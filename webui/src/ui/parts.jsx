@@ -1,6 +1,6 @@
 import { useState } from "preact/hooks";
 import { STEPS, SCREENS, isSetup } from "../flow/screens.js";
-import { stepArt, visSvg, frameMap, toolpathSvg } from "../art.js";
+import { stepArt, visSvg, frameMap, toolpathSvg, workspaceCaption } from "../art.js";
 import { makeFrame, accuracyMap, safeRect, checkJob, startRing, TOLERANCE, SLED_MASS } from "../accuracy.js";
 import logo from "../assets/maslow-logo.webp";
 
@@ -43,8 +43,9 @@ export const Frame = ({ k, d, showLengths = false, showCurrents = false, showWor
   const mc = d.motorCurrent;
   const currents = showCurrents ? (mc ? [mc.tl, mc.tr, mc.bl, mc.br].map(adcToMilliamps) : [null, null, null, null]) : null;
   const acc = accuracyFor(d, tolerance, sledMass);
-  return <Svg class="framesvg" html={visSvg(k, s, d.pos, d.wco, lengths, currents, showWorkspace ? acc.overlay : null, acc.size,
-    toolpathFor(d, acc.size))} />;
+  const cap = showWorkspace ? workspaceCaption(acc.overlay) : null;
+  return <><Svg class="framesvg" html={visSvg(k, s, d.pos, d.wco, lengths, currents, showWorkspace ? acc.overlay : null, acc.size,
+    toolpathFor(d, acc.size))} />{cap && <span class="wscap" style={{ color: cap.colour }}>{cap.text}</span>}</>;
 };
 
 // The chosen file's toolpath, kept until the file, the work offset or the scale change. While its job runs, the moves

@@ -20,7 +20,7 @@ test("the centre is the most accurate place and errors grow toward the anchors",
 test("the ±1 mm area matches the prototype (accuracy-model.mjs, 50 mm steps)", () => {
   assert.deepEqual(safeRect(map, 1), { w: 1000, h: 700 });
   assert.ok(safeRect(map, 2).w > safeRect(map, 1).w);
-  assert.deepEqual(safeRect(map), safeRect(map, 2)); // the default tolerance is ±2 mm
+  assert.deepEqual(safeRect(map), safeRect(map, 3)); // the default tolerance is ±3 mm
 });
 
 test("at ±1 mm, a job inside the area fits; one reaching the corner doesn't", () => {

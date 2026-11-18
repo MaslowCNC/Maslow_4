@@ -68,27 +68,33 @@ function currentRings(currents) {
 
 // The workspace (webui/src/accuracy.js) as a dotted outline: the largest rectangle around the centre where cuts
 // land within the tolerance. The job's outline is drawn over it, orange and dashed where it leaves, and one line
-// under the frame says whether the job fits. Blue and orange are the Okabe-Ito pair, readable with colour blindness.
+// under the frame (workspaceCaption) warns when it doesn't fit. Blue and orange are the Okabe-Ito pair, readable with colour blindness.
 // a: { tol, rect: { w, h } | null, job: checkJob() result | null, note: string | null (shown instead),
 //      hanging: the sled's mass in kg on a vertical frame, else null }
+const WS_OK = "#56b4e9", WS_BAD = "#e69f00";
 function accuracyOverlay(a, X, Y) {
-  const OK = "#56b4e9", BAD = "#e69f00";
-  // right-aligned under the frame, clear of the log, which sits over the drawing's left side
-  const msg = (t, c = "var(--muted)") => `<text x="380" y="258" text-anchor="end" fill="${c}" stroke="var(--panel)" stroke-width="3" ` +
-    `stroke-linejoin="round" paint-order="stroke" font-family="var(--font-mono)" font-size="9">${t}</text>`;
-  if (a.note) return msg(a.note);
+  if (a.note) return "";
   const r = a.rect, rect = r && r.w ? `<rect x="${X(-r.w / 2).toFixed(1)}" y="${Y(r.h / 2).toFixed(1)}" width="${(X(r.w / 2) - X(-r.w / 2)).toFixed(1)}" ` +
-    `height="${(Y(-r.h / 2) - Y(r.h / 2)).toFixed(1)}" fill="${OK}" fill-opacity=".06" stroke="${OK}" stroke-width="1.5" stroke-dasharray="2 4"><title>Cuts land within ±${a.tol} mm here (estimate)</title></rect>` : "";
-  const area = r && r.w ? `${Math.round(r.w)} × ${Math.round(r.h)} mm` : "none";
-  if (!a.job) return rect + msg(`Workspace at ±${a.tol} mm: ${area} (${a.hanging ? `est., ${a.hanging} kg sled` : "estimate"})`);
+    `height="${(Y(-r.h / 2) - Y(r.h / 2)).toFixed(1)}" fill="${WS_OK}" fill-opacity=".06" stroke="${WS_OK}" stroke-width="1.5" stroke-dasharray="2 4"><title>Cuts land within ±${a.tol} mm here (estimate)</title></rect>` : "";
+  if (!a.job) return rect;
   const seg = (p) => p.points.map((q, i) => `${i ? "L" : "M"}${X(q.x).toFixed(1)} ${Y(q.y).toFixed(1)}`).join("");
   const path = (ok) => a.job.pieces.filter((p) => p.ok === ok).map(seg).join("");
-  const job = `<path d="${path(true)}" fill="none" stroke="${OK}" stroke-width="1.5"/>` +
-    `<path d="${path(false)}" fill="none" stroke="${BAD}" stroke-width="2.5" stroke-dasharray="5 3"/>`;
-  const fits = a.job.outside === 0;
+  return rect + `<path d="${path(true)}" fill="none" stroke="${WS_OK}" stroke-width="1.5"/>` +
+    `<path d="${path(false)}" fill="none" stroke="${WS_BAD}" stroke-width="2.5" stroke-dasharray="5 3"/>`;
+}
+
+// The line that goes with the overlay, shown as a small caption at the drawing's bottom right (not in the SVG, so
+// it keeps its size and sits at the panel's edge): the workspace size, a warning when the job leaves it, or why there's none.
+export function workspaceCaption(a) {
+  if (!a) return null;
+  if (a.note) return { text: a.note, colour: "var(--muted)" };
+  const r = a.rect;
+  // A job that fits needs no message: the caption stays the estimate. Only a job that leaves the workspace says so.
+  if (!a.job || a.job.outside === 0) return { text: `Workspace Estimate: ${r && r.w ? `${Math.round(r.w)} × ${Math.round(r.h)} mm` : "none"}` +
+    (a.hanging ? ` (${a.hanging} kg sled)` : ""), colour: "var(--muted)" };
   const worst = Number.isFinite(a.job.worst) ? `worst ±${a.job.worst.toFixed(1)} mm` : "past the frame";
   const some = a.job.pieces.some((p) => p.ok) ? "partly " : "";
-  return rect + job + msg(fits ? `Job fits the ±${a.tol} mm workspace` : `Job ${some}outside ±${a.tol} mm (${worst})`, fits ? OK : BAD);
+  return { text: `Job ${some}outside ±${a.tol} mm (${worst})`, colour: WS_BAD };
 }
 
 // lengths: when given, each belt shows its live length (the Belts toggle).
