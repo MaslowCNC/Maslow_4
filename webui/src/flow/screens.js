@@ -46,7 +46,7 @@ export const SCREENS = {
   measure: { mode: "Setup", tone: T.setup, sub: "Measure the tool", step: 5, msg: "Measure how far the bit sticks out of the spindle socket, then enter it" },
   toolload: { mode: "Setup", tone: T.setup, sub: "Load the tool", name: "Load the tool", step: 5, msg: "Put the bit back in at the stick-out you measured. The device detects it when the bit breaks the beam" },
   zsetting: { mode: "Setup", tone: T.setup, sub: "Setting Z", step: 5, moving: true, msg: "Setting Z from the measured stick-out" },
-  secure: { mode: "Setup", tone: T.setup, sub: "Secure the work piece", step: 6, msg: "Enter the stock thickness and make sure the work piece is clamped down" },
+  secure: { mode: "Setup", tone: T.setup, sub: "Secure the work piece", step: 6, msg: "Make sure the work piece is clamped down" },
   releasing: { mode: "Setup", tone: T.setup, sub: "Tension released", step: 6, nopos: true, msg: "The belts are slack so you can reach the work piece. Apply tension again once it's secure" },
   choosefile: { mode: "Setup", tone: T.setup, sub: "Choose a job file", step: 7, msg: "Tool, Z and work piece are ready. Choose what to cut" },
   ready: { mode: "Ready to cut", tone: T.ready, sub: "", msg: "Set home XY, trace the boundary if you like, then run" },
@@ -124,6 +124,6 @@ export const STEP_HELP = [
   ["Keep clear of the sled and belts.", "The sled moves to a grid of points and measures each one. This takes about 11 minutes.", "If it fails, check that each belt is hooked to its anchor, then try again."],
   ["The device raises the spindle through the light beam to check for a bit.", "If a bit is found, say whether you've set Z for this tool.", "If none is found, measure a tool to load, or continue without one."],
   ["Press Remove tool. The spindle rises so the bit can come out, then take it out.", "Measure how far it sticks out of the spindle socket, from the socket face to the tip, and enter it.", "Load it back in at that stick-out and tighten the collet. The device detects it when the bit breaks the light beam.", "Z is set from the measurement."],
-  ["Enter the stock thickness.", "Clamp or screw the work piece down so it can't move.", "Belts too tight to reach the clamps? Release tension, secure the work piece, then apply tension again."],
+  ["Clamp or screw the work piece down so it can't move.", "Belts too tight to reach the clamps? Release tension, secure the work piece, then apply tension again."],
   ["Upload a G-code file (.nc), or choose one already on the device.", "Check the preview fits on the work piece."]
 ];

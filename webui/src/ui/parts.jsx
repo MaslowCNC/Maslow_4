@@ -1,6 +1,7 @@
 import { useState } from "preact/hooks";
 import { STEPS, SCREENS, isSetup } from "../flow/screens.js";
-import { stepArt, visSvg } from "../art.js";
+import { stepArt, visSvg, frameMap, toolpathSvg } from "../art.js";
+import { makeFrame, accuracyMap, safeRect, checkJob, TOLERANCE } from "../accuracy.js";
 import logo from "../assets/maslow-logo.webp";
 
 // A top-bar button. b.temp marks one that exists only until the firmware rewrite is finished: it shows orange,
@@ -34,13 +35,57 @@ export const StepArt = ({ step, d, class: c = "art" }) =>
 // showLengths: label each belt with its live length (the Belts toggle). A length is unknown before the machine
 // knows it (Maslow state 0, or "?" in the report's BL).
 // showCurrents: a ring at each anchor for its motor's current (the Motors toggle), in mA from the report's MC.
-export const Frame = ({ k, d, showLengths = false, showCurrents = false }) => {
+// showWorkspace: the area where cuts land within the tolerance (mm, Settings → Frame and belts) and whether the
+// chosen job fits it (the Workspace toggle), from the anchors.
+export const Frame = ({ k, d, showLengths = false, showCurrents = false, showWorkspace = false, tolerance = TOLERANCE }) => {
   const s = SCREENS[k];
   const lengths = showLengths ? d.belts.map((v, i) => d.maslow === 0 || d.beltUnknown?.[i] ? null : v) : null;
   const mc = d.motorCurrent;
   const currents = showCurrents ? (mc ? [mc.tl, mc.tr, mc.bl, mc.br].map(adcToMilliamps) : [null, null, null, null]) : null;
-  return <Svg class="framesvg" html={visSvg(k, s, d.pos, d.wco, lengths, currents)} />;
+  const acc = accuracyFor(d, tolerance);
+  return <Svg class="framesvg" html={visSvg(k, s, d.pos, d.wco, lengths, currents, showWorkspace ? acc.overlay : null, acc.size,
+    toolpathFor(d, acc.size))} />;
 };
+
+// The chosen file's toolpath, kept until the file, the work offset or the scale change. While its job runs, the moves
+// up to the running line show as cut; that part is redrawn at most once a second, as a big file's path is large.
+let pathCache = { key: null, g: null, done: null, at: 0, value: "" };
+function toolpathFor(d, size) {
+  const g = d.gcode?.status === "ready" ? d.gcode : null;
+  if (!g) return "";
+  const base = (f) => String(f || "").split("/").pop();   // the job's file is a bare name; the chosen file may be a path
+  const done = d.job && base(d.job.file) === base(g.file) ? d.job.line : null;
+  const key = JSON.stringify([d.wco.x, d.wco.y, size, done == null]);
+  const now = Date.now();
+  if (g !== pathCache.g || key !== pathCache.key || (done !== pathCache.done && now - pathCache.at >= 1000)) {
+    const { mapX, mapY } = frameMap(size);
+    pathCache = { key, g, done, at: now, value: toolpathSvg(g.moves, d.wco, mapX, mapY, done) };
+  }
+  return pathCache.value;
+}
+
+// The accuracy map takes a few ms, so it's kept until the anchors, the spoil board or the tolerance change
+let accCache = { key: null, value: null };
+function accuracyFor(d, tol) {
+  const f = d.frame;
+  // The real machine reports the anchors a moment after connecting: until then there's nothing to work out
+  if (!f) return { size: null, overlay: { note: "The workspace needs the anchors" } };
+  const key = JSON.stringify([f, d.workArea?.spoil, tol]);
+  if (key !== accCache.key) {
+    const frame = f && makeFrame({ ...f, spoil: d.workArea?.spoil ?? 0 });
+    const map = frame && !f.vertical ? accuracyMap(frame) : null;
+    accCache = { key, value: { frame, map, rect: map && safeRect(map, tol) } };
+  }
+  const { frame, map, rect } = accCache.value;
+  const size = frame ? { w: frame.width, h: frame.height } : null;
+  if (!frame) return { size, overlay: { note: "The workspace needs the anchors" } };
+  if (f.vertical) return { size, overlay: { note: "The workspace isn't worked out for a vertical frame yet" } };
+  // The job's extent is in work coordinates; machine = work + WCO
+  const e = d.gcode?.status === "ready" ? d.gcode.extent : null, w = d.wco;
+  const job = e && e.max.x > e.min.x && e.max.y > e.min.y
+    ? checkJob(map, { min: { x: e.min.x + w.x, y: e.min.y + w.y }, max: { x: e.max.x + w.x, y: e.max.y + w.y } }, tol) : null;
+  return { size, overlay: { tol, rect, job } };
+}
 
 // Work position (from the user's home) and machine position (from the anchors). WPos = MPos − WCO.
 export const workPos = (d) => ({ x: d.pos.x - d.wco.x, y: d.pos.y - d.wco.y, z: d.pos.z - d.wco.z });
@@ -71,43 +116,51 @@ export function jogLock(k, d) {
 const NotYetBtn = ({ d, id, label, send }) => <button class="btn ghost" type="button" disabled={!!d.notYet?.[id]}
   title={d.notYet?.[id]} onClick={() => send(id)}>{label}</button>;
 
-const STEP_SIZES = [5, 10];
+// Chunky jog arrows: one shape, turned for each direction (0° points up)
+const Arrow = ({ deg }) => <svg class="jarrow" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" style={`transform:rotate(${deg}deg)`}>
+  <path d="M12 3 L21 13 H15.5 V21 H8.5 V13 H3 Z" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" /></svg>;
+const House = () => <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M3 11.5 12 4l9 7.5" /><path d="M5.5 10v9.5h4.5V14h4v5.5h4.5V10" /></svg>;
+
+// The XY jog directions: [dx, dy, arrow angle, axis label]. The straight ones say which way the machine moves.
+const JOG_DIRS = [[-1, 1, -45, ""], [0, 1, 0, "+Y"], [1, 1, 45, ""], [-1, 0, -90, "−X"], null, [1, 0, 90, "+X"],
+  [-1, -1, -135, ""], [0, -1, 180, "−Y"], [1, -1, 135, ""]];
+const DIR_NAMES = ["Up left", "Up", "Up right", "Left", "", "Right", "Down left", "Down", "Down right"];
+
 export function JogPad({ k, d, send }) {
-  // A step size is one of the presets, or "custom": the user's own value from the box at the end (the default, 10 mm)
-  const [choice, setChoice] = useState("custom");
-  const [custom, setCustom] = useState("10");
-  const customMm = parseFloat(custom);
-  const size = choice === "custom" ? (customMm > 0 ? customMm : 0) : choice;
-  // Z has its own step, typed between Z+ and Z−; the chips above only set the XY step
+  // One XY step: the user's own value (10 mm to start). Z has its own step, typed between Z+ and Z−.
+  const [step, setStep] = useState("10");
+  const size = parseFloat(step) > 0 ? parseFloat(step) : 0;
   const [zStep, setZStep] = useState("5");
   const zMm = parseFloat(zStep) > 0 ? parseFloat(zStep) : 0;
   const lock = jogLock(k, d);
   const j = (dx, dy) => send("jog", { dx: dx * size, dy: dy * size, dz: 0 });
   const jz = dir => send("jog", { dx: 0, dy: 0, dz: dir * zMm });
   return <div class="jogwrap">
-    <div class="chips">{STEP_SIZES.map(v => <button type="button" class={v === choice ? "on" : ""} onClick={() => setChoice(v)}>{v}</button>)}
-      <label class={`chipin${choice === "custom" ? " on" : ""}`}><input type="text" inputmode="decimal" value={custom} aria-label="Your own XY step size in mm"
-        onFocus={() => setChoice("custom")} onClick={() => setChoice("custom")} onInput={e => { setCustom(e.currentTarget.value); setChoice("custom"); }} /><span>mm</span></label></div>
+    <div class="jogtop">
+      <label class="chipin on"><span>Step</span><input type="text" inputmode="decimal" value={step} aria-label="XY step size in mm"
+        onInput={e => setStep(e.currentTarget.value)} /><span>mm</span></label>
+      <NotYetBtn d={d} id="rehomeZ" label="Home Z" send={send} />
+      <NotYetBtn d={d} id="park" label="Park" send={send} />
+    </div>
     <div class="compass">
-      <div class="xy">
-        <button type="button" aria-label="Up left" onClick={() => j(-1, 1)}>↖</button><button type="button" aria-label="Up" onClick={() => j(0, 1)}>↑</button>
-        <button type="button" aria-label="Up right" onClick={() => j(1, 1)}>↗</button>
-        <button type="button" aria-label="Left" onClick={() => j(-1, 0)}>←</button><button type="button" class="home" title="Go to your home (work 0, 0)" onClick={() => send("jog", { dx: d.wco.x - d.pos.x, dy: d.wco.y - d.pos.y })}>HOME</button>
-        <button type="button" aria-label="Right" onClick={() => j(1, 0)}>→</button>
-        <button type="button" aria-label="Down left" onClick={() => j(-1, -1)}>↙</button><button type="button" aria-label="Down" onClick={() => j(0, -1)}>↓</button>
-        <button type="button" aria-label="Down right" onClick={() => j(1, -1)}>↘</button>
+      <div class="xy">{JOG_DIRS.map((v, i) => v
+        ? <button type="button" aria-label={`${DIR_NAMES[i]} ${size} mm`} disabled={!size} onClick={() => j(v[0], v[1])}>
+            <Arrow deg={v[2]} />{v[3] && <span class="jlabel">{v[3]}</span>}</button>
+        : <button type="button" class="home" aria-label="Go to your home (work 0, 0)" title="Go to your home (work 0, 0)"
+            onClick={() => send("jog", { dx: d.wco.x - d.pos.x, dy: d.wco.y - d.pos.y })}><House /></button>)}
       </div>
       <div class="zcol">
-        <button type="button" class="z" aria-label={`Z up ${zMm} mm`} disabled={!zMm} onClick={() => jz(1)}>Z+</button>
+        <button type="button" class="z" aria-label={`Z up ${zMm} mm`} disabled={!zMm} onClick={() => jz(1)}><Arrow deg={0} /><span class="jlabel">+Z</span></button>
         <label class="zstep"><input type="text" inputmode="decimal" value={zStep} aria-label="Z step size in mm"
           onInput={e => setZStep(e.currentTarget.value)} /><span>mm</span></label>
-        <button type="button" class="z" aria-label={`Z down ${zMm} mm`} disabled={!zMm} onClick={() => jz(-1)}>Z−</button>
+        <button type="button" class="z" aria-label={`Z down ${zMm} mm`} disabled={!zMm} onClick={() => jz(-1)}><Arrow deg={180} /><span class="jlabel">−Z</span></button>
       </div>
     </div>
     <PosReadout d={d} nopos={!!lock && SCREENS[k].nopos} />
+    {/* Home Z finds the top of travel (the spindle's light beam); Set Z makes where the bit is now work Z 0 */}
     <div class="row"><NotYetBtn d={d} id="setHomeXY" label="Set home XY" send={send} />
       <NotYetBtn d={d} id="setZ" label="Set Z" send={send} /></div>
-    <div class="row"><NotYetBtn d={d} id="park" label="Park" send={send} /></div>
     {lock && <div class="locked"><div><b>{lock[0]}</b><span>{lock[1]}</span></div></div>}
   </div>;
 }

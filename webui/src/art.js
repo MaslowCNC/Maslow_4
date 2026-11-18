@@ -1,4 +1,5 @@
 import { STEPS } from "./flow/screens.js";
+import { arcPoints } from "./gcode/reader.js";
 
 // Step graphics and the frame drawing, carried over from the mockup. They return SVG markup as strings.
 export function stepArt(i) {
@@ -27,7 +28,8 @@ export function stepArt(i) {
   return `<div class="art"><svg viewBox="0 0 260 120" role="img" aria-label="${STEPS[i]}">${defs}${art}</svg></div>`;
 }
 
-// Belt lengths as labels on the belts: lengths = [tl, tr, bl, br] in mm, null where unknown
+// Belt lengths as labels on the belts: lengths = [tl, tr, bl, br] in mm, null where unknown. Each number lies along
+// its belt, on the line, turned to read left to right, with a halo in the background colour instead of a box.
 function beltLabels(lengths, target) {
   const anchors = [[30, 30], [380, 30], [30, 240], [380, 240]];
   return anchors.map(([ax, ay], i) => {
@@ -37,9 +39,12 @@ function beltLabels(lengths, target) {
     // in that the left-hand labels clear the log overlay
     const t = target.onBelt ? 0.65 : 0.6;
     const x = ax + (target.x - ax) * t, y = ay + (target.y - ay) * t;
-    const w = text.length * 6.4 + 10;
-    return `<g><rect x="${(x - w / 2).toFixed(1)}" y="${(y - 9).toFixed(1)}" width="${w.toFixed(1)}" height="17" rx="4" fill="var(--panel)" fill-opacity=".92" stroke="var(--lilac)" stroke-width="1"/>` +
-      `<text x="${x.toFixed(1)}" y="${(y + 4).toFixed(1)}" text-anchor="middle" fill="var(--text)" font-family="var(--font-mono)" font-size="11">${text}</text></g>`;
+    let angle = Math.atan2(target.y - ay, target.x - ax) * 180 / Math.PI;
+    if (angle > 90) angle -= 180;
+    if (angle < -90) angle += 180;
+    return `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" transform="rotate(${angle.toFixed(1)} ${x.toFixed(1)} ${y.toFixed(1)})" ` +
+      `text-anchor="middle" dominant-baseline="central" fill="var(--text)" stroke="var(--panel)" stroke-width="4" ` +
+      `stroke-linejoin="round" paint-order="stroke" font-family="var(--font-mono)" font-size="11">${text}</text>`;
   }).join("");
 }
 
@@ -61,25 +66,84 @@ function currentRings(currents) {
   }).join("");
 }
 
+// The workspace (webui/src/accuracy.js) as a dotted outline: the largest rectangle around the centre where cuts
+// land within the tolerance. The job's outline is drawn over it, orange and dashed where it leaves, and one line
+// under the frame says whether the job fits. Blue and orange are the Okabe-Ito pair, readable with colour blindness.
+// a: { tol, rect: { w, h } | null, job: checkJob() result | null, note: string | null (shown instead) }
+function accuracyOverlay(a, X, Y) {
+  const OK = "#56b4e9", BAD = "#e69f00";
+  // right-aligned under the frame, clear of the log, which sits over the drawing's left side
+  const msg = (t, c = "var(--muted)") => `<text x="380" y="258" text-anchor="end" fill="${c}" stroke="var(--panel)" stroke-width="3" ` +
+    `stroke-linejoin="round" paint-order="stroke" font-family="var(--font-mono)" font-size="9">${t}</text>`;
+  if (a.note) return msg(a.note);
+  const r = a.rect, rect = r && r.w ? `<rect x="${X(-r.w / 2).toFixed(1)}" y="${Y(r.h / 2).toFixed(1)}" width="${(X(r.w / 2) - X(-r.w / 2)).toFixed(1)}" ` +
+    `height="${(Y(-r.h / 2) - Y(r.h / 2)).toFixed(1)}" fill="${OK}" fill-opacity=".06" stroke="${OK}" stroke-width="1.5" stroke-dasharray="2 4"><title>Cuts land within ±${a.tol} mm here (estimate)</title></rect>` : "";
+  const area = r && r.w ? `${Math.round(r.w)} × ${Math.round(r.h)} mm` : "none";
+  if (!a.job) return rect + msg(`Workspace at ±${a.tol} mm: ${area} (estimate)`);
+  const seg = (p) => p.points.map((q, i) => `${i ? "L" : "M"}${X(q.x).toFixed(1)} ${Y(q.y).toFixed(1)}`).join("");
+  const path = (ok) => a.job.pieces.filter((p) => p.ok === ok).map(seg).join("");
+  const job = `<path d="${path(true)}" fill="none" stroke="${OK}" stroke-width="1.5"/>` +
+    `<path d="${path(false)}" fill="none" stroke="${BAD}" stroke-width="2.5" stroke-dasharray="5 3"/>`;
+  const fits = a.job.outside === 0;
+  const worst = Number.isFinite(a.job.worst) ? `worst ±${a.job.worst.toFixed(1)} mm` : "past the frame";
+  const some = a.job.pieces.some((p) => p.ok) ? "partly " : "";
+  return rect + job + msg(fits ? `Job fits the ±${a.tol} mm workspace` : `Job ${some}outside ±${a.tol} mm (${worst})`, fits ? OK : BAD);
+}
+
 // lengths: when given, each belt shows its live length (the Belts toggle).
 // currents: when given, each motor shows its current as a ring at its anchor (the Motors toggle).
-export function visSvg(k, s, pos = { x: 0, y: 0 }, home = { x: 0, y: 0 }, lengths = null, currents = null) {
+// accuracy: when given, the workspace and the job check (the Workspace toggle), see accuracyOverlay.
+// frameSize: { w, h } in mm when the anchors are known; the drawn anchors then stand for the real ones, so the sled
+// and the overlay are to scale. Without it the drawing assumes 4 mm per unit.
+// Machine coordinates (mm, 0 0 at the frame centre) to drawing units
+export function frameMap(frameSize = null) {
+  const sx = frameSize ? 350 / frameSize.w : 1 / 4, sy = frameSize ? 210 / frameSize.h : 1 / 4, cy = frameSize ? 135 : 140;
+  return { mapX: (x) => 205 + x * sx, mapY: (y) => cy - y * sy };
+}
+
+// The chosen file's cutting moves (readGcode() moves, work coordinates) as SVG paths, moved by the work offset.
+// Rapids and G53 moves are left out. Moves on lines up to `done` (the running job's line) are drawn as cut, the rest
+// fainter; done = null draws the whole file the same. Points closer than half a drawing unit are merged, so a big
+// file stays a few thousand points.
+export function toolpathSvg(moves, wco, X, Y, done = null) {
+  const parts = { cut: [], todo: [] };
+  let last = null, lastKey = null, px = 0, py = 0;
+  for (const mv of moves) {
+    if (mv.rapid || mv.machine) { last = null; continue; }
+    const key = done != null && mv.line > done ? "todo" : "cut";
+    const pts = mv.arc ? arcPoints(mv, 2) : [mv.from, mv.to];
+    const d = parts[key];
+    // A move that carries on from the previous one in the same style continues its path
+    const goesOn = last && key === lastKey && last.x === mv.from.x && last.y === mv.from.y;
+    pts.forEach((p, i) => {
+      const x = X(p.x + wco.x), y = Y(p.y + wco.y);
+      if (i === 0) { if (!goesOn) { d.push(`M${x.toFixed(1)} ${y.toFixed(1)}`); px = x; py = y; } return; }
+      if (Math.abs(x - px) < 0.5 && Math.abs(y - py) < 0.5) return;
+      d.push(`L${x.toFixed(1)} ${y.toFixed(1)}`); px = x; py = y;
+    });
+    last = mv.to; lastKey = key;
+  }
+  const path = (d, attrs) => (d.length ? `<path d="${d.join("")}" fill="none" stroke-linejoin="round" ${attrs}/>` : "");
+  return `<g><title>The chosen file's cutting moves</title>` +
+    path(parts.todo, 'stroke="var(--muted)" stroke-opacity=".55" stroke-width="1"') +
+    path(parts.cut, `stroke="var(--lilac)" stroke-width="${done != null ? 1.8 : 1.3}"`) + "</g>";
+}
+
+// toolpath: an SVG string from toolpathSvg (drawn with frameMap(frameSize)), under the workspace overlay.
+export function visSvg(k, s, pos = { x: 0, y: 0 }, home = { x: 0, y: 0 }, lengths = null, currents = null, accuracy = null, frameSize = null, toolpath = "") {
   // The sled follows the machine position, scaled to the drawing. The cross marks the user's home (work 0, 0);
   // it's drawn over the sled and reaches past it, so it still shows when the sled sits on home.
-  const toX = (x) => Math.max(40, Math.min(370, 205 + x / 4)), toY = (y) => Math.max(40, Math.min(230, 140 - y / 4));
-  const sledX = toX(pos.x), sledY = toY(pos.y), hx = toX(home.x), hy = toY(home.y), unk = s.nopos && !s.moving, done = ["cutting", "stopped", "spindle"].includes(k);
+  const { mapX, mapY } = frameMap(frameSize);
+  const toX = (x) => Math.max(40, Math.min(370, mapX(x))), toY = (y) => Math.max(40, Math.min(230, mapY(y)));
+  const sledX = toX(pos.x), sledY = toY(pos.y), hx = toX(home.x), hy = toY(home.y), unk = s.nopos && !s.moving;
   const loose = s.nopos && s.moving;
   const belts = [[30, 30], [380, 30], [30, 240], [380, 240]].map(([x, y]) =>
     `<line x1="${x}" y1="${y}" x2="${sledX}" y2="${sledY}" stroke="${loose ? "var(--setup)" : "#8f8a97"}" stroke-width="1.4" ${loose ? 'stroke-dasharray="5 4"' : ""}/>`).join("");
   const anchors = [[30, 30], [380, 30], [30, 240], [380, 240]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="6" fill="var(--node)"/>`).join("");
-  const path = "M130 90 H280 V190 H130 Z M170 120 H240 V160 H170 Z";
   return `<svg viewBox="0 0 410 270" role="img" aria-label="Device frame with the sled and toolpath" class="${s.stale ? "stale" : ""}">
     <rect x="30" y="30" width="350" height="210" fill="none" stroke="var(--line2)" stroke-dasharray="3 5"/>
-    <rect x="110" y="72" width="190" height="136" fill="var(--input)" stroke="var(--line2)"/>
-    <path d="${path}" fill="none" stroke="var(--line2)" stroke-width="2"/>
-    ${done ? `<path d="M130 90 H280 V190 H210" fill="none" stroke="var(--lilac)" stroke-width="3"/>` : ""}
-    ${k === "success" || k === "parking" ? `<path d="${path}" fill="none" stroke="var(--lilac)" stroke-width="3"/>` : ""}
-    ${k === "tracing" ? `<path d="M126 86 H284 V194 H200" fill="none" stroke="var(--ready)" stroke-width="2.5" stroke-dasharray="6 4"/>` : ""}
+    ${toolpath}
+    ${accuracy ? accuracyOverlay(accuracy, mapX, mapY) : ""}
     ${unk ? "" : belts}${anchors}${currents ? currentRings(currents) : ""}
     ${unk ? `<text x="205" y="62" text-anchor="middle" fill="var(--muted)" font-family="var(--font-mono)" font-size="12">Sled position unknown</text>` : ""}
     <rect ${unk ? 'opacity="0"' : ""} x="${sledX - 13}" y="${sledY - 13}" width="26" height="26" rx="6" fill="var(--panel)" stroke="var(--lilac)" stroke-width="2"/>

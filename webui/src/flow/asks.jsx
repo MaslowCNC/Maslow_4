@@ -14,14 +14,6 @@ function StickoutInput({ onSave }) {
   </span>;
 }
 
-function StockInput({ value, onSecure }) {
-  const [v, setV] = useState(String(value));
-  return <span class="binput">
-    <label class="field"><span>Stock</span><input value={v} onInput={e => setV(e.currentTarget.value)} aria-label="Stock thickness in mm" /> mm</label>
-    <button class="btn" type="button" onClick={() => { const n = parseFloat(v); if (n >= 0) onSecure(n); }}>It's secure</button>
-  </span>;
-}
-
 function FilePicker({ files, onPick, onUpload }) {
   const [v, setV] = useState(files[0]?.name || "");
   return <span class="binput">
@@ -96,9 +88,10 @@ function askFor(k, ctx) {
     case "toolload": return { text: `Load the bit back in at ${a.stickout} mm stick-out and tighten the collet. The device detects it.`,
       buttons: [B("Measure again", () => setA({ stickout: null }), "ghost")] };
     case "zsetting": return { text: "Setting Z from the measured stick-out.", buttons: [stop()] };
-    case "secure": return { text: "Enter the stock thickness. Is your work piece set up and secure?",
-      buttons: [B("Release tension", () => { setA({ securing: true }); send("release"); }, "ghost")],
-      input: <StockInput value={d.stock} onSecure={n => { mark(6); send("setStock", { stock: n }); setA({ secured: true }); }} /> };
+    // No stock thickness here: calibration doesn't use it yet, so it lives in Settings for anyone who wants to set it
+    case "secure": return { text: "Is your work piece set up and secure?",
+      buttons: [B("Release tension", () => { setA({ securing: true }); send("release"); }, "ghost"),
+        B("It's secure", () => { mark(6); setA({ secured: true }); })] };
     case "releasing": return { text: "Belts are slack. Secure the work piece, then apply tension again.", buttons: [B("Apply tension", () => send("tension"))] };
     case "choosefile": return { text: "Choose a job file, or upload one.", buttons: [],
       input: <FilePicker files={d.files} onPick={f => { mark(7); setA({ file: f }); }}

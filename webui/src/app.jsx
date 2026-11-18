@@ -4,6 +4,7 @@ import { createMachine } from "./device/machine.js";
 import { derive, freshAnswers, isSetup } from "./flow/screens.js";
 import { Desktop } from "./ui/desktop.jsx";
 import { Phone } from "./ui/phone.jsx";
+import { TOLERANCE } from "./accuracy.js";
 import { Settings } from "./ui/modals.jsx";
 import { SimPanel } from "./ui/sim.jsx";
 
@@ -27,18 +28,28 @@ function useNarrow(px = 760) {
   return narrow;
 }
 
+// The workspace tolerance (mm) is a display preference, remembered in this browser only. Storage can be blocked
+// (private windows), so it falls back to the default.
+const TOL_KEY = "maslow.workspaceTolerance";
+function useTolerance() {
+  const [tol, setTol] = useState(() => { try { const v = parseFloat(localStorage.getItem(TOL_KEY)); return v > 0 ? v : TOLERANCE; } catch { return TOLERANCE; } });
+  const set = (v) => { setTol(v); try { localStorage.setItem(TOL_KEY, String(v)); } catch { /* not remembered */ } };
+  return [tol, set];
+}
+
 export function App() {
   const d = useDevice();
   const [a, setAnswers] = useState(freshAnswers);
   const [modal, setModal] = useState(null);           // "settings"
   const [theme, setTheme] = useState("dark");
+  const [tolerance, setTolerance] = useTolerance();
   const narrow = useNarrow();
 
   const setA = (patch) => setAnswers(prev => ({ ...prev, ...patch }));
   const mark = (step) => setAnswers(prev => prev.ran.includes(step) ? prev : { ...prev, ran: [...prev.ran, step] });
   const send = (action, payload) => device.send(action, payload);
   const k = derive(d, a);
-  const ctx = { d, a, setA, send, mark };
+  const ctx = { d, a, setA, send, mark, tolerance, setTolerance };
 
   useEffect(() => { send("connect"); }, []);
   // The device reads the chosen file (for the preview and Trace boundary) whenever the choice changes

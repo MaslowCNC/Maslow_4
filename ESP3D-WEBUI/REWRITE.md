@@ -166,7 +166,7 @@ These are FluidNC's `MPos`, `WCO` and `WPos = MPos − WCO`.
 
 - The mode and Stop are always in view.
 - **Prompts are completed where they're asked.** If the top bar asks for something, it can be done
-  in the top bar: the stick-out, the stock thickness, the job file. Bigger tasks
+  in the top bar: the stick-out, the job file. Bigger tasks
   open a pop-up from the bar. On a phone, the header and the Setup section play this part.
 - **The setup bar expands** with an arrow on its bottom edge: a big step graphic beside fuller
   numbered instructions. It's closed by default. The big graphic is where the line art for
@@ -182,7 +182,7 @@ These are FluidNC's `MPos`, `WCO` and `WPos = MPos − WCO`.
 | State | The mode and every machine action in a fixed order, greyed out with a reason when unavailable |
 | Device | Name, firmware version and update, reboot |
 | Network | WiFi network, hotspot (placeholder) |
-| Frame and belts | Extend distance (0 = until Done extending), spoil board thickness, last stock thickness, work area (automatic), anchors |
+| Frame and belts | Extend distance (0 = until Done extending), spoil board thickness, stock thickness (optional), work area (automatic), anchors |
 | Tool and Z | Last stick-out, default bit |
 | Display | Dark or light panels, units |
 | Advanced | Raw FluidNC and Maslow settings, `maslow.yaml` |
@@ -231,10 +231,12 @@ arrives. The full table of states, subheaders and actions is the UI modes map.
   `EXTENDEDOUT`, never `READY_TO_CUT` or `TENSIONED`.
 - **Extend ends when the user says the belts are attached** (Done extending; needs firmware).
   Today it ends by itself at `extendDist`.
-- **Spoil board and stock thickness** raise the sled above the frame, so the firmware adds both to
-  every anchor's height when it works out belt lengths. A wrong value costs accuracy, most near the
-  anchors. The spoil board is set in Settings › Frame and belts; the stock thickness is asked at
-  Secure the work piece, with the last value filled in.
+- **Spoil board thickness** raises the sled above the frame, so the firmware adds it to every
+  anchor's height when it works out belt lengths. A wrong value costs accuracy, most near the
+  anchors. It's set in Settings › Frame and belts.
+- **Stock thickness isn't part of setup** (decided 2026-11-13): calibration doesn't use it, so
+  Secure the work piece only asks that the work piece is clamped. It stays in Settings › Frame and
+  belts for anyone who wants to set it. Add it back to setup if calibration starts using it.
 - **The tool and Z steps.** Once the position is confirmed, the machine checks for a tool by
   itself: the spindle board raises the spindle through its top-of-travel light beam.
   - **A bit is found:** "Have you set Z for this tool?" Yes goes on; No leads to Measure the tool.
@@ -260,7 +262,7 @@ fault recovery; not after a finished or stopped job, or releasing and re-applyin
 - **Ready to cut** offers Trace boundary (optional), Run, jog and Park. Trace boundary is
   `tracePath()`; Stop leaves the machine where it stopped.
 - **Run starts the file** (decided 2026-11-13): there's no final checklist before a job. The setup
-  steps already cover the stock thickness, the work piece and the file.
+  steps already cover the work piece and the file.
 - **Job: Cutting** while a file runs. Progress is the report's running line ÷ the file's line count,
   counted from the file the preview loads; the report's `SD` percent is bytes read, not progress.
 - **Stop** (`machine.stop()`) sends 0x18, which halts at once and keeps the belt positions, then
@@ -427,8 +429,6 @@ sent only while it applies, like `STOPPED`, is preferred):
   anchors from defaults and skip Find anchors safely?
 - **Park after a successful job:** started by the UI or the firmware? It must turn the spindle off
   first.
-- **Stock thickness timing:** Apply tension uses it, but it's entered later, at Secure the work
-  piece. Does a new value need the position recomputed, or should it be asked earlier?
 - **Renaming the machine** (hostname and hotspot name): does it need a restart, and how does the
   page find the machine once `maslow.local` changes?
 - **Settings:** which take effect at once, which need a restart, and which to lock during a job.

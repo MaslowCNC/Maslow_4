@@ -17,6 +17,8 @@ const SETTINGS = {
   workW: "Maslow_Work_Area_X", workH: "Maslow_Work_Area_Y",
   spoil: "Maslow_spoilboardThickness", stock: "Maslow_workThickness", extend: "Maslow_Extend_Dist"
 };
+// The frame's geometry under kinematics/MaslowKinematics, in this order (readSettings)
+const FRAME_KEYS = ["tlX", "tlY", "trX", "trY", "blX", "blY", "brX", "brY", "tlZ", "trZ", "blZ", "brZ", "beltEndExtension", "armLength"];
 // The board type [ESP800] reports (firmware BoardId), as the machine's name. The Unified Control Board is the Mini's.
 const MACHINES = { maslow41: "Maslow 4.1", unified: "Maslow Mini", unified36v: "Maslow Mini 36 V" };
 
@@ -49,6 +51,7 @@ export function createMachine({ host = location.host } = {}) {
       setHomeXY: "Needs a machine.js action (G10 L20), to add with Tristan",
       setZ: "Needs a machine.js action (G10 L20), to add with Tristan",
       park: "Needs a machine.js action, to add with Tristan",
+      rehomeZ: "Needs a machine.js action for $Spindle/Home (Z homing is mo's)",
       // Extend distance 0 means "until Done extending", which today's firmware doesn't support: it would extend 0 mm
       extendUntilDone: "0 needs the Done extending firmware change. Until then, Extend stops at the distance set here."
     },
@@ -59,6 +62,7 @@ export function createMachine({ host = location.host } = {}) {
     job: null, lastJob: null, motion: null, result: null, restored: false,
     gcode: null,             // the chosen file, read: { file, status: "reading" | "ready" | "failed", detail?, ...readGcode() }
     workArea: { w: 0, h: 0, spoil: 0 }, stock: 0, anchorsSaved: true,
+    frame: null,             // { tl, tr, bl, br: [x, y] mm, z: [tl, tr, bl, br], arm: beltEndExtension + armLength, vertical }
     belts: [0, 0, 0, 0], motorCurrent: null,
     pos: { x: 0, y: 0, z: 0 }, wco: { x: 0, y: 0, z: 0 },
     files: [], log: [], pending: null
@@ -176,6 +180,19 @@ export function createMachine({ host = location.host } = {}) {
     const read = (path) => m.getSetting(path).then(Number).catch(() => null);
     const [w, h, spoil, stock, extend] = await Promise.all(Object.values(SETTINGS).map(read));
     set({ workArea: { w: w ?? 0, h: h ?? 0, spoil: spoil ?? 0 }, stock: stock ?? 0, extendDist: extend });
+    await readFrame();
+  }
+
+  // The anchors (the calibrated ones once Find anchors has run) and orientation, for the accuracy overlay. Read on
+  // connect and again when a Find anchors run ends.
+  async function readFrame() {
+    const read = (path) => m.getSetting(path).then(Number).catch(() => null);
+    const K = (n) => read(`kinematics/MaslowKinematics/${n}`);
+    const v = await Promise.all(FRAME_KEYS.map(K));
+    const vertical = await m.getSetting("Maslow_vertical").then((x) => /^(true|1)$/i.test(x.trim())).catch(() => false);
+    if (v.some((x) => x == null)) { set({ frame: null }); return; }
+    const [tlX, tlY, trX, trY, blX, blY, brX, brY, tlZ, trZ, blZ, brZ, ext, arm] = v;
+    set({ frame: { tl: [tlX, tlY], tr: [trX, trY], bl: [blX, blY], br: [brX, brY], z: [tlZ, trZ, blZ, brZ], arm: ext + arm, vertical } });
   }
 
   // Which machine this is: [ESP800] reports the board ("board:unified"). Over HTTP, like the current UI.
@@ -290,7 +307,11 @@ export function createMachine({ host = location.host } = {}) {
     await import("../../../ESP3D-WEBUI/www/js/wscommands.js");
     await import("../../../ESP3D-WEBUI/www/js/machine.js");
     m = globalThis.machine;
-    m.on("state", (ms) => set(fromMachine(ms)));
+    m.on("state", (ms) => {
+      const wasFinding = s.maslow === 6;   // CALIBRATION_IN_PROGRESS
+      set(fromMachine(ms));
+      if (wasFinding && s.maslow !== 6) readFrame();
+    });
     setInterval(health, 1000);
     connect();
   }

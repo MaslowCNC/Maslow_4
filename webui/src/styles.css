@@ -505,3 +505,13 @@ html, body { margin: 0; }
   .files li .fbtn { flex: 1; min-height: 44px; }
   .ftrash { position: static; transform: none; background: none; padding: 0 12px; min-width: 44px; justify-content: center; }
 }
+
+/* Jog pad: one step box with Set Z and Park beside it; chunky arrows that name the axis they move */
+.jogtop { display: flex; gap: 6px; align-items: stretch; }
+.jogtop .chipin { flex: 1; min-height: 36px; }
+.jogtop .btn { flex: none; }
+.compass .xy button, .compass .z { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; }
+.compass .jarrow { display: block; }
+.compass .jlabel { font: 700 11px var(--font-mono); color: var(--muted); line-height: 1; }
+.compass .home { color: var(--lilac); }
+.compass button:disabled { opacity: .4; cursor: not-allowed; }

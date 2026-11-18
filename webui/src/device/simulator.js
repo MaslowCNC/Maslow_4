@@ -51,6 +51,8 @@ function initialState() {
     machine: "Maslow Mini",       // as the real machine reports it from [ESP800]
     extendDist: 0,                // 0 = extend until the user presses Done extending
     workArea: { w: 1200, h: 1200, spoil: 12.7 },
+    // the anchors as kinematics/MaslowKinematics has them (machine.js has the same shape): a 3000 x 2100 mm frame
+    frame: { tl: [0, 2100], tr: [3000, 2100], bl: [0, 0], br: [3000, 0], z: [100, 56, 34, 78], arm: 153.4, vertical: false },
     stock: 6.35,
     anchorsSaved: true,
     belts: [0, 0, 0, 0],

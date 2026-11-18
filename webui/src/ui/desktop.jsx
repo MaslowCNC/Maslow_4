@@ -47,6 +47,7 @@ export function Desktop({ k, ctx, onSettings, overlay }) {
   const [logOpen, setLogOpen] = useState(true);
   const [showBelts, setShowBelts] = useState(false);
   const [showMotors, setShowMotors] = useState(false);
+  const [showWorkspace, setShowWorkspace] = useState(true);
   return <div class="screen app">
     {/* One card on top: the app header, a thin line, then the setup guide or the mode bar */}
     <div class="topbox" style={`--tone:${isSetup(k) ? "var(--setup)" : s.tone}`}>
@@ -54,13 +55,14 @@ export function Desktop({ k, ctx, onSettings, overlay }) {
       <TopBar k={k} ctx={ctx} onSettings={onSettings} />
     </div>
     <div class="board layout6">
-      {/* The visuals and the device state in one panel: the drawing (with the log, and belt lengths and motor currents when toggled) on
+      {/* The visuals and the device state in one panel: the drawing (with the log, and belt lengths, motor currents and the workspace when toggled) on
           top, the Status, Position and File cards along the bottom */}
       <section class="panel vis merged" style="grid-area:vis">
         <div class="tabs"><span class="on">Toolpath</span><span>Frame</span><span>3D</span><span class="tabs-gap" />
-          <Toggle on={showBelts} set={setShowBelts}>Belts</Toggle><Toggle on={showMotors} set={setShowMotors}>Motors</Toggle></div>
+          <Toggle on={showBelts} set={setShowBelts}>Belts</Toggle><Toggle on={showMotors} set={setShowMotors}>Motors</Toggle>
+          <Toggle on={showWorkspace} set={setShowWorkspace}>Workspace</Toggle></div>
         <div class="visbody">
-          <Frame k={k} d={ctx.d} showLengths={showBelts} showCurrents={showMotors} />
+          <Frame k={k} d={ctx.d} showLengths={showBelts} showCurrents={showMotors} showWorkspace={showWorkspace} tolerance={ctx.tolerance} />
           <span class="viscap">{s.nopos && s.moving ? "Position isn't live while the belts move" : s.stale ? "Last known position" : ""}</span>
           <div class="inset" style={logOpen ? "" : "bottom:auto"}><div class="ph">Log<button type="button" class="linkbtn" onClick={() => setLogOpen(!logOpen)}>{logOpen ? "collapse ▾" : "expand ▸"}</button></div>
             {logOpen && <div class="pb"><LogView d={ctx.d} /></div>}</div>

@@ -104,7 +104,8 @@ function FrameSection({ ctx, busy }) {
   const { d, send } = ctx;
   const [ext, setExt] = useState(String(d.extendDist ?? 0));
   const [spoil, setSpoil] = useState(String(d.workArea.spoil));
-  const extN = parseFloat(ext), spoilN = parseFloat(spoil);
+  const [stock, setStock] = useState(String(d.stock ?? 0));
+  const extN = parseFloat(ext), spoilN = parseFloat(spoil), stockN = parseFloat(stock);
   const extOk = extN >= 0 && !(extN === 0 && d.notYet?.extendUntilDone);
   return <><h4>Frame and belts</h4>
     <Row label="Extend distance" hint="0: the belts pay out until you press Done extending. Set a length if the machine stands vertically.">
@@ -115,7 +116,12 @@ function FrameSection({ ctx, busy }) {
     <Row label="Spoil board thickness" hint="Raises the sled, which changes the belt angles. 0 if there isn't one.">
       <input type="text" inputmode="decimal" class="mono" value={spoil} onInput={e => setSpoil(e.currentTarget.value)} style="width:90px" /> mm
       <button class="btn ghost" type="button" disabled={busy || !(spoilN >= 0) || spoilN === d.workArea.spoil} onClick={() => send("setSpoilboard", { mm: spoilN })}>Save</button></Row>
-    <Row label="Stock thickness" hint="Asked at Secure the work piece for each job."><span class="mono">{d.stock} mm</span></Row>
+    <Row label="Stock thickness" hint="Optional. Calibration doesn't use it yet.">
+      <input type="text" inputmode="decimal" class="mono" value={stock} onInput={e => setStock(e.currentTarget.value)} style="width:90px" /> mm
+      <button class="btn ghost" type="button" disabled={busy || !(stockN >= 0) || stockN === d.stock} onClick={() => send("setStock", { stock: stockN })}>Save</button></Row>
     <Row label="Work area" hint="Worked out from how far the belts extend."><span>Automatic</span></Row>
+    <Row label="Workspace tolerance" hint="The Workspace overlay shows where cuts should land within this, and whether the job stays inside. Remembered in this browser.">
+      <select value={String(ctx.tolerance)} onChange={e => ctx.setTolerance(parseFloat(e.currentTarget.value))}>
+        {[0.5, 1, 2, 3, 5].map(v => <option value={String(v)}>±{v} mm</option>)}</select></Row>
     <Row label="Anchors"><span>{d.anchorsSaved ? "Saved" : "Not measured yet"}</span></Row></>;
 }
