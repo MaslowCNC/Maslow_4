@@ -157,7 +157,6 @@
     <li>Try another USB cable or port.</li>
     <li>An update that failed part way can be run again. If the board no longer starts, run a clean install.</li>
   </ul>
-  <p>Before changing anything, the page reads the files on the board and keeps a copy of <code>maslow.yaml</code> and any other files you added. A clean install saves that copy as a download, so you can put your settings back afterwards from the web interface.</p>
 </main>
 
 <script type="module">
@@ -193,7 +192,6 @@ const STEPS = {
   full: [
     ["download", "Download the firmware"],
     ["connect", "Connect to the board"],
-    ["read", "Back up the files on the board"],
     ["erase", "Erase the board"],
     ["write", "Write the firmware and files"],
     ["restart", "Restart the board"],
@@ -271,21 +269,6 @@ function showResult(ok, html) {
 
 function escapeHtml(s) {
   return s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
-}
-
-function saveFile(name, bytes, type) {
-  const url = URL.createObjectURL(new Blob([bytes], { type }));
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = name;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 60000);
-}
-function fileLink(name, bytes, type) {
-  const url = URL.createObjectURL(new Blob([bytes], { type }));
-  return `<a href="${url}" download="${escapeHtml(name)}">${escapeHtml(name)}</a>`;
 }
 
 async function loadManifest() {
@@ -459,70 +442,6 @@ function sameBytes(a, b) {
   return true;
 }
 
-// ---------- backup zip (stored, no compression) ----------
-
-const CRC_TABLE = (() => {
-  const t = new Uint32Array(256);
-  for (let n = 0; n < 256; n++) {
-    let c = n;
-    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-    t[n] = c >>> 0;
-  }
-  return t;
-})();
-function crc32(bytes) {
-  let c = 0xffffffff;
-  for (const b of bytes) c = CRC_TABLE[(c ^ b) & 0xff] ^ (c >>> 8);
-  return (c ^ 0xffffffff) >>> 0;
-}
-
-function makeZip(files) {
-  const enc = new TextEncoder();
-  const now = new Date();
-  const time = (now.getHours() << 11) | (now.getMinutes() << 5) | (now.getSeconds() >> 1);
-  const date = ((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate();
-  const chunks = [];
-  const central = [];
-  let offset = 0;
-  for (const f of files) {
-    const name = enc.encode(f.path);
-    const crc = crc32(f.data);
-    const local = new DataView(new ArrayBuffer(30));
-    local.setUint32(0, 0x04034b50, true);
-    local.setUint16(4, 20, true);
-    local.setUint16(6, 0x0800, true); // UTF-8 names
-    local.setUint16(10, time, true);
-    local.setUint16(12, date, true);
-    local.setUint32(14, crc, true);
-    local.setUint32(18, f.data.length, true);
-    local.setUint32(22, f.data.length, true);
-    local.setUint16(26, name.length, true);
-    chunks.push(new Uint8Array(local.buffer), name, f.data);
-    const cd = new DataView(new ArrayBuffer(46));
-    cd.setUint32(0, 0x02014b50, true);
-    cd.setUint16(4, 20, true);
-    cd.setUint16(6, 20, true);
-    cd.setUint16(8, 0x0800, true);
-    cd.setUint16(12, time, true);
-    cd.setUint16(14, date, true);
-    cd.setUint32(16, crc, true);
-    cd.setUint32(20, f.data.length, true);
-    cd.setUint32(24, f.data.length, true);
-    cd.setUint16(28, name.length, true);
-    cd.setUint32(42, offset, true);
-    central.push(new Uint8Array(cd.buffer), name);
-    offset += 30 + name.length + f.data.length;
-  }
-  const cdSize = central.reduce((a, c) => a + c.length, 0);
-  const end = new DataView(new ArrayBuffer(22));
-  end.setUint32(0, 0x06054b50, true);
-  end.setUint16(8, files.length, true);
-  end.setUint16(10, files.length, true);
-  end.setUint32(12, cdSize, true);
-  end.setUint32(16, offset, true);
-  return new Blob([...chunks, ...central, new Uint8Array(end.buffer)], { type: "application/zip" });
-}
-
 // ---------- reading flash ----------
 
 // esptool-js's readFlash decodes SLIP one byte at a time into a freshly copied array (gigabytes of
@@ -635,7 +554,7 @@ const CONNECT_HELP =
 async function install(presetPort) {
   if (busy) return;
   const mode = selectedMode();
-  if (!presetPort && mode === "full" && !confirm("Erase the whole board and install from scratch?\n\nmaslow.yaml, WiFi settings and files on the board are deleted. The page saves a copy of the files first.")) return;
+  if (!presetPort && mode === "full" && !confirm("Erase the whole board and install from scratch?\n\nmaslow.yaml, WiFi settings and files on the board are deleted.")) return;
   if (!manifest) await loadManifest();
 
   let port = presetPort;
@@ -658,8 +577,6 @@ async function install(presetPort) {
   log(`Mode: ${mode === "full" ? "clean install" : "update, keep settings"}; files from ${BASE}`);
 
   let transport = null;
-  let backup = null; // { name, blob, files }
-  const day = new Date().toISOString().slice(0, 10);
 
   try {
     step("download");
@@ -688,50 +605,41 @@ async function install(presetPort) {
     if (!(parseInt(flashSize, 10) >= 8)) throw new Error(`The board has ${flashSize} of flash; the Maslow firmware needs 8MB. Nothing was changed.`);
     stepState("connect", "done", `ESP32-S3, ${flashSize} flash`);
 
-    // Read the board's filesystem: the backup, and in keep mode the files to carry over.
-    step("read");
-    const releaseNames = new Set(files.release.map((f) => f.path));
-    let current, image;
-    try {
-      current = filesystemPartition(parsePartitions(await readFlash(loader, 0x8000, 0xc00)));
-      if (current) {
-        detail("about a minute");
-        image = await readFlash(loader, current.offset, current.size, setProgress);
-      }
-    } catch (e) {
-      throw new Error(`Reading the board failed (${e.message}). Nothing was changed. Click Install to try again.`);
-    }
-    let userFiles = null;
-    if (current) {
-      try {
-        const boardFiles = await openLittlefs(files.mklfs, image);
-        log(`Board filesystem: ${boardFiles.map((f) => `${f.path} (${f.data.length})`).join(", ")}`);
-        userFiles = boardFiles.filter((f) => !releaseNames.has(f.path));
-      } catch (e) {
-        log(`Board filesystem: ${e.message}`);
-      }
-    }
-    if (userFiles === null) {
-      if (mode === "keep") {
-        throw new Error("This board has no Maslow files to keep (it looks blank, has other firmware, or its files are damaged). Nothing was changed. Choose Clean install instead.");
-      }
-      stepState("read", "warn", "no Maslow files on the board, nothing to back up");
-    } else if (userFiles.length === 0) {
-      stepState("read", "done", "no files of yours to keep");
-    } else {
-      backup = { name: `maslow-backup-${day}.zip`, blob: makeZip(userFiles), files: userFiles };
-      if (mode === "full") saveFile(backup.name, backup.blob, "application/zip");
-      const names = userFiles.map((f) => f.path).join(", ");
-      stepState("read", "done", mode === "full" ? `saved ${names} as ${backup.name}` : `keeping ${names}`);
-    }
-
     let fsImage = files.littlefs;
     if (mode === "keep") {
+      // Read the board's filesystem to carry its files over.
+      step("read");
+      const releaseNames = new Set(files.release.map((f) => f.path));
+      let current, image;
+      try {
+        current = filesystemPartition(parsePartitions(await readFlash(loader, 0x8000, 0xc00)));
+        if (current) {
+          detail("about a minute");
+          image = await readFlash(loader, current.offset, current.size, setProgress);
+        }
+      } catch (e) {
+        throw new Error(`Reading the board failed (${e.message}). Nothing was changed. Click Install to try again.`);
+      }
+      let userFiles = null;
+      if (current) {
+        try {
+          const boardFiles = await openLittlefs(files.mklfs, image);
+          log(`Board filesystem: ${boardFiles.map((f) => `${f.path} (${f.data.length})`).join(", ")}`);
+          userFiles = boardFiles.filter((f) => !releaseNames.has(f.path));
+        } catch (e) {
+          log(`Board filesystem: ${e.message}`);
+        }
+      }
+      if (userFiles === null) {
+        throw new Error("This board has no Maslow files to keep (it looks blank, has other firmware, or its files are damaged). Nothing was changed. Choose Clean install instead.");
+      }
+      stepState("read", "done", userFiles.length ? `keeping ${userFiles.map((f) => f.path).join(", ")}` : "no files of yours to keep");
+
       step("prepare");
       if (current.offset !== files.fs.offset || current.size !== files.fs.size) {
         throw new Error(
           `This board's files are stored at 0x${current.offset.toString(16)} (${current.size / 1024} KB), not where this firmware keeps them. ` +
-          "Nothing was changed. Choose Clean install; it saves a copy of your files first."
+          "Nothing was changed. Save maslow.yaml from the web interface, then choose Clean install."
         );
       }
       const wanted = [...files.release, ...userFiles];
@@ -785,7 +693,6 @@ async function install(presetPort) {
     let html = mode === "full"
       ? "<p><strong>Done.</strong> The board was erased and the new firmware is installed. Unplug the USB cable and power the Maslow on, then connect it to WiFi as in the setup guide, since the clean install removed the WiFi settings.</p>"
       : "<p><strong>Done.</strong> The new firmware and web interface are installed and your settings were kept. Unplug the USB cable and use the Maslow as usual; reload any open web interface tab.</p>";
-    if (backup) html += `<p>Copy of the files that were on the board: ${fileLink(backup.name, backup.blob, "application/zip")}</p>`;
     showResult(true, html);
   } catch (e) {
     console.error(e);
@@ -795,7 +702,6 @@ async function install(presetPort) {
     if (currentStep === "write" || (currentStep === "erase" && mode === "full")) {
       html += "<p>The board may not start until an install finishes. Click Install to try again.</p>";
     }
-    if (backup) html += `<p>Copy of the files that were on the board: ${fileLink(backup.name, backup.blob, "application/zip")}</p>`;
     showResult(false, html);
     $("logbox").open = true;
   } finally {
@@ -817,7 +723,7 @@ updateButton();
 loadManifest();
 
 // exposed for testing from the console
-window.__installer = { md5Hex, crc32, makeZip, parsePartitions, filesystemPartition, loadFiles, openLittlefs, buildLittlefs, install };
+window.__installer = { md5Hex, parsePartitions, filesystemPartition, loadFiles, openLittlefs, buildLittlefs, install };
 </script>
 </body>
 </html>

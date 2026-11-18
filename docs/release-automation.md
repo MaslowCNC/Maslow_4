@@ -45,7 +45,7 @@ installs a release over USB with Web Serial and esptool-js. It loads the files t
 and SHA-256 hashes in `manifest.json`.
 
 Everything runs in the ESP32-S3's download mode (the firmware has no command console on its USB port).
-The page reads the board's littlefs partition and opens it with `docs/firmware-installer/mklfs.wasm`
+In keep mode the page reads the board's littlefs partition and opens it with `docs/firmware-installer/mklfs.wasm`
 (littlefs in WebAssembly, rebuilt with `name_max` 64 so the firmware mounts what it writes; see
 `docs/firmware-installer/mklfs/README.md`).
 
@@ -55,6 +55,5 @@ The page reads the board's littlefs partition and opens it with `docs/firmware-i
   NVS (WiFi and other settings) is left alone.
 - **Clean install** erases the flash and writes everything including the release `littlefs.bin`.
 
-Both put the board's own files in a zip first; a clean install saves it as a download. Add `?base=<url>/` to
-the page URL to install from another folder with the same files, for example a local build.
+Add `?base=<url>/` to the page URL to install from another folder with the same files, for example a local build.
 
