@@ -1252,8 +1252,8 @@ static Error maslow_stop(const char* value, AuthenticationLevel auth_level, Chan
     Maslow.resetUpdateWatchdog();
     sys.set_state(State::Idle);
     // Explicitly save current belt and Z positions to NVS before cleanup.
-    // The automatic save in Maslow.update() only fires on Cycle/Jog→Idle
-    // transitions that occur inside the update() loop, and update() is not called
+    // The automatic save in Maslow.update() only fires when the belts stop being
+    // held (a jog, move or job ends) inside the update() loop, and update() is not called
     // inside maslow_stop(), so the auto-save would only happen on the next
     // protocol_execute_realtime() cycle — after Maslow.stop() has already run.
     // Saving here guarantees positions are always persisted.
