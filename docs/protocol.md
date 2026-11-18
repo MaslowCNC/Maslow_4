@@ -215,9 +215,9 @@ channels.
 1. Send **0x18**. It is realtime, so it acts the moment it arrives, even behind queued lines or
    a running job, and it works from every channel.
 2. Wait for the start message (`Grbl …`), with a timeout.
-3. Send **`$STOP`**. It raises Z to 2 mm if lower and saves positions. Sending it before the
-   restart would be useless: the reset discards unread input, so `$STOP` would be dropped
-   unanswered.
+3. Send **`$STOP`**. It saves positions. It does not move Z: Stop means stop, so the bit may
+   still be in the work (resuming a job raises Z first). Sending it before the restart would be useless: the reset discards unread input,
+   so `$STOP` would be dropped unanswered.
 
 `$STOP` alone is not a fast stop: it is queued like other `$` commands, so it waits behind
 running motion. 0x85 stops only a jog (`!` holds, it doesn't stop). Our UI still uses 0x85 for
@@ -288,7 +288,7 @@ These work as on any FluidNC machine. The useful ones for a Maslow client:
 | `$Report/Interval=ms` | set this channel's status auto-report interval (0 = off, minimum 50; a WebSocket starts at 200, USB off) |
 | `$Report/Status=n` | 1 = report machine position (MPos), 0 = work position (WPos); the default is 1 |
 | `$SD/Run=file` / `$LocalFS/Run=file` | run a G-code file |
-| `$SD/RunFrom=line,file` | (Maslow) run an SD file from a line (1 = the first), as Resume does after a stop. The lines before it are read in check mode (no motion, spindle, coolant or dwell; units, offsets, feed and spindle state are kept), then: Z up to the highest Z so far, spindle and coolant as the file left them, rapid to where the line starts, plunge at 300 mm/min. Answered once that is planned; the state is `Check` while it reads. Needs Idle and READY_TO_CUT; refused if the file is not the size it was when it stopped |
+| `$SD/RunFrom=line,file` | (Maslow) run an SD file from a line (1 = the first), as Resume does after a stop. The lines before it are read in check mode (no motion, spindle, coolant or dwell; units, offsets, feed and spindle state are kept), then: Z up to the highest Z so far (at least 2 mm above Z home), spindle and coolant as the file left them, rapid to where the line starts, plunge at 300 mm/min. Answered once that is planned; the state is `Check` while it reads. Needs Idle and READY_TO_CUT; refused if the file is not the size it was when it stopped |
 | `$SD/Discard` | (Maslow) forget the stopped job, so `STOPPED` leaves the report |
 | `$MD` / `$ME` | disable / enable motors |
 | `$CMD`, `$S`, `$E`, `$A` | list commands, settings, errors, alarms |
@@ -321,7 +321,7 @@ plus a log line `Motion is disabled: <reason>` when Maslow has blocked motion.
 
 | Command | Name | What it does | UI sends it |
 |---|---|---|---|
-| [`$STOP`][STOP] | `Maslow/stop` | stop belts, spindle and any job; sync positions; raise Z to 2 mm if lower; save state. During Apply Tension it ends in EXTENDEDOUT (4), or UNKNOWN (0) when recovering belts. Queued like other `$` commands, so it waits behind running motion (backlog). The UI sends 0x18 first and `$STOP` after the restart (section 3, how to stop) | yes |
+| [`$STOP`][STOP] | `Maslow/stop` | stop belts, spindle and any job; sync positions; save state. Z stays where it is. During Apply Tension it ends in EXTENDEDOUT (4), or UNKNOWN (0) when recovering belts. Queued like other `$` commands, so it waits behind running motion (backlog). The UI sends 0x18 first and `$STOP` after the restart (section 3, how to stop) | yes |
 | [`$ESTOP`][ESTOP] | `Maslow/estop` | emergency stop: Alarm state, motors and spindle off; the machine ignores further commands until power-cycled | no |
 
 **State and diagnostics (read-only):**

@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Maslow Firmware Installer</title>
+  <style>
+    :root {
+      --bg: #f6f6f4;
+      --card: #ffffff;
+      --text: #1d1d1f;
+      --dim: #5c5c63;
+      --border: #dcdcd8;
+      --accent: #1f8a3c;
+      --accent-soft: #e3f3e7;
+      --danger: #b3261e;
+      --danger-soft: #fbe9e7;
+      --warn-bg: #fff6e0;
+      --warn-border: #e9c46a;
+      --log-bg: #f0f0ec;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #17181a;
+        --card: #222326;
+        --text: #ececee;
+        --dim: #a3a3ab;
+        --border: #3a3b40;
+        --accent: #3fb85f;
+        --accent-soft: #1d3324;
+        --danger: #ef6b62;
+        --danger-soft: #3a2220;
+        --warn-bg: #3a3220;
+        --warn-border: #8a7330;
+        --log-bg: #1b1c1e;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    }
+    main { max-width: 760px; margin: 0 auto; padding: 32px 16px 48px; }
+    h1 { font-size: 1.8rem; margin: 0 0 4px; }
+    h2 { font-size: 1.2rem; margin: 32px 0 12px; }
+    p { margin: 8px 0; }
+    .lede { color: var(--dim); margin-bottom: 8px; }
+    .version { color: var(--dim); font-size: 0.92rem; margin-bottom: 24px; }
+    ul { padding-left: 22px; }
+    li { margin: 6px 0; }
+    .modes { display: grid; gap: 12px; }
+    .mode {
+      display: flex; gap: 12px; align-items: flex-start; cursor: pointer;
+      background: var(--card); border: 2px solid var(--border); border-radius: 10px; padding: 14px 16px;
+    }
+    .mode:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+    .mode.full:has(input:checked) { border-color: var(--danger); background: var(--danger-soft); }
+    .mode input { margin-top: 5px; accent-color: var(--accent); flex: none; }
+    .mode.full input { accent-color: var(--danger); }
+    .mode h3 { margin: 0; font-size: 1.05rem; }
+    .mode p { margin: 2px 0 0; color: var(--dim); font-size: 0.92rem; }
+    .actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 16px; }
+    button.install {
+      background: var(--accent); color: #fff; border: 0; border-radius: 8px;
+      padding: 10px 22px; font-size: 1rem; font-weight: 600; cursor: pointer;
+    }
+    button.install.full { background: #b3261e; }
+    button.install:disabled { opacity: 0.5; cursor: default; }
+    .note {
+      background: var(--warn-bg); border: 1px solid var(--warn-border); border-radius: 10px;
+      padding: 12px 16px; margin: 16px 0;
+    }
+    #run { margin-top: 24px; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+    #steps { list-style: none; padding: 0; margin: 0 0 12px; }
+    #steps li { display: flex; gap: 10px; align-items: baseline; margin: 4px 0; color: var(--dim); }
+    #steps li::before { content: "○"; width: 1.2em; flex: none; text-align: center; }
+    #steps li.active { color: var(--text); font-weight: 600; }
+    #steps li.active::before { content: "◐"; color: var(--accent); }
+    #steps li.done { color: var(--text); }
+    #steps li.done::before { content: "✓"; color: var(--accent); }
+    #steps li.skipped::before { content: "–"; }
+    #steps li.warn::before { content: "!"; color: #c48a00; font-weight: 700; }
+    #steps li.failed { color: var(--danger); }
+    #steps li.failed::before { content: "✕"; color: var(--danger); }
+    #steps .detail { font-weight: 400; color: var(--dim); font-size: 0.9rem; }
+    progress { width: 100%; height: 10px; accent-color: var(--accent); }
+    #result { margin: 12px 0 0; padding: 12px 16px; border-radius: 8px; display: none; }
+    #result.ok { display: block; background: var(--accent-soft); }
+    #result.bad { display: block; background: var(--danger-soft); }
+    #result p:first-child { margin-top: 0; }
+    #result p:last-child { margin-bottom: 0; }
+    details { margin-top: 12px; }
+    summary { cursor: pointer; color: var(--dim); font-size: 0.92rem; }
+    pre#log {
+      background: var(--log-bg); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px;
+      font: 12px/1.4 ui-monospace, Menlo, Consolas, monospace; max-height: 260px; overflow: auto;
+      white-space: pre-wrap; word-break: break-all; margin: 8px 0 0;
+    }
+    code { background: var(--card); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; }
+    a { color: var(--accent); }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Maslow Firmware Installer</h1>
+  <p class="lede">Install the Maslow firmware and web interface on the Maslow's control board over USB, straight from this page.</p>
+  <p class="version" id="version">Looking up the latest release…</p>
+
+  <div class="note" id="unsupported" hidden>
+    This browser can't talk to USB serial ports. Open this page in <strong>Chrome</strong> or <strong>Edge</strong> on a
+    computer, or use the install scripts in the <a href="https://github.com/MaslowCNC/Maslow_4/releases/latest">release zip</a>.
+  </div>
+
+  <h2>1. Plug in the control board</h2>
+  <p>Stop any job and release belt tension first: the board restarts during the install. Then connect the control board's USB-C port to the computer with a <em>data</em> cable (some cables only charge).</p>
+
+  <h2>2. Choose what to install</h2>
+  <div class="modes">
+    <label class="mode keep">
+      <input type="radio" name="mode" value="keep" checked>
+      <div>
+        <h3>Update, keep my settings</h3>
+        <p>Installs the new firmware and web interface. Keeps <code>maslow.yaml</code> (frame size, anchor positions and calibration), WiFi and other settings, and any files on the board.</p>
+      </div>
+    </label>
+    <label class="mode full">
+      <input type="radio" name="mode" value="full">
+      <div>
+        <h3>Clean install, erase everything</h3>
+        <p>Erases the whole board and starts fresh: <code>maslow.yaml</code> goes back to the default, and WiFi settings and files are deleted. You will need to set up and calibrate again. Use it for a new or misbehaving board.</p>
+      </div>
+    </label>
+  </div>
+
+  <h2>3. Install</h2>
+  <p>Click Install, pick the board's port and click Connect. It takes about two minutes; keep this tab open and in front until it finishes.</p>
+  <div class="actions">
+    <button class="install" id="install" disabled>Install</button>
+  </div>
+
+  <section id="run" hidden>
+    <ol id="steps"></ol>
+    <progress id="progress" max="1" value="0"></progress>
+    <div id="result"></div>
+    <details id="logbox">
+      <summary>Details</summary>
+      <pre id="log"></pre>
+    </details>
+  </section>
+
+  <h2>If the port doesn't show up or the install fails</h2>
+  <ul>
+    <li>If it can't connect to the board: unplug the board's USB cable <em>and</em> its power supply, plug only the USB cable back in, and click Install straight away.</li>
+    <li>Close anything else using the board's port (another browser tab, a serial monitor, Arduino or PlatformIO).</li>
+    <li>Try another USB cable or port.</li>
+    <li>An update that failed part way can be run again. If the board no longer starts, run a clean install.</li>
+  </ul>
+</main>
+
+<script type="module">
+import { ESPLoader, Transport } from "https://unpkg.com/esptool-js@0.6.1/bundle.js";
+
+// Everything happens in the ESP32-S3's download mode: the Maslow firmware has no command
+// console on its USB port, so the filesystem (maslow.yaml, web UI) is read and written as a
+// littlefs image with mklfs.wasm (see mklfs/README.md).
+
+// Release files mirrored by .github/workflows/release.yml. ?base=<url>/ loads them from elsewhere
+// (for example a local build).
+const BASE = new URLSearchParams(location.search).get("base")
+  || "https://raw.githubusercontent.com/MaslowCNC/Maslow_4/Maslow-Main/web-assets/latest/";
+const MKLFS_WASM = new URL("mklfs.wasm", import.meta.url);
+
+// Flash layout of firmware/max_littlefs.csv; the filesystem address comes from partitions.bin.
+const FILES = {
+  bootloader: { name: "bootloader.bin", address: 0x0 },
+  partitions: { name: "partitions.bin", address: 0x8000 },
+  bootApp:    { name: "boot_app0.bin",  address: 0xe000 },
+  firmware:   { name: "firmware.bin",   address: 0x10000 },
+  littlefs:   { name: "littlefs.bin" },
+};
+const STEPS = {
+  keep: [
+    ["download", "Download the firmware"],
+    ["connect", "Connect to the board"],
+    ["read", "Read the files on the board"],
+    ["prepare", "Prepare the new files"],
+    ["write", "Write the firmware and files"],
+    ["restart", "Restart the board"],
+  ],
+  full: [
+    ["download", "Download the firmware"],
+    ["connect", "Connect to the board"],
+    ["erase", "Erase the board"],
+    ["write", "Write the firmware and files"],
+    ["restart", "Restart the board"],
+  ],
+};
+// 921600 stalls flash reads over the S3's native USB with esptool-js 0.6.1.
+const FLASH_BAUD = 460800;
+
+const $ = (id) => document.getElementById(id);
+let manifest = null;
+let busy = false;
+
+// ---------- page ----------
+
+function selectedMode() {
+  return document.querySelector("input[name=mode]:checked").value;
+}
+
+function updateButton() {
+  const full = selectedMode() === "full";
+  $("install").textContent = full ? "Erase and install" : "Install update";
+  $("install").classList.toggle("full", full);
+}
+
+function log(text) {
+  const el = $("log");
+  el.textContent += text + "\n";
+  el.scrollTop = el.scrollHeight;
+}
+
+function setProgress(fraction) {
+  $("progress").value = Math.max(0, Math.min(1, fraction));
+}
+
+let currentStep = null;
+function showSteps(mode) {
+  const list = $("steps");
+  list.innerHTML = "";
+  for (const [id, label] of STEPS[mode]) {
+    const li = document.createElement("li");
+    li.dataset.step = id;
+    const text = document.createElement("span");
+    text.textContent = label + " ";
+    const extra = document.createElement("span");
+    extra.className = "detail";
+    text.appendChild(extra);
+    li.appendChild(text);
+    list.appendChild(li);
+  }
+}
+function stepEl(id) {
+  return document.querySelector(`#steps li[data-step="${id}"]`);
+}
+function step(id) {
+  if (currentStep && stepEl(currentStep).className === "active") stepEl(currentStep).className = "done";
+  currentStep = id;
+  stepEl(id).className = "active";
+  log(`--- ${stepEl(id).firstChild.firstChild.textContent.trim()}`);
+  setProgress(0);
+}
+function stepState(id, state, detail) {
+  const el = stepEl(id);
+  el.className = state;
+  if (detail !== undefined) el.querySelector(".detail").textContent = detail ? `— ${detail}` : "";
+}
+function detail(text) {
+  stepState(currentStep, "active", text);
+}
+
+function showResult(ok, html) {
+  const el = $("result");
+  el.className = ok ? "ok" : "bad";
+  el.innerHTML = html;
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+}
+
+async function loadManifest() {
+  try {
+    const res = await fetch(BASE + "manifest.json", { cache: "no-cache" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    manifest = await res.json();
+    const date = manifest.published_at ? new Date(manifest.published_at).toLocaleDateString() : "";
+    $("version").textContent = `Installs ${manifest.tag_name || "the latest release"}${date ? `, released ${date}` : ""}.`;
+  } catch (e) {
+    $("version").textContent = `Couldn't load the release list (${e.message}). Check your internet connection and reload.`;
+  }
+}
+
+// ---------- firmware files ----------
+
+async function sha256Hex(bytes) {
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function fetchFile(key) {
+  const { name } = FILES[key];
+  const res = await fetch(BASE + name, { cache: "no-cache" });
+  if (!res.ok) throw new Error(`Couldn't download ${name} (HTTP ${res.status}).`);
+  const bytes = new Uint8Array(await res.arrayBuffer());
+  const expected = manifest?.files?.[name];
+  if (expected?.size_bytes !== undefined && expected.size_bytes !== bytes.length) {
+    throw new Error(`${name} is ${bytes.length} bytes, expected ${expected.size_bytes}. Reload the page and try again.`);
+  }
+  if (expected?.sha256 && (await sha256Hex(bytes)) !== expected.sha256) {
+    throw new Error(`${name} doesn't match the release checksum. Reload the page and try again.`);
+  }
+  log(`${name}: ${bytes.length} bytes${expected?.sha256 ? ", checksum OK" : ""}`);
+  return bytes;
+}
+
+async function loadFiles() {
+  const files = {};
+  const keys = Object.keys(FILES);
+  for (let i = 0; i < keys.length; i++) {
+    files[keys[i]] = await fetchFile(keys[i]);
+    setProgress((i + 1) / (keys.length + 1));
+  }
+  const res = await fetch(MKLFS_WASM);
+  if (!res.ok) throw new Error(`Couldn't download mklfs.wasm (HTTP ${res.status}).`);
+  files.mklfs = new Uint8Array(await res.arrayBuffer());
+
+  for (const key of ["bootloader", "firmware"]) {
+    if (files[key][0] !== 0xe9) throw new Error(`${FILES[key].name} is not an ESP32 image.`);
+  }
+  const table = parsePartitions(files.partitions);
+  const fs = filesystemPartition(table);
+  const app0 = table.find((p) => p.type === 0 && p.subtype === 0x10);
+  if (!fs || !app0 || app0.offset !== FILES.firmware.address) throw new Error("partitions.bin doesn't have the expected layout.");
+  if (files.firmware.length > app0.size) throw new Error("firmware.bin is larger than its partition.");
+  if (files.littlefs.length !== fs.size) throw new Error("littlefs.bin doesn't match its partition size.");
+  files.fs = fs;
+  files.release = await openLittlefs(files.mklfs, files.littlefs);
+  log(`Release filesystem: ${files.release.map((f) => f.path).join(", ")}`);
+  return files;
+}
+
+// ESP-IDF partition table: 32-byte entries starting AA 50, ended by an MD5 entry (EB EB) or blank flash.
+function parsePartitions(bytes) {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const out = [];
+  for (let i = 0; i + 32 <= bytes.length; i += 32) {
+    if (bytes[i] !== 0xaa || bytes[i + 1] !== 0x50) break;
+    const label = new TextDecoder().decode(bytes.subarray(i + 12, i + 28)).replace(/\0.*$/s, "");
+    out.push({ type: bytes[i + 2], subtype: bytes[i + 3], offset: view.getUint32(i + 4, true), size: view.getUint32(i + 8, true), label });
+  }
+  return out;
+}
+function filesystemPartition(table) {
+  // data partition of subtype spiffs (0x82) or littlefs (0x83)
+  return table.find((p) => p.type === 1 && (p.subtype === 0x82 || p.subtype === 0x83));
+}
+
+// ---------- littlefs images (mklfs.wasm: littlefs 2.11 built for the firmware's geometry) ----------
+
+// The firmware mounts with esp_littlefs defaults: 4096-byte blocks, 128-byte reads and writes,
+// 512-byte cache, 128-byte lookahead; mklfs.wasm is built with name_max 64 to match.
+const LFS = { blockSize: 4096, readSize: 128, progSize: 128, cacheSize: 512, lookaheadSize: 128 };
+
+async function mklfs(wasmBytes) {
+  const { instance } = await WebAssembly.instantiate(wasmBytes, {});
+  if (instance.exports._initialize) instance.exports._initialize();
+  const x = instance.exports;
+  const mem = () => new Uint8Array(x.memory.buffer);
+  const setName = (name) => {
+    const bytes = new TextEncoder().encode(name);
+    if (bytes.length + 1 > x.mk_name_cap()) throw new Error(`File name too long: ${name}`);
+    mem().set(bytes, x.mk_name_buf());
+    mem()[x.mk_name_buf() + bytes.length] = 0;
+  };
+  const getName = () => {
+    const m = mem();
+    let end = x.mk_name_buf();
+    while (m[end] !== 0) end++;
+    return new TextDecoder().decode(m.subarray(x.mk_name_buf(), end));
+  };
+  return { x, mem, setName, getName };
+}
+
+// Returns [{ path, data }] for every file in a littlefs image, or throws if it doesn't mount.
+async function openLittlefs(wasmBytes, image) {
+  const { x, mem, setName, getName } = await mklfs(wasmBytes);
+  mem().set(image, x.mk_image_ptr());
+  const rc = x.mk_mount(LFS.blockSize, image.length / LFS.blockSize, LFS.readSize, LFS.progSize, LFS.cacheSize, LFS.lookaheadSize);
+  if (rc !== 0) throw new Error(`littlefs mount failed (${rc})`);
+  const files = [];
+  const dirs = [""];
+  while (dirs.length) {
+    const dir = dirs.shift();
+    setName(dir === "" ? "/" : dir);
+    if (x.mk_dir_open() !== 0) throw new Error(`Couldn't list ${dir || "/"}`);
+    const entries = [];
+    let r;
+    while ((r = x.mk_dir_next()) > 0) {
+      entries.push({ path: dir === "" ? getName() : `${dir}/${getName()}`, isDir: r === 2 });
+    }
+    x.mk_dir_close();
+    if (r < 0) throw new Error(`Couldn't list ${dir || "/"} (${r})`);
+    for (const e of entries) {
+      if (e.isDir) {
+        dirs.push(e.path);
+        continue;
+      }
+      setName(e.path);
+      const size = x.mk_read_file();
+      if (size < 0) throw new Error(`Couldn't read ${e.path} (${size})`);
+      files.push({ path: e.path, data: mem().slice(x.mk_file_buf(), x.mk_file_buf() + size) });
+    }
+  }
+  return files;
+}
+
+// Builds a littlefs image of `size` bytes holding `files` ([{ path, data }]).
+async function buildLittlefs(wasmBytes, files, size) {
+  const { x, mem, setName } = await mklfs(wasmBytes);
+  const blocks = size / LFS.blockSize;
+  let rc = x.mk_create(LFS.blockSize, blocks, LFS.readSize, LFS.progSize, LFS.cacheSize, LFS.lookaheadSize);
+  if (rc !== 0) throw new Error(`littlefs format failed (${rc})`);
+  const madeDirs = new Set();
+  for (const { path, data } of files) {
+    const parts = path.split("/").filter(Boolean);
+    for (let i = 1; i < parts.length; i++) {
+      const dir = parts.slice(0, i).join("/");
+      if (madeDirs.has(dir)) continue;
+      setName(dir);
+      rc = x.mk_mkdir();
+      if (rc !== 0 && rc !== -17) throw new Error(`Couldn't create folder ${dir} (${rc})`);
+      madeDirs.add(dir);
+    }
+    if (data.length > x.mk_file_cap()) throw new Error(`${path} is too large`);
+    setName(path);
+    mem().set(data, x.mk_file_buf());
+    rc = x.mk_add_file(data.length);
+    if (rc === -28) throw new Error("The board's files don't fit next to the new web interface.");
+    if (rc !== 0) throw new Error(`Couldn't add ${path} (${rc})`);
+  }
+  rc = x.mk_finish();
+  if (rc !== 0) throw new Error(`littlefs finish failed (${rc})`);
+  return mem().slice(x.mk_image_ptr(), x.mk_image_ptr() + size);
+}
+
+function sameBytes(a, b) {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
+// ---------- reading flash ----------
+
+// esptool-js's readFlash decodes SLIP one byte at a time into a freshly copied array (gigabytes of
+// copying for a 2 MB partition) and leaves the stub's MD5 digest unread. This reads the same
+// protocol: data packets, each acknowledged with the running byte count, then a 16-byte MD5.
+const SLIP_END = 0xc0, SLIP_ESC = 0xdb;
+
+async function nextSlipPacket(transport, timeoutMs) {
+  const end = Date.now() + timeoutMs;
+  for (;;) {
+    const buf = transport.buffer;
+    const start = buf.indexOf(SLIP_END);
+    const stop = start >= 0 ? buf.indexOf(SLIP_END, start + 1) : -1;
+    if (stop === start + 1) {
+      // two END bytes in a row: drop the first and look again
+      transport.buffer = buf.slice(start + 1);
+      continue;
+    }
+    if (stop > start) {
+      const frame = buf.subarray(start + 1, stop);
+      transport.buffer = buf.slice(stop + 1);
+      const out = new Uint8Array(frame.length);
+      let n = 0;
+      for (let i = 0; i < frame.length; i++) {
+        const b = frame[i];
+        if (b === SLIP_ESC) {
+          const e = frame[++i];
+          out[n++] = e === 0xdc ? SLIP_END : e === 0xdd ? SLIP_ESC : e;
+        } else {
+          out[n++] = b;
+        }
+      }
+      return out.subarray(0, n);
+    }
+    if (Date.now() > end) throw new Error("The board stopped sending data.");
+    await new Promise((r) => setTimeout(r, 2));
+  }
+}
+
+function u32(...values) {
+  const out = new Uint8Array(values.length * 4);
+  const dv = new DataView(out.buffer);
+  values.forEach((v, i) => dv.setUint32(i * 4, v, true));
+  return out;
+}
+
+async function readFlash(loader, address, size, onProgress) {
+  await loader.checkCommand("read flash", loader.ESP_READ_FLASH, u32(address, size, 0x1000, 16));
+  const transport = loader.transport;
+  const data = new Uint8Array(size);
+  let got = 0;
+  while (got < size) {
+    const packet = await nextSlipPacket(transport, 10000);
+    if (got + packet.length > size) throw new Error("The board sent more data than asked for.");
+    data.set(packet, got);
+    got += packet.length;
+    await transport.write(u32(got));
+    if (onProgress) onProgress(got / size);
+  }
+  const digest = await nextSlipPacket(transport, 10000);
+  const hex = [...digest].map((b) => b.toString(16).padStart(2, "0")).join("");
+  if (digest.length !== 16 || hex !== md5Hex(data)) throw new Error("Data read from the board failed its checksum.");
+  return data;
+}
+
+// ---------- MD5, used by esptool-js to verify what it wrote ----------
+
+function md5Hex(bytes) {
+  const K = new Uint32Array(64);
+  for (let i = 0; i < 64; i++) K[i] = Math.floor(Math.abs(Math.sin(i + 1)) * 2 ** 32) >>> 0;
+  const S = [7, 12, 17, 22, 5, 9, 14, 20, 4, 11, 16, 23, 6, 10, 15, 21];
+  const len = bytes.length;
+  const total = (((len + 8) >>> 6) + 1) << 6;
+  const buf = new Uint8Array(total);
+  buf.set(bytes);
+  buf[len] = 0x80;
+  const bits = len * 8;
+  const dv = new DataView(buf.buffer);
+  dv.setUint32(total - 8, bits >>> 0, true);
+  dv.setUint32(total - 4, Math.floor(bits / 2 ** 32), true);
+  let a0 = 0x67452301, b0 = 0xefcdab89, c0 = 0x98badcfe, d0 = 0x10325476;
+  const M = new Uint32Array(16);
+  for (let off = 0; off < total; off += 64) {
+    for (let j = 0; j < 16; j++) M[j] = dv.getUint32(off + j * 4, true);
+    let A = a0, B = b0, C = c0, D = d0;
+    for (let i = 0; i < 64; i++) {
+      let F, g;
+      if (i < 16) { F = (B & C) | (~B & D); g = i; }
+      else if (i < 32) { F = (D & B) | (~D & C); g = (5 * i + 1) % 16; }
+      else if (i < 48) { F = B ^ C ^ D; g = (3 * i + 5) % 16; }
+      else { F = C ^ (B | ~D); g = (7 * i) % 16; }
+      F = (F + A + K[i] + M[g]) >>> 0;
+      A = D; D = C; C = B;
+      const s = S[(i >> 4) * 4 + (i % 4)];
+      B = (B + ((F << s) | (F >>> (32 - s)))) >>> 0;
+    }
+    a0 = (a0 + A) >>> 0; b0 = (b0 + B) >>> 0; c0 = (c0 + C) >>> 0; d0 = (d0 + D) >>> 0;
+  }
+  const out = new DataView(new ArrayBuffer(16));
+  [a0, b0, c0, d0].forEach((v, i) => out.setUint32(i * 4, v, true));
+  return [...new Uint8Array(out.buffer)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+// ---------- install ----------
+
+const CONNECT_HELP =
+  "Unplug the board's USB cable and its power supply, plug only the USB cable back in, and click Install straight away. " +
+  "Also close anything else that may be using the port.";
+
+async function install(presetPort) {
+  if (busy) return;
+  const mode = selectedMode();
+  if (!presetPort && mode === "full" && !confirm("Erase the whole board and install from scratch?\n\nmaslow.yaml, WiFi settings and files on the board are deleted.")) return;
+  if (!manifest) await loadManifest();
+
+  let port = presetPort;
+  if (!port) {
+    try {
+      port = await navigator.serial.requestPort();
+    } catch (e) {
+      return; // picker cancelled
+    }
+  }
+
+  busy = true;
+  $("install").disabled = true;
+  document.querySelectorAll("input[name=mode]").forEach((r) => (r.disabled = true));
+  $("run").hidden = false;
+  $("log").textContent = "";
+  $("result").className = "";
+  showSteps(mode);
+  currentStep = null;
+  log(`Mode: ${mode === "full" ? "clean install" : "update, keep settings"}; files from ${BASE}`);
+
+  let transport = null;
+
+  try {
+    step("download");
+    const files = await loadFiles();
+    stepState("download", "done", manifest?.tag_name || "");
+
+    step("connect");
+    transport = new Transport(port, false);
+    const loader = new ESPLoader({
+      transport,
+      baudrate: FLASH_BAUD,
+      // Web Serial's default 255-byte receive buffer overruns during a 2 MB read, and esptool-js
+      // drops the lost bytes silently, stalling the transfer.
+      serialOptions: { bufferSize: 262144 },
+      terminal: { clean() {}, writeLine: (s) => log(s), write: (s) => log(s) },
+    });
+    try {
+      await loader.main();
+    } catch (e) {
+      throw new Error(`Couldn't put the board into install mode (${e.message || e}). Nothing was changed. ${CONNECT_HELP}`);
+    }
+    if (loader.chip.CHIP_NAME !== "ESP32-S3") {
+      throw new Error(`This is an ${loader.chip.CHIP_NAME}, not the Maslow control board's ESP32-S3. Nothing was changed.`);
+    }
+    const flashSize = await loader.detectFlashSize();
+    if (!(parseInt(flashSize, 10) >= 8)) throw new Error(`The board has ${flashSize} of flash; the Maslow firmware needs 8MB. Nothing was changed.`);
+    stepState("connect", "done", `ESP32-S3, ${flashSize} flash`);
+
+    let fsImage = files.littlefs;
+    if (mode === "keep") {
+      // Read the board's filesystem to carry its files over.
+      step("read");
+      const releaseNames = new Set(files.release.map((f) => f.path));
+      let current, image;
+      try {
+        current = filesystemPartition(parsePartitions(await readFlash(loader, 0x8000, 0xc00)));
+        if (current) {
+          detail("about a minute");
+          image = await readFlash(loader, current.offset, current.size, setProgress);
+        }
+      } catch (e) {
+        throw new Error(`Reading the board failed (${e.message}). Nothing was changed. Click Install to try again.`);
+      }
+      let userFiles = null;
+      if (current) {
+        try {
+          const boardFiles = await openLittlefs(files.mklfs, image);
+          log(`Board filesystem: ${boardFiles.map((f) => `${f.path} (${f.data.length})`).join(", ")}`);
+          userFiles = boardFiles.filter((f) => !releaseNames.has(f.path));
+        } catch (e) {
+          log(`Board filesystem: ${e.message}`);
+        }
+      }
+      if (userFiles === null) {
+        throw new Error("This board has no Maslow files to keep (it looks blank, has other firmware, or its files are damaged). Nothing was changed. Choose Clean install instead.");
+      }
+      stepState("read", "done", userFiles.length ? `keeping ${userFiles.map((f) => f.path).join(", ")}` : "no files of yours to keep");
+
+      step("prepare");
+      if (current.offset !== files.fs.offset || current.size !== files.fs.size) {
+        throw new Error(
+          `This board's files are stored at 0x${current.offset.toString(16)} (${current.size / 1024} KB), not where this firmware keeps them. ` +
+          "Nothing was changed. Save maslow.yaml from the web interface, then choose Clean install."
+        );
+      }
+      const wanted = [...files.release, ...userFiles];
+      fsImage = await buildLittlefs(files.mklfs, wanted, files.fs.size);
+      // Check the new image before it goes anywhere near the board.
+      const check = await openLittlefs(files.mklfs, fsImage);
+      for (const f of wanted) {
+        const got = check.find((c) => c.path === f.path);
+        if (!got || !sameBytes(got.data, f.data)) throw new Error(`The new filesystem lost ${f.path}. Nothing was changed.`);
+      }
+      stepState("prepare", "done", "new web interface, your files kept");
+    } else {
+      step("erase");
+      detail("about 20 seconds");
+      await loader.eraseFlash();
+      stepState("erase", "done", "");
+    }
+
+    step("write");
+    const parts = [
+      { data: files.bootloader, address: FILES.bootloader.address },
+      { data: files.partitions, address: FILES.partitions.address },
+      { data: files.bootApp, address: FILES.bootApp.address },
+      { data: files.firmware, address: FILES.firmware.address },
+      { data: fsImage, address: files.fs.offset },
+    ];
+    const sizes = parts.map((p) => p.data.length);
+    const totalBytes = sizes.reduce((a, b) => a + b, 0);
+    await loader.writeFlash({
+      fileArray: parts,
+      flashMode: "keep",
+      flashFreq: "keep",
+      flashSize: "keep",
+      eraseAll: false,
+      compress: true,
+      reportProgress: (index, written, total) => {
+        const before = sizes.slice(0, index).reduce((a, b) => a + b, 0);
+        setProgress((before + (written / total) * sizes[index]) / totalBytes);
+      },
+      calculateMD5Hash: md5Hex,
+    });
+    stepState("write", "done", "verified");
+
+    step("restart");
+    await loader.after("hard_reset");
+    await transport.disconnect();
+    transport = null;
+    stepState("restart", "done", "");
+    setProgress(1);
+
+    let html = mode === "full"
+      ? "<p><strong>Done.</strong> The board was erased and the new firmware is installed. Unplug the USB cable and power the Maslow on, then connect it to WiFi as in the setup guide, since the clean install removed the WiFi settings.</p>"
+      : "<p><strong>Done.</strong> The new firmware and web interface are installed and your settings were kept. Unplug the USB cable and use the Maslow as usual; reload any open web interface tab.</p>";
+    showResult(true, html);
+  } catch (e) {
+    console.error(e);
+    log(`ERROR: ${e.message || e}`);
+    if (currentStep) stepState(currentStep, "failed", "");
+    let html = `<p><strong>Install stopped.</strong> ${escapeHtml(e.message || String(e))}</p>`;
+    if (currentStep === "write" || (currentStep === "erase" && mode === "full")) {
+      html += "<p>The board may not start until an install finishes. Click Install to try again.</p>";
+    }
+    showResult(false, html);
+    $("logbox").open = true;
+  } finally {
+    if (transport) { try { await transport.disconnect(); } catch (e) {} }
+    busy = false;
+    $("install").disabled = false;
+    document.querySelectorAll("input[name=mode]").forEach((r) => (r.disabled = false));
+  }
+}
+
+if (!("serial" in navigator)) {
+  $("unsupported").hidden = false;
+} else {
+  $("install").disabled = false;
+}
+document.querySelectorAll("input[name=mode]").forEach((r) => r.addEventListener("change", updateButton));
+$("install").addEventListener("click", () => install());
+updateButton();
+loadManifest();
+
+// exposed for testing from the console
+window.__installer = { md5Hex, parsePartitions, filesystemPartition, loadFiles, openLittlefs, buildLittlefs, install };
+</script>
+</body>
+</html>

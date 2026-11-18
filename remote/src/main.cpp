@@ -1,0 +1,103 @@
+// Maslow ESP-NOW remote: firmware for the 4.0" ESP32-S3 ES3C40P display.
+
+#include <Arduino.h>
+
+#include "Debug.h"
+#include "Display.h"
+#include "Link.h"
+#include "Machine.h"
+#include "Power.h"
+#include "Ui.h"
+#include "Views.h"
+
+LGFX lcd;
+
+// Status LED: green connected, blue pairing, red otherwise.
+static void setLed(bool r, bool g, bool b) {
+    static int last = -1;
+    int        now  = r | g << 1 | b << 2;
+    if (now != last) {  // a WS2812 write takes a while; only on change
+        last = now;
+        boardLed(r, g, b);
+    }
+}
+
+static void debugCommand(const char* c) {
+    if (!strcmp(c, "pair")) {
+        Link::startPairing();
+    } else if (!strcmp(c, "forget")) {
+        Link::forget();
+    } else if (!strncmp(c, "send ", 5)) {
+        Machine::send(c + 5);
+    } else if (!strncmp(c, "inject ", 7)) {
+        Machine::injectLine(c + 7);  // as if the machine had sent it
+    } else if (!strncmp(c, "rt ", 3)) {
+        Machine::realtime((uint8_t)strtol(c + 3, nullptr, 16));
+    } else if (!strncmp(c, "tab ", 4)) {
+        Ui::showTab(atoi(c + 4));
+    } else if (!strcmp(c, "sleep")) {
+        Power::sleepNow();
+    } else if (!strcmp(c, "id")) {
+        DLOG("PANEL 04=%06x D3=%06x %dx%d\n", (unsigned)lcd.panel()->readCommand(0x04, 1, 3),
+             (unsigned)lcd.panel()->readCommand(0xD3, 1, 3), (int)lcd.width(), (int)lcd.height());
+    } else if (!strcmp(c, "redraw")) {
+        Ui::redrawAll();
+    } else if (!strcmp(c, "link")) {
+        DLOG("LINK %s host=%s mac=%s ch=%u rssi=%d tx=%u rx=%u fail=%u\n", Link::stateName(), Link::hostname(),
+             Link::peerMac(), Link::channel(), Link::rssi(), (unsigned)Link::txPackets(), (unsigned)Link::rxPackets(),
+             (unsigned)Link::txFailures());
+    } else if (!strcmp(c, "state")) {
+        DLOG("STATE %s maslow=%d inches=%d mpos=%.3f,%.3f,%.3f wco=%d %.3f,%.3f,%.3f sd=%.1f,%s ovr=%d,%d,%d "
+             "stopped=%d,%s belts=%d mini=%d fixedZ=%d starting=%d\n",
+             Machine::st.state, Machine::maslowState, Machine::inches, Machine::st.mpos[0], Machine::st.mpos[1],
+             Machine::st.mpos[2], Machine::st.haveWco, Machine::st.wco[0], Machine::st.wco[1], Machine::st.wco[2],
+             Machine::st.sdPercent, Machine::st.sdFile, Machine::st.ovr[0], Machine::st.ovr[1], Machine::st.ovr[2],
+             Machine::st.stoppedLine, Machine::st.stoppedFile, Machine::st.beltsKnown, Machine::mini, Machine::fixedZ,
+             Machine::starting());
+    } else {
+        DLOG("? %s\n", c);
+    }
+}
+
+void setup() {
+    Debug::begin();
+    Power::begin();  // releases the pins held through deep sleep
+    setLed(false, false, false);
+    Debug::setHandler(debugCommand);
+    Ui::begin();
+    Link::begin();
+    Machine::begin();
+    if (Link::state() == Link::State::Unpaired) {
+        showPairing();
+    }
+    DLOG("READY\n");
+}
+
+void loop() {
+    Debug::poll();
+    Link::loop();
+    Machine::loop();
+    Ui::loop();
+    viewsLoop();
+    Power::loop();
+
+    static uint32_t ledAt = 0;
+    if (millis() - ledAt > 250) {
+        ledAt = millis();
+        bool alarm = Machine::connected() && Machine::stateIs("Alarm");
+        if (Power::screenOff()) {
+            setLed(alarm, false, false);  // dark, except an alarm
+        } else switch (Link::state()) {
+            case Link::State::Connected:
+                setLed(Machine::stateIs("Alarm"), !Machine::stateIs("Alarm"), false);
+                break;
+            case Link::State::Pairing:
+                setLed(false, false, (millis() / 250) & 1);
+                break;
+            default:
+                setLed((millis() / 500) & 1, false, false);
+                break;
+        }
+    }
+    delay(1);
+}

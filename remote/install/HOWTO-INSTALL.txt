@@ -1,0 +1,46 @@
+Installing the Maslow remote firmware
+=====================================
+
+The remote runs on the 4.0" ESP32-S3 IPS touch display sold by Hosyond
+(lcdwiki ES3C40P: ESP32-S3, 320x480 ST7796S, capacitive touch, USB-C).
+
+Nothing needs to be installed on your computer: this package carries the
+esptool program that writes the firmware.
+
+1. Unpack this whole zip file.
+2. Plug the display into the computer with a USB-C data cable.
+3. Run the installer:
+     Windows: double-click Full-Install.bat
+     macOS:   double-click Full-Install.command
+              If macOS says it can't check the file for malicious software,
+              open System Settings > Privacy & Security, click "Open Anyway"
+              next to Full-Install.command, and double-click it again.
+              Or open Terminal and type:  sh <drag Full-Install.sh here>
+     Linux:   in a terminal, run:  sh Full-Install.sh
+4. The installer finds the board and shows its port, chip and MAC address.
+   Type y to install.
+
+Full-Install erases everything on the board first, including an earlier
+pairing.
+
+After installing, the remote restarts by itself. Then pair it: turn the
+Maslow off and on again and, within 2 minutes, tap Pair on the remote.
+
+If the board isn't found
+  - Use a USB cable that carries data (some only charge).
+  - Close any other program that has the board's port open (Arduino, a
+    serial monitor).
+  - Linux: allow your user to use serial ports:
+      sudo usermod -aG dialout $USER     (then log out and back in)
+  - Hold the board's BOOT button while plugging it in, then try again.
+
+No zip needed: in Chrome or Edge, the browser installer at
+  https://documentation.maslowcnc.com/remote-installer/
+does the same from a web page.
+
+The image can also be written by hand at offset 0x0:
+  esptool --chip esp32s3 erase_flash
+  esptool --chip esp32s3 write_flash 0x0 firmware/maslow-remote.bin
+
+esptool is from Espressif (https://github.com/espressif/esptool), GPL-2.0;
+its license is in the tools folder.

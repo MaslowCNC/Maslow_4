@@ -1210,7 +1210,7 @@ static void protocol_exec_rt_suspend() {
         // the belts already at rest, instead of resuming it.  haltMotion() clears the suspend and
         // sets Idle, so this loop exits; the drop flag keeps the G-code line that was waiting for
         // planner space from queuing the rest of its motion as it unwinds.  The main loop then
-        // runs $STOP to raise the Z and save the positions.
+        // runs $STOP to save the positions.
         if (rtStopFromHold && sys.state() == State::Hold && sys.suspend().bit.holdComplete) {
             rtStopFromHold = false;
             log_info("Stopping the paused job");

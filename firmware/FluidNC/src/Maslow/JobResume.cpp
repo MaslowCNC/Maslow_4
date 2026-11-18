@@ -17,6 +17,7 @@
 #include "../Spindles/Spindle.h"
 #include "../System.h"
 
+#include <algorithm>
 #include <cstring>
 
 namespace {
@@ -29,6 +30,9 @@ namespace {
 
     // Plunge rate for the move down to where the resumed line starts.
     constexpr float RESUME_PLUNGE_MM_PER_MIN = 300.0f;
+    // The entry move raises Z to at least this far above Z home: Stop leaves Z where it was, so the
+    // bit may still be in the work.
+    constexpr float RESUME_CLEAR_ABOVE_HOME_MM = 2.0f;
     // How often to service the protocol (Maslow.update and its 100 ms watchdog) while skipping.
     constexpr uint32_t SKIP_SERVICE_MS = 20;
 
@@ -97,7 +101,7 @@ namespace JobResume {
 
     Error skipTo(InputFile* file, int32_t line, Channel& out) {
         // Highest machine Z the skipped lines reach: the entry move clears at least that.
-        float clearZ = get_mpos()[Z_AXIS];
+        float clearZ = std::max(get_mpos()[Z_AXIS], get_wco()[Z_AXIS] + RESUME_CLEAR_ABOVE_HOME_MM);
 
         sys.set_state(State::CheckMode);
         char     buf[Channel::maxLine];

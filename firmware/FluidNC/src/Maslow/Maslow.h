@@ -121,10 +121,8 @@ public:
     void stopMotors();
     /** Switches the spindle off as M5 would (used by every stop path) */
     void stopSpindle();
-    /** Raises Z axis to Z home + 2mm to prevent workpiece damage after stop */
-    void raiseZ();
-    // The non-blocking first half of raiseZ(): end the job, clear the planner and stepper, hold the
-    // belts where they are, clear any feed hold and go Idle.  Safe to call from inside the hold.
+    // End the job, clear the planner and stepper, hold the belts (and Z) where they are, clear any
+    // feed hold and go Idle.  Does not block, so it is safe to call from inside the hold.
     void haltMotion();
     // Make the belt step counts match the encoders and clear the belt PIDs, so the next move
     // starts from where the belts really are.  Call with stepping stopped.

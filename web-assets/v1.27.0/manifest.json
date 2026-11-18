@@ -1,0 +1,30 @@
+{
+  "tag_name": "v1.27.0",
+  "published_at": "2026-11-17T23:01:47Z",
+  "files": {
+    "firmware.bin": {
+      "sha256": "0dd65a3bb41d34cee11245da5573e623ac37404b22922c9b0514abc3869a21fe",
+      "size_bytes": 2914320
+    },
+    "index.html.gz": {
+      "sha256": "156b561bebdd6581af03f941646f51b7fda43e5b4fa39853cc931d78a8f3f42e",
+      "size_bytes": 154669
+    },
+    "bootloader.bin": {
+      "sha256": "3a06e81d78e928687d7acd8abcd069543a4413de4398e2e2940a97b3fc739fd8",
+      "size_bytes": 19984
+    },
+    "partitions.bin": {
+      "sha256": "f4b243596d46dce408c9a1417152f6c0303dd014c420382661d50c1a73a9e645",
+      "size_bytes": 3072
+    },
+    "boot_app0.bin": {
+      "sha256": "f94c5d786a7a8fab06ac5d10e33bf37711a6697636dc037559ea19cc410a17f0",
+      "size_bytes": 8192
+    },
+    "littlefs.bin": {
+      "sha256": "7b01a33de5ac1d006d03f8131baea31c8e9ace10364b1224fa7dd6cdba949775",
+      "size_bytes": 2097152
+    }
+  }
+}

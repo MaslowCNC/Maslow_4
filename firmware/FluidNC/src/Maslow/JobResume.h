@@ -35,7 +35,8 @@ namespace JobResume {
     size_t      stoppedSize();
 
     // Read lines 1 to line-1 of file without moving (check mode): this sets units, distance
-    // mode, offsets, feed and spindle state as the job would have.  Then raise Z, restore the
+    // mode, offsets, feed and spindle state as the job would have.  Then raise Z (to at least
+    // 2 mm above Z home, and above anything the skipped lines reached), restore the
     // spindle and coolant, rapid to where the line starts and plunge to its Z.  The file is
     // left at the line, ready to run as the job.
     Error skipTo(InputFile* file, int32_t line, Channel& out);

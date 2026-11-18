@@ -76,4 +76,6 @@ architecture rules". They apply to every agent. Follow them.
 - CI doesn't build PRs automatically. A PR comment containing `/build` or `please build` triggers
   `compile-on-review.yml`. `release.yml` builds releases and mirrors assets into `web-assets/`.
 - Bots assign Copilot to issues and relay review comments to it, so expect automated PRs.
-- Don't use `firmware/install_scripts/*/install-wifi_s3.sh`. It is the plain-ESP32 script and is wrong for the S3.
+- The USB install scripts in the release zips are Maslow's own, in `scripts/release/install/`.
+  `firmware/install_scripts/` is upstream FluidNC's (wrong chip or flash offsets for this board):
+  leave it as upstream has it and don't use it.

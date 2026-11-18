@@ -289,6 +289,33 @@ describe("motion", () => {
     expect(g.ws_source.sent).toEqual([]);
   });
 
+  test("setWorkZero puts the origin at a machine position, in mm", async () => {
+    reply("[GC:G0 G54 G17 G21 G90 G94 M5 M9 T0 F0 S0]", "<Idle|MPos:10,20,67.16|FS:0,0|WCO:0,0,62.08>");
+    const op = g.machine.setWorkZero({ z: 60 });
+    expect(lastSent()).toBe("G21 G10 L20 P0 Z7.16\n");
+    reply("ok");
+    await op;
+    expect(g.ws_source.sent.length).toBe(1);
+  });
+
+  test("setWorkZero puts inches back after its G21", async () => {
+    reply("[GC:G0 G54 G17 G20 G90 G94 M5 M9 T0 F0 S0]", "<Idle|MPos:0,0,5|FS:0,0>");
+    const op = g.machine.setWorkZero({ z: 5 });
+    expect(lastSent()).toBe("G21 G10 L20 P0 Z0\n");
+    reply("ok");
+    await tick();
+    expect(lastSent()).toBe("G20\n");
+    reply("ok");
+    await op;
+  });
+
+  test("setWorkZero needs an idle machine", async () => {
+    reply("<Jog|MPos:0,0,5|FS:100,0>");
+    await expect(g.machine.setWorkZero({ z: 5 })).rejects.toMatchObject({ reason: "not-ready" });
+    expect(g.ws_source.sent).toEqual([]);
+    expect(() => g.machine.setWorkZero({})).toThrow();
+  });
+
   test("bad arguments throw before anything is sent", () => {
     expect(() => g.machine.jog({}, { feed: 100 })).toThrow();
     expect(() => g.machine.jog({ x: 1 }, {})).toThrow();

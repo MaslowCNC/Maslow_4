@@ -444,8 +444,8 @@ const updateUnifiedPlayPauseButton = (stateName, clickable) => {
       playButton.innerHTML = '<canvas id="playBtn" style="width:100%;height:100%"></canvas>';
     }
     playButton.onclick = null;
-    if (typeof setPlayButton === 'function') {
-      setPlayButton(false, gray, 'Start', null);
+    if (typeof setRunControls === 'function') {
+      setRunControls();
     }
   } else if (clickable.resume) {
     // Machine is paused - show play button

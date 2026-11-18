@@ -1,0 +1,23 @@
+## Installing Maslow 4 firmware over USB (Windows)
+
+These scripts install the firmware on a Maslow 4 / 4.1 / Mini control board (ESP32-S3)
+over a USB-C cable. To update a machine that is already running Maslow firmware, the
+web UI's firmware update over WiFi is easier and keeps everything on the machine.
+
+Chrome or Edge can do the same without these scripts: open
+https://documentation.maslowcnc.com/firmware-installer/ and choose to keep
+maslow.yaml or to erase everything.
+
+Unzip this file, plug the board into USB, then double-click one of:
+
+  full-install.bat       Fresh install: erases the board, then installs the
+                         filesystem and the firmware. Use this for a new board.
+                         It deletes maslow.yaml, calibration and saved settings.
+  install-wifi_s3.bat    Firmware only. Keeps maslow.yaml and your files.
+  install-fs.bat         Filesystem only (web UI and config templates).
+                         Deletes maslow.yaml and any files you uploaded.
+  erase.bat              Erase everything on the board.
+  fluidterm.bat          Serial terminal for talking to the board.
+
+After a fresh install the board starts with the config template for its board type.
+Calibrate it (or upload your saved maslow.yaml) before cutting.
