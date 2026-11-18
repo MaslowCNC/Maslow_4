@@ -21,3 +21,18 @@ test("choosing a file reads it into state.gcode; choosing none clears it", () =>
   sim.send("chooseFile", { file: null });
   assert.equal(sim.getState().gcode, null);
 });
+
+test("setSettings saves the changed machine settings, logs them with $CO, and refuses out-of-range values", () => {
+  const sim = createSimulator();
+  assert.equal(sim.getState().settings.workW, 0);   // automatic
+  assert.equal(sim.getState().settings.retractLimit, 300);
+  sim.send("setSettings", { values: { parkX: 100, parkY: -50, parkZ: 2 }, label: "Park position" });
+  const s = sim.getState();
+  assert.deepEqual([s.settings.parkX, s.settings.parkY, s.settings.parkZ], [100, -50, 2]);
+  assert.ok(s.log.some(l => l.endsWith("$/Maslow_Park_X=100")));
+  assert.ok(!s.log.some(l => l.includes("Maslow_Park_Z")));   // unchanged, not sent
+  assert.ok(s.log.at(-1).endsWith("$CO"));
+  sim.send("setSettings", { values: { scaleX: 1.5 }, label: "Scale" });
+  assert.equal(sim.getState().settings.scaleX, 1);
+  assert.match(sim.getState().log.at(-1), /Not sent: Scale/);
+});

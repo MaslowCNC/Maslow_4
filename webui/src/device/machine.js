@@ -10,12 +10,12 @@
 
 import { restarted, jobFailed, holding } from "../flow/incidents.js";
 import { readGcode, boundaryPath } from "../gcode/reader.js";
+import { MACHINE_SETTINGS, settingError } from "./settings.js";
 
 // What the firmware's close codes mean (WSChannel.h). For these the page shows a notice and doesn't reconnect.
 const CLOSE_NOTICES = { 4001: "othertab", 4002: "toomany" };
 const RECONNECT_MS = 3000;
 const SETTINGS = {
-  workW: "Maslow_Work_Area_X", workH: "Maslow_Work_Area_Y",
   spoil: "Maslow_spoilboardThickness", stock: "Maslow_workThickness", extend: "Maslow_Extend_Dist"
 };
 // The frame's geometry under kinematics/MaslowKinematics, in this order (readSettings)
@@ -70,7 +70,8 @@ export function createMachine({ host = location.host } = {}) {
     tool: "unknown", settingZ: false, zSetCount: 0, spindle: "off", error: null,
     job: null, lastJob: null, motion: null, result: null, restored: false,
     gcode: null,             // the chosen file, read: { file, status: "reading" | "ready" | "failed", detail?, ...readGcode() }
-    workArea: { w: 0, h: 0, spoil: 0 }, stock: 0, anchorsSaved: true,
+    workArea: { spoil: 0 }, stock: 0, anchorsSaved: true,
+    settings: {},            // work area, park, scale, belt limits (device/settings.js); a key is missing until read
     frame: null,             // { tl, tr, bl, br: [x, y] mm, z: [tl, tr, bl, br], arm: beltEndExtension + armLength, vertical }
     belts: [0, 0, 0, 0], motorCurrent: null,
     pos: { x: 0, y: 0, z: 0 }, wco: { x: 0, y: 0, z: 0 },
@@ -187,8 +188,11 @@ export function createMachine({ host = location.host } = {}) {
 
   async function readSettings() {
     const read = (path) => m.getSetting(path).then(Number).catch(() => null);
-    const [w, h, spoil, stock, extend] = await Promise.all(Object.values(SETTINGS).map(read));
-    set({ workArea: { w: w ?? 0, h: h ?? 0, spoil: spoil ?? 0 }, stock: stock ?? 0, extendDist: extend });
+    const [spoil, stock, extend] = await Promise.all(Object.values(SETTINGS).map(read));
+    const keys = Object.keys(MACHINE_SETTINGS);
+    const values = await Promise.all(keys.map((k) => read(MACHINE_SETTINGS[k].path)));
+    const settings = Object.fromEntries(keys.flatMap((k, i) => (values[i] == null ? [] : [[k, values[i]]])));
+    set({ workArea: { spoil: spoil ?? 0 }, stock: stock ?? 0, extendDist: extend, settings });
     await readFrame();
   }
 
@@ -232,6 +236,28 @@ export function createMachine({ host = location.host } = {}) {
       log(`Couldn't save the ${label.toLowerCase()}: ${err.detail || err.reason}`);
       emit();
     }
+  }
+
+  // Save several machine settings (device/settings.js) and write the config file once, as the current UI's popups
+  // do. Only the values that changed are sent; one that fails stops the rest.
+  async function saveSettings(values, label) {
+    const changed = Object.entries(values).filter(([k, v]) => s.settings[k] !== v);
+    const bad = changed.map(([k, v]) => [k, settingError(k, v)]).find(([, e]) => e);
+    if (bad) { log(`Not sent: ${label} (${bad[0]}: ${bad[1]})`); emit(); return; }
+    if (!changed.length) return;
+    const saved = {};
+    try {
+      for (const [k, v] of changed) {
+        await m.setSetting(MACHINE_SETTINGS[k].path, v);
+        saved[k] = v;
+      }
+      await m.saveConfig();
+      log(`${label} saved: ${changed.map(([k, v]) => `${MACHINE_SETTINGS[k].path}=${v}`).join(", ")}`);
+    } catch (err) {
+      log(`Couldn't save the ${label.toLowerCase()}: ${err.detail || err.reason}`);
+    }
+    // What was set is in the machine's memory even if writing the file failed, so show it
+    set({ settings: { ...s.settings, ...saved } });
   }
 
   // The SD card listing, over HTTP like the current UI (GET /upload?path=/). Read-only.
@@ -431,6 +457,7 @@ export function createMachine({ host = location.host } = {}) {
     if (action === "ackIncident") { set({ incident: null }); return; }
     if (action === "setStock") { setStock(payload.stock); return; }
     if (action === "setSpoilboard") { saveSetting(SETTINGS.spoil, payload.mm, "Spoil board thickness", { workArea: { ...s.workArea, spoil: payload.mm } }); return; }
+    if (action === "setSettings") { saveSettings(payload.values || {}, payload.label || "Settings"); return; }
     if (action === "setExtendDist") {
       if (payload.mm === 0) { log(`Not sent: extend distance 0 (${s.notYet.extendUntilDone})`); emit(); return; }
       saveSetting(SETTINGS.extend, payload.mm, "Extend distance", { extendDist: payload.mm });
