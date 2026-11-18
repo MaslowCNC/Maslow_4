@@ -1021,6 +1021,13 @@ var drawARect = function(x,y,size, opacity){
 var xOffset = 0;
 var yOffset = 0;
 var scaler = 1;
+
+// Zoom buttons and drag-to-pan. viewZoom multiplies the fitted scale; viewPanX/Y move the view
+// centre, in projected world units. No mouse-wheel zoom, on purpose.
+var viewZoom = 1;
+var viewPanX = 0;
+var viewPanY = 0;
+const VIEW_ZOOM_MAX = 1024;
 var xToPixel = function(x) { return scaler * x + xOffset; }
 var yToPixel = function(y) { return -scaler * y + yOffset; }
 var pixelToX = function(px) { return (px - xOffset) / scaler; }
@@ -1137,6 +1144,7 @@ var transformCanvas = function() {
     if (scaler < 0) {
         scaler = -scaler;
     }
+    scaler *= viewZoom;
 
     // Determine what should be centered in the canvas:
     // - Border views (workAreaBbox is valid): center the work area border
@@ -1153,6 +1161,8 @@ var transformCanvas = function() {
     // We want the center of the chosen bbox to map to the canvas center:
     //   scaler*centerX + xOffset = canvas.width/2  => xOffset = canvas.width/2 - scaler*centerX
     //  -scaler*centerY + yOffset = canvas.height/2 => yOffset = canvas.height/2 + scaler*centerY
+    centerX += viewPanX;
+    centerY += viewPanY;
     xOffset = canvas.width / 2 - scaler * centerX;
     yOffset = canvas.height / 2 + scaler * centerY;
 
@@ -1937,6 +1947,7 @@ ToolpathDisplayer.prototype.showToolPosition = function(modal, position) {
 }
 
 ToolpathDisplayer.prototype.cycleCameraAngle = function(gcode, modal, position) {
+    resetToolpathZoom(); // the pan is in the old view's projected units
     cameraAngle = cameraAngle + 1;
     if(cameraAngle > 4){
         cameraAngle = 0;
@@ -1983,10 +1994,78 @@ const updateGcodeViewerAngle = () => {
 	tpDisplayer().cycleCameraAngle(gcode, gCodeModal, arrayToXYZ(WPOS));
 };
 
+var resetToolpathZoom = function() {
+    viewZoom = 1;
+    viewPanX = 0;
+    viewPanY = 0;
+    canvas.style.touchAction = '';
+}
+
+// Zoom by factor about the centre of the view, and redraw
+var zoomToolpath = function(factor) {
+    viewZoom = Math.min(VIEW_ZOOM_MAX, Math.max(1, viewZoom * factor));
+    if (viewZoom === 1) {
+        resetToolpathZoom();
+    }
+    canvas.style.touchAction = viewZoom > 1 ? 'none' : ''; // let a touch drag pan instead of scrolling
+    refreshGcode();
+}
+
+const zoomInButton = document.getElementById('toolpath_zoom_in');
+const zoomOutButton = document.getElementById('toolpath_zoom_out');
+if (zoomInButton && zoomOutButton) {
+    zoomInButton.addEventListener('click', () => zoomToolpath(2));
+    zoomOutButton.addEventListener('click', () => zoomToolpath(0.5));
+}
+
+// While zoomed in, dragging moves the view. A drag isn't a click, so it doesn't switch the view angle.
+var panStart = null;
+var panMoved = false;
+var panRedrawPending = false;
+canvas.addEventListener('pointerdown', function(event) {
+    if (event.button !== 0 || viewZoom <= 1) {
+        return;
+    }
+    panStart = { x: event.clientX, y: event.clientY, panX: viewPanX, panY: viewPanY };
+    panMoved = false;
+    canvas.setPointerCapture(event.pointerId);
+});
+canvas.addEventListener('pointermove', function(event) {
+    if (!panStart) {
+        return;
+    }
+    const dx = event.clientX - panStart.x;
+    const dy = event.clientY - panStart.y;
+    if (!panMoved && Math.hypot(dx, dy) < 5) {
+        return;
+    }
+    panMoved = true;
+    const rect = canvas.getBoundingClientRect();
+    const pxPerCss = canvas.width / rect.width;
+    viewPanX = panStart.panX - dx * pxPerCss / scaler;
+    viewPanY = panStart.panY + dy * pxPerCss / scaler;
+    if (!panRedrawPending) {
+        panRedrawPending = true;
+        requestAnimationFrame(() => {
+            panRedrawPending = false;
+            refreshGcode();
+        });
+    }
+});
+var endPan = function() {
+    panStart = null;
+};
+canvas.addEventListener('pointerup', endPan);
+canvas.addEventListener('pointercancel', endPan);
+
 // Left-click switches view angle
 canvas.addEventListener("mouseup", function(event) {
-    // Only switch view on left-click
+    // Only switch view on left-click, and not at the end of a drag
     if (event.button === 0) {
+        if (panMoved) {
+            panMoved = false;
+            return;
+        }
         updateGcodeViewerAngle();
     }
 });

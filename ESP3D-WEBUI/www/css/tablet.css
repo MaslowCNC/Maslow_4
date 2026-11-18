@@ -107,6 +107,33 @@ border: 1px solid black;
   border-radius: 5px;
   aspect-ratio: 2 / 1;
 }
+
+/* Zoom buttons over the top-right corner of the toolpath preview */
+.toolpath-view {
+  position: relative;
+}
+#small-toolpath {
+  display: block;
+}
+.toolpath-zoom {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.toolpath-zoom button {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  font-size: 18px;
+  line-height: 1;
+  border: 1px solid #999;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.9);
+  cursor: pointer;
+}
 #gcode {
 margin: 10px 0px;
 }
