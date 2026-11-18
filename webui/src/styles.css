@@ -486,7 +486,14 @@ html, body { margin: 0; }
 .ph .iconbtn { margin: -4px -4px -4px 0; }
 .fhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--muted); }
 .files li { position: relative; padding: 0; overflow: hidden; transition: background .15s ease; }
-.files li .fbtn { min-height: 40px; padding: 7px 10px; align-items: center; }
+.files li .fbtn { min-height: 40px; padding: 7px 10px; align-items: center; transition: padding-right .18s ease; }
+.files .fbtn span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.files .fbtn span:last-child { flex: none; }
+/* Make room for the trash so it never covers the file size */
+@media (hover: hover) {
+  .files li:hover .fbtn, .files li:focus-within .fbtn { padding-right: 52px; }
+  .files li.armed .fbtn { padding-right: 104px; }
+}
 .files li:hover, .files li:focus-within { background: var(--hover); }
 .files li.sel:hover { background: color-mix(in srgb, var(--lilac) 26%, var(--panel)); }
 .files li.sel .ftrash { background: linear-gradient(to right, transparent, color-mix(in srgb, var(--lilac) 26%, var(--panel)) 14px); }
