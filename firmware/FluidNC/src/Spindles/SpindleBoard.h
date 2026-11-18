@@ -26,6 +26,8 @@
 #include "../FileStream.h"
 
 namespace Spindles {
+    class G474Flasher;
+
     class SpindleBoard : public Spindle {
     public:
         SpindleBoard(const char* name) : Spindle(name) {}
@@ -64,6 +66,20 @@ namespace Spindles {
         // test=true to record a test one now ("T!").  Triggered by $Spindle/Trip [TEST].  The
         // recording is saved to the local filesystem as TRIP_FILE either way.
         void sendTripRequest(bool test);
+
+        // 36 V board only: flash the spindle MCU (STM32G474) from a .bin on the local filesystem
+        // through its ROM bootloader ($Spindle/G474=FLASH <file>).  Refused unless the machine is at
+        // rest with the spindle off.  Runs in the background from update(); the link carries no
+        // spindle traffic until it finishes.
+        bool startFlash(const char* path, Channel& out);
+        bool flashing() const { return _flasher != nullptr; }
+
+        // 36 V board only: restart the spindle MCU (pulse its NRST with BOOT0 low).  $Spindle/G474=RESET.
+        bool resetSpindleMcu(Channel& out);
+
+        // Send one raw line to the spindle board ($Spindle/G474=SEND <line>), e.g. the G474 firmware's
+        // "#STAT" maintenance commands.  Refused while flashing.
+        bool sendRaw(const char* line, Channel& out);
 
         static constexpr const char* TRIP_FILE = "/spindle_trip.csv";
 
@@ -119,6 +135,10 @@ namespace Spindles {
         // Speed update requested from the ISR, flushed in update()
         volatile uint32_t _pending_rpm = 0;
         volatile bool     _rpm_dirty   = false;
+
+        // Present only while $Spindle/G474=FLASH runs (heap: ~0.4 KB for that time).
+        G474Flasher* _flasher = nullptr;
+        void         serviceFlasher();
 
         // Status return-link parsing
         char    _rx_buf[400];  // the trip recording's CSV header line is ~330 chars

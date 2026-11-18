@@ -271,6 +271,43 @@ namespace WebUI {
             return Error::Ok;
         }
 
+        // 36 V board's spindle MCU (STM32G474), one command to keep the XY heap cost to one entry:
+        //   $Spindle/G474=FLASH <file.bin>   flash it through its ROM bootloader (machine at rest)
+        //   $Spindle/G474=RESET              restart it
+        //   $Spindle/G474=SEND <line>        pass a line to it, e.g. "SEND #STAT" (bring-up commands;
+        //                                    the replies appear in this log as MSG lines)
+        static Error spindleG474(const char* parameter, AuthenticationLevel auth_level, Channel& out) {
+            auto spindle = Spindles::SpindleBoard::instance;
+            if (spindle == nullptr) {
+                log_string(out, "No SpindleBoard spindle is configured");
+                return Error::InvalidValue;
+            }
+            const char* p = parameter ? parameter : "";
+            auto verb = [&](const char* word) {
+                size_t n = strlen(word);
+                if (strncasecmp(p, word, n) != 0 || (p[n] != '\0' && p[n] != ' ')) {
+                    return false;
+                }
+                p += n;
+                while (*p == ' ') {
+                    ++p;
+                }
+                return true;
+            };
+            bool ok;
+            if (verb("FLASH")) {
+                ok = spindle->startFlash(p, out);
+            } else if (verb("RESET")) {
+                ok = spindle->resetSpindleMcu(out);
+            } else if (verb("SEND")) {
+                ok = spindle->sendRaw(p, out);
+            } else {
+                log_string(out, "Usage: $Spindle/G474=FLASH <file.bin> | RESET | SEND <line>");
+                ok = false;
+            }
+            return ok ? Error::Ok : Error::InvalidValue;
+        }
+
         void init() override {
             // If authentication enabled, display_settings skips or displays <Authentication Required>
             // RU - need user or admin password to read
@@ -290,6 +327,7 @@ namespace WebUI {
             new WebCommand(NULL, WEBCMD, WU, "ESP811", "Spindle/Home", homeSpindle);
             new WebCommand(NULL, WEBCMD, WU, "ESP812", "Spindle/RemoveTool", removeSpindleTool);
             new WebCommand(NULL, WEBCMD, WU, "ESP813", "Spindle/Trip", spindleTrip);
+            new WebCommand("FLASH <file>|RESET|SEND <line>", WEBCMD, WA, "ESP814", "Spindle/G474", spindleG474);
         }
     };
     ModuleFactory::InstanceBuilder<WebCommands> web_commands_module __attribute__((init_priority(103))) ("web_commands", true);

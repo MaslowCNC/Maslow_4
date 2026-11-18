@@ -376,7 +376,9 @@ namespace Machine {
             // Maslow M4 default items
             dcM4Vert + dcM4CalibrationGrid + dcM4CurrentThreshold + dcM4ApplyTensionLimit + dcM4Thickness + dcM4Park +
             // Default sections
-            dcSpi + dcSDCard + dcStepping + dcUart1 + dcKinematics +
+            dcSpi + dcSDCard + dcStepping +
+            // The 36 V board wires GPIO1/GPIO2 to the spindle MCU's NRST and BOOT0, not to a TMC UART.
+            (BoardId::board() == BoardId::Board::Unified36V ? std::string() : dcUart1) + dcKinematics +
             "axes:\n"
             "  z:\n    max_rate_mm_per_min: 400\n    acceleration_mm_per_sec2: 10\n    max_travel_mm: 100\n    steps_per_mm: 100\n"
             "    homing:\n      cycle: -1\n";
@@ -403,8 +405,10 @@ namespace Machine {
                 templateName = "maslow-m4.yaml";
                 break;
             case BoardId::Board::Unified:
-            case BoardId::Board::Unified36V:
                 templateName = "maslow-mini.yaml";
+                break;
+            case BoardId::Board::Unified36V:
+                templateName = "maslow-mini-36v.yaml";
                 break;
             default:
                 return;
@@ -473,6 +477,25 @@ namespace Machine {
                                                                      << " motor but the Unified Control Board has none: its GPIO15/16 "
                                                                         "are the spindle board link. Start from maslow-mini.yaml");
                             return;
+                        }
+                    }
+                }
+                // On the 36 V board GPIO1 and GPIO2 hold the spindle MCU (STM32G474) in reset and
+                // select its ROM bootloader.  A UART on them would reset the spindle with every byte.
+                if (BoardId::board() == BoardId::Board::Unified36V) {
+                    for (int i = 0; i < MAX_N_UARTS; ++i) {
+                        Uart* u = config->_uarts[i];
+                        if (!u) {
+                            continue;
+                        }
+                        for (Pin* p : { &u->_txd_pin, &u->_rxd_pin, &u->_rts_pin, &u->_cts_pin }) {
+                            if (p->defined() && (p->name() == "gpio.1" || p->name() == "gpio.2")) {
+                                log_config_error("uart" << i << " uses " << p->name()
+                                                        << ", which on the 36 V Unified Control Board is the spindle MCU's "
+                                                           "reset/boot line. Remove the uart" << i
+                                                        << " section (start from maslow-mini-36v.yaml)");
+                                return;
+                            }
                         }
                     }
                 }
