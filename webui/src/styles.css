@@ -526,3 +526,19 @@ html, body { margin: 0; }
 /* The workspace estimate: small, at the bottom right of the drawing; "Last known position" moves up above it */
 .wscap { position: absolute; right: 12px; bottom: 10px; font: 11px var(--font-mono); color: var(--muted); white-space: nowrap; pointer-events: auto; }
 .visbody .wscap ~ .viscap { bottom: 28px; }
+
+/* The drawing's tabs: Frame (default) and Toolpath; 3D is a placeholder */
+.vtab { font: 600 12px var(--font-mono); padding: 5px 10px; border-radius: 6px; color: var(--muted); background: none; border: 0; cursor: pointer; min-height: 28px; }
+.vtab:hover:not(:disabled):not(.on) { color: var(--text); }
+.vtab.on { color: var(--lilac); background: var(--input); }
+.vtab:disabled { opacity: .45; cursor: not-allowed; }
+.visempty { height: 100%; display: grid; place-items: center; padding: 16px; text-align: center; color: var(--muted); font: 13px var(--font-sans); }
+
+/* Belt lengths and motor currents as text, under the Belts and Motors toggles */
+.readouts { position: absolute; top: 8px; right: 10px; display: grid; gap: 6px; justify-items: end; pointer-events: none; z-index: 1; }
+.ro { background: color-mix(in srgb, var(--panel) 92%, transparent); border: 1px solid var(--sep); border-radius: 8px; padding: 5px 9px; display: grid; gap: 3px; }
+.ro > span { font: 600 10px var(--font-mono); letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.ro dl { margin: 0; display: grid; grid-template-columns: auto auto auto auto; gap: 2px 8px; align-items: baseline; }
+.ro dt { font: 600 10px var(--font-mono); color: var(--muted); }
+.ro dd { margin: 0; font: 600 12px var(--font-mono); font-variant-numeric: tabular-nums; color: var(--text); text-align: right; white-space: nowrap; }
+.ro dd i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px; vertical-align: 1px; }
