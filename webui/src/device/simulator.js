@@ -80,6 +80,34 @@ export function createSimulator() {
   const ask = (title, detail, options) => set({ pending: { title, detail, options: options.map(([label, apply, tone]) => ({ label, apply, tone })) } });
   const state = (n) => { log(`[MSG:INFO: Current state: ${n}]`); return n; };
 
+  // Settings the command box can read ($/name) and write ($/name=value), seeded from the state
+  const settings = {
+    Maslow_Park_X: "0", Maslow_Park_Y: "0", Maslow_Park_Z: "10"
+  };
+  const setting = (name) => ({
+    Maslow_Extend_Dist: s.extendDist, Maslow_Work_Area_X: s.workArea.w, Maslow_Work_Area_Y: s.workArea.h,
+    Maslow_spoilboardThickness: s.workArea.spoil, Maslow_workThickness: s.stock
+  })[name] ?? settings[name];
+  // The lines the firmware would send back for a typed line, ending in ok or error:N
+  function simReply(text) {
+    const [cmd, value] = text.split("=");
+    const upper = cmd.toUpperCase();
+    if (text === "?") return [`<${s.fluid}|MPos:${s.pos.x.toFixed(3)},${s.pos.y.toFixed(3)},${s.pos.z.toFixed(3)}|FS:0,0|MS:${s.maslow}>`];
+    if (/^\[ESP\d+\]/i.test(text)) return [`(simulator) ${text.slice(0, 8)} is answered over HTTP on the machine`];
+    if (upper === "$I") return ["[VER:3.9 FluidNC Maslow (simulator):]", "[OPT:PHS]", "ok"];
+    if (upper === "$SS") return ["[MSG:INFO: (simulator) startup log: FluidNC Maslow, board Maslow Mini]", "ok"];
+    if (upper === "$MINFO") return [`MINFO: ${JSON.stringify({ state: s.maslow, tl: s.belts[0], tr: s.belts[1], bl: s.belts[2], br: s.belts[3] })}`, "ok"];
+    if (upper === "$GSTATE") return [`[MSG:INFO: Current state: ${s.maslow}]`, "ok"];
+    if (cmd.startsWith("$/")) {
+      const name = cmd.slice(2);
+      if (value !== undefined) { settings[name] = value; return ["ok"]; }
+      const v = setting(name);
+      return v === undefined ? ["error:3"] : [`$/${name}=${v}`, "ok"];
+    }
+    if (/^(\$|[GMgm]\d)/.test(text)) return ["ok"];
+    return ["error:1"];
+  }
+
   function connectQuestion(afterReboot) {
     ask(afterReboot ? "The board restarted. What does it report?" : "The page connected. What state is the device in?",
       "Pick what the firmware reports. With a real device this comes from $GSTATE and $MINFO.",
@@ -249,6 +277,15 @@ export function createSimulator() {
       set({ gcode: f ? { file, status: "ready", ...readGcode(sampleGcode(f)) } : null });
     },
     deleteFile({ name }) { log(`Deleted ${name}`); set({ files: s.files.filter(f => f.name !== name) }); },
+    // A line typed in the command box: echo it and answer roughly as the firmware would. Nothing moves.
+    command({ line }) {
+      const text = String(line || "").trim();
+      if (!text) return;
+      log(`> ${text}`);
+      if (!s.connected) { log(`Not sent: ${text} (not connected)`); emit(); return; }
+      log(...simReply(text));
+      emit();
+    },
     uploadFile() { const n = `upload-${s.files.length + 1}.nc`; set({ files: [...s.files, { name: n, size: "40 KB", w: 200, h: 150, minutes: 6, depth: 2 }] }); return n; }
   };
 

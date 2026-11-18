@@ -371,12 +371,6 @@ currents; Extend distance, spoil board and stock thickness, Reboot.
 
 | Current UI | Where it is today | In the new UI |
 |---|---|---|
-| Work area X / Y (0 = auto) | Optional settings › Set Work Area | Shows "Automatic" only; can't be set |
-| Work area centre offset X / Y | Set Work Area | Missing |
-| Park X / Y / Z | Optional settings › Set Park | Park works; its position can't be set |
-| Scale X / Y | Set Scale and Thickness | Missing |
-| Belt retraction limit | Apply Tension Belt Limit | Shown as a fixed 300 mm; not read or saved |
-| Retraction force | Calibration › Config | Missing |
 | WiFi network and password | Calibration › Config, `setupdlg.js`, `scanwifidlg.js` | Settings › Network is a placeholder |
 
 *Actions* (Jog / Home panel, or Settings › Advanced):
@@ -386,17 +380,17 @@ currents; Extend distance, spoil board and stock thickness, Reboot.
 | Spindle on / off | Spindle controls | Missing |
 | Belt motor test (Test) | Calibration popup | Missing |
 | Set Z-Stop | Calibration popup | Not used on the Mini; the 4.1 needs it (its flow isn't defined) |
-| Set home by typing X / Y / Z | Set Home, Set Z Home popups | Sets the current position only |
+| Set home by typing X / Y / Z | Set Home, Set Z Home popups | **Done** (2026-11-18): Set home XY / Set Z open a box filled in with "here"; XY in machine coordinates, Z relative to the current Z home |
 | mm / inch | Units toggle | mm only |
-| Discard a stopped job | Discard button | Check whether choosing another file covers it |
-| Change the Continue line | Resume line with ▲▼ | Continues from the stopped line only |
+| Discard a stopped job | Discard button | **Done** (2026-11-18): Discard on the Job stopped bar (`$SD/Discard`) |
+| Change the Continue line | Resume line with ▲▼ | **Done** (2026-11-18): a Line box on the Job stopped bar, the stopped line to start |
 
 *Support and maintenance* (Settings › Advanced, or a Tools section):
 
 | Current UI | Where it is today | In the new UI |
 |---|---|---|
-| Command box (send `$` commands, verbose) | Main › Commands (`commandpanel.html`, `commands.js`) | Missing; most needed, for support |
-| Save the log to a file | Save Serial | Missing; needed for bug reports |
+| Command box (send `$` commands, verbose) | Main › Commands (`commandpanel.html`, `commands.js`) | **Done** (2026-11-18): off by default, turned on in Settings › Advanced (per browser); under the log, sent as typed through `wsCommands` (`[ESP…]` over HTTP), up/down history. The log keeps 200 lines |
+| Save the log to a file | Save Serial | **Done** (2026-11-18): the download icon by the Log title saves `maslow-log-<date>-<time>.txt` |
 | FluidNC and Maslow settings list | Settings tab (`settingstab.html`, `settings.js`) | Settings › Advanced is a placeholder |
 | Config editor | Config tab (`configtab.js`, hidden) | Settings › Advanced, not designed |
 | Flash files (`maslow.yaml`, `index.html.gz`) | `SPIFFSdlg.js` | Missing |
@@ -405,9 +399,6 @@ currents; Extend distance, spoil board and stock thickness, Reboot.
 | Motor current history | Debugging tab (hidden) | Live rings only |
 | Feed override, motors off, probe | Main › GRBL and Controls panels | Probably not needed on a Maslow; decide |
 | Camera, preferences, languages, login, UI lock, macros, credits | navbar, dialogs | Mostly unused; decide to keep or drop |
-
-Out of date in the new UI: Settings › Tool and Z still says Z lifts 2 mm after Stop. Since the
-Maslow-Main merge (2026-11-18), Stop leaves Z where it is.
 
 Most needed first: the command box and saving the log (support), Park and work area settings
 (people set these today), spindle on / off, and the belt motor test.

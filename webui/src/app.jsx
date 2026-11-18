@@ -37,6 +37,12 @@ function useStored(key, fallback) {
   return [val, set];
 }
 const useTolerance = () => useStored(TOL_KEY, TOLERANCE);
+// The command box under the log (Settings › Advanced): off unless turned on, remembered in this browser
+function useStoredFlag(key) {
+  const [on, setOn] = useState(() => { try { return localStorage.getItem(key) === "1"; } catch { return false; } });
+  const set = (v) => { setOn(v); try { localStorage.setItem(key, v ? "1" : "0"); } catch { /* not remembered */ } };
+  return [on, set];
+}
 // The sled's mass with the router (kg), for the workspace on a vertical frame. Also per browser, until the firmware
 // has a setting for it
 const useSledMass = () => useStored("maslow.sledMass", SLED_MASS);
@@ -48,13 +54,14 @@ export function App() {
   const [theme, setTheme] = useState("dark");
   const [tolerance, setTolerance] = useTolerance();
   const [sledMass, setSledMass] = useSledMass();
+  const [commandBox, setCommandBox] = useStoredFlag("maslow.commandBox");
   const narrow = useNarrow();
 
   const setA = (patch) => setAnswers(prev => ({ ...prev, ...patch }));
   const mark = (step) => setAnswers(prev => prev.ran.includes(step) ? prev : { ...prev, ran: [...prev.ran, step] });
   const send = (action, payload) => device.send(action, payload);
   const k = derive(d, a);
-  const ctx = { d, a, setA, send, mark, tolerance, setTolerance, sledMass, setSledMass };
+  const ctx = { d, a, setA, send, mark, tolerance, setTolerance, sledMass, setSledMass, commandBox, setCommandBox };
 
   useEffect(() => { send("connect"); }, []);
   // The device reads the chosen file (for the preview and Trace boundary) whenever the choice changes

@@ -1,4 +1,5 @@
-import { useState } from "preact/hooks";
+import { useState, useRef, useLayoutEffect } from "preact/hooks";
+import { downloadLog } from "./logfile.js";
 import { STEPS, SCREENS, isSetup } from "../flow/screens.js";
 import { stepArt, visSvg, frameMap, toolpathSvg, toolpathView, workspaceCaption, currentColour, MAX_CURRENT_MA } from "../art.js";
 import { makeFrame, accuracyMap, safeRect, checkJob, startRing, TOLERANCE, SLED_MASS } from "../accuracy.js";
@@ -143,9 +144,52 @@ export function PosReadout({ d, nopos, stale }) {
   return <div class={`posgrid${stale ? " stale" : ""}`}>{row("Work", w)}{row("Machine", m)}</div>;
 }
 
+// The log, kept scrolled to the newest line unless the user has scrolled up to read
 export function LogView({ d }) {
-  return <pre class="log">{d.log.slice(-60).join("\n") || "No messages yet"}</pre>;
+  const ref = useRef(null), atEnd = useRef(true);
+  useLayoutEffect(() => { const el = ref.current; if (el && atEnd.current) el.scrollTop = el.scrollHeight; }, [d.log]);
+  const onScroll = (e) => { const el = e.currentTarget; atEnd.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24; };
+  return <pre class="log" ref={ref} onScroll={onScroll}>{d.log.slice(-60).join("\n") || "No messages yet"}</pre>;
 }
+
+// The command box: one line, sent to the machine as typed (the current UI's Commands panel). Replies show in the
+// log. Up and down step through the lines sent before, kept for the page (both layouts share them).
+const sentLines = [];
+export function CommandBox({ d, send }) {
+  const [text, setText] = useState("");
+  const [at, setAt] = useState(-1);   // index into sentLines while stepping through them; -1 = a new line
+  const submit = (e) => {
+    e.preventDefault();
+    const line = text.trim();
+    if (!line) return;
+    if (sentLines.at(-1) !== line) sentLines.push(line);
+    if (sentLines.length > 40) sentLines.shift();
+    send("command", { line });
+    setText(""); setAt(-1);
+  };
+  const onKeyDown = (e) => {
+    if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+    if (!sentLines.length) return;
+    e.preventDefault();
+    const i = e.key === "ArrowUp" ? (at < 0 ? sentLines.length - 1 : Math.max(0, at - 1))
+      : (at < 0 ? -1 : at + 1 >= sentLines.length ? -1 : at + 1);
+    setAt(i); setText(i < 0 ? "" : sentLines[i]);
+  };
+  const why = "Sent to the machine as typed, with no checks: motion and calibration commands run too. Up and down arrows recall earlier lines.";
+  return <form class="cmdbox" onSubmit={submit} title={why}>
+    <input type="text" class="mono" value={text} placeholder="Command, sent as typed ($I, $SS…)" aria-label="Command to send to the machine, as typed"
+      autocomplete="off" autocapitalize="off" spellcheck={false} enterkeyhint="send"
+      onInput={e => { setText(e.currentTarget.value); setAt(-1); }} onKeyDown={onKeyDown} />
+    <button class="btn ghost" type="submit" disabled={!d.connected || !text.trim()} title={d.connected ? "Send" : "Not connected"}>Send</button>
+  </form>;
+}
+
+// Save the log to a text file, for support (the current UI's Save Serial)
+const SaveIcon = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+  <path d="M12 4v11M7 10l5 5 5-5M5 20h14" /></svg>;
+export const SaveLogBtn = ({ d }) =>
+  <button type="button" class="iconbtn sm" disabled={!d.log.length} aria-label="Save the log to a file" title="Save the log to a text file"
+    onClick={() => downloadLog(d.log, { machine: d.machine })}><SaveIcon /></button>;
 
 // Jogging needs anchors and a confirmed position, and nothing else moving
 export function jogLock(k, d) {

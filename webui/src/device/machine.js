@@ -290,6 +290,38 @@ export function createMachine({ host = location.host } = {}) {
     await listFiles();
   }
 
+  // A line the user typed in the command box, sent as typed: the current UI's Commands panel (commands.js). It's
+  // the user's own command, so there's no machine.js action for it; it goes through wsCommands like every line,
+  // one at a time. The machine's output lines show in the log as they arrive (onData), then ok or error:N.
+  // [ESP…] commands go over HTTP, as everywhere else; ?, ! and ~ are realtime bytes that get no ok.
+  const REALTIME = { "?": 0x3f, "!": 0x21, "~": 0x7e };
+  async function command(line) {
+    const text = String(line || "").trim();
+    if (!text) return;
+    log(`> ${text}`);
+    emit();
+    if (/^\[ESP\d+\]/i.test(text)) {
+      try {
+        const r = await fetch(`/command?plain=${encodeURIComponent(text)}`);
+        const body = (await r.text()).trim();
+        for (const l of body.split(/\r?\n/).filter(Boolean)) log(l);
+        if (!r.ok) log(`HTTP ${r.status}`);
+      } catch (e) {
+        log(`Couldn't send ${text}: ${e.message}`);
+      }
+      emit();
+      return;
+    }
+    const ws = globalThis.wsCommands;
+    const sent = REALTIME[text] != null ? ws.sendRealtime(REALTIME[text]) !== false
+      : ws.send(text, {
+        quiet: true,   // its error is logged here, once
+        onOk: () => { log("ok"); emit(); },
+        onError: (why) => { log(/^\d+$/.test(why) ? `error:${why}` : `No answer to ${text} (${why})`); emit(); }
+      });
+    if (!sent) { log(`Not sent: ${text} (not connected)`); emit(); }
+  }
+
   // Split what the socket sends into lines and hand each to Tristan's files, as socket.js does
   let partial = "";
   const decoder = new TextDecoder();
@@ -445,6 +477,7 @@ export function createMachine({ host = location.host } = {}) {
     if (action === "reconnect") { connect(); return; }
     if (action === "chooseFile") { chooseFile(payload.file); return; }   // reads over HTTP; doesn't need the socket
     if (!m) return;
+    if (action === "command") { command(payload.line); return; }
     if (action === "run") { run("run", () => m.runFile(`/${payload.file}`)); return; }
     if (action === "continueJob") {
       const st = m.state.stopped;

@@ -1,7 +1,7 @@
 import { useState } from "preact/hooks";
 import { SCREENS, isSetup, stepName } from "../flow/screens.js";
 import { ask, mainActions } from "../flow/asks.jsx";
-import { Btn, AppHeader, ModePill, progress, Segs, StepArt, Frame, LogView, JogPad, DetailsBody, FilesBody, jogLock, workPos } from "./parts.jsx";
+import { Btn, AppHeader, ModePill, progress, Segs, StepArt, Frame, LogView, CommandBox, SaveLogBtn, JogPad, DetailsBody, FilesBody, jogLock, workPos } from "./parts.jsx";
 
 // Defined outside Phone so its children keep their state (typed values) across re-renders
 function Section({ id, name, tag, summary, sec, toggle, children }) {
@@ -41,7 +41,7 @@ export function Phone({ k, ctx, onSettings, overlay }) {
         </Section>
         <Section sec={sec} toggle={toggle} id="jog" name="Jog" summary={lock ? lock[0] : "Ready to jog"}><div class="jogbox"><JogPad k={k} d={ctx.d} send={ctx.send} /></div></Section>
         <Section sec={sec} toggle={toggle} id="files" name="Files" summary={ctx.a.file || "No file chosen"}><FilesBody k={k} {...ctx} upload /></Section>
-        <Section sec={sec} toggle={toggle} id="log" name="Log" summary={(ctx.d.log.at(-1) || "").slice(9, 50)}><LogView d={ctx.d} /></Section>
+        <Section sec={sec} toggle={toggle} id="log" name="Log" summary={(ctx.d.log.at(-1) || "").slice(9, 50)}><div class="logbody"><div class="fhead"><span>The last 200 lines</span><SaveLogBtn d={ctx.d} /></div><LogView d={ctx.d} />{ctx.commandBox && <CommandBox d={ctx.d} send={ctx.send} />}</div></Section>
       </div>
     </main>
     {overlay}
