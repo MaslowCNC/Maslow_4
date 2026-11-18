@@ -247,6 +247,23 @@ export function createMachine({ host = location.host } = {}) {
     }
   }
 
+  // Delete a file from the SD card, over HTTP like the listing (GET /upload?path=/&action=delete&filename=…).
+  // machine.files.delete() can't be used here: it calls the current UI's HTTP helpers (SendGetHttp), which this
+  // page doesn't load. The answer is the new listing; its status says whether the delete worked.
+  async function deleteFile(name) {
+    try {
+      const q = new URLSearchParams({ path: "/", action: "delete", filename: name });
+      const r = await fetch(`/upload?${q}`);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const j = await r.json().catch(() => ({}));
+      if (/fail|error|cannot/i.test(j.status || "")) throw new Error(j.status);
+      log(`${name} deleted`);
+    } catch (e) {
+      log(`Couldn't delete ${name}: ${e.message}`);
+    }
+    await listFiles();
+  }
+
   // Split what the socket sends into lines and hand each to Tristan's files, as socket.js does
   let partial = "";
   const decoder = new TextDecoder();
@@ -410,11 +427,7 @@ export function createMachine({ host = location.host } = {}) {
     }
     if (action === "trace") { run("trace", () => traceFile(payload.file)); return; }
     if (action === "uploadFile") return uploadFile();
-    if (action === "deleteFile") {
-      m.files.delete(`/${payload.name}`).then(() => { log(`${payload.name} deleted`); return listFiles(); })
-        .catch(err => { log(`Delete ${payload.name}: ${err.detail || err.message}`); emit(); });
-      return;
-    }
+    if (action === "deleteFile") { deleteFile(payload.name); return; }
     if (action === "ackIncident") { set({ incident: null }); return; }
     if (action === "setStock") { setStock(payload.stock); return; }
     if (action === "setSpoilboard") { saveSetting(SETTINGS.spoil, payload.mm, "Spoil board thickness", { workArea: { ...s.workArea, spoil: payload.mm } }); return; }
