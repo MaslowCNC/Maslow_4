@@ -93,9 +93,9 @@ architecture rules". They apply to every agent. Follow them.
    `-exp.N` tag and push it. Don't move or delete tags, and don't make a no-op commit: the stable
    release is the exact code that was tested. `release.yml` rebuilds it, so the firmware reports
    `vX.Y.Z`. `git describe` picks the newest annotated tag when two share a commit.
-- The web UI's update check (`checkupdatesdlg.js`, Preferences > Update stream) orders versions by
-  strict semver, so `v1.28.0-exp.1` < `v1.28.0-exp.2` < `v1.28.0-exp.10` < `v1.28.0`. The Release stream offers
-  the newest full release; Experimental, or any machine already on a pre-release, also gets
-  pre-releases. Nightly takes the release tagged `nightly`. Pre-releases are told apart by GitHub's
-  pre-release flag, not the suffix text: `release.yml` marks any tag with a `-`
-  suffix as a pre-release (never "Latest") and a bare `vX.Y.Z` as the latest full release.
+- The web UI's update check (`checkupdatesdlg.js`, Preferences > Update stream) picks a release by
+  GitHub's pre-release flag: Release takes the newest full release, Experimental the newest
+  pre-release, Nightly the release tagged `nightly`. `release.yml` sets the flag from the tag: any
+  `-` suffix makes a pre-release (never "Latest"), a bare `vX.Y.Z` the latest full release. Whether
+  the picked release is an update is decided by strict semver
+  (`v1.28.0-exp.1` < `-exp.2` < `-exp.10` < `v1.28.0`).

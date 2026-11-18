@@ -66,25 +66,38 @@ describe("isNewerVersion", () => {
 });
 
 describe("selectReleaseForStream", () => {
-  test("Release stream on a stable version offers only stable releases", () => {
-    expect(api.selectReleaseForStream(releases, "release", ["fluidnc v1.26.0"]).tag_name).toBe("v1.27.0");
+  test("Release offers only full releases, even to a machine on a pre-release", () => {
+    expect(api.selectReleaseForStream(releases, "release").tag_name).toBe("v1.27.0");
   });
 
-  test("someone on a pre-release is offered newer pre-releases on any stream", () => {
-    expect(api.selectReleaseForStream(releases, "release", ["fluidnc v1.28.0-exp.1 (x)"]).tag_name)
-      .toBe("v1.28.0-exp.10");
-    expect(api.selectReleaseForStream(releases, "experimental", ["v1.27.0"]).tag_name).toBe("v1.28.0-exp.10");
-  });
-
-  test("a pre-release user is offered the stable release once it's out", () => {
-    const withStable = [rel("v1.28.0"), ...releases];
-    expect(api.selectReleaseForStream(withStable, "release", ["v1.28.0-exp.2"]).tag_name).toBe("v1.28.0");
-    expect(api.selectReleaseForStream(withStable, "experimental", ["v1.28.0-exp.2"]).tag_name).toBe("v1.28.0");
+  test("Experimental offers the newest pre-release", () => {
+    expect(api.selectReleaseForStream(releases, "experimental").tag_name).toBe("v1.28.0-exp.10");
   });
 
   test("drafts are skipped and Nightly picks the nightly release", () => {
-    expect(api.selectReleaseForStream([rel("v9.0.0", false, true), ...releases], "release", []).tag_name)
+    expect(api.selectReleaseForStream([rel("v9.0.0", false, true), ...releases], "release").tag_name)
       .toBe("v1.27.0");
-    expect(api.selectReleaseForStream(releases, "nightly", []).tag_name).toBe("nightly");
+    expect(api.selectReleaseForStream(releases, "nightly").tag_name).toBe("nightly");
+  });
+});
+
+describe("what each stream reports as an update", () => {
+  const offered = (stream: string, current: string, list = releases) =>
+    api.isNewerVersion(current, api.selectReleaseForStream(list, stream).tag_name);
+
+  test("Experimental: -exp.1 is offered -exp.10; the latest pre-release is up to date", () => {
+    expect(offered("experimental", "fluidnc v1.28.0-exp.1 (x)")).toBe(true);
+    expect(offered("experimental", "fluidnc v1.28.0-exp.10")).toBe(false);
+  });
+
+  test("Release: a pre-release is offered the final release once it's out", () => {
+    expect(offered("release", "fluidnc v1.28.0-exp.2", [rel("v1.28.0"), ...releases])).toBe(true);
+    expect(offered("release", "fluidnc v1.28.0-exp.2")).toBe(false);  // v1.27.0 is older
+  });
+
+  test("Release: the latest release is up to date (the old check always said update available)", () => {
+    expect(offered("release", "fluidnc v1.27.0 (main-abc)")).toBe(false);
+    expect(offered("release", "github.com/BarbourSmith/ESP3D-WEBUI@v1.27.0")).toBe(false);
+    expect(offered("release", "fluidnc v1.26.0")).toBe(true);
   });
 });

@@ -106,45 +106,38 @@ function compareVersions(a, b) {
     return Math.sign(a.pre.length - b.pre.length);
 }
 
-/** True if the version string is a pre-release (has a suffix such as -exp.1). */
-function isPrereleaseVersion(text) {
-    const v = parseVersion(text);
-    return !!v && v.pre.length > 0;
-}
-
-/** Select the release to offer for the configured stream.
+/** Select the best release from the list based on the configured stream.
  *
- * Tag convention:
+ * Tag convention (see .github/workflows in PR #975):
  *   nightly      — rolling pre-release published daily; tag_name is literally "nightly"
- *   experimental — versioned pre-release with a suffix (e.g. v1.2.3-exp.1), marked pre-release
+ *   experimental — versioned pre-release; tag_name matches v*-exp* (e.g. v1.2.3-exp.1)
  *   release      — stable full release; tag_name is bare semver (e.g. v1.2.3)
- *
- * Release and Experimental offer the newest version by semver. Experimental also considers
- * pre-releases, and so does Release when the machine is already running a pre-release
- * (currentVersions), so someone on -exp.1 is offered -exp.2, and the stable release once it's out.
  */
-function selectReleaseForStream(releases, stream, currentVersions = []) {
+function selectReleaseForStream(releases, stream) {
     if (!releases || releases.length === 0) {
         return null;
     }
-    if (stream === "nightly") {
-        // The nightly workflow always recreates a single rolling release whose
-        // tag_name is the literal string "nightly".
-        return releases.find(r => r.tag_name === "nightly" && !r.draft) || null;
+    let candidates;
+    switch (stream) {
+        case "nightly":
+            // The nightly workflow always recreates a single rolling release whose
+            // tag_name is the literal string "nightly".
+            candidates = releases.filter(r => r.tag_name === "nightly" && !r.draft);
+            break;
+        case "experimental":
+            // Versioned pre-releases (v*-exp.*) — exclude the rolling nightly tag.
+            candidates = releases.filter(
+                r => r.prerelease && !r.draft && r.tag_name !== "nightly"
+            );
+            break;
+        case "release":
+        default:
+            // Stable, non-prerelease only.
+            candidates = releases.filter(r => !r.prerelease && !r.draft);
+            break;
     }
-    const includePre = stream === "experimental" || currentVersions.some(isPrereleaseVersion);
-    let best = null, bestVersion = null;
-    for (const r of releases) {
-        if (r.draft || r.tag_name === "nightly") continue;
-        if (r.prerelease && !includePre) continue;
-        const v = parseVersion(r.tag_name);
-        if (!v) continue;
-        if (!best || compareVersions(v, bestVersion) > 0) {
-            best = r;
-            bestVersion = v;
-        }
-    }
-    return best;
+    // GitHub returns releases newest-first; pick the first match.
+    return candidates.length > 0 ? candidates[0] : null;
 }
 
 /** Return true if latestTag is newer than currentVersion */
@@ -192,7 +185,7 @@ function checkForUpdates() {
             return response.json();
         })
         .then(releases => {
-            const release = selectReleaseForStream(releases, stream, [fw_version, web_ui_version]);
+            const release = selectReleaseForStream(releases, stream);
             handleReleaseFetched(release, stream);
         })
         .catch(err => {
