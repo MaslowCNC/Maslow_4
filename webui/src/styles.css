@@ -531,10 +531,14 @@ html, body { margin: 0; }
 .logbody { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
 .logbody .log { flex: 1 1 auto; }
 .acc .logbody .log { max-height: 40vh; }
-.logbtns { display: flex; gap: 10px; }
+.logtitle { display: flex; align-items: center; gap: 8px; }
+.iconbtn.sm { width: 26px; height: 26px; border-radius: 6px; }
+.ph .iconbtn.sm { margin: -3px 0; }
 .linkbtn:disabled { opacity: .4; cursor: not-allowed; }
 .cmdbox { display: flex; gap: 6px; flex: none; }
 .cmdbox input { flex: 1 1 auto; min-width: 0; background: var(--input); border: 1px solid var(--sep); border-radius: 6px; color: var(--text);
   font: 12px var(--font-mono); padding: 0 8px; min-height: 36px; }
 .cmdbox input:focus { outline: 2px solid var(--lilac); outline-offset: -1px; }
 .cmdbox .btn { min-height: 36px; padding: 0 10px; font-size: 13px; }
+.check { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 14px; }
+.check input { width: 18px; height: 18px; accent-color: var(--lilac); margin: 0; }

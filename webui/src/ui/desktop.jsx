@@ -64,8 +64,8 @@ export function Desktop({ k, ctx, onSettings, overlay }) {
         <div class="visbody">
           <Frame k={k} d={ctx.d} showLengths={showBelts} showCurrents={showMotors} showWorkspace={showWorkspace} tolerance={ctx.tolerance} sledMass={ctx.sledMass} />
           <span class="viscap">{s.nopos && s.moving ? "Position isn't live while the belts move" : s.stale ? "Last known position" : ""}</span>
-          <div class="inset" style={logOpen ? "" : "bottom:auto"}><div class="ph">Log<span class="logbtns"><SaveLogBtn d={ctx.d} /><button type="button" class="linkbtn" onClick={() => setLogOpen(!logOpen)}>{logOpen ? "collapse ▾" : "expand ▸"}</button></span></div>
-            {logOpen && <div class="pb logbody"><LogView d={ctx.d} /><CommandBox d={ctx.d} send={ctx.send} /></div>}</div>
+          <div class="inset" style={logOpen ? "" : "bottom:auto"}><div class="ph"><span class="logtitle">Log<SaveLogBtn d={ctx.d} /></span><button type="button" class="linkbtn" onClick={() => setLogOpen(!logOpen)}>{logOpen ? "collapse ▾" : "expand ▸"}</button></div>
+            {logOpen && <div class="pb logbody"><LogView d={ctx.d} />{ctx.commandBox && <CommandBox d={ctx.d} send={ctx.send} />}</div>}</div>
         </div>
         <div class="viscards"><DetailCards k={k} d={ctx.d} a={ctx.a} /></div>
       </section>

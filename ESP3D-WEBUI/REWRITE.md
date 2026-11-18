@@ -369,8 +369,8 @@ To replace the current UI on the board. The simulator isn't on this list: it sta
 | FluidNC and ESP settings | `settingstab.html`, `settings.js` | Settings › Advanced, not designed |
 | WiFi setup and scan | `setupdlg.js`, `scanwifidlg.js`, `wizard.js` | Settings › Network and the first-boot screen are placeholders |
 | Firmware update | `updatedlg.js`, `checkupdatesdlg.js` | Settings › Device has the button, not the flow |
-| Command box and full log | `commandpanel.html`, `commands.js`, `debugging.js` | **Command box done** (2026-11-18): under the log on desktop and phone, sent as typed through `wsCommands` (`[ESP…]` over HTTP), replies in the log, up/down history. The log keeps 200 lines; `debugging.js`'s full log is still to do |
-| Save Serial | `tablettab_save_serial_msg`, `tablet.js` | **Done** (2026-11-18): Log › save downloads `maslow-log-<date>-<time>.txt` with the timestamped lines |
+| Command box and full log | `commandpanel.html`, `commands.js`, `debugging.js` | **Command box done** (2026-11-18): off by default, turned on in Settings › Advanced (per browser); under the log on desktop and phone, sent as typed through `wsCommands` (`[ESP…]` over HTTP), replies in the log, up/down history. The log keeps 200 lines; `debugging.js`'s full log is still to do |
+| Save Serial | `tablettab_save_serial_msg`, `tablet.js` | **Done** (2026-11-18): the download icon by the Log title saves `maslow-log-<date>-<time>.txt` with the timestamped lines |
 | Macros | `macrodlg.js` | Not designed |
 | Camera | `camera.js` | Decide whether to keep it |
 | System status (`[ESP420]`), restart | `statusdlg.js`, `restartdlg.js` | Settings › Device |

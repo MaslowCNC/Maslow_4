@@ -142,9 +142,11 @@ export function CommandBox({ d, send }) {
 }
 
 // Save the log to a text file, for support (the current UI's Save Serial)
-export const SaveLogBtn = ({ d, class: c = "linkbtn", label = "save" }) =>
-  <button type="button" class={c} disabled={!d.log.length} title="Save the log to a text file"
-    onClick={() => downloadLog(d.log, { machine: d.machine })}>{label}</button>;
+const SaveIcon = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+  <path d="M12 4v11M7 10l5 5 5-5M5 20h14" /></svg>;
+export const SaveLogBtn = ({ d }) =>
+  <button type="button" class="iconbtn sm" disabled={!d.log.length} aria-label="Save the log to a file" title="Save the log to a text file"
+    onClick={() => downloadLog(d.log, { machine: d.machine })}><SaveIcon /></button>;
 
 // Jogging needs anchors and a confirmed position, and nothing else moving
 export function jogLock(k, d) {

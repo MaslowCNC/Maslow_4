@@ -41,7 +41,7 @@ export function Phone({ k, ctx, onSettings, overlay }) {
         </Section>
         <Section sec={sec} toggle={toggle} id="jog" name="Jog" summary={lock ? lock[0] : "Ready to jog"}><div class="jogbox"><JogPad k={k} d={ctx.d} send={ctx.send} /></div></Section>
         <Section sec={sec} toggle={toggle} id="files" name="Files" summary={ctx.a.file || "No file chosen"}><FilesBody k={k} {...ctx} upload /></Section>
-        <Section sec={sec} toggle={toggle} id="log" name="Log" summary={(ctx.d.log.at(-1) || "").slice(9, 50)}><div class="logbody"><LogView d={ctx.d} /><CommandBox d={ctx.d} send={ctx.send} /><SaveLogBtn d={ctx.d} class="btn ghost" label="Save the log to a file" /></div></Section>
+        <Section sec={sec} toggle={toggle} id="log" name="Log" summary={(ctx.d.log.at(-1) || "").slice(9, 50)}><div class="logbody"><div class="fhead"><span>The last 200 lines</span><SaveLogBtn d={ctx.d} /></div><LogView d={ctx.d} />{ctx.commandBox && <CommandBox d={ctx.d} send={ctx.send} />}</div></Section>
       </div>
     </main>
     {overlay}
