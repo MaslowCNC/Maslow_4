@@ -316,6 +316,106 @@ plus a log line `Motion is disabled: <reason>` when Maslow has blocked motion.
 | [`$TLI`][TLI] [`$TRI`][TRI] [`$BLI`][BLI] [`$BRI`][BRI] | `Maslow/calibrateXXI` | pull that arm's belt in at full power for 200 ms (clears a jam) | no |
 | [`$TLO`][TLO] [`$TRO`][TRO] [`$BLO`][BLO] [`$BRO`][BRO] | `Maslow/calibrateXXO` | push that arm's belt out for 200 ms | no |
 | [`$SETZSTOP`][SETZSTOP] | `Maslow/setZStop` | make the current Z the Z stop | yes |
+| [`$TCT=<arm>[,key=value…]`][TCT] | `Maslow/tensionCurrentTest` | test bench: hold one belt motor at a series of current levels against a scale, to map current to belt force (below) | no |
+| [`$TPO=<arm>,<resistive current>,<speed>,<dist>[,…]`][TPO] | `Maslow/payOutTest` | test bench: pull a belt out by hand through a scale against its motor, to measure pay-out force (below) | no |
+| [`$TRV=<arm>,<out>,<speed>[,…]`][TRV] | `Maslow/reversalTest` | test bench: one belt through a pay-out and back under the machine's position loop, to see what a reversal does (below) | no |
+
+**Belt tension / current test (`$TCT`).** Hook one belt to a scale anchored to the frame, belt
+taut, and run e.g. `$TCT=BR`. The motor pulls in, closed loop on its measured current (raw ADC,
+the `MC` units), through levels `from`, `from+step`, … `to` and back down to `from`. At each level
+it settles for at least `settle` s, until the current is on target (within 5 %) with the belt
+still for 0.5 s (giving up after 15 s more), then holds for `hold` s while the current is
+averaged. Read the scale during each hold. The motor power rises slowly (100 PWM/s) and not at
+all while the belt is moving, so taking up slack or stretching a spring scale doesn't overshoot. Accepted only when Idle and in Maslow state 0, 2 or 4 (release tension first);
+runs in the Homing state.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `from`, `to`, `step` | 200, 1600, 200 | current levels, raw ADC (at most 32 going up; `from` ≥ 50) |
+| `down` | 1 | `0` skips the descending half |
+| `hold`, `settle` | 5, 2 | seconds per level (hold 0.5–60, settle 0.5–30; settle is a minimum, see above) |
+| `move` | 15 | halt if the belt moves more than this many mm from where it started (1–50) |
+| `max` | 2000 | halt if the current goes above this (≤ 3000; `to` must be ≤ `max`) |
+| `time` | 300 | halt after this many seconds (10–900); refused up front if the levels need longer |
+
+The test halts with the motor off on `$STOP`, 0x18 or anything else that ends the Homing state, a
+Maslow error or watchdog, a change of Maslow state, and on its own checks. Log lines, all starting
+`TCT `, are `key=value` pairs (`scripts/tct_to_csv.py` turns them into a CSV):
+
+- `TCT start arm=… from=… to=… step=… levels=… hold_s=… settle_s=… move_mm=… max_adc=… max_s=… pos=…`
+- `TCT baseline arm=… adc=… mA=…`: the reading with the motor off (500 ms)
+- `TCT read arm=… step=N/M dir=up|down target_adc=… target_mA=… hold_s=… settle_s=… on_target=0|1`: the hold has started, read the scale now (`settle_s` is how long reaching the level took; `on_target=0` means it gave up waiting)
+- `TCT step arm=… step=N dir=… target_adc=… adc=… adc_sd=… adc_min=… adc_max=… mA=… baseline_adc=… pwm=… pos=… move_mm=… settled=0|1 t_s=…`: the averages over the hold
+- `TCT done arm=… steps=… move_mm=… t_s=…`
+- `TCT halt arm=… reason=… step=… adc=… pwm=… move_mm=… t_s=…` (WARN). Reasons: `stop`, `stopped`
+  (Homing ended, e.g. 0x18), `error`, `watchdog`, `state_changed`, `time_limit`, `move_limit`,
+  `over_current`, `dead_current_sense` (under 25 ADC for 1 s at PWM ≥ 300), `target_unreachable`
+  (full PWM for 1 s and under 90 % of the target), `encoder` (no reading for 300 ms)
+
+`mA` uses the UI's conversion, 1000 × 3.3 × ADC / 4095 / 1.5; `pwm` is the duty (0–1023) pulling in;
+`move_mm` is negative when the belt was reeled in.
+
+**Belt pay-out test (`$TPO`).** The companion to `$TCT`, for the force it takes to pull a belt *out*
+against its motor. Hook the scale to the belt end and hold it by hand.
+`$TPO=<arm>,<resistive current ADC>,<max speed mm/s>,<max dist mm>[,hold=s][,time=s]`, for example `$TPO=BL,800,5,20`.
+The resistive current is the current (raw ADC, the `MC` units) the motor holds pulling in while the belt is dragged out.
+Same preconditions and stop paths as `$TCT`.
+
+- **Current mode** (resistive current 100–2800): the motor pulls in at the resistive current with `$TCT`'s
+  loop. Hold the scale still until `TPO ready … pull the belt out now`, then pull the belt out
+  steadily. Above max speed the motor adds pull to brake. At max distance it holds position with
+  the machine's P loop (`MotorUnit`, P = 300) for `hold` s (default 5), ramps that down over 2 s and
+  ends. Read the scale at breakaway, while moving, and during the end hold.
+- **Drive mode** (resistive current 0): the realistic machine case. After a 3 s countdown the motor pays the
+  belt out at max speed under the machine's position control (`MotorUnit::recomputePID`), while you
+  keep the scale taut. Then it holds and ramps down as above. The log shows the current it took.
+
+It halts with the motor off on the `$TCT` conditions (stop, 0x18, error, watchdog, state change,
+`time` cap, default 120 s, encoder, dead current sense while stalled, over 3000 ADC), plus
+`overrun` (5 mm past max distance) and `reeled_in` (10 mm in). Log lines (`scripts/tpo_to_csv.py`):
+
+- `TPO start arm=… mode=current|drive target_adc=… target_mA=… speed=… dist=… hold_s=… max_s=… pos=…`
+- `TPO ready arm=… …`: current mode on target (`on_target=0|1`), or the drive countdown has begun
+- `TPO s t=… ph=settle|hold|move|brake|end|ramp pos=… v=… adc=… pwm=…`: about every 100 ms. `pos` in mm
+  from where pay-out starts (+ is out), `v` in mm/s (+ is out), `pwm` signed (+ drives out)
+- `TPO breakaway arm=… t=… adc=… mA=… pwm=… pos=…`: the belt has moved out 0.3 mm
+- `TPO end arm=…`: max distance reached, holding
+- `TPO summary arm=… mode=… target_adc=… speed=… dist=… breakaway=0|1 breakaway_adc=… breakaway_pwm=… breakaway_t=…
+  moving_adc=… moving_adc_sd=… moving_v=… moving_n=… jumps=… end_adc=… end_pwm=… pos=… t_s=…`: also after a halt.
+  `moving_*` average the samples moving out faster than 0.5 mm/s and not braking; `jumps` counts
+  grab-slip starts (speed up past 1 mm/s after falling under 0.3)
+- `TPO done arm=…`, or `TPO halt arm=… reason=… phase=… adc=… pos=… t_s=…` (WARN)
+
+**Belt reversal test (`$TRV`).** One belt follows a setpoint profile under the machine's own position
+loop: P = 300 on (setpoint − encoder), driven through `DCMotor::runAtPWM` with its 75-PWM floor, as
+`MotorUnit::recomputePID` does (`floor=0` drives the same P output without the floor). The profile is:
+hold, pay out `out` mm at `speed`, hold, reel back to the start, hold, repeated `cycles` times.
+Meant for a belt preloaded against a spring scale with a `$TCT` one-shot, where the encoder position
+also gives the force (`trv_to_csv.py --kg-per-mm`).
+`$TRV=<arm>,<out mm>,<speed mm/s>[,hold=s][,cycles=n][,floor=0|1][,slack=s][,pmax=n][,time=s]`
+(defaults hold 5, cycles 1, floor 1, slack 1, pmax 1023, time 120), e.g. `$TRV=BL,1,5` and `$TRV=BL,5,5`.
+
+- The encoder reads the belt after the spool, so a belt with no tension outside stops registering
+  pay-out while the spool keeps unwinding. If the encoder hasn't advanced for `slack` s while it is
+  more than 0.5 mm behind the pay-out, the test logs `TRV slack` and starts the return at once,
+  which bounds that internal slack.
+- Samples are kept in RAM (up to 1500, at 50 Hz or slower for long profiles) and printed after the
+  run, one line every 5 ms, so logging can't slow the loop. A halt prints them too, and so does a
+  `$STOP` or 0x18 during the run. `$TRV` is refused until the printout is done.
+- Halts as `$TCT` does, plus `overrun` (5 mm past `out`) and `reeled_in` (10 mm inside the start).
+
+Log lines (`scripts/trv_to_csv.py`):
+
+- `TRV start arm=… out=… speed=… hold_s=… cycles=… floor=0|1 slack_s=… pmax=… sample_ms=… pos=…`
+- `TRV phase arm=… step=… kind=hold0|out|hold_out|back|hold_back sp=… err_mean=… err_min=… err_max=… flips=…
+  adc_mean=… adc_max=… dead_ms=… pos_end=… t_s=…`: one per phase as it ends. `err` = encoder − setpoint
+  (the sign `BE` uses), `flips` = sign changes of the P output, `dead_ms` = time in a move until the
+  encoder moved 0.1 mm the commanded way (−1 for holds or if it never did)
+- `TRV slack arm=… step=… t=… sp=… pos=… lag=… pid=…`
+- `TRV finished|halted arm=… pos=… samples=…, printing them`, then `TRV halt arm=… reason=…` (WARN) for a halt
+- `TRV s t=… sp=… pos=… err=… pid=… out=… adc=…`: `sp`/`pos` in mm from the start (+ is out), `pid` the P
+  output before the floor, `out` the PWM commanded (+ drives out)
+- `TRV done arm=… samples=…`
 
 **Stopping:**
 
@@ -368,6 +468,9 @@ plus a log line `Motion is disabled: <reason>` when Maslow has blocked motion.
 [TKSLK]: https://github.com/MaslowCNC/Maslow_4/blob/3448d81fdf596451218280f18a7ec3e971985f5e/firmware/FluidNC/src/ProcessSettings.cpp#L1495
 [CALRESET]: https://github.com/MaslowCNC/Maslow_4/blob/3448d81fdf596451218280f18a7ec3e971985f5e/firmware/FluidNC/src/ProcessSettings.cpp#L1507
 [ESTOP]: https://github.com/MaslowCNC/Maslow_4/blob/3448d81fdf596451218280f18a7ec3e971985f5e/firmware/FluidNC/src/ProcessSettings.cpp#L1516
+[TCT]: https://github.com/MaslowCNC/Maslow_4/blob/Maslow-Main/firmware/FluidNC/src/Maslow/TensionTest.cpp
+[TPO]: https://github.com/MaslowCNC/Maslow_4/blob/Maslow-Main/firmware/FluidNC/src/Maslow/PayOutTest.cpp
+[TRV]: https://github.com/MaslowCNC/Maslow_4/blob/Maslow-Main/firmware/FluidNC/src/Maslow/ReversalTest.cpp
 [SETZSTOP]: https://github.com/MaslowCNC/Maslow_4/blob/3448d81fdf596451218280f18a7ec3e971985f5e/firmware/FluidNC/src/ProcessSettings.cpp#L1523
 [MBOARD]: https://github.com/MaslowCNC/Maslow_4/blob/3448d81fdf596451218280f18a7ec3e971985f5e/firmware/FluidNC/src/ProcessSettings.cpp#L1531
 [MINFO]: https://github.com/MaslowCNC/Maslow_4/blob/3448d81fdf596451218280f18a7ec3e971985f5e/firmware/FluidNC/src/ProcessSettings.cpp#L1537
