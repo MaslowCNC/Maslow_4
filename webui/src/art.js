@@ -50,9 +50,9 @@ function beltLabels(lengths, target) {
 
 // Motor current as a ring around each anchor, like the current UI's dials (tablet.js, debugging.js): the ring fills
 // toward MAX_CURRENT_MA, coloured by how full it is. currents = [tl, tr, bl, br] in mA, null where there's no reading.
-const MAX_CURRENT_MA = 2200;
+export const MAX_CURRENT_MA = 2200;
 const RING_R = 12, RING_C = 2 * Math.PI * RING_R;
-const currentColour = (pct) => pct > 75 ? "#F44336" : pct > 50 ? "#FF9800" : pct > 25 ? "#2196F3" : "#4CAF50";
+export const currentColour = (pct) => pct > 75 ? "#F44336" : pct > 50 ? "#FF9800" : pct > 25 ? "#2196F3" : "#4CAF50";
 function currentRings(currents) {
   const names = ["Top left", "Top right", "Bottom left", "Bottom right"];
   return [[30, 30], [380, 30], [30, 240], [380, 240]].map(([x, y], i) => {
@@ -136,7 +136,7 @@ export function toolpathSvg(moves, wco, X, Y, done = null) {
     path(parts.cut, `stroke="var(--lilac)" stroke-width="${done != null ? 1.8 : 1.3}"`) + "</g>";
 }
 
-// toolpath: an SVG string from toolpathSvg (drawn with frameMap(frameSize)), under the workspace overlay.
+// The Frame view. toolpath: an SVG string from toolpathSvg (drawn with frameMap(frameSize)), under the workspace overlay.
 export function visSvg(k, s, pos = { x: 0, y: 0 }, home = { x: 0, y: 0 }, lengths = null, currents = null, accuracy = null, frameSize = null, toolpath = "") {
   // The sled follows the machine position, scaled to the drawing. The cross marks the user's home (work 0, 0);
   // it's drawn over the sled and reaches past it, so it still shows when the sled sits on home.
@@ -157,4 +157,28 @@ export function visSvg(k, s, pos = { x: 0, y: 0 }, home = { x: 0, y: 0 }, length
     ${unk ? "" : `<circle cx="${sledX}" cy="${sledY}" r="3" fill="var(--lilac)"/>`}
     ${unk ? "" : `<g stroke="var(--ready)" stroke-width="1.6"><title>Your home (work 0, 0)</title><line x1="${hx - 20}" y1="${hy}" x2="${hx + 20}" y2="${hy}"/><line x1="${hx}" y1="${hy - 20}" x2="${hx}" y2="${hy + 20}"/></g>`}
     ${lengths ? beltLabels(lengths, unk ? { x: 205, y: 135, onBelt: false } : { x: sledX, y: sledY, onBelt: true }) : ""}</svg>`;
+}
+
+// The Toolpath view: the chosen file alone, fitted to the drawing, in work coordinates (its own 0, 0 is the user's
+// home). The bit is a small circle at the work position; when it's outside the file's area it sits on the edge,
+// hollow and dashed, so it's still found. g: readGcode() result with its extent; work: { x, y } or null when the
+// position isn't known; done: the running job's line, or null.
+export function toolpathView(g, work, done = null) {
+  const W = 410, H = 270, M = 22;
+  const e = g.extent, ew = Math.max(e.max.x - e.min.x, 1), eh = Math.max(e.max.y - e.min.y, 1);
+  const k = Math.min((W - 2 * M) / ew, (H - 2 * M) / eh);
+  const cx = (e.min.x + e.max.x) / 2, cy = (e.min.y + e.max.y) / 2;
+  const X = (x) => W / 2 + (x - cx) * k, Y = (y) => H / 2 - (y - cy) * k;
+  const box = `<rect x="${X(e.min.x).toFixed(1)}" y="${Y(e.max.y).toFixed(1)}" width="${(ew * k).toFixed(1)}" height="${(eh * k).toFixed(1)}" ` +
+    `fill="none" stroke="var(--line2)" stroke-dasharray="3 5"><title>The file's extent: ${Math.round(ew)} × ${Math.round(eh)} mm</title></rect>`;
+  const hx = X(0), hy = Y(0), home = hx >= 0 && hx <= W && hy >= 0 && hy <= H
+    ? `<g stroke="var(--ready)" stroke-width="1.4"><title>Your home (work 0, 0)</title><line x1="${hx - 10}" y1="${hy}" x2="${hx + 10}" y2="${hy}"/><line x1="${hx}" y1="${hy - 10}" x2="${hx}" y2="${hy + 10}"/></g>` : "";
+  let bit = "";
+  if (work) {
+    const bx = X(work.x), by = Y(work.y), cxB = Math.max(6, Math.min(W - 6, bx)), cyB = Math.max(6, Math.min(H - 6, by));
+    const off = cxB !== bx || cyB !== by;
+    bit = `<g><title>The bit: X ${work.x.toFixed(1)} Y ${work.y.toFixed(1)}${off ? " (outside the file's area)" : ""}</title>` +
+      `<circle cx="${cxB.toFixed(1)}" cy="${cyB.toFixed(1)}" r="4.5" fill="${off ? "none" : "var(--lilac)"}" stroke="var(--lilac)" stroke-width="1.5"${off ? ' stroke-dasharray="2 2"' : ""}/></g>`;
+  }
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="The chosen file's toolpath and the bit">${box}${toolpathSvg(g.moves, { x: 0, y: 0 }, X, Y, done)}${home}${bit}</svg>`;
 }

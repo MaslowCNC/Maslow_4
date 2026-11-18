@@ -1,6 +1,6 @@
 import { useState } from "preact/hooks";
 import { STEPS, SCREENS, isSetup } from "../flow/screens.js";
-import { stepArt, visSvg, frameMap, toolpathSvg, workspaceCaption } from "../art.js";
+import { stepArt, visSvg, frameMap, toolpathSvg, toolpathView, workspaceCaption, currentColour, MAX_CURRENT_MA } from "../art.js";
 import { makeFrame, accuracyMap, safeRect, checkJob, startRing, TOLERANCE, SLED_MASS } from "../accuracy.js";
 import logo from "../assets/maslow-logo.webp";
 
@@ -32,21 +32,64 @@ export const Segs = ({ step, skipped }) =>
 export const StepArt = ({ step, d, class: c = "art" }) =>
   <div class={c}><Svg html={stepArt(step)} /></div>;
 
-// showLengths: label each belt with its live length (the Belts toggle). A length is unknown before the machine
-// knows it (Maslow state 0, or "?" in the report's BL).
-// showCurrents: a ring at each anchor for its motor's current (the Motors toggle), in mA from the report's MC.
+// view: "frame" (the frame, the belts and the sled, with the file's toolpath on it) or "toolpath" (the chosen file
+// alone, fitted to the drawing, with the bit as a small circle).
+// showLengths / showCurrents (the Belts and Motors toggles), on the frame view: each belt labelled with its live
+// length, and a ring at each anchor for its motor's current. The toolpath view has no belts or anchors to draw them
+// on, so there they show as text instead (VisReadouts).
 // showWorkspace: the area where cuts land within the tolerance (mm, Settings → Frame and belts) and whether the
-// chosen job fits it (the Workspace toggle), from the anchors.
-export const Frame = ({ k, d, showLengths = false, showCurrents = false, showWorkspace = false, tolerance = TOLERANCE, sledMass = SLED_MASS }) => {
+// chosen job fits it (the Workspace toggle), from the anchors. The outline is drawn on the frame view; the caption
+// shows on both.
+export const Frame = ({ k, d, view = "frame", showLengths = false, showCurrents = false, showWorkspace = false, tolerance = TOLERANCE, sledMass = SLED_MASS }) => {
   const s = SCREENS[k];
+  const acc = accuracyFor(d, tolerance, sledMass);
+  const cap = showWorkspace ? workspaceCaption(acc.overlay) : null;
+  const caption = cap && <span class="wscap" style={{ color: cap.colour }}>{cap.text}</span>;
+  if (view === "toolpath") {
+    const st = d.gcode?.status;
+    const html = st === "ready" && d.gcode.extent ? toolpathViewFor(d, s.nopos ? null : workPos(d)) : null;
+    return <>{html ? <Svg class="framesvg" html={html} />
+      : <div class="visempty">{st === "reading" ? "Reading the file…" : st === "failed" ? `Couldn't read the file: ${d.gcode.detail || "unknown error"}`
+        : st === "ready" ? "This file has no cutting moves to show" : "Choose a file to see its toolpath"}</div>}{caption}</>;
+  }
   const lengths = showLengths ? d.belts.map((v, i) => d.maslow === 0 || d.beltUnknown?.[i] ? null : v) : null;
   const mc = d.motorCurrent;
   const currents = showCurrents ? (mc ? [mc.tl, mc.tr, mc.bl, mc.br].map(adcToMilliamps) : [null, null, null, null]) : null;
-  const acc = accuracyFor(d, tolerance, sledMass);
-  const cap = showWorkspace ? workspaceCaption(acc.overlay) : null;
   return <><Svg class="framesvg" html={visSvg(k, s, d.pos, d.wco, lengths, currents, showWorkspace ? acc.overlay : null, acc.size,
-    toolpathFor(d, acc.size))} />{cap && <span class="wscap" style={{ color: cap.colour }}>{cap.text}</span>}</>;
+    toolpathFor(d, acc.size))} />{caption}</>;
 };
+
+// Belt lengths and motor currents as text, under the Belts and Motors toggles, on the Toolpath tab. A length is unknown before the machine
+// knows it (Maslow state 0, or "?" in the report's BL); currents are in mA from the report's MC.
+const CORNERS = ["TL", "TR", "BL", "BR"];
+export function VisReadouts({ d, belts, motors }) {
+  if (!belts && !motors) return null;
+  const mc = d.motorCurrent;
+  const mA = mc ? [mc.tl, mc.tr, mc.bl, mc.br].map(adcToMilliamps) : [null, null, null, null];
+  return <div class="readouts">
+    {belts && <div class="ro"><span>Belts</span><dl>{d.belts.map((v, i) => {
+      const unknown = d.maslow === 0 || d.beltUnknown?.[i] || v == null;
+      return <><dt>{CORNERS[i]}</dt><dd>{unknown ? "?" : `${v.toFixed(1)} mm`}</dd></>;
+    })}</dl></div>}
+    {motors && <div class="ro"><span>Motors</span><dl>{mA.map((v, i) => <><dt>{CORNERS[i]}</dt>
+      <dd>{v == null ? "–" : <><i style={{ background: currentColour(Math.min(100, v / MAX_CURRENT_MA * 100)) }} />{Math.round(v)} mA</>}</dd></>)}</dl></div>}
+  </div>;
+}
+
+// The Toolpath view, kept until the file, the bit's position (to a tenth of a mm) or the running line change; the
+// running line redraws at most once a second, as a big file's path is large.
+let viewCache = { g: null, key: null, done: null, at: 0, value: "" };
+function toolpathViewFor(d, work) {
+  const g = d.gcode;
+  const base = (f) => String(f || "").split("/").pop();
+  const done = d.job && base(d.job.file) === base(g.file) ? d.job.line : null;
+  const key = JSON.stringify([work && work.x.toFixed(1), work && work.y.toFixed(1), done == null]);
+  const now = Date.now();
+  if (g !== viewCache.g || key !== viewCache.key || (done !== viewCache.done && now - viewCache.at >= 1000)) {
+    viewCache = { g, key, done, at: now, value: toolpathView(g, work, done) };
+  }
+  return viewCache.value;
+}
 
 // The chosen file's toolpath, kept until the file, the work offset or the scale change. While its job runs, the moves
 // up to the running line show as cut; that part is redrawn at most once a second, as a big file's path is large.

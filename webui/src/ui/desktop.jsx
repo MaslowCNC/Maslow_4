@@ -1,7 +1,7 @@
 import { useState } from "preact/hooks";
 import { SCREENS, STEP_HELP, isSetup, stepName } from "../flow/screens.js";
 import { ask, mainActions } from "../flow/asks.jsx";
-import { Btn, AppHeader, ModePill, DetailCards, progress, Segs, StepArt, Frame, LogView, JogPad, DetailsBody, FilesBody, UploadBtn } from "./parts.jsx";
+import { Btn, AppHeader, ModePill, DetailCards, progress, Segs, StepArt, Frame, LogView, JogPad, DetailsBody, FilesBody, UploadBtn, VisReadouts } from "./parts.jsx";
 
 export const StopBtn = ({ send, label = "Stop" }) => <button class="btn danger" type="button" onClick={() => send("stop")}>{label}</button>;
 
@@ -38,13 +38,14 @@ export function TopBar(props) {
   return isSetup(props.k) ? <SetupBar {...props} /> : <ModeBar {...props} />;
 }
 
-// A toggle beside the visual's tabs, for an overlay
+// A toggle beside the visual's tabs: an overlay on the frame drawing (on the Toolpath tab, belts and motors show as text)
 const Toggle = ({ on, set, children }) =>
   <button type="button" class={`tgl${on ? " on" : ""}`} aria-pressed={on} onClick={() => set(!on)}>{children}</button>;
 
 export function Desktop({ k, ctx, onSettings, overlay }) {
   const s = SCREENS[k];
   const [logOpen, setLogOpen] = useState(true);
+  const [view, setView] = useState("frame");
   const [showBelts, setShowBelts] = useState(false);
   const [showMotors, setShowMotors] = useState(false);
   const [showWorkspace, setShowWorkspace] = useState(true);
@@ -55,14 +56,18 @@ export function Desktop({ k, ctx, onSettings, overlay }) {
       <TopBar k={k} ctx={ctx} onSettings={onSettings} />
     </div>
     <div class="board layout6">
-      {/* The visuals and the device state in one panel: the drawing (with the log, and belt lengths, motor currents and the workspace when toggled) on
+      {/* The visuals and the device state in one panel: the drawing (Frame or Toolpath, with the log, the workspace and the belt and motor readouts when toggled) on
           top, the Status, Position and File cards along the bottom */}
       <section class="panel vis merged" style="grid-area:vis">
-        <div class="tabs"><span class="on">Toolpath</span><span>Frame</span><span>3D</span><span class="tabs-gap" />
+        <div class="tabs" role="tablist" aria-label="Drawing">
+          {[["frame", "Frame"], ["toolpath", "Toolpath"]].map(([id, label]) =>
+            <button type="button" role="tab" class={`vtab${view === id ? " on" : ""}`} aria-selected={view === id} onClick={() => setView(id)}>{label}</button>)}
+          <button type="button" role="tab" class="vtab" aria-selected={false} disabled title="Not built yet">3D</button><span class="tabs-gap" />
           <Toggle on={showBelts} set={setShowBelts}>Belts</Toggle><Toggle on={showMotors} set={setShowMotors}>Motors</Toggle>
           <Toggle on={showWorkspace} set={setShowWorkspace}>Workspace</Toggle></div>
         <div class="visbody">
-          <Frame k={k} d={ctx.d} showLengths={showBelts} showCurrents={showMotors} showWorkspace={showWorkspace} tolerance={ctx.tolerance} sledMass={ctx.sledMass} />
+          <Frame k={k} d={ctx.d} view={view} showLengths={showBelts} showCurrents={showMotors} showWorkspace={showWorkspace} tolerance={ctx.tolerance} sledMass={ctx.sledMass} />
+          {view === "toolpath" && <VisReadouts d={ctx.d} belts={showBelts} motors={showMotors} />}
           <span class="viscap">{s.nopos && s.moving ? "Position isn't live while the belts move" : s.stale ? "Last known position" : ""}</span>
           <div class="inset" style={logOpen ? "" : "bottom:auto"}><div class="ph">Log<button type="button" class="linkbtn" onClick={() => setLogOpen(!logOpen)}>{logOpen ? "collapse ▾" : "expand ▸"}</button></div>
             {logOpen && <div class="pb"><LogView d={ctx.d} /></div>}</div>
