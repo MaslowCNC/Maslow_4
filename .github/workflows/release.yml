@@ -361,6 +361,14 @@ jobs:
             gh release create "$TAG" --title "$TITLE" --notes-file "$NOTES_FILE"
           fi
 
+          # Any suffix (v1.2.3-exp.1, -rc.1, ...) is a pre-release and never "Latest". The web UI's
+          # update streams choose by this flag, so a suffixed tag must not reach the stable stream.
+          if [[ "$TAG" == *-* ]]; then
+            gh release edit "$TAG" --prerelease --latest=false
+          else
+            gh release edit "$TAG" --prerelease=false --latest
+          fi
+
           gh release upload "$TAG" "${files_to_upload[@]}" --clobber
 
       # Mirror browser-fetched release files into the repository so raw.githubusercontent.com can serve them with CORS.
