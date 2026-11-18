@@ -318,6 +318,7 @@ plus a log line `Motion is disabled: <reason>` when Maslow has blocked motion.
 | [`$SETZSTOP`][SETZSTOP] | `Maslow/setZStop` | make the current Z the Z stop | yes |
 | [`$TCT=<arm>[,key=value…]`][TCT] | `Maslow/tensionCurrentTest` | test bench: hold one belt motor at a series of current levels against a scale, to map current to belt force (below) | no |
 | [`$TPO=<arm>,<resistive current>,<speed>,<dist>[,…]`][TPO] | `Maslow/payOutTest` | test bench: pull a belt out by hand through a scale against its motor, to measure pay-out force (below) | no |
+| [`$TRV=<arm>,<out>,<speed>[,…]`][TRV] | `Maslow/reversalTest` | test bench: one belt through a pay-out and back under the machine's position loop, to see what a reversal does (below) | no |
 
 **Belt tension / current test (`$TCT`).** Hook one belt to a scale anchored to the frame, belt
 taut, and run e.g. `$TCT=BR`. The motor pulls in, closed loop on its measured current (raw ADC,
@@ -385,6 +386,37 @@ It halts with the motor off on the `$TCT` conditions (stop, 0x18, error, watchdo
   grab-slip starts (speed up past 1 mm/s after falling under 0.3)
 - `TPO done arm=…`, or `TPO halt arm=… reason=… phase=… adc=… pos=… t_s=…` (WARN)
 
+**Belt reversal test (`$TRV`).** One belt follows a setpoint profile under the machine's own position
+loop: P = 300 on (setpoint − encoder), driven through `DCMotor::runAtPWM` with its 75-PWM floor, as
+`MotorUnit::recomputePID` does (`floor=0` drives the same P output without the floor). The profile is:
+hold, pay out `out` mm at `speed`, hold, reel back to the start, hold, repeated `cycles` times.
+Meant for a belt preloaded against a spring scale with a `$TCT` one-shot, where the encoder position
+also gives the force (`trv_to_csv.py --kg-per-mm`).
+`$TRV=<arm>,<out mm>,<speed mm/s>[,hold=s][,cycles=n][,floor=0|1][,slack=s][,pmax=n][,time=s]`
+(defaults hold 5, cycles 1, floor 1, slack 1, pmax 1023, time 120), e.g. `$TRV=BL,1,5` and `$TRV=BL,5,5`.
+
+- The encoder reads the belt after the spool, so a belt with no tension outside stops registering
+  pay-out while the spool keeps unwinding. If the encoder hasn't advanced for `slack` s while it is
+  more than 0.5 mm behind the pay-out, the test logs `TRV slack` and starts the return at once,
+  which bounds that internal slack.
+- Samples are kept in RAM (up to 1500, at 50 Hz or slower for long profiles) and printed after the
+  run, one line every 5 ms, so logging can't slow the loop. A halt prints them too, and so does a
+  `$STOP` or 0x18 during the run. `$TRV` is refused until the printout is done.
+- Halts as `$TCT` does, plus `overrun` (5 mm past `out`) and `reeled_in` (10 mm inside the start).
+
+Log lines (`scripts/trv_to_csv.py`):
+
+- `TRV start arm=… out=… speed=… hold_s=… cycles=… floor=0|1 slack_s=… pmax=… sample_ms=… pos=…`
+- `TRV phase arm=… step=… kind=hold0|out|hold_out|back|hold_back sp=… err_mean=… err_min=… err_max=… flips=…
+  adc_mean=… adc_max=… dead_ms=… pos_end=… t_s=…`: one per phase as it ends. `err` = encoder − setpoint
+  (the sign `BE` uses), `flips` = sign changes of the P output, `dead_ms` = time in a move until the
+  encoder moved 0.1 mm the commanded way (−1 for holds or if it never did)
+- `TRV slack arm=… step=… t=… sp=… pos=… lag=… pid=…`
+- `TRV finished|halted arm=… pos=… samples=…, printing them`, then `TRV halt arm=… reason=…` (WARN) for a halt
+- `TRV s t=… sp=… pos=… err=… pid=… out=… adc=…`: `sp`/`pos` in mm from the start (+ is out), `pid` the P
+  output before the floor, `out` the PWM commanded (+ drives out)
+- `TRV done arm=… samples=…`
+
 **Stopping:**
 
 | Command | Name | What it does | UI sends it |
@@ -438,6 +470,7 @@ It halts with the motor off on the `$TCT` conditions (stop, 0x18, error, watchdo
 [ESTOP]: https://github.com/MaslowCNC/Maslow_4/blob/3448d81fdf596451218280f18a7ec3e971985f5e/firmware/FluidNC/src/ProcessSettings.cpp#L1516
 [TCT]: https://github.com/MaslowCNC/Maslow_4/blob/Maslow-Main/firmware/FluidNC/src/Maslow/TensionTest.cpp
 [TPO]: https://github.com/MaslowCNC/Maslow_4/blob/Maslow-Main/firmware/FluidNC/src/Maslow/PayOutTest.cpp
+[TRV]: https://github.com/MaslowCNC/Maslow_4/blob/Maslow-Main/firmware/FluidNC/src/Maslow/ReversalTest.cpp
 [SETZSTOP]: https://github.com/MaslowCNC/Maslow_4/blob/3448d81fdf596451218280f18a7ec3e971985f5e/firmware/FluidNC/src/ProcessSettings.cpp#L1523
 [MBOARD]: https://github.com/MaslowCNC/Maslow_4/blob/3448d81fdf596451218280f18a7ec3e971985f5e/firmware/FluidNC/src/ProcessSettings.cpp#L1531
 [MINFO]: https://github.com/MaslowCNC/Maslow_4/blob/3448d81fdf596451218280f18a7ec3e971985f5e/firmware/FluidNC/src/ProcessSettings.cpp#L1537

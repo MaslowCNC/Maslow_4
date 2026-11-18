@@ -178,6 +178,7 @@ void Maslow_::update() {
     if (watchdogFired) {
         tensionTest.abort("watchdog");
         payOutTest.abort("watchdog");
+        reversalTest.abort("watchdog");
         stopMotors();
         static unsigned long wdTimer  = millis();
         static int           wdPhase  = 0;  // 0=on1, 1=off1, 2=on2, 3=pause
@@ -201,6 +202,7 @@ void Maslow_::update() {
     if (error) {
         tensionTest.abort("error");
         payOutTest.abort("error");
+        reversalTest.abort("error");
         static unsigned long timer = millis();
         static bool          st    = true;  //This is used to blink the LED
         if (millis() - timer > 300) {
@@ -300,6 +302,8 @@ void Maslow_::update() {
             axis[arm].update();  //update motor currents and belt speeds like this for now
         }
 
+        reversalTest.serviceDump();  // $TRV prints its samples after the run, in any state
+
         if (safetyOn)
             safety_control();
 
@@ -361,6 +365,8 @@ void Maslow_::update() {
                 tensionTest.update();  // $TCT runs instead of the calibration state machine
             } else if (payOutTest.active()) {
                 payOutTest.update();  // and so does $TPO
+            } else if (reversalTest.active()) {
+                reversalTest.update();  // and $TRV
             } else {
                 calibration.home();
             }
@@ -369,6 +375,7 @@ void Maslow_::update() {
             calibration.clearMotorOverrides();
             tensionTest.abort("stopped");  // 0x18, a feed hold, or anything else that ends Homing
             payOutTest.abort("stopped");
+            reversalTest.abort("stopped");
             Maslow.stopMotors();
         }
 
@@ -1172,6 +1179,7 @@ void Maslow_::stop() {
     stopMotors();
     tensionTest.abort("stop");
     payOutTest.abort("stop");
+    reversalTest.abort("stop");
     calibration.calibrationInProgress = false;
     test                              = false;
     takeSlack                         = false;

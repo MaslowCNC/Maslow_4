@@ -1474,7 +1474,7 @@ static Error maslow_BRI(const char* value, AuthenticationLevel auth_level, Chann
     return Error::Ok;
 }
 
-// Checks shared by the belt bench tests ($TCT, $TPO).  The belt is unhooked from the sled for these,
+// Checks shared by the belt bench tests ($TCT, $TPO, $TRV).  The belt is unhooked from the sled for these,
 // so they refuse while the belts hold the sled.  Returns Error::Ok if a test may start.
 static Error maslow_bench_test_allowed(const char* name, Channel& out) {
     if (Maslow.using_default_config) {
@@ -1483,7 +1483,7 @@ static Error maslow_bench_test_allowed(const char* name, Channel& out) {
     if (maslow_motion_blocked(out)) {
         return Error::SystemGcLock;
     }
-    if (Maslow.tensionTest.active() || Maslow.payOutTest.active()) {
+    if (Maslow.tensionTest.active() || Maslow.payOutTest.active() || Maslow.reversalTest.active()) {
         log_error(name << " refused: a test is already running ($STOP ends it)");
         return Error::IdleError;
     }
@@ -1534,6 +1534,28 @@ static Error maslow_payout_test(const char* value, AuthenticationLevel auth_leve
     Maslow.resetUpdateWatchdog();
     sys.set_state(State::Homing);
     Maslow.payOutTest.start(p);
+    return Error::Ok;
+}
+
+// $TRV=<arm>,<out mm>,<speed mm/s>[,key=value...]: run one belt through a pay-out and back under the
+// machine's position loop, to see what a reversal does.  See ReversalTest.h and docs/protocol.md.
+static Error maslow_reversal_test(const char* value, AuthenticationLevel auth_level, Channel& out) {
+    Error err = maslow_bench_test_allowed("TRV", out);
+    if (err != Error::Ok) {
+        return err;
+    }
+    ReversalTest::Params p;
+    std::string          why;
+    if (!ReversalTest::parse(value, p, why)) {
+        log_error("TRV refused: " << why.c_str());
+        return Error::InvalidValue;
+    }
+    Maslow.resetUpdateWatchdog();
+    sys.set_state(State::Homing);
+    if (!Maslow.reversalTest.start(p)) {
+        sys.set_state(State::Idle);
+        return Error::IdleError;
+    }
     return Error::Ok;
 }
 
@@ -1727,6 +1749,7 @@ void make_user_commands() {
     new UserCommand("TKSLK", "Maslow/takeSlack", maslow_takeSlack, anyState);
     new UserCommand("TCT", "Maslow/tensionCurrentTest", maslow_tension_test, anyState);
     new UserCommand("TPO", "Maslow/payOutTest", maslow_payout_test, anyState);
+    new UserCommand("TRV", "Maslow/reversalTest", maslow_reversal_test, anyState);
     new UserCommand("CALRESET", "Maslow/resetCalibration", maslow_reset_calibration, anyState);
     new UserCommand("ESTOP", "Maslow/estop", maslow_estop, anyState);
     new UserCommand("SETZSTOP", "Maslow/setZStop", maslow_set_zStop, anyState);
