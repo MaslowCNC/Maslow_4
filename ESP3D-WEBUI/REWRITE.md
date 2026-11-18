@@ -386,7 +386,7 @@ current UI's popups do:
 | Work area centre offset X / Y | `Maslow_Work_Area_Center_Offset_X/Y` | Set Work Area | Done, under More |
 | Park X / Y / Z | `Maslow_Park_X/Y/Z` | Set Park | Done |
 | Scale X / Y | `Maslow_Scale_X/Y` | Set Scale and Thickness | Done, under More |
-| Belt retraction limit | `Maslow_Apply_Tension_Belt_Retraction_Limit` | Apply Tension Belt Limit | Done; Settings › Advanced shows it too |
+| Belt retraction limit | `Maslow_Apply_Tension_Belt_Retraction_Limit` | Apply Tension Belt Limit | Done |
 | Retraction force | `Maslow_Retract_Current_Threshold` | Calibration › Config | Done, under More |
 | Spoil board, stock thickness, extend distance | `Maslow_spoilboardThickness`, `Maslow_workThickness`, `Maslow_Extend_Dist` | Set Scale and Thickness, Config | Done earlier |
 

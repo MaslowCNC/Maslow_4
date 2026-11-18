@@ -93,10 +93,7 @@ export function Settings({ k, ctx, onClose, theme, setTheme, compact, stop }) {
     <Row label="Z after Stop" hint="How far Z lifts above work Z when you press Stop."><span class="mono">+2 mm</span><span class="note">fixed in firmware</span></Row></>;
   else if (sec === "display") body = <><h4>Display</h4>
     <Row label="Panels"><select value={theme} onChange={e => setTheme(e.currentTarget.value)}><option value="dark">Dark</option><option value="light">Light</option></select></Row></>;
-  else body = <><h4>Advanced</h4><p class="note">The raw FluidNC and Maslow settings. Not wired to the simulator yet.</p>
-    <Row label="Belt retraction limit" hint="Apply tension stops if a belt winds in more than this.">
-      <span class="mono">{d.settings?.retractLimit != null ? `${d.settings.retractLimit} mm` : "–"}</span>
-      <button class="btn ghost" type="button" onClick={() => setSec("frame")}>Change in Frame and belts</button></Row></>;
+  else body = <><h4>Advanced</h4><p class="note">The raw FluidNC and Maslow settings. Not designed yet.</p></>;
   return <Modal title="Settings" small="maslow" onClose={onClose} nav={nav} compact={compact} stop={stop} ctx={ctx}>{body}</Modal>;
 }
 
