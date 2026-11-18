@@ -41,15 +41,20 @@ The workflow matrix is generated from the manifest, so adding a new target there
 `docs/firmware-installer/index.html` (published at `https://documentation.maslowcnc.com/firmware-installer/`)
 installs a release over USB with Web Serial and esptool-js. It loads the files the workflow mirrors into
 `web-assets/latest/` on the default branch (raw.githubusercontent.com serves them with CORS):
-`bootloader.bin`, `partitions.bin`, `boot_app0.bin`, `firmware.bin`, `littlefs.bin` and `index.html.gz`, checked
-against the sizes and SHA-256 hashes in `manifest.json`.
+`bootloader.bin`, `partitions.bin`, `boot_app0.bin`, `firmware.bin` and `littlefs.bin`, checked against the sizes
+and SHA-256 hashes in `manifest.json`.
 
-- **Update, keep my settings** checks that the board's filesystem partition matches the new partition table,
-  writes the bootloader, partition table, `boot_app0.bin` (so the board boots app0 even after OTA updates) and
-  firmware, leaves NVS and the filesystem alone, then uploads the new `index.html.gz` over the USB console with
-  `$Xmodem/Receive`.
-- **Clean install** erases the flash and writes everything including `littlefs.bin`.
+Everything runs in the ESP32-S3's download mode (the firmware has no command console on its USB port).
+The page reads the board's littlefs partition and opens it with `docs/firmware-installer/mklfs.wasm`
+(littlefs in WebAssembly, rebuilt with `name_max` 64 so the firmware mounts what it writes; see
+`docs/firmware-installer/mklfs/README.md`).
 
-Both read `maslow.yaml` over the console first (`$LocalFS/Show`) and offer it as a download. Add `?base=<url>/` to
+- **Update, keep my settings** builds a new filesystem from the release's `littlefs.bin` files plus every
+  other file on the board (`maslow.yaml`, other configs, uploads), checks it, and writes it with the
+  bootloader, partition table, `boot_app0.bin` (so the board boots app0 even after OTA updates) and firmware.
+  NVS (WiFi and other settings) is left alone.
+- **Clean install** erases the flash and writes everything including the release `littlefs.bin`.
+
+Both put the board's own files in a zip first; a clean install saves it as a download. Add `?base=<url>/` to
 the page URL to install from another folder with the same files, for example a local build.
 
