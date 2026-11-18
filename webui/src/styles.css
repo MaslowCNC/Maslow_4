@@ -340,6 +340,8 @@
   .srow input[type=text], .srow select { background: var(--input); border: 1px solid var(--sep); color: var(--text); border-radius: 8px; padding: 8px 10px; font: 14px var(--font-sans); min-width: 0; }
   .srow input.mono { font-family: var(--font-mono); }
   .srow .btn { min-height: 38px; }
+  .srow .setfield { display: inline-flex; align-items: center; gap: 4px; }
+  .srow .setfield span { color: var(--muted); font: 12px var(--font-mono); }
   .modal.single { width: min(520px, 100%); height: auto; max-height: 100%; grid-template-columns: 1fr; grid-template-rows: auto 1fr auto; }
   .modal.single .mhead { grid-column: 1; }
   .modal .art { max-width: 260px; }

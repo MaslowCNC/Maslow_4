@@ -182,7 +182,7 @@ These are FluidNC's `MPos`, `WCO` and `WPos = MPos − WCO`.
 | State | The mode and every machine action in a fixed order, greyed out with a reason when unavailable |
 | Device | Name, firmware version and update, reboot |
 | Network | WiFi network, hotspot (placeholder) |
-| Frame and belts | Extend distance (0 = until Done extending), spoil board thickness, stock thickness (optional), work area (automatic), anchors |
+| Frame and belts | Extend distance (0 = until Done extending), spoil board thickness, stock thickness (optional), work area (0 = automatic), park position, belt retraction limit, anchors, work area centre offset, scale, retraction force |
 | Tool and Z | Last stick-out, default bit |
 | Display | Dark or light panels, units |
 | Advanced | Raw FluidNC and Maslow settings, `maslow.yaml` |
@@ -411,6 +411,22 @@ Maslow-Main merge (2026-11-18), Stop leaves Z where it is.
 
 Most needed first: the command box and saving the log (support), Park and work area settings
 (people set these today), spindle on / off, and the belt motor test.
+
+*Machine settings* (Settings › Frame and belts; names, ranges and defaults in `webui/src/device/settings.js`).
+Each is read on connect and saved with `setSetting()` for what changed, then `saveConfig()` (`$CO`), as the
+current UI's popups do:
+
+| Setting | Firmware setting | Current UI | In the new UI |
+|---|---|---|---|
+| Work area X / Y, 0 = automatic | `Maslow_Work_Area_X/Y` | Set Work Area | Done. Shows the automatic size (80 % × 60 % of the frame) |
+| Work area centre offset X / Y | `Maslow_Work_Area_Center_Offset_X/Y` | Set Work Area | Done |
+| Park X / Y / Z | `Maslow_Park_X/Y/Z` | Set Park | Done |
+| Scale X / Y | `Maslow_Scale_X/Y` | Set Scale and Thickness | Done |
+| Belt retraction limit | `Maslow_Apply_Tension_Belt_Retraction_Limit` | Apply Tension Belt Limit | Done |
+| Retraction force | `Maslow_Retract_Current_Threshold` | Calibration › Config | Done |
+| Spoil board, stock thickness, extend distance | `Maslow_spoilboardThickness`, `Maslow_workThickness`, `Maslow_Extend_Dist` | Set Scale and Thickness, Config | Done earlier |
+
+Checked against the simulator only, not yet on a machine.
 
 **3. Build and ship:**
 

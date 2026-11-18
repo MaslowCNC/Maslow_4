@@ -1,6 +1,7 @@
 import { COMMANDS } from "./commands.js";
 import { restarted, spindleFault } from "../flow/incidents.js";
 import { readGcode } from "../gcode/reader.js";
+import { MACHINE_SETTINGS, defaultSettings, settingError } from "./settings.js";
 
 // A stand-in for the machine. It holds the state the firmware would report and, whenever the real device would
 // answer (a step finishing, a fault, a tool being found), it asks the tester through `pending` instead of guessing.
@@ -50,7 +51,8 @@ function initialState() {
     restored: false,              // came back from a reboot with belt lengths restored
     machine: "Maslow Mini",       // as the real machine reports it from [ESP800]
     extendDist: 0,                // 0 = extend until the user presses Done extending
-    workArea: { w: 1200, h: 1200, spoil: 12.7 },
+    workArea: { spoil: 12.7 },
+    settings: defaultSettings(),  // work area (0 = automatic), park, scale, belt limits (device/settings.js)
     // the anchors as kinematics/MaslowKinematics has them (machine.js has the same shape): a 3000 x 2100 mm frame
     frame: { tl: [0, 2100], tr: [3000, 2100], bl: [0, 0], br: [3000, 0], z: [100, 56, 34, 78], arm: 153.4, vertical: false },
     stock: 6.35,
@@ -179,6 +181,15 @@ export function createSimulator() {
     setExtendDist({ mm }) { log(`$/Maslow_Extend_Dist=${mm}`, "$CO"); set({ extendDist: mm }); },
     setSpoilboard({ mm }) { log(`$/Maslow_spoilboardThickness=${mm}`, "$CO"); set({ workArea: { ...s.workArea, spoil: mm } }); },
     setStock({ stock }) { log(`$/Maslow_workThickness=${stock}`); set({ stock }); },
+    // Several machine settings at once, as the machine adapter sends them: the changed ones, then $CO
+    setSettings({ values = {}, label = "Settings" }) {
+      const changed = Object.entries(values).filter(([k, v]) => s.settings[k] !== v);
+      const bad = changed.map(([k, v]) => [k, settingError(k, v)]).find(([, e]) => e);
+      if (bad) { log(`Not sent: ${label} (${bad[0]}: ${bad[1]})`); emit(); return; }
+      if (!changed.length) return;
+      log(...changed.map(([k, v]) => `$/${MACHINE_SETTINGS[k].path}=${v}`), "$CO");
+      set({ settings: { ...s.settings, ...Object.fromEntries(changed) } });
+    },
 
     run({ file }) {
       log(`$SD/Run=/${file}`);

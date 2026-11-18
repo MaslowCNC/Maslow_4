@@ -1,6 +1,7 @@
 import { useState } from "preact/hooks";
 import { SCREENS } from "../flow/screens.js";
 import { ModePill, Conn } from "./parts.jsx";
+import { MACHINE_SETTINGS, settingError, effectiveWorkArea } from "../device/settings.js";
 
 // Pop-ups cover the panels only, so the top bar and Stop stay visible and clickable
 function Modal({ title, small, onClose, children, foot, nav, single, compact, stop, ctx }) {
@@ -92,8 +93,7 @@ export function Settings({ k, ctx, onClose, theme, setTheme, compact, stop }) {
     <Row label="Z after Stop" hint="Stop leaves Z where it is, so the bit may stay in the work. Continue lifts it to at least 2 mm above work Z 0 before moving."><span>Stays put</span><span class="note">set in firmware</span></Row></>;
   else if (sec === "display") body = <><h4>Display</h4>
     <Row label="Panels"><select value={theme} onChange={e => setTheme(e.currentTarget.value)}><option value="dark">Dark</option><option value="light">Light</option></select></Row></>;
-  else body = <><h4>Advanced</h4><p class="note">The raw FluidNC and Maslow settings. Not wired to the simulator.</p>
-    <Row label="Belt retraction limit" hint="Apply tension stops if a belt winds in more than this."><span class="mono">300 mm</span></Row></>;
+  else body = <><h4>Advanced</h4><p class="note">The raw FluidNC and Maslow settings. Not designed yet.</p></>;
   return <Modal title="Settings" small="maslow" onClose={onClose} nav={nav} compact={compact} stop={stop} ctx={ctx}>{body}</Modal>;
 }
 
@@ -119,7 +119,17 @@ function FrameSection({ ctx, busy }) {
     <Row label="Stock thickness" hint="Optional. Calibration doesn't use it yet.">
       <input type="text" inputmode="decimal" class="mono" value={stock} onInput={e => setStock(e.currentTarget.value)} style="width:90px" /> mm
       <button class="btn ghost" type="button" disabled={busy || !(stockN >= 0) || stockN === d.stock} onClick={() => send("setStock", { stock: stockN })}>Save</button></Row>
-    <Row label="Work area" hint="Worked out from how far the belts extend."><span>Automatic</span></Row>
+    <WorkAreaRow ctx={ctx} busy={busy} />
+    <SettingGroup ctx={ctx} busy={busy} label="Work area centre offset" name="Work area centre offset" keys={[["offX", "X"], ["offY", "Y"]]}
+      hint="Moves the work area off the frame's centre. Usually 0." />
+    <SettingGroup ctx={ctx} busy={busy} label="Park position" name="Park position" keys={[["parkX", "X"], ["parkY", "Y"], ["parkZ", "Z"]]}
+      hint="Where Park moves the sled. Z first, to this height above work Z 0; then X and Y, as machine position (0, 0 is where Apply tension leaves the sled)." />
+    <SettingGroup ctx={ctx} busy={busy} label="Belt retraction limit" name="Belt retraction limit" keys={[["retractLimit"]]}
+      hint="Apply tension stops if a belt winds in more than this. Default 300 mm." />
+    <SettingGroup ctx={ctx} busy={busy} label="Retraction force" name="Retraction force" keys={[["retractForce"]]}
+      hint="How hard the motors pull before a belt counts as tight, when retracting and measuring. Default 1300." />
+    <SettingGroup ctx={ctx} busy={busy} label="Scale" name="Scale" keys={[["scaleX", "X"], ["scaleY", "Y"]]}
+      hint="Corrects cuts that come out a little too big or small. 1 is no change; 1.01 cuts 1 % larger. 0.8 to 1.2." />
     <Row label="Workspace tolerance" hint="The Workspace overlay shows where cuts should land within this, and whether the job stays inside. Remembered in this browser.">
       <select value={String(ctx.tolerance)} onChange={e => ctx.setTolerance(parseFloat(e.currentTarget.value))}>
         {[0.5, 1, 2, 3, 5].map(v => <option value={String(v)}>±{v} mm</option>)}</select></Row>
@@ -127,4 +137,38 @@ function FrameSection({ ctx, busy }) {
       <select value={String(ctx.sledMass)} onChange={e => ctx.setSledMass(parseFloat(e.currentTarget.value))}>
         {[4, 6, 8, 10, 12, 15].map(v => <option value={String(v)}>{v} kg</option>)}</select></Row>}
     <Row label="Anchors"><span>{d.anchorsSaved ? "Saved" : "Not measured yet"}</span></Row></>;
+}
+
+// The work area: 0 on an axis means automatic, which the firmware works out from the anchors the belts measured
+// (80 % of the frame's width, 60 % of its height). Shows what that comes to on this frame.
+function WorkAreaRow({ ctx, busy }) {
+  const { d } = ctx;
+  const a = effectiveWorkArea({ workW: d.settings?.workW ?? 0, workH: d.settings?.workH ?? 0 }, d.frame);
+  const mm = (v, auto) => (v == null ? "?" : `${Math.round(v)}${auto ? " (auto)" : ""}`);
+  return <SettingGroup ctx={ctx} busy={busy} label="Work area" name="Work area" keys={[["workW", "X"], ["workH", "Y"]]}
+    hint={<>0 = automatic: worked out from how far the belts extend to the anchors (80 % of the frame's width, 60 % of its height).
+      {" "}Now {mm(a.w, a.auto.w)} × {mm(a.h, a.auto.h)} mm.</>} />;
+}
+
+// One or more machine settings (device/settings.js) with one Save. Edited fields are kept as drafts; the rest show
+// the device's value, so a value read after the dialog opened still appears. Save sends only what changed.
+function SettingGroup({ ctx, busy, label, name, hint, keys }) {
+  const { d, send } = ctx;
+  const [draft, setDraft] = useState({});
+  const stored = (k) => d.settings?.[k];
+  const text = (k) => draft[k] ?? (stored(k) == null ? "" : String(stored(k)));
+  const values = Object.fromEntries(keys.map(([k]) => [k, text(k).trim() === "" ? NaN : Number(text(k))]));
+  const errors = keys.map(([k, sub]) => [sub, settingError(k, values[k])]).filter(([, e]) => e);
+  const changed = keys.some(([k]) => values[k] !== stored(k));
+  const unit = MACHINE_SETTINGS[keys[0][0]].unit;
+  const save = () => { send("setSettings", { values, label: name }); setDraft({}); };
+  return <Row label={label} hint={hint}>
+    {keys.map(([k, sub]) => <label class="setfield">{sub && <span>{sub}</span>}
+      <input type="text" inputmode="decimal" class="mono" value={text(k)} aria-label={`${label}${sub ? ` ${sub}` : ""}`}
+        placeholder={stored(k) == null ? "–" : ""} onInput={e => setDraft({ ...draft, [k]: e.currentTarget.value })} style="width:80px" /></label>)}
+    {unit && <span>{unit}</span>}
+    <button class="btn ghost" type="button" disabled={busy || errors.length > 0 || !changed} onClick={save}>Save</button>
+    {changed && errors.length > 0 && <span class="note" style="flex-basis:100%;color:var(--danger)">
+      {errors.map(([sub, e]) => (sub ? `${sub}: ${e}` : e)).join(" · ")}</span>}
+  </Row>;
 }
