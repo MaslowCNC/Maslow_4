@@ -526,3 +526,8 @@ html, body { margin: 0; }
 /* The workspace estimate: small, at the bottom right of the drawing; "Last known position" moves up above it */
 .wscap { position: absolute; right: 12px; bottom: 10px; font: 11px var(--font-mono); color: var(--muted); white-space: nowrap; pointer-events: auto; }
 .visbody .wscap ~ .viscap { bottom: 28px; }
+
+/* Set home XY / Set Z: the box under the buttons */
+.sethome { display: grid; gap: 6px; padding: 8px; border-radius: 8px; background: var(--input); }
+.sethome .row { flex-wrap: wrap; }
+.btn.ghost.on { border-color: var(--lilac); color: var(--lilac); }

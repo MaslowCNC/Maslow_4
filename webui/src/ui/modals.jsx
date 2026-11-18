@@ -89,7 +89,7 @@ export function Settings({ k, ctx, onClose, theme, setTheme, compact, stop }) {
   else if (sec === "frame") body = <FrameSection ctx={ctx} busy={busy} />;
   else if (sec === "tool") body = <><h4>Tool and Z</h4>
     <Row label="Last stick-out" hint="Set when you measure a tool."><span class="mono">{d.zFromStickout ? `${d.zFromStickout} mm` : "–"}</span></Row>
-    <Row label="Z after Stop" hint="How far Z lifts above work Z when you press Stop."><span class="mono">+2 mm</span><span class="note">fixed in firmware</span></Row></>;
+    <Row label="Z after Stop" hint="Stop leaves Z where it is, so the bit may stay in the work. Continue lifts it to at least 2 mm above work Z 0 before moving."><span>Stays put</span><span class="note">set in firmware</span></Row></>;
   else if (sec === "display") body = <><h4>Display</h4>
     <Row label="Panels"><select value={theme} onChange={e => setTheme(e.currentTarget.value)}><option value="dark">Dark</option><option value="light">Light</option></select></Row></>;
   else body = <><h4>Advanced</h4><p class="note">The raw FluidNC and Maslow settings. Not wired to the simulator.</p>

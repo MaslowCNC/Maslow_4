@@ -9,7 +9,7 @@ export const STEPS = ["Retract belts", "Extend belts", "Apply tension", "Find an
 export const freshAnswers = () => ({
   retractChecked: false,
   zDone: false, measuring: false, stickout: null, zBase: null, secured: false, securing: false,
-  file: null, stoppedSeen: false, faultSeen: false, ran: []
+  file: null, stoppedSeen: false, contLine: null, faultSeen: false, ran: []
 });
 
 export const T = { setup: "var(--setup)", ready: "var(--ready)", job: "var(--job)", error: "var(--danger)", wait: "var(--muted)" };
@@ -52,7 +52,7 @@ export const SCREENS = {
   ready: { mode: "Ready to cut", tone: T.ready, sub: "", msg: "Set home XY, trace the boundary if you like, then run" },
   tracing: { mode: "Ready to cut", tone: T.ready, sub: "Tracing the boundary", moving: true, msg: "Moving around the edge of the job with Z raised" },
   parking: { mode: "Ready to cut", tone: T.ready, sub: "Parking", moving: true, msg: "Moving to the park position" },
-  stopped: { mode: "Ready to cut", tone: T.ready, sub: "Job stopped", msg: "The job stopped. Z lifted, spindle off. Progress is saved, so you can continue from there" },
+  stopped: { mode: "Ready to cut", tone: T.ready, sub: "Job stopped", msg: "The job stopped. Spindle off, Z left where it was. Progress is saved, so you can continue from there" },
   cutting: { mode: "Job", tone: T.job, sub: "Cutting", msg: "The job is running" },
   success: { mode: "Job", tone: T.job, sub: "Success", moving: true, msg: "The job finished. Parking next" },
   spindle: { mode: "Job", tone: T.job, sub: "Spindle fault: recovering", alert: true, moving: true, msg: "The spindle tripped. Ending the job, lifting Z and re-homing it" },

@@ -185,10 +185,11 @@ export function createSimulator() {
       set({ fluid: "Run", spindle: "on", job: { file, line: 0, total: 3260, running: true }, lastJob: null });
       jobQuestion();
     },
-    continueJob() {
-      const lj = s.lastJob;
-      log(`(planned) Continue ${lj?.file} from line ${lj?.line}`);
-      set({ fluid: "Run", spindle: "on", job: { file: lj.file, line: lj.line, total: 3260, running: true }, lastJob: null });
+    discardStopped() { log("$SD/Discard"); set({ lastJob: null }); },
+    continueJob({ line } = {}) {
+      const lj = s.lastJob, from = line ?? lj?.line;
+      log(`$SD/Resume=${lj?.file},${from}`);
+      set({ fluid: "Run", spindle: "on", job: { file: lj.file, line: from, total: 3260, running: true }, lastJob: null });
       jobQuestion();
     },
     trace() {
@@ -228,8 +229,9 @@ export function createSimulator() {
     },
     jog({ dx = 0, dy = 0, dz = 0 }) { set({ pos: { x: +(s.pos.x + dx).toFixed(3), y: +(s.pos.y + dy).toFixed(3), z: +(s.pos.z + dz).toFixed(3) } }); },
     // Setting a home moves the work zero, not the machine: the machine position stays as it was
-    setHomeXY() { log("G10 L20 P0 X0 Y0"); set({ wco: { ...s.wco, x: s.pos.x, y: s.pos.y } }); },
-    setZ() { log("G10 L20 P0 Z0"); set({ wco: { ...s.wco, z: s.pos.z } }); },
+    // The new home in machine coordinates; without one, here
+    setHomeXY({ x = s.pos.x, y = s.pos.y } = {}) { log(`setWorkZero x=${x} y=${y}`); set({ wco: { ...s.wco, x, y } }); },
+    setZ({ z = s.pos.z } = {}) { log(`setWorkZero z=${z}`); set({ wco: { ...s.wco, z } }); },
     // The demo files aren't real, so each reads as a generated sample of its size
     chooseFile({ file }) {
       const f = s.files.find(x => x.name === file);

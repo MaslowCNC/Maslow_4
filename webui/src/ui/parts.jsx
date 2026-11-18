@@ -131,9 +131,41 @@ const JOG_DIRS = [[-1, 1, -45, ""], [0, 1, 0, "+Y"], [1, 1, 45, ""], [-1, 0, -90
   [-1, -1, -135, ""], [0, -1, 180, "−Y"], [1, -1, 135, ""]];
 const DIR_NAMES = ["Up left", "Up", "Up right", "Left", "", "Right", "Down left", "Down", "Down right"];
 
+// Set home XY / Set Z open a small box under the buttons, filled in with "here", so Set keeps the old one-click
+// meaning and typed values place the home somewhere else (as the current UI's Set Home popups do)
+const SetHomeBtn = ({ d, id, label, open, setOpen }) => <button class={`btn ghost${open === id ? " on" : ""}`} type="button"
+  disabled={!!d.notYet?.[id]} title={d.notYet?.[id]} aria-expanded={open === id} onClick={() => setOpen(open === id ? null : id)}>{label}</button>;
+
+// XY: machine coordinates for the new home (where the job's 0, 0 goes). Z: relative to the current Z home, like the Z
+// readout, so 0 keeps it and the current work Z puts it here. On a 4.1 the new Z home must be 0–72 mm above the z-stop.
+const Z_HOME_MAX_MM = 72;
+function SetHomeBox({ d, which, send, close }) {
+  const xy = which === "setHomeXY";
+  const f = v => (Math.abs(v) < 0.0005 ? 0 : v).toFixed(1);
+  const [x, setX] = useState(f(d.pos.x)), [y, setY] = useState(f(d.pos.y));
+  const [z, setZ] = useState(f(d.pos.z - d.wco.z));
+  const zHome = d.wco.z + parseFloat(z);
+  const mini = /^Maslow Mini/.test(d.machine || "");
+  const err = xy ? (!Number.isFinite(parseFloat(x)) || !Number.isFinite(parseFloat(y)) ? "Enter X and Y in mm" : "")
+    : !Number.isFinite(zHome) ? "Enter Z in mm"
+    : !mini && (zHome < 0 || zHome > Z_HOME_MAX_MM) ? `Z home must be 0–${Z_HOME_MAX_MM} mm above the z-stop (this is ${zHome.toFixed(1)} mm)` : "";
+  const field = (label, v, set) => <label class="field"><span>{label}</span>
+    <input type="text" inputmode="decimal" class="mono" value={v} onInput={e => set(e.currentTarget.value)} aria-label={`${label} in mm`} style="width:80px" /> mm</label>;
+  return <div class="sethome">
+    <span class="note">{xy ? "Machine position for the job's 0, 0. Filled in with where the sled is now."
+      : "Z relative to the current Z home. Filled in with where the bit is now."}</span>
+    <div class="row">{xy ? <>{field("X", x, setX)}{field("Y", y, setY)}</> : field("Z", z, setZ)}</div>
+    {err && <span class="note" style="color:var(--danger)">{err}</span>}
+    <div class="row"><button class="btn ghost" type="button" onClick={close}>Cancel</button>
+      <button class="btn" type="button" disabled={!!err} onClick={() => {
+        send(which, xy ? { x: parseFloat(x), y: parseFloat(y) } : { z: zHome }); close(); }}>Set</button></div>
+  </div>;
+}
+
 export function JogPad({ k, d, send }) {
   // One XY step: the user's own value (10 mm to start). Z has its own step, typed between Z+ and Z−.
   const [step, setStep] = useState("10");
+  const [editHome, setEditHome] = useState(null);   // "setHomeXY" | "setZ" while its box is open
   const size = parseFloat(step) > 0 ? parseFloat(step) : 0;
   const [zStep, setZStep] = useState("5");
   const zMm = parseFloat(zStep) > 0 ? parseFloat(zStep) : 0;
@@ -163,8 +195,9 @@ export function JogPad({ k, d, send }) {
     </div>
     <PosReadout d={d} nopos={!!lock && SCREENS[k].nopos} />
     {/* Home Z finds the top of travel (the spindle's light beam); Set Z makes where the bit is now work Z 0 */}
-    <div class="row"><NotYetBtn d={d} id="setHomeXY" label="Set home XY" send={send} />
-      <NotYetBtn d={d} id="setZ" label="Set Z" send={send} /></div>
+    <div class="row"><SetHomeBtn d={d} id="setHomeXY" label="Set home XY" open={editHome} setOpen={setEditHome} />
+      <SetHomeBtn d={d} id="setZ" label="Set Z" open={editHome} setOpen={setEditHome} /></div>
+    {editHome && <SetHomeBox d={d} which={editHome} send={send} close={() => setEditHome(null)} />}
     {lock && <div class="locked"><div><b>{lock[0]}</b><span>{lock[1]}</span></div></div>}
   </div>;
 }

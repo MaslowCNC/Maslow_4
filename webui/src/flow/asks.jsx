@@ -39,6 +39,12 @@ export function ask(k, ctx) {
   return q;
 }
 
+// The line a stopped job continues from: the stopped line to start, changeable (as the current UI's ▲▼ box)
+function LineInput({ value, onChange }) {
+  return <span class="binput"><label class="field"><span>Line</span>
+    <input type="text" inputmode="numeric" value={value} onInput={e => onChange(e.currentTarget.value)} aria-label="Line to continue from" style="width:90px" /></label></span>;
+}
+
 function askFor(k, ctx) {
   const { d, a, setA, send, mark } = ctx;
   const B = (label, onClick, style = "") => ({ label, onClick, style });
@@ -110,6 +116,12 @@ function askFor(k, ctx) {
     case "othertab": return { text: "Only one tab per browser can be connected.", buttons: [B("Use this tab", () => send("reconnect"))] };
     case "toomany": return { text: "Close tabs or devices you aren't using.", buttons: [B("Reconnect", () => send("reconnect"))] };
     case "lost": return { text: "Reconnecting automatically. If it doesn't come back, reboot the device or turn it off and on.", buttons: [B("Reboot device", () => send("reboot"), "ghost")] };
+    // Continue from the stopped line, or one the user types; Discard forgets the stopped job ($SD/Discard)
+    case "stopped": {
+      const stoppedLine = d.lastJob?.line ?? 0;
+      return { text: "", input: <LineInput value={a.contLine ?? String(stoppedLine)} onChange={v => setA({ contLine: v })} />,
+        buttons: [B("Discard", () => { setA({ stoppedSeen: true, contLine: null }); send("discardStopped"); }, "ghost")] };
+    }
     default: return { text: "", buttons: [] };
   }
 }
@@ -125,7 +137,12 @@ export function mainActions(k, ctx) {
   switch (k) {
     case "ready": return [trace, B(`Run ${a.file}`, () => send("run", { file: a.file }), "go")];
     case "stopped": return [B("Run from the start", () => { setA({ stoppedSeen: true }); send("run", { file: a.file }); }, "ghost"),
-      B(`Continue from line ${(d.lastJob?.line ?? 0).toLocaleString()}`, () => { setA({ stoppedSeen: true }); send("continueJob"); }, "go")];
+      (() => {
+        const n = parseInt(a.contLine ?? d.lastJob?.line ?? 0, 10);
+        const ok = Number.isInteger(n) && n >= 1;
+        return { ...B(`Continue from line ${ok ? n.toLocaleString() : "…"}`, () => { setA({ stoppedSeen: true, contLine: null }); send("continueJob", { line: n }); }, "go"),
+          disabled: !ok, title: ok ? "" : "Type a line number from 1" };
+      })()];
     default: return [];
   }
 }

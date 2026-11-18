@@ -358,23 +358,59 @@ To replace the current UI on the board. The simulator isn't on this list: it sta
    connection notices, an alarm after our own Stop.
 7. **Job progress, and the Belts and Motors tabs** (mA = 1000 × 3.3 × ADC / 4095 / 1.5).
 
-**2. Everything else the current UI does** (goal 6):
+**2. Everything else the current UI does** (goal 6). Cross-checked against every tab and pop-up
+of the current UI on 2026-11-18 (its Tablet, Main and Settings tabs show; Camera, Config and
+Debugging are hidden by default).
+
+Already in the new UI: Retract, Extend, Apply tension, Find anchors, Release tension, Stop; jog with
+a step, go to XY home, Set home XY, Set Z, Home Z, Remove tool, Park; SD files (list, upload,
+delete); Run, Continue after a stop, Trace boundary; log, state, toolpath on the frame, motor
+currents; Extend distance, spoil board and stock thickness, Reboot.
+
+*Machine settings* (Settings › Frame and belts, or a new Machine section):
 
 | Current UI | Where it is today | In the new UI |
 |---|---|---|
-| G-code preview | `simple-toolpath.js`, `toolpath-displayer.js` | Placeholder drawing. Reuse it, or a 3D view if three.js comes in |
-| SD card files | `files.js` | List, choose and upload done. Delete, rename and folders to add (`machine.files` has them) |
-| Flash files (`maslow.yaml`, `index.html.gz`) | `SPIFFSdlg.js` | Settings › Advanced, not designed |
-| Config editor | `configtab.js` | Settings › Advanced, not designed |
-| FluidNC and ESP settings | `settingstab.html`, `settings.js` | Settings › Advanced, not designed |
-| WiFi setup and scan | `setupdlg.js`, `scanwifidlg.js`, `wizard.js` | Settings › Network and the first-boot screen are placeholders |
-| Firmware update | `updatedlg.js`, `checkupdatesdlg.js` | Settings › Device has the button, not the flow |
-| Command box and full log | `commandpanel.html`, `commands.js`, `debugging.js` | Log panel only; no command box |
-| Macros | `macrodlg.js` | Not designed |
-| Camera | `camera.js` | Decide whether to keep it |
-| System status (`[ESP420]`), restart | `statusdlg.js`, `restartdlg.js` | Settings › Device |
-| Languages | `translate.js`, `language/` | English only. Decide whether to keep translations |
-| Belt motor test, diagnostics | `maslow.js`, `tablet.js` | Settings › Advanced, not designed |
+| Work area X / Y (0 = auto) | Optional settings › Set Work Area | Shows "Automatic" only; can't be set |
+| Work area centre offset X / Y | Set Work Area | Missing |
+| Park X / Y / Z | Optional settings › Set Park | Park works; its position can't be set |
+| Scale X / Y | Set Scale and Thickness | Missing |
+| Belt retraction limit | Apply Tension Belt Limit | Shown as a fixed 300 mm; not read or saved |
+| Retraction force | Calibration › Config | Missing |
+| WiFi network and password | Calibration › Config, `setupdlg.js`, `scanwifidlg.js` | Settings › Network is a placeholder |
+
+*Actions* (Jog / Home panel, or Settings › Advanced):
+
+| Current UI | Where it is today | In the new UI |
+|---|---|---|
+| Spindle on / off | Spindle controls | Missing |
+| Belt motor test (Test) | Calibration popup | Missing |
+| Set Z-Stop | Calibration popup | Not used on the Mini; the 4.1 needs it (its flow isn't defined) |
+| Set home by typing X / Y / Z | Set Home, Set Z Home popups | Sets the current position only |
+| mm / inch | Units toggle | mm only |
+| Discard a stopped job | Discard button | Check whether choosing another file covers it |
+| Change the Continue line | Resume line with ▲▼ | Continues from the stopped line only |
+
+*Support and maintenance* (Settings › Advanced, or a Tools section):
+
+| Current UI | Where it is today | In the new UI |
+|---|---|---|
+| Command box (send `$` commands, verbose) | Main › Commands (`commandpanel.html`, `commands.js`) | Missing; most needed, for support |
+| Save the log to a file | Save Serial | Missing; needed for bug reports |
+| FluidNC and Maslow settings list | Settings tab (`settingstab.html`, `settings.js`) | Settings › Advanced is a placeholder |
+| Config editor | Config tab (`configtab.js`, hidden) | Settings › Advanced, not designed |
+| Flash files (`maslow.yaml`, `index.html.gz`) | `SPIFFSdlg.js` | Missing |
+| Firmware update, check for updates | `updatedlg.js`, `checkupdatesdlg.js` | Settings › Device has a disabled button |
+| System status (`[ESP420]`) | `statusdlg.js` | Partly in Settings › Device |
+| Motor current history | Debugging tab (hidden) | Live rings only |
+| Feed override, motors off, probe | Main › GRBL and Controls panels | Probably not needed on a Maslow; decide |
+| Camera, preferences, languages, login, UI lock, macros, credits | navbar, dialogs | Mostly unused; decide to keep or drop |
+
+Out of date in the new UI: Settings › Tool and Z still says Z lifts 2 mm after Stop. Since the
+Maslow-Main merge (2026-11-18), Stop leaves Z where it is.
+
+Most needed first: the command box and saving the log (support), Park and work area settings
+(people set these today), spindle on / off, and the belt motor test.
 
 **3. Build and ship:**
 

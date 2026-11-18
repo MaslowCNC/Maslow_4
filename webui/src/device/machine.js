@@ -422,9 +422,10 @@ export function createMachine({ host = location.host } = {}) {
     if (action === "run") { run("run", () => m.runFile(`/${payload.file}`)); return; }
     if (action === "continueJob") {
       const st = m.state.stopped;
-      if (st) run("continueJob", () => m.resumeFile(st.file, st.line));
+      if (st) run("continueJob", () => m.resumeFile(st.file, payload.line ?? st.line));
       return;
     }
+    if (action === "discardStopped") { run("discardStopped", () => m.discardStopped()); return; }
     if (action === "trace") { run("trace", () => traceFile(payload.file)); return; }
     if (action === "uploadFile") return uploadFile();
     if (action === "deleteFile") { deleteFile(payload.name); return; }
@@ -454,7 +455,9 @@ export function createMachine({ host = location.host } = {}) {
     if (action === "setHomeXY" || action === "setZ") {
       const p = m.state.mpos;
       if (!p) { log(`Not sent: ${action} (the machine's position isn't known yet)`); emit(); return; }
-      run(action, () => m.setWorkZero(action === "setZ" ? { z: p.z } : { x: p.x, y: p.y }));
+      // payload: the new home in machine coordinates ({x, y} or {z}); without one, here
+      const q = payload || {};
+      run(action, () => m.setWorkZero(action === "setZ" ? { z: q.z ?? p.z } : { x: q.x ?? p.x, y: q.y ?? p.y }));
       return;
     }
     if (ACTIONS[action]) { run(action, ACTIONS[action]); return; }
