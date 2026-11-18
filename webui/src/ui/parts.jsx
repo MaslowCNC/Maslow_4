@@ -120,6 +120,26 @@ export function jogLock(k, d) {
 const NotYetBtn = ({ d, id, label, send }) => <button class="btn ghost" type="button" disabled={!!d.notYet?.[id]}
   title={d.notYet?.[id]} onClick={() => send(id)}>{label}</button>;
 
+// Spindle on / off (Mini only). It follows the spindle speed the machine reports, so a job or Stop shows here too.
+// Turning it on needs the machine idle with no job; turning it off is refused only during a job (Stop ends the job
+// and turns the spindle off). Off while the belts move, as the jog pad is.
+export function spindleLock(k, d) {
+  const s = SCREENS[k];
+  if (d.notYet?.spindleOn) return d.notYet.spindleOn;
+  if (!d.connected) return "Waiting for the device to answer";
+  if (d.job || s.mode === "Job") return "The job controls the spindle. Press Stop to end it";
+  if (d.spindle === "on") return null;   // turning it off is always allowed outside a job
+  if (s.mode === "Error" || d.fluid === "Alarm") return "Clear the error first";
+  if (s.moving || d.fluid !== "Idle") return "Not while the machine is moving";
+  return null;
+}
+function SpindleBtn({ k, d, send }) {
+  const on = d.spindle === "on", why = spindleLock(k, d);
+  return <button class={`btn spinbtn${on ? " on" : " ghost"}`} type="button" disabled={!!why} aria-pressed={on}
+    title={why || (on ? "The spindle is running. Press to stop it (M5)" : "Start the spindle at 12,000 RPM (M3)")}
+    onClick={() => send(on ? "spindleOff" : "spindleOn")}>{on && <i class="spindot" aria-hidden="true" />}{on ? "Spindle off" : "Spindle on"}</button>;
+}
+
 // Chunky jog arrows: one shape, turned for each direction (0° points up)
 const Arrow = ({ deg }) => <svg class="jarrow" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" style={`transform:rotate(${deg}deg)`}>
   <path d="M12 3 L21 13 H15.5 V21 H8.5 V13 H3 Z" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" /></svg>;
@@ -165,7 +185,10 @@ export function JogPad({ k, d, send }) {
     {/* Home Z finds the top of travel (the spindle's light beam); Set Z makes where the bit is now work Z 0 */}
     <div class="row"><NotYetBtn d={d} id="setHomeXY" label="Set home XY" send={send} />
       <NotYetBtn d={d} id="setZ" label="Set Z" send={send} /></div>
-    {lock && <div class="locked"><div><b>{lock[0]}</b><span>{lock[1]}</span></div></div>}
+    {/* The Maslow 4.1 has no spindle output, so the toggle only shows on a Mini (or before the machine is known) */}
+    {!(d.machine && !/^Maslow Mini/.test(d.machine)) && <div class="row"><SpindleBtn k={k} d={d} send={send} /></div>}
+    {lock && <div class="locked"><div><b>{lock[0]}</b><span>{lock[1]}</span>
+      {d.spindle === "on" && !d.job && <SpindleBtn k={k} d={d} send={send} />}</div></div>}
   </div>;
 }
 
@@ -176,6 +199,7 @@ export function AppHeader({ d, onSettings }) {
   return <header class="apphead">
     <img class="logo" src={logo} alt="Maslow" />
     <MachineTag d={d} />
+    {d.spindle === "on" && <span class="spintag" role="status"><i class="spindot" aria-hidden="true" />Spindle running</span>}
     <span class="apphead-gap" />
     <Conn d={d} />
     <button class="gear" type="button" aria-label="Settings" onClick={onSettings}>⚙</button>

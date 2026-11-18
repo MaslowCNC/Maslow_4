@@ -47,6 +47,7 @@ const machine = (() => {
 	 * mpos, wpos, wco: {x, y, z} in mm, null until known
 	 * units:       the firmware's G-code units, "mm" or "inch" (machine actions always send G21)
 	 * motorCurrent: {tl, tr, bl, br}, raw ADC 0-4095 (Debug tab converts to mA), from MC; null until known
+	 * spindleSpeed: the spindle speed the machine reports (RPM, the second FS value; 0 = off), null until known
  * job:         {pct, file, line} while a file runs, else null
 	 * stopped:     {line, file} after a job ended early (STOP, an error in the file, a spindle
 	 *              fault), from the STOPPED field: resumeFile(file, line) continues it. null once
@@ -67,6 +68,7 @@ const machine = (() => {
 		stopped: null,
 		belts: null,
 		motorCurrent: null,
+		spindleSpeed: null,
 	};
 	let statusCount = 0; // status reports seen, to wait for a fresh one
 	let beltLengthsFromStatus = false; // a BL field has been seen (firmware that reports it)
@@ -128,6 +130,9 @@ const machine = (() => {
 			} else if (key === "BE") {
 				const [etl, etr, ebl, ebr] = value.split(",").map(Number);
 				state.belts = { ...state.belts, etl, etr, ebl, ebr };
+			} else if (key === "FS") {
+				const speed = Number(value.split(",")[1]);
+				state.spindleSpeed = Number.isFinite(speed) ? speed : state.spindleSpeed;
 			} else if (key === "MC") {
 				const [tl, tr, bl, br] = value.split(",").map(Number);
 				state.motorCurrent = { tl, tr, bl, br };
@@ -611,6 +616,64 @@ const machine = (() => {
 	/** Raise the Z until the tool clears the top-of-travel beam, to take the tool out. */
 	const removeTool = () => spindleBoardOperation("remove tool", "$Spindle/RemoveTool");
 
+	// Spindle on and off
+	// The speed the tablet UI's Spindle On button asks for: the spindle board's top commanded speed.
+	const SPINDLE_RPM = 12000;
+	const spindleBusy = () => state.job || state.grbl !== "Idle";
+
+	/**
+	 * Turn the spindle on (M3 at rpm), as the tablet UI's Spindle On button does. Only when Idle with no job
+	 * running: a job owns the spindle. Done when the firmware accepts the line; the status report's spindle
+	 * speed (state.spindleSpeed) then shows it running. Stop turns it off.
+	 */
+	const spindleOn = (rpm = SPINDLE_RPM) => {
+		if (!(Number.isFinite(rpm) && rpm > 0)) {
+			throw new TypeError(`machine.spindleOn: rpm must be a positive number, got ${rpm}`);
+		}
+		if (spindleBusy()) {
+			return notReady("spindle on", "Can't start the spindle while the machine is busy or a job is running");
+		}
+		return simpleOperation("spindle on", `M3 S${Math.round(rpm)}`);
+	};
+	/** Turn the spindle off (M5). Refused during a job: Stop ends the job and turns it off. */
+	const spindleOff = () => {
+		if (state.job) {
+			return notReady("spindle off", "A job is running: press Stop to end it and turn the spindle off");
+		}
+		return simpleOperation("spindle off", "M5");
+	};
+
+	// Diagnostics
+	// Belt states where nothing holds the belts tight, so a short pull on each motor can't move the sled
+	const MOTOR_TEST_STATES = [MASLOW.UNKNOWN, MASLOW.RETRACTED, MASLOW.EXTENDEDOUT];
+	/**
+	 * The tablet UI's Test button ($TEST): for each arm the firmware runs the motor outward (paying the belt out)
+	 * at full power until it draws current, for at most 100 ms, and checks its encoder and magnet. Only while
+	 * Idle with the belts slack (Maslow state UNKNOWN, RETRACTED or EXTENDEDOUT). A missing motor or encoder
+	 * latches an error that blocks motion until clearAlarm(). Resolves with
+	 * {passed: [arm, ...], failed: [{arm, problem}, ...], lines} from the firmware's log lines.
+	 */
+	const testMotors = () => {
+		if (state.job || state.grbl !== "Idle" || !MOTOR_TEST_STATES.includes(state.maslow)) {
+			return notReady("motor test", "The motor test runs only while the machine is idle and the belts are slack (retracted, extended or unknown)");
+		}
+		return operation("motor test", async ({ resolve }) => {
+			const lines = await sendLine("$TEST", { collect: true });
+			const passed = [];
+			const failed = [];
+			for (const line of lines) {
+				const ok = line.match(/All tests passed on (.+?)\]?$/);
+				const bad = line.match(/(Motor not found|Encoder not found|Magnet not detected) on (.+?)\]?$/);
+				if (ok) {
+					passed.push(ok[1].trim());
+				} else if (bad) {
+					failed.push({ arm: bad[2].trim(), problem: bad[1] });
+				}
+			}
+			resolve({ passed, failed, lines });
+		});
+	};
+
 	// Stopping and pausing
 	/** End any running operation now: 0x18, then $STOP (save; Z stays where it is). Done when $STOP is answered. */
 	const stop = () => {
@@ -956,6 +1019,11 @@ const machine = (() => {
 		// spindle board
 		homeSpindleZ,
 		removeTool,
+		// spindle
+		spindleOn,
+		spindleOff,
+		// diagnostics
+		testMotors,
 		// jobs and files
 		runFile,
 		resumeFile,

@@ -240,6 +240,17 @@
   /* The connected machine's name beside a panel title */
   .machinetag { display: inline-flex; align-items: center; padding: 1px 8px; border: 1px solid var(--lilac); border-radius: 999px;
     color: var(--lilac); font: 600 11px var(--font-mono); letter-spacing: .02em; white-space: nowrap; text-transform: none; }
+  /* Spindle running: a red pulsing dot on the jog pad's toggle and in the app header */
+  .spintag { display: inline-flex; align-items: center; gap: 6px; padding: 1px 8px; border: 1px solid var(--danger); border-radius: 999px;
+    color: var(--danger); font: 600 11px var(--font-mono); white-space: nowrap; }
+  .spindot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: none; animation: spinpulse 1.2s ease-in-out infinite; }
+  .spinbtn { gap: 6px; }
+  .spinbtn.on { background: var(--danger); border-color: var(--danger); color: #fff; }
+  @keyframes spinpulse { 50% { opacity: .35; } }
+  @media (prefers-reduced-motion: reduce) { .spindot { animation: none; } }
+  .mtest { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font: 12px var(--font-mono); }
+  .mtest .ok { color: var(--ready); } .mtest .bad { color: var(--danger); }
+  .locked .spinbtn { margin-top: 8px; }
   .mini .fname { font: 600 13px var(--font-mono); overflow-wrap: anywhere; }
   .bar { height: 8px; border-radius: 99px; background: var(--input); overflow: hidden; }
   .bar i { display: block; height: 100%; background: var(--fill, var(--lilac)); border-radius: 99px; }
@@ -372,6 +383,9 @@ html, body { margin: 0; }
 .apphead-gap { flex: 1; }
 .phoneapp .apphead { min-height: 34px; padding: 0 0 6px; gap: 10px; border-bottom: 1px solid var(--sep); }
 .phoneapp .apphead .logo { height: 20px; }
+/* On a phone the header has no room for the spindle tag beside the machine and connection: it wraps to its own line */
+.phoneapp .apphead { flex-wrap: wrap; row-gap: 6px; }
+.phoneapp .apphead .spintag { order: 9; }
 .board.layout6 { grid-template-columns: 2.2fr 1fr; grid-template-rows: .7fr .7fr .8fr 1fr;
   grid-template-areas: "vis comp" "vis comp" "vis comp" "vis files"; }
 /* The merged visuals + device state panel: tabs and toggles, the drawing with its overlays, the cards below */

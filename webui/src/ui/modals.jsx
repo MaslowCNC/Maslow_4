@@ -93,8 +93,34 @@ export function Settings({ k, ctx, onClose, theme, setTheme, compact, stop }) {
   else if (sec === "display") body = <><h4>Display</h4>
     <Row label="Panels"><select value={theme} onChange={e => setTheme(e.currentTarget.value)}><option value="dark">Dark</option><option value="light">Light</option></select></Row></>;
   else body = <><h4>Advanced</h4><p class="note">The raw FluidNC and Maslow settings. Not wired to the simulator.</p>
-    <Row label="Belt retraction limit" hint="Apply tension stops if a belt winds in more than this."><span class="mono">300 mm</span></Row></>;
+    <Row label="Belt retraction limit" hint="Apply tension stops if a belt winds in more than this."><span class="mono">300 mm</span></Row>
+    <MotorTest k={k} ctx={ctx} /></>;
   return <Modal title="Settings" small="maslow" onClose={onClose} nav={nav} compact={compact} stop={stop} ctx={ctx}>{body}</Modal>;
+}
+
+// The belt motor test ($TEST), a diagnostic. Each arm's motor pays its belt out at full power until it draws current
+// (at most 100 ms), then the encoder and magnet are checked. Only while idle with the belts slack: with the belts tight
+// the pull would jerk the sled. A missing motor or encoder stops motion until the error is cleared.
+const SLACK = [0, 2, 4];   // Maslow states UNKNOWN, RETRACTED, EXTENDEDOUT
+function MotorTest({ k, ctx }) {
+  const { d } = ctx, s = SCREENS[k];
+  const why = !d.connected ? "Waiting for the device to answer."
+    : d.fluid === "Alarm" ? "Clear the error first (Settings › State › Clear error)."
+    : d.job || s.moving || d.fluid !== "Idle" ? "Not while the machine is busy."
+    : !SLACK.includes(d.maslow) ? "Only while the belts are slack: retracted, extended, or before setup. Release tension first."
+    : null;
+  const running = d.op?.action === "motorTest" && d.op.phase !== "failed";
+  const r = d.motorTest;
+  return <>
+    <Row label="Belt motor test" hint="Runs each belt motor outward for a moment (under 0.1 s) and checks its encoder and magnet. For finding a loose cable or a dead motor. The belts must be slack.">
+      <button class="btn ghost" type="button" disabled={!!why || running} title={why || "Send $TEST"} onClick={() => ctx.send("motorTest")}>
+        {running ? "Testing…" : "Test motors"}</button></Row>
+    {why && <p class="note" style="margin:0">{why}</p>}
+    {r && <ul class="mtest">{r.passed.map(a => <li class="ok">{a}: passed</li>)}
+      {r.failed.map(f => <li class="bad">{f.arm}: {f.problem.toLowerCase()}</li>)}</ul>}
+    {r?.failed.some(f => f.problem !== "Magnet not detected") &&
+      <p class="note alert" style="margin:0">Motion is disabled until you fix the cause and clear the error ($X).</p>}
+  </>;
 }
 
 // Frame and belts. There's no work area to confirm any more: the machine works it out from how far the belts
