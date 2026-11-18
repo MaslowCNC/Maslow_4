@@ -1535,6 +1535,10 @@ static Error maslow_estop(const char* value, AuthenticationLevel auth_level, Cha
 
 /** Sets the 'bottom' Z position, this is a 'stop' beyond which travel cannot continue */
 static Error maslow_set_zStop(const char* value, AuthenticationLevel auth_level, Channel& out) {
+    if (Maslow.zHomedBySpindleBoard()) {
+        Maslow.setZStop();  // logs why Z is left alone
+        return Error::SettingDisabled;
+    }
     sys.set_state(State::Homing);
     Maslow.setZStop();
     sys.set_state(State::Idle);

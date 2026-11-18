@@ -505,6 +505,11 @@ const tabletShowBoardControls = () => {
   if (spindleControls) {
     spindleControls.style.display = maslowIsMini() ? "" : "none";
   }
+  // The Mini's spindle board homes Z on its beam and owns the Z zero, so $SETZSTOP refuses there
+  const zStopButton = id("tablettab_cal_zstop");
+  if (zStopButton) {
+    zStopButton.style.display = maslowIsMini() ? "none" : "";
+  }
 };
 
 const loadFixedZSetting = () => {

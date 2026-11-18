@@ -533,9 +533,11 @@ bool Calibration::requestStateChange(int newState) {
                 }
                 Maslow.stop();
 
-                //Save the z-axis 'stop' position
-                Maslow.targetZ = 0;
-                Maslow.setZStop();
+                //Save the z-axis 'stop' position (not on a Mini: its spindle board homes Z on the beam)
+                if (!Maslow.zHomedBySpindleBoard()) {
+                    Maslow.targetZ = 0;
+                    Maslow.setZStop();
+                }
 
                 //Recalculate the center position because the machine dimensions may have been updated
                 updateCenterXY();

@@ -107,8 +107,11 @@ public:
     void saveZPos();
     void loadZPos();
     void logLoadZPosDebug();
-    /** Sets the 'bottom' Z position, this is a 'stop' beyond which travel cannot continue */
-    void setZStop();
+    /** Sets the 'bottom' Z position, this is a 'stop' beyond which travel cannot continue.
+     *  Returns false (and changes nothing) when a spindle board owns Z (see zHomedBySpindleBoard). */
+    bool setZStop();
+    /** True on a Maslow Mini: the spindle board homes Z on its beam and sets the Z zero itself */
+    bool zHomedBySpindleBoard() const;
 
     //Save and load belt positions
     void saveBeltPositions();

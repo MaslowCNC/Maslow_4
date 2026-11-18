@@ -656,8 +656,20 @@ void Maslow_::logLoadZPosDebug() {
     log_info("Zm=" << targetZ << "mm, Z home=" << zHome << "mm, Z position=" << zPosition << "mm");
 }
 
+bool Maslow_::zHomedBySpindleBoard() const {
+    return Spindles::SpindleBoard::instance != nullptr;
+}
+
 /** Sets the 'bottom' Z position, this is a 'stop' beyond which travel cannot continue */
-void Maslow_::setZStop() {
+bool Maslow_::setZStop() {
+    // On a Mini the spindle board streams axis-4 Z as an absolute phase where 0 is its beam at the
+    // top of travel.  Zeroing Z here would make it drive the Z back up to the beam with no motion
+    // command, and the Z zero would end up at the beam instead of where the user set it.
+    if (zHomedBySpindleBoard()) {
+        log_warn("Set Z-Stop is not used with a spindle board: the Z zero comes from the spindle's Z homing beam");
+        return false;
+    }
+
     targetZ = 0;
 
     // Use Z_AXIS constant (2) for cartesian coordinate, not motor index (4)
@@ -674,7 +686,7 @@ void Maslow_::setZStop() {
     Error result              = gc_execute_line(clear_offset_line);
     if (result != Error::Ok) {
         log_error("Failed to clear transient Z home offset: " << errorString(result));
-        return;
+        return true;
     }
 
     char set_home_line[] = "G10 L20 P0 Z0";
@@ -682,6 +694,7 @@ void Maslow_::setZStop() {
     if (result != Error::Ok) {
         log_error("Failed to set persistent Z home: " << errorString(result));
     }
+    return true;
 }
 
 //This function saves the current belt positions to non-volatile storage

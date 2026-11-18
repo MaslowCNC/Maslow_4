@@ -312,10 +312,10 @@ plus a log line `Motion is disabled: <reason>` when Maslow has blocked motion.
 | [`$EXT`][EXT] | `Maslow/extend` | extend all belts (3 → 4) | yes |
 | [`$TKSLK`][TKSLK] | `Maslow/takeSlack` | take up slack and find the frame (5); from UNKNOWN, pull the belts not restored at boot tight and restore them from their saved lengths (`error:9` if no belt is known) | yes |
 | [`$CMP`][CMP] | `Maslow/comply` | release tension (8) | yes |
-| [`$CAL`][CAL] | `Maslow/calibrate` | run calibration (6) | yes |
+| [`$CAL`][CAL] | `Maslow/calibrate` | run calibration (6); resets Z the way `$SETZSTOP` does at the start, except on a Mini | yes |
 | [`$TLI`][TLI] [`$TRI`][TRI] [`$BLI`][BLI] [`$BRI`][BRI] | `Maslow/calibrateXXI` | pull that arm's belt in at full power for 200 ms (clears a jam) | no |
 | [`$TLO`][TLO] [`$TRO`][TRO] [`$BLO`][BLO] [`$BRO`][BRO] | `Maslow/calibrateXXO` | push that arm's belt out for 200 ms | no |
-| [`$SETZSTOP`][SETZSTOP] | `Maslow/setZStop` | make the current Z the Z stop | yes |
+| [`$SETZSTOP`][SETZSTOP] | `Maslow/setZStop` | make the current Z the Z stop; on a Mini it changes nothing and answers `error:5` with a log line, since the spindle board sets the Z zero at its homing beam | yes |
 
 **Stopping:**
 
