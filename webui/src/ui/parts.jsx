@@ -122,7 +122,8 @@ const NotYetBtn = ({ d, id, label, send }) => <button class="btn ghost" type="bu
 
 // Spindle on / off (Mini only). It follows the spindle speed the machine reports, so a job or Stop shows here too.
 // Turning it on needs the machine idle with no job; turning it off is refused only during a job (Stop ends the job
-// and turns the spindle off). Off while the belts move, as the jog pad is.
+// and turns the spindle off). Off while the belts move. It lives in Settings › Tool and Z; the header's
+// "Spindle running" tag shows it from every screen, and Stop (always visible) turns it off too.
 export function spindleLock(k, d) {
   const s = SCREENS[k];
   if (d.notYet?.spindleOn) return d.notYet.spindleOn;
@@ -133,7 +134,7 @@ export function spindleLock(k, d) {
   if (s.moving || d.fluid !== "Idle") return "Not while the machine is moving";
   return null;
 }
-function SpindleBtn({ k, d, send }) {
+export function SpindleBtn({ k, d, send }) {
   const on = d.spindle === "on", why = spindleLock(k, d);
   return <button class={`btn spinbtn${on ? " on" : " ghost"}`} type="button" disabled={!!why} aria-pressed={on}
     title={why || (on ? "The spindle is running. Press to stop it (M5)" : "Start the spindle at 12,000 RPM (M3)")}
@@ -185,10 +186,7 @@ export function JogPad({ k, d, send }) {
     {/* Home Z finds the top of travel (the spindle's light beam); Set Z makes where the bit is now work Z 0 */}
     <div class="row"><NotYetBtn d={d} id="setHomeXY" label="Set home XY" send={send} />
       <NotYetBtn d={d} id="setZ" label="Set Z" send={send} /></div>
-    {/* The Maslow 4.1 has no spindle output, so the toggle only shows on a Mini (or before the machine is known) */}
-    {!(d.machine && !/^Maslow Mini/.test(d.machine)) && <div class="row"><SpindleBtn k={k} d={d} send={send} /></div>}
-    {lock && <div class="locked"><div><b>{lock[0]}</b><span>{lock[1]}</span>
-      {d.spindle === "on" && !d.job && <SpindleBtn k={k} d={d} send={send} />}</div></div>}
+    {lock && <div class="locked"><div><b>{lock[0]}</b><span>{lock[1]}</span></div></div>}
   </div>;
 }
 

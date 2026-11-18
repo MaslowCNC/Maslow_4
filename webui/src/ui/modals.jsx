@@ -1,6 +1,6 @@
 import { useState } from "preact/hooks";
 import { SCREENS } from "../flow/screens.js";
-import { ModePill, Conn } from "./parts.jsx";
+import { ModePill, Conn, SpindleBtn, spindleLock } from "./parts.jsx";
 
 // Pop-ups cover the panels only, so the top bar and Stop stay visible and clickable
 function Modal({ title, small, onClose, children, foot, nav, single, compact, stop, ctx }) {
@@ -88,6 +88,11 @@ export function Settings({ k, ctx, onClose, theme, setTheme, compact, stop }) {
     <p class="note">Placeholder: these depend on what the current WiFi dialog offers.</p></>;
   else if (sec === "frame") body = <FrameSection ctx={ctx} busy={busy} />;
   else if (sec === "tool") body = <><h4>Tool and Z</h4>
+    {/* The Maslow 4.1 has no spindle output, so this only shows on a Mini (or before the machine is known) */}
+    {!(d.machine && !/^Maslow Mini/.test(d.machine)) && <>
+      <Row label="Spindle" hint="Runs the spindle at 12,000 RPM outside a job: to check the bit runs true, or to cut by hand while you jog. Stop also turns it off.">
+        <span class="mono">{d.spindle === "on" ? "Running" : "Off"}</span><SpindleBtn k={k} d={d} send={ctx.send} /></Row>
+      {spindleLock(k, d) && <p class="note" style="margin:0">{spindleLock(k, d)}.</p>}</>}
     <Row label="Last stick-out" hint="Set when you measure a tool."><span class="mono">{d.zFromStickout ? `${d.zFromStickout} mm` : "–"}</span></Row>
     <Row label="Z after Stop" hint="How far Z lifts above work Z when you press Stop."><span class="mono">+2 mm</span><span class="note">fixed in firmware</span></Row></>;
   else if (sec === "display") body = <><h4>Display</h4>

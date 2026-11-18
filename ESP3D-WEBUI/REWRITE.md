@@ -375,7 +375,7 @@ To replace the current UI on the board. The simulator isn't on this list: it sta
 | System status (`[ESP420]`), restart | `statusdlg.js`, `restartdlg.js` | Settings › Device |
 | Languages | `translate.js`, `language/` | English only. Decide whether to keep translations |
 | Belt motor test (`$TEST`, `tablettab_cal_test`) | `tablet.js` | Done: Settings › Advanced, `machine.testMotors()`. Only while Idle with slack belts (Maslow 0, 2, 4): each motor pays its belt out at full power for up to 100 ms. Shows each arm's result; a missing motor or encoder latches an error ($X). Other diagnostics not designed |
-| Spindle on / off (`tablettab_spindle_toggle`) | `tablet.js` | Done: Jog / Home panel, Mini only (the 4.1 has `NoSpindle`). `machine.spindleOn()` (`M3 S12000`) / `spindleOff()` (`M5`); follows the report's `FS` spindle speed, with a "Spindle running" tag in the header. Off during a job and while the machine moves; `$STOP` turns it off |
+| Spindle on / off (`tablettab_spindle_toggle`) | `tablet.js` | Done: Settings › Tool and Z, Mini only (the 4.1 has `NoSpindle`). `machine.spindleOn()` (`M3 S12000`) / `spindleOff()` (`M5`); follows the report's `FS` spindle speed, with a "Spindle running" tag in the header. Off during a job and while the machine moves; `$STOP` turns it off |
 
 **3. Build and ship:**
 

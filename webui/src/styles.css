@@ -250,7 +250,6 @@
   @media (prefers-reduced-motion: reduce) { .spindot { animation: none; } }
   .mtest { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font: 12px var(--font-mono); }
   .mtest .ok { color: var(--ready); } .mtest .bad { color: var(--danger); }
-  .locked .spinbtn { margin-top: 8px; }
   .mini .fname { font: 600 13px var(--font-mono); overflow-wrap: anywhere; }
   .bar { height: 8px; border-radius: 99px; background: var(--input); overflow: hidden; }
   .bar i { display: block; height: 100%; background: var(--fill, var(--lilac)); border-radius: 99px; }
