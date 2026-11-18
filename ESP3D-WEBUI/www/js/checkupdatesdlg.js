@@ -52,67 +52,114 @@ function getUpdateStream() {
     return GetPrefOrDefault("update_stream") || "release";
 }
 
-/** Select the best release from the list based on the configured stream.
+/**
+ * Pull the version out of a firmware or UI version string and parse it.
  *
- * Tag convention (see .github/workflows in PR #975):
- *   nightly      — rolling pre-release published daily; tag_name is literally "nightly"
- *   experimental — versioned pre-release; tag_name matches v*-exp* (e.g. v1.2.3-exp.1)
- *   release      — stable full release; tag_name is bare semver (e.g. v1.2.3)
+ * The strings look like "fluidnc v1.27.0 (branch-abc123)", "v1.27.0-exp.1-dirty" or
+ * "github.com/.../ESP3D-WEBUI@v1.27.0-12-g8700a9bf9". A git describe tail ("-12-g8700a9bf9")
+ * or "-dirty" marks a local build of that tag, not a pre-release, so it is dropped.
+ *
+ * Returns { major, minor, patch, pre: [identifiers] } or null if there is no version.
  */
-function selectReleaseForStream(releases, stream) {
+function parseVersion(text) {
+    if (!text) return null;
+    const re = /(\d+)\.(\d+)(?:\.(\d+))?((?:-[0-9A-Za-z.-]+)?)/;
+    // Prefer a "v1.2.3" token, so other digits in the string aren't mistaken for it.
+    const m = /\bv(\d+)\.(\d+)(?:\.(\d+))?((?:-[0-9A-Za-z.-]+)?)/i.exec(text) || re.exec(text);
+    if (!m) return null;
+    let pre = m[4].replace(/-dirty$/i, "").replace(/-\d+-g[0-9a-f]+$/i, "");
+    pre = pre.replace(/^-/, "");
+    return {
+        major: parseInt(m[1], 10),
+        minor: parseInt(m[2], 10),
+        patch: m[3] === undefined ? 0 : parseInt(m[3], 10),
+        pre: pre ? pre.split(".") : [],
+    };
+}
+
+/** Compare two pre-release identifiers ("exp", "rc", "3") by semver rules (spec item 11.4). */
+function comparePreIdentifier(a, b) {
+    const aNum = /^\d+$/.test(a), bNum = /^\d+$/.test(b);
+    if (aNum && bNum) return Math.sign(parseInt(a, 10) - parseInt(b, 10));
+    if (aNum) return -1;  // numeric identifiers sort before text ones
+    if (bNum) return 1;
+    return a < b ? -1 : a > b ? 1 : 0;  // text identifiers compare as ASCII
+}
+
+/**
+ * Compare two parsed versions by semver precedence (https://semver.org/#spec-item-11):
+ * -1 if a is older, 1 if a is newer, 0 if the same. A pre-release is older than the
+ * release it leads up to: v1.28.0-exp.1 < v1.28.0. Number the pre-releases
+ * "-exp.N", not "-expN": with the dot, exp.10 sorts after exp.2.
+ */
+function compareVersions(a, b) {
+    for (const k of ["major", "minor", "patch"]) {
+        if (a[k] !== b[k]) return a[k] < b[k] ? -1 : 1;
+    }
+    if (!a.pre.length && !b.pre.length) return 0;
+    if (!a.pre.length) return 1;   // a is the release, b a pre-release of it
+    if (!b.pre.length) return -1;
+    for (let i = 0; i < Math.min(a.pre.length, b.pre.length); i++) {
+        const c = comparePreIdentifier(a.pre[i], b.pre[i]);
+        if (c) return c;
+    }
+    return Math.sign(a.pre.length - b.pre.length);
+}
+
+/** True if the version string is a pre-release (has a suffix such as -exp.1). */
+function isPrereleaseVersion(text) {
+    const v = parseVersion(text);
+    return !!v && v.pre.length > 0;
+}
+
+/** Select the release to offer for the configured stream.
+ *
+ * Tag convention:
+ *   nightly      — rolling pre-release published daily; tag_name is literally "nightly"
+ *   experimental — versioned pre-release with a suffix (e.g. v1.2.3-exp.1), marked pre-release
+ *   release      — stable full release; tag_name is bare semver (e.g. v1.2.3)
+ *
+ * Release and Experimental offer the newest version by semver. Experimental also considers
+ * pre-releases, and so does Release when the machine is already running a pre-release
+ * (currentVersions), so someone on -exp.1 is offered -exp.2, and the stable release once it's out.
+ */
+function selectReleaseForStream(releases, stream, currentVersions = []) {
     if (!releases || releases.length === 0) {
         return null;
     }
-    let candidates;
-    switch (stream) {
-        case "nightly":
-            // The nightly workflow always recreates a single rolling release whose
-            // tag_name is the literal string "nightly".
-            candidates = releases.filter(r => r.tag_name === "nightly" && !r.draft);
-            break;
-        case "experimental":
-            // Versioned pre-releases (v*-exp.*) — exclude the rolling nightly tag.
-            candidates = releases.filter(
-                r => r.prerelease && !r.draft && r.tag_name !== "nightly"
-            );
-            break;
-        case "release":
-        default:
-            // Stable, non-prerelease only.
-            candidates = releases.filter(r => !r.prerelease && !r.draft);
-            break;
+    if (stream === "nightly") {
+        // The nightly workflow always recreates a single rolling release whose
+        // tag_name is the literal string "nightly".
+        return releases.find(r => r.tag_name === "nightly" && !r.draft) || null;
     }
-    // GitHub returns releases newest-first; pick the first match.
-    return candidates.length > 0 ? candidates[0] : null;
+    const includePre = stream === "experimental" || currentVersions.some(isPrereleaseVersion);
+    let best = null, bestVersion = null;
+    for (const r of releases) {
+        if (r.draft || r.tag_name === "nightly") continue;
+        if (r.prerelease && !includePre) continue;
+        const v = parseVersion(r.tag_name);
+        if (!v) continue;
+        if (!best || compareVersions(v, bestVersion) > 0) {
+            best = r;
+            bestVersion = v;
+        }
+    }
+    return best;
 }
 
 /** Return true if latestTag is newer than currentVersion */
 function isNewerVersion(currentVersion, latestTag) {
-    // Normalize: strip leading 'v', convert to lower-case, drop pre-release suffix for comparison
-    const normalize = (v) => {
-        // Strip leading 'v', lowercase, then remove any pre-release suffix (e.g. '-beta', '-rc1')
-        return v.replace(/^v/i, "").trim().toLowerCase().replace(/-.*$/, "");
-    };
-    const cur = normalize(currentVersion || "");
-    const latest = normalize(latestTag || "");
+    const cur = parseVersion(currentVersion);
+    const latest = parseVersion(latestTag);
     if (!cur || !latest) {
-        return (latest !== cur);
+        // Can't tell: offer the update unless the strings are the same.
+        return (latestTag || "").trim() !== (currentVersion || "").trim();
     }
-    if (cur === latest) {
-        return false;
-    }
-    // Numeric semver comparison
-    const toNum = (s) => s.split(".").map(p => parseInt(p, 10) || 0);
-    const curParts = toNum(cur);
-    const latestParts = toNum(latest);
-    const len = Math.max(curParts.length, latestParts.length);
-    for (let i = 0; i < len; i++) {
-        const c = curParts[i] || 0;
-        const l = latestParts[i] || 0;
-        if (l > c) return true;
-        if (l < c) return false;
-    }
-    return false;
+    return compareVersions(cur, latest) < 0;
+}
+
+if (typeof globalThis !== "undefined") {
+    globalThis.__checkUpdatesTestApi = { parseVersion, compareVersions, selectReleaseForStream, isNewerVersion };
 }
 
 /** Look up an asset by name (case-insensitive) in a release */
@@ -145,7 +192,7 @@ function checkForUpdates() {
             return response.json();
         })
         .then(releases => {
-            const release = selectReleaseForStream(releases, stream);
+            const release = selectReleaseForStream(releases, stream, [fw_version, web_ui_version]);
             handleReleaseFetched(release, stream);
         })
         .catch(err => {

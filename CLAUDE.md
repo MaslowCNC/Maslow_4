@@ -79,3 +79,23 @@ architecture rules". They apply to every agent. Follow them.
 - The USB install scripts in the release zips are Maslow's own, in `scripts/release/install/`.
   `firmware/install_scripts/` is upstream FluidNC's (wrong chip or flash offsets for this board):
   leave it as upstream has it and don't use it.
+
+## Releases
+
+1. Tag the commit `vX.Y.Z-exp.1` (annotated: `git tag -a`) and push the tag. `release.yml` builds
+   it. If it needs fixes, tag the fix commit `-exp.2`, `-exp.3`, and so on. Keep the dot: tags
+   follow semver exactly, and semver only compares the number as a number when it is its own
+   dot-separated part (`exp.10` > `exp.2`, but `exp10` < `exp2`).
+2. Share it in the
+   [Interstitial Firmware Releases](https://forums.maslowcnc.com/t/interstitial-firmware-releases/20215)
+   forum thread for testing.
+3. Once it's judged stable, add a second annotated tag `vX.Y.Z` to the same commit as the last
+   `-exp.N` tag and push it. Don't move or delete tags, and don't make a no-op commit: the stable
+   release is the exact code that was tested. `release.yml` rebuilds it, so the firmware reports
+   `vX.Y.Z`. `git describe` picks the newest annotated tag when two share a commit.
+- The web UI's update check (`checkupdatesdlg.js`, Preferences > Update stream) orders versions by
+  strict semver, so `v1.28.0-exp.1` < `v1.28.0-exp.2` < `v1.28.0-exp.10` < `v1.28.0`. The Release stream offers
+  the newest full release; Experimental, or any machine already on a pre-release, also gets
+  pre-releases. Nightly takes the release tagged `nightly`. Pre-releases are told apart by GitHub's
+  pre-release flag, not the suffix text: `release.yml` marks any tag with a `-`
+  suffix as a pre-release (never "Latest") and a bare `vX.Y.Z` as the latest full release.
