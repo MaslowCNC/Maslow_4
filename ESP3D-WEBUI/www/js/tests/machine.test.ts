@@ -573,39 +573,7 @@ describe("files", () => {
   });
 });
 
-describe("work zero, park, alarm, spindle board", () => {
-  test("setWorkZeroXY sends G10 L20 P0 X0 Y0; done when a report after the ok carries WCO", async () => {
-    reply("<Idle|MPos:120,80,5|FS:0,0>");
-    g.ws_source.sent.length = 0;
-    const op = g.machine.setWorkZeroXY();
-    let done = false;
-    op.then(() => (done = true));
-    expect(lastSent()).toBe("G10 L20 P0 X0 Y0\n");
-    // a WCO report before the ok is from before the change
-    reply("<Idle|MPos:120,80,5|FS:0,0|WCO:0,0,0>", "ok", "<Idle|MPos:120,80,5|FS:0,0>");
-    await op.accepted;
-    expect(lastSent()).toBe("?");
-    await tick();
-    expect(done).toBe(false);
-    reply("<Idle|MPos:120,80,5|FS:0,0|WCO:120,80,0>");
-    await op;
-    expect(g.machine.state.wpos).toEqual({ x: 0, y: 0, z: 5 });
-  });
-
-  test("ok and the WCO report arriving together finish setWorkZeroZ", async () => {
-    const op = g.machine.setWorkZeroZ();
-    expect(lastSent()).toBe("G10 L20 P0 Z0\n");
-    reply("ok", "<Idle|MPos:0,0,0|FS:0,0|WCO:0,0,0>");
-    await op;
-  });
-
-  test("a rejected work zero reports the firmware error", async () => {
-    const op = g.machine.setWorkZeroXY();
-    reply("error:9");
-    await expect(op).rejects.toMatchObject({ reason: "rejected", code: 9 });
-    await expect(op.accepted).rejects.toMatchObject({ reason: "rejected" });
-  });
-
+describe("park, alarm, spindle board", () => {
   test("park reads the park settings, raises Z, then moves XY in machine coordinates", async () => {
     reply("[GC:G0 G54 G17 G21 G90 G94 M5 M9 T0 F0 S0]");
     const op = g.machine.park();

@@ -3,9 +3,10 @@
 // the same state shape from machine.state, so the screens don't change.
 //
 // Actions so far: Stop, the belt steps of Setup (retract, extend, apply tension, release tension, find
-// anchors), running a file and Trace boundary. Each goes through a machine.js action, and its Operation is kept in state.op so the screens can show
-// "starting", then nothing (done) or why it failed. The screen itself still comes from the machine's state, so
-// every connection shows the same thing. Jogging, files, jobs and the tool steps come next.
+// anchors), running a file, Trace boundary, jogging, Set home XY, Set Z, Park, Clear error, and on the Mini Home Z
+// and Remove tool. Each goes through a machine.js action, and its Operation is kept in state.op so the screens can
+// show "starting", then nothing (done) or why it failed. The screen itself still comes from the machine's state, so
+// every connection shows the same thing. The tool steps come next: they need the spindle board's status field.
 
 import { restarted, jobFailed, holding } from "../flow/incidents.js";
 import { readGcode, boundaryPath } from "../gcode/reader.js";
@@ -25,8 +26,17 @@ const MACHINES = { maslow41: "Maslow 4.1", unified: "Maslow Mini", unified36v: "
 // UI action → machine.js action, for the actions this page sends so far
 const ACTIONS = {
   retract: "retractBelts", extend: "extendBelts", tension: "applyTension",
-  release: "releaseTension", findAnchors: "calibrate"
+  release: "releaseTension", findAnchors: "calibrate",
+  park: "park", clearError: "clearAlarm",
+  rehomeZ: "homeSpindleZ", removeTool: "removeTool"
 };
+// The spindle board's actions, Mini only. Their Operation ends when the firmware answers ok, which only means the
+// board was sent the command: it finishes 1 to 40 s later, and can fail (a tool removal that can't clear the beam).
+// Until the status report has a spindle board field, the page says "sent", never "done", and the board's own log
+// lines tell the rest. When the field exists, machine.js waits for it and these become ordinary actions.
+const SPINDLE_BOARD = ["rehomeZ", "removeTool"];
+const NO_SPINDLE_BOARD = "This machine has no spindle board (the Maslow 4.1's Z is set by eye)";
+const isMini = (name) => /^Maslow Mini/.test(name || "");
 
 // Jog speeds, as the current UI's defaults (prefDefs.js: xy_feedrate, z_feedrate)
 const JOG_FEED = { xy: 2500, z: 300 };
@@ -48,10 +58,9 @@ export function createMachine({ host = location.host } = {}) {
     beltsKnown: 0,           // how many belt lengths the machine knows (BL "?" = unknown)
     toolSteps: false,        // the tool check, measure and load aren't connected yet (they need the tool field)
     notYet: {                // actions this page can't send yet, and why; their buttons are disabled with the reason
-      setHomeXY: "Needs a machine.js action (G10 L20), to add with Tristan",
-      setZ: "Needs a machine.js action (G10 L20), to add with Tristan",
-      park: "Needs a machine.js action, to add with Tristan",
-      rehomeZ: "Needs a machine.js action for $Spindle/Home (Z homing is mo's)",
+      // Until [ESP800] says which machine this is; readMachine() then enables them on a Mini
+      rehomeZ: "Waiting to learn which machine this is",
+      removeTool: "Waiting to learn which machine this is",
       // Extend distance 0 means "until Done extending", which today's firmware doesn't support: it would extend 0 mm
       extendUntilDone: "0 needs the Done extending firmware change. Until then, Extend stops at the distance set here."
     },
@@ -200,7 +209,12 @@ export function createMachine({ host = location.host } = {}) {
     try {
       const r = await fetch(`/command?plain=${encodeURIComponent("[ESP800]")}`);
       const tag = (await r.text()).match(/board:\s*([a-z0-9]+)/i)?.[1];
-      set({ machine: MACHINES[tag] || (tag ? `Unknown board (${tag})` : "Unknown machine") });
+      const machine = MACHINES[tag] || (tag ? `Unknown board (${tag})` : "Unknown machine");
+      const notYet = { ...s.notYet };
+      for (const a of SPINDLE_BOARD) {
+        if (isMini(machine)) delete notYet[a]; else notYet[a] = NO_SPINDLE_BOARD;
+      }
+      set({ machine, notYet });
     } catch (e) {
       log(`Couldn't read which machine this is: ${e.message}`);
       emit();
@@ -365,7 +379,10 @@ export function createMachine({ host = location.host } = {}) {
     const mine = () => s.op?.action === action;   // a later action replaces this one
     op.accepted.then(() => { if (mine() && s.op.phase === "starting") set({ op: { ...s.op, phase: "running" } }); }, () => {});
     op.then(
-      () => { log(`${action}: done`); if (mine()) set({ op: null }); else emit(); },
+      () => {
+        log(SPINDLE_BOARD.includes(action) ? `${action}: sent to the spindle board` : `${action}: done`);
+        if (mine()) set({ op: null }); else emit();
+      },
       (err) => {
         // Ended by our own Stop: not a failure
         if (err.reason === "reset") { if (mine()) set({ op: null }); return; }
@@ -417,6 +434,14 @@ export function createMachine({ host = location.host } = {}) {
     if (action === "stop") {
       s = { ...s, op: null };
       m.stop().catch(err => { log(`Stop: ${err.detail || err.reason}`); emit(); });
+      return;
+    }
+    if (s.notYet[action]) { log(`Not sent: ${action} (${s.notYet[action]})`); emit(); return; }
+    // Set home XY / Set Z: the work origin where the machine is now, through Tristan's setWorkZero
+    if (action === "setHomeXY" || action === "setZ") {
+      const p = m.state.mpos;
+      if (!p) { log(`Not sent: ${action} (the machine's position isn't known yet)`); emit(); return; }
+      run(action, () => m.setWorkZero(action === "setZ" ? { z: p.z } : { x: p.x, y: p.y }));
       return;
     }
     if (ACTIONS[action]) { run(action, ACTIONS[action]); return; }

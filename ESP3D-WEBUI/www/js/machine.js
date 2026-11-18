@@ -69,7 +69,6 @@ const machine = (() => {
 		motorCurrent: null,
 	};
 	let statusCount = 0; // status reports seen, to wait for a fresh one
-	let wcoCount = 0; // status reports that carried WCO (FluidNC sends it every 10-30 reports)
 	let beltLengthsFromStatus = false; // a BL field has been seen (firmware that reports it)
 	const listeners = { state: new Set(), line: new Set() };
 
@@ -119,7 +118,6 @@ const machine = (() => {
 				wpos = xyz(value);
 			} else if (key === "WCO") {
 				state.wco = xyz(value);
-				wcoCount++;
 			} else if (key === "MS") {
 				state.maslow = Number(value);
 			} else if (key === "BL") {
@@ -261,18 +259,14 @@ const machine = (() => {
 	/**
 	 * Send one line; resolves on ok (with the collected lines if collect), rejects with a
 	 * MachineError. Quiet by default: the caller of the action reports failures, so wsCommands
-	 * doesn't also post "Machine rejected" and grbl.js doesn't treat it as a fault. atOk runs as
-	 * the ok is read, before any line after it (the promise only settles later).
+	 * doesn't also post "Machine rejected" and grbl.js doesn't treat it as a fault.
 	 */
-	const sendLine = (line, { collect = false, quiet = true, atOk } = {}) =>
+	const sendLine = (line, { collect = false, quiet = true } = {}) =>
 		new Promise((resolve, reject) => {
 			const sent = wsCommands.send(line, {
 				collect,
 				quiet,
-				onOk: (lines) => {
-					atOk?.();
-					resolve(lines ?? []);
-				},
+				onOk: (lines) => resolve(lines ?? []),
 				onError: (code) => reject(toError(line, code)),
 			});
 			if (!sent) {
@@ -602,31 +596,6 @@ const machine = (() => {
 			resolve();
 		});
 	};
-
-	// Work coordinates
-	/**
-	 * Make the current position work 0 on the given axes (G10 L20 P0, the active coordinate
-	 * system). Done when a status report after the ok carries the new WCO, so state.wpos shows it.
-	 * FluidNC doesn't send WCO in every report (every 10th when idle), so that can take a moment.
-	 */
-	const workZeroOperation = (name, axes) =>
-		operation(name, async ({ accept, resolve, ended }) => {
-			let wcoAtOk = Number.POSITIVE_INFINITY;
-			await sendLine(`G10 L20 P0 ${axes.map((a) => `${a}0`).join(" ")}`, {
-				atOk: () => {
-					wcoAtOk = wcoCount;
-				},
-			});
-			accept();
-			wsCommands.sendRealtime(0x3f);
-			await waitFor(() => wcoCount > wcoAtOk, { what: name, ended });
-			resolve();
-		});
-
-	/** Make the current X and Y position the work origin (work X 0, Y 0). */
-	const setWorkZeroXY = () => workZeroOperation("set work zero XY", ["X", "Y"]);
-	/** Make the current Z position work Z 0. */
-	const setWorkZeroZ = () => workZeroOperation("set work zero Z", ["Z"]);
 
 	// Spindle board (the Z controller)
 	/**
@@ -983,12 +952,10 @@ const machine = (() => {
 		tracePath,
 		park,
 		// work coordinates
-		setWorkZeroXY,
-		setWorkZeroZ,
+		setWorkZero,
 		// spindle board
 		homeSpindleZ,
 		removeTool,
-		setWorkZero,
 		// jobs and files
 		runFile,
 		resumeFile,
