@@ -70,7 +70,7 @@ function StateSection({ k, ctx, close }) {
   </>;
 }
 
-const SECTIONS = [["state", "State"], ["device", "Device"], ["network", "Network"], ["frame", "Frame and belts"], ["tool", "Tool and Z"], ["display", "Display"], ["advanced", "Advanced"]];
+const SECTIONS = [["state", "State"], ["device", "Device"], ["network", "Network"], ["frame", "Frame and belts"], ["home", "Home"], ["tool", "Tool and Z"], ["display", "Display"], ["advanced", "Advanced"]];
 
 export function Settings({ k, ctx, onClose, theme, setTheme, compact, stop }) {
   const [sec, setSec] = useState("state");
@@ -88,6 +88,7 @@ export function Settings({ k, ctx, onClose, theme, setTheme, compact, stop }) {
     <Row label="Hotspot"><select><option>Only when WiFi isn't connected</option><option>Always on</option><option>Off</option></select></Row>
     <p class="note">Placeholder: these depend on what the current WiFi dialog offers.</p></>;
   else if (sec === "frame") body = <FrameSection ctx={ctx} busy={busy} />;
+  else if (sec === "home") body = <HomeSection ctx={ctx} busy={busy} />;
   else if (sec === "tool") body = <><h4>Tool and Z</h4>
     {/* The Maslow 4.1 has no spindle output, so this only shows on a Mini (or before the machine is known) */}
     {!(d.machine && !/^Maslow Mini/.test(d.machine)) && <>
@@ -204,4 +205,36 @@ function SettingGroup({ ctx, busy, label, name, hint, keys }) {
     {changed && errors.length > 0 && <span class="note" style="flex-basis:100%;color:var(--danger)">
       {errors.map(([sub, e]) => (sub ? `${sub}: ${e}` : e)).join(" · ")}</span>}
   </Row>;
+}
+
+// Home: the job's 0, 0, 0 typed as machine coordinates (the jog pad's Set home XY / Set Z use where the machine is
+// now), and Reset home, which puts it back on the machine's own 0, 0, 0 so work and machine positions match.
+// On a 4.1 the Z home must be 0–72 mm above the z-stop; the Mini's spindle board has its own Z range.
+const Z_HOME_MAX_MM = 72;
+function HomeSection({ ctx, busy }) {
+  const { d, send } = ctx;
+  const f = v => (Math.abs(v) < 0.0005 ? 0 : v).toFixed(1);
+  const [x, setX] = useState(f(d.wco.x)), [y, setY] = useState(f(d.wco.y)), [z, setZ] = useState(f(d.wco.z));
+  const xN = parseFloat(x), yN = parseFloat(y), zN = parseFloat(z);
+  const mini = /^Maslow Mini/.test(d.machine || "");
+  const xyErr = !Number.isFinite(xN) || !Number.isFinite(yN) ? "Enter X and Y in mm" : "";
+  const zErr = !Number.isFinite(zN) ? "Enter Z in mm"
+    : !mini && (zN < 0 || zN > Z_HOME_MAX_MM) ? `Z home must be 0–${Z_HOME_MAX_MM} mm above the z-stop` : "";
+  const off = busy || !!d.notYet?.setHomeXY;
+  const field = (label, v, set) => <label class="field"><span>{label}</span>
+    <input type="text" inputmode="decimal" class="mono" value={v} onInput={e => set(e.currentTarget.value)} aria-label={`Home ${label} in mm`} style="width:80px" /></label>;
+  const isReset = d.wco.x === 0 && d.wco.y === 0 && d.wco.z === 0;
+  return <><h4>Home</h4>
+    <p class="note">The jog pad's Set home XY and Set Z put home where the machine is now. Here you can type it instead, in
+      machine coordinates.</p>
+    <Row label="Home X, Y" hint="Machine position of the job's 0, 0.">
+      {field("X", x, setX)}{field("Y", y, setY)} mm
+      <button class="btn ghost" type="button" disabled={off || !!xyErr || (xN === d.wco.x && yN === d.wco.y)} onClick={() => send("setHomeXY", { x: xN, y: yN })}>Set</button></Row>
+    {xyErr && <p class="note" style="color:var(--danger)">{xyErr}</p>}
+    <Row label="Home Z" hint={mini ? "Machine Z of the job's Z 0." : "Machine Z of the job's Z 0: how far above the z-stop."}>
+      {field("Z", z, setZ)} mm
+      <button class="btn ghost" type="button" disabled={off || !!zErr || zN === d.wco.z} onClick={() => send("setZ", { z: zN })}>Set</button></Row>
+    {zErr && <p class="note" style="color:var(--danger)">{zErr}</p>}
+    <Row label="Reset home" hint="Puts home back on the machine's own 0, 0, 0, so work and machine positions read the same.">
+      <button class="btn ghost" type="button" disabled={off || isReset} onClick={() => { send("resetHome"); setX("0.0"); setY("0.0"); setZ("0.0"); }}>{isReset ? "Already reset" : "Reset home"}</button></Row></>;
 }

@@ -291,6 +291,7 @@ export function createSimulator() {
     // Setting a home moves the work zero, not the machine: the machine position stays as it was
     // The new home in machine coordinates; without one, here
     setHomeXY({ x = s.pos.x, y = s.pos.y } = {}) { log(`setWorkZero x=${x} y=${y}`); set({ wco: { ...s.wco, x, y } }); },
+    resetHome() { log("setWorkZero x=0 y=0 z=0"); set({ wco: { x: 0, y: 0, z: 0 } }); },
     setZ({ z = s.pos.z } = {}) { log(`setWorkZero z=${z}`); set({ wco: { ...s.wco, z } }); },
     // The demo files aren't real, so each reads as a generated sample of its size
     chooseFile({ file }) {
