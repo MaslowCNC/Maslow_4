@@ -266,7 +266,8 @@ fault recovery; not after a finished or stopped job, or releasing and re-applyin
 - **Job: Cutting** while a file runs. Progress is the report's running line ÷ the file's line count,
   counted from the file the preview loads; the report's `SD` percent is bytes read, not progress.
 - **Stop** (`machine.stop()`) sends 0x18, which halts at once and keeps the belt positions, then
-  `$STOP`, which raises Z 2 mm and saves. The job leaves `STOPPED:line,file` in the report, so
+  `$STOP`, which saves. Z stays where it stopped (Maslow-Main, 2026-11-17), so the bit may still
+  be in the work; Continue first raises Z to at least 2 mm above the work Z 0. The job leaves `STOPPED:line,file` in the report, so
   every browser sees it. Ready to cut then shows **Job stopped** with Continue from line N (the line
   can be changed), Run from the start, or choose another file.
 - **Success:** the job ends with no `STOPPED`. Park follows a success (not a stop or a fault).
@@ -291,7 +292,7 @@ spindle fault. A hold is cleared with Stop instead. These incidents live in `web
 | The spindle tripped | The spindle faulted and the machine ended the job and re-homed Z (simulator now; the real machine once the spindle field exists) | The tool check, then Job stopped |
 | The machine is holding | Held with no job running | Cleared with Stop |
 
-- **Spindle fault:** the machine holds, ends the job, raises and re-homes Z, and reports
+- **Spindle fault:** the machine holds, ends the job, re-homes Z (up to the top of travel), and reports
   `READY_TO_CUT` again; the job leaves `STOPPED`. The UI shows **Job: Spindle fault: recovering**,
   with no Run, until recovery finishes, then the tool check. It needs the spindle-board state
   mo is adding, because during recovery the machine already looks ready. (Maslow Mini only.)

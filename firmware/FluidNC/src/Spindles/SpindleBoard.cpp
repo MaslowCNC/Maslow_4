@@ -430,8 +430,8 @@ namespace Spindles {
         serviceFaultRecovery();
     }
 
-    // How long the machine must sit Idle after $STOP before the Z is re-homed.  $STOP's own Z
-    // raise passes through Idle on its way into a Cycle, so a single Idle reading is not enough.
+    // How long the machine must sit Idle after $STOP before the Z is re-homed, so the belts have
+    // settled.  ($STOP no longer raises the Z; the re-home below is what lifts the bit clear.)
     static const uint32_t RECOVERY_IDLE_MS = 1000;
     // Give up on a step that has not completed in this long (e.g. the operator took over).
     static const uint32_t RECOVERY_STEP_TIMEOUT_MS = 30000;
@@ -461,8 +461,8 @@ namespace Spindles {
                 if ((st == State::Hold && sys.suspend().bit.holdComplete) || st == State::Idle) {
                     log_info(name() << ": machine stopped after the spindle fault - ending the job ($STOP)");
                     // In a hold the main loop is suspended inside it, so ask the hold itself to end
-                    // the job; it then runs $STOP, which raises the Z and saves the positions as the
-                    // Stop button does.  When already Idle, run $STOP directly.
+                    // the job; it then runs $STOP, which saves the positions as the Stop button
+                    // does (the Z stays put until the re-home below).  When already Idle, run $STOP directly.
                     if (st == State::Hold) {
                         rtStopFromHold = true;
                     } else {
