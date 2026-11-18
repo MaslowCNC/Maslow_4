@@ -27,6 +27,7 @@ export function SimPanel({ d, device }) {
             : <button type="button" class="btn ghost" onClick={() => device.event("reconnect")}>Reconnect</button>}
           <button type="button" class="btn ghost" onClick={() => device.event("emergencyStop")} disabled={!d.connected}>Press the emergency button</button>
           <button type="button" class="btn ghost" onClick={() => device.event("boardReset")} disabled={!d.connected}>Board resets</button>
+          <button type="button" class="btn ghost" onClick={() => device.event("toggleVertical")}>{d.frame?.vertical ? "Lay the frame flat" : "Stand the frame vertically"}</button>
         </div>
       </details>
     </div>}

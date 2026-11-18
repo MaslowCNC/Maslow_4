@@ -258,6 +258,8 @@ export function createSimulator() {
   // Events a tester can cause at any time, from the simulator panel
   const events = {
     disconnect() { log("Connection lost"); set({ connected: false, pending: null }); },
+    // Maslow_vertical, as Find anchors saves it after detecting the orientation
+    toggleVertical() { set({ frame: { ...s.frame, vertical: !s.frame.vertical } }); },
     reconnect() { connectQuestion(false); },
     emergencyStop() { log("[MSG:ERR: Emergency stop! Stopping all motors]");
       set({ fluid: "Alarm", error: { reason: "Emergency button pressed" }, job: null, motion: null, spindle: "off", pending: null }); },

@@ -69,7 +69,8 @@ function currentRings(currents) {
 // The workspace (webui/src/accuracy.js) as a dotted outline: the largest rectangle around the centre where cuts
 // land within the tolerance. The job's outline is drawn over it, orange and dashed where it leaves, and one line
 // under the frame says whether the job fits. Blue and orange are the Okabe-Ito pair, readable with colour blindness.
-// a: { tol, rect: { w, h } | null, job: checkJob() result | null, note: string | null (shown instead) }
+// a: { tol, rect: { w, h } | null, job: checkJob() result | null, note: string | null (shown instead),
+//      hanging: the sled's mass in kg on a vertical frame, else null }
 function accuracyOverlay(a, X, Y) {
   const OK = "#56b4e9", BAD = "#e69f00";
   // right-aligned under the frame, clear of the log, which sits over the drawing's left side
@@ -79,7 +80,7 @@ function accuracyOverlay(a, X, Y) {
   const r = a.rect, rect = r && r.w ? `<rect x="${X(-r.w / 2).toFixed(1)}" y="${Y(r.h / 2).toFixed(1)}" width="${(X(r.w / 2) - X(-r.w / 2)).toFixed(1)}" ` +
     `height="${(Y(-r.h / 2) - Y(r.h / 2)).toFixed(1)}" fill="${OK}" fill-opacity=".06" stroke="${OK}" stroke-width="1.5" stroke-dasharray="2 4"><title>Cuts land within ±${a.tol} mm here (estimate)</title></rect>` : "";
   const area = r && r.w ? `${Math.round(r.w)} × ${Math.round(r.h)} mm` : "none";
-  if (!a.job) return rect + msg(`Workspace at ±${a.tol} mm: ${area} (estimate)`);
+  if (!a.job) return rect + msg(`Workspace at ±${a.tol} mm: ${area} (${a.hanging ? `est., ${a.hanging} kg sled` : "estimate"})`);
   const seg = (p) => p.points.map((q, i) => `${i ? "L" : "M"}${X(q.x).toFixed(1)} ${Y(q.y).toFixed(1)}`).join("");
   const path = (ok) => a.job.pieces.filter((p) => p.ok === ok).map(seg).join("");
   const job = `<path d="${path(true)}" fill="none" stroke="${OK}" stroke-width="1.5"/>` +
