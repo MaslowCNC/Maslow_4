@@ -402,7 +402,12 @@ const machine = (() => {
 
 	// Belts and calibration
 	const retractBelts = () =>
-		maslowOperation("retract belts", "$ALL", { start: MASLOW.RETRACTING, success: MASLOW.RETRACTED });
+		maslowOperation("retract belts", "$ALL", {
+			start: MASLOW.RETRACTING,
+			success: MASLOW.RETRACTED,
+			// UNKNOWN: a belt wasn't zeroed because its encoder failed reads
+			failure: [MASLOW.UNKNOWN],
+		});
 	const extendBelts = () =>
 		maslowOperation("extend belts", "$EXT", {
 			start: MASLOW.EXTENDING,
@@ -421,7 +426,8 @@ const machine = (() => {
 		maslowOperation("calibrate", "$CAL", {
 			start: MASLOW.CALIBRATION_IN_PROGRESS,
 			success: MASLOW.READY_TO_CUT,
-			failure: [MASLOW.EXTENDEDOUT],
+			// UNKNOWN: stopped because a belt's encoder failed reads
+			failure: [MASLOW.EXTENDEDOUT, MASLOW.UNKNOWN],
 		});
 	const releaseTension = () =>
 		maslowOperation("release tension", "$CMP", { start: MASLOW.RELEASE_TENSION, success: MASLOW.EXTENDEDOUT });

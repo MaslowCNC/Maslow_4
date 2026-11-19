@@ -258,6 +258,12 @@ static Error runFile(const Volume& fs, const char* parameter, AuthenticationLeve
         return Error::IdleError;
     }
     bool topLevel = !Job::active();
+    // A belt whose encoder is failing reads may not be where the machine thinks it is
+    std::string why;
+    if (topLevel && Maslow.failingEncoder(why) >= 0) {
+        log_error_to(out, "Cannot start the job: " << why.c_str());
+        return Error::IdleError;
+    }
     Job::save();
     InputFile* theFile;
     if ((err = openFile(fs, parameter, out, theFile)) != Error::Ok) {

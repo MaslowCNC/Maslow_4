@@ -80,6 +80,12 @@ extern const char* VERSION_NUMBER;
 #define IDLE_UPDATE_WATCHDOG_MS 500
 
 int ENCODER_READ_FREQUENCY_HZ = 1000;  //max frequency for polling the encoders
+// Encoder read failures.  A healthy encoder fails none (none in a whole Find Anchors run or cut on
+// 2026-11-19), so this many in one second means a bad connection: belt operations and jobs are
+// refused, and running ones stopped, until ENCODER_TROUBLE_HOLD_MS has passed without it.
+constexpr uint32_t      ENCODER_TROUBLE_FAILURES  = 3;
+constexpr unsigned long ENCODER_TROUBLE_HOLD_MS   = 10000;
+constexpr uint32_t      ENCODER_STOP_MIN_FAILURES = 10;  // and over 10% of an encoder's reads in a second stops the machine
 
 //------------------------------------------------------
 //------------------------------------------------------ Main Function Loops
@@ -397,33 +403,11 @@ bool Maslow_::updateEncoderPositions() {
     bool                 success               = true;
     static unsigned long lastCallToEncoderRead = millis();
 
-    static int           encoderFailCounter[4] = { 0, 0, 0, 0 };
-    static unsigned long encoderFailTimer      = millis();
+    static unsigned long encoderFailTimer = millis();
 
     if (!readingFromSD && (millis() - lastCallToEncoderRead > 1000 / (ENCODER_READ_FREQUENCY_HZ))) {
         static int encoderToRead = 0;
-        switch (encoderToRead) {
-            case 0:
-                if (!axis[_TL].updateEncoderPosition()) {
-                    encoderFailCounter[TLEncoderLine]++;
-                }
-                break;
-            case 1:
-                if (!axis[_TR].updateEncoderPosition()) {
-                    encoderFailCounter[TREncoderLine]++;
-                }
-                break;
-            case 2:
-                if (!axis[_BL].updateEncoderPosition()) {
-                    encoderFailCounter[BLEncoderLine]++;
-                }
-                break;
-            case 3:
-                if (!axis[_BR].updateEncoderPosition()) {
-                    encoderFailCounter[BREncoderLine]++;
-                }
-                break;
-        }
+        axis[encoderToRead].updateEncoderPosition();  // arms are read in order _TL, _TR, _BL, _BR
         encoderToRead++;
         if (encoderToRead > 3) {
             encoderToRead         = 0;
@@ -431,31 +415,61 @@ bool Maslow_::updateEncoderPositions() {
         }
     }
 
-    // if more than 1% of readings fail, warn user, if more than 10% fail, stop the machine and raise alarm
+    // Once a second, count each encoder's failed reads (MotorUnit counts every read, including
+    // the ones a retract makes).  Any failure is warned about.  A few in a second mark the belt's
+    // length untrustworthy for a while (failingEncoder), and more than 10% of an encoder's reads
+    // stop the machine.  That limit used to be 100 failures a second whichever encoder it was, but
+    // each encoder is read only ~250 times a second, so one could lose ~40% of its reads (seen
+    // 2026-11-19: BL failing 70-89 a second for minutes) without anything stopping.
     if (millis() - encoderFailTimer > 1000) {
-        for (int i = 0; i < 4; i++) {
-            //turn i into proper label
-            String label = axis_id_to_label(i);
+        static uint32_t lastReads[ARM_COUNT]    = { 0, 0, 0, 0 };
+        static uint32_t lastFailures[ARM_COUNT] = { 0, 0, 0, 0 };
+        bool            stopMachine             = false;
+        for (int arm = _TL; arm < ARM_COUNT; arm++) {
+            const uint32_t reads    = axis[arm].encoderReads() - lastReads[arm];
+            const uint32_t failures = axis[arm].encoderReadFailures() - lastFailures[arm];
+            lastReads[arm]          = axis[arm].encoderReads();
+            lastFailures[arm]       = axis[arm].encoderReadFailures();
 #if MASLOW_DISABLE_BOOT_SELFTEST
             // Bench-test mode: encoders may be absent, so don't warn or panic on read failures.
-            (void)label;
 #else
-            if (encoderFailCounter[i] > 0.1 * ENCODER_READ_FREQUENCY_HZ) {
+            if (failures >= ENCODER_TROUBLE_FAILURES) {
+                encoderTroubleReads[arm]    = reads;
+                encoderTroubleFailures[arm] = failures;
+                encoderTroubleMs[arm]       = millis();
+            }
+            if (failures >= ENCODER_STOP_MIN_FAILURES && failures * 10 > reads) {
                 // log error statement with appropriate label
-                log_error("Failure on " << label.c_str() << " encoder, failed to read " << encoderFailCounter[i]
+                log_error("Failure on " << axis[arm].label().c_str() << " encoder, failed to read " << failures << " of " << reads
                                         << " times in the last second");
-                Maslow.panic();
-            } else if (encoderFailCounter[i] > 0) {  //0.01*ENCODER_READ_FREQUENCY_HZ){
-                log_warn("Bad connection on " << label.c_str() << " encoder, failed to read " << encoderFailCounter[i]
-                                              << " times in the last second");
+                stopMachine = true;
+            } else if (failures > 0) {
+                log_warn("Bad connection on " << axis[arm].label().c_str() << " encoder, failed to read " << failures << " of "
+                                              << reads << " times in the last second");
             }
 #endif
-            encoderFailCounter[i] = 0;
-            encoderFailTimer      = millis();
+        }
+        encoderFailTimer = millis();
+        // A belt operation stops itself on a failing encoder (Calibration::home) and leaves its
+        // state machine in a state that says so; a panic here would leave it mid-operation.
+        if (stopMachine && sys.state() != State::Homing) {
+            Maslow.panic();
         }
     }
 
     return success;
+}
+
+int Maslow_::failingEncoder(std::string& why) const {
+    for (int arm = _TL; arm < ARM_COUNT; arm++) {
+        if (encoderTroubleMs[arm] != 0 && millis() - encoderTroubleMs[arm] < ENCODER_TROUBLE_HOLD_MS) {
+            why = std::string("the ") + Maslow.axis[arm].label().c_str() + " encoder failed " + std::to_string(encoderTroubleFailures[arm]) +
+                  " of " + std::to_string(encoderTroubleReads[arm]) + " reads in one second " +
+                  std::to_string((millis() - encoderTroubleMs[arm]) / 1000) + "s ago. Check its cable";
+            return arm;
+        }
+    }
+    return -1;
 }
 
 // This computes the target lengths of the belts based on the target x and y coordinates and sends that information to each arm.

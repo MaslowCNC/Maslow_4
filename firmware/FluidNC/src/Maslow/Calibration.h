@@ -59,6 +59,7 @@ public:
     void printCurrentState();
     bool requestStateChange(int newState);
     void stopTakingSlack();  // $STOP during Apply Tension
+    bool stopOnEncoderFailure();  // ends a belt operation whose belt length can't be trusted
 
     // Set extended state variables (used when restoring from NVS)
     void setExtendedState(bool tl, bool tr, bool bl, bool br);

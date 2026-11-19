@@ -36,6 +36,13 @@ public:
     bool     comply();
     bool     retract();
     double   getLastRetractOffset() const;
+    // Why the last retract stopped without zeroing the belt; empty if it didn't
+    const String& retractRefusal() const { return _retractRefusal; }
+    // The belt's name for messages, e.g. "Bottom Left"
+    String   label() const;
+    // Encoder reads attempted and failed since boot, for the read-failure checks in Maslow.cpp
+    uint32_t encoderReads() const { return _encoderReads; }
+    uint32_t encoderReadFailures() const { return _encoderReadFailures; }
     bool     extend(double targetLength);
     bool     pull_tight(int currentThreshold);
     bool     motor_test();
@@ -71,6 +78,8 @@ private:
     double  _commandPWM                        = 0;  //The last PWM duty cycle sent to the motor
     double  mostRecentCumulativeEncoderReading = 0;
     double  encoderReadFailurePrintTime        = millis();
+    uint32_t _encoderReads                     = 0;
+    uint32_t _encoderReadFailures              = 0;
     //unsigned long lastCallGetPos = millis();
 
     //variables to keep track of the motor current and belt speed
@@ -89,6 +98,16 @@ private:
     float    retract_baseline         = 700;
     bool     retractPendingZero       = false;
     double   lastRetractOffset        = 0.0;
+    // A retract counts the encoder's failed reads from the start of the pull, then zeroes the
+    // belt and reads the zero back before it trusts it
+    bool     retractCounting          = false;
+    uint32_t retractStartFailures     = 0;
+    uint32_t retractStartReads        = 0;
+    int      zeroAttempts             = 0;
+    int      zeroCheckReads           = 0;
+    int      zeroGoodReads            = 0;
+    bool     zeroSet                  = false;
+    String   _retractRefusal;
 
     //comply variables
     unsigned long lastCallToComply  = millis();
