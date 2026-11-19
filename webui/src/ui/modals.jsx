@@ -164,6 +164,10 @@ function FrameSection({ ctx, busy }) {
       hint="How hard the motors pull before a belt counts as tight, when retracting and measuring. Default 1300." />
     <SettingGroup ctx={ctx} busy={busy} label="Scale" name="Scale" keys={[["scaleX", "X"], ["scaleY", "Y"]]}
       hint="Corrects cuts that come out a little too big or small. 1 is no change; 1.01 cuts 1 % larger. 0.8 to 1.2." />
+    <SettingGroup ctx={ctx} busy={busy} label="Belt stretch" name="Belt stretch" keys={[["beltStiffness", "Stiffness"], ["pullForce", "Pull"]]}
+      hint={<>Belts stretch under tension (stiffness 178900 N: about 0.9 mm per metre at 16 kg). Find anchors measures with
+        the pull force, and cutting holds the belts at about the same tension. Stiffness 0 turns this off.
+        {" "}<b>Run Find anchors again after changing either</b>: anchors found with other values leave the belts too tight or too slack.</>} />
     <Row label="Workspace tolerance" hint="The Workspace overlay shows where cuts should land within this, and whether the job stays inside. Remembered in this browser.">
       <select value={String(ctx.tolerance)} onChange={e => ctx.setTolerance(parseFloat(e.currentTarget.value))}>
         {[0.5, 1, 2, 3, 5].map(v => <option value={String(v)}>±{v} mm</option>)}</select></Row>

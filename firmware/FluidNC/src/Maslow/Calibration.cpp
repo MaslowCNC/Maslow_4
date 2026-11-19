@@ -1467,12 +1467,14 @@ bool Calibration::takeSlackFunc() {
                 float brTotalZ = (currentZ + kinematics->getBrZ() + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
 
                 // Convert measured XY plane distances to actual belt lengths for motor positions
-                // calibration_data[0] contains measured XY plane distances: [TL, TR, BL, BR]
-                float beltLength[ARM_COUNT];
-                beltLength[_TL] = measurementFromXYPlane(calibration_data[0][0], tlTotalZ);
-                beltLength[_TR] = measurementFromXYPlane(calibration_data[0][1], trTotalZ);
-                beltLength[_BL] = measurementFromXYPlane(calibration_data[0][2], blTotalZ);
-                beltLength[_BR] = measurementFromXYPlane(calibration_data[0][3], brTotalZ);
+                // calibration_data[0] contains measured XY plane distances: [TL, TR, BL, BR], as stretched spans;
+                // the motors count paid-out belt, so undo the stretch take_measurement added
+                const float pullForce = kinematics->getCalibrationPullForce();
+                float       beltLength[ARM_COUNT];
+                beltLength[_TL] = kinematics->geometricToPaidOut(measurementFromXYPlane(calibration_data[0][0], tlTotalZ), pullForce);
+                beltLength[_TR] = kinematics->geometricToPaidOut(measurementFromXYPlane(calibration_data[0][1], trTotalZ), pullForce);
+                beltLength[_BL] = kinematics->geometricToPaidOut(measurementFromXYPlane(calibration_data[0][2], blTotalZ), pullForce);
+                beltLength[_BR] = kinematics->geometricToPaidOut(measurementFromXYPlane(calibration_data[0][3], brTotalZ), pullForce);
 
                 // Set motor positions directly from measured belt lengths
                 // Axis mapping: A=TL(0), B=TR(1), C=BL(2), D=BR(3), Z=router(4)
@@ -1722,11 +1724,13 @@ bool Calibration::take_measurement(float result[4], int dir, int run, int curren
             float blTotalZ = (currentZ + kinematics->getBlZ() + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
             float brTotalZ = (currentZ + kinematics->getBrZ() + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
 
-            //take measurement and record it to the calibration data array.
-            result[0] = measurementToXYPlane(Maslow.axis[_TL].getPosition(), tlTotalZ);
-            result[1] = measurementToXYPlane(Maslow.axis[_TR].getPosition(), trTotalZ);
-            result[2] = measurementToXYPlane(Maslow.axis[_BL].getPosition(), blTotalZ);
-            result[3] = measurementToXYPlane(Maslow.axis[_BR].getPosition(), brTotalZ);
+            //take measurement and record it to the calibration data array, as the spans the belts bridge: they
+            //stretch past the encoder length under the pull (no change with stretch compensation off)
+            const float pullForce = kinematics->getCalibrationPullForce();
+            result[0] = measurementToXYPlane(kinematics->paidOutToGeometric(Maslow.axis[_TL].getPosition(), pullForce), tlTotalZ);
+            result[1] = measurementToXYPlane(kinematics->paidOutToGeometric(Maslow.axis[_TR].getPosition(), pullForce), trTotalZ);
+            result[2] = measurementToXYPlane(kinematics->paidOutToGeometric(Maslow.axis[_BL].getPosition(), pullForce), blTotalZ);
+            result[3] = measurementToXYPlane(kinematics->paidOutToGeometric(Maslow.axis[_BR].getPosition(), pullForce), brTotalZ);
             BR_tight  = false;
             BL_tight  = false;
             return true;
@@ -1820,11 +1824,13 @@ bool Calibration::take_measurement(float result[4], int dir, int run, int curren
                 float blTotalZ = (currentZ + kinematics->getBlZ() + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
                 float brTotalZ = (currentZ + kinematics->getBrZ() + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
 
-                //take measurement and record it to the calibration data array.
-                result[0] = measurementToXYPlane(Maslow.axis[_TL].getPosition(), tlTotalZ);
-                result[1] = measurementToXYPlane(Maslow.axis[_TR].getPosition(), trTotalZ);
-                result[2] = measurementToXYPlane(Maslow.axis[_BL].getPosition(), blTotalZ);
-                result[3] = measurementToXYPlane(Maslow.axis[_BR].getPosition(), brTotalZ);
+                //take measurement and record it to the calibration data array, as the spans the belts bridge: they
+                //stretch past the encoder length under the pull (no change with stretch compensation off)
+                const float pullForce = kinematics->getCalibrationPullForce();
+                result[0] = measurementToXYPlane(kinematics->paidOutToGeometric(Maslow.axis[_TL].getPosition(), pullForce), tlTotalZ);
+                result[1] = measurementToXYPlane(kinematics->paidOutToGeometric(Maslow.axis[_TR].getPosition(), pullForce), trTotalZ);
+                result[2] = measurementToXYPlane(kinematics->paidOutToGeometric(Maslow.axis[_BL].getPosition(), pullForce), blTotalZ);
+                result[3] = measurementToXYPlane(kinematics->paidOutToGeometric(Maslow.axis[_BR].getPosition(), pullForce), brTotalZ);
                 // Reset all flags for next measurement
                 tight[_TL]               = false;
                 tight[_TR]               = false;
@@ -1914,11 +1920,13 @@ bool Calibration::take_measurement(float result[4], int dir, int run, int curren
                 float blTotalZ = (currentZ + kinematics->getBlZ() + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
                 float brTotalZ = (currentZ + kinematics->getBrZ() + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness());
 
-                //take measurement and record it to the calibration data array.
-                result[0]   = measurementToXYPlane(Maslow.axis[_TL].getPosition(), tlTotalZ);
-                result[1]   = measurementToXYPlane(Maslow.axis[_TR].getPosition(), trTotalZ);
-                result[2]   = measurementToXYPlane(Maslow.axis[_BL].getPosition(), blTotalZ);
-                result[3]   = measurementToXYPlane(Maslow.axis[_BR].getPosition(), brTotalZ);
+                //take measurement and record it to the calibration data array, as the spans the belts bridge: they
+                //stretch past the encoder length under the pull (no change with stretch compensation off)
+                const float pullForce = kinematics->getCalibrationPullForce();
+                result[0]   = measurementToXYPlane(kinematics->paidOutToGeometric(Maslow.axis[_TL].getPosition(), pullForce), tlTotalZ);
+                result[1]   = measurementToXYPlane(kinematics->paidOutToGeometric(Maslow.axis[_TR].getPosition(), pullForce), trTotalZ);
+                result[2]   = measurementToXYPlane(kinematics->paidOutToGeometric(Maslow.axis[_BL].getPosition(), pullForce), blTotalZ);
+                result[3]   = measurementToXYPlane(kinematics->paidOutToGeometric(Maslow.axis[_BR].getPosition(), pullForce), brTotalZ);
                 pull1_tight = false;
                 pull2_tight = false;
                 return true;

@@ -281,7 +281,21 @@ namespace Kinematics {
 
         // Solve for X,Y position using intersection of circles
         float x, y;
-        if (computeXYfromBeltLengths(tlXYDistance, trXYDistance, x, y) && !std::isnan(x) && !std::isnan(y)) {
+        bool  solved = computeXYfromBeltLengths(tlXYDistance, trXYDistance, x, y);
+
+        // With stretch compensation the motors hold paid-out lengths, which the belts stretch past under the
+        // tension the inverse kinematics sized for this spot. That tension depends on the spot, so solve, size
+        // it there and solve again; it varies slowly enough that two passes leave well under 0.01 mm.
+        for (int pass = 0; solved && _beltAxialStiffness > 0.0f && pass < 2; pass++) {
+            float tension[ARM_COUNT];
+            estimateBeltTensions(x, y, tension);
+            solved = computeXYfromBeltLengths(measurementToXYPlane(paidOutToGeometric(tlBeltLength, tension[_TL]), fabs(tlTotalZ)),
+                                              measurementToXYPlane(paidOutToGeometric(trBeltLength, tension[_TR]), fabs(trTotalZ)),
+                                              x,
+                                              y);
+        }
+
+        if (solved && !std::isnan(x) && !std::isnan(y)) {
             // Apply inverse scale factors to convert from scaled motor space back to cartesian space
             cartesian[X_AXIS] = x / Maslow.scaleX;
             cartesian[Y_AXIS] = y / Maslow.scaleY;
@@ -322,6 +336,16 @@ namespace Kinematics {
             motors[1] = computeTR(x, y, z);  // Top Right -> B axis
             motors[2] = computeBL(x, y, z);  // Bottom Left -> C axis
             motors[3] = computeBR(x, y, z);  // Bottom Right -> D axis
+
+            // Belt stretch compensation: those are the spans the belts must bridge. Under tension a belt
+            // stretches, so pay out that much less (estimateBeltTensions says which tension is assumed).
+            if (_beltAxialStiffness > 0.0f) {
+                float tension[ARM_COUNT];
+                estimateBeltTensions(x, y, tension);
+                for (int arm = 0; arm < ARM_COUNT; arm++) {
+                    motors[arm] = geometricToPaidOut(motors[arm], tension[arm]);
+                }
+            }
         } else {
             // When belts are not ready, keep them at their current positions
             // This prevents the motion planner from synchronizing Z-axis with large belt movements
@@ -412,6 +436,69 @@ namespace Kinematics {
         return lengthInXY + _beltEndExtension + _armLength;  // Add belt end extension and arm length
     }
 
+    // A belt paid out to paidOutLength spans paidOutLength * (1 + F/AE) at tension F
+    float MaslowKinematics::paidOutToGeometric(float paidOutLength, float tension) const {
+        if (_beltAxialStiffness > 0.0f && tension > 0.0f) {
+            return paidOutLength * (1.0f + tension / _beltAxialStiffness);
+        }
+        return paidOutLength;
+    }
+
+    // The length to pay out so the belt spans geometricLength at tension F
+    float MaslowKinematics::geometricToPaidOut(float geometricLength, float tension) const {
+        if (_beltAxialStiffness > 0.0f && tension > 0.0f) {
+            return geometricLength / (1.0f + tension / _beltAxialStiffness);
+        }
+        return geometricLength;
+    }
+
+    // Four belts against two force-balance equations leave two degrees of freedom, the preload, and position
+    // control sets it: the lengths commanded fix the tensions. The current can't tell us them (a held belt's
+    // gearbox carries part of the load), so we choose them: the balanced set nearest to calibrationPullForce on
+    // every belt, i.e. Find Anchors' pull. Minimum norm around t0:  T = t0 + Uᵀλ  with  (U Uᵀ) λ = -(W + U t0),
+    // U = [u_TL u_TR u_BL u_BR] the unit vectors from the sled to each anchor, W the sled's weight (vertical
+    // frames, along -Y). A uniform t0 alone isn't balanced away from the centre and would push the sled up to
+    // ~1.6 mm off target on a full-size frame. Tensions are clamped at 0.
+    void MaslowKinematics::estimateBeltTensions(float x, float y, float tension[ARM_COUNT]) const {
+        const float t0    = _calibrationPullForce > 0.0f ? _calibrationPullForce : 0.0f;
+        const float sledX = x + _centerX;  // compute() applies the same centre offset
+        const float sledY = y + _centerY;
+        float       ux[ARM_COUNT], uy[ARM_COUNT];
+        for (int i = 0; i < ARM_COUNT; i++) {
+            const float dx  = anchor_location[i][Coord_X] - sledX;
+            const float dy  = anchor_location[i][Coord_Y] - sledY;
+            const float len = sqrtf(dx * dx + dy * dy);
+            if (len < 1e-3f) {  // on an anchor: no direction, fall back to the preload
+                for (int j = 0; j < ARM_COUNT; j++) {
+                    tension[j] = t0;
+                }
+                return;
+            }
+            ux[i] = dx / len;
+            uy[i] = dy / len;
+        }
+
+        const float wy = (Maslow.calibration.orientation == VERTICAL) ? -_sledWeight : 0.0f;
+        float       bx = 0.0f, by = -wy;
+        float       m00 = 0.0f, m01 = 0.0f, m11 = 0.0f;
+        for (int i = 0; i < ARM_COUNT; i++) {
+            bx -= t0 * ux[i];
+            by -= t0 * uy[i];
+            m00 += ux[i] * ux[i];
+            m01 += ux[i] * uy[i];
+            m11 += uy[i] * uy[i];
+        }
+        const float det     = m00 * m11 - m01 * m01;
+        float       lambdaX = 0.0f, lambdaY = 0.0f;
+        if (fabsf(det) > 1e-9f) {
+            lambdaX = (m11 * bx - m01 * by) / det;
+            lambdaY = (-m01 * bx + m00 * by) / det;
+        }
+        for (int i = 0; i < ARM_COUNT; i++) {
+            tension[i] = std::max(0.0f, t0 + ux[i] * lambdaX + uy[i] * lambdaY);
+        }
+    }
+
     void MaslowKinematics::releaseMotors(AxisMask axisMask, MotorMask motors) {
         // Release the specified motors
         // This is handled by the base motor system
@@ -438,6 +525,9 @@ namespace Kinematics {
         handler.item("brZ", anchor_location[_BR][Coord_Z]);
         handler.item("beltEndExtension", _beltEndExtension);
         handler.item("armLength", _armLength);
+        handler.item("beltAxialStiffness", _beltAxialStiffness, 0.0f, 10000000.0f);
+        handler.item("sledWeight", _sledWeight, 0.0f, 1000.0f);
+        handler.item("calibrationPullForce", _calibrationPullForce, 0.0f, 1000.0f);
         handler.item("beltToothSpacing", _beltToothSpacing);
         handler.item("encoderTeeth", _encoderTeeth);
         handler.item("maxSegmentLength", _maxSegmentLength);
@@ -499,6 +589,11 @@ namespace Kinematics {
             _workThickness = thickness;
             log_info("Work thickness set to " << thickness << " mm");
         }
+    }
+
+    void MaslowKinematics::setBeltStretch(float axialStiffness, float calibrationPullForce) {
+        _beltAxialStiffness   = axialStiffness;
+        _calibrationPullForce = calibrationPullForce;
     }
 
     void MaslowKinematics::validate() {

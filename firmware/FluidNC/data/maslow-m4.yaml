@@ -62,6 +62,9 @@ kinematics:
     brZ: 78.000000
     beltEndExtension: 30.000000
     armLength: 123.400002
+    beltAxialStiffness: 178900.000000
+    sledWeight: 86.328003
+    calibrationPullForce: 156.960007
     beltToothSpacing: 1.998800
     encoderTeeth: 22.000000
     maxSegmentLength: 5.000000

@@ -83,6 +83,21 @@ namespace Kinematics {
         // The area jobs are limited to. An axis left at 0 (the default) is sized automatically from the frame
         void getWorkArea(float& width, float& height) const;
 
+        // Belt stretch compensation. A belt under tension F is longer than the length the encoder counts out by
+        // F * L / AE. AE (beltAxialStiffness) 0 turns all of it off.
+        float getBeltAxialStiffness() const { return _beltAxialStiffness; }
+        float getSledWeight() const { return _sledWeight; }
+        float getCalibrationPullForce() const { return _calibrationPullForce; }
+
+        // Paid-out (encoder) belt length <-> the span it bridges at tension F (N). Unchanged when AE or F is 0.
+        float paidOutToGeometric(float paidOutLength, float tension) const;
+        float geometricToPaidOut(float geometricLength, float tension) const;
+
+        // The tension (N) each belt is commanded to carry with the sled at x, y (centred, scaled coordinates):
+        // the force-balanced set closest to calibrationPullForce on every belt, plus the sled's weight on a
+        // vertical frame. Belts are position controlled, so the lengths this sizes are what set the tension.
+        void estimateBeltTensions(float x, float y, float tension[ARM_COUNT]) const;
+
         // Forward kinematics methods for position synchronization
         bool  computeXYfromBeltLengths(float tlLength, float trLength, float& x, float& y) const;
         float measurementToXYPlane(float measurement, float zHeight) const;
@@ -92,6 +107,7 @@ namespace Kinematics {
         void setCalibrationAnchors(float tlX, float tlY, float trX, float trY, float brX);
         void setSpoilboardThickness(float thickness);
         void setWorkThickness(float thickness);
+        void setBeltStretch(float axialStiffness, float calibrationPullForce);
 
     private:
         // Validation and correction helper method
@@ -109,6 +125,12 @@ namespace Kinematics {
         // Belt and arm parameters (in mm)
         float _beltEndExtension = 30.0f;   // Belt end extension
         float _armLength        = 123.4f;  // Arm length
+
+        // Belt stretch compensation. 0 here (no key in an older maslow.yaml) leaves it off: anchors found
+        // without it would be cut with too much belt tension.
+        float _beltAxialStiffness   = 0.0f;  // AE (N): belt stretch = F * L / AE. 0 disables compensation
+        float _sledWeight           = 0.0f;  // Sled weight (N), vertical frames only
+        float _calibrationPullForce = 0.0f;  // Belt tension (N) during Find Anchors measurements, and the cutting preload
 
         // Material thickness offsets (in mm) - accounts for spoil board and work piece thickness
         float _spoilboardThickness = 0.0f;  // Spoil board thickness added to all anchor heights
