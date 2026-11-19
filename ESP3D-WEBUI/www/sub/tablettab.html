@@ -2,7 +2,13 @@
   <div id="tablet-listener" tabindex="0">
     <div class="maslow">
       <div class="display tablettab-canvas-wrapper">
-        <canvas id="small-toolpath" class="previewer" style="width: 100%; height: 100%"></canvas>
+        <div class="toolpath-view">
+          <canvas id="small-toolpath" class="previewer" style="width: 100%; height: 100%"></canvas>
+          <div class="toolpath-zoom">
+            <button type="button" id="toolpath_zoom_in" title="Zoom in (drag to move the view)">+</button>
+            <button type="button" id="toolpath_zoom_out" title="Zoom out">&minus;</button>
+          </div>
+        </div>
         <textarea id="tablettab_gcode" style="border: none" class="gcode" rows="8" placeholder="GCode File Display"
           spellcheck="false" readonly>
         </textarea>
