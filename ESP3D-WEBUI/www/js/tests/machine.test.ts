@@ -142,6 +142,24 @@ describe("belt operations", () => {
     await op;
   });
 
+  test("retract ending in UNKNOWN (a belt wasn't zeroed) fails it", async () => {
+    reply(idle(4));
+    const op = g.machine.retractBelts();
+    reply("ok", home(1));
+    await tick();
+    reply("[MSG:ERR: Retract stopped: the Bottom Left belt was not zeroed because its encoder failed 9 of 812 reads while the belt was pulled in. Check its encoder cable, then Retract All again]", idle(0));
+    await expect(op).rejects.toMatchObject({ reason: "failed", detail: "retract belts failed: now UNKNOWN" });
+  });
+
+  test("calibrate stopped by a failing encoder (UNKNOWN) fails it", async () => {
+    reply(idle(4));
+    const op = g.machine.calibrate();
+    reply("ok", home(6));
+    await tick();
+    reply(idle(0));
+    await expect(op).rejects.toMatchObject({ reason: "failed", detail: "calibrate failed: now UNKNOWN" });
+  });
+
   test("a refused request fails after two fresh reports show no change", async () => {
     reply(idle(0));
     const op = g.machine.extendBelts();
