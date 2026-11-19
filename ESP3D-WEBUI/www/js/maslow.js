@@ -8,6 +8,8 @@ const APPLY_TENSION_RETRACTION_WARNING_PREFIX = "Maslow Apply Tension retraction
 const Z_HOME_RESET_WARNING_PREFIX = "Maslow Z home reset warning:";
 // Apply Tension couldn't confirm the position against the saved anchors; Find Anchors fixes both
 const APPLY_TENSION_FAILED_PREFIXES = ["Apply Tension failed:", "Center point deviation over"];
+// One belt is far off while the other fits: its length is wrong, and Find Anchors would bake that in
+const APPLY_TENSION_ONE_BELT_PREFIX = "Apply Tension failed: one belt is off.";
 const ZM_INVALID_WARNING_PREFIX = "Maslow Zm invalid warning:";
 
 /** Maslow state constants (mirror firmware Maslow.h defines) */
@@ -598,6 +600,7 @@ function showApplyTensionFailedMessage(msg) {
 
 	const errorMatch = msg.match(/^\[MSG:ERR:\s*(.*)\]$/);
 	const errorText = errorMatch ? errorMatch[1].trim() : msg;
+	const oneBelt = errorText.startsWith(APPLY_TENSION_ONE_BELT_PREFIX);
 
 	const modal = document.createElement("div");
 	modal.id = modalId;
@@ -623,13 +626,16 @@ function showApplyTensionFailedMessage(msg) {
 	`;
 
 	const heading = document.createElement("h3");
-	heading.textContent = "Couldn't confirm the machine's position";
+	heading.textContent = oneBelt ? "One belt doesn't match" : "Couldn't confirm the machine's position";
 	heading.style.marginTop = "0";
 
 	const messageElement = document.createElement("p");
-	messageElement.textContent =
-		"The belt lengths don't match the saved anchor points, so the anchors may have moved. " +
-		"Run Find Anchors to measure them again. The belts are still attached, so there's no need to retract.";
+	messageElement.textContent = oneBelt
+		? "One belt's length doesn't match the saved anchor points while the others do, so that belt's length is " +
+			"probably wrong (for example, it was zeroed while its encoder was failing). Running Find Anchors now would " +
+			"build that error into the anchors. Unhook the belts, Retract All, Extend and Apply Tension again."
+		: "The belt lengths don't match the saved anchor points, so the anchors may have moved. " +
+			"Run Find Anchors to measure them again. The belts are still attached, so there's no need to retract.";
 
 	const detailElement = document.createElement("p");
 	detailElement.textContent = errorText;
@@ -639,7 +645,7 @@ function showApplyTensionFailedMessage(msg) {
 	actions.style.cssText = "display: flex; gap: 10px; justify-content: flex-end;";
 
 	const cancelButton = document.createElement("button");
-	cancelButton.textContent = "Not now";
+	cancelButton.textContent = oneBelt ? "OK" : "Not now";
 	cancelButton.style.cssText = "padding: 5px 10px; cursor: pointer;";
 	cancelButton.onclick = () => modal.remove();
 
@@ -657,7 +663,9 @@ function showApplyTensionFailedMessage(msg) {
 	};
 
 	actions.appendChild(cancelButton);
-	actions.appendChild(findAnchorsButton);
+	if (!oneBelt) {
+		actions.appendChild(findAnchorsButton);
+	}
 	dialog.appendChild(heading);
 	dialog.appendChild(messageElement);
 	dialog.appendChild(detailElement);
@@ -1038,5 +1046,5 @@ const saveWiFiSettings = () => {
 
 //removeIf(production)
 // ESM exports for unit testing - stripped from production builds by the gulp pipeline
-export { MaslowErrMsgKeyValueCantUse, MaslowErrMsgNoKey, MaslowErrMsgNoValue, MaslowErrMsgNoMatchingKey, MaslowErrMsgKeyValueSuffix, maslowMsgHandling, processMaslowConfigResponse };
+export { MaslowErrMsgKeyValueCantUse, MaslowErrMsgNoKey, MaslowErrMsgNoValue, MaslowErrMsgNoMatchingKey, MaslowErrMsgKeyValueSuffix, maslowMsgHandling, maslowInfoMsgHandling, processMaslowConfigResponse };
 //endRemoveIf(production)
