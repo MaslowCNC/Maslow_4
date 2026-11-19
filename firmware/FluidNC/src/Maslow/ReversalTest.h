@@ -41,7 +41,7 @@ public:
     // false (nothing started) if the sample buffer can't be allocated.
     bool start(const Params& p);
     void update();
-    // Prints the samples after the run, a line every 5 ms.  Called on every Maslow update, whatever
+    // Prints the samples after the run, a line every 40 ms.  Called on every Maslow update, whatever
     // the state, so a run ended by $STOP or 0x18 still prints what it recorded.
     void serviceDump();
     // Halts the test if it is running: motor off, "TRV halt reason=<reason>" logged, then the

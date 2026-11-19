@@ -17,7 +17,9 @@ static constexpr int    PWM_FLOOR = 75;    // DCMotor::runAtPWM's motorStartsToM
 static constexpr int    PWM_MAX   = 1023;
 
 static constexpr unsigned long CHECK_MS   = 20;  // encoder read and safety checks
-static constexpr unsigned long DUMP_MS    = 5;   // one sample line per 5 ms after the run
+// One sample line per 40 ms after the run.  At one per 5 ms the burst starved the polling task and
+// the task watchdog reset the board ("Reset reason: task watchdog"), which also runs the boot motor test.
+static constexpr unsigned long DUMP_MS    = 40;
 static constexpr double        MOVED_MM   = 0.1;
 static constexpr double        LAG_MM     = 0.5;   // pay-out lag that counts as the encoder not following
 static constexpr double        ADVANCE_MM = 0.05;  // encoder progress that counts as following

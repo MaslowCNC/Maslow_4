@@ -400,7 +400,8 @@ also gives the force (`trv_to_csv.py --kg-per-mm`).
   more than 0.5 mm behind the pay-out, the test logs `TRV slack` and starts the return at once,
   which bounds that internal slack.
 - Samples are kept in RAM (up to 1500, at 50 Hz or slower for long profiles) and printed after the
-  run, one line every 5 ms, so logging can't slow the loop. A halt prints them too, and so does a
+  run, one line every 40 ms (a 15 s run takes about 30 s to print; faster bursts reset the board through
+  the task watchdog), so logging can't slow the loop. A halt prints them too, and so does a
   `$STOP` or 0x18 during the run. `$TRV` is refused until the printout is done.
 - Halts as `$TCT` does, plus `overrun` (5 mm past `out`) and `reeled_in` (10 mm inside the start).
 
