@@ -779,36 +779,10 @@ var drawMachineBounds = function() {
     // Update anchor points from current configuration
     updateAnchorPointsFromConfig();
 
-    // Get work area dimensions from configuration, with default fallback values
-    // Default values: 2438mm x 1219mm (8ft x 4ft, typical for a 4x8 plywood sheet)
-    var woodWidth = 2438;
-    var woodHeight = 1219;
-    var centerOffsetX = 0;
-    var centerOffsetY = 0;
-
-    // Load work area settings from global configuration if available
-    if (globalThis.loadedValues) {
-        var configWidth = parseFloat(globalThis.loadedValues.workAreaX);
-        var configHeight = parseFloat(globalThis.loadedValues.workAreaY);
-        var configOffsetX = parseFloat(globalThis.loadedValues.workAreaCenterOffsetX);
-        var configOffsetY = parseFloat(globalThis.loadedValues.workAreaCenterOffsetY);
-
-        woodWidth = (isFinite(configWidth) && configWidth > 0) ? configWidth : woodWidth;
-        woodHeight = (isFinite(configHeight) && configHeight > 0) ? configHeight : woodHeight;
-        centerOffsetX = isFinite(configOffsetX) ? configOffsetX : 0;
-        centerOffsetY = isFinite(configOffsetY) ? configOffsetY : 0;
-    }
-
-    // Work area is defined in machine coordinates where (0,0) is at the center
-    // Work area center in machine coordinates (user offsets from machine origin)
-    const workAreaCenterXMachine = centerOffsetX;
-    const workAreaCenterYMachine = centerOffsetY;
-
-    // Work area corners in machine coordinates
-    const machineMinX = workAreaCenterXMachine - woodWidth/2;
-    const machineMaxX = workAreaCenterXMachine + woodWidth/2;
-    const machineMinY = workAreaCenterYMachine - woodHeight/2;
-    const machineMaxY = workAreaCenterYMachine + woodHeight/2;
+    // Work area corners in machine coordinates, where (0,0) is the frame center. getWorkAreaBounds()
+    // (tablet.js) is shared with the job bounds check, so a 0 (auto) axis is drawn at the size the
+    // firmware enforces, sized from the anchors.
+    const { minX: machineMinX, maxX: machineMaxX, minY: machineMinY, maxY: machineMaxY } = getWorkAreaBounds();
 
     // Project the corners from machine coordinates
     const p0 = projection({x: machineMinX, y: machineMinY, z: 0});
