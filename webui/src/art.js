@@ -79,7 +79,8 @@ function accuracyOverlay(a, X, Y) {
   if (!a.job) return rect;
   const seg = (p) => p.points.map((q, i) => `${i ? "L" : "M"}${X(q.x).toFixed(1)} ${Y(q.y).toFixed(1)}`).join("");
   const path = (ok) => a.job.pieces.filter((p) => p.ok === ok).map(seg).join("");
-  return rect + `<path d="${path(true)}" fill="none" stroke="${WS_OK}" stroke-width="1.5"/>` +
+  // The job's boundary where it fits stays faint (it's only a frame around the file); where it leaves the workspace it's the warning
+  return rect + `<path d="${path(true)}" fill="none" stroke="${WS_OK}" stroke-opacity=".3" stroke-width="1"/>` +
     `<path d="${path(false)}" fill="none" stroke="${WS_BAD}" stroke-width="2.5" stroke-dasharray="5 3"/>`;
 }
 
@@ -112,7 +113,7 @@ export function frameMap(frameSize = null) {
 // Rapids and G53 moves are left out. Moves on lines up to `done` (the running job's line) are drawn as cut, the rest
 // fainter; done = null draws the whole file the same. Points closer than half a drawing unit are merged, so a big
 // file stays a few thousand points.
-export function toolpathSvg(moves, wco, X, Y, done = null) {
+export function toolpathSvg(moves, wco, X, Y, done = null, gray = false) {
   const parts = { cut: [], todo: [] };
   let last = null, lastKey = null, px = 0, py = 0;
   for (const mv of moves) {
@@ -133,7 +134,9 @@ export function toolpathSvg(moves, wco, X, Y, done = null) {
   const path = (d, attrs) => (d.length ? `<path d="${d.join("")}" fill="none" stroke-linejoin="round" ${attrs}/>` : "");
   return `<g><title>The chosen file's cutting moves</title>` +
     path(parts.todo, 'stroke="var(--muted)" stroke-opacity=".55" stroke-width="1"') +
-    path(parts.cut, `stroke="var(--lilac)" stroke-width="${done != null ? 1.8 : 1.3}"`) + "</g>";
+    // gray (the Frame tab): the file in light gray, so it sits behind the machine drawing; a running job's cut part stays lilac
+    path(parts.cut, done == null && gray ? 'stroke="var(--muted)" stroke-opacity=".6" stroke-width="1.1"'
+      : `stroke="var(--lilac)" stroke-width="${done != null ? 1.8 : 1.3}"`) + "</g>";
 }
 
 // The Frame view. toolpath: an SVG string from toolpathSvg (drawn with frameMap(frameSize)), under the workspace overlay.
@@ -148,7 +151,7 @@ export function visSvg(k, s, pos = { x: 0, y: 0 }, home = { x: 0, y: 0 }, length
     `<line x1="${x}" y1="${y}" x2="${sledX}" y2="${sledY}" stroke="${loose ? "var(--setup)" : "#8f8a97"}" stroke-width="1.4" ${loose ? 'stroke-dasharray="5 4"' : ""}/>`).join("");
   const anchors = [[30, 30], [380, 30], [30, 240], [380, 240]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="6" fill="var(--node)"/>`).join("");
   return `<svg viewBox="0 0 410 270" role="img" aria-label="Device frame with the sled and toolpath" class="${s.stale ? "stale" : ""}">
-    <rect x="30" y="30" width="350" height="210" fill="none" stroke="var(--line2)" stroke-dasharray="3 5"/>
+    <rect x="30" y="30" width="350" height="210" fill="none" stroke="var(--line2)" stroke-opacity=".35" stroke-dasharray="3 5"/>
     ${toolpath}
     ${accuracy ? accuracyOverlay(accuracy, mapX, mapY) : ""}
     ${unk ? "" : belts}${anchors}${currents ? currentRings(currents) : ""}

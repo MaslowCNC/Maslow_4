@@ -1,4 +1,5 @@
 import { useState } from "preact/hooks";
+import { jobFit } from "./fit.js";
 
 // What each screen asks for in the top bar, and what its buttons do. The rule from REWRITE.md: whatever the
 // top bar asks for can be completed in the top bar (small inputs here, bigger tasks in a pop-up opened from here).
@@ -43,6 +44,12 @@ export function ask(k, ctx) {
 function LineInput({ value, onChange }) {
   return <span class="binput"><label class="field"><span>Line</span>
     <input type="text" inputmode="numeric" value={value} onInput={e => onChange(e.currentTarget.value)} aria-label="Line to continue from" style="width:90px" /></label></span>;
+}
+
+// The chosen job against the work area and the frame (fit.js), once the file has been read
+export function fitFor(d, a) {
+  const g = d.gcode?.status === "ready" && d.gcode.file === a.file ? d.gcode : null;
+  return g ? jobFit(g.extent, d.wco, d.settings, d.frame) : null;
 }
 
 function askFor(k, ctx) {
@@ -116,6 +123,11 @@ function askFor(k, ctx) {
     case "othertab": return { text: "Only one tab per browser can be connected.", buttons: [B("Use this tab", () => send("reconnect"))] };
     case "toomany": return { text: "Close tabs or devices you aren't using.", buttons: [B("Reconnect", () => send("reconnect"))] };
     case "lost": return { text: "Reconnecting automatically. If it doesn't come back, reboot the device or turn it off and on.", buttons: [B("Reboot device", () => send("reboot"), "ghost")] };
+    // Ready to cut says when the job doesn't fit: outside the work area is a warning, past the frame blocks Run
+    case "ready": {
+      const fit = fitFor(d, a);
+      return fit && (fit.level === "outside" || fit.level === "pastFrame") ? { text: fit.text, alert: true, buttons: [] } : { text: "", buttons: [] };
+    }
     // Continue from the stopped line, or one the user types; Discard forgets the stopped job ($SD/Discard)
     case "stopped": {
       const stoppedLine = d.lastJob?.line ?? 0;
@@ -131,12 +143,20 @@ export function mainActions(k, ctx) {
   const { d, a, setA, send } = ctx;
   const B = (label, onClick, style = "") => ({ label, onClick, style });
   // Trace boundary moves around the chosen file's extent (the real machine reads the file for it)
+  // Past the frame, Trace boundary and Run would drive the sled where it can't go
+  const pastFrame = fitFor(d, a)?.level === "pastFrame";
+  const PAST = "The job goes past the frame, where the machine can't reach.";
   const trace = d.notYet?.trace
     ? { ...B("Trace boundary", () => {}, "ghost"), disabled: true, title: d.notYet.trace }
+    : pastFrame ? { ...B("Trace boundary", () => {}, "ghost"), disabled: true, title: PAST }
     : B("Trace boundary", () => send("trace", { file: a.file }), "ghost");
   switch (k) {
-    case "ready": return [trace, B(`Run ${a.file}`, () => send("run", { file: a.file }), "go")];
-    case "stopped": return [B("Run from the start", () => { setA({ stoppedSeen: true }); send("run", { file: a.file }); }, "ghost"),
+    case "ready": {
+      const run = B(`Run ${a.file}`, () => send("run", { file: a.file }), "go");
+      return [trace, pastFrame ? { ...run, disabled: true, title: PAST } : run];
+    }
+    case "stopped": return [{ ...B("Run from the start", () => { setA({ stoppedSeen: true }); send("run", { file: a.file }); }, "ghost"),
+      ...(pastFrame ? { disabled: true, title: PAST } : {}) },
       (() => {
         const n = parseInt(a.contLine ?? d.lastJob?.line ?? 0, 10);
         const ok = Number.isInteger(n) && n >= 1;

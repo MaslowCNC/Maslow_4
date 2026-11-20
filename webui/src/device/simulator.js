@@ -293,10 +293,10 @@ export function createSimulator() {
     setHomeXY({ x = s.pos.x, y = s.pos.y } = {}) { log(`setWorkZero x=${x} y=${y}`); set({ wco: { ...s.wco, x, y } }); },
     resetHome() { log("setWorkZero x=0 y=0 z=0"); set({ wco: { x: 0, y: 0, z: 0 } }); },
     setZ({ z = s.pos.z } = {}) { log(`setWorkZero z=${z}`); set({ wco: { ...s.wco, z } }); },
-    // The demo files aren't real, so each reads as a generated sample of its size
+    // The demo files aren't real, so each reads as a generated sample of its size; an uploaded file is read for real
     chooseFile({ file }) {
       const f = s.files.find(x => x.name === file);
-      set({ gcode: f ? { file, status: "ready", ...readGcode(sampleGcode(f)) } : null });
+      set({ gcode: f ? { file, status: "ready", ...(f.text != null ? readGcode(f.text) : readGcode(sampleGcode(f))) } : null });
     },
     deleteFile({ name }) { log(`Deleted ${name}`); set({ files: s.files.filter(f => f.name !== name) }); },
     // A line typed in the command box: echo it and answer roughly as the firmware would. Nothing moves.
@@ -308,7 +308,27 @@ export function createSimulator() {
       log(...simReply(text));
       emit();
     },
-    uploadFile() { const n = `upload-${s.files.length + 1}.nc`; set({ files: [...s.files, { name: n, size: "40 KB", w: 200, h: 150, minutes: 6, depth: 2 }] }); return n; }
+    // Upload: pick a real G-code file from this computer, as on the machine. It stays in this page (not saved anywhere),
+    // so its preview, size, placement and fit check are the file's own. Outside a browser (tests) there's nothing to
+    // pick, so a made-up file is added as before.
+    uploadFile() {
+      const fake = () => { const n = `upload-${s.files.length + 1}.nc`; set({ files: [...s.files, { name: n, size: "40 KB", w: 200, h: 150, minutes: 6, depth: 2 }] }); return n; };
+      if (typeof document === "undefined") return fake();
+      return new Promise((resolve) => {
+        const input = Object.assign(document.createElement("input"), { type: "file", accept: ".nc,.gcode,.gc,.ngc,.tap,.txt" });
+        input.onchange = async () => {
+          const file = input.files[0];
+          if (!file) return resolve(null);
+          const text = await file.text();
+          const entry = { name: file.name, size: `${Math.max(1, Math.round(file.size / 1024))} KB`, text };
+          log(`Uploaded ${file.name} (kept in this page only)`);
+          set({ files: [...s.files.filter(f => f.name !== file.name), entry] });
+          if (s.gcode?.file === file.name) actions.chooseFile({ file: file.name });   // the same name again: show the new one
+          resolve(file.name);
+        };
+        input.click();
+      });
+    }
   };
 
   function jobQuestion() {

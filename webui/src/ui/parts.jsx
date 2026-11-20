@@ -1,4 +1,5 @@
 import { useState, useRef, useLayoutEffect } from "preact/hooks";
+import { jobPlacement } from "../flow/fit.js";
 import { downloadLog } from "./logfile.js";
 import { STEPS, SCREENS, isSetup } from "../flow/screens.js";
 import { stepArt, visSvg, frameMap, toolpathSvg, toolpathView, workspaceCaption, currentColour, MAX_CURRENT_MA } from "../art.js";
@@ -104,7 +105,7 @@ function toolpathFor(d, size) {
   const now = Date.now();
   if (g !== pathCache.g || key !== pathCache.key || (done !== pathCache.done && now - pathCache.at >= 1000)) {
     const { mapX, mapY } = frameMap(size);
-    pathCache = { key, g, done, at: now, value: toolpathSvg(g.moves, d.wco, mapX, mapY, done) };
+    pathCache = { key, g, done, at: now, value: toolpathSvg(g.moves, d.wco, mapX, mapY, done, true) };
   }
   return pathCache.value;
 }
@@ -309,7 +310,7 @@ function FileCard({ d, a }) {
   const f = d.files.find(x => x.name === name) || {};
   const g = d.gcode?.file === name ? d.gcode : null;
   const e = g?.status === "ready" && g.extent;
-  const size = e ? `${(e.max.x - e.min.x).toFixed(0)} × ${(e.max.y - e.min.y).toFixed(0)} mm` : f.w ? `${f.w} × ${f.h} mm` : null;
+  const size = e ? `${(e.max.x - e.min.x).toFixed(0)} × ${(e.max.y - e.min.y).toFixed(0)} mm · ${jobPlacement(e)}` : f.w ? `${f.w} × ${f.h} mm` : null;
   const depth = e ? `${Math.max(0, -e.min.z).toFixed(1)} mm deep` : f.depth != null ? `${f.depth} mm deep` : null;
   const extra = [size, depth, f.minutes ? `about ${f.minutes} min` : null, g?.lineCount ? `${g.lineCount.toLocaleString()} lines` : null].filter(Boolean);
   return <div class="mini"><span>File</span><b class="fname">{name}</b>

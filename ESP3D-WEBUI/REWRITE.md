@@ -1,7 +1,7 @@
 # WebUI rewrite
 
-Why we're rewriting the WebUI, what we decided, and what's left. Updated 2026-11-11, after the
-machine API in [MaslowCNC/Maslow_4#1132](https://github.com/MaslowCNC/Maslow_4/pull/1132).
+Why we're rewriting the WebUI, what we decided, and what's left. Updated 2026-11-20. To pick the work
+up in a new session, read "Where we are", "How to work on it" and "What we still need" › 2.
 
 **Related:**
 - `webui/`: the working site, with a simulated device (`webui/README.md`)
@@ -17,14 +17,50 @@ machine API in [MaslowCNC/Maslow_4#1132](https://github.com/MaslowCNC/Maslow_4/p
 - **The current UI** is plain HTML and JavaScript in `www/`: about 55 script files (about 16,800
   lines) that share global variables. Gulp packs it into one `index.html.gz` (about 150 KB), which
   the board serves from its 2 MB flash.
-- **The machine API (#1132)** is on `Maslow-Main` and merged into `firmwareRewrite`:
-  - every command goes over the WebSocket, one line at a time, through `wscommands.js`;
-  - the machine's state comes from the status report;
-  - `machine.js` gives named actions and one state store.
-- **The new UI** is a working site in `webui/`, built with Preact and Vite into one self-contained
-  page (about 30 KB gzipped). Every screen and path works on desktop and phone. It runs against a
-  simulator that asks the tester what the machine reported.
-- **Next:** connect the same screens to a real machine through `machine.js` ("What we still need").
+- **The machine API (#1132)** is on `Maslow-Main` and merged into `firmwareRewrite`
+  (`wscommands.js`, `machine.js`). `Maslow-Main` was merged again on 2026-11-18 (Stop leaves Z where
+  it is; Tristan's `setWorkZero`).
+- **The new UI** (`webui/`, Preact + Vite, one self-contained page, about 70 KB gzipped) runs the whole
+  Mini flow on a real Maslow Mini (`?device=machine`) and on the simulator (`?device=sim`):
+  - setup (retract, extend, tension, find anchors, tool check, secure, choose file), Run, Stop,
+    Continue from a typed line, Discard, Trace boundary, incidents (acknowledge first);
+  - jog pad (one XY step, Z step, labelled arrows), Set home XY / Set Z (one click, here), Home Z,
+    Park, Remove tool;
+  - Frame tab (live belt lengths, motor current rings, Workspace accuracy overlay, the file's
+    toolpath in light gray) and Toolpath tab (the file alone, fitted);
+  - files: list, upload, delete; the File card with size and X / Y range; the fit check (below);
+  - log with Save, and a command box (off by default, Settings › Advanced);
+  - Settings: State, Device, Network (placeholder), Frame and belts (extend distance, spoil board,
+    stock thickness, work area and offset, Park, scale, belt retraction limit, retraction force,
+    Workspace tolerance, sled weight), Home (typed home, Reset home), Tool and Z (Spindle on / off,
+    Mini only), Display, Advanced (command box, belt motor test).
+- **Tested on the Mini (2026-11-18):** belt labels, motor rings, command box, Save log, settings read
+  and save, Set home, Settings › Home, delete, spindle on / off. **Not yet:** Continue from a changed
+  line, Discard, the belt motor test, the fit check.
+- **Next:** the rest of the gap list ("What we still need" › 2), and the 4.1's setup flow.
+
+## How to work on it
+
+- **Run it:** `cd webui && npm run dev -- --port 5199`, then `http://localhost:5199/?device=sim`
+  (simulator) or `?device=machine` (the real machine, proxied to `maslow.local`). Only one browser tab
+  can drive the machine; a second shows "Connected in another tab".
+- **Simulator:** the yellow "Simulated device" panel picks what the firmware reports ("Still
+  tensioned" jumps to the tool check). Upload picks a real G-code file from your computer and keeps it
+  in the page, so the preview and the fit check use the real file.
+- **Build and test:** `npm run build`; `node --test --test-force-exit "src/**/*.test.js"` (the
+  simulator's timer keeps the test run open without `--test-force-exit`). The old UI's bun tests
+  (`ESP3D-WEBUI/www/js/tests`) need `bun`, which isn't installed on the main Mac.
+- **Code map:** `src/flow/` (screens, what each asks, incidents, fit check), `src/ui/` (desktop,
+  phone, parts, modals), `src/device/` (simulator, the real-machine adapter `machine.js`, settings),
+  `src/art.js` (the SVG drawings), `src/gcode/reader.js`, `src/accuracy.js` (the Workspace map).
+- **Put on the board for testing:** replace `index.html.gz` (part 3 below). Flash only through
+  `/flash-maslow`; `maslow.local` can be slow to resolve on macOS, so the IP may be needed.
+- **The fit check** (`src/flow/fit.js`): the chosen job, placed at home, is compared with the work
+  area (Settings, 0 = automatic 80 % × 60 % of the frame, plus the centre offset) and the frame
+  (the rectangle inside the anchors). Outside the work area: a warning in the Ready bar. Past the
+  frame: the warning, and Run, Trace boundary and Run from the start are disabled. The firmware has
+  no limits of its own (`soft_limits: false`). Messages don't suggest moving home (confusing next to
+  the G-code's own origin).
 
 **Decided (2026-11-11, from the team meetings):**
 
@@ -59,8 +95,11 @@ machine API in [MaslowCNC/Maslow_4#1132](https://github.com/MaslowCNC/Maslow_4/p
   internet.
 - **One file, served gzipped,** as `index.html.gz`, so the firmware's web server and the update
   process don't change.
-- **A size budget** (proposed: 300 KB gzipped) that the build checks. Every dependency justifies
-  its size. three.js, for a 3D preview, is under consideration and would be the biggest.
+- **A size budget (decided 2026-11-14): no bigger than the old page, about 145 KB gzipped.** Every
+  dependency justifies its size. **No three.js in the page** (about 120 KB or more gzipped on its
+  own): the 2D toolpath preview is a plain canvas or SVG, a 3D preview would be a small hand-written
+  WebGL line viewer, and the setup line art is pre-rendered SVG (three.js only as our own export
+  tool), animated with CSS. A build check against the budget is still to add.
 
 ### The machine is the authority
 
@@ -334,7 +373,7 @@ From testing on 2026-11-06 (`ISSUES-LOG.md`) and reading the firmware. Recheck o
 
 To replace the current UI on the board. The simulator isn't on this list: it stays as the demo.
 
-**1. Connect the screens to the machine** (ours, in `webui/`):
+**1. Connect the screens to the machine** (ours, in `webui/`). **Done by 2026-11-18**; kept as a record:
 
 1. **Load `wscommands.js` and `machine.js`.** Before importing them, provide the globals they read:
    - `ws_source`: the open WebSocket;
@@ -438,7 +477,8 @@ Checked against the simulator only, not yet on a machine.
   A second page isn't possible without a firmware change (the board downloads any file other than
   `index.html`), and isn't needed for now.
 
-**4. New actions in `machine.js`** (shared with the current UI; each with a bun test; who writes
+**4. New actions in `machine.js`** (**done 2026-11-18**: `park`, `setWorkZero`, `clearAlarm`, `homeSpindleZ`,
+`removeTool`, `spindleOn` / `spindleOff`, `testMotors`; kept as a record) (shared with the current UI; each with a bun test; who writes
 them is to agree with Tristan). No firmware change needed:
 
 | Action | Sends |
@@ -476,7 +516,6 @@ sent only while it applies, like `STOPPED`, is preferred):
 - **Renaming the machine** (hostname and hotspot name): does it need a restart, and how does the
   page find the machine once `maslow.local` changes?
 - **Settings:** which take effect at once, which need a restart, and which to lock during a job.
-- **Size budget:** is 300 KB gzipped right, with three.js under consideration?
 - **Languages and browsers:** keep the translations? What's the oldest phone we support?
 - **Upstream ESP3D-WebUI:** keep any connection, or treat this as our own code?
 - **Not in the map yet:** recovering after a power loss, saved anchor setups for each table, and a
