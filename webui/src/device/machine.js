@@ -12,6 +12,7 @@ import { restarted, jobFailed, holding } from "../flow/incidents.js";
 import { readGcode, boundaryPath } from "../gcode/reader.js";
 import { MACHINE_SETTINGS, settingError } from "./settings.js";
 import { parseSettingsList, valueError, espSetCommand, withValues } from "./settingslist.js";
+import { FLASH_IDLE, flashActions, filesQuery, fileUrl, parentPath } from "./flashfiles.js";
 import { NET_IDLE, parseNetSettings, parseNetStatus, parseApList, onFallbackHotspot, setCommand, netChanges } from "./network.js";
 
 // What the firmware's close codes mean (WSChannel.h). For these the page shows a notice and doesn't reconnect.
@@ -86,7 +87,8 @@ export function createMachine({ host = location.host } = {}) {
     belts: [0, 0, 0, 0], motorCurrent: null,
     pos: { x: 0, y: 0, z: 0 }, wco: { x: 0, y: 0, z: 0 },
     files: [], log: [], pending: null,
-    net: NET_IDLE            // the network settings (device/network.js), read when Settings › Network or Device opens
+    net: NET_IDLE,           // the network settings (device/network.js), read when Settings › Network or Device opens
+    flash: FLASH_IDLE        // the board's own files (device/flashfiles.js), read when Settings › Advanced › Files opens
   };
 
   // Files read from the SD card through the G-code reader (gcode/reader.js), each fetched once: url → Promise of
@@ -344,6 +346,44 @@ export function createMachine({ host = location.host } = {}) {
     }
     await listFiles();
   }
+
+  // The board's flash files (LittleFS), over the firmware's /files endpoint like the current UI's SPIFFSdlg.js. A file
+  // is read with a plain GET of its path; in development the dev server forwards those under /flashfs, because the
+  // page's own paths are Vite's.
+  const FLASH_URL = import.meta.env.DEV ? "/flashfs" : "";
+  async function filesAnswer(r) {
+    if (!r.ok) throw new Error((await r.text().catch(() => "")).trim().slice(0, 120) || `HTTP ${r.status}`);
+    return r.json();
+  }
+  const flash = flashActions({
+    get: () => s.flash,
+    set: (patch) => set({ flash: { ...s.flash, ...patch } }),
+    log: (line) => { log(line); emit(); },
+    lock: () => (!s.connected ? "Waiting for the device to answer." : s.readOnly ? "Another tab is driving the machine; this one can only look."
+      : s.job ? "Not while a job runs." : s.motion || s.fluid === "Run" || s.fluid === "Jog" ? "Not while the machine moves." : null),
+    io: {
+      list: async (dir) => filesAnswer(await fetch(`/files?${filesQuery(dir)}`, { cache: "no-store" })),
+      act: async (query) => filesAnswer(await fetch(`/files?${query}`, { cache: "no-store" })),
+      // As BuildFileUploadFormData (files.js): the size first, so the board can check the whole file arrived
+      async upload(path, content) {
+        const blob = typeof content === "string" ? new Blob([content], { type: "text/plain" }) : content;
+        const dir = parentPath(path);
+        const form = new FormData();
+        form.append("path", dir === "/" ? "/" : `${dir}/`);
+        form.append(`${path}S`, String(blob.size));
+        form.append("myfile[]", blob, path);
+        return filesAnswer(await fetch(`/files?${filesQuery(dir)}`, { method: "POST", body: form }));
+      },
+      async read(path) {
+        const r = await fetch(fileUrl(path, FLASH_URL), { cache: "no-store" });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.text();
+      },
+      download(path, name) {
+        Object.assign(document.createElement("a"), { href: fileUrl(path, FLASH_URL), download: name }).click();
+      }
+    }
+  });
 
   // An [ESP…] command over HTTP, as the current UI sends them. The answer is the body; the board answers 200 even
   // when the command fails, with error:N or a message in the body.
@@ -629,6 +669,8 @@ export function createMachine({ host = location.host } = {}) {
     if (action === "scanNetworks") { scanNetworks(); return; }
     if (action === "saveNetwork") { saveNetwork(payload); return; }
     if (action === "reboot") { reboot(); return; }
+    // The board's files are HTTP too; changes are refused in flashActions while a job runs or nothing answers
+    if (flash[action]) return flash[action](payload);
     if (!m) return;
     if (action === "command") { command(payload.line); return; }
     if (action === "run") { run("run", () => m.runFile(`/${payload.file}`)); return; }

@@ -38,3 +38,44 @@
 .rawfoot { position: sticky; bottom: -16px; margin: 0 -18px -16px; padding: 10px 18px; background: var(--panel); border-top: 1px solid var(--sep);
   display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; justify-content: space-between; font-size: 13px; color: var(--muted); }
 .rawbtns { display: flex; gap: 8px; }
+
+/* Settings › Advanced › Files (ui/files.jsx): the board's flash files and the text editor */
+.note.warn { color: var(--warn); }
+.fbar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; justify-content: space-between; }
+.fbtns { display: flex; flex-wrap: wrap; gap: 8px; }
+.fcrumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; min-width: 0; color: var(--muted); }
+.fcrumb { min-height: 44px; padding: 0 8px; border: 0; border-radius: 8px; background: none; color: var(--lilac); font: 500 14px var(--font-mono); cursor: pointer; }
+.fcrumb[aria-current] { color: var(--text); font-weight: 600; }
+.fcrumb:hover:not(:disabled) { background: var(--hover); }
+.flist { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.flist li { border-radius: 8px; border: 1px solid transparent; }
+.flist li.open { border-color: var(--sep); background: var(--sub); }
+.frowwrap { display: flex; align-items: stretch; }
+.frow { flex: 1; min-width: 0; min-height: 44px; display: flex; align-items: center; gap: 10px; padding: 0 10px; border: 0; border-radius: 8px;
+  background: none; color: var(--text); font: 14px var(--font-sans); text-align: left; cursor: pointer; }
+.frow:hover:not(:disabled) { background: var(--hover); }
+.frow svg { flex: none; color: var(--muted); }
+.fname { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: 13px; }
+.fsize { flex: none; font: 12px var(--font-mono); color: var(--muted); }
+.ftag { flex: none; padding: 1px 6px; border-radius: 4px; border: 1px solid var(--warn); color: var(--warn); font: 600 11px var(--font-sans); }
+.fmore { flex: none; width: 44px; min-height: 44px; border: 0; border-radius: 8px; background: none; color: var(--lilac); font-size: 18px; cursor: pointer; }
+.fmore:hover { background: var(--hover); }
+.fempty { padding: 8px 10px; }
+.facts { padding: 4px 10px 10px; display: grid; gap: 8px; }
+.facts .btn, .fpanel .btn, .fbar .btn { min-height: 44px; }
+.btn.fdanger { color: var(--danger); border-color: var(--danger); }
+.fpanel { display: grid; gap: 8px; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--sep); background: var(--panel); }
+.fpanel.warn { border-color: var(--danger); }
+.fpanel p { margin: 0; font-size: 13px; }
+.fpanel label { font-size: 13px; color: var(--muted); }
+.frename { display: flex; flex-wrap: wrap; gap: 8px; }
+.frename input { flex: 1 1 200px; min-width: 0; min-height: 44px; box-sizing: border-box; background: var(--input); border: 1px solid var(--sep);
+  color: var(--text); border-radius: 8px; padding: 0 10px; font: 14px var(--font-mono); }
+.frename input[aria-invalid="true"] { border-color: var(--danger); }
+.fchips { display: flex; flex-wrap: wrap; gap: 6px; }
+.fchip { min-height: 44px; padding: 0 12px; border-radius: 999px; border: 1px dashed var(--lilac); background: none; color: var(--lilac); font-size: 13px; cursor: pointer; }
+.fedname { display: flex; align-items: center; gap: 8px; min-width: 0; overflow-wrap: anywhere; }
+.fedname svg { flex: none; color: var(--muted); }
+.fedit { width: 100%; box-sizing: border-box; resize: vertical; min-height: 200px; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--sep);
+  background: var(--input); color: var(--text); font: 13px/1.5 var(--font-mono); tab-size: 2; white-space: pre; overflow: auto; }
+.fedit:focus-visible { outline: 2px solid var(--lilac); outline-offset: 1px; }
