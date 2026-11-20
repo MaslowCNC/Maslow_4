@@ -1,5 +1,5 @@
 // The machine settings Settings › Frame and belts edits, shared by the real-machine adapter and the simulator so
-// both keep them in the same state shape. Each is a $/… setting (most of them $/Maslow_…), as the current UI reads and writes it
+// both keep them in the same state shape. Each is a $/Maslow_… setting, as the current UI reads and writes it
 // (ESP3D-WEBUI/www/js/tablet.js, maslow.js), with the range the firmware accepts (MachineConfig.cpp) and the
 // default it writes into a new maslow.yaml.
 //
@@ -17,11 +17,7 @@ export const MACHINE_SETTINGS = {
   scaleX:       { path: "Maslow_Scale_X", min: 0.8, max: 1.2, def: 1, unit: "" },
   scaleY:       { path: "Maslow_Scale_Y", min: 0.8, max: 1.2, def: 1, unit: "" },
   retractLimit: { path: "Maslow_Apply_Tension_Belt_Retraction_Limit", min: 0, max: 4250, def: 300, unit: "mm" },
-  retractForce: { path: "Maslow_Retract_Current_Threshold", min: 0, max: 3500, def: 1300, unit: "", integer: true },
-  // Belt stretch compensation (MaslowKinematics). Not $/Maslow_… settings: they live under kinematics in the
-  // config. Stiffness 0 turns it off; a maslow.yaml written before it existed has neither, so the firmware reads 0.
-  beltStiffness: { path: "kinematics/MaslowKinematics/beltAxialStiffness", min: 0, max: 10000000, def: 178900, unit: "N" },
-  pullForce:     { path: "kinematics/MaslowKinematics/calibrationPullForce", min: 0, max: 1000, def: 156.96, unit: "N" }
+  retractForce: { path: "Maslow_Retract_Current_Threshold", min: 0, max: 3500, def: 1300, unit: "", integer: true }
 };
 
 export const defaultSettings = () =>

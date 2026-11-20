@@ -53,6 +53,7 @@ function initialState() {
     machine: "Maslow Mini",       // as the real machine reports it from [ESP800]
     extendDist: 0,                // 0 = extend until the user presses Done extending
     workArea: { spoil: 12.7 },
+    beltStretch: true,       // belt stretch compensation (kinematics/MaslowKinematics/beltStretchCompensation)
     settings: defaultSettings(),  // work area (0 = automatic), park, scale, belt limits (device/settings.js)
     // the anchors as kinematics/MaslowKinematics has them (machine.js has the same shape): a 3000 x 2100 mm frame
     frame: { tl: [0, 2100], tr: [3000, 2100], bl: [0, 0], br: [3000, 0], z: [100, 56, 34, 78], arm: 153.4, vertical: false },
@@ -210,6 +211,7 @@ export function createSimulator() {
     setExtendDist({ mm }) { log(`$/Maslow_Extend_Dist=${mm}`, "$CO"); set({ extendDist: mm }); },
     setSpoilboard({ mm }) { log(`$/Maslow_spoilboardThickness=${mm}`, "$CO"); set({ workArea: { ...s.workArea, spoil: mm } }); },
     setStock({ stock }) { log(`$/Maslow_workThickness=${stock}`); set({ stock }); },
+    setBeltStretch({ on }) { log(`$/kinematics/MaslowKinematics/beltStretchCompensation=${!!on}`, "$CO"); set({ beltStretch: !!on }); },
     // Several machine settings at once, as the machine adapter sends them: the changed ones, then $CO
     setSettings({ values = {}, label = "Settings" }) {
       const changed = Object.entries(values).filter(([k, v]) => s.settings[k] !== v);
