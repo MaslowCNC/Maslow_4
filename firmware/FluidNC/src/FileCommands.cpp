@@ -257,6 +257,13 @@ static Error runFile(const Volume& fs, const char* parameter, AuthenticationLeve
         log_string(out, "Alarm");
         return Error::IdleError;
     }
+    // A job needs known belt lengths, as Resume does.  Outside Ready to Cut the kinematics hold
+    // the belts still, so the job would run Z and the spindle in place.  The UI's Play button
+    // already checks this, but other clients send $SD/Run directly.  Macros (not SD) still run.
+    if (!Job::active() && &fs == &SD && Maslow.calibration.getCurrentState() != READY_TO_CUT) {
+        log_error_to(out, "Cannot start the job: belt lengths are not known (not ready to cut)");
+        return Error::IdleError;
+    }
     bool topLevel = !Job::active();
     Job::save();
     InputFile* theFile;

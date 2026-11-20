@@ -201,10 +201,15 @@ void Maslow_::update() {
     // Triggered by eStop() (position error > 15 mm while running, $ESTOP command) or by
     // a hardware fault detected at startup (encoder or motor not found).
     // The machine ignores all movement commands while in this state.
-    // Recovery: fix the underlying cause (check console log for details), then power-cycle.
+    // Recovery: fix the underlying cause (check console log for details), then $X (clearError).
     if (error) {
         static unsigned long timer = millis();
         static bool          st    = true;  //This is used to blink the LED
+        // Hold FluidNC in Alarm for as long as the latch is set, so nothing can start a job
+        // (runFile refuses in Alarm) while the belt motors are off.  $X clears the latch first.
+        if (sys.state() == State::Idle) {
+            sys.set_state(State::Alarm);
+        }
         if (millis() - timer > 300) {
             stopMotors();
             st = !st;
@@ -1062,6 +1067,21 @@ String Maslow_::axis_id_to_label(int axis_id) {
     return label;
 }
 
+// The belt's name for an arm index (_TL, _TR, _BL, _BR)
+String Maslow_::arm_label(int arm) {
+    switch (arm) {
+        case _TL:
+            return axis_id_to_label(TLEncoderLine);
+        case _TR:
+            return axis_id_to_label(TREncoderLine);
+        case _BL:
+            return axis_id_to_label(BLEncoderLine);
+        case _BR:
+            return axis_id_to_label(BREncoderLine);
+    }
+    return "";
+}
+
 //Runs the self test feature
 void Maslow_::test_() {
     log_info("Firmware Version: " << VERSION_NUMBER);
@@ -1293,6 +1313,8 @@ bool Maslow_::clearError() {
     if (error) {
         log_warn("Clearing error state. Motion is enabled again - make sure the cause was fixed, then re-check belt "
                  "tension and machine position before cutting");
+        // A job was run straight after an e-stop on 2026-11-19, with a belt still 36 mm off
+        calibration.requireApplyTension();
     }
 
     error              = false;
@@ -1321,7 +1343,7 @@ String Maslow_::motionBlockedReason() const {
 //Emergency Stop
 void Maslow_::eStop(String message) {
     log_error("Emergency stop! Stopping all motors");
-    log_warn("The machine will not respond until turned off and back on again");
+    log_warn("Motion is disabled. Fix the cause, then clear the alarm ($X). Apply Tension is needed before cutting again");
     stop();
     stopSpindle();
     error              = true;
@@ -1347,7 +1369,7 @@ void Maslow_::safety_control() {
             panicCounter[i]++;
             if (panicCounter[i] > tresholdHitsBeforePanic) {
                 if (sys.state() == State::Jog || sys.state() == State::Cycle) {
-                    log_warn("Motor current on " << axis_id_to_label(i).c_str() << " axis exceeded threshold of " << 4000);
+                    log_warn("Motor current on " << arm_label(i).c_str() << " axis exceeded threshold of " << 4000);
                     //Maslow.panic();
                 }
                 tick[i] = true;
@@ -1367,10 +1389,10 @@ void Maslow_::safety_control() {
         if (axis[i].getMotorPower() > 450 && abs(axis[i].getBeltSpeed()) < 0.1 && !tick[i]) {
             axisSlackCounter[i]++;
             if (axisSlackCounter[i] > 3000) {
-                // log_info("SLACK:" << axis_id_to_label(i).c_str() << " motor power is " << int(axis[i].getMotorPower())
+                // log_info("SLACK:" << arm_label(i).c_str() << " motor power is " << int(axis[i].getMotorPower())
                 //                   << ", but the belt speed is" << axis[i].getBeltSpeed());
                 // log_info(axisSlackCounter[i]);
-                // log_info("Pull on " << axis_id_to_label(i).c_str() << " and restart!");
+                // log_info("Pull on " << arm_label(i).c_str() << " and restart!");
                 tick[i]             = true;
                 axisSlackCounter[i] = 0;
                 Maslow.panic();
@@ -1380,7 +1402,7 @@ void Maslow_::safety_control() {
 
         //If the motor has a position error greater than 1mm and we are running a file or jogging
         if ((abs(axis[i].getPositionError()) > 1) && (sys.state() == State::Jog || sys.state() == State::Cycle) && !tick[i]) {
-            // log_error("Position error on " << axis_id_to_label(i).c_str() << " axis exceeded 1mm, error is " << axis[i].getPositionError()
+            // log_error("Position error on " << arm_label(i).c_str() << " axis exceeded 1mm, error is " << axis[i].getPositionError()
             //                                << "mm");
             tick[i] = true;
         }
@@ -1389,7 +1411,7 @@ void Maslow_::safety_control() {
         previousPositionError[i] = axis[i].getPositionError();
         if ((abs(axis[i].getPositionError()) > 15) && (sys.state() == State::Cycle || (sys.state() == State::Idle && Job::active()))) {
             positionErrorCounter[i]++;
-            log_warn("Position error on " << axis_id_to_label(i).c_str() << " axis exceeded 15mm while running. Error is "
+            log_warn("Position error on " << arm_label(i).c_str() << " axis exceeded 15mm while running. Error is "
                                           << axis[i].getPositionError() << "mm" << " Counter: " << positionErrorCounter[i]);
             log_warn("Previous error was " << previousPositionError[i] << "mm");
 

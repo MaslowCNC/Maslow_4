@@ -325,6 +325,19 @@ void Calibration::printCurrentState() {
     log_info("Current state: " << currentState);
 }
 
+// After an e-stop is cleared the belts may not be where the machine thinks (the 15 mm position
+// error that stops it usually means a belt is off).  Make Apply Tension, which measures the belts
+// against the anchors, the next step instead of going straight back to cutting.  Set directly:
+// no belt operation runs here, so none of the requestStateChange() transitions fit.
+void Calibration::requireApplyTension() {
+    if (currentState != READY_TO_CUT) {
+        return;
+    }
+    currentState = EXTENDEDOUT;
+    log_warn("Belt positions need checking after the emergency stop: Apply Tension before cutting");
+    printCurrentState();
+}
+
 // $STOP during Apply Tension: nothing else leaves TAKING_SLACK once the update loop stops
 // running it, and $TKSLK is refused from there. Go where a failed run would go, so the user
 // can apply tension again: EXTENDEDOUT for a normal run, UNKNOWN when recovering belts.
@@ -1368,7 +1381,7 @@ bool Calibration::takeSlackFunc() {
             }
 
             log_warn("Maslow Apply Tension retraction warning: Belt "
-                     << Maslow.axis_id_to_label(arm).c_str() << " retracted " << retractedAmount
+                     << Maslow.arm_label(arm).c_str() << " retracted " << retractedAmount
                      << "mm while applying tension (limit " << applyTensionBeltRetractionLimitMm
                      << "mm). A belt may not be anchored. Continue to keep retracting or Cancel to stop. Reduce Extend Dist or extend Belt Retraction Limit (Options) if Belts Attached to Anchors. Release Tension will allow Approx. 10mm of belt to be released.");
 
@@ -1535,13 +1548,13 @@ bool Calibration::recoverBeltsFunc() {
         if (!recoverPulling[arm]) {
             recoverPulling[arm]  = true;
             recoverStartPos[arm] = Maslow.axis[arm].getPosition();
-            log_info("Apply Tension: pulling the " << Maslow.axis_id_to_label(arm).c_str() << " belt tight");
+            log_info("Apply Tension: pulling the " << Maslow.arm_label(arm).c_str() << " belt tight");
         }
         const float retractedAmount = recoverStartPos[arm] - Maslow.axis[arm].getPosition();
         if (applyTensionAllowLimiting && retractedAmount > applyTensionBeltRetractionLimitMm) {
             Maslow.stopMotors();
             log_warn("Maslow Apply Tension retraction warning: Belt "
-                     << Maslow.axis_id_to_label(arm).c_str() << " retracted " << retractedAmount
+                     << Maslow.arm_label(arm).c_str() << " retracted " << retractedAmount
                      << "mm while applying tension (limit " << applyTensionBeltRetractionLimitMm
                      << "mm). A belt may not be anchored. Continue to keep retracting or Cancel to stop.");
             requestStateChange(UNKNOWN);
@@ -1994,8 +2007,7 @@ bool Calibration::take_measurement_avg_with_check(int waypoint, int dir) {
                 //print all the measurements in readable form:
                 for (int i = 0; i < 4; i++) {
                     for (int j = 0; j < 4; j++) {
-                        //use axis id to label:
-                        log_info(Maslow.axis_id_to_label(i).c_str() << " " << measurements[j][i]);
+                        log_info(Maslow.arm_label(i).c_str() << " " << measurements[j][i]);
                     }
                 }
                 //reset the run counter to run the measurements again
