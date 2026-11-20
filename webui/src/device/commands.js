@@ -27,11 +27,13 @@ export const COMMANDS = {
   spindleOff:     { api: "spindleOff()", cmd: "M5", status: "exists", note: "Mini only. Not during a job: Stop ends the job and turns it off" },
   motorTest:      { api: "testMotors()", cmd: "$TEST", status: "exists", note: "Idle with slack belts (Maslow 0, 2, 4). Each motor pays out ≤100 ms; result from log lines; a missing motor or encoder latches an error ($X)" },
   rehomeZ:        { api: "homeSpindleZ()", cmd: "$Spindle/Home", status: "exists", note: "Mini only. Done on ok, before Z has homed; needs the spindle board field" },
-  reboot:         { api: null, cmd: "[ESP444]RESTART", status: "exists", note: "HTTP; not in machine.js" },
+  reboot:         { api: null, cmd: "[ESP444]RESTART", status: "exists", note: "HTTP, as the current UI's restart dialog; not in machine.js" },
   deleteFile:     { api: "files.delete(path)", cmd: "GET /upload?action=delete", status: "exists", note: "HTTP, like the current UI" },
   jog:            { api: "jog(delta, {feed})", cmd: "$J=G91 G21 …", status: "exists" },
   setHomeXY:      { api: "setWorkZero({x, y})", cmd: "G21 G10 L20 P0 X… Y…", status: "exists", note: "The current machine position as the origin; needs Idle" },
   setZ:           { api: "setWorkZero({z})", cmd: "G21 G10 L20 P0 Z…", status: "exists", note: "The current machine Z as work Z 0; needs Idle" },
   command:        { api: null, cmd: "the typed line, as typed", status: "exists", note: "Command box: wsCommands.send (one line at a time), [ESP…] over HTTP, ? ! ~ as realtime bytes. No machine.js action: it's the user's own raw command" },
-  joinNetwork:   { api: null, cmd: "WiFi settings ([ESP401])", status: "exists", note: "HTTP; placeholder until the WiFi dialog is designed" }
+  readNetwork:    { api: null, cmd: "[ESP400], [ESP420]", status: "exists", note: "HTTP, as the current UI's settings: flash settings (JSON) and where the board is now" },
+  scanNetworks:   { api: null, cmd: "[ESP410]", status: "exists", note: "HTTP, as scanwifidlg.js" },
+  saveNetwork:    { api: null, cmd: "[ESP401]P=Sta/SSID V=…, Sta/Password, WiFi/Mode, AP/SSID, AP/Password, Hostname", status: "exists", note: "HTTP, one per changed setting, value %-encoded. Saved to flash; used after a restart" }
 };
