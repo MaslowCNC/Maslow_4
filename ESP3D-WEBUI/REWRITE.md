@@ -452,7 +452,7 @@ currents; Extend distance, spoil board and stock thickness, Reboot.
 | Flash files (`maslow.yaml`, `index.html.gz`) | `SPIFFSdlg.js` | **Done** (2026-11-20, simulator only): Settings › Advanced › Files (`webui/src/ui/files.jsx`, `webui/src/device/flashfiles.js`): list, folders, upload, download, rename (with index-old / index-new names offered, a taken name refused), delete; warnings for the page and the config; off during a job or while disconnected. Uses `/files` as `SPIFFSdlg.js` does |
 | Firmware update, check for updates | `updatedlg.js`, `checkupdatesdlg.js` | Settings › Device has a disabled button |
 | System status (`[ESP420]`) | `statusdlg.js` | Partly in Settings › Device |
-| Motor current history | Debugging tab (hidden) | Live rings only |
+| Motor current history (the old Debugging tab had live gauges only, which the motor rings cover) | Debugging tab (hidden) | **Done** (2026-11-20, simulator only): Settings › Jobs lists the last 10 jobs (when, how long, how it ended); each opens to its motor current and belt error chart, a CSV download and the job's log (Download log). Recorded in this browser (one row a second, IndexedDB); only while the page is open, so a sleeping phone or background tab leaves gaps. `webui/src/device/jobrecord.js` |
 | Feed override, motors off, probe | Main › GRBL and Controls panels | Probably not needed on a Maslow; decide |
 | Camera, preferences, languages, login, UI lock, macros, credits | navbar, dialogs | Mostly unused; decide to keep or drop |
 
@@ -537,3 +537,5 @@ sent only while it applies, like `STOPPED`, is preferred):
 - **Upstream ESP3D-WebUI:** keep any connection, or treat this as our own code?
 - **Not in the map yet:** recovering after a power loss, saved anchor setups for each table, and a
   job history.
+- **Job history:** builds on the job records in `webui/src/device/jobrecord.js` (file, start, end, outcome,
+  per-second currents; format documented there), kept per browser for now.

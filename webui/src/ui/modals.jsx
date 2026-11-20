@@ -3,6 +3,7 @@ import { SCREENS } from "../flow/screens.js";
 import { ModePill, Conn, SpindleBtn, spindleLock } from "./parts.jsx";
 import { MACHINE_SETTINGS, settingError, effectiveWorkArea } from "../device/settings.js";
 import { AdvancedSection } from "./advanced.jsx";
+import { JobsSection } from "./jobs.jsx";
 import { WIFI_MODES, OTHER_WIFI_MODES, NET_SETTINGS, netError, netChanges, netWarnings } from "../device/network.js";
 
 // Pop-ups cover the panels only, so the top bar and Stop stay visible and clickable
@@ -72,7 +73,7 @@ function StateSection({ k, ctx, close }) {
   </>;
 }
 
-const SECTIONS = [["state", "State"], ["device", "Device"], ["network", "Network"], ["frame", "Frame and belts"], ["home", "Home"], ["tool", "Tool and Z"], ["display", "Display"], ["advanced", "Advanced"]];
+const SECTIONS = [["state", "State"], ["device", "Device"], ["network", "Network"], ["frame", "Frame and belts"], ["home", "Home"], ["tool", "Tool and Z"], ["jobs", "Jobs"], ["display", "Display"], ["advanced", "Advanced"]];
 
 export function Settings({ k, ctx, onClose, theme, setTheme, compact, stop, section = "state" }) {
   const [sec, setSec] = useState(section);
@@ -98,6 +99,7 @@ export function Settings({ k, ctx, onClose, theme, setTheme, compact, stop, sect
       {spindleLock(k, d) && <p class="note" style="margin:0">{spindleLock(k, d)}.</p>}</>}
     <Row label="Last stick-out" hint="Set when you measure a tool."><span class="mono">{d.zFromStickout ? `${d.zFromStickout} mm` : "–"}</span></Row>
     <Row label="Z after Stop" hint="Stop leaves Z where it is, so the bit may stay in the work. Continue lifts it to at least 2 mm above work Z 0 before moving."><span>Stays put</span><span class="note">set in firmware</span></Row></>;
+  else if (sec === "jobs") body = <JobsSection recorder={ctx.recorder} />;
   else if (sec === "display") body = <><h4>Display</h4>
     <Row label="Panels"><select value={theme} onChange={e => setTheme(e.currentTarget.value)}><option value="dark">Dark</option><option value="light">Light</option></select></Row></>;
   else body = <AdvancedSection k={k} ctx={ctx}>

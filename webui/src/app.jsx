@@ -7,6 +7,9 @@ import { Phone } from "./ui/phone.jsx";
 import { TOLERANCE, SLED_MASS } from "./accuracy.js";
 import { Settings } from "./ui/modals.jsx";
 import { SimPanel } from "./ui/sim.jsx";
+import { createRecorder } from "./device/jobrecord.js";
+import { openJobStore } from "./device/jobstore.js";
+import { exampleJobs } from "./device/jobrecord.sample.js";
 
 // The device behind the UI: the real machine (machine.js) or the simulator, both with the same interface
 // (getState, subscribe, send). ?device=machine or ?device=sim picks one. Otherwise the page uses the machine
@@ -14,6 +17,9 @@ import { SimPanel } from "./ui/sim.jsx";
 const choice = new URLSearchParams(location.search).get("device");
 const useMachine = choice ? choice === "machine" : import.meta.env.PROD && location.protocol.startsWith("http");
 const device = useMachine ? createMachine() : createSimulator();
+// Records each job's motor currents while this page is open (Settings › Jobs). The simulator also shows
+// example jobs (one of each outcome), never saved, so the list has something in it before a job has run.
+const recorder = createRecorder({ device, store: openJobStore(), examples: device.isSimulated ? exampleJobs() : [] });
 
 function useDevice() {
   const [d, setD] = useState(device.getState());
@@ -62,7 +68,7 @@ export function App() {
   const send = (action, payload) => device.send(action, payload);
   const k = derive(d, a);
   const openSettings = (section = "state") => setModal({ name: "settings", section });
-  const ctx = { d, a, setA, send, mark, tolerance, setTolerance, sledMass, setSledMass, commandBox, setCommandBox, openSettings };
+  const ctx = { d, a, setA, send, mark, tolerance, setTolerance, sledMass, setSledMass, commandBox, setCommandBox, openSettings, recorder };
 
   useEffect(() => { send("connect"); }, []);
   // The device reads the chosen file (for the preview and Trace boundary) whenever the choice changes

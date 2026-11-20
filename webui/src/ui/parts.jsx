@@ -1,6 +1,7 @@
 import { useState, useRef, useLayoutEffect } from "preact/hooks";
 import { jobPlacement } from "../flow/fit.js";
 import { downloadLog } from "./logfile.js";
+import { adcToMilliamps } from "../device/jobrecord.js";
 import { STEPS, SCREENS, isSetup } from "../flow/screens.js";
 import { stepArt, visSvg, frameMap, toolpathSvg, toolpathView, workspaceCaption, currentColour, MAX_CURRENT_MA } from "../art.js";
 import { makeFrame, accuracyMap, safeRect, checkJob, startRing, TOLERANCE, SLED_MASS } from "../accuracy.js";
@@ -333,8 +334,8 @@ export function MotorsView({ k, d }) {
   return <div class={`belts${s.stale ? " stale" : ""}`}>{[mc.tl, mc.tr, mc.bl, mc.br].map((v, i) => <><span>{BELT_NAMES[i]}</span><span class="bar"><i style={`width:${Math.min(100, mA(v) / 20)}%`}></i></span><span>{mA(v)} mA</span></>)}</div>;
 }
 
-// MC is raw ADC 0–4095; the current UI converts it to mA this way (docs/protocol.md)
-export const adcToMilliamps = (adc) => (adc == null ? null : 1000 * 3.3 * adc / 4095 / 1.5);
+// MC is raw ADC 0–4095, converted to mA as the current UI does (docs/protocol.md); the job recorder uses it too
+export { adcToMilliamps };
 
 // The Status, Position and File cards
 export function DetailCards({ k, d, a }) {
