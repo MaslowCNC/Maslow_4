@@ -18,6 +18,7 @@ const RECONNECT_MS = 3000;
 const SETTINGS = {
   spoil: "Maslow_spoilboardThickness", stock: "Maslow_workThickness", extend: "Maslow_Extend_Dist"
 };
+const BELT_STRETCH = "kinematics/MaslowKinematics/beltStretchCompensation";
 // The frame's geometry under kinematics/MaslowKinematics, in this order (readSettings)
 const FRAME_KEYS = ["tlX", "tlY", "trX", "trY", "blX", "blY", "brX", "brY", "tlZ", "trZ", "blZ", "brZ", "beltEndExtension", "armLength"];
 // The board type [ESP800] reports (firmware BoardId), as the machine's name. The Unified Control Board is the Mini's.
@@ -78,6 +79,7 @@ export function createMachine({ host = location.host } = {}) {
     job: null, lastJob: null, motion: null, result: null, restored: false,
     gcode: null,             // the chosen file, read: { file, status: "reading" | "ready" | "failed", detail?, ...readGcode() }
     workArea: { spoil: 0 }, stock: 0, anchorsSaved: true,
+    beltStretch: null,       // belt stretch compensation on (true) or off; null until read or on firmware without it
     settings: {},            // work area, park, scale, belt limits (device/settings.js); a key is missing until read
     frame: null,             // { tl, tr, bl, br: [x, y] mm, z: [tl, tr, bl, br], arm: beltEndExtension + armLength, vertical }
     belts: [0, 0, 0, 0], motorCurrent: null,
@@ -201,7 +203,8 @@ export function createMachine({ host = location.host } = {}) {
     const keys = Object.keys(MACHINE_SETTINGS);
     const values = await Promise.all(keys.map((k) => read(MACHINE_SETTINGS[k].path)));
     const settings = Object.fromEntries(keys.flatMap((k, i) => (values[i] == null ? [] : [[k, values[i]]])));
-    set({ workArea: { spoil: spoil ?? 0 }, stock: stock ?? 0, extendDist: extend, settings });
+    const beltStretch = await m.getSetting(BELT_STRETCH).then((x) => /^(true|1)$/i.test(x.trim())).catch(() => null);
+    set({ workArea: { spoil: spoil ?? 0 }, stock: stock ?? 0, extendDist: extend, settings, beltStretch });
     await readFrame();
   }
 
@@ -243,6 +246,19 @@ export function createMachine({ host = location.host } = {}) {
       set(patch);
     } catch (err) {
       log(`Couldn't save the ${label.toLowerCase()}: ${err.detail || err.reason}`);
+      emit();
+    }
+  }
+
+  // Belt stretch compensation on or off. The firmware moves the anchors to match at the next Apply tension.
+  async function setBeltStretch(on) {
+    try {
+      await m.setSetting(BELT_STRETCH, on);
+      await m.saveConfig();
+      log(`Belt stretch compensation ${on ? "on" : "off"}: takes effect at the next Apply tension`);
+      set({ beltStretch: on });
+    } catch (err) {
+      log(`Couldn't save belt stretch compensation: ${err.detail || err.reason}`);
       emit();
     }
   }
@@ -407,8 +423,9 @@ export function createMachine({ host = location.host } = {}) {
     m = globalThis.machine;
     m.on("state", (ms) => {
       const wasFinding = s.maslow === 6;   // CALIBRATION_IN_PROGRESS
+      const wasTensioning = s.maslow === 5;   // TAKING_SLACK: it moves the anchors if belt stretch was turned on or off
       set(fromMachine(ms));
-      if (wasFinding && s.maslow !== 6) readFrame();
+      if ((wasFinding && s.maslow !== 6) || (wasTensioning && s.maslow !== 5)) readFrame();
     });
     setInterval(health, 1000);
     connect();
@@ -501,6 +518,7 @@ export function createMachine({ host = location.host } = {}) {
     if (action === "setStock") { setStock(payload.stock); return; }
     if (action === "setSpoilboard") { saveSetting(SETTINGS.spoil, payload.mm, "Spoil board thickness", { workArea: { ...s.workArea, spoil: payload.mm } }); return; }
     if (action === "setSettings") { saveSettings(payload.values || {}, payload.label || "Settings"); return; }
+    if (action === "setBeltStretch") { setBeltStretch(!!payload.on); return; }
     if (action === "setExtendDist") {
       if (payload.mm === 0) { log(`Not sent: extend distance 0 (${s.notYet.extendUntilDone})`); emit(); return; }
       saveSetting(SETTINGS.extend, payload.mm, "Extend distance", { extendDist: payload.mm });

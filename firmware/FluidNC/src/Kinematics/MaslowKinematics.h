@@ -83,6 +83,32 @@ namespace Kinematics {
         // The area jobs are limited to. An axis left at 0 (the default) is sized automatically from the frame
         void getWorkArea(float& width, float& height) const;
 
+        // Belt stretch compensation. A belt under tension F is longer than the length the encoder counts out by
+        // F * L / AE. On or off (beltStretchCompensation); the belt's numbers are fixed.
+        static constexpr float BELT_AXIAL_STIFFNESS = 178900.0f;  // AE (N), the belt manufacturer's spec
+        static constexpr float BELT_PRELOAD         = 156.96f;    // N (16 kgf): Find Anchors' pull, and the cutting preload
+        static constexpr float SLED_WEIGHT          = 86.33f;     // N (8.8 kg), vertical frames only
+
+        // The pull Find Anchors and Apply Tension correct their measurements for now: BELT_PRELOAD, or 0 when off
+        float measurementPreload() const { return _beltStretchCompensation ? BELT_PRELOAD : 0.0f; }
+        // A belt paid out to paidOut spans paidOut * (1 + F/AE) at that pull; and back
+        float spanAtPull(float paidOut) const { return paidOut * (1.0f + measurementPreload() / BELT_AXIAL_STIFFNESS); }
+        float paidOutAtPull(float span) const { return span / (1.0f + measurementPreload() / BELT_AXIAL_STIFFNESS); }
+
+        // Cutting follows the anchors (anchorStretchPreload), not the setting, so turning the setting on or off
+        // changes nothing until syncAnchorsToBeltStretch() moves the anchors to match.
+        bool stretchActive() const { return _anchorStretchPreload > 0.0f; }
+        // Moves the anchors to what Find Anchors would have found with the current setting, if they were found (or
+        // last moved) with the other one. Each belt's paid-out length with the sled at the frame centre is the span at
+        // the old factor; at the new one it spans more or less, so its anchor moves along the belt by the difference.
+        // Matches a full refit of the logged data to 0.04 mm. Returns true if the anchors moved.
+        bool syncAnchorsToBeltStretch();
+
+        // The tension (N) each belt is commanded to carry with the sled at x, y (centred, scaled coordinates):
+        // the force-balanced set closest to BELT_PRELOAD on every belt, plus the sled's weight on a vertical
+        // frame. Belts are position controlled, so the lengths this sizes are what set the tension.
+        void estimateBeltTensions(float x, float y, float tension[ARM_COUNT]) const;
+
         // Forward kinematics methods for position synchronization
         bool  computeXYfromBeltLengths(float tlLength, float trLength, float& x, float& y) const;
         float measurementToXYPlane(float measurement, float zHeight) const;
@@ -92,6 +118,7 @@ namespace Kinematics {
         void setCalibrationAnchors(float tlX, float tlY, float trX, float trY, float brX);
         void setSpoilboardThickness(float thickness);
         void setWorkThickness(float thickness);
+        void setBeltStretchCompensation(bool on) { _beltStretchCompensation = on; }
 
     private:
         // Validation and correction helper method
@@ -109,6 +136,10 @@ namespace Kinematics {
         // Belt and arm parameters (in mm)
         float _beltEndExtension = 30.0f;   // Belt end extension
         float _armLength        = 123.4f;  // Arm length
+
+        // Belt stretch compensation (off when a maslow.yaml written before it has neither key)
+        bool  _beltStretchCompensation = false;  // the setting
+        float _anchorStretchPreload    = 0.0f;   // pull (N) the anchors were corrected for: 0 if found without compensation
 
         // Material thickness offsets (in mm) - accounts for spoil board and work piece thickness
         float _spoilboardThickness = 0.0f;  // Spoil board thickness added to all anchor heights

@@ -17,6 +17,7 @@ export const COMMANDS = {
   setSpoilboard:  { api: "setSetting()", cmd: "$/Maslow_spoilboardThickness=…", status: "exists" },
   setStock:       { api: "setSetting()", cmd: "$/Maslow_workThickness=…", status: "exists" },
   setSettings:    { api: "setSetting() each, then saveConfig()", cmd: "$/Maslow_Work_Area_X=…, $/Maslow_Park_X=…, … then $CO", status: "exists", note: "Work area, park, scale and belt limits (device/settings.js)" },
+  setBeltStretch: { api: "setSetting() + saveConfig()", cmd: "$/kinematics/MaslowKinematics/beltStretchCompensation=true|false", status: "exists", note: "Takes effect at the next Apply tension, which moves the anchors to match" },
   run:            { api: "runFile(path)", cmd: "$SD/Run=<file>", status: "exists" },
   continueJob:    { api: "resumeFile(path, line)", cmd: "$SD/RunFrom=<line>,<file>", status: "exists", note: "From the report's STOPPED:line,file; discardStopped() forgets it" },
   trace:          { api: "tracePath(points)", cmd: "G0 moves, one at a time", status: "exists" },
