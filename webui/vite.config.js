@@ -28,7 +28,10 @@ export default defineConfig(async ({ command }) => {
         "/ws": { target: `ws://${machine}`, ws: true, rewrite: () => "/" },   // the firmware's socket is at "/"
         "/upload": { target: `http://${machine}` },
         "/command": { target: `http://${machine}` },
-        "/SD": { target: `http://${machine}` }   // file contents, to count a job's lines
+        "/SD": { target: `http://${machine}` },   // file contents, to count a job's lines
+        "/files": { target: `http://${machine}` },   // the board's flash files (Settings › Advanced › Files)
+        // A flash file's contents: the board serves /maslow.yaml at its own path, which here is Vite's
+        "/flashfs": { target: `http://${machine}`, rewrite: (p) => p.replace(/^\/flashfs/, "") }
       } : undefined
     }
   };

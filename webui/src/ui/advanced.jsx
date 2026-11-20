@@ -1,18 +1,21 @@
 import { useState, useEffect } from "preact/hooks";
 import { SCREENS } from "../flow/screens.js";
 import { LISTS, grouped, valueError, isChanged, pendingChanges } from "../device/settingslist.js";
+import { FilesTab } from "./files.jsx";
 import "./advanced.css";
 
 // Settings › Advanced: tabs along the top for the support tools (the command box and belt motor test, passed in as
 // children) and the raw Maslow and FluidNC settings lists. Tabs rather than more entries in the Settings nav, so it
 // works the same in the desktop pop-up and the phone's, where the section nav is already a scrolling row of pills.
-const TABS = [["tools", "Tools"], ["maslow", "Maslow"], ["fluidnc", "FluidNC"]];
+// Files is the board's flash files (ui/files.jsx): next to the settings lists, since editing maslow.yaml as text is
+// the other way to change them.
+const TABS = [["tools", "Tools"], ["maslow", "Maslow"], ["fluidnc", "FluidNC"], ["files", "Files"]];
 
 export function AdvancedSection({ k, ctx, children }) {
   const { d, send } = ctx;
   const [tab, setTab] = useState("tools");
   const [filter, setFilter] = useState("");   // shared by both lists
-  const lists = tab !== "tools";
+  const lists = tab === "maslow" || tab === "fluidnc";
   // Enter in the filter reads every setting from the board again. Edits not saved yet are kept.
   const reread = (e) => {
     if (e.key !== "Enter") return;
@@ -36,7 +39,8 @@ export function AdvancedSection({ k, ctx, children }) {
           onInput={(e) => setFilter(e.currentTarget.value)} onKeyDown={reread} /></label>}
     </div>
     <div id="adv-panel" role="tabpanel" aria-labelledby={`adv-${tab}`} class="advpanel">
-      {tab === "tools" ? children : <SettingsList key={tab} list={tab} k={k} ctx={ctx} filter={filter} />}
+      {tab === "tools" ? children : tab === "files" ? <FilesTab ctx={ctx} lock={lockReason(k, d)} />
+        : <SettingsList key={tab} list={tab} k={k} ctx={ctx} filter={filter} />}
     </div>
   </>;
 }

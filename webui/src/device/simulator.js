@@ -5,6 +5,8 @@ import { MACHINE_SETTINGS, defaultSettings, settingError } from "./settings.js";
 import { parseSettingsList, valueError, espSetCommand, withValues } from "./settingslist.js";
 import { sampleValues, sampleAnswer } from "./settingslist.sample.js";
 import { NET_IDLE, NET_SETTINGS, netChanges } from "./network.js";
+import { FLASH_IDLE, MAX_EDIT, flashActions } from "./flashfiles.js";
+import { createFlashFs } from "./flashfiles.sample.js";
 
 // A stand-in for the machine. It holds the state the firmware would report and, whenever the real device would
 // answer (a step finishing, a fault, a tool being found), it asks the tester through `pending` instead of guessing.
@@ -80,6 +82,7 @@ function initialState() {
     incident: null,               // something the user must acknowledge first (flow/incidents.js)
     net: NET_IDLE,                // the network settings, as the machine adapter has them (device/network.js)
     netSaved: { ...SIM_NET },     // what the board would use after a restart
+    flash: FLASH_IDLE,            // the board's own files (device/flashfiles.js), read when Settings › Advanced › Files opens
     pending: null                 // the question the simulator is asking the tester
   };
 }
@@ -166,7 +169,36 @@ export function createSimulator() {
       result: null, spindle: "off", error: null, pending: null, connectId: s.connectId + 1, ...extra });
   }
 
+  // The board's flash files: an in-memory filesystem that answers like the firmware's /files (flashfiles.sample.js).
+  // A short wait on each answer, so "Uploading…" and "Saving…" show as they would on the board.
+  const flashFs = createFlashFs();
+  const later = (v) => new Promise((r) => setTimeout(() => r(v), 150));
+  const flash = flashActions({
+    get: () => s.flash,
+    set: (patch) => set({ flash: { ...s.flash, ...patch } }),
+    log: (line) => log(line),
+    lock: () => (!s.connected ? "Waiting for the device to answer." : s.job ? "Not while a job runs." : s.motion ? "Not while the machine moves." : null),
+    io: {
+      list: (dir) => later(flashFs.request(new URLSearchParams({ path: dir }))),
+      act: (query) => later(flashFs.request(query)),
+      async upload(path, content) {
+        // An uploaded file is kept in this page: as text when the editor could open it, otherwise as it is
+        if (typeof content !== "string" && content.size <= MAX_EDIT && /\.(ya?ml|json|txt|cfg|ini|md|bak)$/i.test(path)) content = await content.text();
+        return later(flashFs.write(path, typeof content === "string" ? content : { size: content.size, blob: content }));
+      },
+      read: async (path) => { const c = flashFs.read(path); return later(c == null || typeof c === "string" ? c : null); },
+      download(path, name) {
+        const c = flashFs.read(path);
+        if (c == null) throw new Error("the simulator only has this file's size, not its contents");
+        const url = URL.createObjectURL(typeof c === "string" ? new Blob([c], { type: "text/plain" }) : c);
+        Object.assign(document.createElement("a"), { href: url, download: name }).click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+    }
+  });
+
   const actions = {
+    ...flash,
     ackIncident() { set({ incident: null }); },
     connect() { connectQuestion(false); },
 
