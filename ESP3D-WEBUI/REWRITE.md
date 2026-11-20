@@ -430,7 +430,7 @@ currents; Extend distance, spoil board and stock thickness, Reboot.
 |---|---|---|
 | Command box (send `$` commands, verbose) | Main › Commands (`commandpanel.html`, `commands.js`) | **Done** (2026-11-18): off by default, turned on in Settings › Advanced (per browser); under the log, sent as typed through `wsCommands` (`[ESP…]` over HTTP), up/down history. The log keeps 200 lines |
 | Save the log to a file | Save Serial | **Done** (2026-11-18): the download icon by the Log title saves `maslow-log-<date>-<time>.txt` |
-| FluidNC and Maslow settings list | Settings tab (`settingstab.html`, `settings.js`) | Settings › Advanced is a placeholder |
+| FluidNC and Maslow settings list | Settings tab (`settingstab.html`, `settings.js`) | **Done** (2026-11-20, simulator only): Settings › Advanced, tabs Tools / Maslow / FluidNC. Read with `[ESP400]`, typed editors, filter, Save sends only the changes (`[ESP401]` for flash settings; `setSetting()` then `$CO` for config items); off while moving or disconnected; "Restart" tag on network settings. `webui/src/device/settingslist.js` |
 | Config editor | Config tab (`configtab.js`, hidden) | Settings › Advanced, not designed |
 | Flash files (`maslow.yaml`, `index.html.gz`) | `SPIFFSdlg.js` | Missing |
 | Firmware update, check for updates | `updatedlg.js`, `checkupdatesdlg.js` | Settings › Device has a disabled button |

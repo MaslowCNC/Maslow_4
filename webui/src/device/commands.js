@@ -33,5 +33,7 @@ export const COMMANDS = {
   setHomeXY:      { api: "setWorkZero({x, y})", cmd: "G21 G10 L20 P0 X… Y…", status: "exists", note: "The current machine position as the origin; needs Idle" },
   setZ:           { api: "setWorkZero({z})", cmd: "G21 G10 L20 P0 Z…", status: "exists", note: "The current machine Z as work Z 0; needs Idle" },
   command:        { api: null, cmd: "the typed line, as typed", status: "exists", note: "Command box: wsCommands.send (one line at a time), [ESP…] over HTTP, ? ! ~ as realtime bytes. No machine.js action: it's the user's own raw command" },
+  readSettingsList: { api: null, cmd: "[ESP400]", status: "exists", note: "HTTP. Settings › Advanced's raw lists (device/settingslist.js)" },
+  saveSettingsList: { api: "setSetting() each, then saveConfig()", cmd: "[ESP401]P=… T=… V=… for flash settings; $/<path>=… then $CO for config items", status: "exists", note: "Only the changed settings" },
   joinNetwork:   { api: null, cmd: "WiFi settings ([ESP401])", status: "exists", note: "HTTP; placeholder until the WiFi dialog is designed" }
 };

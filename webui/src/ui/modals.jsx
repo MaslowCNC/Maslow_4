@@ -2,6 +2,7 @@ import { useState } from "preact/hooks";
 import { SCREENS } from "../flow/screens.js";
 import { ModePill, Conn, SpindleBtn, spindleLock } from "./parts.jsx";
 import { MACHINE_SETTINGS, settingError, effectiveWorkArea } from "../device/settings.js";
+import { AdvancedSection } from "./advanced.jsx";
 
 // Pop-ups cover the panels only, so the top bar and Stop stay visible and clickable
 function Modal({ title, small, onClose, children, foot, nav, single, compact, stop, ctx }) {
@@ -99,10 +100,10 @@ export function Settings({ k, ctx, onClose, theme, setTheme, compact, stop }) {
     <Row label="Z after Stop" hint="Stop leaves Z where it is, so the bit may stay in the work. Continue lifts it to at least 2 mm above work Z 0 before moving."><span>Stays put</span><span class="note">set in firmware</span></Row></>;
   else if (sec === "display") body = <><h4>Display</h4>
     <Row label="Panels"><select value={theme} onChange={e => setTheme(e.currentTarget.value)}><option value="dark">Dark</option><option value="light">Light</option></select></Row></>;
-  else body = <><h4>Advanced</h4><p class="note">The raw FluidNC and Maslow settings. Not designed yet.</p>
+  else body = <AdvancedSection k={k} ctx={ctx}>
     <Row label="Command box" hint="A box under the log that sends a line to the machine as typed, for support. No checks: motion and calibration commands run too. Remembered in this browser.">
       <label class="check"><input type="checkbox" checked={ctx.commandBox} onChange={e => ctx.setCommandBox(e.currentTarget.checked)} /> Show</label></Row>
-    <MotorTest k={k} ctx={ctx} /></>;
+    <MotorTest k={k} ctx={ctx} /></AdvancedSection>;
   return <Modal title="Settings" small="maslow" onClose={onClose} nav={nav} compact={compact} stop={stop} ctx={ctx}>{body}</Modal>;
 }
 
