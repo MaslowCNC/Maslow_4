@@ -1148,6 +1148,42 @@ function setRunControls() {
 var grblReportingUnits = 0
 var startTime = 0
 
+const getPositionDisplayFactor = () => {
+  switch (gCodeModal.units) {
+    case "G20":
+      return grblReportingUnits === 0 ? 1 / MM_PER_INCH : 1;
+    case "G21":
+      return grblReportingUnits === 0 ? 1 : MM_PER_INCH;
+    default:
+      return 1;
+  }
+};
+
+const formatPositionCoordinates = (position, factor, digits) =>
+  Object.fromEntries(["x", "y", "z"].map((axis) => [
+    axis,
+    Number.isFinite(position?.[axis]) ? Number(position[axis] * factor).toFixed(digits) : "?",
+  ]));
+
+const updatePositionReadout = (state) => {
+  const factor = getPositionDisplayFactor();
+  const digits = gCodeModal.units === "G20" ? 4 : 2;
+  for (const [prefix, position] of [["wpos", state.wpos], ["mpos", state.mpos]]) {
+    const formatted = formatPositionCoordinates(position, factor, digits);
+    for (const axis of ["x", "y", "z"]) {
+      setTextContent(`${prefix}-${axis}`, formatted[axis]);
+    }
+  }
+};
+
+if (typeof machine !== "undefined") {
+  machine.on("state", updatePositionReadout);
+}
+
+if (typeof globalThis !== "undefined") {
+  globalThis.__tabletPositionTestApi = { formatPositionCoordinates };
+}
+
 var spindleDirection = ''
 var spindleSpeed = ''
 
@@ -1197,26 +1233,6 @@ function tabletUpdateModal() {
 function tabletGrblState(grbl, response) {
   // tabletShowResponse(response)
   const stateName = grbl.stateName;
-
-  // Unit conversion factor - depends on both $13 setting and parser units
-  let factor = 1.0;
-
-  //  spindleSpeed = grbl.spindleSpeed;
-  //  spindleDirection = grbl.spindle;
-  //
-  //  feedOverride = OVR.feed/100.0;
-  //  rapidOverride = OVR.rapid/100.0;
-  //  spindleOverride = OVR.spindle/100.0;
-
-  const mmPerInch = 25.4;
-  switch (gCodeModal.units) {
-    case 'G20':
-      factor = grblReportingUnits === 0 ? 1 / mmPerInch : 1.0
-      break
-    case 'G21':
-      factor = grblReportingUnits === 0 ? 1.0 : mmPerInch
-      break
-  }
 
   const cannotClick = stateName === 'Run' || stateName === 'Hold'
   // Recompute the layout only when the state changes
@@ -1311,21 +1327,6 @@ function tabletGrblState(grbl, response) {
   }
   // Always update tool position, even without GCode loaded
   tpDisplayer().reDrawTool(gCodeModal, arrayToXYZ(WPOS));
-
-  const digits = gCodeModal.units === 'G20' ? 4 : 2;
-
-  if (WPOS) {
-    WPOS.forEach((pos, index) => {
-      setTextContent(`wpos-${axisNames[index]}`, Number(pos * factor).toFixed(index > 2 ? 2 : digits));
-    })
-  }
-
-  if (MPOS) {
-    MPOS.forEach((pos, index) => {
-      const axisName = axisNames[index].toUpperCase();
-      setTextContent(`mpos-${axisNames[index]}`, `|${axisName}m: ${Number(pos * factor).toFixed(index > 2 ? 2 : digits)}|`);
-    })
-  }
 
   // On the first status update that has both WCO and MPOS data, proactively
   // show the Z safety popup if machine Z is already above the safe threshold.
@@ -2135,6 +2136,7 @@ function tabletInit() {
     // Buttons - Fourth Row
     id("tablettab_set_z_home").addEventListener("click", openSetZHomePopup);
     id("tablettab_move_to_xy_home").addEventListener("click", moveHome);
+    id("tablettab_move_to_z_home").addEventListener("click", () => sendMove("Z0"));
     id("tablettab_toggle_units").addEventListener("click", toggleUnits);
     id("tablettab_set_xy_home").addEventListener("click", openSetHomePopup);
 
