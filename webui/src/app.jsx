@@ -50,7 +50,7 @@ const useSledMass = () => useStored("maslow.sledMass", SLED_MASS);
 export function App() {
   const d = useDevice();
   const [a, setAnswers] = useState(freshAnswers);
-  const [modal, setModal] = useState(null);           // "settings"
+  const [modal, setModal] = useState(null);           // { name: "settings", section }
   const [theme, setTheme] = useState("dark");
   const [tolerance, setTolerance] = useTolerance();
   const [sledMass, setSledMass] = useSledMass();
@@ -61,7 +61,8 @@ export function App() {
   const mark = (step) => setAnswers(prev => prev.ran.includes(step) ? prev : { ...prev, ran: [...prev.ran, step] });
   const send = (action, payload) => device.send(action, payload);
   const k = derive(d, a);
-  const ctx = { d, a, setA, send, mark, tolerance, setTolerance, sledMass, setSledMass, commandBox, setCommandBox };
+  const openSettings = (section = "state") => setModal({ name: "settings", section });
+  const ctx = { d, a, setA, send, mark, tolerance, setTolerance, sledMass, setSledMass, commandBox, setCommandBox, openSettings };
 
   useEffect(() => { send("connect"); }, []);
   // The device reads the chosen file (for the preview and Trace boundary) whenever the choice changes
@@ -86,10 +87,10 @@ export function App() {
 
   // Stop is in the top bar, which pop-ups don't cover, so they don't carry their own
   const mprops = { ctx, compact: narrow, stop: false };
-  const overlay = modal === "settings"
-    ? <Settings k={k} {...mprops} theme={theme} setTheme={setTheme} onClose={() => setModal(null)} />
+  const overlay = modal?.name === "settings"
+    ? <Settings key={modal.section} k={k} {...mprops} section={modal.section} theme={theme} setTheme={setTheme} onClose={() => setModal(null)} />
     : null;
-  const props = { k, ctx, onSettings: () => setModal("settings"), overlay };
+  const props = { k, ctx, onSettings: () => openSettings(), overlay };
   return <div class={`appshell${narrow ? " narrow" : ""}`} data-panels={theme}>
     {narrow ? <Phone {...props} /> : <Desktop {...props} />}
     {device.isSimulated && <SimPanel d={d} device={device} />}

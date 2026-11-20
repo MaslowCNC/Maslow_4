@@ -8,7 +8,7 @@
 //   T  type: I integer, R real, S text, B choice (O lists the options), A IP address
 //   V  value; M and S the minimum and maximum (a text's length), when the firmware gives them
 //
-// Saving (as the current UI does): a flash setting with [ESP401]P=<name> T=<type> V=<value> over HTTP, kept in flash
+// Saving (as the current UI does; machine.js sends them): a flash setting with [ESP401]P=<name> T=<type> V=<value> over HTTP, kept in flash
 // at once; a config item with machine.js setSetting() ($/<path>=<value>), then saveConfig() ($CO) once, which writes
 // maslow.yaml.
 
@@ -154,10 +154,6 @@ export function espSetCommand(item, value) {
   return `[ESP401]P=${item.path} T=${item.espType} V=${encodeURIComponent(String(value))}`;
 }
 
-/** An [ESP…] command's answer means it failed: the board answers 200 with error:N or a message in the body */
-export function espFailure(body) {
-  return String(body).match(/error:\s*\d+|Parameter must[^\n]*|Invalid[^\n]*|Authentication failed[^\n]*/i)?.[0].trim() || null;
-}
 
 /** The items with the saved values put in (a secret stays hidden) */
 export function withValues(items, saved) {
@@ -165,12 +161,3 @@ export function withValues(items, saved) {
   return items.map((i) => (by.has(i.path) && !i.secret ? { ...i, value: by.get(i.path) } : i));
 }
 
-/** Send an [ESP…] command over HTTP, as the current UI does; resolves to the answer's body, rejects on a failure */
-export async function espRequest(text, fetchFn = globalThis.fetch) {
-  const r = await fetchFn(`/command?plain=${encodeURIComponent(text)}`);
-  const body = await r.text();
-  if (!r.ok) throw new Error(body.trim() || `HTTP ${r.status}`);
-  const bad = espFailure(body);
-  if (bad) throw new Error(bad);
-  return body;
-}

@@ -11,7 +11,8 @@
 import { restarted, jobFailed, holding } from "../flow/incidents.js";
 import { readGcode, boundaryPath } from "../gcode/reader.js";
 import { MACHINE_SETTINGS, settingError } from "./settings.js";
-import { parseSettingsList, valueError, espSetCommand, espRequest, withValues } from "./settingslist.js";
+import { parseSettingsList, valueError, espSetCommand, withValues } from "./settingslist.js";
+import { NET_IDLE, parseNetSettings, parseNetStatus, parseApList, onFallbackHotspot, setCommand, netChanges } from "./network.js";
 
 // What the firmware's close codes mean (WSChannel.h). For these the page shows a notice and doesn't reconnect.
 const CLOSE_NOTICES = { 4001: "othertab", 4002: "toomany" };
@@ -84,7 +85,8 @@ export function createMachine({ host = location.host } = {}) {
     frame: null,             // { tl, tr, bl, br: [x, y] mm, z: [tl, tr, bl, br], arm: beltEndExtension + armLength, vertical }
     belts: [0, 0, 0, 0], motorCurrent: null,
     pos: { x: 0, y: 0, z: 0 }, wco: { x: 0, y: 0, z: 0 },
-    files: [], log: [], pending: null
+    files: [], log: [], pending: null,
+    net: NET_IDLE            // the network settings (device/network.js), read when Settings › Network or Device opens
   };
 
   // Files read from the SD card through the G-code reader (gcode/reader.js), each fetched once: url → Promise of
@@ -276,7 +278,7 @@ export function createMachine({ host = location.host } = {}) {
     if (s.settingsList.status === "reading") return;
     set({ settingsList: { ...s.settingsList, status: "reading", detail: null } });
     try {
-      set({ settingsList: { status: "ready", items: parseSettingsList(await espRequest("[ESP400]")), save: s.settingsList.save } });
+      set({ settingsList: { status: "ready", items: parseSettingsList(await esp("[ESP400]")), save: s.settingsList.save } });
     } catch (e) {
       log(`Couldn't read the settings list: ${e.message}`);
       set({ settingsList: { ...s.settingsList, status: "failed", detail: e.message } });
@@ -297,7 +299,7 @@ export function createMachine({ host = location.host } = {}) {
     try {
       for (const c of changes) {
         const i = byPath.get(c.path);
-        if (i.store === "flash") await espRequest(espSetCommand(i, c.value));
+        if (i.store === "flash") await esp(espSetCommand(i, c.value));
         else await m.setSetting(c.path, c.value);
         saved.push(c);
       }
@@ -341,6 +343,98 @@ export function createMachine({ host = location.host } = {}) {
       log(`Couldn't delete ${name}: ${e.message}`);
     }
     await listFiles();
+  }
+
+  // An [ESP…] command over HTTP, as the current UI sends them. The answer is the body; the board answers 200 even
+  // when the command fails, with error:N or a message in the body.
+  async function esp(text) {
+    const r = await fetch(`/command?plain=${encodeURIComponent(text)}`);
+    const body = await r.text();
+    if (!r.ok) throw new Error(body.trim() || `HTTP ${r.status}`);
+    const bad = body.match(/error:\s*\d+|Parameter must[^\n]*|Invalid[^\n]*/i);
+    if (bad) throw new Error(bad[0].trim());
+    return body;
+  }
+  const setNet = (patch) => set({ net: { ...s.net, ...patch } });
+
+  // The network settings and where the board is now: [ESP400] (flash settings, JSON) and [ESP420] (status)
+  async function readNetwork() {
+    if (s.net.read === "reading") return;
+    setNet({ read: "reading", detail: null });
+    try {
+      const [list, text] = await Promise.all([esp("[ESP400]"), esp("[ESP420]")]);
+      const settings = parseNetSettings(list), status = parseNetStatus(text);
+      set({ net: { ...s.net, read: "ready", settings, status }, hotspot: onFallbackHotspot(status, settings) });
+    } catch (e) {
+      log(`Couldn't read the network settings: ${e.message}`);
+      setNet({ read: "failed", detail: e.message });
+    }
+  }
+
+  // On each connect: is the board on its hotspot because it couldn't join WiFi (first boot, or a network it can't
+  // reach)? Then the page asks for a network first. [ESP420] is small; the settings ([ESP400], about 40 KB) are only
+  // read when the hotspot is up, to tell a fallback from "Hotspot only".
+  async function checkHotspot() {
+    try {
+      const status = parseNetStatus(await esp("[ESP420]"));
+      if (!onFallbackHotspot(status, null)) { set({ net: { ...s.net, status }, hotspot: false }); return; }
+      await readNetwork();
+    } catch (e) {
+      log(`Couldn't read the network status: ${e.message}`);
+      emit();
+    }
+  }
+
+  // The WiFi networks the board can see ([ESP410]). The scan takes a few seconds; the board stays connected.
+  async function scanNetworks() {
+    if (s.net.scan?.state === "scanning") return;
+    setNet({ scan: { state: "scanning", list: s.net.scan?.list || [] } });
+    try {
+      setNet({ scan: { state: "done", list: parseApList(await esp("[ESP410]")) } });
+    } catch (e) {
+      log(`Couldn't scan for WiFi networks: ${e.message}`);
+      setNet({ scan: { state: "failed", list: [], detail: e.message } });
+    }
+  }
+
+  // Save what changed, one [ESP401] each, in order; one that fails stops the rest. Saved to flash at once, used
+  // after a restart. Passwords aren't logged.
+  async function saveNetwork(form) {
+    const current = s.net.settings || {};
+    const { changes, error } = netChanges(form, current);
+    if (error) { log(`Not sent: network settings (${error})`); setNet({ save: { state: "failed", detail: error } }); return; }
+    if (!changes.length) return;
+    setNet({ save: { state: "saving" } });
+    const saved = {};
+    try {
+      for (const [k, v] of changes) {
+        await esp(setCommand(k, v));
+        saved[k] = v;
+      }
+      log(`Network settings saved: ${changes.map(([k]) => k).join(", ")}. They take effect after a restart.`);
+      setNet({ save: { state: "saved" } });
+    } catch (e) {
+      log(`Couldn't save the network settings: ${e.message}`);
+      setNet({ save: { state: "failed", detail: e.message } });
+    }
+    const { password, apPassword, ...shown } = saved;
+    if (Object.keys(saved).length) {
+      // Hotspot only, saved while on the hotspot, ends the WiFi setup screen now: nothing changes at the restart
+      const settings = { ...current, ...shown };
+      set({ net: { ...s.net, settings, restartNeeded: true }, hotspot: onFallbackHotspot(s.net.status, settings) });
+    }
+  }
+
+  // Restart the board ([ESP444]RESTART). The socket drops; the page reconnects on its own when the board is back.
+  async function reboot() {
+    log("Restarting the board");
+    set({ net: { ...s.net, restartNeeded: false, save: null } });
+    try {
+      await esp("[ESP444]RESTART");
+    } catch (e) {
+      // The board may drop the request as it restarts; only a clear refusal is worth reporting
+      if (/error|Parameter/i.test(e.message)) { log(`Couldn't restart: ${e.message}`); emit(); }
+    }
   }
 
   // A line the user typed in the command box, sent as typed: the current UI's Commands panel (commands.js). It's
@@ -430,6 +524,7 @@ export function createMachine({ host = location.host } = {}) {
       globalThis.wsCommands.send("$G", { quiet: true });
       readSettings();
       readMachine();
+      checkHotspot();
       listFiles();
     };
     ws.onmessage = (e) => onData(e.data);
@@ -529,6 +624,11 @@ export function createMachine({ host = location.host } = {}) {
     if (action === "connect") { if (!m) start(); return; }
     if (action === "reconnect") { connect(); return; }
     if (action === "chooseFile") { chooseFile(payload.file); return; }   // reads over HTTP; doesn't need the socket
+    // The network settings and restarting are HTTP too
+    if (action === "readNetwork") { readNetwork(); return; }
+    if (action === "scanNetworks") { scanNetworks(); return; }
+    if (action === "saveNetwork") { saveNetwork(payload); return; }
+    if (action === "reboot") { reboot(); return; }
     if (!m) return;
     if (action === "command") { command(payload.line); return; }
     if (action === "run") { run("run", () => m.runFile(`/${payload.file}`)); return; }

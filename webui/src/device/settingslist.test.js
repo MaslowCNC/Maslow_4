@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseSettingsList, grouped, valueError, isChanged, pendingChanges, espSetCommand, espFailure, withValues } from "./settingslist.js";
+import { parseSettingsList, grouped, valueError, isChanged, pendingChanges, espSetCommand, withValues } from "./settingslist.js";
 import { sampleAnswer, sampleValues } from "./settingslist.sample.js";
 import { createSimulator } from "./simulator.js";
 
@@ -70,11 +70,9 @@ test("only real changes are sent: numbers compare as numbers, an empty password 
   assert.deepEqual(withValues(items, changes).find((i) => i.path === "Hostname").value, "shop-maslow");
 });
 
-test("a flash setting is saved with [ESP401], the value %-encoded; failures are found in the body", () => {
+test("a flash setting is saved with [ESP401], the value %-encoded", () => {
   const by = Object.fromEntries(parseSettingsList(ANSWER).map((i) => [i.path, i]));
   assert.equal(espSetCommand(by["Sta/Password"], "a b&c"), "[ESP401]P=Sta/Password T=S V=a%20b%26c");
-  assert.equal(espFailure("ok\n"), null);
-  assert.equal(espFailure("error:3\n"), "error:3");
 });
 
 test("the simulator's sample parses, and a save shows on the next read and in Frame and belts", () => {

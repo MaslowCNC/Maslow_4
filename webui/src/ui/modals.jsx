@@ -1,8 +1,9 @@
-import { useState } from "preact/hooks";
+import { useEffect, useState } from "preact/hooks";
 import { SCREENS } from "../flow/screens.js";
 import { ModePill, Conn, SpindleBtn, spindleLock } from "./parts.jsx";
 import { MACHINE_SETTINGS, settingError, effectiveWorkArea } from "../device/settings.js";
 import { AdvancedSection } from "./advanced.jsx";
+import { WIFI_MODES, OTHER_WIFI_MODES, NET_SETTINGS, netError, netChanges, netWarnings } from "../device/network.js";
 
 // Pop-ups cover the panels only, so the top bar and Stop stay visible and clickable
 function Modal({ title, small, onClose, children, foot, nav, single, compact, stop, ctx }) {
@@ -73,21 +74,20 @@ function StateSection({ k, ctx, close }) {
 
 const SECTIONS = [["state", "State"], ["device", "Device"], ["network", "Network"], ["frame", "Frame and belts"], ["home", "Home"], ["tool", "Tool and Z"], ["display", "Display"], ["advanced", "Advanced"]];
 
-export function Settings({ k, ctx, onClose, theme, setTheme, compact, stop }) {
-  const [sec, setSec] = useState("state");
+export function Settings({ k, ctx, onClose, theme, setTheme, compact, stop, section = "state" }) {
+  const [sec, setSec] = useState(section);
   const { d } = ctx, s = SCREENS[k];
   const busy = s.moving || s.mode === "Job" || !d.connected;
   const nav = <nav class="mnav">{SECTIONS.map(([id, n]) => <button type="button" aria-current={id === sec} onClick={() => setSec(id)}>{n}</button>)}</nav>;
   let body;
   if (sec === "state") body = <StateSection k={k} ctx={ctx} close={onClose} />;
   else if (sec === "device") body = <><h4>Device</h4>
-    <Row label="Name" hint="Letters, numbers and dashes. Sets the .local address and the hotspot name."><input type="text" class="mono" value="maslow" /> <span class="note">maslow.local</span></Row>
+    <NameRow ctx={ctx} busy={busy} />
     <Row label="Firmware"><span class="mono">Simulated device</span><button class="btn ghost" type="button" disabled={busy}>Update firmware</button></Row>
     <Row label="Restart" hint="Reconnects on its own when it's back."><button class="btn ghost" type="button" disabled={busy} onClick={() => { onClose(); ctx.send("reboot"); }}>Reboot device</button></Row></>;
-  else if (sec === "network") body = <><h4>Network</h4>
-    <Row label="WiFi network"><span>Workshop</span><button class="btn ghost" type="button">Change network</button></Row>
-    <Row label="Hotspot"><select><option>Only when WiFi isn't connected</option><option>Always on</option><option>Off</option></select></Row>
-    <p class="note">Placeholder: these depend on what the current WiFi dialog offers.</p></>;
+  // Not the socket: the network settings go over HTTP, and they're how a board whose socket won't connect is fixed.
+  // The section stays off until [ESP400] answers, so a board that can't be reached at all still can't be edited.
+  else if (sec === "network") body = <NetworkSection ctx={ctx} busy={s.moving || s.mode === "Job"} close={onClose} />;
   else if (sec === "frame") body = <FrameSection ctx={ctx} busy={busy} />;
   else if (sec === "home") body = <HomeSection ctx={ctx} busy={busy} />;
   else if (sec === "tool") body = <><h4>Tool and Z</h4>
@@ -238,4 +238,159 @@ function HomeSection({ ctx, busy }) {
     {zErr && <p class="note" style="color:var(--danger)">{zErr}</p>}
     <Row label="Reset home" hint="Puts home back on the machine's own 0, 0, 0, so work and machine positions read the same.">
       <button class="btn ghost" type="button" disabled={off || isReset} onClick={() => { send("resetHome"); setX("0.0"); setY("0.0"); setZ("0.0"); }}>{isReset ? "Already reset" : "Reset home"}</button></Row></>;
+}
+
+// Network: the WiFi the board joins, what it does when it can't, and its hotspot. These are the board's own flash
+// settings, read and saved over HTTP (device/network.js); the board uses them after a restart. A password reads
+// back hidden, so its box starts empty and is only sent when typed.
+function useNetwork(ctx) {
+  const { d, send } = ctx;
+  // Read each time the section opens: another connection, or the board itself, may have changed them
+  useEffect(() => { send("readNetwork"); }, []);
+  return d.net || {};
+}
+
+function NetStatus({ net }) {
+  if (net.read === "reading" && !net.status) return <span class="note">Reading…</span>;
+  if (net.read === "failed") return <span class="note" style="color:var(--danger)">Couldn't read: {net.detail}</span>;
+  const st = net.status;
+  if (!st) return <span class="note">–</span>;
+  return <span>
+    {st.sta && (st.sta.connected ? <>On <b>{st.sta.ssid}</b> <span class="mono note">{st.sta.ip}</span></> : <>Not connected to {st.sta.ssid || "a network"}</>)}
+    {st.sta && st.ap && <br />}
+    {st.ap && <>Hotspot <b>{st.ap.ssid}</b> <span class="mono note">{st.ap.ip}</span></>}
+    {!st.sta && !st.ap && "WiFi is off"}
+  </span>;
+}
+
+// After a save: the board keeps using the old settings until it restarts
+function RestartNote({ ctx, close, net, busy }) {
+  if (!net.restartNeeded) return null;
+  return <div class="netnote"><p class="note" style="margin:0">Saved. The board uses the new settings after it restarts.</p>
+    <button class="btn" type="button" disabled={busy} onClick={() => { close(); ctx.send("reboot"); }}>Restart now</button></div>;
+}
+
+// Each setting saves on its own, so changing one can't send another by accident. The WiFi network and its password
+// are one group: a new network needs its password.
+const NET_GROUPS = { wifi: ["ssid", "password"], mode: ["mode"], apSsid: ["apSsid"], apPassword: ["apPassword"] };
+
+function NetworkSection({ ctx, busy, close }) {
+  const { send } = ctx;
+  const net = useNetwork(ctx);
+  const cur = net.settings;
+  const [form, setForm] = useState({});      // what the user changed; the rest shows the board's value
+  const [savingGroup, setSavingGroup] = useState(null);
+  const [showScan, setShowScan] = useState(false);
+  // A save clears only its own group's edits, not ones still waiting in another row
+  useEffect(() => {
+    if (net.save?.state !== "saved" || !savingGroup) return;
+    setForm((f) => Object.fromEntries(Object.entries(f).filter(([k]) => !NET_GROUPS[savingGroup].includes(k))));
+    setSavingGroup(null);
+  }, [net.save]);
+  const val = (k) => form[k] ?? (NET_SETTINGS[k].secret ? "" : cur?.[k] ?? "");
+  const edit = (k) => (e) => setForm({ ...form, [k]: e.currentTarget.value });
+  const scanList = net.scan?.list || [];
+  const picked = scanList.find((ap) => ap.ssid === val("ssid"));
+  const ssidChanged = !!cur && val("ssid") !== cur.ssid;
+  const saving = net.save?.state === "saving";
+  const off = busy || !cur || saving;
+  const scan = () => { setShowScan(true); send("scanNetworks"); };
+  const host = cur?.hostname || "maslow";
+  const payloadFor = (g) => g === "wifi" ? { ssid: val("ssid"), password: val("password"), open: !!picked && !picked.locked }
+    : { [g]: val(g) };
+  // One group's Save: the button, then why it can't save, what went wrong, and what to know first
+  const save = (g) => {
+    if (!cur) return null;
+    const payload = payloadFor(g);
+    const { changes, error } = netChanges(payload, cur);
+    const touched = NET_GROUPS[g].some((k) => k in form);
+    const warnings = !error ? netWarnings({ form: payload, current: cur, scan: net.scan, changes }) : [];
+    if (changes.length && g === "wifi" && cur.mode !== "AP") {
+      warnings.push(`After the restart this page loses the board until this computer is on ${val("ssid")}: then open http://${host}.local.`);
+    }
+    if (changes.length && g === "mode" && val("mode") === "AP") {
+      warnings.push(`After the restart, join the hotspot ${val("apSsid")}, then open http://${host}.local.`);
+    }
+    return <>
+      <button class="btn" type="button" disabled={off || !!error || !changes.length}
+        onClick={() => { setSavingGroup(g); send("saveNetwork", payload); }}>
+        {saving && savingGroup === g ? "Saving…" : "Save"}</button>
+      {error && touched && <span class="note netmsg" style="color:var(--danger)">{error}</span>}
+      {net.save?.state === "failed" && savingGroup === g && <span class="note netmsg" style="color:var(--danger)">{net.save.detail}</span>}
+      {warnings.length > 0 && <ul class="netwarn">{warnings.map((w) => <li>{w}</li>)}</ul>}
+    </>;
+  };
+  const input = (k) => <input type="text" class="mono" value={val(k)} onInput={edit(k)} aria-label={NET_SETTINGS[k].label}
+    autocomplete="off" spellcheck={false} disabled={off} style="width:220px" />;
+  const secret = (k, saved) => <SecretInput value={val(k)} onInput={edit(k)} label={NET_SETTINGS[k].label} disabled={off} saved={saved} />;
+  const openPicked = picked && !picked.locked;
+  return <><h4>Network</h4>
+    <p class="note" style="margin:0">Each setting saves on its own. The board uses it after a restart.</p>
+    <Row label="Now"><NetStatus net={net} /></Row>
+    <Row label="WiFi network" hint="The network the board joins.">
+      {input("ssid")}
+      <button class="btn ghost" type="button" disabled={off || net.scan?.state === "scanning"} onClick={scan}>
+        {net.scan?.state === "scanning" ? "Scanning…" : "Scan"}</button>
+      {showScan && net.scan?.state === "failed" && <span class="note" style="flex-basis:100%;color:var(--danger)">Scan failed: {net.scan.detail}</span>}
+      {showScan && scanList.length > 0 && <ul class="aplist">{scanList.map((ap) =>
+        <li><button type="button" aria-pressed={ap.ssid === val("ssid")} disabled={off}
+          onClick={() => setForm({ ...form, ssid: ap.ssid, password: "" })}>
+          <span class="apname">{ap.ssid}</span><span class="note">{ap.locked ? "🔒 " : ""}{ap.signal} %</span></button></li>)}</ul>}
+      {openPicked && save("wifi")}
+    </Row>
+    {!openPicked && <Row label="WiFi password" hint={ssidChanged ? `For ${val("ssid") || "the new network"}. Saved with the network.` : "Saved. Type a new one to change it."}>
+      {secret("password", !ssidChanged)}
+      {save("wifi")}</Row>}
+    <Row label="Connects through" hint="If it can't join the WiFi, it starts its hotspot so you can still reach it. Hotspot only skips the WiFi setup screen.">
+      <select value={val("mode")} disabled={off} onChange={edit("mode")} aria-label={NET_SETTINGS.mode.label}>
+        {!WIFI_MODES.some(([m]) => m === val("mode")) && <option value={val("mode")}>{OTHER_WIFI_MODES[val("mode")] || val("mode") || "–"}</option>}
+        {WIFI_MODES.map(([m, label]) => <option value={m}>{label}</option>)}</select>
+      {save("mode")}</Row>
+    <Row label="Hotspot name" hint="The network the board makes itself.">{input("apSsid")}
+      {save("apSsid")}</Row>
+    <Row label="Hotspot password" hint="Saved. Type a new one (8 characters or more) to change it.">
+      {secret("apPassword", true)}
+      {save("apPassword")}</Row>
+    <RestartNote ctx={ctx} close={close} net={net} busy={busy} />
+  </>;
+}
+
+// A password box: dots, with a button to show what's typed. A saved password can't be shown (the board only says
+// one is saved), so its box starts empty with dots for a placeholder. It's a text box drawn as dots, not
+// type=password: browsers and password managers fill password boxes by themselves, and a filled box here is saved
+// to the board. That once changed a hotspot password nobody typed and locked a machine out.
+// The eye only appears once something is typed: there's nothing else to show.
+function SecretInput({ value, onInput, label, disabled, saved }) {
+  const [reveal, setShown] = useState(false);
+  const shown = reveal && !!value;
+  return <span class="secretbox">
+    <input type="text" class={shown ? "mono" : "mono secret"} value={value} onInput={onInput} aria-label={label}
+      placeholder={saved ? "••••••••" : ""} autocomplete="off" spellcheck={false} autocapitalize="off" autocorrect="off"
+      data-1p-ignore="" data-lpignore="true" data-bwignore="" disabled={disabled} />
+    {value && <button type="button" class="iconbtn sm" aria-label={shown ? `Hide ${label.toLowerCase()}` : `Show ${label.toLowerCase()}`}
+      aria-pressed={shown} title={shown ? "Hide" : "Show"} disabled={disabled} onClick={() => setShown(!shown)}>
+      {shown ? <EyeOff /> : <Eye />}</button>}
+  </span>;
+}
+const Eye = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+  <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></svg>;
+const EyeOff = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+  <path d="M10.6 5.1A10.6 10.6 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-2.6 3.4M6.6 6.6A17 17 0 0 0 2 12s3.5 7 10 7a10 10 0 0 0 5.4-1.6" />
+  <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2M3 3l18 18" /></svg>;
+
+// The board's name: its .local address on the network. Saved with the network settings, used after a restart.
+function NameRow({ ctx, busy }) {
+  const net = useNetwork(ctx);
+  const cur = net.settings?.hostname;
+  const [name, setName] = useState(null);
+  useEffect(() => { if (net.save?.state === "saved") setName(null); }, [net.save]);
+  const v = name ?? cur ?? "";
+  const err = name != null ? netError("hostname", v) : null;
+  const off = busy || cur == null || net.save?.state === "saving";
+  return <><Row label="Name" hint="Letters, numbers and dashes. The board's address on the network is this, then .local.">
+    <input type="text" class="mono" value={v} disabled={off} spellcheck={false} aria-label="Name" onInput={e => setName(e.currentTarget.value)} style="width:160px" />
+    <span class="note mono">{v || "?"}.local</span>
+    <button class="btn ghost" type="button" disabled={off || !!err || name == null || v === cur} onClick={() => ctx.send("saveNetwork", { hostname: v })}>Save</button>
+    {err && <span class="note" style="flex-basis:100%;color:var(--danger)">{err}</span>}</Row>
+    {net.restartNeeded && <p class="note" style="margin:0">Saved. The board uses the new name after it restarts (Restart, below).</p>}</>;
 }
