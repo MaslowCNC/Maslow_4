@@ -11,6 +11,7 @@
 import { restarted, jobFailed, holding } from "../flow/incidents.js";
 import { readGcode, boundaryPath } from "../gcode/reader.js";
 import { MACHINE_SETTINGS, settingError } from "./settings.js";
+import { parseSettingsList, valueError, espSetCommand, withValues } from "./settingslist.js";
 import { NET_IDLE, parseNetSettings, parseNetStatus, parseApList, onFallbackHotspot, setCommand, netChanges } from "./network.js";
 
 // What the firmware's close codes mean (WSChannel.h). For these the page shows a notice and doesn't reconnect.
@@ -80,6 +81,7 @@ export function createMachine({ host = location.host } = {}) {
     gcode: null,             // the chosen file, read: { file, status: "reading" | "ready" | "failed", detail?, ...readGcode() }
     workArea: { spoil: 0 }, stock: 0, anchorsSaved: true,
     settings: {},            // work area, park, scale, belt limits (device/settings.js); a key is missing until read
+    settingsList: { status: "idle" },   // Settings › Advanced's raw lists: { status, items, detail, save } (device/settingslist.js)
     frame: null,             // { tl, tr, bl, br: [x, y] mm, z: [tl, tr, bl, br], arm: beltEndExtension + armLength, vertical }
     belts: [0, 0, 0, 0], motorCurrent: null,
     pos: { x: 0, y: 0, z: 0 }, wco: { x: 0, y: 0, z: 0 },
@@ -269,6 +271,48 @@ export function createMachine({ host = location.host } = {}) {
     }
     // What was set is in the machine's memory even if writing the file failed, so show it
     set({ settings: { ...s.settings, ...saved } });
+  }
+
+  // Settings › Advanced: every setting, from [ESP400] (about 40 KB, so only when the lists open or after a save)
+  async function readSettingsList() {
+    if (s.settingsList.status === "reading") return;
+    set({ settingsList: { ...s.settingsList, status: "reading", detail: null } });
+    try {
+      set({ settingsList: { status: "ready", items: parseSettingsList(await esp("[ESP400]")), save: s.settingsList.save } });
+    } catch (e) {
+      log(`Couldn't read the settings list: ${e.message}`);
+      set({ settingsList: { ...s.settingsList, status: "failed", detail: e.message } });
+    }
+  }
+
+  // Save what changed, in order; one that fails stops the rest. A flash setting goes with [ESP401] (kept at once); a
+  // config item with setSetting(), then one saveConfig() ($CO) writes maslow.yaml. Passwords aren't logged.
+  async function saveSettingsList(changes) {
+    const items = s.settingsList.items || [];
+    const byPath = new Map(items.map((i) => [i.path, i]));
+    const bad = changes.map((c) => [c.path, byPath.get(c.path) ? valueError(byPath.get(c.path), c.value) : "Unknown setting"]).find(([, e]) => e);
+    const setSave = (save, saved = []) => set({ settingsList: { ...s.settingsList, items: withValues(s.settingsList.items || [], saved), save } });
+    if (bad) { log(`Not sent: settings (${bad[0]}: ${bad[1]})`); setSave({ state: "failed", detail: `${bad[0]}: ${bad[1]}` }); return; }
+    if (!changes.length) return;
+    setSave({ state: "saving" });
+    const saved = [];
+    try {
+      for (const c of changes) {
+        const i = byPath.get(c.path);
+        if (i.store === "flash") await esp(espSetCommand(i, c.value));
+        else await m.setSetting(c.path, c.value);
+        saved.push(c);
+      }
+      if (saved.some((c) => c.store === "config")) await m.saveConfig();
+      log(`Settings saved: ${saved.map((c) => (byPath.get(c.path).secret ? c.path : `${c.path}=${c.value}`)).join(", ")}`);
+      setSave({ state: "saved", restart: saved.some((c) => byPath.get(c.path).restart) }, saved);
+    } catch (err) {
+      const why = err.detail || err.reason || err.message;
+      log(`Couldn't save ${changes[saved.length].path}: ${why}`);
+      setSave({ state: "failed", detail: `${changes[saved.length].path}: ${why}` }, saved);
+    }
+    // Frame and belts shows some of the same settings: read them again if one of them changed
+    if (saved.some((c) => byPath.get(c.path).friendly)) readSettings();
   }
 
   // The SD card listing, over HTTP like the current UI (GET /upload?path=/). Read-only.
@@ -601,6 +645,8 @@ export function createMachine({ host = location.host } = {}) {
     if (action === "setStock") { setStock(payload.stock); return; }
     if (action === "setSpoilboard") { saveSetting(SETTINGS.spoil, payload.mm, "Spoil board thickness", { workArea: { ...s.workArea, spoil: payload.mm } }); return; }
     if (action === "setSettings") { saveSettings(payload.values || {}, payload.label || "Settings"); return; }
+    if (action === "readSettingsList") { readSettingsList(); return; }
+    if (action === "saveSettingsList") { saveSettingsList(payload.changes || []); return; }
     if (action === "setExtendDist") {
       if (payload.mm === 0) { log(`Not sent: extend distance 0 (${s.notYet.extendUntilDone})`); emit(); return; }
       saveSetting(SETTINGS.extend, payload.mm, "Extend distance", { extendDist: payload.mm });

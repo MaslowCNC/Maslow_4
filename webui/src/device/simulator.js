@@ -2,6 +2,8 @@ import { COMMANDS } from "./commands.js";
 import { restarted, spindleFault } from "../flow/incidents.js";
 import { readGcode } from "../gcode/reader.js";
 import { MACHINE_SETTINGS, defaultSettings, settingError } from "./settings.js";
+import { parseSettingsList, valueError, espSetCommand, withValues } from "./settingslist.js";
+import { sampleValues, sampleAnswer } from "./settingslist.sample.js";
 import { NET_IDLE, NET_SETTINGS, netChanges } from "./network.js";
 
 // A stand-in for the machine. It holds the state the firmware would report and, whenever the real device would
@@ -62,6 +64,7 @@ function initialState() {
     extendDist: 0,                // 0 = extend until the user presses Done extending
     workArea: { spoil: 12.7 },
     settings: defaultSettings(),  // work area (0 = automatic), park, scale, belt limits (device/settings.js)
+    settingsList: { status: "idle" },  // Settings › Advanced's raw lists: { status, items, detail, save } (device/settingslist.js)
     // the anchors as kinematics/MaslowKinematics has them (machine.js has the same shape): a 3000 x 2100 mm frame
     frame: { tl: [0, 2100], tr: [3000, 2100], bl: [0, 0], br: [3000, 0], z: [100, 56, 34, 78], arm: 153.4, vertical: false },
     stock: 6.35,
@@ -99,6 +102,30 @@ export function createSimulator() {
     Maslow_Extend_Dist: s.extendDist, Maslow_Work_Area_X: s.workArea.w, Maslow_Work_Area_Y: s.workArea.h,
     Maslow_spoilboardThickness: s.workArea.spoil, Maslow_workThickness: s.stock
   })[name] ?? settings[name];
+  // Every setting [ESP400] lists (settingslist.sample.js), path → text. The ones Settings › Frame and belts edits come
+  // from the state, so both sections always agree.
+  const raw = sampleValues();
+  const r3 = (v) => Number(v).toFixed(3);
+  function rawValues() {
+    for (const [k, d] of Object.entries(MACHINE_SETTINGS)) raw[d.path] = d.integer ? String(s.settings[k]) : r3(s.settings[k]);
+    Object.assign(raw, { Maslow_spoilboardThickness: r3(s.workArea.spoil), Maslow_workThickness: r3(s.stock),
+      Maslow_Extend_Dist: r3(s.extendDist), Maslow_vertical: s.frame.vertical ? "1" : "0" });
+    return raw;
+  }
+  // A saved raw setting that the state also holds, put into the state
+  function mirrored(changes) {
+    const patch = {}, settings = { ...s.settings };
+    for (const { path, value } of changes) {
+      const k = Object.keys(MACHINE_SETTINGS).find((key) => MACHINE_SETTINGS[key].path === path);
+      if (k) settings[k] = Number(value);
+      if (path === "Maslow_spoilboardThickness") patch.workArea = { ...s.workArea, spoil: Number(value) };
+      if (path === "Maslow_workThickness") patch.stock = Number(value);
+      if (path === "Maslow_Extend_Dist") patch.extendDist = Number(value);
+      if (path === "Maslow_vertical") patch.frame = { ...s.frame, vertical: value === "1" };
+    }
+    return { ...patch, settings };
+  }
+
   // The lines the firmware would send back for a typed line, ending in ok or error:N
   function simReply(text) {
     const [cmd, value] = text.split("=");
@@ -227,6 +254,27 @@ export function createSimulator() {
       if (!changed.length) return;
       log(...changed.map(([k, v]) => `$/${MACHINE_SETTINGS[k].path}=${v}`), "$CO");
       set({ settings: { ...s.settings, ...Object.fromEntries(changed) } });
+    },
+
+    // Settings › Advanced: [ESP400], and saving the changed ones as the machine adapter does
+    readSettingsList() {
+      log("[ESP400]");
+      set({ settingsList: { status: "ready", items: parseSettingsList(sampleAnswer(rawValues())) } });
+    },
+    saveSettingsList({ changes = [] }) {
+      const items = s.settingsList.items || [];
+      const byPath = new Map(items.map((i) => [i.path, i]));
+      const bad = changes.map((c) => [c.path, byPath.get(c.path) ? valueError(byPath.get(c.path), c.value) : "Unknown setting"]).find(([, e]) => e);
+      if (bad) { log(`Not sent: settings (${bad[0]}: ${bad[1]})`); set({ settingsList: { ...s.settingsList, save: { state: "failed", detail: `${bad[0]}: ${bad[1]}` } } }); return; }
+      if (!changes.length) return;
+      for (const c of changes) {
+        const i = byPath.get(c.path);
+        log(i.store === "flash" ? espSetCommand(i, i.secret ? "********" : c.value) : `$/${c.path}=${c.value}`);
+        raw[c.path] = c.value;
+      }
+      if (changes.some((c) => c.store === "config")) log("$CO");
+      set({ ...mirrored(changes), settingsList: { status: "ready", items: withValues(items, changes),
+        save: { state: "saved", restart: changes.some((c) => byPath.get(c.path).restart) } } });
     },
 
     run({ file }) {
