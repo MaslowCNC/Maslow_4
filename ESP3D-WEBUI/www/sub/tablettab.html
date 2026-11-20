@@ -114,23 +114,45 @@
             <div id="tablettab_set_xy_home" class="maslow-grid-item maslow-grid-item-btn"
               style="background-color: #f2f0e4;" title="Set XY home position">Define XY Home</div>
           </div>
-          <div id="tablettab-position-display" class="maslow-grid-container" style="grid-template-columns: auto;">
+          <div id="tablettab-position-display" class="maslow-grid-container"
+            style="grid-template-columns: repeat(3, minmax(0, 1fr));">
+            <div id="tablettab_move_to_z_home" class="maslow-grid-item maslow-grid-item-btn"
+              style="background-color: #f2f0e4; border: 0; color: #337ab7; font: inherit;" title="Move Z to Home"
+              aria-label="Move Z to Home">
+              <span>Z</span>
+              <svg width="32" height="32" viewBox="0 0 24 24" aria-hidden="true">
+                <path fill="currentColor" d="M12 3 2 12h3v9h6v-6h2v6h6v-9h3L12 3z"></path>
+              </svg>
+            </div>
             <div class="maslow-grid-item">
-              <table style="width:100%">
+              <table style="width:100%; table-layout:fixed">
                 <tr>
-                  <td>X:</td>
+                  <td>Xh:</td>
                   <td id="wpos-x">0.000</td>
                 </tr>
                 <tr>
-                  <td>Y:</td>
+                  <td>Yh:</td>
                   <td id="wpos-y">0.000</td>
                 </tr>
                 <tr>
-                  <td>Z:</td>
+                  <td>Zh:</td>
                   <td id="wpos-z">0.000</td>
                 </tr>
+              </table>
+            </div>
+            <div class="maslow-grid-item">
+              <table style="width:100%; table-layout:fixed">
                 <tr>
-                  <td id="active-state"></td>
+                  <td>Xm:</td>
+                  <td id="mpos-x">0.000</td>
+                </tr>
+                <tr>
+                  <td>Ym:</td>
+                  <td id="mpos-y">0.000</td>
+                </tr>
+                <tr>
+                  <td>Zm:</td>
+                  <td id="mpos-z">0.000</td>
                 </tr>
               </table>
             </div>

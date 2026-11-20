@@ -868,6 +868,21 @@ const moveHome = () => {
   });
 }
 
+const moveZHome = () => {
+  tabletClick();
+  const machineZ = MPOS && MPOS.length >= 3 ? MPOS[2] : null;
+  const workZeroZ = WCO && WCO.length >= 3 ? WCO[2] : null;
+  const zDeltaMm = machineZ !== null && workZeroZ !== null ? workZeroZ - machineZ : 0;
+
+  checkZHomeAndProceed(() => {
+    runButtonAction(
+      id("tablettab_move_to_z_home"),
+      "Move Z to Home",
+      () => machine.moveTo({ z: 0 })
+    );
+  }, zDeltaMm);
+}
+
 function saveSerialMessages() {
   // save off the serial messages
   const msgs = getValue('messages') || "";
@@ -1314,18 +1329,7 @@ function tabletGrblState(grbl, response) {
 
   const digits = gCodeModal.units === 'G20' ? 4 : 2;
 
-  if (WPOS) {
-    WPOS.forEach((pos, index) => {
-      setTextContent(`wpos-${axisNames[index]}`, Number(pos * factor).toFixed(index > 2 ? 2 : digits));
-    })
-  }
-
-  if (MPOS) {
-    MPOS.forEach((pos, index) => {
-      const axisName = axisNames[index].toUpperCase();
-      setTextContent(`mpos-${axisNames[index]}`, `|${axisName}m: ${Number(pos * factor).toFixed(index > 2 ? 2 : digits)}|`);
-    })
-  }
+  updatePositionDisplay(WPOS, MPOS, factor, digits);
 
   // On the first status update that has both WCO and MPOS data, proactively
   // show the Z safety popup if machine Z is already above the safe threshold.
@@ -1336,6 +1340,19 @@ function tabletGrblState(grbl, response) {
     checkZHomeAndProceed(() => {}, 0);
   }
 }
+
+const updatePositionDisplay = (wpos, mpos, factor, digits) => {
+  ["x", "y", "z"].forEach((axis, index) => {
+    if (wpos) {
+      setTextContent(`wpos-${axis}`, Number(wpos[index] * factor).toFixed(digits));
+    }
+    if (mpos) {
+      setTextContent(`mpos-${axis}`, Number(mpos[index] * factor).toFixed(digits));
+    }
+  });
+};
+
+globalThis.__tabletPositionTestApi = { updatePositionDisplay };
 
 let gCodeFilename = '';
 
@@ -2135,6 +2152,7 @@ function tabletInit() {
     // Buttons - Fourth Row
     id("tablettab_set_z_home").addEventListener("click", openSetZHomePopup);
     id("tablettab_move_to_xy_home").addEventListener("click", moveHome);
+    id("tablettab_move_to_z_home").addEventListener("click", moveZHome);
     id("tablettab_toggle_units").addEventListener("click", toggleUnits);
     id("tablettab_set_xy_home").addEventListener("click", openSetHomePopup);
 
