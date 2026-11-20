@@ -352,6 +352,19 @@
   .srow .btn { min-height: 38px; }
   .srow .setfield { display: inline-flex; align-items: center; gap: 4px; }
   .srow .setfield span { color: var(--muted); font: 12px var(--font-mono); }
+  .secretbox { position: relative; display: inline-flex; width: 220px; max-width: 100%; }
+  .secretbox input { width: 100%; padding-right: 40px !important; }
+  .secretbox .iconbtn { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); }
+  .srow input.secret { -webkit-text-security: disc; letter-spacing: 1px; }
+  .netmsg { flex-basis: 100%; }
+  .netwarn { flex-basis: 100%; margin: 0; padding: 10px 12px 10px 28px; border-radius: 8px; background: color-mix(in srgb, var(--warn) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent); font-size: 13px; line-height: 1.45; display: grid; gap: 4px; }
+  .aplist { list-style: none; margin: 0; padding: 0; flex-basis: 100%; display: grid; gap: 4px; max-height: 190px; overflow: auto; }
+  .aplist button { width: 100%; min-height: 40px; display: flex; justify-content: space-between; align-items: center; gap: 10px; text-align: left;
+    background: var(--input); border: 1px solid var(--sep); color: var(--text); border-radius: 8px; padding: 6px 10px; font: 14px var(--font-sans); cursor: pointer; }
+  .aplist button[aria-pressed="true"] { border-color: var(--lilac); color: var(--lilac); }
+  .aplist .apname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .netnote { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
   .modal.single { width: min(520px, 100%); height: auto; max-height: 100%; grid-template-columns: 1fr; grid-template-rows: auto 1fr auto; }
   .modal.single .mhead { grid-column: 1; }
   .modal .art { max-width: 260px; }

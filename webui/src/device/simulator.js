@@ -2,6 +2,7 @@ import { COMMANDS } from "./commands.js";
 import { restarted, spindleFault } from "../flow/incidents.js";
 import { readGcode } from "../gcode/reader.js";
 import { MACHINE_SETTINGS, defaultSettings, settingError } from "./settings.js";
+import { NET_IDLE, NET_SETTINGS, netChanges } from "./network.js";
 
 // A stand-in for the machine. It holds the state the firmware would report and, whenever the real device would
 // answer (a step finishing, a fault, a tool being found), it asks the tester through `pending` instead of guessing.
@@ -17,6 +18,13 @@ const FILES = [
 ];
 
 const time = () => new Date().toTimeString().slice(0, 8);
+
+// What the simulated board reports for its network ([ESP400], [ESP420]) and sees when it scans ([ESP410])
+const SIM_NET = { ssid: "Workshop", mode: "STA>AP", apSsid: "maslow", hostname: "maslow" };
+const SIM_APS = [
+  { ssid: "Workshop", signal: 82, locked: true }, { ssid: "Workshop-5G", signal: 64, locked: true },
+  { ssid: "Makerspace Guest", signal: 41, locked: false }, { ssid: "NETGEAR-2F", signal: 18, locked: true }
+];
 
 // Stand-in G-code for a demo file, so the preview has something to draw: a w × h outline with rounded corners and a
 // circle in the middle, cut in 3 mm passes down to the file's depth. Work coordinates, X 0 Y 0 at the lower left.
@@ -67,6 +75,8 @@ function initialState() {
     files: FILES,
     log: [],
     incident: null,               // something the user must acknowledge first (flow/incidents.js)
+    net: NET_IDLE,                // the network settings, as the machine adapter has them (device/network.js)
+    netSaved: { ...SIM_NET },     // what the board would use after a restart
     pending: null                 // the question the simulator is asking the tester
   };
 }
@@ -132,7 +142,6 @@ export function createSimulator() {
   const actions = {
     ackIncident() { set({ incident: null }); },
     connect() { connectQuestion(false); },
-    joinNetwork() { set({ hotspot: false }); connectQuestion(false); },
 
     retract() {
       log("[MSG:INFO: Retracting all belts]");
@@ -282,9 +291,36 @@ export function createSimulator() {
       log("$Spindle/Home");
       ask("Re-homing Z", "Z rises to the top of travel.", [["Z homed", () => set({ spindle: "off", tool: "unknown", pos: { ...s.pos, z: 0 }, pending: null })]]);
     },
+    // The network settings, over HTTP on the machine. Reading and scanning answer after a moment, as the board does.
+    readNetwork() {
+      log("[ESP400]", "[ESP420]");
+      set({ net: { ...s.net, read: "reading" } });
+      const n = s.netSaved;
+      setTimeout(() => set({ net: { ...s.net, read: "ready", settings: { ...n },
+        // In hotspot mode (first boot) the board couldn't join its network, so it runs the hotspot (STA>AP)
+        status: n.mode === "AP" ? { sta: null, ap: { ssid: n.apSsid, ip: "192.168.0.1" } }
+          : s.hotspot ? { sta: { ssid: n.ssid, connected: false, ip: "0.0.0.0" }, ap: { ssid: n.apSsid, ip: "192.168.0.1" } }
+          : { sta: { ssid: n.ssid, connected: true, ip: "192.168.1.42" }, ap: null } } }), 400);
+    },
+    scanNetworks() {
+      log("[ESP410]");
+      set({ net: { ...s.net, scan: { state: "scanning", list: s.net.scan?.list || [] } } });
+      setTimeout(() => set({ net: { ...s.net, scan: { state: "done", list: SIM_APS } } }), 1500);
+    },
+    saveNetwork(form) {
+      const current = s.net.settings || s.netSaved;
+      const { changes, error } = netChanges(form, current);
+      if (error) { log(`Not sent: network settings (${error})`); set({ net: { ...s.net, save: { state: "failed", detail: error } } }); return; }
+      if (!changes.length) return;
+      // Passwords aren't logged, here or on the machine
+      log(...changes.map(([k, v]) => `[ESP401]P=${NET_SETTINGS[k].name} V=${NET_SETTINGS[k].secret ? "…" : v}`));
+      const { password, apPassword, ...shown } = Object.fromEntries(changes);
+      set({ netSaved: { ...s.netSaved, ...shown }, hotspot: s.hotspot && shown.mode !== "AP",
+        net: { ...s.net, settings: { ...current, ...shown }, save: { state: "saved" }, restartNeeded: true } });
+    },
     reboot() {
       log("[ESP444]RESTART");
-      set({ connected: false, pending: null });
+      set({ connected: false, pending: null, net: { ...s.net, restartNeeded: false, save: null } });
       setTimeout(() => connectQuestion(true), 1200);
     },
     jog({ dx = 0, dy = 0, dz = 0 }) { set({ pos: { x: +(s.pos.x + dx).toFixed(3), y: +(s.pos.y + dy).toFixed(3), z: +(s.pos.z + dz).toFixed(3) } }); },

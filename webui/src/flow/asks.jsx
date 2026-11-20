@@ -57,8 +57,8 @@ function askFor(k, ctx) {
   const B = (label, onClick, style = "") => ({ label, onClick, style });
   const stop = (label = "Stop") => B(label, () => send("stop"), "stopping");
   switch (k) {
-    case "wifi": return { text: "Choose a network for the device to join. (Placeholder until the current WiFi dialog is documented.)",
-      buttons: [B("Join network", () => send("joinNetwork"))] };
+    case "wifi": return { text: "Choose a WiFi network for the machine to join, or keep using its hotspot. If you always use the hotspot, Hotspot only stops this screen from coming back.",
+      buttons: [B("Join network", () => ctx.openSettings?.("network")), B("Use the hotspot only", () => send("saveNetwork", { mode: "AP" }), "ghost")] };
     case "recover": return { text: `${d.beltsKnown} of 4 belt lengths are still known. Apply tension holds those and pulls the others tight to recover them. Check every belt is attached first.`,
       buttons: [B("Apply tension", () => { mark(2); send("tension"); }), B("Retract belts", () => { mark(0); send("retract"); }, "ghost")] };
     case "unknown": return { text: "Clear the area around the sled so the belts can wind in freely.", buttons: [B("Retract belts", () => { mark(0); send("retract"); })] };

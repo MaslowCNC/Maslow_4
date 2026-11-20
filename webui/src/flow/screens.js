@@ -22,7 +22,7 @@ export const SCREENS = {
   incident: { mode: "Error", tone: T.error, sub: "Needs your attention", alert: true, nopos: true, msg: "Something happened that you need to know about" },
   othertab: { mode: "Error", tone: T.error, sub: "Connected in another tab", alert: true, stale: true, msg: "This machine is now connected in another tab of this browser. Only one tab per browser can be connected" },
   toomany: { mode: "Error", tone: T.error, sub: "Too many connections", alert: true, stale: true, msg: "The machine has 4 connections, and a newer one took this tab's place. Close tabs or devices you aren't using, then reconnect" },
-  wifi: { mode: "Connecting", tone: T.wait, sub: "WiFi setup", nopos: true, msg: "Connected through the Maslow hotspot. Choose a network for the device to join" },
+  wifi: { mode: "Connecting", tone: T.wait, sub: "WiFi setup", nopos: true, msg: "Connected through the Maslow hotspot. Choose a network for the machine to join, or keep using the hotspot" },
   unknown: { mode: "Setup", tone: T.setup, sub: "Belt lengths unknown", step: 0, nopos: true, msg: "No saved belt lengths, or a retract was stopped. Start by retracting the belts" },
   recover: { mode: "Setup", tone: T.setup, sub: "Some belt lengths known", step: 2, nopos: true, msg: "Some belt lengths were restored at boot. Apply tension can recover the rest" },
   retracting: { mode: "Setup", tone: T.setup, sub: "Retracting belts", step: 0, nopos: true, moving: true, msg: "Winding each belt in until it meets resistance" },

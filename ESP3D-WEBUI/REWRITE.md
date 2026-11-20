@@ -30,11 +30,14 @@ up in a new session, read "Where we are", "How to work on it" and "What we still
     toolpath in light gray) and Toolpath tab (the file alone, fitted);
   - files: list, upload, delete; the File card with size and X / Y range; the fit check (below);
   - log with Save, and a command box (off by default, Settings › Advanced);
-  - Settings: State, Device, Network (placeholder), Frame and belts (extend distance, spoil board,
+  - Settings: State, Device, Network, Frame and belts (extend distance, spoil board,
     stock thickness, work area and offset, Park, scale, belt retraction limit, retraction force,
     Workspace tolerance, sled weight), Home (typed home, Reset home), Tool and Z (Spindle on / off,
     Mini only), Display, Advanced (command box, belt motor test).
-- **Tested on the Mini (2026-11-18):** belt labels, motor rings, command box, Save log, settings read
+- **The machines still run the current UI.** All testing on the Mini is from the local dev server
+  (`?device=machine`); the new UI isn't on any board yet. Decided 2026-11-20: keep it that way until
+  the gap list (part 2) and the other missing features are done, then do part 3.
+- **Tested on the Mini, from the dev server (2026-11-18):** belt labels, motor rings, command box, Save log, settings read
   and save, Set home, Settings › Home, delete, spindle on / off. **Not yet:** Continue from a changed
   line, Discard, the belt motor test, the fit check.
 - **Next:** the rest of the gap list ("What we still need" › 2), and the 4.1's setup flow.
@@ -53,8 +56,9 @@ up in a new session, read "Where we are", "How to work on it" and "What we still
 - **Code map:** `src/flow/` (screens, what each asks, incidents, fit check), `src/ui/` (desktop,
   phone, parts, modals), `src/device/` (simulator, the real-machine adapter `machine.js`, settings),
   `src/art.js` (the SVG drawings), `src/gcode/reader.js`, `src/accuracy.js` (the Workspace map).
-- **Put on the board for testing:** replace `index.html.gz` (part 3 below). Flash only through
-  `/flash-maslow`; `maslow.local` can be slow to resolve on macOS, so the IP may be needed.
+- **Test on the machine from the dev server,** not the board: `?device=machine` with the machine on
+  the network (`MASLOW_HOST=<ip>` if `maslow.local` is slow to resolve on macOS). Putting the new UI
+  on the board (part 3 below) waits until part 2 is done. Flash only through `/flash-maslow`.
 - **The fit check** (`src/flow/fit.js`): the chosen job, placed at home, is compared with the work
   area (Settings, 0 = automatic 80 % × 60 % of the frame, plus the centre offset) and the frame
   (the rectangle inside the anchors). Outside the work area: a warning in the Ready bar. Past the
@@ -122,6 +126,9 @@ up in a new session, read "Where we are", "How to work on it" and "What we still
 - **Errors are shown, not hidden,** with what to do next.
 - **Unavailable means disabled,** not just greyed (the current UI ran Retract from a grey button),
   and every state has a way out.
+- **A setting that can cut the connection only sends what was typed, and says so first** (learnt
+  2026-11-20, below). Each network setting has its own Save. Network changes warn when the board can't see
+  the network, and name the way back in (the hotspot, or USB with "Join WiFi only").
 - **Stopgaps are marked.** A control that exists only until the firmware work is finished (such as
   "Skip the tool check" while the tool state isn't reported) is orange with a dashed border, tagged
   "Temporary", and its tooltip says what it's waiting for. Stop stays beside it.
@@ -220,7 +227,7 @@ These are FluidNC's `MPos`, `WCO` and `WPos = MPos − WCO`.
 |---|---|
 | State | The mode and every machine action in a fixed order, greyed out with a reason when unavailable |
 | Device | Name, firmware version and update, reboot |
-| Network | WiFi network, hotspot (placeholder) |
+| Network | WiFi network, how it connects (WiFi with hotspot fallback, or hotspot only), hotspot |
 | Frame and belts | Extend distance (0 = until Done extending), spoil board thickness, stock thickness (optional), work area (0 = automatic), park position, belt retraction limit, anchors, work area centre offset, scale, retraction force |
 | Tool and Z | Last stick-out, default bit |
 | Display | Dark or light panels, units |
@@ -368,6 +375,16 @@ From testing on 2026-11-06 (`ISSUES-LOG.md`) and reading the firmware. Recheck o
   state goes to `EXTENDEDOUT` but the FluidNC state doesn't return to Idle (from the code, not
   tested). Stop clears it.
 - Findings from older firmware, still to recheck, are in `ISSUES-LOG.md` ("From earlier testing").
+- **Locked out by the network settings (2026-11-20).** Testing the fallback, we saved a WiFi network
+  that doesn't exist. The board fell back to its hotspot as it should, but the hotspot refused
+  `12345678`: the browser had filled the Hotspot password box (then `type=password`) and the new
+  UI saved it. Network settings were also greyed out without the socket, so the page that should fix
+  it couldn't. What changed: password boxes are text drawn as dots, ignored by password managers,
+  with a show button; each setting saves on its own; warnings for a network the board can't see and for
+  the way back in; Network works over HTTP without the socket. For testing: **before any test that
+  takes the board off WiFi, join its hotspot (or plug in USB) while it's still reachable.** The dev
+  server can't follow the board to the hotspot, so recover from the board's own page,
+  `http://192.168.0.1`.
 
 ## What we still need
 
@@ -410,7 +427,7 @@ currents; Extend distance, spoil board and stock thickness, Reboot.
 
 | Current UI | Where it is today | In the new UI |
 |---|---|---|
-| WiFi network and password | Calibration › Config, `setupdlg.js`, `scanwifidlg.js` | Settings › Network is a placeholder |
+| WiFi network and password | Calibration › Config, `setupdlg.js`, `scanwifidlg.js` | **Done** (2026-11-20; read, scan, save and restart tested on the Mini from the dev server): Settings › Network, `webui/src/device/network.js`. Shows where the board is now (`[ESP420]`), reads the settings (`[ESP400]`), scans (`[ESP410]`), saves each changed one (`[ESP401]`, value %-encoded): WiFi network and password, how it connects (`WiFi/Mode`: "WiFi, with the hotspot as a fallback" (STA>AP) or "Hotspot only" (AP). WiFi only (STA) and Off aren't offered, decided 2026-11-20: the board always keeps a way in without USB. A board set to STA elsewhere shows it, with a warning, so it can be changed. Hotspot only is for a machine always used over its hotspot; the WiFi setup screen offers it as "Use the hotspot only", which takes effect at once), hotspot name and password. Then Restart now (`[ESP444]RESTART`, now wired on the machine too). Settings › Device › Name sets `Hostname`. The hotspot screen's Join network opens it. Password boxes are text drawn as dots with a show button (not `type=password`, see "Locked out" under Known machine behaviour), and each setting has its own Save (the WiFi network and its password save together), so one change can't carry another; each Save warns before a risky change (`netWarnings`). A password can't be cleared (the firmware reads an empty value as a query), so joining an open network keeps the old password stored. On each connect the adapter reads `[ESP420]`: the hotspot running with no WiFi joined, and `WiFi/Mode` not "Hotspot only" (`onFallbackHotspot`; `[ESP400]` is read only then, it's about 40 KB), sets `d.hotspot`, so a first boot or a board that can't reach its network opens on the WiFi setup screen. Tested on the Mini on 2026-11-20: a saved network it couldn't find, the fallback hotspot, the WiFi setup screen from the dev server, and back to the home WiFi. To repeat it: join `maslow` (password `12345678`), run the dev server with `MASLOW_HOST=192.168.0.1`; to get there, save a WiFi network that doesn't exist and restart (it falls back; type the real network and password again from the hotspot). "Hotspot only" should open on the normal flow instead |
 
 *Actions* (Jog / Home panel, or Settings › Advanced):
 
@@ -458,7 +475,7 @@ current UI's popups do:
 
 Checked against the simulator only, not yet on a machine.
 
-**3. Build and ship:**
+**3. Build and ship** (not started; waits until part 2 is done, decided 2026-11-20):
 
 - Gzip the Vite build into `index.html.gz` for `firmware/FluidNC/data/`.
 - Add the new UI to the CI build (`compile-on-review.yml` and `release.yml` run `gulp package`).
