@@ -4,7 +4,6 @@
 var interval_status = -1
 var probe_progress_status = 0
 var grbl_error_msg = ''
-var serialLogSavedForCurrentAlarm = false
 var WCO = undefined
 var OVR = { feed: undefined, rapid: undefined, spindle: undefined }
 var MPOS = [0, 0, 0]
@@ -154,7 +153,6 @@ function init_grbl_panel() {
 function grbl_clear_status() {
   grbl_set_probe_detected(false)
   grbl_error_msg = ''
-  serialLogSavedForCurrentAlarm = false
   setHTML('grbl_status_text', grbl_error_msg)
   setHTML('grbl_status', '')
 }
@@ -876,10 +874,6 @@ const grblHandleMessage = (msg) => {
     }
     if (grbl_error_msg.length === 0) {
       grbl_error_msg = translate_text_item(msg.trim());
-      if (!serialLogSavedForCurrentAlarm && typeof saveSerialMessages === 'function') {
-        saveSerialMessages();
-        serialLogSavedForCurrentAlarm = true;
-      }
     }
     return;
   }
