@@ -188,6 +188,8 @@ export function createMachine({ host = location.host } = {}) {
       motorCurrent: ms.motorCurrent,
       // On while the report's spindle speed (FS) is above 0: a job, Stop or another connection changes it too
       spindle: ms.spindleSpeed > 0 ? "on" : "off",
+      // Each belt's position error (BE, mm), TL, TR, BL, BR; null until reported. The job recorder keeps it
+      beltError: b.etl == null ? null : [b.etl, b.etr, b.ebl, b.ebr],
       job: ms.job ? { file: baseName(ms.job.file), line: ms.job.line ?? 0, total: lineCount(ms.job.file), running: true } : null,
       lastJob: ms.stopped ? { file: ms.stopped.file, result: "stopped", line: ms.stopped.line } : null,
       error: alarm ? (s.error || { reason: "The machine is in Alarm" }) : null

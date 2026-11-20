@@ -478,18 +478,33 @@ export function createSimulator() {
     }
   };
 
-  // Belt motor currents, as the real machine's MC field reports them (raw ADC, 0-4095). Made up, so the Motors
-  // view has something to show: a light hold when idle and tensioned, more while the belts or a job move.
+  // Belt motor currents and belt errors, as the real machine's MC (raw ADC, 0-4095) and BE (mm) fields report them.
+  // Made up, so the Motors view and the job recorder have something to show: a light hold when idle and tensioned,
+  // more while the belts or a job move. During a job the file line advances, the load swings between the top and
+  // bottom motors as the sled moves, and now and then one motor spikes (a hard plunge, a snag) with a belt error.
   const BUSY = [1, 3, 5, 6, 8];
   setInterval(() => {
     if (!s.connected) return;
     const moving = BUSY.includes(s.maslow) || s.job || s.motion;
-    const base = moving ? 900 : s.maslow === 7 ? 60 : 0;
-    const jitter = () => (moving ? Math.round((Math.random() - 0.5) * 900) : Math.round(Math.random() * 10));
-    const mc = { tl: base + jitter(), tr: base + jitter(), bl: Math.round(base * 0.7) + jitter(), br: Math.round(base * 0.7) + jitter() };
-    for (const k of Object.keys(mc)) mc[k] = Math.max(0, Math.min(4095, mc[k]));
-    set({ motorCurrent: mc });
-  }, 500);
+    let mc, be = [0, 0, 0, 0], job = s.job;
+    if (s.job) {
+      job = { ...s.job, line: Math.min(s.job.total || Infinity, s.job.line + 1 + Math.floor(Math.random() * 4)) };
+      const ph = job.line / 90;   // where the sled is, as a slow swing between the top and bottom of the work
+      const up = 0.5 + 0.5 * Math.sin(ph), side = 0.5 + 0.5 * Math.sin(ph * 0.63 + 1);
+      if (!spike && Math.random() < 0.004) spike = { arm: Math.floor(Math.random() * 4), ticks: 3 + Math.floor(Math.random() * 6) };
+      const load = [up * (1 - side), up * side, (1 - up) * (1 - side), (1 - up) * side].map((x) => 500 + 1100 * x);
+      const noise = () => (Math.random() - 0.5) * 220;
+      mc = load.map((v, i) => v + noise() + (spike?.arm === i ? 1500 + Math.random() * 600 : 0));
+      be = load.map((_, i) => +((Math.random() - 0.5) * 0.08 + (spike?.arm === i ? 0.4 + Math.random() * 0.8 : 0)).toFixed(3));
+      if (spike && --spike.ticks <= 0) spike = null;
+    } else {
+      const base = moving ? 900 : s.maslow === 7 ? 60 : 0;
+      const jitter = () => (moving ? (Math.random() - 0.5) * 900 : Math.random() * 10);
+      mc = [base, base, base * 0.7, base * 0.7].map((v) => v + jitter());
+    }
+    const [tl, tr, bl, br] = mc.map((v) => Math.max(0, Math.min(4095, Math.round(v))));
+    set({ motorCurrent: { tl, tr, bl, br }, beltError: be, job });
+  }, 200);
 
   return {
     getState: () => s,
@@ -506,3 +521,4 @@ export function createSimulator() {
     isSimulated: true
   };
 }
+  let spike = null;   // { arm, ticks } while one motor spikes
