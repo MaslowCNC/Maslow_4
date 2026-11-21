@@ -138,6 +138,17 @@ from the motor stage and the sense nets, down to the curved bottom edge of the b
 
 ![The buck's parts before (red outlines) and after (orange), sense nets in cyan, the RC block in blue, U9_SYNC in green](docs/v1.1-buck-move.png)
 
+**5. Track stubs removed** (`tools/v1.1_stubs.py`, `tools/v1.1_stubs_fixups.py`).
+
+These came from v1.0's routing, which has all of them: DRC reported them as dangling tracks and a dangling via.
+- 13 track ends that ran past their last connection were cut back to it. The cuts range from 0.15 mm (ISB1) to
+  3.54 mm (SCL); the others are VAC_CONTROL 2.05, DETECTORLED 1.70, SCL0 1.05, PHC2 0.73 and 1.13, SCL3 0.70,
+  BoardCOM2 0.70, GHB1 0.70, GHC2_G 0.55, GHA1 0.35 and INHC2 0.35 mm.
+- A PHC2 via at (−3.25, 26.8) joined nothing. It went, along with the 3.3 mm chain of tiny bottom-layer segments
+  that led to it from R139's link, running past R139's gate pad.
+- U22 pin 12 (PHC2) reached its via only through a diagonal that clipped the pad's corner and ran 0.3 mm past it. It
+  now has a straight 0.3 mm bottom-layer track from the via (−0.9, 34.35) into the pad's centre.
+
 Schematic: R178 and C164 are on the Spindle Drive sheet, where PB4's no-connect became the `U9_SYNC` label.
 C165 is on the root sheet with the `RT` and `U9_SYNC` labels. The title block is Rev 1.1, so the silkscreen reads
 "36V   v1.1".
@@ -150,8 +161,9 @@ C165 is on the root sheet with the `RT` and `U9_SYNC` labels. The title block is
 ### Checks (as of this commit)
 
 - **ERC:** no new problems (42 `pin_not_driven` against 43 in v1.0).
-- **DRC** (with schematic parity): no errors. 263 warnings, all also in v1.0's 267; the four that went are two thin
-  VSUP stubs and two silkscreen-over-pad warnings that left with the parts.
+- **DRC** (with schematic parity): no errors, nothing unconnected, no dangling tracks or vias. 237 warnings, all
+  also in v1.0's 267. The 30 that went are the 14 dangling items, track-width warnings on the thin stub fragments
+  that were removed, and silkscreen warnings that left with the moved parts.
 - **GND connectivity:** unchanged from v1.0. `tools/gndcheck.py` reports 61 components on both boards.
   - The script can't see thermal-relief spokes, so the count isn't the number of islands. Compare it against the
     previous revision.
@@ -215,6 +227,15 @@ KP=/Applications/KiCad/KiCad.app/Contents/Frameworks/Python.framework/Versions/C
 - `v1.1_u9move.py`: the buck move (change 4), applied after `v1.1_pcb.py`. Also a record; it checks U9's old
   position, so it won't run twice.
 - `u9map.py <new> <old> <out.png>`: renders the buck before/after map in `docs/`.
+- `v1.1_stubs.py [--apply]`: finds tracks that run past their last connection (DRC's `track_dangling`) and cuts each
+  back to it, one pass per run. Three things learned the hard way:
+  - KiCad's JSON report gives a dangling track's *start* as its position, not the loose end. The script finds the
+    loose end itself, the way KiCad's test does.
+  - The script only sees anchor connections (a track end, a via or a pad centre inside the track). KiCad also counts
+    a track clipping a pad's edge, which is how it got U22 pin 12 wrong.
+  - Never let it chase the next dangling item on its own: a wrong cut makes both halves of a real route dangle, and
+    it then eats them. Run one pass, read what it did, and finish with DRC with schematic parity.
+- `v1.1_stubs_fixups.py`: the two hand fixes that went with it (the dead PHC2 chain, U22 pin 12's link).
 - `kirouter.py`: a small grid A* router and placement helper over pcbnew. It knows the net classes, the custom
   island rules and the keep-outs, and it pulls the result into straight runs. It was used for SB1, the RT stub and
   the C164 link.
