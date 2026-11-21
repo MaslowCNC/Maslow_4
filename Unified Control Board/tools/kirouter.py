@@ -89,6 +89,15 @@ class Router:
     def _near(self, item):
         return item.GetBoundingBox().Intersects(self.bbox)
 
+    def _zones(self):
+        """board zones plus the rule areas drawn inside footprints (keep-outs the board's zone list leaves out)"""
+        for z in self.b.Zones():
+            yield z
+        for fp in self.b.GetFootprints():
+            for z in fp.Zones():
+                if z.GetIsRuleArea():
+                    yield z
+
     def _grow(self, item, layer, amount):
         ps = pcbnew.SHAPE_POLY_SET()
         item.TransformShapeToPolygon(ps, layer, MM(amount), ERR, pcbnew.ERROR_OUTSIDE)
@@ -119,7 +128,7 @@ class Router:
                 for pts in self._grow(t, L, grow + extra_for(t.GetNetname(), grow)):
                     g.fill(m, pts)
         bg = self.BACKGROUND[layer_name]
-        for z in self.b.Zones():
+        for z in self._zones():
             if not z.IsOnLayer(L) or not self._near(z):
                 continue
             if z.GetIsRuleArea():
@@ -207,7 +216,7 @@ class Router:
             m = self.blocked(ln, net, clearance + via[0] / 2.0, for_via=True)
             vb = m if vb is None else (vb | m)
         # rule areas that ban vias
-        for z in self.b.Zones():
+        for z in self._zones():
             if z.GetIsRuleArea() and z.GetDoNotAllowVias() and self._near(z):
                 ps = pcbnew.SHAPE_POLY_SET(z.Outline())
                 ps.Inflate(MM(via[0] / 2.0), pcbnew.CORNER_STRATEGY_ROUND_ALL_CORNERS, ERR)
