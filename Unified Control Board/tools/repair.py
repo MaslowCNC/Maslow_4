@@ -1,10 +1,11 @@
-# repair.py <board dir> <net> [--before islands.json]: tidy up after tools/reroute.py changed a net.  Removes the
-# net's dead copper (tools/netreview.py's model), then stitches GND pour islands the change left floating: with
-# --before (written by `repair.py <board dir> --snapshot islands.json` before the change), every top or bottom GND
-# fill island that is cut off from the main GND now but was not before.  Cut off means no copper path (fills on any
-# layer, vias, tracks, pads) to the part of GND with the most pads: either floating (KiCad keeps an island that a via
-# joins to another stray island, and DRC does not flag it) or holding pads of its own (DRC flags those).  A stitch is
-# a 0.6/0.3 via at a free spot of the island, at least 1 mm from other holes, over main GND fill on top, In2 or bottom.
+# repair.py <board dir> <net> [--before islands.json]: tidy up after tools/reroute.py changed a net.
+#  1. Removes the net's dead copper, and its one-layer vias (KiCad calls those dangling), on tools/netreview.py's model.
+#  2. With --before (written by `repair.py <board dir> --snapshot islands.json` before the change), stitches every top
+#     or bottom GND fill island that is cut off from the main GND now but was not before.  Cut off means no copper path
+#     (fills on any layer, vias, tracks, pads) to the part of GND with the most pads: either floating (KiCad keeps an
+#     island that a via joins to another stray island, and DRC does not flag it) or holding pads of its own (DRC flags
+#     those).  A stitch is a 0.6/0.3 via at a free spot of the island, at least 1 mm from other holes, over main GND
+#     fill on top, In2 or bottom.
 # repair.py <board dir> --list: print the cut-off islands.  repair.py <board dir> --stitch-all: stitch them all.
 # Run with KiCad 10's Python.
 import sys, os, math
@@ -168,8 +169,22 @@ for v in res["dead_vias"]:
     for t in list(b.GetTracks()):
         if t.GetClass() == "PCB_VIA" and t.GetNetname() == NET and math.dist(P(t.GetPosition()), tuple(v)) < 0.01:
             b.Remove(t); keep.append(t); done += 1
+# a via left with copper on one layer only (KiCad calls it dangling): join the track ends inside it at its centre
+# and drop it, as route_fix.py via1 does
+for vx, vy in res.get("via1", []):
+    v = next((t for t in b.GetTracks() if t.GetClass() == "PCB_VIA" and t.GetNetname() == NET and math.dist(P(t.GetPosition()), (vx, vy)) < 0.01), None)
+    if v is None:
+        continue
+    c, rad = P(v.GetPosition()), TO(v.GetWidth(pcbnew.F_Cu)) / 2
+    ends = [(t, k) for t in b.GetTracks() if t.GetClass() == "PCB_TRACK" and t.GetNetname() == NET
+            for k, e in enumerate((P(t.GetStart()), P(t.GetEnd()))) if math.dist(e, c) <= rad + 1e-3]
+    if len({t.GetLayer() for t, k in ends}) != 1 or any(p.GetNetname() == NET and p.HitTest(v.GetPosition()) for fp in b.GetFootprints() for p in fp.Pads()):
+        continue
+    for t, k in ends:
+        (t.SetStart if k == 0 else t.SetEnd)(V(c))
+    b.Remove(v); keep.append(v); done += 1
 if NET:
-    print("  %s: %d dead pieces removed" % (NET, done))
+    print("  %s: %d dead pieces and one-layer vias removed" % (NET, done))
     pcbnew.ZONE_FILLER(b).Fill(b.Zones())
 
 # 2. GND pour islands cut off from the main GND: stitch each to it

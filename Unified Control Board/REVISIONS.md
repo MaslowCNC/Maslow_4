@@ -149,6 +149,28 @@ These came from v1.0's routing, which has all of them: DRC reported them as dang
 - U22 pin 12 (PHC2) reached its via only through a diagonal that clipped the pad's corner and ran 0.3 mm past it. It
   now has a straight 0.3 mm bottom-layer track from the via (−0.9, 34.35) into the pad's centre.
 
+**6. Every route reviewed** (`docs/route-review.md` has the full log, `tools/netreview.py` and friends did the work).
+
+Each routed net was traced on its own: stubs, loops, staircases, detours between pads and detours inside a route.
+Almost everything this found came from v1.0's routing.
+- **Removed:** dead copper and router fragments. That was 19 dead pieces, about 310 fragments, and one pair of
+  identical stacked segments.
+- **Straightened:** staircases, over 300 chains of them.
+- **Shortened.** 30 detoured routes got shorter. Each was kept only if a full DRC afterwards showed nothing new. The
+  biggest were:
+  - SCL 72.5 → 48.6 mm;
+  - INHC1 83.4 → 52.2 mm;
+  - GHC1_G 48.1 → 18.6 mm;
+  - BoardCOM2 99.6 → 73.9 mm with 7 → 3 vias;
+  - the In2 up-and-over beside U2 on Net-(U2-IPROPI), 20.2 → 11.4 mm.
+- **Fewer vias** where the length allows: BR IN2 5 → 2, SPINDLE_RST_X 4 → 2, TEMP2 5 → 3, INHB2 3 → 1 and
+  SPINDLE_BOOT_X 4 → 2.
+- **The rules every new route followed:**
+  - it stays off In1, the VCC plane that feeds the motor stages;
+  - it keeps clear of the sense nets;
+  - the sense nets themselves were only straightened, keeping 0.25 mm more than the clearance.
+- **Totals:** 3194 → 1909 track segments, 597 → 577 vias, 5796 → 5307 mm of track.
+
 Schematic: R178 and C164 are on the Spindle Drive sheet, where PB4's no-connect became the `U9_SYNC` label.
 C165 is on the root sheet with the `RT` and `U9_SYNC` labels. The title block is Rev 1.1, so the silkscreen reads
 "36V   v1.1".
@@ -161,12 +183,17 @@ C165 is on the root sheet with the `RT` and `U9_SYNC` labels. The title block is
 ### Checks (as of this commit)
 
 - **ERC:** no new problems (42 `pin_not_driven` against 43 in v1.0).
-- **DRC** (with schematic parity): no errors, nothing unconnected, no dangling tracks or vias. 237 warnings, all
-  also in v1.0's 267. The 30 that went are the 14 dangling items, track-width warnings on the thin stub fragments
-  that were removed, and silkscreen warnings that left with the moved parts.
-- **GND connectivity:** unchanged from v1.0. `tools/gndcheck.py` reports 61 components on both boards.
-  - The script can't see thermal-relief spokes, so the count isn't the number of islands. Compare it against the
-    previous revision.
+- **DRC** (with schematic parity): no errors, nothing unconnected, no dangling tracks or vias.
+  - 189 warnings: track width, silkscreen and footprint-library ones, as in v1.0's 267.
+  - 237 at the stub clean-up (change 5). The 30 that went before that were the 14 dangling items, track-width
+    warnings on the thin stub fragments, and silkscreen warnings that left with the moved parts.
+  - The route review (change 6) took off 48 more: track-width warnings on fragments and on runs of segments that
+    are now merged. A few narrow motor-phase and VCC runs come back as "new" only because their segments changed.
+- **GND connectivity:** `tools/repair.py --list` finds no GND pour island cut off from the main GND, in v1.0 or now.
+  - It follows thermal spokes and pad-to-track links. `tools/gndcheck.py` can't, so its component count isn't a
+    count of islands.
+  - The route review's TEMP2 re-route split R144's bottom-layer pour off; a stitching via at (−24.69, 33.30) joins it
+    again.
   - Two GND stitching vias at (−22.56, 50.5) and (−23.56, 50.5) are gone: SB1's bottom leg cut off the small
     island they sat on.
   - The first v1.1 commit's stitching via at (−2.10, 61.55), for the ground pocket at U9's old RT pin, left with
@@ -178,8 +205,9 @@ C165 is on the root sheet with the `RT` and `U9_SYNC` labels. The title block is
 
 ### Still to do before ordering v1.1
 
-1. **Look over the moved buck and the U9_SYNC route in KiCad.** Both were placed and routed by script. DRC is
-   clean, but nobody has looked at them in the editor yet.
+1. **Look over the moved buck, U9_SYNC and the re-routed nets in KiCad.** All were placed or routed by script. DRC
+   is clean, but nobody has looked at them in the editor yet. `docs/route-review.md` lists every re-routed net, and
+   its images show the biggest changes.
 2. **Regenerate the JLCPCB files** with `jlcpcb/gen_jlcpcb.py`. The BOM, CPL and gerbers in `jlcpcb/` are still
    v1.0's.
    - New parts: R178 (C144651), C164 (C45783), C165 (C32949). FB1 (C1002) is gone.
@@ -237,10 +265,34 @@ KP=/Applications/KiCad/KiCad.app/Contents/Frameworks/Python.framework/Versions/C
     it then eats them. Run one pass, read what it did, and finish with DRC with schematic parity.
 - `v1.1_stubs_fixups.py`: the two hand fixes that went with it (the dead PHC2 chain, U22 pin 12's link).
 - `kirouter.py`: a small grid A* router and placement helper over pcbnew. It knows the net classes, the custom
-  island rules and the keep-outs, and it pulls the result into straight runs. It was used for SB1, the RT stub and
-  the C164 link.
-- `gndcheck.py <board> [net]`: connected components of a net through its fills, vias, pads and tracks. Compare the
-  result against the previous revision (see Checks).
+  island rules and the keep-outs (including those drawn inside footprints), and it pulls the result into straight
+  runs. It was used for SB1, the RT stub, the C164 link and the route review's re-routes.
+- `gndcheck.py <board> [net]`: connected components of a net through its fills, vias, pads and tracks. It can't
+  see thermal spokes or pad-to-track links, so use `repair.py --list` to find GND islands that are really cut off.
+- Route review (`docs/route-review.md`):
+  - `netreview.py <board> <out dir> [net ...]`: traces every net the way KiCad connects it. It reports:
+    - dead copper;
+    - loops;
+    - one-layer vias;
+    - pad-to-pad detours;
+    - with `local_detours()`, detours inside a route.
+
+    It also draws each net on its own and on contact sheets.
+  - `route_fix.py <dir> <report.json> dead|tidy|via1|pull [--margin M] [net ...]`: the mechanical fixes:
+    - trims dead copper;
+    - removes fragments;
+    - joins tracks across one-layer vias;
+    - string-pulls staircases with full clearance plus M (default 0.03 mm).
+  - `reroute.py <dir> <net> <end A> <end B> [options]`: takes out the worst stretch of copper between two pads (or
+    two points, `In2.Cu@x,y`), joins the net again by kirouter's shortest route on top, In2 and bottom, and keeps
+    the new route only if it meets the rule. The rules:
+    - by default, 15 % and 2 mm shorter (`--accept`, `--save`, `--vias`);
+    - or, with `--fewer K`, K fewer vias at no more than 0.5 mm longer.
+  - `detours.py <dir> <log> [--local] [reroute.py options] [net ...]`: runs reroute.py on every detour, worst first,
+    then `repair.py`. A full DRC follows each change, and the board goes back if anything new appears.
+  - `repair.py <dir> <net> --before islands.json`: after a re-route, removes the net's dead copper and stitches any
+    GND pour island the change cut off from the main GND (the part with the most pads). `--snapshot islands.json`
+    records the islands first, `--list` prints the cut-off islands and `--stitch-all` stitches them.
 - `sb1map.py <new> <old> <out.png>`: renders the before/after map in `docs/`.
 
 DRC and ERC as run for this file:

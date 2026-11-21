@@ -16,7 +16,7 @@ D = sys.argv[1].rstrip("/") + "/"
 LOG = sys.argv[2]
 LOCAL = "--local" in sys.argv   # detours inside a route (netreview.local_detours) instead of pad to pad
 EXTRA = [a for a in sys.argv[3:] if (a.startswith("--") or a.replace(".", "").isdigit()) and a != "--local"]   # passed on to reroute.py
-ONLY = set(a for a in sys.argv[3:] if a not in EXTRA)
+ONLY = set(a for a in sys.argv[3:] if a not in EXTRA and a != "--local")
 PY = sys.executable
 KICAD_CLI = "/Applications/KiCad/KiCad.app/Contents/MacOS/kicad-cli"
 SKIP = re.compile(r"IS[ABC][12]|S[ABC][12]|U9_SYNC|USBD[+-]|3V3A")
