@@ -22,7 +22,7 @@
   "name": "Maslow 36 V spindle (STM32G474RBT3, HSI16, no crystal)",
   "upload": {
     "maximum_ram_size": 131072,
-    "maximum_size": 131072,
+    "maximum_size": 126976,
     "protocol": "stlink",
     "protocols": ["stlink", "jlink", "cmsis-dap", "serial"]
   },

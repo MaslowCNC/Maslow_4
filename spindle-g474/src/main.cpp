@@ -22,6 +22,7 @@
 #include "foc.h"
 #include "link.h"
 #include "trip.h"
+#include "cal.h"
 
 HardwareSerial Link(PA_3_ALT1, PA_2_ALT1);   // USART2: RX PA3, TX PA2 (the ROM bootloader's port too)
 
@@ -611,7 +612,7 @@ static void finishGcal() {
         }
         if (ok) foc::setPhaseGains(k, g);
         linkEvent("MSG", "GCAL M%d gains a %.3f b %.3f c %.3f (%s) | sums after %+.3f %+.3f %+.3f A | apparent R a %.3f b %.3f c %.3f ohm",
-                  k + 1, g[0], g[1], g[2], ok ? "applied" : "NOT applied: out of range", after[0], after[1], after[2], r[0],
+                  k + 1, g[0], g[1], g[2], ok ? "applied; #GSAVE stores it" : "NOT applied: out of range", after[0], after[1], after[2], r[0],
                   r[1], r[2]);
     }
 }
@@ -839,6 +840,27 @@ static void maintenance(const char* line) {
             g_jm_state = 1;
             linkEvent("MSG", "JMEAS: %.0f -> %.0f RPM (0.5 s steady, the ramp, 0.5 s steady)", g_jm_from, g_jm_to);
         }
+    } else if (!strcmp(word, "GSAVE") || !strcmp(word, "GCLEAR")) {
+        bool        save = word[1] == 'S';
+        const char* why  = "";
+        if (foc::enabled() || g_spinning || g_gcal_step >= 0 || g_jm_state) {
+            linkEvent("WARN", "%s refused: the drive must be off (a flash erase stalls the CPU)", word);
+        } else if (!save) {
+            if (cal::clear(&why)) linkEvent("MSG", "GCLEAR: stored calibration erased (nominal gains after the next reset)");
+            else linkEvent("WARN", "GCLEAR FAILED: %s", why);
+        } else {
+            cal::Record rec = {};
+            foc::phaseGains(0, rec.gain[0]);
+            foc::phaseGains(1, rec.gain[1]);
+            rec.r    = tu.r;
+            rec.l    = tu.l;
+            rec.flux = tu.flux;
+            if (cal::save(rec, &why))
+                linkEvent("MSG", "GSAVE: stored M1 gains %.3f %.3f %.3f, M2 %.3f %.3f %.3f, obs R %.3f L %.1fuH flux %.2fmWb (0x%08lx, %s)",
+                          rec.gain[0][0], rec.gain[0][1], rec.gain[0][2], rec.gain[1][0], rec.gain[1][1], rec.gain[1][2],
+                          rec.r, rec.l * 1e6f, rec.flux * 1e3f, (unsigned long)cal::ADDR, cal::bankMode());
+            else linkEvent("WARN", "GSAVE FAILED: %s", why);
+        }
     } else if (!strcmp(word, "GAIN")) {
         for (int k = 0; k < 2; k++) {
             float g[3];
@@ -877,13 +899,14 @@ static void maintenance(const char* line) {
     } else {
         linkEvent("MSG", "# commands: STAT LOG <ms> ALIGN [V] [ms] CL <0|1> CUR <kp> <ki> POS <kp> <kd> <ki> "
                          "POSBW <min> <full rpm> OLKI <ki> DTC <ns> IHOLD/ISPIN/IBOOST/ILIM <A> OBS <R> <L> <flux> "
-                         "TRIP <sw A> [hw A] NOISE [samples] SLOW <0|1|2> DUMP [samples] [channel] BRK MOE LOAD <us> SPIN <rpm> <ms> RXLOG PREV GCAL [V] GAIN GAIN1/GAIN2 <a> <b> <c> JMEAS <rpm> VER");
+                         "TRIP <sw A> [hw A] NOISE [samples] SLOW <0|1|2> DUMP [samples] [channel] BRK MOE LOAD <us> SPIN <rpm> <ms> RXLOG PREV GCAL [V] GAIN GAIN1/GAIN2 <a> <b> <c> JMEAS <rpm> GSAVE GCLEAR VER");
         return;
     }
     if (strcmp(word, "STAT") && strcmp(word, "VER") && strcmp(word, "ALIGN") && strcmp(word, "NOISE") && strcmp(word, "SLOW") &&
         strcmp(word, "DUMP") && strcmp(word, "BRK") &&
         strcmp(word, "MOE") && strcmp(word, "LOAD") && strcmp(word, "SPIN") && strcmp(word, "RXLOG") &&
-        strcmp(word, "PREV") && strcmp(word, "GCAL") && strncmp(word, "GAIN", 4) && strcmp(word, "JMEAS")) {
+        strcmp(word, "PREV") && strcmp(word, "GCAL") && strncmp(word, "GAIN", 4) && strcmp(word, "JMEAS") &&
+        strcmp(word, "GSAVE") && strcmp(word, "GCLEAR")) {
         linkEvent("MSG", "tuning: cur %.3f/%.0f pos %.2f/%.3f/%.1f bw %.2f/%.0f olki %.1f I hold %.1f spin %.1f "
                          "boost %.1f lim %.1f obs R %.3f L %.1fuH flux %.2fmWb trip %.1f A dtc %.0f ns CL %d",
                   tu.cur_kp, tu.cur_ki, tu.pos_kp, tu.pos_kd, tu.pos_ki, tu.pos_bw_min, tu.pos_bw_full_rpm, tu.ol_ki,
@@ -1240,6 +1263,21 @@ void setup() {
     if (g_init_ok) {
         foc::init();
         BOOT_TRACE_POINT("foc::init done");
+        // The board's calibration (#GCAL gains, #OBS constants), if one is stored.
+        cal::Record rec;
+        if (cal::load(&rec)) {
+            foc::setPhaseGains(0, rec.gain[0]);
+            foc::setPhaseGains(1, rec.gain[1]);
+            foc::Tuning& tu = foc::tuning();
+            tu.r            = rec.r;
+            tu.l            = rec.l;
+            tu.flux         = rec.flux;
+            linkEvent("MSG", "calibration loaded: M1 gains %.3f %.3f %.3f, M2 %.3f %.3f %.3f, obs R %.3f L %.1fuH flux %.2fmWb",
+                      rec.gain[0][0], rec.gain[0][1], rec.gain[0][2], rec.gain[1][0], rec.gain[1][1], rec.gain[1][2],
+                      rec.r, rec.l * 1e6f, rec.flux * 1e3f);
+        } else {
+            linkEvent("MSG", "no stored calibration: nominal current gains (run #GCAL, then #GSAVE)");
+        }
         g_init_ok = hw::start(&why);
         BOOT_TRACE_POINT(g_init_ok ? "hw::start ok, ADC interrupt on" : "hw::start FAILED");
     }

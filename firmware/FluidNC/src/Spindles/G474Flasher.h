@@ -13,6 +13,11 @@
     mass-erased, written in 256-byte blocks from 0x08000000, read back and compared, then the G474
     is reset with BOOT0 low so the new firmware starts.
 
+    The G474 keeps its board calibration (per-phase current gains, observer constants; the spindle
+    firmware's cal.h) in a 48-byte record at 0x0801F800.  It is read before the mass erase and, if it
+    carries the record's magic, written back and checked after the image, so an update keeps it.
+    Images are limited to 124 KB: the last 4 KB of the flash are the calibration's.
+
     Non-blocking: SpindleBoard::update() calls service() every pass until it returns false, so the
     Maslow loop keeps running (an erase takes up to a few seconds, a 90 KB image ~20 s).  The
     object, with its 256-byte block buffer and the open file, exists only while flashing.
@@ -39,6 +44,10 @@ namespace Spindles {
 
         static constexpr uint32_t FLASH_BASE = 0x08000000;
         static constexpr size_t   FLASH_SIZE = 128 * 1024;   // STM32G474RB
+        static constexpr size_t   IMAGE_MAX  = 124 * 1024;   // the last 4 KB hold the calibration
+        static constexpr uint32_t CAL_ADDR   = 0x0801F800;   // spindle-g474/src/cal.h
+        static constexpr size_t   CAL_LEN    = 48;
+        static constexpr uint32_t CAL_MAGIC  = 0x4C41434D;   // "MCAL"
 
     private:
         enum class State : uint8_t {
@@ -47,6 +56,10 @@ namespace Spindles {
             BootWait,
             Sync,
             GetId,
+            CalReadCmd,   // keep the stored calibration: read it before the erase ...
+            CalReadAddr,
+            CalReadLen,
+            CalReadData,
             EraseCmd,
             EraseArg,
             WriteCmd,
@@ -56,6 +69,13 @@ namespace Spindles {
             VerifyAddr,
             VerifyLen,
             VerifyData,
+            CalWriteCmd,   // ... and write it back after the image
+            CalWriteAddr,
+            CalWriteData,
+            CalCheckCmd,
+            CalCheckAddr,
+            CalCheckLen,
+            CalCheckData,
             Finish,
             Done,
             Failed,
@@ -90,5 +110,8 @@ namespace Spindles {
         int      _last_pct = -1;
         bool     _verifying = false;
         uint8_t  _buf[256];
+        uint8_t  _cal[CAL_LEN];        // the calibration record read before the erase
+        size_t   _cal_have    = 0;
+        bool     _cal_present = false;
     };
 }

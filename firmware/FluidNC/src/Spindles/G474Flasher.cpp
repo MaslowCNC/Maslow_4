@@ -152,8 +152,9 @@ namespace Spindles {
                     break;
                 }
                 _size = _file->size();
-                if (_size < 1024 || _size > FLASH_SIZE) {
-                    fail("file size is not that of a G474 firmware image (1 KB .. 128 KB .bin)");
+                if (_size < 1024 || _size > IMAGE_MAX) {
+                    fail("file size is not that of a G474 firmware image (1 KB .. 124 KB .bin; the last 4 KB hold "
+                         "the calibration)");
                     break;
                 }
                 log_info("Spindle flash: " << _path << ", " << _size << " bytes; resetting the spindle MCU into its bootloader");
@@ -214,12 +215,134 @@ namespace Spindles {
                     } else if (pid != G47X_PID) {
                         fail("the spindle MCU is not an STM32G47x (product ID mismatch)");
                     } else {
-                        sendCommand(CMD_EXT_ERASE);
+                        sendCommand(CMD_READ_MEMORY);   // the calibration record first
                         expect(1, 1000);
-                        _state = State::EraseCmd;
+                        _state = State::CalReadCmd;
                     }
                 }
                 break;
+
+            case State::CalReadCmd:
+            case State::CalCheckCmd:
+                r = poll();
+                if (r < 0 || (r > 0 && _rx[0] != ACK)) {
+                    fail("Read Memory refused (read-out protection set? recover with SWD)");
+                } else if (r > 0) {
+                    sendAddress(CAL_ADDR);
+                    expect(1, 1000);
+                    _state = _state == State::CalReadCmd ? State::CalReadAddr : State::CalCheckAddr;
+                }
+                break;
+
+            case State::CalReadAddr:
+            case State::CalCheckAddr:
+                r = poll();
+                if (r < 0 || (r > 0 && _rx[0] != ACK)) {
+                    fail("calibration read address refused");
+                } else if (r > 0) {
+                    uint8_t len[2] = { (uint8_t)(CAL_LEN - 1), (uint8_t)~(uint8_t)(CAL_LEN - 1) };
+                    _uart->write(len, 2);
+                    expect(1, 1000);
+                    _state = _state == State::CalReadAddr ? State::CalReadLen : State::CalCheckLen;
+                }
+                break;
+
+            case State::CalReadLen:
+            case State::CalCheckLen:
+                r = poll();
+                if (r < 0 || (r > 0 && _rx[0] != ACK)) {
+                    fail("calibration read length refused");
+                } else if (r > 0) {
+                    _cal_have = 0;
+                    _deadline = millis() + 1000;
+                    _state    = _state == State::CalReadLen ? State::CalReadData : State::CalCheckData;
+                }
+                break;
+
+            case State::CalReadData:
+                while (_cal_have < CAL_LEN && _uart->available()) {
+                    int c = _uart->read();
+                    if (c < 0) {
+                        break;
+                    }
+                    _cal[_cal_have++] = (uint8_t)c;
+                }
+                if (_cal_have >= CAL_LEN) {
+                    uint32_t magic = (uint32_t)_cal[0] | ((uint32_t)_cal[1] << 8) | ((uint32_t)_cal[2] << 16) |
+                                     ((uint32_t)_cal[3] << 24);
+                    _cal_present = magic == CAL_MAGIC;
+                    log_info("Spindle flash: " << (_cal_present ? "stored calibration found; it is kept across the erase"
+                                                                : "no stored calibration to keep"));
+                    sendCommand(CMD_EXT_ERASE);
+                    expect(1, 1000);
+                    _state = State::EraseCmd;
+                } else if ((int32_t)(millis() - _deadline) > 0) {
+                    fail("calibration read timed out");
+                }
+                break;
+
+            case State::CalWriteCmd:
+                r = poll();
+                if (r < 0 || (r > 0 && _rx[0] != ACK)) {
+                    fail("image written and verified, but Write Memory was refused for the calibration - run #GCAL and "
+                         "#GSAVE again");
+                } else if (r > 0) {
+                    sendAddress(CAL_ADDR);
+                    expect(1, 1000);
+                    _state = State::CalWriteAddr;
+                }
+                break;
+
+            case State::CalWriteAddr:
+                r = poll();
+                if (r < 0 || (r > 0 && _rx[0] != ACK)) {
+                    fail("calibration write address refused");
+                } else if (r > 0) {
+                    uint8_t n1 = (uint8_t)(CAL_LEN - 1);
+                    uint8_t cs = n1;
+                    for (size_t i = 0; i < CAL_LEN; i++) {
+                        cs ^= _cal[i];
+                    }
+                    _uart->write(&n1, 1);
+                    _uart->write(_cal, CAL_LEN);
+                    _uart->write(&cs, 1);
+                    expect(1, 2000);
+                    _state = State::CalWriteData;
+                }
+                break;
+
+            case State::CalWriteData:
+                r = poll();
+                if (r < 0 || (r > 0 && _rx[0] != ACK)) {
+                    fail("image written and verified, but the calibration write-back failed - run #GCAL and #GSAVE again");
+                } else if (r > 0) {
+                    sendCommand(CMD_READ_MEMORY);   // read it back
+                    expect(1, 1000);
+                    _state = State::CalCheckCmd;
+                }
+                break;
+
+            case State::CalCheckData: {
+                bool mismatch = false;
+                while (_cal_have < CAL_LEN && _uart->available()) {
+                    int c = _uart->read();
+                    if (c < 0) {
+                        break;
+                    }
+                    if ((uint8_t)c != _cal[_cal_have]) {
+                        mismatch = true;
+                    }
+                    _cal_have++;
+                }
+                if (mismatch) {
+                    fail("image written and verified, but the calibration did not read back - run #GCAL and #GSAVE again");
+                } else if (_cal_have >= CAL_LEN) {
+                    _state = State::Finish;
+                } else if ((int32_t)(millis() - _deadline) > 0) {
+                    fail("calibration read-back timed out");
+                }
+                break;
+            }
 
             case State::EraseCmd:
                 r = poll();
@@ -347,7 +470,13 @@ namespace Spindles {
                         expect(1, 1000);
                         _state = State::VerifyCmd;
                     } else if (_state != State::Failed) {
-                        _state = State::Finish;
+                        if (_cal_present) {
+                            sendCommand(CMD_WRITE_MEMORY);   // put the calibration back
+                            expect(1, 1000);
+                            _state = State::CalWriteCmd;
+                        } else {
+                            _state = State::Finish;
+                        }
                     }
                 } else if ((int32_t)(millis() - _deadline) > 0) {
                     fail("read-back timed out");
@@ -356,7 +485,8 @@ namespace Spindles {
 
             case State::Finish:
                 restartApplication();
-                log_info("Spindle flash: " << _size << " bytes written and verified; spindle MCU restarted");
+                log_info("Spindle flash: " << _size << " bytes written and verified"
+                                           << (_cal_present ? ", calibration restored" : "") << "; spindle MCU restarted");
                 _state = State::Done;
                 return false;
 
