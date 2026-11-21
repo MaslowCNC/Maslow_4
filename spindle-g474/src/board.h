@@ -60,7 +60,11 @@ constexpr float NTC_PULLUP          = 10000.0f;
 
 // ---- PWM ----
 constexpr uint32_t TIMER_CLOCK_HZ   = 170000000;
+#ifdef PWM_FREQUENCY_OVERRIDE_HZ   // bring-up experiments, e.g. moving the 3V3 buck's alias (BRINGUP.md)
+constexpr uint32_t PWM_FREQUENCY_HZ = PWM_FREQUENCY_OVERRIDE_HZ;
+#else
 constexpr uint32_t PWM_FREQUENCY_HZ = 20000;
+#endif
 // Centre-aligned: the counter goes 0 -> ARR -> 0 once per PWM period.
 constexpr uint32_t PWM_ARR          = TIMER_CLOCK_HZ / (2 * PWM_FREQUENCY_HZ);   // 4250
 constexpr float    PWM_PERIOD_S     = 1.0f / PWM_FREQUENCY_HZ;

@@ -412,6 +412,12 @@ static void sendStatus() {
 static uint32_t g_align_until  = 0;
 static uint32_t g_stat_every   = 0;
 static bool     g_noise_pending = false;
+static uint32_t g_align_avg_at  = 0;      // when to start averaging the align currents (millis)
+static int      g_dump_print    = -1;     // next #DUMP line to print, -1 = none
+static int      g_dump_rows     = 0;      // samples captured
+static int      g_dump_chan     = 6;      // 0-5 = one channel (M1 a b c, M2 a b c), 6 = all
+static uint32_t g_dump_last_ms  = 0;
+constexpr int   DUMP_PER_LINE   = 16;
 
 static void reportNoise() {
     static const char ph[3] = { 'a', 'b', 'c' };
@@ -466,7 +472,8 @@ static void maintenance(const char* line) {
         } else if (!enableDrive("ALIGN") || (foc::disable(), !foc::startAlignTest(v))) {
             linkEvent("WARN", "ALIGN refused (0.1-3 V, drive must be enable-able)");
         } else {
-            g_align_until = millis() + 300;
+            g_align_until  = millis() + 300;
+            g_align_avg_at = millis() + 150;   // average the settled half: 2000 samples = 100 ms
             linkEvent("MSG", "ALIGN: %.2f V on the phase A axis of both motors for 300 ms", v);
         }
     } else if (!strcmp(word, "CL")) {
@@ -506,6 +513,17 @@ static void maintenance(const char* line) {
         g_noise_pending = true;
         linkEvent("MSG", "NOISE: sampling %lu periods (%.0f ms)", (unsigned long)samples,
                   samples / (PWM_FREQUENCY_HZ / 1000.0f));
+    } else if (!strcmp(word, "DUMP")) {
+        if (g_dump_print >= 0) {
+            linkEvent("WARN", "DUMP refused: still printing the last one");
+        } else {
+            g_dump_rows = foc::startDump(n >= 2 ? (int)a : 512);
+            g_dump_chan = (n >= 3 && b >= 0 && b <= 5) ? (int)b : 6;
+            linkEvent("MSG", "DUMP: %d consecutive samples at %lu Hz, counts vs zero, %d per line: "
+                             "D <channel 0-5 = M1 a b c, M2 a b c> <first sample> <values>",
+                      g_dump_rows, (unsigned long)PWM_FREQUENCY_HZ, DUMP_PER_LINE);
+            g_dump_print = 0;
+        }
     } else if (!strcmp(word, "SLOW") && n >= 2) {
         hw::setSlowMode((int)a);
         linkEvent("MSG", "SLOW: slow ADC2 conversions %s", a < 0.5f ? "free-running" : a < 1.5f ? "after the current samples" : "off");
@@ -514,10 +532,11 @@ static void maintenance(const char* line) {
     } else {
         linkEvent("MSG", "# commands: STAT LOG <ms> ALIGN [V] CL <0|1> CUR <kp> <ki> POS <kp> <kd> <ki> "
                          "POSBW <min> <full rpm> OLKI <ki> DTC <ns> IHOLD/ISPIN/IBOOST/ILIM <A> OBS <R> <L> <flux> "
-                         "TRIP <sw A> [hw A] NOISE [samples] SLOW <0|1|2> VER");
+                         "TRIP <sw A> [hw A] NOISE [samples] SLOW <0|1|2> DUMP [samples] [channel] VER");
         return;
     }
-    if (strcmp(word, "STAT") && strcmp(word, "VER") && strcmp(word, "ALIGN") && strcmp(word, "NOISE") && strcmp(word, "SLOW")) {
+    if (strcmp(word, "STAT") && strcmp(word, "VER") && strcmp(word, "ALIGN") && strcmp(word, "NOISE") && strcmp(word, "SLOW") &&
+        strcmp(word, "DUMP")) {
         linkEvent("MSG", "tuning: cur %.3f/%.0f pos %.2f/%.3f/%.1f bw %.2f/%.0f olki %.1f I hold %.1f spin %.1f "
                          "boost %.1f lim %.1f obs R %.3f L %.1fuH flux %.2fmWb trip %.1f A dtc %.0f ns CL %d",
                   tu.cur_kp, tu.cur_ki, tu.pos_kp, tu.pos_kd, tu.pos_ki, tu.pos_bw_min, tu.pos_bw_full_rpm, tu.ol_ki,
@@ -898,6 +917,20 @@ void loop() {
     // ALIGN test: report what the shunts saw, then off.
     if (g_align_until && (int32_t)(now - g_align_until) >= 0) {
         g_align_until = 0;
+        if (g_noise_pending && foc::noiseDone()) {
+            g_noise_pending = false;
+            for (int k = 0; k < 2; k++) {
+                float amps[3], sd[3];
+                for (int p = 0; p < 3; p++) {
+                    foc::NoiseStats st;
+                    foc::noiseResult(k, p, &st);
+                    amps[p] = SENSE_SIGN * (st.mean - st.offset) * SENSE_A_PER_LSB;
+                    sd[p]   = st.sd * SENSE_A_PER_LSB;
+                }
+                linkEvent("MSG", "ALIGN M%d averaged over 100 ms: ia %+.2f ib %+.2f ic %+.2f A (sample sd %.2f %.2f %.2f A)",
+                          k + 1, amps[0], amps[1], amps[2], sd[0], sd[1], sd[2]);
+            }
+        }
         printStat();
         foc::disable();
         linkEvent("MSG", "ALIGN done: expect ia ~ +V/R, ib ~ ic ~ -ia/2 on both motors (sign check)");
@@ -920,9 +953,35 @@ void loop() {
         last_status = now;
         sendStatus();
     }
-    if (g_noise_pending && foc::noiseDone()) {
+    if (g_align_avg_at && (int32_t)(now - g_align_avg_at) >= 0) {
+        g_align_avg_at = 0;
+        foc::startNoise(2000);
+        g_noise_pending = true;   // reported by the align-done block, not as #NOISE
+    }
+    if (g_noise_pending && g_align_until == 0 && foc::noiseDone()) {
         g_noise_pending = false;
         reportNoise();
+    }
+    // #DUMP lines: DUMP_PER_LINE samples of one channel each, one line every 10 ms so the XY board's
+    // log keeps up.  g_dump_print counts lines: channel-major over the captured samples.
+    if (g_dump_print >= 0 && foc::dumpDone() && now - g_dump_last_ms >= 10 && Link.availableForWrite() >= 160) {
+        g_dump_last_ms = now;
+        int lines_per_chan = (g_dump_rows + DUMP_PER_LINE - 1) / DUMP_PER_LINE;
+        int nchan          = g_dump_chan == 6 ? 6 : 1;
+        int ch             = g_dump_chan == 6 ? g_dump_print / lines_per_chan : g_dump_chan;
+        int first          = (g_dump_print % lines_per_chan) * DUMP_PER_LINE;
+        char buf[160];
+        int  len = snprintf(buf, sizeof(buf), "D %d %d", ch, first);
+        for (int i = first; i < first + DUMP_PER_LINE && i < g_dump_rows; i++) {
+            int v[6];
+            foc::dumpRow(i, v);
+            len += snprintf(buf + len, sizeof(buf) - len, " %d", v[ch]);
+        }
+        linkEvent("MSG", "%s", buf);
+        if (++g_dump_print >= lines_per_chan * nchan) {
+            g_dump_print = -1;
+            linkEvent("MSG", "DUMP done");
+        }
     }
     if (g_stat_every && now - g_stat_last >= g_stat_every) {
         g_stat_last = now;

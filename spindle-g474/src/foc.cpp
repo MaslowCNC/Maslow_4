@@ -104,6 +104,13 @@ namespace foc {
         uint64_t          g_noise_sq[2][3];
         uint16_t          g_noise_min[2][3], g_noise_max[2][3];
 
+        // #DUMP: consecutive raw samples of all six channels (bring-up: is the sense noise periodic?).
+        constexpr int     DUMP_MAX = 1024;
+        uint16_t          g_dump[DUMP_MAX][6];
+        volatile int      g_dump_n      = 0;
+        int               g_dump_target = 0;
+        volatile bool     g_dump_on     = false;
+
         Tuning g_tun = {
             CUR_KP, CUR_KI, POS_KP, POS_KD, POS_KI, POS_BW_MIN, POS_BW_FULL_RPM, OL_CUR_KI,
             HOLD_CURRENT_A, SPINUP_CURRENT_A, Z_MOVE_BOOST_A, IQ_LIMIT_A,
@@ -497,6 +504,12 @@ namespace foc {
                 }
             if (++g_noise_n >= g_noise_target) g_noise_on = false;
         }
+        if (g_dump_on) {
+            uint16_t* row = g_dump[g_dump_n];
+            for (int k = 0; k < 2; k++)
+                for (int p = 0; p < 3; p++) row[k * 3 + p] = raw[k][p];
+            if (++g_dump_n >= g_dump_target) g_dump_on = false;
+        }
         if (g_calibrating) {
             for (int k = 0; k < 2; k++)
                 for (int p = 0; p < 3; p++) g_cal_sum[k][p] += raw[k][p];
@@ -662,6 +675,25 @@ namespace foc {
         g_noise_target = samples ? samples : 1;
         g_noise_on     = true;
         __enable_irq();
+    }
+
+    int startDump(int samples) {
+        if (samples < 1) samples = 1;
+        if (samples > DUMP_MAX) samples = DUMP_MAX;
+        __disable_irq();
+        g_dump_n      = 0;
+        g_dump_target = samples;
+        g_dump_on     = true;
+        __enable_irq();
+        return samples;
+    }
+
+    bool dumpDone() {
+        return !g_dump_on && g_dump_n > 0;
+    }
+
+    void dumpRow(int i, int out[6]) {
+        for (int c = 0; c < 6; c++) out[c] = (int)g_dump[i][c] - (int)lroundf(mot[c / 3].off[c % 3]);
     }
 
     bool noiseDone() {

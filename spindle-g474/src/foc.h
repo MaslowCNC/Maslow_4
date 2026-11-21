@@ -78,6 +78,10 @@ namespace foc {
     void startNoise(uint32_t samples);
     bool noiseDone();
     void noiseResult(int m, int phase, NoiseStats* out);
+    // Bring-up (#DUMP): consecutive raw samples of all six channels, counts relative to each zero.
+    int  startDump(int samples);   // returns the number it will capture (max 1024)
+    bool dumpDone();
+    void dumpRow(int i, int out[6]);   // M1 a b c, M2 a b c
 
     // Run-time tuning (the '#' link commands).
     struct Tuning {

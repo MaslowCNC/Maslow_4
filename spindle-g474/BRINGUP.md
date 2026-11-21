@@ -27,12 +27,33 @@ an assumption the next one relies on. Stop at the first surprise.
   HAL's `ADC_CHANNEL_n` is a bitfield, so ADC2 had been converting PA1 = motor 1's phase A shunt
   input for "VBUS" and channel 0 for both NTCs). Current offsets are fine (means within ~10 counts of
   the zero) but **the noise is high**: `#NOISE 2000` gives sd 14-35 counts (0.15-0.36 A) on five
-  channels and ~130 counts (1.35 A, range -1.7..+2.6 A) on motor 1 phase B (PA7, ADC2). Not the slow
-  ADC2 conversions (`#SLOW` A/B: no change). All six RC networks are identical (1k / 100 pF, only
-  ~1.6 MHz filtering), so look at supply and ground noise: on USB the TPS54360B runs at ~4.6 V in,
-  just above its 4.5 V minimum. **Re-measure with 36 V on (step 2.4) before going further**, then
-  scope ISB1 at the MCU pin if motor 1 phase B is still the worst.
-- New maintenance commands: `#NOISE [samples]`, `#SLOW <0|1|2>`. A CPU fault now turns both bridges
+  channels and ~130 counts (1.35 A, range -1.7..+2.6 A) on motor 1 phase B (PA7, ADC2). All six RC
+  networks are identical (1k / 100 pF, only ~1.6 MHz filtering). See step 2.4 for the cause.
+- **Step 2.4 (36 V, one motor connected, drive off):** vbus 36.5 V (2.323 V at the pin); compare
+  with a meter. The noise **doubled**: sd 54-60 counts on M1 a / M2 a, 26-41 on M1 c / M2 b / M2 c,
+  ~280 counts (2.9 A, bursts to -970 counts = +10 A for ~4 samples) on M1 b. **Cause: U9, the
+  TPS54360B 3V3 buck** (RT 200k, measured 480.7 kHz; 12V_GD is a linear BCX56 and quiet):
+  - `#DUMP` shows the six channels moving together (M1 a / M1 c / M2 a / M2 c correlate +0.87..+0.98;
+    M1 b anti-phase, 5x larger), so it is one disturbance on the shared ground/reference, with
+    bursts every ~30-36 samples and a spectral cluster at 510-600 Hz;
+  - moving the PWM to 20.2 kHz (`-D PWM_FREQUENCY_OVERRIDE_HZ=20200`) moved the line to 4222 Hz (+2nd
+    harmonic at 8.44 kHz), exactly 24 x 20204 Hz - 480.7 kHz: U9's edges drifting through the ADC
+    sampling instant. It grew at 36 V because SW_NODE now swings 36 V, not 4.6 V.
+  - Not the slow ADC2 conversions: `#SLOW 0/1/2` give the same sd (verified after the scanf fix below).
+  - Fix options (hardware): synchronize U9 to the PWM (its RT/CLK pin accepts 160 kHz-2.3 MHz; a G474
+    timer at 24 x 20 kHz, phased so no edge lands in the sampling window), more RC filtering at the
+    MCU pins (1k / 100 pF passes 480 kHz untouched), check ISB1's route and U9's hot-loop ground
+    return against the shunt grounds, a snubber on SW_NODE.
+  - Consequences now: closed-loop quality will suffer, and BRINGUP step 4's `#TRIP 6 10` would
+    nuisance-trip on M1 b (bursts reach ~10 A, the comparator's 10 A threshold is 48.5 mV at the pin).
+    Keep the defaults (15 A x 3 periods, 20 A comparator) for the first `#ALIGN`; its readout is now a
+    100 ms average, which reads through the noise.
+- **Found and fixed (G474): every numeric `#` argument was ignored.** newlib-nano was linked with float
+  printf but not float scanf, so `sscanf("%f")` parsed nothing: `#TRIP`, `#IHOLD`, `#POS`, `#OBS`, `#LOG`
+  silently did nothing (`#ALIGN` only worked because 0.5 V is its default). Now built with
+  `PIO_FRAMEWORK_ARDUINO_NANOLIB_FLOAT_SCANF`; check any tuning command's echo after a reflash.
+- New maintenance commands: `#NOISE [samples]`, `#SLOW <0|1|2>`, `#DUMP [samples] [channel]` (consecutive
+  raw samples, 16 per line; `D <channel> <first sample> <values>`). A CPU fault now turns both bridges
   off and sends `ERR:spindle CPU fault ... pc=...` over the link (`addr2line -e firmware.elf <pc>`).
 
 ## Verified without hardware
@@ -162,7 +183,8 @@ the 36 V board (~0.60 V).
 
 ### 4. Sense sign and phase order, motors loose
 
-1. Connect both motors, loose. Lower the trips first: `$Spindle/G474=SEND #TRIP 6 10`.
+1. Connect both motors, loose. Lower the trips first: `$Spindle/G474=SEND #TRIP 6 10` (board 1: not
+   until the U9 noise is fixed, see above - it would trip on noise).
 2. `#ALIGN 0.5`: per motor expect ia **positive**, roughly +0.5 V / R minus the dead-time loss
    (0.5-1.2 A), and ib ≈ ic ≈ −ia/2. The rotors snap to the phase A axis.
    - ia negative on both: `SENSE_SIGN` is wrong — fix it before anything else.
