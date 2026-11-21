@@ -4,6 +4,13 @@
 	(generator_version "10.0")
 	(uuid "dfafd8b3-c553-40fe-89ed-f7586d7cf6a1")
 	(paper "A4")
+	(title_block
+		(title "Unified Control Board 36V")
+		(date "2026-11-21")
+		(rev "1.0")
+		(company "Maslow CNC")
+		(comment 1 "STM32G474 spindle drive, 36 V bus")
+	)
 	(lib_symbols
 		(symbol "Mechanical:MountingHole_Pad"
 			(pin_numbers

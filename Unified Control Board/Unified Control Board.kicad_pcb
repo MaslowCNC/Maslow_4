@@ -7,6 +7,13 @@
 		(legacy_teardrops no)
 	)
 	(paper "USLedger")
+	(title_block
+		(title "Unified Control Board 36V")
+		(date "2026-11-21")
+		(rev "1.0")
+		(company "Maslow CNC")
+		(comment 1 "STM32G474 spindle drive, 36 V bus")
+	)
 	(layers
 		(0 "F.Cu" signal)
 		(4 "In1.Cu" signal)
@@ -67687,6 +67694,28 @@
 		(effects
 			(font
 				(size 1.5 1.5)
+				(thickness 0.25)
+			)
+		)
+	)
+	(gr_text "UNIFIED CONTROL BOARD"
+		(at 7.5000 61.2000 0)
+		(layer "F.SilkS")
+		(uuid "337c93e2-0d8d-40e5-aeea-6c695e549b12")
+		(effects
+			(font
+				(size 1.00 1.00)
+				(thickness 0.15)
+			)
+		)
+	)
+	(gr_text "36V   v${REVISION}"
+		(at 7.5000 63.9000 0)
+		(layer "F.SilkS")
+		(uuid "3e9b791e-a62c-48cc-9c17-460c58b2dd94")
+		(effects
+			(font
+				(size 1.50 1.50)
 				(thickness 0.25)
 			)
 		)
