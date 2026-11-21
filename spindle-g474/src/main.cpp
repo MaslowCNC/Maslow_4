@@ -41,6 +41,12 @@ static bool     g_gcal_avg   = false;   // averaging this step's currents (noise
 static uint32_t g_gcal_t     = 0;       // when this step's settling ends
 static float    g_gcal_v     = 0.8f;    // calibration voltage
 static float    g_gcal_m[6][2][3];      // mean phase currents per step, motor, phase (A, nominal gains)
+static int      g_jm_state = 0;    // #JMEAS: 0 idle, 1 settle, 2 steady before, 3 ramp, 4 settle, 5 steady after
+static bool     g_jm_acc   = false;
+static uint32_t g_jm_t = 0, g_jm_ramp_t0 = 0, g_jm_ramp_ms = 0, g_jm_n[3];
+static float    g_jm_from = 0, g_jm_to = 0, g_jm_cmd0 = 0, g_jm_cmd1 = 0;
+static float    g_jm_before[2], g_jm_ramp[2], g_jm_after[2];
+constexpr uint32_t JM_SETTLE_MS = 300, JM_STEADY_MS = 500, JM_SKIP_MS = 60;
 constexpr uint32_t GCAL_SETTLE_MS = 400;
 constexpr uint32_t GCAL_SAMPLES   = 10000;   // 0.5 s at 20 kHz
 // #RXLOG (bring-up): the last 256 raw bytes received on the link.
@@ -610,6 +616,79 @@ static void finishGcal() {
     }
 }
 
+// #JMEAS <rpm>: rotor inertia from a closed-loop speed step.  The torque that accelerates a rotor on the
+// 500 rad/s^2 ramp is J*alpha; drag is taken out as the mean of the steady iq before and after the step.
+static void serviceJmeas(uint32_t now) {
+    if (!g_jm_state) return;
+    float dummy[2];
+    if (!foc::enabled() || foc::mode() != foc::Mode::Closed) {
+        g_jm_state = 0;
+        foc::iqAccStop(dummy);
+        linkEvent("WARN", "JMEAS aborted: the drive left closed loop");
+        return;
+    }
+    switch (g_jm_state) {
+        case 1:
+            if (now - g_jm_t >= JM_SETTLE_MS) {
+                foc::iqAccStart();
+                g_jm_t     = now;
+                g_jm_state = 2;
+            }
+            break;
+        case 2:
+            if (now - g_jm_t >= JM_STEADY_MS) {
+                g_jm_n[0] = foc::iqAccStop(g_jm_before);
+                setSpindleSpeed(g_jm_to);
+                g_jm_t     = now;
+                g_jm_acc   = false;
+                g_jm_state = 3;
+            }
+            break;
+        case 3: {
+            float cmd = foc::speedCommandRpm();
+            if (!g_jm_acc && now - g_jm_t >= JM_SKIP_MS) {   // past the ramp's start transient
+                foc::iqAccStart();
+                g_jm_acc     = true;
+                g_jm_cmd0    = cmd;
+                g_jm_ramp_t0 = now;
+            }
+            if (g_jm_acc && fabsf(cmd - g_jm_to) < 0.05f * fabsf(g_jm_to - g_jm_from)) {   // stop before its end
+                g_jm_n[1]    = foc::iqAccStop(g_jm_ramp);
+                g_jm_cmd1    = cmd;
+                g_jm_ramp_ms = now - g_jm_ramp_t0;
+                g_jm_t       = now;
+                g_jm_state   = 4;
+            } else if (now - g_jm_t > 20000) {
+                g_jm_state = 0;
+                foc::iqAccStop(dummy);
+                linkEvent("WARN", "JMEAS aborted: the ramp did not finish");
+            }
+            break;
+        }
+        case 4:
+            if (now - g_jm_t >= JM_SETTLE_MS) {
+                foc::iqAccStart();
+                g_jm_t     = now;
+                g_jm_state = 5;
+            }
+            break;
+        case 5:
+            if (now - g_jm_t >= JM_STEADY_MS) {
+                g_jm_n[2]   = foc::iqAccStop(g_jm_after);
+                g_jm_state  = 0;
+                float alpha = (g_jm_cmd1 - g_jm_cmd0) * RPM_TO_RAD / (g_jm_ramp_ms / 1000.0f);
+                float kt    = 1.5f * POLE_PAIRS * foc::tuning().flux;
+                for (int k = 0; k < 2; k++) {
+                    float drive = g_jm_ramp[k] - 0.5f * (g_jm_before[k] + g_jm_after[k]);
+                    linkEvent("MSG", "JMEAS %.0f -> %.0f RPM, %.0f rad/s^2 over %lu ms: M%d iq before %+.3f ramp %+.3f after %+.3f A -> J %.2e kg m^2",
+                              g_jm_from, g_jm_to, alpha, (unsigned long)g_jm_ramp_ms, k + 1, g_jm_before[k], g_jm_ramp[k],
+                              g_jm_after[k], fabsf(alpha) > 1.0f ? kt * drive / alpha : NAN);
+                }
+            }
+            break;
+    }
+}
+
 // #GCAL steps, from loop(): settle, average, record, turn the vector 60 degrees.
 static void serviceGcal(uint32_t now) {
     if (g_gcal_step < 0) return;
@@ -708,12 +787,12 @@ static void maintenance(const char* line) {
                   samples / (PWM_FREQUENCY_HZ / 1000.0f));
     } else if (!strcmp(word, "SPIN") && n >= 3) {
         // Bench spin that stops itself: it does not depend on the link delivering the S0.
-        float    rpm = a < 0 ? 0 : a > 3000 ? 3000 : a;
+        float    rpm = a < 0 ? 0 : a > 12000 ? 12000 : a;   // bench: loose motors
         uint32_t ms  = b < 100 ? 100 : b > 30000 ? 30000 : (uint32_t)b;
         setSpindleSpeed(rpm);
         g_spin_until = millis() + ms;
         if (!g_spin_until) g_spin_until = 1;
-        g_bench_spin = rpm > 0;
+        if (rpm > 0) g_bench_spin = true;   // kept through a #SPIN 0 ramp-down; cleared once powered down
         linkEvent("MSG", "SPIN: %.0f RPM for %lu ms, then S0", rpm, (unsigned long)ms);
     } else if (!strcmp(word, "LOAD") && n >= 2) {
         uint32_t us = a < 0 ? 0 : a > 48 ? 48 : (uint32_t)a;
@@ -745,6 +824,20 @@ static void maintenance(const char* line) {
             linkEvent("MSG", "GCAL: %.2f V at 0-300 deg in 60 deg steps, %lu ms settle + %lu ms average each; the rotors "
                              "snap to each vector",
                       v, (unsigned long)GCAL_SETTLE_MS, (unsigned long)(GCAL_SAMPLES / (PWM_FREQUENCY_HZ / 1000)));
+        }
+    } else if (!strcmp(word, "JMEAS") && n >= 2) {
+        if (g_jm_state) {
+            linkEvent("WARN", "JMEAS refused: one is running");
+        } else if (!foc::enabled() || foc::mode() != foc::Mode::Closed) {
+            linkEvent("WARN", "JMEAS needs closed loop (spin up with #SPIN first)");
+        } else if (a < CL_ENTER_RPM || a > 12000.0f || fabsf(a - foc::speedTargetRpm()) < 500.0f) {
+            linkEvent("WARN", "JMEAS: target 2000-12000 RPM, at least 500 RPM from the present speed");
+        } else {
+            g_jm_from  = foc::speedTargetRpm();
+            g_jm_to    = a;
+            g_jm_t     = millis();
+            g_jm_state = 1;
+            linkEvent("MSG", "JMEAS: %.0f -> %.0f RPM (0.5 s steady, the ramp, 0.5 s steady)", g_jm_from, g_jm_to);
         }
     } else if (!strcmp(word, "GAIN")) {
         for (int k = 0; k < 2; k++) {
@@ -784,13 +877,13 @@ static void maintenance(const char* line) {
     } else {
         linkEvent("MSG", "# commands: STAT LOG <ms> ALIGN [V] [ms] CL <0|1> CUR <kp> <ki> POS <kp> <kd> <ki> "
                          "POSBW <min> <full rpm> OLKI <ki> DTC <ns> IHOLD/ISPIN/IBOOST/ILIM <A> OBS <R> <L> <flux> "
-                         "TRIP <sw A> [hw A] NOISE [samples] SLOW <0|1|2> DUMP [samples] [channel] BRK MOE LOAD <us> SPIN <rpm> <ms> RXLOG PREV GCAL [V] GAIN GAIN1/GAIN2 <a> <b> <c> VER");
+                         "TRIP <sw A> [hw A] NOISE [samples] SLOW <0|1|2> DUMP [samples] [channel] BRK MOE LOAD <us> SPIN <rpm> <ms> RXLOG PREV GCAL [V] GAIN GAIN1/GAIN2 <a> <b> <c> JMEAS <rpm> VER");
         return;
     }
     if (strcmp(word, "STAT") && strcmp(word, "VER") && strcmp(word, "ALIGN") && strcmp(word, "NOISE") && strcmp(word, "SLOW") &&
         strcmp(word, "DUMP") && strcmp(word, "BRK") &&
         strcmp(word, "MOE") && strcmp(word, "LOAD") && strcmp(word, "SPIN") && strcmp(word, "RXLOG") &&
-        strcmp(word, "PREV") && strcmp(word, "GCAL") && strncmp(word, "GAIN", 4)) {
+        strcmp(word, "PREV") && strcmp(word, "GCAL") && strncmp(word, "GAIN", 4) && strcmp(word, "JMEAS")) {
         linkEvent("MSG", "tuning: cur %.3f/%.0f pos %.2f/%.3f/%.1f bw %.2f/%.0f olki %.1f I hold %.1f spin %.1f "
                          "boost %.1f lim %.1f obs R %.3f L %.1fuH flux %.2fmWb trip %.1f A dtc %.0f ns CL %d",
                   tu.cur_kp, tu.cur_ki, tu.pos_kp, tu.pos_kd, tu.pos_ki, tu.pos_bw_min, tu.pos_bw_full_rpm, tu.ol_ki,
@@ -1242,6 +1335,7 @@ void loop() {
     }
 
     serviceGcal(now);
+    serviceJmeas(now);
     if (g_align_until == 0 && g_gcal_step < 0) {
         CRUMB(7);
         superviseSpin();

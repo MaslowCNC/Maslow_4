@@ -67,6 +67,9 @@ namespace foc {
     void setFakeLoad(uint32_t us);   // bring-up (#LOAD): pad every ADC interrupt to `us` (0 = off)
     uint32_t uartErrorsSeen(int which);   // bring-up: USART2 0 = ORE, 1 = FE, 2 = NE flags the interrupt saw
     uint32_t overruns();   // interrupts that ended with the next sample already waiting, since boot
+    // Bring-up (#JMEAS): average each motor's measured iq along its direction of rotation (A).
+    void     iqAccStart();
+    uint32_t iqAccStop(float mean[2]);   // returns the number of interrupts averaged
     const char* enableFailReason();   // why the last enable() / startAlignTest() returned false
 
     // Snapshot and reset the per-interval telemetry of motor m.

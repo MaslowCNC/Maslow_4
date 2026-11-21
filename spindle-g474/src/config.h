@@ -63,13 +63,14 @@ constexpr float IQ_LIMIT_A      = 8.0f;      // GUESS: closed-loop torque curren
 // inertias 3e-6..5e-5 kg m^2 (the real one is unknown) and motor-constant errors: retune on the
 // bench (#POS).  These are the gains at and above POS_BW_FULL_RPM.
 // Board 1 (2026-11-20): the simulation's 10 / 0.12 / 100 (for J 1e-5) oscillated at ~52 Hz right after
-// the hand-over and tripped the comparator; the oscillation says J ~2-5e-6.  Scaled by that ratio
-// (x0.24) closed loop held 3000 RPM.  These are stable in the simulation for J 2e-6..1e-5 but too soft
-// for its 15 / 36 mNm load-step Z checks (those fail): retune for stiffness once J is measured and the
-// U9 sense noise is fixed (BRINGUP.md).
-constexpr float POS_KP          = 2.4f;      // A per rad of angle error
-constexpr float POS_KD          = 0.029f;    // A per rad/s of speed error
-constexpr float POS_KI          = 24.0f;     // A per rad s
+// the hand-over and tripped the comparator.  #JMEAS measured the rotors at J 2.9e-6 (M1) / 3.4e-6 (M2)
+// kg m^2 over 3000-12000 RPM, so the gains are scaled to J 3e-6 (x0.3).  On board 1 they held closed loop
+// from the hand-over to 12000 RPM; in the simulation (J 2e-6..5e-6, R/flux errors) no slips or hunting,
+// the 36 mNm load step passes, the 15 mNm one moves the Z ~12 deg (limit 10): retune for stiffness once
+// the U9 sense noise is fixed (BRINGUP.md).
+constexpr float POS_KP          = 3.0f;      // A per rad of angle error
+constexpr float POS_KD          = 0.036f;    // A per rad/s of speed error
+constexpr float POS_KI          = 30.0f;     // A per rad s
 // Below POS_BW_FULL_RPM the angle loop's bandwidth b falls linearly to POS_BW_MIN at CL_EXIT_RPM
 // (Kp*b^2, Kd*b, Ki*b^3: same damping, foc.cpp posGains).  At full gains the loop limit-cycled
 // between 1500 and 3000 RPM in the simulation (+-5 A bursts at ~25 Hz: the observer is weakest at

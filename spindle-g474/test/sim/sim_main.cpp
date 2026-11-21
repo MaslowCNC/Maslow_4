@@ -67,7 +67,7 @@ namespace hw {
 struct Pmsm {
     double R = PHASE_R_OHM, L = PHASE_L_H, psi = FLUX_WB;
     double vdt = 0.3e-6 / PWM_PERIOD_S * 36.0;   // dead time (DRV8300 200 ns + timer 100 ns) as a voltage error
-    double J = 1.0e-5;    // kg m^2 (guess)
+    double J = 3.0e-6;    // kg m^2 (board 1 #JMEAS: 2.9e-6 / 3.4e-6)
     double B = 6.4e-6;    // N m s: ~8 mNm at 12k RPM, the ESC1's 0.68 A no-load
     double ia = 0, ib = 0;
     double th = 0, w = 0; // electrical = mechanical (1 pole pair); th unwrapped
@@ -220,7 +220,7 @@ static void report(const char* label) {
 }
 
 int main(int argc, char** argv) {
-    double J = argc > 1 ? atof(argv[1]) : 1e-5, kf = argc > 2 ? atof(argv[2]) : 1, kr = argc > 3 ? atof(argv[3]) : 1;
+    double J = argc > 1 ? atof(argv[1]) : 3e-6, kf = argc > 2 ? atof(argv[2]) : 1, kr = argc > 3 ? atof(argv[3]) : 1;   // board 1 #JMEAS: 2.9e-6 / 3.4e-6
     for (int k = 0; k < 2; k++) {
         mot[k].J = J;
         mot[k].psi *= kf;
@@ -293,6 +293,34 @@ int main(int argc, char** argv) {
     mot[0].load = 0;
     run(0.5);
     report("load off");
+
+    // JMEAS=1: the firmware's #JMEAS (0.5 s steady, step 6000 -> 9000, the ramp, 0.5 s steady) against the
+    // model's own inertia.
+    if (getenv("JMEAS")) {
+        float before[2], ramp[2], after[2];
+        run(0.3);
+        foc::iqAccStart();
+        run(0.5);
+        foc::iqAccStop(before);
+        foc::setSpeedTarget(9000);
+        run(0.06);
+        double c0 = foc::speedCommandRpm(), t0 = g_t;
+        foc::iqAccStart();
+        while (fabs(foc::speedCommandRpm() - 9000) > 0.05 * 3000) run(0.001);
+        foc::iqAccStop(ramp);
+        double alpha = (foc::speedCommandRpm() - c0) * RPM_TO_RAD / (g_t - t0);
+        run(0.3);
+        foc::iqAccStart();
+        run(0.5);
+        foc::iqAccStop(after);
+        for (int k = 0; k < 2; k++) {
+            double drive = ramp[k] - 0.5 * (before[k] + after[k]);
+            printf("JMEAS M%d: iq before %+.4f ramp %+.4f after %+.4f A, alpha %.0f -> J %.3e (model %.3e)\n", k + 1, before[k],
+                   ramp[k], after[k], alpha, 1.5 * POLE_PAIRS * foc::tuning().flux * drive / alpha, mot[k].J);
+        }
+        foc::setSpeedTarget(6000);
+        run(1.0);
+    }
 
     // 6. Up to 18000 RPM.
     foc::setSpeedTarget(18000);

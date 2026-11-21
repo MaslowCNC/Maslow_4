@@ -136,6 +136,10 @@ namespace foc {
         volatile uint32_t g_fake_load_cycles = 0;   // #LOAD: pad the interrupt to this length (bring-up)
         volatile uint32_t g_uart_err[3]      = { 0, 0, 0 };   // USART2 ORE / FE / NE seen by the interrupt (bring-up)
         volatile uint32_t g_overruns    = 0;   // interrupts that ended with the next sample already waiting
+        // #JMEAS: each motor's measured iq along its own direction of rotation, summed per interrupt.
+        volatile bool     g_iqacc_on = false;
+        float             g_iqacc_sum[2];
+        volatile uint32_t g_iqacc_n = 0;
         uint32_t          g_overrun_run = 0;   // ... in a row
         constexpr uint32_t OVERRUN_TRIP = 8;   // this many in a row starve the main loop: motors off
 
@@ -335,21 +339,25 @@ namespace foc {
             float kp, kd, ki;
             posGains(&kp, &kd, &ki);
             for (int k = 0; k < 2; k++) {
-                Motor& m  = mot[k];
-                float s, c;
-                fastSinCos(m.obs_angle, &s, &c);
-                float  id = m.ial * c + m.ibe * s;
-                float  iq = -m.ial * s + m.ibe * c;
-                float  vd, vq;
+                Motor& m = mot[k];
+                // The rotor lags the open-loop vector by its load angle: that is the starting error,
+                // so the closed loop pulls the rotor onto the same reference and the Z does not move.
+                if (!m.eps_valid) m.eps = wrapPi(m.ref - m.obs_angle);
+                m.eps_valid = true;
+                // The current already flowing, as the open loop's own current vector (its references:
+                // the slow trim holds the average on them) turned into the observer's frame by the load
+                // angle - not this instant's measured current, which on board 1's motor 1 carries phase
+                // B's sense noise (bursts to ~10 A) and kicked the angle loop at the hand-over.
+                float sr, cr;
+                fastSinCos(m.eps, &sr, &cr);
+                float id = m.id_ref * cr - m.iq_ref * sr;
+                float iq = m.id_ref * sr + m.iq_ref * cr;
+                float vd, vq;
                 voltageIn(m, m.obs_angle, &vd, &vq);
                 float we = m.obs_w;
                 // Start every loop from the voltage and current already there: no step at the hand-over.
                 m.int_d = vd - (-we * g_tun.l * iq);
                 m.int_q = vq - (we * g_tun.l * id + we * g_tun.flux);
-                // The rotor lags the open-loop vector by its load angle: that is the starting error,
-                // so the closed loop pulls the rotor onto the same reference and the Z does not move.
-                if (!m.eps_valid) m.eps = wrapPi(m.ref - m.obs_angle);
-                m.eps_valid = true;
                 float wref = m.dir * g_omega_cmd + g_phi_rate;
                 m.pos_int = clampf(iq - kp * m.eps - kd * (wref - m.obs_w), -g_tun.iq_limit, g_tun.iq_limit);
                 m.id_cl   = id;   // fades to 0
@@ -576,6 +584,10 @@ namespace foc {
         } else {
             step(raw);
         }
+        if (g_iqacc_on) {
+            for (int k = 0; k < 2; k++) g_iqacc_sum[k] += mot[k].dir * mot[k].iq;
+            g_iqacc_n++;
+        }
         if (g_fake_load_cycles) {
             while (DWT->CYCCNT - t0 < g_fake_load_cycles) {}
         }
@@ -731,6 +743,23 @@ namespace foc {
 
     void setFakeLoad(uint32_t us) {
         g_fake_load_cycles = us ? us * (SystemCoreClock / 1000000) : 0;
+    }
+
+    void iqAccStart() {
+        __disable_irq();
+        g_iqacc_sum[0] = g_iqacc_sum[1] = 0;
+        g_iqacc_n                       = 0;
+        g_iqacc_on                      = true;
+        __enable_irq();
+    }
+
+    uint32_t iqAccStop(float mean[2]) {
+        __disable_irq();
+        g_iqacc_on = false;
+        uint32_t n = g_iqacc_n;
+        for (int k = 0; k < 2; k++) mean[k] = n ? g_iqacc_sum[k] / (float)n : 0.0f;
+        __enable_irq();
+        return n;
     }
 
     uint32_t overruns() {

@@ -123,12 +123,31 @@ an assumption the next one relies on. Stop at the first surprise.
   expected), Z error within +-4 deg, interrupt 37 us, 0 overruns; then the timed ramp-down, "open loop
   below 1500 RPM", stop. Next: step 6.2 (6000 / 9000 / 12000 RPM, measure J from a speed step),
   6.3-6.5; store the `#GCAL` gains (they are lost at every reboot).
+- **Step 6.2 passed (closed loop to 12000 RPM, loose motors, ~1 A supply limit):**
+  - A first try slipped 60 ms after the hand-over (M1 fell 90 deg behind): the hand-over seeded the
+    angle loop's integrator and the fading d current from that instant's measured current, which on M1
+    carries phase B's noise bursts (first closed-loop sample id -3.2 / iq -4.2 A while the drive held
+    +3 / 0). It now seeds them from the open loop's own current vector turned by the tracked load angle:
+    three hand-overs in a row clean, sim unchanged, sweep worst rotor 28 -> 21 deg.
+  - `#JMEAS <rpm>` (iq averaged every interrupt: 0.5 s steady, the 500 rad/s^2 ramp, 0.5 s steady; drag
+    = the mean of the two steady values) measured **J 2.9e-6 (M1) / 3.4e-6 (M2) kg m^2** over 3000->6000->
+    9000->12000 RPM, repeatable to ~10 % (the simulation check reads 3.09e-6 for a 3.00e-6 model rotor).
+    M2's steady drag ~0.5 A (6 mNm), roughly flat with speed.
+  - 3000 / 6000 / 9000 / 12000 RPM: observers within 1 % above 6000 RPM, flux 0.93-1.07, q voltage
+    2.9 / 4.7 / 7.4 / 10 V (back-EMF 0.82 V per 1000 RPM; the ~20 V limit is far off), Z error within
+    +-4.4 deg, interrupt 37 us, 0 overruns; ramp-down, hand-back at 1500 RPM and stop clean.
+  - Gains re-scaled to the measured J: `#POS 3.0 0.036 30` (now the defaults) ran the same sequence on
+    board 1. The simulation now defaults to J 3e-6 (sweep grid 2e-6 / 3e-6 / 5e-6): 0 slips in 75 cases;
+    every failure is the 15 mNm load step moving the Z ~12 deg (limit 10) - the stiffness left to win
+    back once the U9 noise is fixed.
+  - `#SPIN` now goes to 12000 RPM (bench).
 - New maintenance commands: `#NOISE [samples]`, `#SLOW <0|1|2>`, `#DUMP [samples] [channel]` (consecutive
   raw samples, 16 per line; `D <channel> <first sample> <values>`), `#BRK`, `#MOE`, `#LOAD <us>` (pad the
   interrupt, drive off), `#SPIN <rpm> <ms>` (bench spin that stops itself), `#RXLOG` (last 256 link
   bytes), `#PREV` (the previous boot's record: last main-loop step, longest interrupt, CPU fault).
   `#STAT` adds uptime, reset reason, overruns, longest interrupt since boot, main-loop rate, link
-  counters. `#ALIGN <V> [ms]` takes a duration (max 5 s). `#GCAL [V]` per-phase gain calibration, `#GAIN` / `#GAIN1` / `#GAIN2`. A CPU fault now turns both bridges
+  counters. `#ALIGN <V> [ms]` takes a duration (max 5 s). `#GCAL [V]` per-phase gain calibration, `#GAIN` / `#GAIN1` / `#GAIN2`, `#JMEAS <rpm>` rotor inertia
+  from a closed-loop speed step. A CPU fault now turns both bridges
   off and sends `ERR:spindle CPU fault ... pc=...` over the link (`addr2line -e firmware.elf <pc>`).
 
 ## Verified without hardware

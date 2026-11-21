@@ -2,7 +2,8 @@
 # Robustness sweep: builds ./sim and runs it over a grid of rotor inertias and motor-constant errors
 # (the model motor against the firmware's own constants), one line per case, then a summary.
 #
-#   ./sweep.sh                      # J 5e-6 1e-5 2e-5  x  R 0.8..1.3  x  flux 0.93..1.07 (75 runs)
+#   ./sweep.sh                      # J 2e-6 3e-6 5e-6  x  R 0.8..1.3  x  flux 0.93..1.07 (75 runs)
+#                                   (board 1 measured J 2.9e-6 / 3.4e-6 with #JMEAS)
 #   J="1e-5" R="0.9 1" ./sweep.sh   # a smaller grid
 #   POS=10,0.12,100 ./sweep.sh      # tuning overrides pass through to ./sim (POS, OLKI)
 #
@@ -13,7 +14,7 @@ set -e
 cd "$(dirname "$0")"
 c++ -std=c++17 -O2 -I. -I../../src sim_main.cpp ../../src/foc.cpp -o sim
 
-J=${J:-"5e-6 1e-5 2e-5"}
+J=${J:-"2e-6 3e-6 5e-6"}
 R=${R:-"0.8 0.9 1 1.15 1.3"}
 FLUX=${FLUX:-"0.93 0.97 1 1.03 1.07"}
 JOBS=${JOBS:-8}
