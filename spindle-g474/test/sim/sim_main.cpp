@@ -28,6 +28,8 @@
 TIM_TypeDef    sim_tim1, sim_tim8;
 ADC_TypeDef    sim_adc[5];
 DWT_Type       sim_dwt;
+TAMP_TypeDef   sim_tamp;
+USART_TypeDef  sim_usart2;
 CoreDebug_Type sim_cd;
 uint32_t       SystemCoreClock = 170000000;
 static double  g_t             = 0;   // s
@@ -53,6 +55,7 @@ namespace hw {
     void     setHardwareTripAmps(float) {}
     uint16_t rawCurrent(int, int) { return 0; }
     void     serviceSlowAnalog() {}
+    void     slowKickFromIsr() {}
     float    vbus() { return 36.0f; }
     float    temperature(int) { return 25.0f; }
     void     setFanDuty(uint8_t) {}

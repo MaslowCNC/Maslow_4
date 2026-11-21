@@ -23,3 +23,10 @@ void bootTrace(const char* stage);
 #else
 #define BOOT_TRACE_POINT(stage) ((void)0)
 #endif
+
+// Reset-surviving diagnostics in the TAMP backup registers (kept across a watchdog reset or a fault):
+// the main loop's current step, the longest ADC interrupt since boot, and a CPU fault's registers.
+// The next boot reports them (bring-up: "previous boot ...").
+void crumbsInit();          // first thing in setup(): enable access, report the previous boot, clear
+void crumbsReport();        // send the previous boot's record (also part of crumbsInit)
+#define CRUMB(step) (TAMP->BKP0R = 0xC0DE0000u | (uint32_t)(step))

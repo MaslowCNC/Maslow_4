@@ -24,6 +24,41 @@ namespace foc {
             while (a < -PI_F) a += TWO_PI_F;
             return a;
         }
+        // Fast sin/cos and atan2 for the 20 kHz interrupt.  newlib's sinf/cosf/atan2f (full argument
+        // reduction, ~150-400 cycles each, ~20 calls per interrupt) took most of the 50 us budget: on
+        // board 1 the interrupt overran its period in an open-loop spin and the watchdog reset the chip.
+        // Quadrant reduction + degree-7/8 Taylor on [-pi/4, pi/4]: error < 4e-7, any x below ~1e9.
+        inline void fastSinCos(float x, float* s, float* c) {
+            constexpr float TWO_OVER_PI = 0.636619772f;
+            constexpr float PIO2_HI     = 1.5707963705062866f;   // pi/2 in two parts (Cody-Waite)
+            constexpr float PIO2_LO     = -4.371139000186243e-8f;
+            float           fq          = x * TWO_OVER_PI;
+            int             q           = (int)(fq + (fq >= 0.0f ? 0.5f : -0.5f));
+            float           r           = (x - (float)q * PIO2_HI) - (float)q * PIO2_LO;
+            float           r2          = r * r;
+            float           sn          = r * (1.0f + r2 * (-1.6666667e-1f + r2 * (8.3333333e-3f + r2 * -1.9841270e-4f)));
+            float cs = 1.0f + r2 * (-0.5f + r2 * (4.1666667e-2f + r2 * (-1.3888889e-3f + r2 * 2.4801587e-5f)));
+            switch (q & 3) {
+                case 0: *s = sn; *c = cs; break;
+                case 1: *s = cs; *c = -sn; break;
+                case 2: *s = -sn; *c = -cs; break;
+                default: *s = -cs; *c = sn; break;
+            }
+        }
+        // Octant reduction + odd degree-9 polynomial for atan on [0, 1]: error < 1e-5 rad.
+        inline float fastAtan2(float y, float x) {
+            float ax = fabsf(x), ay = fabsf(y);
+            float mx = fmaxf(ax, ay), mn = fminf(ax, ay);
+            if (mx == 0.0f) return 0.0f;
+            float a = mn / mx;
+            float q = a * a;
+            float r = ((((0.0208351f * q - 0.0851330f) * q + 0.1801410f) * q - 0.3302995f) * q + 0.9998660f) * a;
+            if (ay > ax) r = 1.57079637f - r;
+            if (x < 0.0f) r = 3.14159274f - r;
+            if (y < 0.0f) r = -r;
+            return r;
+        }
+
         inline float clampf(float x, float lo, float hi) { return x < lo ? lo : (x > hi ? hi : x); }
         inline float slew(float x, float target, float step) {
             if (x < target) return fminf(x + step, target);
@@ -95,6 +130,11 @@ namespace foc {
 
         volatile uint32_t g_isr_max_cycles = 0;
         volatile uint32_t g_isr_count      = 0;
+        volatile uint32_t g_fake_load_cycles = 0;   // #LOAD: pad the interrupt to this length (bring-up)
+        volatile uint32_t g_uart_err[3]      = { 0, 0, 0 };   // USART2 ORE / FE / NE seen by the interrupt (bring-up)
+        volatile uint32_t g_overruns    = 0;   // interrupts that ended with the next sample already waiting
+        uint32_t          g_overrun_run = 0;   // ... in a row
+        constexpr uint32_t OVERRUN_TRIP = 8;   // this many in a row starve the main loop: motors off
 
         // #NOISE: raw statistics of all six sense channels over a fixed number of samples (bring-up).
         volatile bool     g_noise_on = false;
@@ -181,7 +221,7 @@ namespace foc {
             m.flux_b = clampf(m.flux_b + (m.vbeta - R * m.ibe) * DT - L * (m.ibe - m.ibe_prev), -F, F);
             m.ial_prev = m.ial;
             m.ibe_prev = m.ibe;
-            float a  = atan2f(m.flux_b, m.flux_a);
+            float a  = fastAtan2(m.flux_b, m.flux_a);
             float da = wrapPi(a - m.obs_angle);
             m.obs_angle = a;
             m.obs_w += (da / DT - m.obs_w) * fminf(DT / OBS_SPEED_TAU_S, 1.0f);
@@ -197,7 +237,8 @@ namespace foc {
         void currentLoop(int k, float we, bool emf_ff, bool soft) {
             Motor&      m    = mot[k];
             const float vmax = MAX_MODULATION * g_vbus * INV_SQRT3;
-            float       s = sinf(m.theta), c = cosf(m.theta);
+            float s, c;
+            fastSinCos(m.theta, &s, &c);
             m.id = m.ial * c + m.ibe * s;
             m.iq = -m.ial * s + m.ibe * c;
 
@@ -233,7 +274,8 @@ namespace foc {
             m.vq = vq;
             // Rotate back at the angle the rotor will have while this voltage is applied.
             float th = m.theta + we * PWM_DELAY_PERIODS * DT;
-            float s2 = sinf(th), c2 = cosf(th);
+            float s2, c2;
+            fastSinCos(th, &s2, &c2);
             m.valpha = vd * c2 - vq * s2;
             m.vbeta  = vd * s2 + vq * c2;
         }
@@ -264,7 +306,8 @@ namespace foc {
 
         // Rotate the last applied voltage into the frame at angle th, for loop integrators.
         void voltageIn(const Motor& m, float th, float* vd, float* vq) {
-            float s = sinf(th), c = cosf(th);
+            float s, c;
+            fastSinCos(th, &s, &c);
             *vd = m.valpha * c + m.vbeta * s;
             *vq = -m.valpha * s + m.vbeta * c;
         }
@@ -288,7 +331,8 @@ namespace foc {
             posGains(&kp, &kd, &ki);
             for (int k = 0; k < 2; k++) {
                 Motor& m  = mot[k];
-                float  s  = sinf(m.obs_angle), c = cosf(m.obs_angle);
+                float s, c;
+                fastSinCos(m.obs_angle, &s, &c);
                 float  id = m.ial * c + m.ibe * s;
                 float  iq = -m.ial * s + m.ibe * c;
                 float  vd, vq;
@@ -313,7 +357,8 @@ namespace foc {
             // closed loop's torque current fades out (iq_carry).
             for (int k = 0; k < 2; k++) {
                 Motor& m = mot[k];
-                float  s = sinf(m.ref), c = cosf(m.ref);
+                float s, c;
+                fastSinCos(m.ref, &s, &c);
                 float  id = m.ial * c + m.ibe * s;
                 float  iq = -m.ial * s + m.ibe * c;
                 float  vd, vq;
@@ -487,12 +532,19 @@ namespace foc {
 
     extern "C" void ADC5_IRQHandler(void) {
         uint32_t t0 = DWT->CYCCNT;
+        TAMP->BKP2R = 1;   // inside the interrupt (reset-surviving diagnostics, see link.h)
         ADC5->ISR   = ADC_ISR_JEOS | ADC_ISR_JEOC;
         uint16_t raw[2][3] = {
             { (uint16_t)ADC1->JDR1, (uint16_t)ADC2->JDR1, (uint16_t)ADC3->JDR1 },
             { (uint16_t)ADC5->JDR1, (uint16_t)ADC5->JDR2, (uint16_t)ADC4->JDR1 },
         };
         hw::slowKickFromIsr();   // after the current samples, so it ends long before the next trigger
+        {
+            uint32_t isr = USART2->ISR;   // sampled, not cleared: the UART interrupt clears them (a lower bound)
+            if (isr & USART_ISR_ORE) g_uart_err[0]++;
+            if (isr & USART_ISR_FE) g_uart_err[1]++;
+            if (isr & USART_ISR_NE) g_uart_err[2]++;
+        }
         if (g_noise_on) {
             for (int k = 0; k < 2; k++)
                 for (int p = 0; p < 3; p++) {
@@ -517,8 +569,22 @@ namespace foc {
         } else {
             step(raw);
         }
+        if (g_fake_load_cycles) {
+            while (DWT->CYCCNT - t0 < g_fake_load_cycles) {}
+        }
         uint32_t dt = DWT->CYCCNT - t0;
         if (dt > g_isr_max_cycles) g_isr_max_cycles = dt;
+        if (dt > TAMP->BKP1R) TAMP->BKP1R = dt;   // longest since boot, kept across a reset
+        // The next sample already waiting means this interrupt overran its period.  In a row, the main
+        // loop gets no time at all (no link, no watchdog kick): turn the motors off so it shortens again.
+        if (ADC5->ISR & ADC_ISR_JEOS) {
+            g_overruns++;
+            if (++g_overrun_run >= OVERRUN_TRIP && g_enabled)
+                raiseFault(FaultOverrun, -1, -1, (float)dt / (SystemCoreClock / 1000000));
+        } else {
+            g_overrun_run = 0;
+        }
+        TAMP->BKP2R = 0;
         g_isr_count++;
     }
 
@@ -655,6 +721,18 @@ namespace foc {
         return fmaxf(mot[0].speed_err_frac, mot[1].speed_err_frac);
     }
 
+    void setFakeLoad(uint32_t us) {
+        g_fake_load_cycles = us ? us * (SystemCoreClock / 1000000) : 0;
+    }
+
+    uint32_t overruns() {
+        return g_overruns;
+    }
+
+    uint32_t uartErrorsSeen(int which) {
+        return (which >= 0 && which < 3) ? g_uart_err[which] : 0;
+    }
+
     uint8_t faultCode() {
         return g_fault;
     }
@@ -671,6 +749,9 @@ namespace foc {
                      'A' + phase, amps, SW_TRIP_COUNT, g_tun.sw_trip_a);
         } else if (f == FaultBreak) {
             snprintf(detail, n, "hardware over-current (comparator break) on M%d", motor + 1);
+        } else if (f == FaultOverrun) {
+            snprintf(detail, n, "control interrupt overran its %lu us period %lu times in a row (last %.0f us) - motors off",
+                     (unsigned long)(1000000 / PWM_FREQUENCY_HZ), (unsigned long)OVERRUN_TRIP, amps);
         } else if (n) {
             detail[0] = 0;
         }

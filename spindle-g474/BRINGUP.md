@@ -62,8 +62,27 @@ an assumption the next one relies on. Stop at the first surprise.
   error). Both bridges carried current. The currents are above the 0.5-1.2 A estimate (R nearer
   0.3 ohm than 0.39?). Sense noise while switching = idle (all U9). ISR 14 us with both bridges
   modulating.
+- **Step 5 (open loop, 1000 RPM, both motors loose, supply limit ~1 A) passed after one fix:**
+  - First tries lost most link commands mid-spin (an `S0` too), then the G474 reset with "watchdog (main
+    loop stalled)". Not the link: the ADC interrupt overran its 50 us period (55 us; the board record
+    said it died INSIDE the interrupt), so interrupts ran back to back and the main loop never ran.
+    ~20 newlib sinf/cosf/atan2f calls per interrupt were most of it. Now fast sin/cos/atan2 (error
+    < 4e-7 / 1e-5 rad; sim passes, sweep unchanged: 0 slips, the same lightest-rotor / R-20 % soft
+    fails), flash prefetch on, and 8 overruns in a row now turn the motors off (fault "control
+    interrupt overran") instead of starving the main loop into a watchdog reset.
+  - 6 s at 1000 RPM: interrupt 34 us (35 us worst since boot), 0 overruns, link fully responsive,
+    `#SPIN` ramp-down and power-off clean. M1 obs negative / M2 positive (opposite senses as expected).
+    M2 id ~2-3.7 A, iq ~0; M1 noisy (its phase B noise lands in dq). Flux ~1.0 (0.93-1.28). Observer
+    speeds wander +-50 % around 1000 RPM (0.8 V back-EMF, noisy M1): watch the 2000 RPM hand-over
+    (needs both within 10 %) in step 6.
+  - Before closed loop: the U9 noise (above) and more interrupt headroom (closed loop adds work; CCM
+    SRAM for the interrupt code would help).
 - New maintenance commands: `#NOISE [samples]`, `#SLOW <0|1|2>`, `#DUMP [samples] [channel]` (consecutive
-  raw samples, 16 per line; `D <channel> <first sample> <values>`), `#BRK`, `#MOE`. A CPU fault now turns both bridges
+  raw samples, 16 per line; `D <channel> <first sample> <values>`), `#BRK`, `#MOE`, `#LOAD <us>` (pad the
+  interrupt, drive off), `#SPIN <rpm> <ms>` (bench spin that stops itself), `#RXLOG` (last 256 link
+  bytes), `#PREV` (the previous boot's record: last main-loop step, longest interrupt, CPU fault).
+  `#STAT` adds uptime, reset reason, overruns, longest interrupt since boot, main-loop rate, link
+  counters. `#ALIGN <V> [ms]` takes a duration (max 5 s). A CPU fault now turns both bridges
   off and sends `ERR:spindle CPU fault ... pc=...` over the link (`addr2line -e firmware.elf <pc>`).
 
 ## Verified without hardware

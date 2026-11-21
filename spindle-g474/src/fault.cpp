@@ -40,6 +40,14 @@ extern "C" void spindleFaultReport(const uint32_t* frame, uint32_t exc_return) {
     // Outputs off first: clearing MOE puts every gate input in its idle (off) state.
     TIM1->BDTR &= ~TIM_BDTR_MOE;
     TIM8->BDTR &= ~TIM_BDTR_MOE;
+    // Kept across the watchdog reset that follows; the next boot reports it.
+    TAMP->BKP3R = 0xFA170000u;
+    TAMP->BKP4R = frame[6];
+    TAMP->BKP5R = frame[5];
+    TAMP->BKP6R = SCB->CFSR;
+    TAMP->BKP7R = SCB->HFSR;
+    // Stop the interrupt-driven transmitter so it cannot interleave with this report.
+    USART2->CR1 &= ~(USART_CR1_TXEIE_TXFNFIE | USART_CR1_TCIE);
 
     puts_polled("\nERR:spindle CPU fault - motors off;");
     field(" pc=", frame[6]);

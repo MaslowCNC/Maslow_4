@@ -61,9 +61,12 @@ namespace foc {
     float maxSpeedErrorFraction();       // closed loop: worst |obs - ref| / command
 
     // Faults the interrupt detected (it has already turned the outputs off).  Read-and-clear.
-    enum Fault : uint8_t { FaultNone = 0, FaultOverCurrent = 1, FaultBreak = 2 };
+    enum Fault : uint8_t { FaultNone = 0, FaultOverCurrent = 1, FaultBreak = 2, FaultOverrun = 3 };
     uint8_t takeFault(char* detail, size_t n);
     uint8_t faultCode();   // the latched fault, without clearing it
+    void setFakeLoad(uint32_t us);   // bring-up (#LOAD): pad every ADC interrupt to `us` (0 = off)
+    uint32_t uartErrorsSeen(int which);   // bring-up: USART2 0 = ORE, 1 = FE, 2 = NE flags the interrupt saw
+    uint32_t overruns();   // interrupts that ended with the next sample already waiting, since boot
     const char* enableFailReason();   // why the last enable() / startAlignTest() returned false
 
     // Snapshot and reset the per-interval telemetry of motor m.

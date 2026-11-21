@@ -30,9 +30,21 @@ static const char* FW_VERSION    = "g474-0.1";
 
 // ------------------------------------------------------------------ link output
 
+static volatile uint32_t g_rx_lines = 0;   // link lines received (#STAT, bring-up)
+static volatile uint32_t g_tx_drops = 0;   // lines dropped because the TX buffer had no room
+static const char*       g_boot_reason = "";   // this boot's reset reason (#STAT)
+static uint32_t          g_prev[8];            // the previous boot's backup registers (crumbsInit)
+// #RXLOG (bring-up): the last 256 raw bytes received on the link.
+static uint8_t  g_rxlog[256];
+static uint32_t g_rxlog_n = 0;
+
+
 bool linkWriteIfRoom(const char* line, int n) {
     if (n <= 0) return true;
-    if (Link.availableForWrite() < n) return false;
+    if (Link.availableForWrite() < n) {
+        g_tx_drops++;
+        return false;
+    }
     Link.write(reinterpret_cast<const uint8_t*>(line), n);
     return true;
 }
@@ -421,6 +433,8 @@ static void sendStatus() {
 static uint32_t g_align_until  = 0;
 static uint32_t g_stat_every   = 0;
 static bool     g_noise_pending = false;
+static volatile uint32_t g_loop_count = 0;   // main-loop passes, reported per second by #STAT
+static uint32_t g_spin_until = 0;   // #SPIN: when the timed bench spin ramps down (0 = none)
 static uint32_t g_align_avg_at  = 0;      // when to start averaging the align currents (millis)
 static int      g_dump_print    = -1;     // next #DUMP line to print, -1 = none
 static int      g_dump_rows     = 0;      // samples captured
@@ -469,6 +483,25 @@ static void probeMoe() {
     }
 }
 
+static void dumpRxLog() {
+    uint32_t n     = g_rxlog_n;
+    uint32_t count = n < 256 ? n : 256;
+    char     line[200];
+    int      len = 0;
+    for (uint32_t i = n - count; i < n; i++) {
+        uint8_t c = g_rxlog[i & 0xFF];
+        if (len > 150) {
+            linkEvent("MSG", "RXLOG %s", line);
+            len = 0;
+        }
+        if (c == '\n') len += snprintf(line + len, sizeof(line) - len, "|");
+        else if (c >= 0x20 && c < 0x7F && c != '|' && c != '\\') len += snprintf(line + len, sizeof(line) - len, "%c", c);
+        else len += snprintf(line + len, sizeof(line) - len, "\\x%02x", c);
+    }
+    if (len) linkEvent("MSG", "RXLOG %s", line);
+    linkEvent("MSG", "RXLOG end (%lu bytes received since boot; | = newline)", (unsigned long)n);
+}
+
 static void reportNoise() {
     static const char ph[3] = { 'a', 'b', 'c' };
     for (int k = 0; k < 2; k++) {
@@ -487,16 +520,26 @@ static void reportNoise() {
 static uint32_t g_stat_last    = 0;
 
 static void printStat() {
+    static uint32_t last_ms = 0, last_loops = 0;
+    uint32_t        now_ms = millis(), loops = g_loop_count;
+    float           loop_hz = last_ms && now_ms != last_ms ? (loops - last_loops) * 1000.0f / (now_ms - last_ms) : 0.0f;
+    last_ms = now_ms;
+    last_loops = loops;
     foc::MotorTelemetry t[2] = { foc::take(0), foc::take(1) };
     uint32_t            isr_max, isr_n;
     foc::takeIsrStats(&isr_max, &isr_n);
     const char* mode = foc::mode() == foc::Mode::Off ? "off" : foc::mode() == foc::Mode::Open ? "open" : "closed";
+    linkEvent("MSG", "STAT up %lu s since %s; control interrupt overruns %lu, longest %lu us since boot",
+              (unsigned long)(millis() / 1000), g_boot_reason, (unsigned long)foc::overruns(),
+              (unsigned long)(TAMP->BKP1R / (SystemCoreClock / 1000000)));
     linkEvent("MSG", "STAT %s cmd %.0f/%.0f rpm phi %.1f/%.1f deg zerr %.1f deg vbus %.1f V T %.0f/%.0f C isr %lu us",
               mode, foc::speedCommandRpm(), foc::speedTargetRpm(), rad2deg(foc::phaseCurrent()),
               rad2deg(foc::phaseTarget()), rad2deg(foc::zErrorRad()), hw::vbus(), hw::temperature(0),
               hw::temperature(1), (unsigned long)isr_max);
-    linkEvent("MSG", "STAT pins: vbus %.3f V, NTC1 %.3f V, NTC2 %.3f V (of 3.3 V)", hw::slowPinVolts(0),
-              hw::slowPinVolts(1), hw::slowPinVolts(2));
+    linkEvent("MSG", "STAT pins: vbus %.3f V, NTC1 %.3f V, NTC2 %.3f V (of 3.3 V); main loop %.0f Hz; link rx %lu lines, "
+                     "tx drops %lu; uart errors seen ore %lu fe %lu ne %lu", hw::slowPinVolts(0), hw::slowPinVolts(1),
+              hw::slowPinVolts(2), loop_hz, (unsigned long)g_rx_lines, (unsigned long)g_tx_drops,
+              (unsigned long)foc::uartErrorsSeen(0), (unsigned long)foc::uartErrorsSeen(1), (unsigned long)foc::uartErrorsSeen(2));
     for (int k = 0; k < 2; k++) {
         linkEvent("MSG", "STAT M%d i %.2f %.2f %.2f dq %.2f %.2f v %.2f %.2f obs %.0f rpm flux %.2f max %.1f A", k + 1,
                   t[k].ia, t[k].ib, t[k].ic, t[k].id, t[k].iq, t[k].vd, t[k].vq, t[k].obs_rpm, t[k].obs_flux, t[k].imax);
@@ -526,9 +569,10 @@ static void maintenance(const char* line) {
             linkEvent("WARN", "ALIGN refused: align start failed (%s)", foc::enableFailReason());
             reportBreak();
         } else {
-            g_align_until  = millis() + 300;
-            g_align_avg_at = millis() + 150;   // average the settled half: 2000 samples = 100 ms
-            linkEvent("MSG", "ALIGN: %.2f V on the phase A axis of both motors for 300 ms", v);
+            uint32_t ms    = n >= 3 ? (uint32_t)(b < 50 ? 50 : b > 5000 ? 5000 : b) : 300;
+            g_align_until  = millis() + ms;
+            g_align_avg_at = millis() + ms / 2;   // average 2000 samples (100 ms) from halfway
+            linkEvent("MSG", "ALIGN: %.2f V on the phase A axis of both motors for %lu ms", v, (unsigned long)ms);
         }
     } else if (!strcmp(word, "CL")) {
         tu.closed_loop_allowed = a != 0;
@@ -567,6 +611,25 @@ static void maintenance(const char* line) {
         g_noise_pending = true;
         linkEvent("MSG", "NOISE: sampling %lu periods (%.0f ms)", (unsigned long)samples,
                   samples / (PWM_FREQUENCY_HZ / 1000.0f));
+    } else if (!strcmp(word, "SPIN") && n >= 3) {
+        // Bench spin that stops itself: it does not depend on the link delivering the S0.
+        float    rpm = a < 0 ? 0 : a > 3000 ? 3000 : a;
+        uint32_t ms  = b < 100 ? 100 : b > 30000 ? 30000 : (uint32_t)b;
+        setSpindleSpeed(rpm);
+        g_spin_until = millis() + ms;
+        if (!g_spin_until) g_spin_until = 1;
+        linkEvent("MSG", "SPIN: %.0f RPM for %lu ms, then S0", rpm, (unsigned long)ms);
+    } else if (!strcmp(word, "LOAD") && n >= 2) {
+        uint32_t us = a < 0 ? 0 : a > 48 ? 48 : (uint32_t)a;
+        foc::setFakeLoad(us);
+        linkEvent("MSG", "LOAD: every ADC interrupt padded to %lu us (0 = off)", (unsigned long)us);
+    } else if (!strcmp(word, "PREV")) {
+        linkEvent("MSG", "PREV: this boot: %s, up %lu s; raw %08lx %08lx %08lx %08lx", g_boot_reason,
+                  (unsigned long)(millis() / 1000), (unsigned long)g_prev[0], (unsigned long)g_prev[1],
+                  (unsigned long)g_prev[2], (unsigned long)g_prev[3]);
+        crumbsReport();
+    } else if (!strcmp(word, "RXLOG")) {
+        dumpRxLog();
     } else if (!strcmp(word, "BRK")) {
         reportBreak();
     } else if (!strcmp(word, "MOE")) {
@@ -588,14 +651,15 @@ static void maintenance(const char* line) {
     } else if (!strcmp(word, "VER")) {
         linkEvent("MSG", "spindle firmware %s, %s %s", FW_VERSION, __DATE__, __TIME__);
     } else {
-        linkEvent("MSG", "# commands: STAT LOG <ms> ALIGN [V] CL <0|1> CUR <kp> <ki> POS <kp> <kd> <ki> "
+        linkEvent("MSG", "# commands: STAT LOG <ms> ALIGN [V] [ms] CL <0|1> CUR <kp> <ki> POS <kp> <kd> <ki> "
                          "POSBW <min> <full rpm> OLKI <ki> DTC <ns> IHOLD/ISPIN/IBOOST/ILIM <A> OBS <R> <L> <flux> "
-                         "TRIP <sw A> [hw A] NOISE [samples] SLOW <0|1|2> DUMP [samples] [channel] BRK VER");
+                         "TRIP <sw A> [hw A] NOISE [samples] SLOW <0|1|2> DUMP [samples] [channel] BRK MOE LOAD <us> SPIN <rpm> <ms> RXLOG PREV VER");
         return;
     }
     if (strcmp(word, "STAT") && strcmp(word, "VER") && strcmp(word, "ALIGN") && strcmp(word, "NOISE") && strcmp(word, "SLOW") &&
         strcmp(word, "DUMP") && strcmp(word, "BRK") &&
-        strcmp(word, "MOE")) {
+        strcmp(word, "MOE") && strcmp(word, "LOAD") && strcmp(word, "SPIN") && strcmp(word, "RXLOG") &&
+        strcmp(word, "PREV")) {
         linkEvent("MSG", "tuning: cur %.3f/%.0f pos %.2f/%.3f/%.1f bw %.2f/%.0f olki %.1f I hold %.1f spin %.1f "
                          "boost %.1f lim %.1f obs R %.3f L %.1fuH flux %.2fmWb trip %.1f A dtc %.0f ns CL %d",
                   tu.cur_kp, tu.cur_ki, tu.pos_kp, tu.pos_kd, tu.pos_ki, tu.pos_bw_min, tu.pos_bw_full_rpm, tu.ol_ki,
@@ -606,6 +670,7 @@ static void maintenance(const char* line) {
 
 static void processLine(const char* line, size_t len) {
     if (len == 0) return;
+    g_rx_lines++;
     switch (line[0]) {
         case 'S': setSpindleSpeed(strtof(line + 1, nullptr)); break;
         case 'Z': setPhaseTargetDeg(strtof(line + 1, nullptr)); break;
@@ -649,6 +714,7 @@ static void pollLink() {
     static size_t len = 0;
     while (Link.available()) {
         char ch = (char)Link.read();
+        g_rxlog[g_rxlog_n++ & 0xFF] = (uint8_t)ch;
         if (ch == '\r') continue;
         if (ch == '\n') {
             buf[len] = 0;
@@ -899,14 +965,49 @@ static const char* resetReason() {
 
 // ------------------------------------------------------------------ setup / loop
 
+// ------------------------------------------------------------------ reset-surviving diagnostics
+
+
+static const char* crumbName(uint32_t step) {
+    static const char* const names[] = { "?", "slow analog", "link input", "fault check", "2 ms sampling",
+                                         "analog limits", "align", "spin supervision", "tool state machine",
+                                         "reported state", "fan", "status line", "#LOG", "#NOISE report",
+                                         "#DUMP print", "trip recorder", "LED", "end of loop" };
+    return step < sizeof(names) / sizeof(names[0]) ? names[step] : "?";
+}
+
+void crumbsInit() {
+    RCC->APB1ENR1 |= RCC_APB1ENR1_PWREN | RCC_APB1ENR1_RTCAPBEN;
+    (void)RCC->APB1ENR1;
+    PWR->CR1 |= PWR_CR1_DBP;   // backup domain writable
+    volatile uint32_t* bkp = &TAMP->BKP0R;
+    for (int i = 0; i < 8; i++) {
+        g_prev[i] = bkp[i];
+        bkp[i]    = 0;
+    }
+}
+
+void crumbsReport() {
+    if ((g_prev[0] & 0xFFFF0000u) == 0xC0DE0000u)
+        linkEvent("MSG", "previous boot: main loop last at '%s', longest ADC interrupt %lu us%s",
+                  crumbName(g_prev[0] & 0xFFFF), (unsigned long)(g_prev[1] / (SystemCoreClock / 1000000)),
+                  g_prev[2] ? " - it ended INSIDE the ADC interrupt" : "");
+    if (g_prev[3] == 0xFA170000u)
+        linkEvent("MSG", "previous boot: CPU fault pc=%08lx lr=%08lx cfsr=%08lx hfsr=%08lx", (unsigned long)g_prev[4],
+                  (unsigned long)g_prev[5], (unsigned long)g_prev[6], (unsigned long)g_prev[7]);
+}
+
 void setup() {
     // Cycle counter first: the fault report's UART timeouts use it.
     CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
     DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+    crumbsInit();
 
     const char* reason = resetReason();
+    g_boot_reason      = reason;
     Link.begin(LINK_BAUD);
     linkEvent("MSG", "spindle reset reason: %s", reason);
+    crumbsReport();
     Link.flush();   // all of it out before init starts reconfiguring the chip
 
     const char* why = "";
@@ -955,25 +1056,37 @@ void setup() {
 }
 
 void loop() {
+    g_loop_count++;
     hw::watchdogKick();
     uint32_t now = millis();
+    if (g_spin_until && (int32_t)(now - g_spin_until) >= 0) {
+        g_spin_until = 0;
+        setSpindleSpeed(0);
+        linkEvent("MSG", "SPIN: time up, ramping down");
+    }
 
+    CRUMB(1);
     hw::serviceSlowAnalog();
+    CRUMB(2);
     pollLink();
 
     // Faults the interrupt caught (outputs already off).
     char detail[96];
+    CRUMB(3);
     uint8_t f = foc::takeFault(detail, sizeof(detail));
     if (f != foc::FaultNone) stopForOverCurrent(detail);
 
     static uint32_t last_2ms = 0;
     if (now - last_2ms >= 2) {
         last_2ms = now;
+        CRUMB(4);
         sample2ms(now);
+        CRUMB(5);
         checkAnalogLimits(now);
     }
 
     // ALIGN test: report what the shunts saw, then off.
+    CRUMB(6);
     if (g_align_until && (int32_t)(now - g_align_until) >= 0) {
         g_align_until = 0;
         if (g_noise_pending && foc::noiseDone()) {
@@ -996,13 +1109,17 @@ void loop() {
     }
 
     if (g_align_until == 0) {
+        CRUMB(7);
         superviseSpin();
+        CRUMB(8);
         updateToolStateMachine();
     }
+    CRUMB(9);
     updateReportedState();
 
     static uint32_t last_fan = 0;
     if (now - last_fan >= 10) {
+        CRUMB(10);
         updateFan((now - last_fan) / 1000.0f);
         last_fan = now;
     }
@@ -1010,6 +1127,7 @@ void loop() {
     static uint32_t last_status = 0;
     if (now - last_status >= LINK_STATUS_INTERVAL_MS && Link.availableForWrite() >= 48) {
         last_status = now;
+        CRUMB(11);
         sendStatus();
     }
     if (g_align_avg_at && (int32_t)(now - g_align_avg_at) >= 0) {
@@ -1019,6 +1137,7 @@ void loop() {
     }
     if (g_noise_pending && g_align_until == 0 && foc::noiseDone()) {
         g_noise_pending = false;
+        CRUMB(13);
         reportNoise();
     }
     // #DUMP lines: DUMP_PER_LINE samples of one channel each, one line every 10 ms so the XY board's
@@ -1044,6 +1163,7 @@ void loop() {
     }
     if (g_stat_every && now - g_stat_last >= g_stat_every) {
         g_stat_last = now;
+        CRUMB(12);
         printStat();
     }
     if (!g_init_ok) {
@@ -1054,6 +1174,7 @@ void loop() {
         }
     }
 
+    CRUMB(15);
     tripService();
 
     // Status LED: slow blink idle, fast blink driving, solid on fault.
