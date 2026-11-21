@@ -10,7 +10,7 @@ changes with it.
 | Revision | In git | Status |
 |---|---|---|
 | v1.0 | tag `hw/ucb-36v/v1.0` (commit 484b1944b) | Built and assembled: board 1 (`maslow36v.local`) |
-| v1.1 | branch `36V-board-v1.1` | In progress: U9_SYNC still to route, fab files not regenerated |
+| v1.1 | branch `36V-board-v1.1` | Layout done, DRC clean. Fab files not regenerated, sync firmware not written |
 
 To open an older revision without touching your checkout:
 
@@ -66,9 +66,8 @@ These are the v1.1 changes done by hand, in order of value. Coordinates are KiCa
 
 ## v1.1 (in progress)
 
-v1.1 fixes the noise at the source and keeps U9 where it is. Moving U9 was considered and not needed: rerouting SB1
-gives it the same clearance from the buck as the other phases. Moving the buck would mean re-laying-out that whole
-corner of the board.
+v1.1 fixes the noise at the source. SB1 no longer runs over the buck (change 1), and the buck itself moves away
+from the motor stage and the sense nets, down to the curved bottom edge of the board (change 4).
 
 ### Changes
 
@@ -77,9 +76,9 @@ corner of the board.
 - SB1 now runs from R114's own pad 1, a Kelvin tap at the shunt, to R117's via-in-pad at (−24.0, 66.2).
 - The new route is 47.5 mm long with 5 vias (B.Cu 10 mm, F.Cu 11 mm, In2 26 mm). It stays at x ≤ −13.8 mm, west
   of the buck.
-- Closest approach is 5.5 mm to SW_NODE copper and 9.9 mm to L1's body, the same clearance SA1 has (5.9 mm). In
-  v1.0 it was −0.28 mm and 0.14 mm.
-- The before/after map is `docs/v1.1-SB1-before-after.png`.
+- With U9 still in its v1.0 place, this alone gave 5.5 mm to SW_NODE copper and 9.9 mm to L1's body, the same
+  clearance SA1 had. In v1.0 it was −0.28 mm and 0.14 mm. With the buck moved (change 4) it is 13.6 mm and 15.4 mm.
+- The before/after map is `docs/v1.1-SB1-before-after.png` (drawn before the buck moved).
 
 ![SB1 before (red) and after (green), U9's buck parts in orange](docs/v1.1-SB1-before-after.png)
 
@@ -93,13 +92,51 @@ corner of the board.
   calibrated at startup.
 
 **3. U9 synchronised to the PWM.**
-- New C165, 10 pF C0G 0402 (CL05C100JB5NNNC, C32949), on the bottom at (−0.2, 61.6). It sits right at R30, joined
-  to U9 pin 4 (RT/CLK) by a short stub.
-- The new net U9_SYNC runs from U20 pin 57 (PB4, TIM3_CH1 on AF2) to C165.
+- New C165, 10 pF C0G 0402 (CL05C100JB5NNNC, C32949), on the bottom beside R30, 2.7 mm of track from U9 pin 4
+  (RT/CLK).
+- The new net U9_SYNC runs from U20 pin 57 (PB4, TIM3_CH1 on AF2) to C165: 43.6 mm, 5 vias, top and bottom layers
+  only.
+  - PB4 is the only spare timer pin that gets out of the G474's fan-out at all (PB5, next to it, routes the same
+    way; PB10, PA4, PC9, PA9, PA10, PB3 and PB9 have no route). Its first two vias duck under the G474 to escape.
+  - No high-impedance sense node (IS*) comes within 2 mm of it on the same layer. Its closest neighbours are
+    TEMP2 (a slow thermistor input, 0.57 mm, for 4.8 mm) and a crossing of SA1 (shunt side, 0.67 mm).
 - This is the TPS54360B datasheet's (SNVSB93) recommended way to drive RT/CLK from a low-impedance clock: AC
   coupling through 10 pF, with RT staying in place to ground.
 - R30 (200 kΩ, about 500 kHz) still sets the free-running frequency. The buck runs at that frequency until the
   clock arrives, and falls back to it if the clock stops (G474 reset or bootloader).
+
+**4. The 3V3 buck moved to the curved bottom edge** (`tools/v1.1_u9move.py`).
+- U9 goes from (−3.6, 56.9), beside motor 1's stage and sense routes, to (1.1, 68.6), turned 180° so its switch node
+  (pin 8, D5, L1) faces east, away from the sense side. L1 sits by the board edge.
+- U9, L1, D5, C31 and C32 keep their layout and bottom-layer copper. The feedback, compensation and RT parts (R27,
+  R29, R30, C165, R31, C29, C30) are re-placed so FB, COMP and RT each leave their pin directly: FB 3.1 mm, COMP
+  6.6 mm, RT 2.7 mm of track. v1.0's COMP had to hop through In2.
+- The output caps C33 (22 µF) and C23 (10 µF) move next to L1's output pad. They were 9 mm away, so the output ripple
+  current ran through the 3V3 plane and the ground under the stage.
+- That area is crossed on the top layer by a bundle of long signals (BoardCOM1, INLA1, SPINDLE_RST_X, 12V_GD), so the
+  buck keeps its copper on the bottom layer. Vias only go where the bundle leaves room.
+  - U9's thermal pad now joins the bottom ground pour solidly (it had thermal spokes) and keeps 2 vias (it had 5).
+  - R27's 3V3 tap and L1's output each have a via to the 3V3 plane.
+  - Seven more ground vias tie the bottom pour around the buck to the top pour: two that moved with D5, and five
+    new ones by the ground pads of C33, C23, D5, C29 and R30.
+- Re-routed because of the move:
+  - VSUP from D1, D2 and C28 to C32, the new input hub.
+  - INLC1: its In2 hop ended in a via where C32's ground pad now sits. It is now top layer only.
+  - BoardCOM2: its In2 run would have crossed right over the new switch node. It now runs on the top layer past the
+    buck and drops to In2 well clear of it.
+- Switch-node copper to the nearest sense nets, edge to edge:
+
+  | Net | v1.0 | v1.1 before the move | v1.1 |
+  |---|---|---|---|
+  | SB1 | −0.28 mm (over it) | 5.5 mm | 13.6 mm |
+  | SA1 | 5.9 mm | 5.9 mm | 19.4 mm |
+  | SA2 | 6.3 mm | 6.3 mm | 22.2 mm |
+  | SC1 | 9.4 mm | 9.4 mm | 22.9 mm |
+  | nearest IS* (MCU side) | 11.9 mm | 11.9 mm | 20.4 mm |
+
+  L1's body is now at least 15.4 mm from any sense net (v1.0: 0.14 mm from SB1, 10.3 mm from SA1).
+
+![The buck's parts before (red outlines) and after (orange), sense nets in cyan, the RC block in blue, U9_SYNC in green](docs/v1.1-buck-move.png)
 
 Schematic: R178 and C164 are on the Spindle Drive sheet, where PB4's no-connect became the `U9_SYNC` label.
 C165 is on the root sheet with the `RT` and `U9_SYNC` labels. The title block is Rev 1.1, so the silkscreen reads
@@ -109,41 +146,32 @@ C165 is on the root sheet with the `RT` and `U9_SYNC` labels. The title block is
 
 - **C107 (ISB1's filter capacitor) stays 100 pF.** Changing it to 330 pF was a rework option for boards with the
   old SB1 route. The reroute removes the cause, and the larger value would slow that phase's settling.
-- **U9's position** stays the same (see above).
 
 ### Checks (as of this commit)
 
 - **ERC:** no new problems (42 `pin_not_driven` against 43 in v1.0).
-- **DRC** (with schematic parity): one error, the unrouted U9_SYNC connection (U20 pad 57 to C165 pad 2). The
-  same 267 warnings as v1.0.
+- **DRC** (with schematic parity): no errors. 263 warnings, all also in v1.0's 267; the four that went are two thin
+  VSUP stubs and two silkscreen-over-pad warnings that left with the parts.
 - **GND connectivity:** unchanged from v1.0. `tools/gndcheck.py` reports 61 components on both boards.
   - The script can't see thermal-relief spokes, so the count isn't the number of islands. Compare it against the
     previous revision.
   - Two GND stitching vias at (−22.56, 50.5) and (−23.56, 50.5) are gone: SB1's bottom leg cut off the small
     island they sat on.
-  - One new GND stitching via at (−2.10, 61.55) reconnects the GND pocket under U9 that holds R30's and C29's
-    ground pads. C165 and its stub had closed that pocket's only bottom-layer exit.
-- **Contact circles:** the new bottom parts C164 and C165 sit 62–72 mm from the origin, well clear of the r18/r27
+  - The first v1.1 commit's stitching via at (−2.10, 61.55), for the ground pocket at U9's old RT pin, left with
+    the buck.
+- **Contact circles:** every new or moved bottom part sits 60–77 mm from the origin, well clear of the r18/r27
   contact circles.
+- **C28's can:** its courtyard only covers its pads, but the 10 × 10 mm can spans x 9.0–19.9, y 62.2–73.0. The moved
+  parts stay west of x 9.0.
 
 ### Still to do before ordering v1.1
 
-1. **Route U9_SYNC** (U20 pad 57 at (−31.8, 53.1) on F.Cu to C165 pad 2 at (−0.2, 62.1) on B.Cu).
-   - The automatic router only found paths that rejoin the problem in another form:
-     - through the sense RC block (C106–C108, C126, C128), which puts a 500 kHz clock among the sense nodes and
-       splits their ground;
-     - or across U9's bottom-layer power ground.
-   - The other spare TIM3 pins don't help: PC9 (pin 41, TIM3_CH4, east side) is boxed in, and PA6 (TIM3_CH1) sits
-     beside PA7, ISB1's input.
-   - Route it by hand in KiCad:
-     - Keep it well away from the IS*/SA*/SB*/SC* sense nets and the RC block. Running near the buck is fine,
-       since it is a 3.3 V logic clock.
-     - Keep it off U9's power-ground copper on the bottom.
-     - Add GND stitching vias wherever it splits a pour.
-     - 0.15 mm width is fine.
+1. **Look over the moved buck and the U9_SYNC route in KiCad.** Both were placed and routed by script. DRC is
+   clean, but nobody has looked at them in the editor yet.
 2. **Regenerate the JLCPCB files** with `jlcpcb/gen_jlcpcb.py`. The BOM, CPL and gerbers in `jlcpcb/` are still
    v1.0's.
    - New parts: R178 (C144651), C164 (C45783), C165 (C32949). FB1 (C1002) is gone.
+   - The CPL changes for every moved part (U9, L1, D5, C23, C29–C33, R27, R29–R31, C165).
 3. **Optional: a board-revision code.** Neither MCU can currently tell v1.0 from v1.1, and the firmware needs that
    to pick the trip thresholds. Two cheap ways:
    - a strap on a spare G474 pin (PD2 pin 55, or PF0/PF1 pins 5–6);
@@ -184,6 +212,9 @@ KP=/Applications/KiCad/KiCad.app/Contents/Frameworks/Python.framework/Versions/C
 - `v1.1_schematic.py`, `v1.1_pcb.py`: the v1.1 edits, applied to v1.0 (`$KP tools/v1.1_pcb.py .` from this
   folder). They are kept as the record of exactly what changed. They check v1.0's layout as they go, so they won't
   run a second time.
+- `v1.1_u9move.py`: the buck move (change 4), applied after `v1.1_pcb.py`. Also a record; it checks U9's old
+  position, so it won't run twice.
+- `u9map.py <new> <old> <out.png>`: renders the buck before/after map in `docs/`.
 - `kirouter.py`: a small grid A* router and placement helper over pcbnew. It knows the net classes, the custom
   island rules and the keep-outs, and it pulls the result into straight runs. It was used for SB1, the RT stub and
   the C164 link.
