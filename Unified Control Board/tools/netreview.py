@@ -7,6 +7,7 @@
 #   detour - pad-to-pad copper paths much longer than the straight line between the pads (only for pairs whose
 #            path passes no third pad), as path / straight, excess mm;
 #   jog    - tiny segments (< 0.05 mm) and back-and-forth jogs.
+# local_detours() finds detours inside a route (see there); tools/detours.py --local re-routes them.
 # Writes <out>/report.json, <out>/report.txt and contact sheets <out>/sheet_NN.png (one tile per net, numbered in
 # report.txt) plus <out>/net_<name>.png for each net.
 import sys, os, json, math, re, heapq, collections
@@ -355,6 +356,79 @@ def analyse(net, its):
                                 "ratio": round(path / straight, 2)})
     res["detours"] = sorted(out, key=lambda d: -(d["path"] - d["straight"]))
     return res
+
+
+def local_detours(net, its, min_excess=2.0, ratio=1.4):
+    """stretches of copper between two junctions (pads, T-junctions, zone edges) that are much longer than the straight
+    line between their ends: at least min_excess mm and ratio times longer.  Catches a detour in the middle of a long
+    route, which the pad-to-pad check cannot.  Each is {a, b, path, straight, vias}, a and b being a pad ("U2.1") or a
+    point on a layer ("In2.Cu@-19.8000,-12.6000"), worst first, none overlapping another on the same chain."""
+    g = build(net, its)
+    n = len(g.info)
+    parent = list(range(n))
+
+    def root(i):
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+    for u, v, w, tag in g.edges:
+        if tag[0] in ("piece", "link") and w < MERGE and not (u in g.term or v in g.term):
+            ru, rv = root(u), root(v)
+            if ru != rv:
+                parent[ru] = rv
+    E = [(root(u), root(v), w, tag) for u, v, w, tag in g.edges if root(u) != root(v)]
+    terms = {root(t) for t in g.term}
+    adj = collections.defaultdict(set)
+    for k, (u, v, w, tag) in enumerate(E):
+        adj[u].add((v, k)); adj[v].add((u, k))
+    alive = set(range(len(E)))
+    nb = lambda x: [(v, k) for v, k in adj[x] if k in alive]
+    queue = [x for x in list(adj) if x not in terms and len({v for v, k in nb(x)}) <= 1]
+    while queue:
+        x = queue.pop()
+        if x in terms or len({v for v, k in nb(x)}) > 1:
+            continue
+        for v, k in nb(x):
+            alive.discard(k)
+            if v not in terms and len({y for y, kk in nb(v)}) <= 1:
+                queue.append(v)
+
+    def name(x):
+        layer, p, label = g.info[x]
+        if label is not None:
+            return label[1] if label[0] == "pad" else None
+        return "%s@%.4f,%.4f" % (layer, p[0], p[1])
+    out, seen = [], set()
+    for s in [x for x in list(adj) if nb(x) and (x in terms or len(nb(x)) != 2)]:
+        for v, k in nb(s):
+            if k in seen:
+                continue
+            seq, ks, x, kk = [s, v], [k], v, k
+            seen.add(k)
+            while x not in terms and len(nb(x)) == 2:
+                y, k2 = next((y, k2) for y, k2 in nb(x) if k2 != kk)
+                if k2 in seen:
+                    break
+                seen.add(k2); seq.append(y); ks.append(k2); x, kk = y, k2
+            L = [0.0]
+            for k2 in ks:
+                L.append(L[-1] + (E[k2][2] if E[k2][3][0] in ("piece", "link") else 0.0))
+            ok = [i for i, x in enumerate(seq) if g.info[x][1] is not None and name(x) is not None]
+            cand = []
+            for ii, i in enumerate(ok):
+                for j in ok[ii + 1:]:
+                    path, straight = L[j] - L[i], dist(g.info[seq[i]][1], g.info[seq[j]][1])
+                    if path - straight >= min_excess and path >= ratio * straight:
+                        cand.append((path - straight, i, j, path, straight))
+            cand.sort(reverse=True)
+            taken = []
+            for ex, i, j, path, straight in cand:
+                if all(j <= i2 or i >= j2 for i2, j2 in taken):
+                    taken.append((i, j))
+                    out.append({"a": name(seq[i]), "b": name(seq[j]), "path": round(path, 2), "straight": round(straight, 2),
+                                "vias": sum(1 for k2 in ks[i:j] if E[k2][3][0] == "via")})
+    return sorted(out, key=lambda d: -(d["path"] - d["straight"]))
 
 
 if __name__ == "__main__":

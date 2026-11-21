@@ -119,8 +119,11 @@ if CMD == "pull":
     import kirouter as kr
     dru = open(D + "Unified Control Board.kicad_dru").read()
     SKIP = re.compile(r"IS[ABC][12]|S[ABC][12]|U9_SYNC|USBD[+-]")   # spacing chosen on purpose
-    only = set(sys.argv[4:])
+    args = sys.argv[4:]
     MARGIN = 0.03
+    if "--margin" in args:   # extra clearance kept while straightening (the sense nets keep their spacing)
+        k = args.index("--margin"); MARGIN = float(args[k + 1]); args = args[:k] + args[k + 2:]
+    only = set(args)
     tracks_all = [t for t in b.GetTracks() if t.GetClass() == "PCB_TRACK"]
     vias_all = [t for t in b.GetTracks() if t.GetClass() == "PCB_VIA"]
     pads_all = [(fp, p) for fp in b.GetFootprints() for p in fp.Pads()]

@@ -1,4 +1,5 @@
-# detours.py <board dir> <log> [net ...]: try tools/reroute.py on every detour tools/netreview.py reports, worst
+# detours.py <board dir> <log> [--local] [reroute.py options] [net ...]: try tools/reroute.py on every detour
+# tools/netreview.py reports (with --local, the detours inside routes from local_detours()), worst
 # first, net by net.  Every re-route reroute.py accepts is then checked by a full DRC: if any error, unconnected item
 # or dangling track/via appears that was not there before, the board file goes back to how it was.  After a kept
 # re-route the net is analysed again and its next detour tried (up to four per net).  Skips nets whose routing is
@@ -13,7 +14,8 @@ import netreview as nr
 
 D = sys.argv[1].rstrip("/") + "/"
 LOG = sys.argv[2]
-EXTRA = [a for a in sys.argv[3:] if a.startswith("--") or a.replace(".", "").isdigit()]   # passed on to reroute.py
+LOCAL = "--local" in sys.argv   # detours inside a route (netreview.local_detours) instead of pad to pad
+EXTRA = [a for a in sys.argv[3:] if (a.startswith("--") or a.replace(".", "").isdigit()) and a != "--local"]   # passed on to reroute.py
 ONLY = set(a for a in sys.argv[3:] if a not in EXTRA)
 PY = sys.executable
 KICAD_CLI = "/Applications/KiCad/KiCad.app/Contents/MacOS/kicad-cli"
@@ -38,7 +40,10 @@ def drc_bad():
 
 def analyse(net):
     b = pcbnew.LoadBoard(PCB)
-    return nr.analyse(net, nr.load(b)[net])
+    its = nr.load(b)[net]
+    if LOCAL:
+        return {"detours": nr.local_detours(net, its)}
+    return nr.analyse(net, its)
 
 
 base = drc_bad()
@@ -51,9 +56,10 @@ for net in nets:
     if (ONLY and net not in ONLY) or SKIP.fullmatch(net):
         continue
     res = nr.analyse(net, ib[net])
-    if res["zones"] or not res["detours"]:
+    found = nr.local_detours(net, ib[net]) if LOCAL else res["detours"]
+    if res["zones"] or not found:
         continue
-    todo.append((max(d["path"] - d["straight"] for d in res["detours"]), net))
+    todo.append((max(d["path"] - d["straight"] for d in found), net))
 todo.sort(reverse=True)
 log = open(LOG, "a")
 backup = PCB + ".detour-backup"
@@ -90,5 +96,6 @@ for excess, net in todo:
         log.flush()
         if verdict != "RE-ROUTED":
             continue
-if os.path.exists(backup):
-    os.unlink(backup)
+for f in (backup, backup + ".islands.json"):
+    if os.path.exists(f):
+        os.unlink(f)

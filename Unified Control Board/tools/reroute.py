@@ -1,5 +1,7 @@
-# reroute.py <board dir> <net> <pad A> <pad B> [--inner] [--force] [--dry] [--accept R] [--chain K] [--step S]
-# Re-route the worst stretch of the copper path between two pads of a net.
+# reroute.py <board dir> <net> <end A> <end B> [--inner] [--force] [--dry] [--accept R] [--chain K] [--step S]
+#            [--vias N] [--save MM] [--viacost C] [--fewer K] [--slack MM]
+# Re-route the worst stretch of the copper path between two pads of a net.  An end can also be a point of the net's
+# copper on a layer, "In2.Cu@-19.8,-12.6" (tools/netreview.py local_detours() reports them that way).
 #
 # On tools/netreview.py's point graph (dead copper peeled off first), the path between the pads is split at real
 # junctions (a point where a third piece of copper joins, a pad or a zone).  The longest of those chains (or chain K,
@@ -7,7 +9,9 @@
 # shortest route kirouter finds from any point of one to any point of the other: clearance plus 0.03 mm, top and
 # bottom layers (--inner also allows In1/In2 at 1.5x cost), kept off the analog nets.  The new route is kept only if
 # it is at least 2 mm shorter and no more than R (default 0.85) of the old chain; otherwise the original goes back
-# exactly.  Run with KiCad 10's Python.
+# exactly.  --vias N limits the extra vias the new route may add, --save MM sets the minimum saving (default 2 mm) and
+# --viacost C the router's cost of a via in mm (default 2).  --fewer K accepts instead a route with at least K fewer
+# vias that is no more than --slack MM (default 0.5) longer.  Run with KiCad 10's Python.
 import sys, os, math, re, heapq, collections
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import numpy as np
@@ -26,6 +30,9 @@ CHAIN = int(flags[flags.index("--chain") + 1]) if "--chain" in flags else None
 STEP = float(flags[flags.index("--step") + 1]) if "--step" in flags else 0.1
 MAXVIAS = int(flags[flags.index("--vias") + 1]) if "--vias" in flags else 99   # extra vias allowed
 MINSAVE = float(flags[flags.index("--save") + 1]) if "--save" in flags else 2.0
+VIACOST = float(flags[flags.index("--viacost") + 1]) if "--viacost" in flags else 2.0
+FEWER = int(flags[flags.index("--fewer") + 1]) if "--fewer" in flags else None
+SLACK = float(flags[flags.index("--slack") + 1]) if "--slack" in flags else 0.5
 PCB = D + "Unified Control Board.kicad_pcb"
 b = pcbnew.LoadBoard(PCB)
 dru = open(D + "Unified Control Board.kicad_dru").read()
@@ -76,7 +83,18 @@ while queue:
             alive.discard(k)
             if v not in terms and len(nbrs(v)) <= 1:
                 queue.append(v)
-TA, TB = root(g.key[("pad", PA)]), root(g.key[("pad", PB)])
+
+
+def end_node(spec):
+    """a pad ("U2.1") or a point of the net's copper on a layer ("In2.Cu@-19.8,-12.6", as netreview.local_detours names it)"""
+    if "@" in spec:
+        ln, xy = spec.split("@")
+        x, y = (float(c) for c in xy.split(","))
+        return root(g.key[(ln, round(x, 4), round(y, 4))])
+    return root(g.key[("pad", spec)])
+
+
+TA, TB = end_node(PA), end_node(PB)
 # shortest copper path A -> B
 dist_, prev = {TA: 0.0}, {}
 pq = [(0.0, TA)]
@@ -242,7 +260,7 @@ def heur(i, j):
     return H[min(ny_ - 1, max(0, int((y - region[1]) / cg))), min(nx_ - 1, max(0, int((x - region[0]) / cg)))]
 
 
-runs = R.route(NET, starts, goals, W, clr, layers=layers, via_cost=2.0, noise=noise, noise_cost=1.5, clear_radius=0.3,
+runs = R.route(NET, starts, goals, W, clr, layers=layers, via_cost=VIACOST, noise=noise, noise_cost=1.5, clear_radius=0.3,
                heuristic=heur)
 ok = False
 if runs:
@@ -253,7 +271,10 @@ if runs:
     gb = min(goals, key=lambda q: (q[0] - e0[0]) ** 2 + (q[1] - e0[1]) ** 2)
     print("  chain %.1f mm, %d vias -> new %.1f mm, %d vias (%s), from (%.2f, %.2f) %s to (%.2f, %.2f) %s" % (
         old_len, old_vias, new_len, new_vias, "/".join(r[0][:-3] for r in runs), sa[0], sa[1], sa[2], gb[0], gb[1], gb[2]))
-    ok = FORCE or (new_len <= ACCEPT * old_len and old_len - new_len >= MINSAVE and new_vias <= old_vias + MAXVIAS)
+    if FEWER is not None:
+        ok = FORCE or (new_vias <= old_vias - FEWER and new_len <= old_len + SLACK)
+    else:
+        ok = FORCE or (new_len <= ACCEPT * old_len and old_len - new_len >= MINSAVE and new_vias <= old_vias + MAXVIAS)
     if ok and not DRY:
         kr.add_runs(b, NET, runs, W, snap_start=(sa[0], sa[1]), snap_end=(gb[0], gb[1]), keep=keep)
 else:
