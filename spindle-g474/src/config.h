@@ -10,7 +10,7 @@
 
 // ---- Motor (both spindle motors are the same part) ----
 constexpr int   POLE_PAIRS      = 1;
-constexpr float PHASE_R_OHM     = 0.39f;     // BENCH: dead-time corrected
+constexpr float PHASE_R_OHM     = 0.32f;     // board 1 #GCAL (0.28-0.35 per axis, FETs + shunts + wiring); ESC1 bench 0.39
 constexpr float PHASE_L_H       = 75e-6f;    // BENCH
 constexpr float FLUX_WB         = 7.84e-3f;  // BENCH (ESC1, bus-corrected; the ESP32 VSWEEP gave 7.28)
 
@@ -62,9 +62,14 @@ constexpr float IQ_LIMIT_A      = 8.0f;      // GUESS: closed-loop torque curren
 // the rotors ~50 deg apart in the simulation (test/sim).  Chosen in the simulation over rotor
 // inertias 3e-6..5e-5 kg m^2 (the real one is unknown) and motor-constant errors: retune on the
 // bench (#POS).  These are the gains at and above POS_BW_FULL_RPM.
-constexpr float POS_KP          = 10.0f;     // A per rad of angle error
-constexpr float POS_KD          = 0.12f;     // A per rad/s of speed error
-constexpr float POS_KI          = 100.0f;    // A per rad s
+// Board 1 (2026-11-20): the simulation's 10 / 0.12 / 100 (for J 1e-5) oscillated at ~52 Hz right after
+// the hand-over and tripped the comparator; the oscillation says J ~2-5e-6.  Scaled by that ratio
+// (x0.24) closed loop held 3000 RPM.  These are stable in the simulation for J 2e-6..1e-5 but too soft
+// for its 15 / 36 mNm load-step Z checks (those fail): retune for stiffness once J is measured and the
+// U9 sense noise is fixed (BRINGUP.md).
+constexpr float POS_KP          = 2.4f;      // A per rad of angle error
+constexpr float POS_KD          = 0.029f;    // A per rad/s of speed error
+constexpr float POS_KI          = 24.0f;     // A per rad s
 // Below POS_BW_FULL_RPM the angle loop's bandwidth b falls linearly to POS_BW_MIN at CL_EXIT_RPM
 // (Kp*b^2, Kd*b, Ki*b^3: same damping, foc.cpp posGains).  At full gains the loop limit-cycled
 // between 1500 and 3000 RPM in the simulation (+-5 A bursts at ~25 Hz: the observer is weakest at

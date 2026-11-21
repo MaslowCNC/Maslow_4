@@ -112,6 +112,17 @@ an assumption the next one relies on. Stop at the first surprise.
     kd 0.12; the 5 ms speed filter lags ~57 deg at 50 Hz) and M1's phase B noise, before the inertia.
     Next: lower kd / the low-speed bandwidth (`#POS`, `#POSBW`), filter the derivative, or fix the U9
     noise first.
+- **Step 6.1 passed (closed loop, 3000 RPM, loose motors):** the oscillation's iq/speed swing put the
+  rotor inertia at ~2-5e-6 kg m^2, not the simulation's 1e-5 (the D term alone then made a speed loop
+  near 400 rad/s, above the 5 ms speed filter's 200 rad/s corner). Angle gains scaled by that ratio:
+  `#POS 2.4 0.029 24` (now the defaults, with R 0.32). Simulation: stable for J 2e-6..1e-5 with R/flux
+  errors (0 slips, no hunting); only the 15/36 mNm load-step Z checks fail (too soft - retune for
+  stiffness once J is measured and the U9 noise is fixed). On board 1, with the `#GCAL` gains set:
+  hand-over at 2000 RPM, ramp to 3000, **6.5 s in closed loop**: observers 3000 RPM +-6 % (single
+  samples), id ~0, small iq (M2 -0.5..+1.9 A; M1 noisier), q voltage 2.2-3.0 V (back-EMF 2.46 V
+  expected), Z error within +-4 deg, interrupt 37 us, 0 overruns; then the timed ramp-down, "open loop
+  below 1500 RPM", stop. Next: step 6.2 (6000 / 9000 / 12000 RPM, measure J from a speed step),
+  6.3-6.5; store the `#GCAL` gains (they are lost at every reboot).
 - New maintenance commands: `#NOISE [samples]`, `#SLOW <0|1|2>`, `#DUMP [samples] [channel]` (consecutive
   raw samples, 16 per line; `D <channel> <first sample> <values>`), `#BRK`, `#MOE`, `#LOAD <us>` (pad the
   interrupt, drive off), `#SPIN <rpm> <ms>` (bench spin that stops itself), `#RXLOG` (last 256 link
