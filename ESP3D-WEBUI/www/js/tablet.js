@@ -510,18 +510,38 @@ const tabletShowBoardControls = () => {
 const EXPECTED_ENCODER_TEETH = { maslow41: 22, unified: 35, unified36v: 35 };
 const BOARD_MACHINE_NAMES = { maslow41: "Maslow 4.1", unified: "Maslow Mini", unified36v: "Maslow Mini" };
 
-/** The warning to show for this board and encoderTeeth value, or "" when it matches or the board is unknown. */
-const encoderTeethWarning = (board, teethText) => {
+// The firmware's upper limit for Maslow_Extend_Dist (mm).
+const EXTEND_DIST_MAX = 4250;
+
+/**
+ * The warning to show for this board and encoderTeeth value, or "" when it matches or the board is unknown.
+ * extendDistText is the current Maslow_Extend_Dist, if it could be read: it was saved at the wrong scale too.
+ */
+const encoderTeethWarning = (board, teethText, extendDistText) => {
   const expected = EXPECTED_ENCODER_TEETH[board];
   const teeth = Number.parseFloat(teethText);
   if (!expected || !Number.isFinite(teeth) || Math.abs(teeth - expected) < 0.01) {
     return "";
   }
   const errorPct = Math.abs(teeth / expected - 1) * 100;
+  // Belt lengths have been read at teeth/expected of their true size, so once the teeth are fixed the
+  // same Extend Dist pays out a different amount of belt. Scale it to pay out what it did before.
+  const extendDist = Number.parseFloat(extendDistText);
+  const newExtendDist = teeth > 0 && extendDist > 0
+    ? Math.min(EXTEND_DIST_MAX, Math.ceil(extendDist * expected / teeth))
+    : 0;
+  const extendStep = newExtendDist
+    ? `<code>$/Maslow_Extend_Dist=${newExtendDist}</code> (it is ${extendDist} now, measured at the old scale)`
+    : `<code>$/Maslow_Extend_Dist=N</code>, where N is the current Extend Dist times ${expected}/${teeth}`
+      + ` (it was measured at the old scale)`;
   return `This machine is a ${BOARD_MACHINE_NAMES[board]}, whose encoders have ${expected} teeth, but encoderTeeth `
     + `is set to ${teeth}. Every belt length will be off by about ${errorPct.toFixed(0)}%, so calibration and cuts will be wrong.`
-    + `<br><br>To fix it, send <code>$/kinematics/MaslowKinematics/encoderTeeth=${expected}</code> and then <code>$CO</code>`
-    + ` (save config) from the console, then restart the machine.`;
+    + `<br><br>To fix it, send these from the console, one at a time:`
+    + `<br><code>$/kinematics/MaslowKinematics/encoderTeeth=${expected}</code>`
+    + `<br>${extendStep}`
+    + `<br><code>$CO</code> (save config)`
+    + `<br><br>Then restart the machine and calibrate it again: Retract All, Extend All, Apply Tension, then Find Anchors.`
+    + ` The saved frame size was measured at the old scale too, so it stays wrong until Find Anchors runs.`;
 };
 
 // Warn once per page load: the setting only changes when the config is edited.
@@ -530,11 +550,15 @@ const checkEncoderTeeth = () => {
   if (encoderTeethWarningShown || !EXPECTED_ENCODER_TEETH[maslowBoard]) {
     return;
   }
-  machine.getSetting("kinematics/MaslowKinematics/encoderTeeth").then((teeth) => {
-    const warning = encoderTeethWarning(maslowBoard, teeth);
-    if (warning && !encoderTeethWarningShown) {
+  machine.getSetting("kinematics/MaslowKinematics/encoderTeeth").then(async (teeth) => {
+    if (!encoderTeethWarning(maslowBoard, teeth)) {
+      return;
+    }
+    // The warning gives the corrected Extend Dist when it can read the current one.
+    const extendDist = await machine.getSetting("Maslow_Extend_Dist").catch(() => "");
+    if (!encoderTeethWarningShown) {
       encoderTeethWarningShown = true;
-      alertdlg("Wrong Encoder Teeth", warning);
+      alertdlg("Wrong Encoder Teeth", encoderTeethWarning(maslowBoard, teeth, extendDist));
     }
   }).catch((err) => console.warn("Could not read encoderTeeth:", err.detail ?? err.reason));
 };
