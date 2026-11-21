@@ -40,6 +40,13 @@ namespace cal {
     // "dual bank, 2 KB pages" or "single bank, 4 KB pages" (FLASH_OPTR.DBANK), for the log.
     const char* bankMode();
 
+    // Flash bank mode (FLASH_OPTR.DBANK).  setBankModeAndWipe() mass-erases the main flash and writes
+    // the bit from a RAM routine, then reloads the option bytes, which resets the chip: it comes back
+    // empty (no scrambled code can run - the address layout changes with the mode) and must be
+    // reprogrammed through the XY board.  Returns only if nothing was done (why says so).
+    bool dualBankMode();
+    bool setBankModeAndWipe(bool dual, const char** why);
+
     // Bring-up: CRC-32 (zlib's) of [addr, addr + len), and the bank / page the record's erase uses.
     uint32_t crc32Range(uint32_t addr, uint32_t len);
     void     erasePageOf(uint32_t* bank, uint32_t* page);

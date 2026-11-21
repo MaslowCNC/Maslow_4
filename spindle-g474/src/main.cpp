@@ -861,6 +861,21 @@ static void maintenance(const char* line) {
                           rec.r, rec.l * 1e6f, rec.flux * 1e3f, (unsigned long)cal::ADDR, cal::bankMode());
             else linkEvent("WARN", "GSAVE FAILED: %s", why);
         }
+    } else if (!strcmp(word, "DBANK") && n >= 2) {
+        bool        dual = a > 0.5f;
+        const char* why  = "";
+        if (foc::enabled() || g_spinning || g_gcal_step >= 0 || g_jm_state) {
+            linkEvent("WARN", "DBANK refused: the drive must be off");
+        } else if (dual == cal::dualBankMode()) {
+            linkEvent("MSG", "DBANK: already %s", cal::bankMode());
+        } else {
+            linkEvent("MSG", "DBANK: erasing the flash and switching to %s mode; the G474 resets with an empty flash - "
+                             "reprogram it with $Spindle/G474=FLASH, then #GSAVE the calibration again",
+                      dual ? "dual-bank" : "single-bank");
+            Link.flush();
+            delay(10);
+            if (!cal::setBankModeAndWipe(dual, &why)) linkEvent("WARN", "DBANK not changed: %s", why);
+        }
     } else if (!strcmp(word, "FLASHCRC") && n >= 2) {
         uint32_t len = a < 1 ? 1 : a > 0x20000 ? 0x20000 : (uint32_t)a;
         linkEvent("MSG", "FLASHCRC 0x08000000 + %lu: %08lx", (unsigned long)len,
@@ -915,7 +930,7 @@ static void maintenance(const char* line) {
     } else {
         linkEvent("MSG", "# commands: STAT LOG <ms> ALIGN [V] [ms] CL <0|1> CUR <kp> <ki> POS <kp> <kd> <ki> "
                          "POSBW <min> <full rpm> OLKI <ki> DTC <ns> IHOLD/ISPIN/IBOOST/ILIM <A> OBS <R> <L> <flux> "
-                         "TRIP <sw A> [hw A] NOISE [samples] SLOW <0|1|2> DUMP [samples] [channel] BRK MOE LOAD <us> SPIN <rpm> <ms> RXLOG PREV GCAL [V] GAIN GAIN1/GAIN2 <a> <b> <c> JMEAS <rpm> GSAVE GCLEAR FLASHCRC <len> CALDBG VER");
+                         "TRIP <sw A> [hw A] NOISE [samples] SLOW <0|1|2> DUMP [samples] [channel] BRK MOE LOAD <us> SPIN <rpm> <ms> RXLOG PREV GCAL [V] GAIN GAIN1/GAIN2 <a> <b> <c> JMEAS <rpm> GSAVE GCLEAR FLASHCRC <len> CALDBG DBANK <0|1> VER");
         return;
     }
     if (strcmp(word, "STAT") && strcmp(word, "VER") && strcmp(word, "ALIGN") && strcmp(word, "NOISE") && strcmp(word, "SLOW") &&
@@ -923,7 +938,7 @@ static void maintenance(const char* line) {
         strcmp(word, "MOE") && strcmp(word, "LOAD") && strcmp(word, "SPIN") && strcmp(word, "RXLOG") &&
         strcmp(word, "PREV") && strcmp(word, "GCAL") && strncmp(word, "GAIN", 4) && strcmp(word, "JMEAS") &&
         strcmp(word, "GSAVE") && strcmp(word, "GCLEAR") &&
-        strcmp(word, "FLASHCRC") && strcmp(word, "CALDBG")) {
+        strcmp(word, "FLASHCRC") && strcmp(word, "CALDBG") && strcmp(word, "DBANK")) {
         linkEvent("MSG", "tuning: cur %.3f/%.0f pos %.2f/%.3f/%.1f bw %.2f/%.0f olki %.1f I hold %.1f spin %.1f "
                          "boost %.1f lim %.1f obs R %.3f L %.1fuH flux %.2fmWb trip %.1f A dtc %.0f ns CL %d",
                   tu.cur_kp, tu.cur_ki, tu.pos_kp, tu.pos_kd, tu.pos_ki, tu.pos_bw_min, tu.pos_bw_full_rpm, tu.ol_ki,

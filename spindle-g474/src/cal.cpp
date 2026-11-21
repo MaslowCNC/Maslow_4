@@ -86,6 +86,52 @@ namespace cal {
         }
     }
 
+    namespace {
+        // Runs from RAM with interrupts off: nothing here may touch the flash it erases.  Mass erase
+        // (both banks), write OPTR, reload the option bytes (a system reset).  ~50 ms, inside the
+        // 250 ms watchdog.
+        __attribute__((section(".RamFunc"), noinline, long_call)) void ramWipeAndSetOptr(uint32_t optr) {
+            while (FLASH->SR & FLASH_SR_BSY) {
+            }
+            FLASH->CR |= FLASH_CR_MER1 | FLASH_CR_MER2;
+            FLASH->CR |= FLASH_CR_STRT;
+            while (FLASH->SR & FLASH_SR_BSY) {
+            }
+            FLASH->CR &= ~(FLASH_CR_MER1 | FLASH_CR_MER2);
+            FLASH->OPTR = optr;
+            FLASH->CR |= FLASH_CR_OPTSTRT;
+            while (FLASH->SR & FLASH_SR_BSY) {
+            }
+            FLASH->CR |= FLASH_CR_OBL_LAUNCH;
+            for (;;) {
+            }
+        }
+    }
+
+    bool dualBankMode() {
+        return dualBank();
+    }
+
+    bool setBankModeAndWipe(bool dual, const char** why) {
+        uint32_t optr = FLASH->OPTR;
+        uint32_t want = dual ? (optr | FLASH_OPTR_DBANK) : (optr & ~FLASH_OPTR_DBANK);
+        if (want == optr) {
+            *why = "already in that mode";
+            return false;
+        }
+        if (HAL_FLASH_Unlock() != HAL_OK || HAL_FLASH_OB_Unlock() != HAL_OK) {
+            HAL_FLASH_Lock();
+            *why = "flash / option byte unlock failed";
+            return false;
+        }
+        __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_ALL_ERRORS);
+        TIM1->BDTR &= ~TIM_BDTR_MOE;   // bridges off for good measure (the caller checked the drive is off)
+        TIM8->BDTR &= ~TIM_BDTR_MOE;
+        __disable_irq();
+        ramWipeAndSetOptr(want);   // does not return
+        return true;
+    }
+
     bool load(Record* out) {
         s_ecc_hit = false;
         s_reading = true;

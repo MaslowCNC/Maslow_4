@@ -83,6 +83,7 @@ namespace Spindles {
 
         void fail(const char* why);
         void restartApplication();
+        void skipCalibration(const char* why);
         void sendCommand(uint8_t cmd);
         void sendAddress(uint32_t addr);
         void expect(size_t n, uint32_t timeout_ms);   // wait for n bytes in _rx

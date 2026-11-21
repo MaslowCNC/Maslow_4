@@ -75,6 +75,18 @@ namespace Spindles {
         resetToApplication();
     }
 
+    // The calibration could not be read before the erase: it will be lost, but the update goes on - a
+    // stuck flash would leave SWD as the only way in (e.g. after a flash-mode change scrambles the
+    // old contents).
+    void G474Flasher::skipCalibration(const char* why) {
+        log_warn("Spindle flash: could not read the stored calibration (" << why
+                                                                          << "); flashing without keeping it - run #GCAL and #GSAVE after");
+        _cal_present = false;
+        sendCommand(CMD_EXT_ERASE);
+        expect(1, 1000);
+        _state = State::EraseCmd;
+    }
+
     void G474Flasher::sendCommand(uint8_t cmd) {
         uint8_t b[2] = { cmd, (uint8_t)~cmd };
         _uart->flushRx();
@@ -226,7 +238,11 @@ namespace Spindles {
             case State::CalCheckCmd:
                 r = poll();
                 if (r < 0 || (r > 0 && _rx[0] != ACK)) {
-                    fail("Read Memory refused (read-out protection set? recover with SWD)");
+                    if (_state == State::CalReadCmd) {
+                        skipCalibration("Read Memory refused");
+                    } else {
+                        fail("Read Memory refused (read-out protection set? recover with SWD)");
+                    }
                 } else if (r > 0) {
                     sendAddress(CAL_ADDR);
                     expect(1, 1000);
@@ -238,7 +254,11 @@ namespace Spindles {
             case State::CalCheckAddr:
                 r = poll();
                 if (r < 0 || (r > 0 && _rx[0] != ACK)) {
-                    fail("calibration read address refused");
+                    if (_state == State::CalReadAddr) {
+                        skipCalibration("read address refused");
+                    } else {
+                        fail("calibration read address refused");
+                    }
                 } else if (r > 0) {
                     uint8_t len[2] = { (uint8_t)(CAL_LEN - 1), (uint8_t)~(uint8_t)(CAL_LEN - 1) };
                     _uart->write(len, 2);
@@ -251,7 +271,11 @@ namespace Spindles {
             case State::CalCheckLen:
                 r = poll();
                 if (r < 0 || (r > 0 && _rx[0] != ACK)) {
-                    fail("calibration read length refused");
+                    if (_state == State::CalReadLen) {
+                        skipCalibration("read length refused");
+                    } else {
+                        fail("calibration read length refused");
+                    }
                 } else if (r > 0) {
                     _cal_have = 0;
                     _deadline = millis() + 1000;
@@ -277,7 +301,7 @@ namespace Spindles {
                     expect(1, 1000);
                     _state = State::EraseCmd;
                 } else if ((int32_t)(millis() - _deadline) > 0) {
-                    fail("calibration read timed out");
+                    skipCalibration("read timed out");
                 }
                 break;
 
