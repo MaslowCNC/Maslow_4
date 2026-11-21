@@ -67,11 +67,15 @@ for excess, net in todo:
         d = cand[0]
         tried.add((d["a"], d["b"]))
         shutil.copyfile(PCB, backup)
+        snap = backup + ".islands.json"
+        subprocess.run([PY, os.path.join(HERE, "repair.py"), D, "--snapshot", snap], capture_output=True, text=True)
         out = subprocess.run([PY, os.path.join(HERE, "reroute.py"), D, net, d["a"], d["b"], "--inner"] + EXTRA,
                              capture_output=True, text=True).stdout
         lines = [l.strip() for l in out.splitlines() if "chain" in l or "re-routed" in l or "kept" in l or " not " in l or "nothing" in l]
         verdict = "kept original"
         if "re-routed" in out:
+            rep = subprocess.run([PY, os.path.join(HERE, "repair.py"), D, net, "--before", snap], capture_output=True, text=True).stdout
+            lines += [l.strip() for l in rep.splitlines() if "island" in l or ("dead" in l and " 0 dead" not in l)]
             now = drc_bad()
             new = now - base
             if new:
