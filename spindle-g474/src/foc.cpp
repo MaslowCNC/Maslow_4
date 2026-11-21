@@ -96,6 +96,14 @@ namespace foc {
         volatile uint32_t g_isr_max_cycles = 0;
         volatile uint32_t g_isr_count      = 0;
 
+        // #NOISE: raw statistics of all six sense channels over a fixed number of samples (bring-up).
+        volatile bool     g_noise_on = false;
+        volatile uint32_t g_noise_n  = 0;
+        uint32_t          g_noise_target = 0;
+        uint32_t          g_noise_sum[2][3];
+        uint64_t          g_noise_sq[2][3];
+        uint16_t          g_noise_min[2][3], g_noise_max[2][3];
+
         Tuning g_tun = {
             CUR_KP, CUR_KI, POS_KP, POS_KD, POS_KI, POS_BW_MIN, POS_BW_FULL_RPM, OL_CUR_KI,
             HOLD_CURRENT_A, SPINUP_CURRENT_A, Z_MOVE_BOOST_A, IQ_LIMIT_A,
@@ -477,6 +485,18 @@ namespace foc {
             { (uint16_t)ADC1->JDR1, (uint16_t)ADC2->JDR1, (uint16_t)ADC3->JDR1 },
             { (uint16_t)ADC5->JDR1, (uint16_t)ADC5->JDR2, (uint16_t)ADC4->JDR1 },
         };
+        hw::slowKickFromIsr();   // after the current samples, so it ends long before the next trigger
+        if (g_noise_on) {
+            for (int k = 0; k < 2; k++)
+                for (int p = 0; p < 3; p++) {
+                    uint32_t v = raw[k][p];
+                    g_noise_sum[k][p] += v;
+                    g_noise_sq[k][p] += (uint64_t)(v * v);
+                    if (v < g_noise_min[k][p]) g_noise_min[k][p] = v;
+                    if (v > g_noise_max[k][p]) g_noise_max[k][p] = v;
+                }
+            if (++g_noise_n >= g_noise_target) g_noise_on = false;
+        }
         if (g_calibrating) {
             for (int k = 0; k < 2; k++)
                 for (int p = 0; p < 3; p++) g_cal_sum[k][p] += raw[k][p];
@@ -627,6 +647,37 @@ namespace foc {
             detail[0] = 0;
         }
         return f;
+    }
+
+    void startNoise(uint32_t samples) {
+        __disable_irq();
+        for (int k = 0; k < 2; k++)
+            for (int p = 0; p < 3; p++) {
+                g_noise_sum[k][p] = 0;
+                g_noise_sq[k][p]  = 0;
+                g_noise_min[k][p] = 0xFFFF;
+                g_noise_max[k][p] = 0;
+            }
+        g_noise_n      = 0;
+        g_noise_target = samples ? samples : 1;
+        g_noise_on     = true;
+        __enable_irq();
+    }
+
+    bool noiseDone() {
+        return !g_noise_on && g_noise_n > 0;
+    }
+
+    void noiseResult(int k, int p, NoiseStats* out) {
+        float n     = (float)g_noise_n;
+        float mean  = g_noise_sum[k][p] / n;
+        float var   = (float)((double)g_noise_sq[k][p] / n - (double)mean * mean);
+        out->mean   = mean;
+        out->offset = mot[k].off[p];
+        out->sd     = var > 0 ? sqrtf(var) : 0.0f;
+        out->min    = g_noise_min[k][p];
+        out->max    = g_noise_max[k][p];
+        out->n      = g_noise_n;
     }
 
     MotorTelemetry take(int k) {

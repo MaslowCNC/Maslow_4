@@ -34,6 +34,8 @@ namespace hw {
 
     // Slow analog, round robin, call from the main loop.  Values are filtered.
     void serviceSlowAnalog();
+    void slowKickFromIsr();   // ADC interrupt: start a slow conversion the main loop has set up
+    void setSlowMode(int mode);   // bring-up A/B: 0 free-running, 1 after the current samples (default), 2 off
     float vbus();          // V
     float temperature(int n);  // deg C, NTC 0 or 1; NaN if open/shorted
     float slowPinVolts(int i);  // filtered pin voltage: 0 = VBUS divider, 1 = NTC1, 2 = NTC2 (bring-up)

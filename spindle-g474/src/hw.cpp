@@ -296,6 +296,8 @@ namespace hw {
         Slow     slow[3] = { { ADC_CHANNEL_1, 0, false }, { ADC_CHANNEL_5, 0, false }, { ADC_CHANNEL_11, 0, false } };
         int      slowIdx = 0;
         bool     slowBusy = false;
+        volatile bool slowRequest = false;   // set by the main loop, started by the ADC interrupt
+        int           slowMode    = 1;       // #SLOW: 0 free-running (old), 1 started by the ADC interrupt, 2 off
 
         float ntcCelsius(float frac) {
             // frac = Vntc / 3V3A; NTC to GND under a 10k pull-up.
@@ -502,12 +504,33 @@ namespace hw {
             }
             slowIdx = (slowIdx + 1) % 3;
         }
-        if (ADC2->CR & ADC_CR_ADSTART) return;
-        // One regular conversion of the next channel; injected samples pre-empt it as needed.
-        ADC2->SQR1 = (slow[slowIdx].channel & 0x1F) << ADC_SQR1_SQ1_Pos;   // L = 0: one conversion
-        ADC2->ISR  = ADC_ISR_EOC | ADC_ISR_EOS | ADC_ISR_OVR;
-        ADC2->CR |= ADC_CR_ADSTART;
-        slowBusy = true;
+        if (slowMode == 2) return;
+        if (slowRequest || (ADC2->CR & ADC_CR_ADSTART)) return;
+        // One regular conversion of the next channel.  The ADC interrupt starts it just after the
+        // current samples (slowKickFromIsr), so it is over long before the next PWM-peak trigger: a
+        // regular conversion still running at the trigger corrupts motor 1's phase B sample on ADC2.
+        // The HAL's ADC_CHANNEL_n constants are bitfield encodings, not plain numbers: (ADC_CHANNEL_1 & 0x1F)
+        // is 2 (PA1, motor 1's phase A shunt input) and ADC_CHANNEL_5/11 give 0.  SQ1 needs the number.
+        uint32_t ch = __LL_ADC_CHANNEL_TO_DECIMAL_NB(slow[slowIdx].channel);
+        ADC2->SQR1  = (ch & 0x1F) << ADC_SQR1_SQ1_Pos;   // L = 0: one conversion
+        ADC2->ISR   = ADC_ISR_EOC | ADC_ISR_EOS | ADC_ISR_OVR;
+        slowBusy    = true;
+        if (slowMode == 0) {
+            ADC2->CR |= ADC_CR_ADSTART;
+        } else {
+            slowRequest = true;
+        }
+    }
+
+    void setSlowMode(int mode) {
+        slowMode = mode < 0 ? 0 : mode > 2 ? 2 : mode;
+    }
+
+    void slowKickFromIsr() {
+        if (slowRequest) {
+            slowRequest = false;
+            ADC2->CR |= ADC_CR_ADSTART;
+        }
     }
 
     float vbus() {

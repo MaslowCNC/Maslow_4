@@ -411,6 +411,23 @@ static void sendStatus() {
 
 static uint32_t g_align_until  = 0;
 static uint32_t g_stat_every   = 0;
+static bool     g_noise_pending = false;
+
+static void reportNoise() {
+    static const char ph[3] = { 'a', 'b', 'c' };
+    for (int k = 0; k < 2; k++) {
+        char  buf[200];
+        int   len = 0;
+        for (int p = 0; p < 3; p++) {
+            foc::NoiseStats st;
+            foc::noiseResult(k, p, &st);
+            len += snprintf(buf + len, sizeof(buf) - len, "%s%c mean %+.1f sd %.1f [%d..%d]", p ? " | " : "", ph[p],
+                            st.mean - st.offset, st.sd, (int)st.min - (int)lroundf(st.offset),
+                            (int)st.max - (int)lroundf(st.offset));
+        }
+        linkEvent("MSG", "NOISE M%d (counts vs zero, %.4f A/count): %s", k + 1, SENSE_A_PER_LSB, buf);
+    }
+}
 static uint32_t g_stat_last    = 0;
 
 static void printStat() {
@@ -483,15 +500,24 @@ static void maintenance(const char* line) {
     } else if (!strcmp(word, "TRIP") && n >= 2) {
         if (a > 0 && a <= 20) tu.sw_trip_a = a;
         if (n >= 3 && b > 0 && b <= 21) hw::setHardwareTripAmps(b);
+    } else if (!strcmp(word, "NOISE")) {
+        uint32_t samples = (n >= 2 && a >= 1) ? (uint32_t)a : 2000;
+        foc::startNoise(samples);
+        g_noise_pending = true;
+        linkEvent("MSG", "NOISE: sampling %lu periods (%.0f ms)", (unsigned long)samples,
+                  samples / (PWM_FREQUENCY_HZ / 1000.0f));
+    } else if (!strcmp(word, "SLOW") && n >= 2) {
+        hw::setSlowMode((int)a);
+        linkEvent("MSG", "SLOW: slow ADC2 conversions %s", a < 0.5f ? "free-running" : a < 1.5f ? "after the current samples" : "off");
     } else if (!strcmp(word, "VER")) {
         linkEvent("MSG", "spindle firmware %s, %s %s", FW_VERSION, __DATE__, __TIME__);
     } else {
         linkEvent("MSG", "# commands: STAT LOG <ms> ALIGN [V] CL <0|1> CUR <kp> <ki> POS <kp> <kd> <ki> "
                          "POSBW <min> <full rpm> OLKI <ki> DTC <ns> IHOLD/ISPIN/IBOOST/ILIM <A> OBS <R> <L> <flux> "
-                         "TRIP <sw A> [hw A] VER");
+                         "TRIP <sw A> [hw A] NOISE [samples] SLOW <0|1|2> VER");
         return;
     }
-    if (strcmp(word, "STAT") && strcmp(word, "VER") && strcmp(word, "ALIGN")) {
+    if (strcmp(word, "STAT") && strcmp(word, "VER") && strcmp(word, "ALIGN") && strcmp(word, "NOISE") && strcmp(word, "SLOW")) {
         linkEvent("MSG", "tuning: cur %.3f/%.0f pos %.2f/%.3f/%.1f bw %.2f/%.0f olki %.1f I hold %.1f spin %.1f "
                          "boost %.1f lim %.1f obs R %.3f L %.1fuH flux %.2fmWb trip %.1f A dtc %.0f ns CL %d",
                   tu.cur_kp, tu.cur_ki, tu.pos_kp, tu.pos_kd, tu.pos_ki, tu.pos_bw_min, tu.pos_bw_full_rpm, tu.ol_ki,
@@ -893,6 +919,10 @@ void loop() {
     if (now - last_status >= LINK_STATUS_INTERVAL_MS && Link.availableForWrite() >= 48) {
         last_status = now;
         sendStatus();
+    }
+    if (g_noise_pending && foc::noiseDone()) {
+        g_noise_pending = false;
+        reportNoise();
     }
     if (g_stat_every && now - g_stat_last >= g_stat_every) {
         g_stat_last = now;

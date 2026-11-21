@@ -69,6 +69,16 @@ namespace foc {
     // Interrupt timing: longest ISR (us) and count since the last call.
     void takeIsrStats(uint32_t* max_us, uint32_t* count);
 
+    // Bring-up (#NOISE): raw statistics of the six sense channels over `samples` interrupts.
+    struct NoiseStats {
+        float    mean, offset, sd;   // counts (offset = the zero from calibrateOffsets)
+        uint16_t min, max;
+        uint32_t n;
+    };
+    void startNoise(uint32_t samples);
+    bool noiseDone();
+    void noiseResult(int m, int phase, NoiseStats* out);
+
     // Run-time tuning (the '#' link commands).
     struct Tuning {
         float cur_kp, cur_ki;
