@@ -506,6 +506,43 @@ const tabletShowBoardControls = () => {
   }
 };
 
+// Teeth on the encoder roller, by [ESP800] board. A wrong encoderTeeth scales every belt length.
+const EXPECTED_ENCODER_TEETH = { maslow41: 22, unified: 35, unified36v: 35 };
+const BOARD_MACHINE_NAMES = { maslow41: "Maslow 4.1", unified: "Maslow Mini", unified36v: "Maslow Mini" };
+
+/** The warning to show for this board and encoderTeeth value, or "" when it matches or the board is unknown. */
+const encoderTeethWarning = (board, teethText) => {
+  const expected = EXPECTED_ENCODER_TEETH[board];
+  const teeth = Number.parseFloat(teethText);
+  if (!expected || !Number.isFinite(teeth) || Math.abs(teeth - expected) < 0.01) {
+    return "";
+  }
+  const errorPct = Math.abs(teeth / expected - 1) * 100;
+  return `This machine is a ${BOARD_MACHINE_NAMES[board]}, whose encoders have ${expected} teeth, but encoderTeeth `
+    + `is set to ${teeth}. Every belt length will be off by about ${errorPct.toFixed(0)}%, so calibration and cuts will be wrong.`
+    + `<br><br>To fix it, send <code>$/kinematics/MaslowKinematics/encoderTeeth=${expected}</code> and then <code>$CO</code>`
+    + ` (save config) from the console, then restart the machine.`;
+};
+
+// Warn once per page load: the setting only changes when the config is edited.
+let encoderTeethWarningShown = false;
+const checkEncoderTeeth = () => {
+  if (encoderTeethWarningShown || !EXPECTED_ENCODER_TEETH[maslowBoard]) {
+    return;
+  }
+  machine.getSetting("kinematics/MaslowKinematics/encoderTeeth").then((teeth) => {
+    const warning = encoderTeethWarning(maslowBoard, teeth);
+    if (warning && !encoderTeethWarningShown) {
+      encoderTeethWarningShown = true;
+      alertdlg("Wrong Encoder Teeth", warning);
+    }
+  }).catch((err) => console.warn("Could not read encoderTeeth:", err.detail ?? err.reason));
+};
+
+if (typeof globalThis !== "undefined") {
+  globalThis.__tabletEncoderTeethTestApi = { encoderTeethWarning };
+}
+
 const loadFixedZSetting = () => {
   SendPrinterCommand("$/kinematics/MaslowKinematics/fixedZ");
 };
@@ -1582,6 +1619,7 @@ const requestMachineState = () => {
   SendPrinterCommand("$MINFO");
   requestModes();
   loadFixedZSetting();
+  checkEncoderTeeth();
   loadCornerValues();
   if (typeof loadParkSettings === 'function') {
     loadParkSettings();
