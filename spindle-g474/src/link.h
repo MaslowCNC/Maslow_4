@@ -13,3 +13,13 @@ void linkEvent(const char* level, const char* fmt, ...) __attribute__((format(pr
 
 // Send a raw line (with its newline) if it fits.
 bool linkWriteIfRoom(const char* line, int n);
+
+// Boot trace (builds with -D BOOT_TRACE, i.e. g474-bench): one "MSG:boot: <stage>" line per init
+// step, each sent out completely before the next step starts, so the last line the XY board logs
+// names the step a hang or fault happened in.  Compiles to nothing otherwise.
+void bootTrace(const char* stage);
+#ifdef BOOT_TRACE
+#define BOOT_TRACE_POINT(stage) bootTrace(stage)
+#else
+#define BOOT_TRACE_POINT(stage) ((void)0)
+#endif

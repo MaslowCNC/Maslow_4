@@ -36,6 +36,7 @@ namespace hw {
     void serviceSlowAnalog();
     float vbus();          // V
     float temperature(int n);  // deg C, NTC 0 or 1; NaN if open/shorted
+    float slowPinVolts(int i);  // filtered pin voltage: 0 = VBUS divider, 1 = NTC1, 2 = NTC2 (bring-up)
 
     void setFanDuty(uint8_t duty);   // 0..255 on VAC_CONTROL
 

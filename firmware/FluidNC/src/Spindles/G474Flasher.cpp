@@ -64,6 +64,14 @@ namespace Spindles {
         _state = State::Failed;
         // Let whatever is in the flash run (BOOT0 low).  After a failed write that is nothing
         // useful, and $Spindle/G474=FLASH can simply be run again: the ROM bootloader is always there.
+        restartApplication();
+    }
+
+    // The link back in its normal mode (8N1) and its RX empty BEFORE the G474 leaves reset: its first
+    // line (the reset reason) starts a few ms after NRST rises, and read in 8E1 it is garbage.
+    void G474Flasher::restartApplication() {
+        _uart->restoreMode();
+        _uart->flushRx();
         resetToApplication();
     }
 
@@ -347,7 +355,7 @@ namespace Spindles {
                 break;
 
             case State::Finish:
-                resetToApplication();
+                restartApplication();
                 log_info("Spindle flash: " << _size << " bytes written and verified; spindle MCU restarted");
                 _state = State::Done;
                 return false;

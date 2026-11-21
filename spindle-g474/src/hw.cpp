@@ -1,6 +1,7 @@
 #include "hw.h"
 #include "board.h"
 #include "config.h"
+#include "link.h"   // BOOT_TRACE_POINT
 #include <math.h>
 
 // All peripheral handles are file-local.  HAL is used for initialisation only; the interrupt
@@ -329,18 +330,23 @@ namespace hw {
         for (int m = 0; m < 2; m++) {
             if (!initPwmTimer(m, why)) return false;
         }
+        BOOT_TRACE_POINT("PWM timers");
         initPwmPins();
+        BOOT_TRACE_POINT("PWM pins");
 
         // Sense pins: analog (OPAMP VINP and COMP INP share them).  Slow analog too.
         gpioAnalog(GPIOA, GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_7);
         gpioAnalog(GPIOB, GPIO_PIN_0 | GPIO_PIN_11 | GPIO_PIN_13 | GPIO_PIN_14);
         gpioAnalog(GPIOC, GPIO_PIN_4 | GPIO_PIN_5);
+        BOOT_TRACE_POINT("analog pins");
 
         if (!initOpamps(why)) return false;
+        BOOT_TRACE_POINT("OPAMPs");
 
         ADC_TypeDef* const adcs[5] = { ADC1, ADC2, ADC3, ADC4, ADC5 };
         for (int i = 0; i < 5; i++) {
             if (!initAdc(i, adcs[i], why)) return false;
+            BOOT_TRACE_POINT(i == 0 ? "ADC1" : i == 1 ? "ADC2" : i == 2 ? "ADC3" : i == 3 ? "ADC4" : "ADC5");
         }
         // Motor 1: OPAMP1 -> ADC1, OPAMP2 -> ADC2, OPAMP3 -> ADC3.  Motor 2: OPAMP4 + OPAMP5 -> ADC5
         // (two ranks), OPAMP6 -> ADC4.
@@ -355,11 +361,14 @@ namespace hw {
         if (!regularSampleTime(ADC_CHANNEL_5, ADC_SAMPLETIME_247CYCLES_5, why)) return false;
         if (!regularSampleTime(ADC_CHANNEL_11, ADC_SAMPLETIME_247CYCLES_5, why)) return false;
         if (!regularSampleTime(ADC_CHANNEL_1, ADC_SAMPLETIME_47CYCLES_5, why)) return false;
+        BOOT_TRACE_POINT("ADC channels");
 
         if (!initDac(hdac3, DAC3, why)) return false;
         if (!initDac(hdac4, DAC4, why)) return false;
+        BOOT_TRACE_POINT("DACs");
         delayMicroseconds(20);   // DAC settling before the comparators can see a threshold
         if (!initComparators(why)) return false;
+        BOOT_TRACE_POINT("comparators");
 
         // Fan: TIM4 CH1 on PB6, 25 kHz, off.
         htimFan.Instance               = TIM4;
@@ -376,6 +385,7 @@ namespace hw {
         if (HAL_TIM_PWM_ConfigChannel(&htimFan, &oc, TIM_CHANNEL_1) != HAL_OK) { *why = "fan channel"; return false; }
         gpioOut(GPIOB, GPIO_PIN_6, GPIO_AF2_TIM4);
         HAL_TIM_PWM_Start(&htimFan, TIM_CHANNEL_1);
+        BOOT_TRACE_POINT("fan timer");
 
         pinMode(PIN_BEAM_LED, OUTPUT);
         digitalWrite(PIN_BEAM_LED, HIGH);   // beam on for good, as the ESP32 board did
@@ -391,6 +401,7 @@ namespace hw {
         for (int i = 0; i < 5; i++) {
             if (HAL_ADCEx_InjectedStart(&hadc[i]) != HAL_OK) { *why = "ADC injected start"; return false; }
         }
+        BOOT_TRACE_POINT("ADC injected start");
         ADC5->ISR = ADC_ISR_JEOS | ADC_ISR_JEOC;
         ADC5->IER |= ADC_IER_JEOSIE;
         HAL_NVIC_SetPriority(ADC5_IRQn, 0, 0);
@@ -404,6 +415,7 @@ namespace hw {
         TIM8->CR1 |= TIM_CR1_CEN;
         __enable_irq();
 
+        BOOT_TRACE_POINT("PWM counters running");
         bool ok1 = alignUpdateToValley(TIM1);
         bool ok8 = alignUpdateToValley(TIM8);
         g_update_phase = (ok1 && ok8) ? "valley" : "NOT ALIGNED";
@@ -500,6 +512,10 @@ namespace hw {
 
     float vbus() {
         return slow[0].valid ? slow[0].filtered * VBUS_DIVIDER : 0.0f;
+    }
+
+    float slowPinVolts(int i) {
+        return (i >= 0 && i < 3 && slow[i].valid) ? slow[i].filtered : NAN;
     }
 
     float temperature(int n) {

@@ -52,6 +52,11 @@ void linkEvent(const char* level, const char* fmt, ...) {
     linkWriteIfRoom(line, n);
 }
 
+void bootTrace(const char* stage) {
+    linkEvent("MSG", "boot: %s (t=%lu us)", stage, (unsigned long)micros());
+    Link.flush();
+}
+
 // ------------------------------------------------------------------ shared state (as the ESP32's)
 
 // 0 = OK, 1 = driver hardware fault (here: bus voltage, over-temperature, init failure),
@@ -417,6 +422,8 @@ static void printStat() {
               mode, foc::speedCommandRpm(), foc::speedTargetRpm(), rad2deg(foc::phaseCurrent()),
               rad2deg(foc::phaseTarget()), rad2deg(foc::zErrorRad()), hw::vbus(), hw::temperature(0),
               hw::temperature(1), (unsigned long)isr_max);
+    linkEvent("MSG", "STAT pins: vbus %.3f V, NTC1 %.3f V, NTC2 %.3f V (of 3.3 V)", hw::slowPinVolts(0),
+              hw::slowPinVolts(1), hw::slowPinVolts(2));
     for (int k = 0; k < 2; k++) {
         linkEvent("MSG", "STAT M%d i %.2f %.2f %.2f dq %.2f %.2f v %.2f %.2f obs %.0f rpm flux %.2f max %.1f A", k + 1,
                   t[k].ia, t[k].ib, t[k].ic, t[k].id, t[k].iq, t[k].vd, t[k].vq, t[k].obs_rpm, t[k].obs_flux, t[k].imax);
@@ -789,19 +796,43 @@ static const char* resetReason() {
 // ------------------------------------------------------------------ setup / loop
 
 void setup() {
+    // Cycle counter first: the fault report's UART timeouts use it.
+    CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+    DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+
     const char* reason = resetReason();
     Link.begin(LINK_BAUD);
     linkEvent("MSG", "spindle reset reason: %s", reason);
+    Link.flush();   // all of it out before init starts reconfiguring the chip
 
     const char* why = "";
     g_init_ok       = hw::init(&why);
+    BOOT_TRACE_POINT(g_init_ok ? "hw::init ok" : "hw::init FAILED");
     if (g_init_ok) {
         foc::init();
+        BOOT_TRACE_POINT("foc::init done");
         g_init_ok = hw::start(&why);
+        BOOT_TRACE_POINT(g_init_ok ? "hw::start ok, ADC interrupt on" : "hw::start FAILED");
     }
+#ifdef BOOT_TRACE
+    if (g_init_ok) {
+        // 2 ms timed by the cycle counter, not SysTick: an interrupt that never ends would stop that too.
+        uint32_t max_us = 0, count = 0;
+        foc::takeIsrStats(&max_us, &count);   // restart the count for exactly this window
+        uint32_t c0 = DWT->CYCCNT;
+        while (DWT->CYCCNT - c0 < SystemCoreClock / 500) {}
+        foc::takeIsrStats(&max_us, &count);
+        char buf[80];
+        snprintf(buf, sizeof(buf), "ADC interrupt ran %lu times in 2 ms (expect ~40), longest %lu us",
+                 (unsigned long)count, (unsigned long)max_us);
+        bootTrace(buf);
+    }
+#endif
     if (g_init_ok) {
         delay(20);   // a few hundred samples of the OPAMPs settling
+        BOOT_TRACE_POINT("OPAMP settling delay done");
         g_init_ok = foc::calibrateOffsets(2000, &why);
+        BOOT_TRACE_POINT(g_init_ok ? "offset calibration ok" : "offset calibration FAILED");
     }
     if (!g_init_ok) {
         g_init_why   = why;

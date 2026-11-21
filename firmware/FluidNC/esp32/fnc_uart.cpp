@@ -104,7 +104,10 @@ std::map<UartParity, uart_parity_t> parity_mode = {
 void uart_mode(uint32_t uart_num, uint32_t baud, UartData dataBits, UartParity parity, UartStop stopBits) {
     uart_port_t port = (uart_port_t)uart_num;
     if (port) {
-        fnc_uart_config_t conf;
+        // Zero the fields not set here (upstream FluidNC fix): IDF 5.5's flags.allow_pd /
+        // backup_before_sleep left as stack garbage make fnc_uart_param_config() return early
+        // and silently keep the old mode.
+        fnc_uart_config_t conf = {};
         conf.source_clk          = UART_SCLK_APB;
         conf.baud_rate           = baud;
         conf.data_bits           = datalen[dataBits];
@@ -115,7 +118,7 @@ void uart_mode(uint32_t uart_num, uint32_t baud, UartData dataBits, UartParity p
 
         fnc_uart_param_config(port, &conf);
     } else {
-        uart_config_t conf;
+        uart_config_t conf = {};
         conf.source_clk          = UART_SCLK_APB;
         conf.baud_rate           = baud;
         conf.data_bits           = datalen[dataBits];

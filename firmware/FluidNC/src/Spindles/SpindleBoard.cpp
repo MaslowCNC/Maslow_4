@@ -103,10 +103,17 @@ namespace Spindles {
             }
         }
 
-        log_warn(name() << ": NO response from spindle board during boot. Check the link wiring "
-                           "(XY TX gpio.15 -> spindle RX gpio.39, XY RX gpio.16 <- spindle TX gpio.38), "
-                           "a shared ground between the boards, and 115200 baud. "
-                           "Will confirm automatically if the spindle board responds later.");
+        if (BoardId::board() == BoardId::Board::Unified36V) {
+            log_warn(name() << ": NO response from the spindle MCU (STM32G474) during boot. If it was never "
+                               "flashed, use $Spindle/G474=FLASH <file.bin>; otherwise check its link "
+                               "(XY TX gpio.15 -> G474 RX PA3, XY RX gpio.16 <- G474 TX PA2). "
+                               "Will confirm automatically if it responds later.");
+        } else {
+            log_warn(name() << ": NO response from spindle board during boot. Check the link wiring "
+                               "(XY TX gpio.15 -> spindle RX gpio.39, XY RX gpio.16 <- spindle TX gpio.38), "
+                               "a shared ground between the boards, and 115200 baud. "
+                               "Will confirm automatically if the spindle board responds later.");
+        }
     }
 
     void SpindleBoard::config_message() {
@@ -723,8 +730,8 @@ namespace Spindles {
         }
         delete _flasher;
         _flasher = nullptr;
-        _uart->restoreMode();
-        _uart->flushRx();
+        // The flasher already put the link back in 8N1 and emptied it before releasing the G474 from
+        // reset; reconfiguring or flushing here could cut into the G474's first line.
         _rx_len = 0;
         // The spindle restarted: send it everything again, and expect a fresh hello.
         _last_sent_rpm  = 0xFFFFFFFF;
@@ -746,6 +753,9 @@ namespace Spindles {
             log_string(out, "Refused: the spindle MCU is being flashed");
             return false;
         }
+        // Drop any partial line first, so the restarted G474's first line is read on its own.
+        _uart->flushRx();
+        _rx_len = 0;
         G474Flasher::resetToApplication();
         _last_sent_rpm  = 0xFFFFFFFF;
         _last_sent_fan  = -1;
