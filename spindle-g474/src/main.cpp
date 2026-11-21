@@ -34,6 +34,8 @@ static volatile uint32_t g_rx_lines = 0;   // link lines received (#STAT, bring-
 static volatile uint32_t g_tx_drops = 0;   // lines dropped because the TX buffer had no room
 static const char*       g_boot_reason = "";   // this boot's reset reason (#STAT)
 static uint32_t          g_prev[8];            // the previous boot's backup registers (crumbsInit)
+static uint32_t g_spin_until = 0;   // #SPIN: when the timed bench spin ramps down (0 = none)
+static bool     g_bench_spin = false;   // a #SPIN test is running: outside the XY board's job control
 // #RXLOG (bring-up): the last 256 raw bytes received on the link.
 static uint8_t  g_rxlog[256];
 static uint32_t g_rxlog_n = 0;
@@ -188,12 +190,24 @@ static void requireRehome() {
 
 // Stop for an over-current or a lost rotor: the relative phase (the Z) no longer means anything.
 // Fault code 2 stays latched until a fresh non-zero speed or Z move (as on the ESP32).
+// A fault during a #SPIN bench test stops the motors and is reported, but not latched into the status
+// line's fault code: the XY board would answer that with its job recovery ($STOP, then a Z re-home 'G'),
+// i.e. motion nobody asked for on a bench.
+static bool benchSpinFault(const char* detail) {
+    if (!g_bench_spin) return false;
+    g_bench_spin = false;
+    g_spin_until = 0;
+    linkEvent("WARN", "%s - bench spin stopped (not reported as a fault: no XY recovery or Z re-home)", detail);
+    return true;
+}
+
 static void stopForOverCurrent(const char* detail) {
     tripTrigger(detail);
     disableDrive(true);
     g_spinning = false;
     foc::setSpeedTarget(0);
     requireRehome();
+    if (benchSpinFault(detail)) return;
     g_fault_code = 2;
     linkEvent("WARN", "%s - spindle stopped; re-home the Z, then send a new speed", detail);
 }
@@ -205,6 +219,7 @@ static void stopForDriverFault(const char* detail) {
     g_spinning = false;
     foc::setSpeedTarget(0);
     requireRehome();
+    if (benchSpinFault(detail)) return;
     g_fault_code = 1;
     linkEvent("ERR", "%s", detail);
 }
@@ -434,7 +449,6 @@ static uint32_t g_align_until  = 0;
 static uint32_t g_stat_every   = 0;
 static bool     g_noise_pending = false;
 static volatile uint32_t g_loop_count = 0;   // main-loop passes, reported per second by #STAT
-static uint32_t g_spin_until = 0;   // #SPIN: when the timed bench spin ramps down (0 = none)
 static uint32_t g_align_avg_at  = 0;      // when to start averaging the align currents (millis)
 static int      g_dump_print    = -1;     // next #DUMP line to print, -1 = none
 static int      g_dump_rows     = 0;      // samples captured
@@ -618,6 +632,7 @@ static void maintenance(const char* line) {
         setSpindleSpeed(rpm);
         g_spin_until = millis() + ms;
         if (!g_spin_until) g_spin_until = 1;
+        g_bench_spin = rpm > 0;
         linkEvent("MSG", "SPIN: %.0f RPM for %lu ms, then S0", rpm, (unsigned long)ms);
     } else if (!strcmp(word, "LOAD") && n >= 2) {
         uint32_t us = a < 0 ? 0 : a > 48 ? 48 : (uint32_t)a;
@@ -1064,6 +1079,7 @@ void loop() {
         setSpindleSpeed(0);
         linkEvent("MSG", "SPIN: time up, ramping down");
     }
+    if (g_bench_spin && !g_spin_until && !g_spinning && !foc::enabled()) g_bench_spin = false;   // ramped down
 
     CRUMB(1);
     hw::serviceSlowAnalog();

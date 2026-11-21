@@ -77,6 +77,21 @@ an assumption the next one relies on. Stop at the first surprise.
     (needs both within 10 %) in step 6.
   - Before closed loop: the U9 noise (above) and more interrupt headroom (closed loop adds work; CCM
     SRAM for the interrupt code would help).
+- **Step 6 (`#SPIN 3000 8000`) did not reach closed loop: "observer did not lock at the closed-loop
+  hand-over speed"** after 1.4 s at 2000 RPM; stopped cleanly, interrupt 34-36 us, 0 overruns.
+  - Trip recording (XY `/spindle_trip.csv`, 2 ms samples - really 2.1 ms under load): both observers
+    average the command exactly (2000 / 2002 RPM: the rotors track the I/f drive) but ripple sd ~240 RPM
+    (12 %) at 33.4 and 66.9 Hz = 1x and 2x electrical (1 pole pair) on both motors, so they are inside the
+    10 % band only 51-56 % of the time, never the 100 ms in a row the hand-over needs (longest 12-24 ms).
+  - 1x / 2x electrical ripple is what current-measurement offset / gain errors do to the observer, and
+    the ALIGN currents do not add up: ia+ib+ic = -0.31 A (M1) / +0.26 A (M2) of ~1.5 A, ib/ic up to 28 %
+    off -ia/2. A fraction of a milliohm of shared copper/ground in the 5 mOhm shunt sense paths would do
+    it (the same paths that let U9's noise in): check the shunt sense taps (Kelvin?), and/or calibrate
+    per-phase gains in firmware (ALIGN along each phase axis, Kirchhoff sum = 0).
+  - ALIGN slopes (0.05 -> 0.5 V) give R ~0.34 ohm (M1) / 0.29 ohm (M2), not the ESC1 bench's 0.39 ohm:
+    `#OBS 0.31 75e-6 7.84e-3` (SI units) before the next try.
+  - A fault during a `#SPIN` bench test is no longer latched into the status line's fault code: the
+    XY board would otherwise run its job recovery ($STOP, then a Z re-home 'G') - motion on a bench.
 - New maintenance commands: `#NOISE [samples]`, `#SLOW <0|1|2>`, `#DUMP [samples] [channel]` (consecutive
   raw samples, 16 per line; `D <channel> <first sample> <values>`), `#BRK`, `#MOE`, `#LOAD <us>` (pad the
   interrupt, drive off), `#SPIN <rpm> <ms>` (bench spin that stops itself), `#RXLOG` (last 256 link
