@@ -4,6 +4,37 @@ Written 2026-11-17 with no board in hand: everything here compiles and the pin m
 netlist, but **no line of it has run on hardware**. Work through the steps in order; each one checks
 an assumption the next one relies on. Stop at the first surprise.
 
+## Board 1 results (2026-11-20, USB power only, steps 1-2.3)
+
+- **Step 1 passed.** The ESP32-S3 arrived blank; factory image + `uploadfs` over USB worked.
+  `$MBOARD` = Unified Control Board 36V, 590 mV. The config was copied from `maslow-mini-36v.yaml`.
+  The USB port carries **no FluidNC console** (every Maslow build keeps USB in JTAG/serial mode, see
+  `esp32s3/Console.cpp`): it shows only ROM, `printf` and panic output, and opening it resets the
+  chip. Commands need WiFi: a fresh board is AP `maslow` / `12345678` at 192.168.0.1, then set the
+  STA network in the web UI. Rename it (`$Hostname`): the default `maslow` clashes with other machines.
+- **Step 2.1 done over the link, not SWD:** `$Spindle/G474=FLASH /file.bin` erased, wrote and
+  verified 90 KB in 23 s on the first try (step 9's path; no ST-LINK needed for a blank G474). Put
+  the .bin on the XY filesystem with the web UI's file upload (`POST /files`).
+  - Found and fixed (82b7507da): after a flash the XY link stayed in 8E1, so every G474 line was
+    garbage. `uart_mode()` passed an unzeroed config and IDF 5.5 then silently ignored the change back
+    to 8N1 (the USB console shows `fnc_uart_param_config(1010): not able to power down in light
+    sleep`). Maslow-Main has the same bug.
+- **Step 2.2 passed:** `ready: G474 FOC, PWM 20000 Hz, update on the valley`. The `g474-bench` boot
+  trace (`MSG:boot: ...` per init step) shows the link at 115200 (clock right), the ADC interrupt at
+  20 kHz from TIM1 TRGO2 (40 in 2 ms, 4-5 us each with the drive off), and offset calibration within
+  range on all six channels.
+- **Step 2.3:** vbus 0.5 V and NTCs 29 / 26 C after fixing the slow-channel bug (1821880c2: the
+  HAL's `ADC_CHANNEL_n` is a bitfield, so ADC2 had been converting PA1 = motor 1's phase A shunt
+  input for "VBUS" and channel 0 for both NTCs). Current offsets are fine (means within ~10 counts of
+  the zero) but **the noise is high**: `#NOISE 2000` gives sd 14-35 counts (0.15-0.36 A) on five
+  channels and ~130 counts (1.35 A, range -1.7..+2.6 A) on motor 1 phase B (PA7, ADC2). Not the slow
+  ADC2 conversions (`#SLOW` A/B: no change). All six RC networks are identical (1k / 100 pF, only
+  ~1.6 MHz filtering), so look at supply and ground noise: on USB the TPS54360B runs at ~4.6 V in,
+  just above its 4.5 V minimum. **Re-measure with 36 V on (step 2.4) before going further**, then
+  scope ISB1 at the MCU pin if motor 1 phase B is still the worst.
+- New maintenance commands: `#NOISE [samples]`, `#SLOW <0|1|2>`. A CPU fault now turns both bridges
+  off and sends `ERR:spindle CPU fault ... pc=...` over the link (`addr2line -e firmware.elf <pc>`).
+
 ## Verified without hardware
 
 - `pio run` and `pio run -e g474-bench` build (87 KB of 128 KB flash, 61 KB of 128 KB RAM).
