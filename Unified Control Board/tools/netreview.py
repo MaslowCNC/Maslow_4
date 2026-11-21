@@ -14,12 +14,8 @@ import numpy as np
 import pcbnew
 
 TO, MM = pcbnew.ToMM, pcbnew.FromMM
-PCB, OUT = sys.argv[1], sys.argv[2]
-ONLY = set(sys.argv[3:])
-os.makedirs(OUT, exist_ok=True)
-b = pcbnew.LoadBoard(PCB)
 LAYERS = ["F.Cu", "In1.Cu", "In2.Cu", "B.Cu"]
-LID = {n: b.GetLayerID(n) for n in LAYERS}
+b, LID = None, {}
 
 
 def P(v):
@@ -48,93 +44,60 @@ class Item:
     __slots__ = ("kind", "obj", "layers", "pts", "w", "name", "polys", "uid")
 
 
-items_by_net = collections.defaultdict(list)
-for t in b.GetTracks():
-    it = Item()
-    it.obj, it.uid = t, t.m_Uuid.AsString()
-    if t.GetClass() == "PCB_VIA":
-        it.kind, it.layers, it.pts, it.w = "via", set(LAYERS), [P(t.GetPosition())], TO(t.GetWidth(pcbnew.F_Cu))
-    else:
-        it.kind, it.layers, it.pts, it.w = "track", {b.GetLayerName(t.GetLayer())}, [P(t.GetStart()), P(t.GetEnd())], TO(t.GetWidth())
-    it.name = t.GetNetname()
-    items_by_net[it.name].append(it)
-for fp in b.GetFootprints():
-    for p in fp.Pads():
-        n = p.GetNetname()
-        if not n:
-            continue
+def load(board):
+    """read every net's copper from a loaded board; returns {net: [Item]}"""
+    global b, LID
+    b = board
+    LID = {n: b.GetLayerID(n) for n in LAYERS}
+    items_by_net = collections.defaultdict(list)
+    for t in b.GetTracks():
         it = Item()
-        it.kind, it.obj, it.name, it.uid = "pad", p, n, "%s.%s" % (fp.GetReference(), p.GetNumber())
-        it.layers = {b.GetLayerName(l) for l in p.GetLayerSet().CuStack() if b.GetLayerName(l) in LID}
-        it.pts, it.w = [P(p.GetPosition())], 0
-        it.polys = {}
-        for ln in it.layers:
-            ps = pcbnew.SHAPE_POLY_SET()
-            p.TransformShapeToPolygon(ps, LID[ln], 0, MM(0.005), pcbnew.ERROR_INSIDE)
-            it.polys[ln] = ps
-        items_by_net[n].append(it)
-for z in b.Zones():
-    if z.GetIsRuleArea() or not z.GetNetname():
-        continue
-    for l in z.GetLayerSet().Seq():
-        ln = b.GetLayerName(l)
-        if ln not in LID:
-            continue
-        fp_ = z.GetFilledPolysList(l)
-        for k in range(fp_.OutlineCount()):
-            one = pcbnew.SHAPE_POLY_SET()
-            one.AddOutline(fp_.Outline(k))
-            for h in range(fp_.HoleCount(k)):
-                one.AddHole(fp_.Hole(k, h))
+        it.obj, it.uid = t, t.m_Uuid.AsString()
+        if t.GetClass() == "PCB_VIA":
+            it.kind, it.layers, it.pts, it.w = "via", set(LAYERS), [P(t.GetPosition())], TO(t.GetWidth(pcbnew.F_Cu))
+        else:
+            it.kind, it.layers, it.pts, it.w = "track", {b.GetLayerName(t.GetLayer())}, [P(t.GetStart()), P(t.GetEnd())], TO(t.GetWidth())
+        it.name = t.GetNetname()
+        items_by_net[it.name].append(it)
+    for fp in b.GetFootprints():
+        for p in fp.Pads():
+            n = p.GetNetname()
+            if not n:
+                continue
             it = Item()
-            it.kind, it.obj, it.name, it.uid = "zone", z, z.GetNetname(), "%s/%s/%d" % (z.GetZoneName(), ln, k)
-            it.layers, it.pts, it.w, it.polys = {ln}, [], 0, {ln: one}
-            items_by_net[it.name].append(it)
+            it.kind, it.obj, it.name, it.uid = "pad", p, n, "%s.%s" % (fp.GetReference(), p.GetNumber())
+            it.layers = {b.GetLayerName(l) for l in p.GetLayerSet().CuStack() if b.GetLayerName(l) in LID}
+            it.pts, it.w = [P(p.GetPosition())], 0
+            it.polys = {}
+            for ln in it.layers:
+                ps = pcbnew.SHAPE_POLY_SET()
+                p.TransformShapeToPolygon(ps, LID[ln], 0, MM(0.005), pcbnew.ERROR_INSIDE)
+                it.polys[ln] = ps
+            items_by_net[n].append(it)
+    for z in b.Zones():
+        if z.GetIsRuleArea() or not z.GetNetname():
+            continue
+        for l in z.GetLayerSet().Seq():
+            ln = b.GetLayerName(l)
+            if ln not in LID:
+                continue
+            fp_ = z.GetFilledPolysList(l)
+            for k in range(fp_.OutlineCount()):
+                one = pcbnew.SHAPE_POLY_SET()
+                one.AddOutline(fp_.Outline(k))
+                for h in range(fp_.HoleCount(k)):
+                    one.AddHole(fp_.Hole(k, h))
+                it = Item()
+                it.kind, it.obj, it.name, it.uid = "zone", z, z.GetNetname(), "%s/%s/%d" % (z.GetZoneName(), ln, k)
+                it.layers, it.pts, it.w, it.polys = {ln}, [], 0, {ln: one}
+                items_by_net[it.name].append(it)
+
+
+    return items_by_net
 
 
 def seg_of(it):
     return pcbnew.SEG(V(it.pts[0]), V(it.pts[1]))
-
-
-def touches(a, c):
-    """KiCad-like connection test between two same-net items (generous: overlap counts for pads and zones)"""
-    common = a.layers & c.layers
-    if not common:
-        return False
-    if a.kind == "zone" and c.kind == "zone":
-        return False
-    if c.kind in ("pad", "zone") and a.kind not in ("pad", "zone"):
-        a, c = c, a
-    for ln in common:
-        if a.kind in ("pad", "zone"):
-            poly = a.polys[ln]
-            if c.kind == "track":
-                if poly.Collide(seg_of(c), MM(c.w / 2)):
-                    return True
-            elif c.kind == "via":
-                if poly.Collide(V(c.pts[0]), MM(c.w / 2)):
-                    return True
-            elif c.kind == "pad":
-                if poly.Collide(V(c.pts[0])) or c.polys[ln].Collide(V(a.pts[0])) if a.kind == "pad" else poly.Collide(V(c.pts[0])):
-                    return True
-                if a.kind == "pad" and c.polys[ln].Collide(a.polys[ln].Outline(0).CPoint(0)):
-                    return True
-            continue
-        # track / via pairs
-        if a.kind == "via" and c.kind == "via":
-            if dist(a.pts[0], c.pts[0]) <= (a.w + c.w) / 2:
-                return True
-            continue
-        if a.kind == "via":
-            a, c = c, a
-        if c.kind == "via":   # a is a track
-            if any(dist(e, c.pts[0]) <= c.w / 2 + 1e-4 for e in a.pts) or proj(c.pts[0], *a.pts)[1] <= a.w / 2 + 1e-4:
-                return True
-            continue
-        # track - track: an end of one inside the other's copper
-        if any(proj(e, *c.pts)[1] <= c.w / 2 + 1e-4 for e in a.pts) or any(proj(e, *a.pts)[1] <= a.w / 2 + 1e-4 for e in c.pts):
-            return True
-    return False
 
 
 def bbox_of(its):
@@ -394,119 +357,124 @@ def analyse(net, its):
     return res
 
 
-# ------------------------------------------------------------------ rendering (one tile per net)
-COL = {"F.Cu": (215, 35, 35), "In1.Cu": (150, 60, 190), "In2.Cu": (175, 115, 35), "B.Cu": (45, 105, 225)}
-outline = pcbnew.SHAPE_POLY_SET()
-b.GetBoardPolygonOutlines(outline, True)
-edge_pts = [[P(outline.Outline(k).CPoint(i)) for i in range(outline.Outline(k).PointCount())] for k in range(outline.OutlineCount())]
-all_tracks = [(b.GetLayerName(t.GetLayer()), P(t.GetStart()), P(t.GetEnd()), TO(t.GetWidth())) for t in b.GetTracks() if t.GetClass() == "PCB_TRACK"]
-all_pads = []
-for fp in b.GetFootprints():
-    for p in fp.Pads():
-        bb = p.GetBoundingBox()
-        all_pads.append((TO(bb.GetLeft()), TO(bb.GetTop()), TO(bb.GetRight()), TO(bb.GetBottom()), p.GetNetname()))
+if __name__ == "__main__":
+    PCB, OUT = sys.argv[1], sys.argv[2]
+    ONLY = set(sys.argv[3:])
+    os.makedirs(OUT, exist_ok=True)
+    items_by_net = load(pcbnew.LoadBoard(PCB))
+    # ------------------------------------------------------------------ rendering (one tile per net)
+    COL = {"F.Cu": (215, 35, 35), "In1.Cu": (150, 60, 190), "In2.Cu": (175, 115, 35), "B.Cu": (45, 105, 225)}
+    outline = pcbnew.SHAPE_POLY_SET()
+    b.GetBoardPolygonOutlines(outline, True)
+    edge_pts = [[P(outline.Outline(k).CPoint(i)) for i in range(outline.Outline(k).PointCount())] for k in range(outline.OutlineCount())]
+    all_tracks = [(b.GetLayerName(t.GetLayer()), P(t.GetStart()), P(t.GetEnd()), TO(t.GetWidth())) for t in b.GetTracks() if t.GetClass() == "PCB_TRACK"]
+    all_pads = []
+    for fp in b.GetFootprints():
+        for p in fp.Pads():
+            bb = p.GetBoundingBox()
+            all_pads.append((TO(bb.GetLeft()), TO(bb.GetTop()), TO(bb.GetRight()), TO(bb.GetBottom()), p.GetNetname()))
 
 
-def render(net, its, res, size=320):
-    bb = bbox_of(its)
-    if not bb:
-        return None
-    x0, y0, x1, y1 = bb
-    m = 2.0
-    x0, y0, x1, y1 = x0 - m, y0 - m, x1 + m, y1 + m
-    span = max(x1 - x0, y1 - y0)
-    cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
-    x0, y0 = cx - span / 2, cy - span / 2
-    s = size / span
-    img = np.full((size, size, 3), 255, np.uint8)
-    yy, xx = np.mgrid[0:size, 0:size]
-    X = x0 + (xx + 0.5) / s
-    Y = y0 + (yy + 0.5) / s
+    def render(net, its, res, size=320):
+        bb = bbox_of(its)
+        if not bb:
+            return None
+        x0, y0, x1, y1 = bb
+        m = 2.0
+        x0, y0, x1, y1 = x0 - m, y0 - m, x1 + m, y1 + m
+        span = max(x1 - x0, y1 - y0)
+        cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+        x0, y0 = cx - span / 2, cy - span / 2
+        s = size / span
+        img = np.full((size, size, 3), 255, np.uint8)
+        yy, xx = np.mgrid[0:size, 0:size]
+        X = x0 + (xx + 0.5) / s
+        Y = y0 + (yy + 0.5) / s
 
-    def disc(x, y, r, col):
-        i0, i1 = int((x - r - x0) * s) - 1, int((x + r - x0) * s) + 2
-        j0, j1 = int((y - r - y0) * s) - 1, int((y + r - y0) * s) + 2
-        i0, i1, j0, j1 = max(0, i0), min(size, i1), max(0, j0), min(size, j1)
-        if i0 >= i1 or j0 >= j1:
-            return
-        mm = (X[j0:j1, i0:i1] - x) ** 2 + (Y[j0:j1, i0:i1] - y) ** 2 <= max(r, 0.6 / s) ** 2
-        img[j0:j1, i0:i1][mm] = col
+        def disc(x, y, r, col):
+            i0, i1 = int((x - r - x0) * s) - 1, int((x + r - x0) * s) + 2
+            j0, j1 = int((y - r - y0) * s) - 1, int((y + r - y0) * s) + 2
+            i0, i1, j0, j1 = max(0, i0), min(size, i1), max(0, j0), min(size, j1)
+            if i0 >= i1 or j0 >= j1:
+                return
+            mm = (X[j0:j1, i0:i1] - x) ** 2 + (Y[j0:j1, i0:i1] - y) ** 2 <= max(r, 0.6 / s) ** 2
+            img[j0:j1, i0:i1][mm] = col
 
-    def seg(a, c, w, col):
-        L = dist(a, c)
-        k = max(1, int(L * s / 1.2))
-        for q in range(k + 1):
-            disc(a[0] + (c[0] - a[0]) * q / k, a[1] + (c[1] - a[1]) * q / k, w / 2, col)
+        def seg(a, c, w, col):
+            L = dist(a, c)
+            k = max(1, int(L * s / 1.2))
+            for q in range(k + 1):
+                disc(a[0] + (c[0] - a[0]) * q / k, a[1] + (c[1] - a[1]) * q / k, w / 2, col)
 
-    def box(l, t, r, btm, col):
-        i0, i1 = max(0, int((l - x0) * s)), min(size, int((r - x0) * s) + 1)
-        j0, j1 = max(0, int((t - y0) * s)), min(size, int((btm - y0) * s) + 1)
-        if i0 < i1 and j0 < j1:
-            img[j0:j1, i0:i1] = col
-    for l, t, r, btm, pn in all_pads:
-        if r >= x0 and l <= x0 + span and btm >= y0 and t <= y0 + span:
-            box(l, t, r, btm, (228, 228, 228) if pn != net else (255, 170, 60))
-    for ln, a, c, w in all_tracks:
-        if max(a[0], c[0]) >= x0 and min(a[0], c[0]) <= x0 + span and max(a[1], c[1]) >= y0 and min(a[1], c[1]) <= y0 + span:
-            seg(a, c, max(w, 0.08), (222, 222, 222))
-    for pts in edge_pts:
-        for a, c in zip(pts, pts[1:] + pts[:1]):
+        def box(l, t, r, btm, col):
+            i0, i1 = max(0, int((l - x0) * s)), min(size, int((r - x0) * s) + 1)
+            j0, j1 = max(0, int((t - y0) * s)), min(size, int((btm - y0) * s) + 1)
+            if i0 < i1 and j0 < j1:
+                img[j0:j1, i0:i1] = col
+        for l, t, r, btm, pn in all_pads:
+            if r >= x0 and l <= x0 + span and btm >= y0 and t <= y0 + span:
+                box(l, t, r, btm, (228, 228, 228) if pn != net else (255, 170, 60))
+        for ln, a, c, w in all_tracks:
             if max(a[0], c[0]) >= x0 and min(a[0], c[0]) <= x0 + span and max(a[1], c[1]) >= y0 and min(a[1], c[1]) <= y0 + span:
-                seg(a, c, 0.15, (120, 120, 120))
-    for order in ("B.Cu", "In2.Cu", "In1.Cu", "F.Cu"):
+                seg(a, c, max(w, 0.08), (222, 222, 222))
+        for pts in edge_pts:
+            for a, c in zip(pts, pts[1:] + pts[:1]):
+                if max(a[0], c[0]) >= x0 and min(a[0], c[0]) <= x0 + span and max(a[1], c[1]) >= y0 and min(a[1], c[1]) <= y0 + span:
+                    seg(a, c, 0.15, (120, 120, 120))
+        for order in ("B.Cu", "In2.Cu", "In1.Cu", "F.Cu"):
+            for it in its:
+                if it.kind == "track" and order in it.layers:
+                    seg(it.pts[0], it.pts[1], max(it.w, 1.6 / s), COL[order])
         for it in its:
-            if it.kind == "track" and order in it.layers:
-                seg(it.pts[0], it.pts[1], max(it.w, 1.6 / s), COL[order])
-    for it in its:
-        if it.kind == "via":
-            disc(it.pts[0][0], it.pts[0][1], max(it.w / 2, 2.5 / s), (0, 0, 0))
-    for d in res["loops"]:
-        seg(d["p"], d["q"], max(0.2, 3.0 / s), (230, 0, 230))
-    for d in res["dead"]:
-        seg(d["p"], d["q"], max(0.25, 3.5 / s), (0, 200, 0))
-    for v in res["dead_vias"] + res["via1"]:
-        disc(v[0], v[1], max(0.4, 5.0 / s), (0, 200, 0))
-    return img
+            if it.kind == "via":
+                disc(it.pts[0][0], it.pts[0][1], max(it.w / 2, 2.5 / s), (0, 0, 0))
+        for d in res["loops"]:
+            seg(d["p"], d["q"], max(0.2, 3.0 / s), (230, 0, 230))
+        for d in res["dead"]:
+            seg(d["p"], d["q"], max(0.25, 3.5 / s), (0, 200, 0))
+        for v in res["dead_vias"] + res["via1"]:
+            disc(v[0], v[1], max(0.4, 5.0 / s), (0, 200, 0))
+        return img
 
 
-def png(path, arr):
-    import zlib, struct
-    h, w, _ = arr.shape
-    raw = b"".join(b"\x00" + arr[y].tobytes() for y in range(h))
+    def png(path, arr):
+        import zlib, struct
+        h, w, _ = arr.shape
+        raw = b"".join(b"\x00" + arr[y].tobytes() for y in range(h))
 
-    def chunk(t, d):
-        return struct.pack(">I", len(d)) + t + d + struct.pack(">I", zlib.crc32(t + d) & 0xffffffff)
-    open(path, "wb").write(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0))
-                           + chunk(b"IDAT", zlib.compress(raw, 6)) + chunk(b"IEND", b""))
+        def chunk(t, d):
+            return struct.pack(">I", len(d)) + t + d + struct.pack(">I", zlib.crc32(t + d) & 0xffffffff)
+        open(path, "wb").write(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0))
+                               + chunk(b"IDAT", zlib.compress(raw, 6)) + chunk(b"IEND", b""))
 
 
-# ------------------------------------------------------------------ run
-nets = sorted(n for n, its in items_by_net.items() if n and any(i.kind in ("track", "via") for i in its) and (not ONLY or n in ONLY))
-report = []
-tiles = []
-for k, net in enumerate(nets):
-    its = items_by_net[net]
-    res = analyse(net, its)
-    res["tile"] = k + 1
-    report.append(res)
-    img = render(net, its, res)
-    if img is not None:
-        png(os.path.join(OUT, "net_%s.png" % re.sub(r"[^A-Za-z0-9_.+-]", "_", net)), img)
-        tiles.append(img)
-    print("%3d %-22s seg %3d via %2d pad %2d zone %2d  %6.1f mm  dead %5.2f mm %d vias  via1 %d  loop %5.2f mm  tiny %2d  detours %s" % (
-        k + 1, net, res["segments"], res["vias"], res["pads"], res["zones"], res["length"], res["dead_len"], len(res["dead_vias"]),
-        len(res["via1"]), res["loop_len"], res["tiny"], ", ".join("%s-%s %.0f/%.0f" % (d["a"], d["b"], d["path"], d["straight"]) for d in res["detours"][:3])),
-        flush=True)
-json.dump(report, open(os.path.join(OUT, "report.json"), "w"), indent=1)
-# contact sheets: 4 x 3 tiles of 320 px with 8 px gaps
-per, cols, ts, gap = 12, 4, 320, 8
-for s0 in range(0, len(tiles), per):
-    chunk_ = tiles[s0:s0 + per]
-    rows_ = (len(chunk_) + cols - 1) // cols
-    sheet = np.full((rows_ * (ts + gap), cols * (ts + gap), 3), 255, np.uint8)
-    for q, tile in enumerate(chunk_):
-        r, c = divmod(q, cols)
-        sheet[r * (ts + gap):r * (ts + gap) + ts, c * (ts + gap):c * (ts + gap) + ts] = tile
-        sheet[r * (ts + gap):r * (ts + gap) + ts, c * (ts + gap) + ts:c * (ts + gap) + ts + 2] = 90
-    png(os.path.join(OUT, "sheet_%02d.png" % (s0 // per + 1)), sheet)
-print("sheets:", (len(tiles) + per - 1) // per)
+    # ------------------------------------------------------------------ run
+    nets = sorted(n for n, its in items_by_net.items() if n and any(i.kind in ("track", "via") for i in its) and (not ONLY or n in ONLY))
+    report = []
+    tiles = []
+    for k, net in enumerate(nets):
+        its = items_by_net[net]
+        res = analyse(net, its)
+        res["tile"] = k + 1
+        report.append(res)
+        img = render(net, its, res)
+        if img is not None:
+            png(os.path.join(OUT, "net_%s.png" % re.sub(r"[^A-Za-z0-9_.+-]", "_", net)), img)
+            tiles.append(img)
+        print("%3d %-22s seg %3d via %2d pad %2d zone %2d  %6.1f mm  dead %5.2f mm %d vias  via1 %d  loop %5.2f mm  tiny %2d  detours %s" % (
+            k + 1, net, res["segments"], res["vias"], res["pads"], res["zones"], res["length"], res["dead_len"], len(res["dead_vias"]),
+            len(res["via1"]), res["loop_len"], res["tiny"], ", ".join("%s-%s %.0f/%.0f" % (d["a"], d["b"], d["path"], d["straight"]) for d in res["detours"][:3])),
+            flush=True)
+    json.dump(report, open(os.path.join(OUT, "report.json"), "w"), indent=1)
+    # contact sheets: 4 x 3 tiles of 320 px with 8 px gaps
+    per, cols, ts, gap = 12, 4, 320, 8
+    for s0 in range(0, len(tiles), per):
+        chunk_ = tiles[s0:s0 + per]
+        rows_ = (len(chunk_) + cols - 1) // cols
+        sheet = np.full((rows_ * (ts + gap), cols * (ts + gap), 3), 255, np.uint8)
+        for q, tile in enumerate(chunk_):
+            r, c = divmod(q, cols)
+            sheet[r * (ts + gap):r * (ts + gap) + ts, c * (ts + gap):c * (ts + gap) + ts] = tile
+            sheet[r * (ts + gap):r * (ts + gap) + ts, c * (ts + gap) + ts:c * (ts + gap) + ts + 2] = 90
+        png(os.path.join(OUT, "sheet_%02d.png" % (s0 // per + 1)), sheet)
+    print("sheets:", (len(tiles) + per - 1) // per)

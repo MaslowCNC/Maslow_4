@@ -185,8 +185,10 @@ class Router:
         return out
 
     def route(self, net, starts, goals, width, clearance, layers=("F.Cu", "B.Cu"), via=(0.6, 0.3), via_cost=3.0,
-              noise=None, noise_cost=4.0, clear_radius=0.0, extra_keep=(), allow=None):
-        """starts/goals: lists of (x, y, layer_name).  Returns [(layer, [(x, y), ...]), ...] runs with vias between."""
+              noise=None, noise_cost=4.0, clear_radius=0.0, extra_keep=(), allow=None, heuristic=None):
+        """starts/goals: lists of (x, y, layer_name).  Returns [(layer, [(x, y), ...]), ...] runs with vias between.
+        heuristic: optional h(i, j) -> mm lower bound to the nearest goal (replaces the default, which scans every
+        goal and gets slow with hundreds of them)."""
         g = self.grid
         blk = {}
         for ln in layers:
@@ -222,6 +224,8 @@ class Router:
 
         def h(i, j):
             return min(math.hypot(i - a, j - b) for a, b in gx) * g.step
+        if heuristic is not None:
+            h = heuristic
 
         dirs = [(1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)]
         best, prev, pq = {}, {}, []
