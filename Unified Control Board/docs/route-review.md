@@ -29,3 +29,14 @@ It also draws each net on its own, so every route can be looked at.
   its centre and the via is gone.
 - Result: 3194 → 2914 segments and 597 → 596 vias. DRC with schematic parity: no errors, nothing unconnected, nothing
   dangling, 219 warnings (was 237).
+
+## Step 2: staircases and wiggles
+
+- `tools/route_fix.py pull` takes each chain of same-layer, same-width segments between real junctions (pads, vias,
+  zone edges, T-junctions, width changes) and string-pulls it. From each point it jumps to the farthest later point
+  reachable in a straight line with full clearance: the board's rules plus 0.03 mm.
+- The chain's ends stay put, so nothing gets connected or disconnected.
+- Left alone on purpose: the sense nets (IS*, S[ABC][12]), U9_SYNC and the USB data pair, whose spacing was chosen.
+- Result: 232 chains, 1294 → 747 segments, 82.7 mm of track gone. DRC with schematic parity: no errors, 201 warnings.
+  The nine "new" ones are the same narrow VCC, USB5V and phase runs as before, now as merged segments with their
+  widths kept.
