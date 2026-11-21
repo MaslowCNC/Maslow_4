@@ -141,13 +141,30 @@ an assumption the next one relies on. Stop at the first surprise.
     every failure is the 15 mNm load step moving the Z ~12 deg (limit 10) - the stiffness left to win
     back once the U9 noise is fixed.
   - `#SPIN` now goes to 12000 RPM (bench).
+- **Board calibration stored (2026-11-20):** `#GSAVE` writes both motors' `#GCAL` gains and the `#OBS`
+  constants to a 48-byte CRC-checked record at 0x0801F800 (the board file reserves the last 4 KB);
+  it loads at every boot ("calibration loaded: ..."); `#GCLEAR` erases it; both refused with the drive
+  on. The XY flasher reads it before its mass erase and writes it back after the image ("stored
+  calibration found; it is kept across the erase" ... "calibration restored"). Tested on board 1:
+  save, reset, clear, reset, save, full reflash - image CRC (`#FLASHCRC`) intact after every erase.
+  Board 1's record holds M1 1.111 / 0.906 / 0.983, M2 0.889 / 1.076 / 1.035, R 0.32.
+  - **Flash banks - check before production.** The G474RB arrived with DBANK = 1 (dual bank, OPTR
+    0xFFEFF8AA). In that mode bank 2 starts at 0x08040000, not at 0x08010000 as the HAL's
+    FLASH_BANK_SIZE (size / 2) implies: erasing "bank 2 page 31" left the record alone, erasing bank
+    1 page 63 cleared it. So on a 128 KB part the firmware above 64 KB (it is ~103 KB) and the
+    record sit in bank 1's upper half, which RM0440 most likely does not guarantee on this size in
+    dual-bank mode. Single-bank mode (DBANK = 0: 128 KB contiguous, 4 KB pages - the layout the
+    Arduino variant assumes) is the clean setting; changing it is an option-byte write plus a full
+    reflash and a re-saved calibration. cal.cpp handles both modes. `#CALDBG` shows OPTR and the
+    page the record's erase uses.
 - New maintenance commands: `#NOISE [samples]`, `#SLOW <0|1|2>`, `#DUMP [samples] [channel]` (consecutive
   raw samples, 16 per line; `D <channel> <first sample> <values>`), `#BRK`, `#MOE`, `#LOAD <us>` (pad the
   interrupt, drive off), `#SPIN <rpm> <ms>` (bench spin that stops itself), `#RXLOG` (last 256 link
   bytes), `#PREV` (the previous boot's record: last main-loop step, longest interrupt, CPU fault).
   `#STAT` adds uptime, reset reason, overruns, longest interrupt since boot, main-loop rate, link
   counters. `#ALIGN <V> [ms]` takes a duration (max 5 s). `#GCAL [V]` per-phase gain calibration, `#GAIN` / `#GAIN1` / `#GAIN2`, `#JMEAS <rpm>` rotor inertia
-  from a closed-loop speed step. A CPU fault now turns both bridges
+  from a closed-loop speed step, `#GSAVE` / `#GCLEAR` stored calibration, `#FLASHCRC <len>` image
+  CRC-32 (zlib's, compare with the .bin), `#CALDBG` flash option bytes / record words. A CPU fault now turns both bridges
   off and sends `ERR:spindle CPU fault ... pc=...` over the link (`addr2line -e firmware.elf <pc>`).
 
 ## Verified without hardware

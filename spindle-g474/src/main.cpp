@@ -861,6 +861,22 @@ static void maintenance(const char* line) {
                           rec.r, rec.l * 1e6f, rec.flux * 1e3f, (unsigned long)cal::ADDR, cal::bankMode());
             else linkEvent("WARN", "GSAVE FAILED: %s", why);
         }
+    } else if (!strcmp(word, "FLASHCRC") && n >= 2) {
+        uint32_t len = a < 1 ? 1 : a > 0x20000 ? 0x20000 : (uint32_t)a;
+        linkEvent("MSG", "FLASHCRC 0x08000000 + %lu: %08lx", (unsigned long)len,
+                  (unsigned long)cal::crc32Range(0x08000000, len));
+    } else if (!strcmp(word, "CALDBG")) {
+        uint32_t bank = 0, page = 0;
+        cal::erasePageOf(&bank, &page);
+        const volatile uint32_t* r = reinterpret_cast<const volatile uint32_t*>(cal::ADDR);
+        const volatile uint32_t* b1 = reinterpret_cast<const volatile uint32_t*>(0x0800F800);
+        linkEvent("MSG", "CALDBG OPTR %08lx MEMRMP %08lx size %u KB | erase bank %lu page %lu | WRP1A %08lx WRP1B %08lx WRP2A %08lx WRP2B %08lx",
+                  (unsigned long)FLASH->OPTR, (unsigned long)SYSCFG->MEMRMP, (unsigned)*(const uint16_t*)FLASHSIZE_BASE,
+                  (unsigned long)bank, (unsigned long)page, (unsigned long)FLASH->WRP1AR, (unsigned long)FLASH->WRP1BR,
+                  (unsigned long)FLASH->WRP2AR, (unsigned long)FLASH->WRP2BR);
+        linkEvent("MSG", "CALDBG at 0x0801F800: %08lx %08lx %08lx %08lx | at 0x0800F800: %08lx %08lx %08lx %08lx | SR %08lx",
+                  (unsigned long)r[0], (unsigned long)r[1], (unsigned long)r[2], (unsigned long)r[3], (unsigned long)b1[0],
+                  (unsigned long)b1[1], (unsigned long)b1[2], (unsigned long)b1[3], (unsigned long)FLASH->SR);
     } else if (!strcmp(word, "GAIN")) {
         for (int k = 0; k < 2; k++) {
             float g[3];
@@ -899,14 +915,15 @@ static void maintenance(const char* line) {
     } else {
         linkEvent("MSG", "# commands: STAT LOG <ms> ALIGN [V] [ms] CL <0|1> CUR <kp> <ki> POS <kp> <kd> <ki> "
                          "POSBW <min> <full rpm> OLKI <ki> DTC <ns> IHOLD/ISPIN/IBOOST/ILIM <A> OBS <R> <L> <flux> "
-                         "TRIP <sw A> [hw A] NOISE [samples] SLOW <0|1|2> DUMP [samples] [channel] BRK MOE LOAD <us> SPIN <rpm> <ms> RXLOG PREV GCAL [V] GAIN GAIN1/GAIN2 <a> <b> <c> JMEAS <rpm> GSAVE GCLEAR VER");
+                         "TRIP <sw A> [hw A] NOISE [samples] SLOW <0|1|2> DUMP [samples] [channel] BRK MOE LOAD <us> SPIN <rpm> <ms> RXLOG PREV GCAL [V] GAIN GAIN1/GAIN2 <a> <b> <c> JMEAS <rpm> GSAVE GCLEAR FLASHCRC <len> CALDBG VER");
         return;
     }
     if (strcmp(word, "STAT") && strcmp(word, "VER") && strcmp(word, "ALIGN") && strcmp(word, "NOISE") && strcmp(word, "SLOW") &&
         strcmp(word, "DUMP") && strcmp(word, "BRK") &&
         strcmp(word, "MOE") && strcmp(word, "LOAD") && strcmp(word, "SPIN") && strcmp(word, "RXLOG") &&
         strcmp(word, "PREV") && strcmp(word, "GCAL") && strncmp(word, "GAIN", 4) && strcmp(word, "JMEAS") &&
-        strcmp(word, "GSAVE") && strcmp(word, "GCLEAR")) {
+        strcmp(word, "GSAVE") && strcmp(word, "GCLEAR") &&
+        strcmp(word, "FLASHCRC") && strcmp(word, "CALDBG")) {
         linkEvent("MSG", "tuning: cur %.3f/%.0f pos %.2f/%.3f/%.1f bw %.2f/%.0f olki %.1f I hold %.1f spin %.1f "
                          "boost %.1f lim %.1f obs R %.3f L %.1fuH flux %.2fmWb trip %.1f A dtc %.0f ns CL %d",
                   tu.cur_kp, tu.cur_ki, tu.pos_kp, tu.pos_kd, tu.pos_ki, tu.pos_bw_min, tu.pos_bw_full_rpm, tu.ol_ki,

@@ -39,4 +39,8 @@ namespace cal {
 
     // "dual bank, 2 KB pages" or "single bank, 4 KB pages" (FLASH_OPTR.DBANK), for the log.
     const char* bankMode();
+
+    // Bring-up: CRC-32 (zlib's) of [addr, addr + len), and the bank / page the record's erase uses.
+    uint32_t crc32Range(uint32_t addr, uint32_t len);
+    void     erasePageOf(uint32_t* bank, uint32_t* page);
 }

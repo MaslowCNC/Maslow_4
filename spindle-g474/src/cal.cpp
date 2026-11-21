@@ -35,13 +35,16 @@ namespace cal {
             return (FLASH->OPTR & FLASH_OPTR_DBANK) != 0;
         }
 
-        // The page holding ADDR: 2 KB pages per bank (dual bank) or 4 KB pages (single bank).
+        // The page holding ADDR: 2 KB pages per bank (dual bank) or 4 KB pages (single bank).  In dual
+        // bank mode bank 2 starts at 0x08040000 on these parts whatever the flash size: the HAL's
+        // FLASH_BANK_SIZE (size / 2) would put it at 0x08010000 on a 128 KB G474, and erasing "bank 2
+        // page 31" left board 1's record alone; erasing bank 1 page 63 cleared it with the image intact.
         void pageOf(uint32_t* bank, uint32_t* page) {
-            uint32_t off = ADDR - FLASH_BASE;
+            constexpr uint32_t BANK2_OFFSET = 0x40000;
+            uint32_t           off          = ADDR - FLASH_BASE;
             if (dualBank()) {
-                uint32_t bank_size = ((uint32_t)(*(const uint16_t*)FLASHSIZE_BASE) << 10) / 2;
-                *bank              = off >= bank_size ? FLASH_BANK_2 : FLASH_BANK_1;
-                *page              = (off % bank_size) / 2048;
+                *bank = off >= BANK2_OFFSET ? FLASH_BANK_2 : FLASH_BANK_1;
+                *page = (off % BANK2_OFFSET) / 2048;
             } else {
                 *bank = FLASH_BANK_1;
                 *page = off / 4096;
@@ -128,6 +131,14 @@ namespace cal {
 
     bool clear(const char** why) {
         return erasePage(why);
+    }
+
+    uint32_t crc32Range(uint32_t addr, uint32_t len) {
+        return crc32(reinterpret_cast<const void*>(addr), len);
+    }
+
+    void erasePageOf(uint32_t* bank, uint32_t* page) {
+        pageOf(bank, page);
     }
 
     const char* bankMode() {
