@@ -2057,12 +2057,13 @@ bool Calibration::take_measurement_avg_with_check(int waypoint, int dir) {
                 if (!kinematics)
                     return false;
 
-                double threshold = 100;
-                float  diff[ARM_COUNT];
-                diff[_TL] = measurements[0][0] - measurementToXYPlane(kinematics->computeTL(x, y, 0), kinematics->getTlZ());
-                diff[_TR] = measurements[0][1] - measurementToXYPlane(kinematics->computeTR(x, y, 0), kinematics->getTrZ());
-                diff[_BL] = measurements[0][2] - measurementToXYPlane(kinematics->computeBL(x, y, 0), kinematics->getBlZ());
-                diff[_BR] = measurements[0][3] - measurementToXYPlane(kinematics->computeBR(x, y, 0), kinematics->getBrZ());
+                double      threshold = 100;
+                float       diff[ARM_COUNT];
+                const float stackZ = kinematics->getSpoilboardThickness() + kinematics->getWorkThickness();
+                diff[_TL] = measurements[0][0] - measurementToXYPlane(kinematics->computeTL(x, y, 0), kinematics->getTlZ() + stackZ);
+                diff[_TR] = measurements[0][1] - measurementToXYPlane(kinematics->computeTR(x, y, 0), kinematics->getTrZ() + stackZ);
+                diff[_BL] = measurements[0][2] - measurementToXYPlane(kinematics->computeBL(x, y, 0), kinematics->getBlZ() + stackZ);
+                diff[_BR] = measurements[0][3] - measurementToXYPlane(kinematics->computeBR(x, y, 0), kinematics->getBrZ() + stackZ);
                 log_info("Center point off by: TL: " << diff[_TL] << " TR: " << diff[_TR] << " BL: " << diff[_BL] << " BR: " << diff[_BR]);
 
                 if (abs(diff[_TL]) > threshold || abs(diff[_TR]) > threshold || abs(diff[_BL]) > threshold || abs(diff[_BR]) > threshold) {
@@ -2671,9 +2672,11 @@ float Calibration::measurementToXYPlane(float measurement, float zHeight) {
     if (!kinematics)
         return 0.0f;
 
-    // Include spoilboard and work thickness in the total Z height to match normal operation
-    // This ensures calibration measurements are consistent with actual cutting operations
-    float totalZHeight = zHeight + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness();
+    // zHeight is the whole vertical offset between the arm and the anchor: anchor Z + spoilboard + work
+    // thickness (+ router Z), exactly as MaslowKinematics::compute() uses it. Callers include the
+    // spoilboard and work thickness, so they must not be added again here: counting them twice made
+    // Find Anchors fit the anchors with a different belt angle than the one used for cutting.
+    float totalZHeight = zHeight;
 
     // Validate that measurement is sufficient to reach the XY plane at this Z height
     // If totalZHeight >= measurement, the belt would be too short to reach the anchor point
@@ -2693,9 +2696,8 @@ float Calibration::measurementFromXYPlane(float xyPlaneDistance, float zHeight) 
     if (!kinematics)
         return 0.0f;
 
-    // Include spoilboard and work thickness in the total Z height to match normal operation
-    // This ensures calibration measurements are consistent with actual cutting operations
-    float totalZHeight = zHeight + kinematics->getSpoilboardThickness() + kinematics->getWorkThickness();
+    // zHeight already includes the spoilboard and work thickness (see measurementToXYPlane)
+    float totalZHeight = zHeight;
     float lengthInXY =
         xyPlaneDistance - kinematics->getBeltEndExtension() - kinematics->getArmLength();  //Subtract the belt end extension and arm length
 
