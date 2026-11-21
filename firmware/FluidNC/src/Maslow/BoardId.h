@@ -26,4 +26,8 @@ namespace BoardId {
     // The Unified Control Boards wire the belt motors and encoders the opposite way round to the
     // Maslow 4.1, so both must be reversed in firmware for a command to turn a belt the same way.
     bool reversedBeltMotors();
+
+    // Teeth on the encoder roller: 22 on the Maslow 4.1, 35 on the Mini (Unified Control Boards).
+    // 0 when the board is unknown.
+    int expectedEncoderTeeth();
 }
