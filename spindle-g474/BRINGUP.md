@@ -157,6 +157,63 @@ an assumption the next one relies on. Stop at the first surprise.
     Arduino variant assumes) is the clean setting; changing it is an option-byte write plus a full
     reflash and a re-saved calibration. cal.cpp handles both modes. `#CALDBG` shows OPTR and the
     page the record's erase uses.
+  - **Board 1 is now single bank** (`#DBANK 0`, then reflash: OPTR 0xFFAFF8AA, the record's page is
+    bank 1 page 31). Re-saved and checked: `#GSAVE` ("single bank, 4 KB pages"), reset ("calibration
+    loaded"), full reflash keeps it, image CRC intact, closed loop at 3000 RPM.
+- **Step 7 passed: both motors to 24000 RPM in closed loop** (loose motors, 36.3 V, supply limit 6 A;
+  2026-11-20). ~80 s at 24000 RPM in eight runs of 6-15 s, each a full 0 -> 24000 -> 0 cycle through
+  the hand-over and the hand-back; at speed no trip after the changes below, Z error within -4.5..+7.9
+  deg, board NTCs 33 C at most. Final build: two 24000 RPM runs and five 6000 RPM cycles, all clean.
+  What it took:
+  - **Voltage headroom.** The back-EMF meets the current loops' old limit (0.95 x Vbus / sqrt(3) = 20.0 V)
+    below 24000 RPM. `modulate()` now fits the three duties into the whole 0..DUTY_MAX range: centred
+    while they fit, shifted down together above that (the line voltages do not change; the bottom phase may
+    sit at 0, low side on all period, nothing to dead-time-compensate). The limit becomes (DUTY_MAX - dead
+    time) / sqrt(3) x Vbus = 20.4-20.5 V (`voltageLimit()`, `MAX_MODULATION` 1.0 of that). Voltage demand
+    against the limit on motor 2 (the clean one) - motor 1 averages the same but its sense noise adds
+    peaks:
+
+    | RPM | 12000 | 15000 | 18000 | 20000 | 22000 | 24000 |
+    |---|---|---|---|---|---|---|
+    | motor 2 demand | 0.49 | 0.61 | 0.73 | 0.80 | 0.87 | 0.94 |
+    | motor 1 peak | 0.65 | 0.78 | 0.90 | 0.99 | 1.06 (1-2 % of periods clipped) | 1.12 (6-7 % clipped) |
+
+    The old limit would have stopped near 22500 RPM.
+  - **Field weakening** (`#FW <A> [share]`, default 3 A from 0.95 of the limit): negative d current lowers
+    the q voltage by we x L x |id| - only ~0.19 V per A at 24000 RPM. At 24000 motor 2 needs none; motor
+    1's noise-inflated demand winds it up to 1.4-3 A. The simulation reaches 24000 with the model's heavier
+    drag (16 mNm) at 0.97 of the limit with it, 0.997 without.
+  - **PWM update moved to the peak.** The duties loaded at the valley, but every write of the closed loop's
+    ~35 us interrupt came after it (`STAT volts ... after-valley` counts them: all of them), so voltages
+    landed 2 periods after their sample where 1.5 were compensated, and the observer and the two-shunt
+    rebuild used the wrong period's voltage and duties (7 deg of frame offset at 24000 RPM in the
+    simulation). Now the update is on the peak right after the sample (`update on the peak` in the boot
+    line): every write lands in time whatever the interrupt's length, the delay is exactly 1.5 periods,
+    and the observer and the rebuild use the voltage and duties in force (two interrupts back). The
+    simulation models all three (`UPDATE=peak|valley|late`); the sweep is no worse (70/75 with only the
+    known stiffness checks failing, 0 slips, worst rotor 34 deg at spin-down against 41).
+  - **Over-current trips raised (U9 noise; back down once U9 is fixed).** Motor 1's comparators broke three
+    times in a few minutes at 15000-18000 RPM with 20 A / 0.38 us (and 0.75 us), once ~70 ms after the
+    hand-over with ~2.5 V applied, where no real 20 A can build up: the 50 us post-mortem (`#BRKDUMP`)
+    showed motor 1's three phase samples summing to +5..+8 A for 250 us before it - common mode, the U9
+    signature. Idle, `#CMPTEST` found no latch even at 5 A (the idle spikes are all shorter than the
+    filter), comparator highs at 20 A, none from 25 A. Now 30 A and 0.75 us (`HW_TRIP_A`, `BreakFilter`
+    0xC): none since. The software trip then fired once at 24000 RPM (motor 1 phase A -15.4 A for 3
+    periods, on ~2.5 A of real current: motor 1's largest sample per 2 ms runs median 9 A, p99 15 A there),
+    so it is 18 A x 5 periods now. The AON7264E FETs take far more for microseconds.
+  - **Hand-back seeded from the closed loop's state.** One run stopped 70 ms after the 1500 RPM hand-back
+    with "a rotor fell 151 deg off its reference angle in open loop": motor 2 got ~1 A of the 3 A spin
+    current and its observer then read 650 RPM. `handbackToOpen()` had seeded the open-loop trims from
+    that instant's measured current and last commanded voltage, both carrying sense noise (Kp passes it
+    into the voltage). It now uses the closed loop's current references and integrators plus feed-forward,
+    turned into the reference frame by eps - as the hand-over already did. Z error just after the
+    hand-back since: -17.8..+6.9 deg over seven cycles (slip limit 150).
+  - Hardware quirk: a read-modify-write of TIMx_BDTR.BKF is ignored while BKE is set (LOCK off);
+    `hw::setBreakFilter()` clears BKE for the write.
+  - For G-code use (step 8): the 36 V config template still has `max_rpm: 14000` and the matching
+    `speed_map`; the ramp to 24000 takes ~11 s (500 rad/s^2 to 14000, 150 above), so `spinup_ms` must cover
+    it. Under cutting load the q voltage rises by R x Iq (0.32 V per A): above ~22000 RPM a real load will
+    lean on field weakening, which costs ~5 A of d current per volt.
 - New maintenance commands: `#NOISE [samples]`, `#SLOW <0|1|2>`, `#DUMP [samples] [channel]` (consecutive
   raw samples, 16 per line; `D <channel> <first sample> <values>`), `#BRK`, `#MOE`, `#LOAD <us>` (pad the
   interrupt, drive off), `#SPIN <rpm> <ms>` (bench spin that stops itself), `#RXLOG` (last 256 link
@@ -166,6 +223,13 @@ an assumption the next one relies on. Stop at the first surprise.
   from a closed-loop speed step, `#GSAVE` / `#GCLEAR` stored calibration, `#FLASHCRC <len>` image
   CRC-32 (zlib's, compare with the .bin), `#CALDBG` flash option bytes / record words. A CPU fault now turns both bridges
   off and sends `ERR:spindle CPU fault ... pc=...` over the link (`addr2line -e firmware.elf <pc>`).
+  For high speed: `#VLOG <ms>` (one line per interval: speeds, dq currents and voltages, voltage demand /
+  peak against the limit, clipped periods, field weakening, comparator highs seen by the main loop),
+  `STAT volts` (the same per `#STAT`), `#FW <A> [share]`, `#TRIP <sw A> [comparator A] [motor 2
+  comparator A]` (comparators up to 40 A; echoes the settings), `#BKF <0-15>` break filter (drive off),
+  `#CMPTEST <A> [ms]` (drive off: would the idle noise latch a break at this threshold?), `#BRKDUMP
+  [first]` (the 16 interrupts before the last fault: raw phase currents, comparator outputs, duties).
+  `#SPIN` now goes to `MAX_COMMAND_RPM` (24000).
 
 ## Verified without hardware
 
@@ -189,11 +253,11 @@ an assumption the next one relies on. Stop at the first surprise.
 |---|---|---|---|
 | Clocks | HSI16 → 170 MHz (generic G474RB clock config) | no link output at all, or a wrong baud rate | 2 |
 | Sampling | All five ADCs start on TIM1 TRGO2 (OC4REF, 20 ticks before the peak); ADC5 finishes last and raises the interrupt | `init failed: no current samples`; `#STAT` isr 0 | 2 |
-| Update event | TIM1/TIM8 load new duties at the valley (`update on the valley` in the boot line) | `init failed: PWM update event not on the valley` | 2 |
+| Update event | TIM1/TIM8 load new duties at the peak right after the sample (`update on the peak` in the boot line; the valley was missed by every closed-loop write, see step 7) | `init failed: PWM update event not on the peak` | 2 |
 | OPAMP → ADC | OPAMP1→ADC1, 2→ADC2, 3→ADC3, 4+5→ADC5, 6→ADC4, PGA ×16 | a zero offset far from 2010 counts (`current-sense zero out of range`), or a phase reading another phase's current | 2, 4 |
 | Sense sign | Positive phase current (into the motor) makes the reading FALL (`SENSE_SIGN = -1`) | `#ALIGN` gives ia < 0; with the current loop on, a runaway to the trip | 4 |
 | DRV8300 | MODE/DT open = 6-input mode, non-inverted INL, 200 ns dead time; idle = all inputs low = all FETs off | FETs on when they should be off: smoke. Scope before connecting a motor | 3 |
-| Comparator trip | VINP above the DAC threshold (20 A conduction-direction) trips the break; break filter ~0.38 µs ignores switching ringing | nuisance `hardware over-current` at turn-on, or no trip at all | 3, 5 |
+| Comparator trip | VINP above the DAC threshold (30 A conduction-direction since step 7: motor 1's U9 noise broke 20 A) trips the break; break filter 0.75 µs | nuisance `hardware over-current` at turn-on or at speed (`#BRKDUMP`), or no trip at all | 3, 5, 7 |
 | ISR time | both motors' FOC + observer in well under the 50 µs period | `#STAT` isr > ~35 µs; jitter, then current spikes at speed | 2, 6 |
 | Open loop (I/f) | 2.5 A holds the Z, 3 A spins up a loaded spindle, +1 A for Z moves | rotors slip at spin-up or Z moves stall | 5, 8 |
 | Observer | R 0.39 Ω, L 75 µH, flux 7.84 mWb (ESC1 bench, one loose motor, 24 V); locks within 10 % at 2000 RPM | `observer did not lock at the closed-loop hand-over speed` | 6 |
@@ -202,7 +266,7 @@ an assumption the next one relies on. Stop at the first surprise.
 | Hand-back | at 1500 RPM open loop takes over on the same reference, carrying the angle loop's integral (the steady load); the sim's Z swing there is 5° nominal, up to ~30° (0.7 mm) with the motor constants off | a Z twitch when the spindle stops | 6, 8 |
 | Open loop | voltage drive + 5 Hz current trim (`#OLKI`), dead-time compensation 250 ns (`#DTC`) | hold current off its target in `#STAT`; rotors ringing after Z moves | 5 |
 | Rotor inertia | assumed 1e-5 kg m²; above ~1e-4 the 250 rad/s² open-loop spin-up stalls | `rotor fell ... off its reference angle in open loop` at spin-up | 6 |
-| 36 V headroom | 0.82 V per 1000 RPM back-EMF: ~22k RPM before the voltage limit; firmware cap 18k | Iq can no longer hold speed above some RPM | 7 |
+| 36 V headroom | measured: 24000 RPM needs ~0.94 of the 20.4 V limit unloaded (step 7); firmware cap 24000; field weakening up to 3 A | Iq can no longer hold speed under load near 24000 RPM | 7, 8 |
 | Bus/NTC scaling | 100k/6.8k divider, NCP18XH103 (B 3380) | `#STAT` vbus/temperature off a multimeter/thermometer | 2 |
 | Fan output | VAC_CONTROL (PB6) is driven as 25 kHz 3.3 V push-pull PWM like the ESP32's fan pin, straight to CN10 pin 1; **CN10 pin 2 is 36 V**. If the vacuum's control input pulls up to 36 V, PB6 is damaged. Check the device before connecting it | — | 3 |
 | XY flasher | AN3155 on USART2 at 115200 8E1: mass erase, 256-byte writes padded to 8 bytes, read-back compare; GPIO2 → BOOT0, GPIO1 → NRST | `$Spindle/G474=FLASH` fails with the step it stopped at; recover with SWD | 9 |
@@ -328,8 +392,10 @@ the 36 V board (~0.60 V).
 
 ### 7. Up to speed
 
-Raise the supply limit. 15000, then 18000 RPM, loose. Note where the voltage limit is reached.
-Raise the trips back (`#TRIP 15 20`, or reflash).
+Raise the supply limit (6 A was plenty: ~1-1.5 A at 24000 RPM loose). `#VLOG 200`, then `#SPIN` 15000,
+18000, 20000, 22000, 24000 for a few seconds each, loose: watch the demand `u` against 1.0, clipped
+periods, `fw`, the Z error. Passed on board 1 (results above). The trips are raised for the U9 noise
+(30 A comparators, 18 A x 5 software): put them back (`HW_TRIP_A`, `SW_TRIP_*`) once U9 is fixed.
 
 ### 8. In the spindle
 

@@ -21,9 +21,10 @@ constexpr int   SPINDLE_DIRECTION = -1;
 
 // ---- Speeds ----
 constexpr float RPM_TO_RAD      = 2.0f * (float)M_PI / 60.0f;
-// GUESS: the 36 V bus allows about 22k RPM before the back-EMF (0.82 V/1000 RPM) meets the
-// linear modulation limit.  The XY board's SpindleBoard max_rpm caps what is asked for anyway.
-constexpr float MAX_COMMAND_RPM = 18000.0f;
+// The back-EMF (0.80 V per 1000 RPM on board 1) meets the modulator's linear limit (~20.5 V on a
+// 36.4 V bus, foc.cpp modulate) at ~25000 RPM.  The XY board's SpindleBoard max_rpm caps what is asked
+// for anyway.
+constexpr float MAX_COMMAND_RPM = 24000.0f;
 constexpr float SPIN_RAMP_RAD_S2      = 500.0f;   // BENCH (ESP32): ~4800 RPM/s ...
 constexpr float SPIN_RAMP_HIGH_RAD_S2 = 150.0f;   // ... and ~1400 RPM/s above
 constexpr float SPIN_RAMP_SLOW_ABOVE_RPM = 14000.0f;
@@ -43,7 +44,17 @@ constexpr float OL_CURRENT_SLEW_A_S = 50.0f; // open-loop current changes ramp a
 // ---- Current loops (BENCH: ESC1, ~400 Hz bandwidth: P = L*wc, I = R*wc) ----
 constexpr float CUR_KP          = 0.2f;      // V/A
 constexpr float CUR_KI          = 1000.0f;   // V/(A s)
-constexpr float MAX_MODULATION  = 0.95f;     // of the linear SVPWM limit Vbus/sqrt(3)
+// The current loops' voltage limit, as a share of the modulator's linear range: (DUTY_MAX less the
+// dead-time compensation) / sqrt(3) * Vbus, ~20.5 V on 36.4 V (foc.cpp voltageLimit / modulate).  Was
+// 0.95 of Vbus / sqrt(3) (~20.0 V) with centred duties, below 24000 RPM's back-EMF plus R * Iq.
+constexpr float MAX_MODULATION  = 1.0f;
+// Field weakening (closed loop, #FW <A> [share]): when the voltage demand passes FW_TARGET of the limit,
+// negative d current lowers the q voltage by we * L * |id| - weak on these motors (L 75 uH: ~5 A per
+// volt at 24000 RPM), so it only covers the last few hundred mV.  Board 1 at 24000 RPM: motor 1 (its sense
+// noise rides on the demand) needed the full 3 A, motor 2 none.
+constexpr float FW_MAX_A        = 3.0f;
+constexpr float FW_TARGET       = 0.95f;
+constexpr float FW_KI           = 3000.0f;   // A per second per unit of demand over the target
 // GUESS: effective dead time to compensate (the DRV8300's 200 ns plus the timer's 100 ns, minus
 // FET switching overlap); measure it at bring-up (#DTC) - the ESC1 fit put the loss at ~0.42 V.
 constexpr float DEADTIME_COMP_NS = 250.0f;
@@ -98,10 +109,20 @@ constexpr uint32_t LOST_MS      = 100;       // ... this long = lost lock (stop)
 constexpr uint32_t CL_SETTLE_MS = 300;       // BENCH: no lost-lock check right after the hand-over
 
 // ---- Protection ----
-// Hardware: the comparators trip the timer break in ~1 us.  The ADC saturates at ~21 A.
-constexpr float HW_TRIP_A       = 20.0f;     // GUESS: comparator threshold, conduction direction (below)
-constexpr float SW_TRIP_A       = 15.0f;     // GUESS: any phase sample above this ...
-constexpr int   SW_TRIP_COUNT   = 3;         // ... this many PWM periods in a row (ESC1 used 12 A x 3)
+// Hardware: the comparators trip the timer break in ~1 us (hw.cpp break filter: 0.75 us of a steady trip).
+// The ADC saturates at ~21 A.  Board 1 (2026-11-20): at 20 A with a 0.38 us filter, motor 1's comparators
+// broke three times in a few minutes of 15000-18000 RPM bench spins, once ~70 ms after the hand-over with
+// ~2.5 V applied, where a real 20 A cannot build up; the samples before it summed to +5..+8 A across the
+// three phases (common mode: the U9 buck noise, BRINGUP.md).  At 30 A with 0.75 us, none in all the runs to
+// 24000 RPM since.  The AON7264E FETs take far more than 30 A for microseconds; the software trip below
+// covers the ADC's range.  Back to 20 A once U9 is fixed.
+constexpr float HW_TRIP_A       = 30.0f;     // comparator threshold, conduction direction (below)
+// Any phase sample above SW_TRIP_A for SW_TRIP_COUNT periods in a row.  Board 1 at 24000 RPM: motor 1's largest
+// sample per 2 ms ran median 9 A, p99 15 A, max 17 A on ~2.5 A of real current (its sense noise, BRINGUP.md), and
+// 15 A x 3 tripped after 2.6 s.  18 A x 5 (250 us) stays inside the ADC's ~21 A; the comparators above catch
+// anything faster.  The ESC1 used 12 A x 3.  Back to 15 A x 3 once U9 is fixed.
+constexpr float SW_TRIP_A       = 18.0f;
+constexpr int   SW_TRIP_COUNT   = 5;
 constexpr float RMS_TRIP_A      = 9.0f;      // GUESS: phase RMS, 50 ms filter, sustained ...
 constexpr uint32_t RMS_TRIP_MS  = 200;       // ... this long
 constexpr float VBUS_MAX_V      = 44.0f;     // GUESS: 60 V FETs, 63 V bulk: coast above this

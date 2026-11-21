@@ -22,6 +22,7 @@
 #include "../../src/foc.h"
 #include "../../src/hw.h"
 #include <cstdlib>
+#include <cstring>
 #include <random>
 #include <vector>
 
@@ -128,7 +129,15 @@ static uint16_t adcFor(double amps) {
     return (uint16_t)lround(raw);
 }
 
-// One PWM period: sample at the peak, run the ISR, new duties from the valley.
+// Where the duties an interrupt writes take effect (UPDATE=valley|late|peak):
+//   peak   - the firmware since 2026-11-20: they load at the next peak and hold for the period after it;
+//   valley - the earlier design intent: half a period after the sample, writes always in time;
+//   late   - what board 1 actually did with the valley update: every write missed it (the interrupt takes
+//            ~35 us of the 25 us half period), so the duties loaded a period later than intended.
+static int      g_update = 2;
+static uint16_t ccr_late[2][3];
+
+// One PWM period: sample at the peak, run the ISR, new duties from the update event.
 static void period() {
     sim_adc[0].JDR1 = adcFor(mot[0].ia);
     sim_adc[1].JDR1 = adcFor(mot[0].ib);
@@ -136,9 +145,15 @@ static void period() {
     sim_adc[4].JDR1 = adcFor(mot[1].ia);
     sim_adc[4].JDR2 = adcFor(mot[1].ib);
     sim_adc[3].JDR1 = adcFor(mot[1].ic());
+    if (g_update == 2) memcpy(ccr_active, ccr_pending, sizeof(ccr_active));   // the last interrupt's, from this peak
     ADC5_IRQHandler();
     simulateHalf(PWM_PERIOD_S / 2);
-    memcpy(ccr_active, ccr_pending, sizeof(ccr_active));
+    if (g_update == 0) {
+        memcpy(ccr_active, ccr_pending, sizeof(ccr_active));
+    } else if (g_update == 1) {
+        memcpy(ccr_active, ccr_late, sizeof(ccr_active));
+        memcpy(ccr_late, ccr_pending, sizeof(ccr_late));
+    }
     simulateHalf(PWM_PERIOD_S / 2);
     g_t += PWM_PERIOD_S;
 }
@@ -229,10 +244,14 @@ int main(int argc, char** argv) {
     printf("model: J %.1e kg m^2, flux %.2f mWb, R %.3f ohm (firmware assumes %.2f mWb, %.3f ohm)\n", J,
            mot[0].psi * 1e3, mot[0].R, FLUX_WB * 1e3, PHASE_R_OHM);
     if (const char* tr = getenv("TRACE")) sscanf(tr, "%lf,%lf", &trace_from, &trace_to);
+    if (const char* u = getenv("UPDATE")) g_update = !strcmp(u, "valley") ? 0 : !strcmp(u, "late") ? 1 : 2;
+    sim_tim1.CR1 = sim_tim8.CR1 = TIM_CR1_DIR;   // duty writes always before the valley (period() applies them there)
     foc::init();
     // Tuning overrides for experiments: OLKI=<V/(A s)>, POS=<kp>,<kd>,<ki>
     if (const char* d = getenv("OLKI")) foc::tuning().ol_ki = atof(d);
     if (const char* p = getenv("POS")) sscanf(p, "%f,%f,%f", &foc::tuning().pos_kp, &foc::tuning().pos_kd, &foc::tuning().pos_ki);
+    if (const char* f = getenv("FW")) foc::tuning().fw_max_a = atof(f);
+    if (const char* b = getenv("BRAKE")) for (int k = 0; k < 2; k++) mot[k].B = atof(b);
     run(0.01);   // a few idle periods
 
     // 1. Enable: open-loop hold.  The rotors pull into the current vectors.
@@ -329,9 +348,30 @@ int main(int argc, char** argv) {
     check(fabs(fabs(mot[1].w * 60 / (2 * M_PI)) - 18000) < 400, "18000 RPM reached on 36 V");
     check(fabs(zErrDeg()) < 5, "Z held at 18000 RPM");
 
+    // 6b. Up to 24000 RPM (TOP=<rpm> to change): the back-EMF is then ~19.7 V of the ~20.3 V limit on
+    // the model's 36 V bus, with the model's viscous drag (~16 mNm, ~1.4 A of iq) on top.
+    double top = getenv("TOP") ? atof(getenv("TOP")) : 24000;
+    if (top > 18000) {
+        foc::takeVolt(0);
+        foc::takeVolt(1);
+        foc::setSpeedTarget(top);
+        run((top - 18000) * RPM_TO_RAD / SPIN_RAMP_HIGH_RAD_S2 + 2.0);
+        char label[32];
+        snprintf(label, sizeof(label), "%.0f RPM", top);
+        report(label);
+        for (int k = 0; k < 2; k++) {
+            foc::VoltStats v = foc::takeVolt(k);
+            printf("         M%d volts: limit %.2f V, demand %.3f (peak %.3f), clipped %u of %u, fw %.2f A, vd %+.2f vq %+.2f, "
+                   "id %+.2f iq %+.2f\n",
+                   k + 1, v.vmax, v.u, v.u_max, (unsigned)v.sat, (unsigned)v.n, v.fw_id, v.vd, v.vq, v.id, v.iq);
+        }
+        check(fabs(fabs(mot[1].w * 60 / (2 * M_PI)) - top) < 0.02 * top, "top speed reached on 36 V");
+        check(fabs(zErrDeg()) < 5, "Z held at top speed");
+    }
+
     // 7. Spin down: hand back to open loop, ramp to rest.
     foc::setSpeedTarget(0);
-    run(14.0);
+    run(14.0 + (top > 18000 ? (top - 18000) * RPM_TO_RAD / SPIN_RAMP_HIGH_RAD_S2 : 0));
     report("spun down");
     check(foc::mode() == foc::Mode::Open, "back in open loop");
     check(fabs(mot[0].w) < 1 && fabs(mot[1].w) < 1, "rotors at rest");

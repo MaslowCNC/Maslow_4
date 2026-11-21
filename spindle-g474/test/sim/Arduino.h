@@ -7,7 +7,7 @@
 #include <cstdio>
 #include <cstring>
 
-struct TIM_TypeDef { volatile uint32_t SR; };
+struct TIM_TypeDef { volatile uint32_t SR; volatile uint32_t CR1; };
 // Status registers are write-1-to-clear on the chip: a plain struct field would let foc.cpp's own
 // clear set the flags (and fake an interrupt overrun every period).
 struct W1C {
@@ -41,6 +41,7 @@ extern USART_TypeDef  sim_usart2;
 #define DWT (&sim_dwt)
 #define CoreDebug (&sim_cd)
 #define TIM_SR_BIF (1u << 7)
+#define TIM_CR1_DIR (1u << 4)   // the sim's duties always land at the valley: counting down
 #define ADC_ISR_JEOC (1u << 5)
 #define ADC_ISR_JEOS (1u << 6)
 #define CoreDebug_DEMCR_TRCENA_Msk (1u << 24)

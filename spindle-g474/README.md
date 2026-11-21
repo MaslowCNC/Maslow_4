@@ -134,5 +134,9 @@ at reset.
 | `#DTC ns` | dead-time compensation (0 = off) |
 | `#IHOLD A`, `#ISPIN A`, `#IBOOST A`, `#ILIM A` | open-loop hold / spin-up / Z-move boost currents, closed-loop Iq limit |
 | `#OBS R L flux` | observer motor constants (Ω, H, Wb) |
-| `#TRIP sw_A [hw_A]` | software per-sample trip and comparator threshold |
+| `#TRIP sw_A [hw_A] [hw_A motor 2]` | software per-sample trip and comparator thresholds (up to 40 A; echoes them) |
+| `#FW A [share]` | closed-loop field weakening: up to `A` of negative d current once the voltage demand passes `share` of the limit (default 3 A, 0.95) |
+| `#VLOG ms` | one line every `ms` (0 = off): speeds, dq currents and voltages, voltage demand against the limit, clipped periods, field weakening, comparator highs |
+| `#SPIN rpm ms` | bench spin that stops itself after `ms` (up to 30 s and 24000 RPM) |
+| `#BKF 0-15`, `#CMPTEST A [ms]`, `#BRKDUMP [first]` | bring-up, see BRINGUP.md step 7: break filter, idle comparator test, the samples before the last fault |
 | `#VER` | firmware version |

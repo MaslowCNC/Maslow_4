@@ -90,7 +90,7 @@ namespace hw {
             bd.DeadTime         = deadtimeTicks();
             bd.BreakState       = TIM_BREAK_ENABLE;
             bd.BreakPolarity    = TIM_BREAKPOLARITY_HIGH;
-            bd.BreakFilter      = 0x9;                  // fDTS/8, N = 8: ~0.38 us of a steady trip
+            bd.BreakFilter      = 0xC;                  // fDTS/16, N = 8: 0.75 us of a steady trip (config.h HW_TRIP_A)
             bd.BreakAFMode      = TIM_BREAK_AFMODE_INPUT;
             bd.Break2State      = TIM_BREAK2_DISABLE;
             bd.Break2Polarity   = TIM_BREAK2POLARITY_HIGH;
@@ -131,11 +131,15 @@ namespace hw {
             gpioOut(GPIOC, GPIO_PIN_6 | GPIO_PIN_7 | GPIO_PIN_8 | GPIO_PIN_10 | GPIO_PIN_11 | GPIO_PIN_12, GPIO_AF4_TIM8);
         }
 
-        // Make the update event (where the preloaded duties load) land on the valley, so duties
-        // written by the interrupt just after a peak sample are in force for the whole next period
-        // and its peak sample.  With RCR = 1 the parity of the repetition counter decides which
-        // extreme carries the update; a single RCR = 0 update shifts it by half a period.
-        bool alignUpdateToValley(TIM_TypeDef* t) {
+        // Make the update event (where the preloaded duties load) land on the peak, right after the
+        // sample: whatever the interrupt writes after a peak sample (it takes up to ~37 us of the 50 us
+        // period) loads at the next peak and is in force for the whole period after it, whose pulses
+        // centre on its valley - 1.5 periods after the sample the angle came from (foc.cpp
+        // PWM_DELAY_PERIODS).  On the valley, board 1's closed loop missed it with every write (~26-35 us
+        // into a 25 us half period) and ran a period late; a shorter interrupt would have made it
+        // sometimes.  With RCR = 1 the parity of the repetition counter decides which extreme carries
+        // the update; a single RCR = 0 update shifts it by half a period.
+        bool alignUpdateToPeak(TIM_TypeDef* t) {
             for (int attempt = 0; attempt < 4; attempt++) {
                 t->SR = ~TIM_SR_UIF;
                 uint32_t t0 = micros();
@@ -144,7 +148,7 @@ namespace hw {
                 }
                 uint32_t cnt = t->CNT;
                 bool     up  = !(t->CR1 & TIM_CR1_DIR);
-                if (cnt < PWM_ARR / 4 && up) return true;   // just past the valley: right phase
+                if (cnt > PWM_ARR * 3 / 4 && !up) return true;   // just past the peak, counting down: right phase
                 // Shift by one half period.
                 t->RCR = 0;
                 t->SR  = ~TIM_SR_UIF;
@@ -418,10 +422,10 @@ namespace hw {
         __enable_irq();
 
         BOOT_TRACE_POINT("PWM counters running");
-        bool ok1 = alignUpdateToValley(TIM1);
-        bool ok8 = alignUpdateToValley(TIM8);
-        g_update_phase = (ok1 && ok8) ? "valley" : "NOT ALIGNED";
-        if (!ok1 || !ok8) { *why = "PWM update event not on the valley"; return false; }
+        bool ok1 = alignUpdateToPeak(TIM1);
+        bool ok8 = alignUpdateToPeak(TIM8);
+        g_update_phase = (ok1 && ok8) ? "peak" : "NOT ALIGNED";
+        if (!ok1 || !ok8) { *why = "PWM update event not on the peak"; return false; }
 
         HAL_NVIC_EnableIRQ(ADC5_IRQn);
         return true;
@@ -466,10 +470,10 @@ namespace hw {
     }
 
     uint8_t comparatorOutputs() {
-        uint8_t bits = 0;
-        for (int i = 0; i < 6; i++) {
-            if (HAL_COMP_GetOutputLevel(&hcomp[i]) == COMP_OUTPUT_LEVEL_HIGH) bits |= 1u << i;
-        }
+        COMP_TypeDef* const inst[6] = { COMP1, COMP2, COMP4, COMP6, COMP7, COMP5 };
+        uint8_t             bits    = 0;
+        for (int i = 0; i < 6; i++)
+            if (inst[i]->CSR & COMP_CSR_VALUE) bits |= 1u << i;
         return bits;
     }
 
@@ -490,12 +494,35 @@ namespace hw {
         return ((float)code / 4095.0f * ADC_VREF - VINP_ZERO_V) / VINP_V_PER_A;
     }
 
+    void setHardwareTripAmps(int motor, float amps) {
+        uint32_t           code = dacCodeForAmps(amps);
+        DAC_HandleTypeDef& h    = motor ? hdac4 : hdac3;
+        HAL_DAC_SetValue(&h, DAC_CHANNEL_1, DAC_ALIGN_12B_R, code);
+        HAL_DAC_SetValue(&h, DAC_CHANNEL_2, DAC_ALIGN_12B_R, code);
+    }
+
     void setHardwareTripAmps(float amps) {
-        uint32_t code = dacCodeForAmps(amps);
-        HAL_DAC_SetValue(&hdac3, DAC_CHANNEL_1, DAC_ALIGN_12B_R, code);
-        HAL_DAC_SetValue(&hdac3, DAC_CHANNEL_2, DAC_ALIGN_12B_R, code);
-        HAL_DAC_SetValue(&hdac4, DAC_CHANNEL_1, DAC_ALIGN_12B_R, code);
-        HAL_DAC_SetValue(&hdac4, DAC_CHANNEL_2, DAC_ALIGN_12B_R, code);
+        setHardwareTripAmps(0, amps);
+        setHardwareTripAmps(1, amps);
+    }
+
+    float hardwareTripAmps(int motor) {
+        uint32_t code = (motor ? DAC4->DHR12R1 : DAC3->DHR12R1) & 0xFFF;
+        return ((float)code / 4095.0f * ADC_VREF - VINP_ZERO_V) / VINP_V_PER_A;
+    }
+
+    void setBreakFilter(uint32_t bkf) {
+        // With MOE clear only (the caller refuses while driving).  Board 1 ignored a plain read-modify-write
+        // of BDTR with BKE set; this clears BKE for the write, then sets it again with the new filter.
+        for (int m = 0; m < 2; m++) {
+            uint32_t v = (TIMS[m]->BDTR & ~(TIM_BDTR_BKF | TIM_BDTR_MOE)) | ((bkf & 0xFu) << TIM_BDTR_BKF_Pos);
+            TIMS[m]->BDTR = v & ~TIM_BDTR_BKE;
+            TIMS[m]->BDTR = v;
+        }
+    }
+
+    uint32_t breakFilter() {
+        return (TIM1->BDTR & TIM_BDTR_BKF) >> TIM_BDTR_BKF_Pos;
     }
 
     uint16_t rawCurrent(int m, int p) {

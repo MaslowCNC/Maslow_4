@@ -26,8 +26,14 @@ namespace hw {
     bool clearBreak(int motor);
     uint8_t comparatorOutputs();   // bit per phase: m1 a,b,c = bits 0-2, m2 = bits 3-5
 
-    // Set the comparator threshold (phase amps in the low-side conduction direction).
+    // Set the comparator threshold (phase amps in the low-side conduction direction), both motors or
+    // one (DAC3 feeds motor 1's three comparators, DAC4 motor 2's).
     void setHardwareTripAmps(float amps);
+    void setHardwareTripAmps(int motor, float amps);
+    float hardwareTripAmps(int motor);
+    // Bring-up: the timers' break input filter (TIMx_BDTR.BKF, 0-15; 9 = fDTS/8 x 8 = 0.38 us at boot).
+    void setBreakFilter(uint32_t bkf);
+    uint32_t breakFilter();
     // Bring-up (#BRK): how many of `reads` reads found each comparator's output high (m1 a,b,c, m2 a,b,c),
     // a timer's status register (BIF = break latched), and the comparator threshold in amps.
     void     comparatorHighCounts(uint16_t counts[6], int reads);

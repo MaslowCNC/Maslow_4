@@ -71,9 +71,26 @@ namespace foc {
     void     iqAccStart();
     uint32_t iqAccStop(float mean[2]);   // returns the number of interrupts averaged
     const char* enableFailReason();   // why the last enable() / startAlignTest() returned false
+    // Bring-up (#BRKDUMP): the interrupts up to the last fault (i = 0 newest; a comparator break or a software
+    // over-current): phase currents
+    // (A, no rebuild) and duties in force, M1 a b c then M2 a b c, and the comparator outputs read at the
+    // interrupt's start.  False once the drive has been enabled again, or past the recorded entries.
+    bool brkDump(int i, float amps[6], float duty[6], uint8_t* cmp);
 
     // Snapshot and reset the per-interval telemetry of motor m.
     MotorTelemetry take(int m);
+
+    // High-speed bring-up (#STAT, #VLOG): the voltage headroom of motor m.  Read-and-restart; take()
+    // (every 2 ms, main loop) leaves these alone.
+    struct VoltStats {
+        float    vmax;                    // the current loops' voltage limit now (V)
+        float    u, u_max;                // voltage demand / limit: this period, and the largest since the last read
+        uint32_t sat, n;                  // periods the limit clipped the demand, periods counted
+        float    fw_id;                   // field-weakening d current (A, >= 0; #FW)
+        uint32_t late;                    // duty writes made after the valley (in time for the next peak's update)
+        float    id, iq, vd, vq, obs_rpm; // this period
+    };
+    VoltStats takeVolt(int m);
     // Interrupt timing: longest ISR (us) and count since the last call.
     void takeIsrStats(uint32_t* max_us, uint32_t* count);
 
@@ -103,6 +120,8 @@ namespace foc {
         float sw_trip_a;
         float deadtime_ns;              // dead-time compensation (0 = off)
         bool  closed_loop_allowed;
+        float fw_max_a;                 // closed loop: field-weakening d current limit (A, 0 = off; #FW)
+        float fw_target;                // ... starts when the voltage demand passes this share of the limit
     };
     Tuning& tuning();
     void setVbus(float v);

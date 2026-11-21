@@ -11,12 +11,14 @@ namespace foc {
         constexpr float SQRT3     = 1.7320508f;
         constexpr float INV_SQRT3 = 0.57735027f;
         constexpr float DT        = PWM_PERIOD_S;
-        // SVPWM at MAX_MODULATION reaches a duty of 0.5 + 0.95/2 = 0.975: clamp just above it.  The low
-        // side then stays on >= 1 us per period (bootstrap refresh); the highest-duty phase's sample
-        // is never used (two-shunt rebuild).
+        // The highest duty: the low side then stays on >= 1 us per period (bootstrap refresh).  The
+        // highest-duty phase's sample is never used (two-shunt rebuild).  modulate() fits the three
+        // duties into 0..DUTY_MAX; voltageLimit() keeps the current loops inside that.
         constexpr float DUTY_MAX  = 0.98f;
-        // The voltage computed now is applied from the next valley for a whole period: on average
-        // 1.5 periods after the sample the angle was measured at.
+        // The duties computed now load at the next peak (hw.cpp alignUpdateToPeak) and hold for the period
+        // after it, centred on its valley: 1.5 periods after the sample the angle was measured at.  So the
+        // period that ends at a sample ran on the duties computed two interrupts earlier (Motor::duty_prev,
+        // va_prev / vb_prev): the two-shunt rebuild and the observer use those.
         constexpr float PWM_DELAY_PERIODS = 1.5f;
 
         inline float wrapPi(float a) {
@@ -72,7 +74,8 @@ namespace foc {
             float gain[3];                // per-phase current gain correction (#GCAL), 1 = nominal
             float ia, ib, ic;             // A
             float ial, ibe;               // A, stationary frame
-            float duty[3];                // duties in force during this sample
+            float duty[3];                // duties computed this interrupt (in force from the next peak)
+            float duty_prev[3];           // ... the previous interrupt's: in force during this sample
             // MXLEMMING flux observer (SimpleFOCDrivers' MXLEMMINGObserverSensor, as on the ESC1)
             float flux_a, flux_b;
             float ial_prev, ibe_prev;
@@ -84,7 +87,8 @@ namespace foc {
             float id, iq, id_ref, iq_ref;
             float int_d, int_q;
             float vd, vq;
-            float valpha, vbeta;          // last commanded voltage (the observer's input next period)
+            float valpha, vbeta;          // last commanded voltage
+            float va_prev, vb_prev;       // ... the one before: in force over the period that just ended (the observer's input)
             // Both modes drive toward the same reference angle, ref = dir*alpha + phi + c: open loop
             // puts the current vector there, closed loop steers the observed rotor angle onto it.
             float c;                      // reference angle constant
@@ -96,6 +100,11 @@ namespace foc {
             float iq_carry;               // open loop: the closed loop's torque current, fading out
             float speed_err_frac;
             int   over_count;
+            float fw_id;                  // closed loop: field-weakening d current magnitude (#FW), A
+            // voltage headroom (takeVolt): demand / limit, its peak, clipped and counted periods, duty
+            // writes made after the valley
+            float    u, u_max;
+            uint32_t sat_n, u_n, late_n;
             // telemetry since the last take()
             float    imax, i2sum;
             uint32_t n;
@@ -151,6 +160,19 @@ namespace foc {
         uint64_t          g_noise_sq[2][3];
         uint16_t          g_noise_min[2][3], g_noise_max[2][3];
 
+        // Fault post-mortem (#BRKDUMP): the last BRK_RING interrupts' raw samples, the comparator outputs read
+        // at each interrupt's start and the duties in force during each sample, frozen when a fault (a
+        // comparator break, a software over-current) stops the bridges (bring-up: a real current ramp, or noise?).
+        constexpr int BRK_RING = 16;
+        struct BrkEntry {
+            uint16_t raw[6];
+            uint16_t duty[6];   // x 10000, M1 a b c, M2 a b c
+            uint8_t  cmp;       // comparator outputs, bit per phase (hw::comparatorOutputs)
+        };
+        BrkEntry          g_brk[BRK_RING];
+        volatile uint32_t g_brk_n      = 0;       // entries written since the last unfreeze
+        volatile bool     g_brk_frozen = false;
+
         // #DUMP: consecutive raw samples of all six channels (bring-up: is the sense noise periodic?).
         constexpr int     DUMP_MAX = 1024;
         uint16_t          g_dump[DUMP_MAX][6];
@@ -161,7 +183,7 @@ namespace foc {
         Tuning g_tun = {
             CUR_KP, CUR_KI, POS_KP, POS_KD, POS_KI, POS_BW_MIN, POS_BW_FULL_RPM, OL_CUR_KI,
             HOLD_CURRENT_A, SPINUP_CURRENT_A, Z_MOVE_BOOST_A, IQ_LIMIT_A,
-            PHASE_R_OHM, PHASE_L_H, FLUX_WB, SW_TRIP_A, DEADTIME_COMP_NS, true,
+            PHASE_R_OHM, PHASE_L_H, FLUX_WB, SW_TRIP_A, DEADTIME_COMP_NS, true, FW_MAX_A, FW_TARGET,
         };
 
         void resetControl(Motor& m) {
@@ -171,11 +193,14 @@ namespace foc {
             m.obs_w_lock = 0;
             m.int_d = m.int_q = 0;
             m.vd = m.vq = m.valpha = m.vbeta = 0;
+            m.va_prev = m.vb_prev = 0;
             m.pos_int = m.id_cl = m.iq_carry = 0;
             m.eps       = 0;
             m.eps_valid = false;
             m.over_count = 0;
             m.speed_err_frac = 0;
+            m.fw_id = 0;
+            m.u     = 0;
         }
 
         void outputsOff() {
@@ -191,6 +216,7 @@ namespace foc {
 
         void raiseFault(uint8_t f, int motor, int phase, float amps) {
             outputsOff();
+            g_brk_frozen = true;   // keep the samples before it (#BRKDUMP)
             if (g_fault == FaultNone) {
                 g_fault       = f;
                 g_fault_motor = motor;
@@ -208,8 +234,8 @@ namespace foc {
                 // The highest-duty phase has the shortest low-side time, so its sample sits closest to
                 // the switching edge; rebuild it from the other two (they sum to zero).  ESC1 bench.
                 int hi = 0;
-                if (m.duty[1] > m.duty[hi]) hi = 1;
-                if (m.duty[2] > m.duty[hi]) hi = 2;
+                if (m.duty_prev[1] > m.duty_prev[hi]) hi = 1;
+                if (m.duty_prev[2] > m.duty_prev[hi]) hi = 2;
                 i[hi] = -(i[(hi + 1) % 3] + i[(hi + 2) % 3]);
             }
             m.ia  = i[0];
@@ -225,8 +251,8 @@ namespace foc {
 
         void observerUpdate(Motor& m) {
             const float R = g_tun.r, L = g_tun.l, F = g_tun.flux;
-            m.flux_a = clampf(m.flux_a + (m.valpha - R * m.ial) * DT - L * (m.ial - m.ial_prev), -F, F);
-            m.flux_b = clampf(m.flux_b + (m.vbeta - R * m.ibe) * DT - L * (m.ibe - m.ibe_prev), -F, F);
+            m.flux_a = clampf(m.flux_a + (m.va_prev - R * m.ial) * DT - L * (m.ial - m.ial_prev), -F, F);
+            m.flux_b = clampf(m.flux_b + (m.vb_prev - R * m.ibe) * DT - L * (m.ibe - m.ibe_prev), -F, F);
             m.ial_prev = m.ial;
             m.ibe_prev = m.ibe;
             float a  = fastAtan2(m.flux_b, m.flux_a);
@@ -237,6 +263,14 @@ namespace foc {
             m.obs_da = da;
         }
 
+        // The current loops' voltage limit (V, magnitude of vd/vq): the modulator's linear range - the
+        // three duties fit in 0..DUTY_MAX (modulate), less the top phase's dead-time compensation - times
+        // MAX_MODULATION.  ~20.5 V on a 36.4 V bus.
+        inline float voltageLimit() {
+            float vdt = fmaxf(g_tun.deadtime_ns, 0.0f) * 1e-9f / PWM_PERIOD_S;
+            return MAX_MODULATION * (DUTY_MAX - vdt) * g_vbus * INV_SQRT3;
+        }
+
         // dq current loops for one motor at angle m.theta, electrical speed we.
         //   soft = false (closed loop): PI current loops, ~400 Hz (ESC1 gains), decoupling + EMF feed-forward.
         //   soft = true  (open loop): a voltage drive - R*I, L and back-EMF feed-forward - trimmed by a
@@ -245,7 +279,7 @@ namespace foc {
         //   had; a stiff current loop would cancel it and leave an undamped spring (test/sim).
         void currentLoop(int k, float we, bool emf_ff, bool soft) {
             Motor&      m    = mot[k];
-            const float vmax = MAX_MODULATION * g_vbus * INV_SQRT3;
+            const float vmax = voltageLimit();
             float s, c;
             fastSinCos(m.theta, &s, &c);
             m.id = m.ial * c + m.ibe * s;
@@ -270,23 +304,32 @@ namespace foc {
                 vq = g_tun.cur_kp * eq + int_q + vq_ff;
             }
             float mag = sqrtf(vd * vd + vq * vq);
+            m.u       = mag / fmaxf(vmax, 1e-3f);
+            if (m.u > m.u_max) m.u_max = m.u;
+            m.u_n++;
             if (mag > vmax) {
                 float k2 = vmax / mag;
                 vd *= k2;
                 vq *= k2;
+                m.sat_n++;
                 // Saturated: hold the integrators where they were (no wind-up).
             } else {
                 m.int_d = int_d;
                 m.int_q = int_q;
             }
+            // Field weakening (closed loop, #FW): the demand's excess over fw_target of the limit winds
+            // up a negative d current (the caller subtracts fw_id from id_ref); below it, it unwinds.
+            if (!soft) m.fw_id = clampf(m.fw_id + FW_KI * (m.u - g_tun.fw_target) * DT, 0.0f, g_tun.fw_max_a);
             m.vd = vd;
             m.vq = vq;
             // Rotate back at the angle the rotor will have while this voltage is applied.
             float th = m.theta + we * PWM_DELAY_PERIODS * DT;
             float s2, c2;
             fastSinCos(th, &s2, &c2);
-            m.valpha = vd * c2 - vq * s2;
-            m.vbeta  = vd * s2 + vq * c2;
+            m.va_prev = m.valpha;
+            m.vb_prev = m.vbeta;
+            m.valpha  = vd * c2 - vq * s2;
+            m.vbeta   = vd * s2 + vq * c2;
         }
 
         void modulate(int k, bool dt_comp) {
@@ -306,11 +349,32 @@ namespace foc {
                 const float i[3] = { m.ia, m.ib, m.ic };
                 for (int x = 0; x < 3; x++) comp[x] = vdt * clampf(i[x] / DT_COMP_KNEE_A, -1.0f, 1.0f);
             }
-            m.duty[0] = clampf(0.5f + (va - vcm) * inv + comp[0], 0.0f, DUTY_MAX);
-            m.duty[1] = clampf(0.5f + (vb - vcm) * inv + comp[1], 0.0f, DUTY_MAX);
-            m.duty[2] = clampf(0.5f + (vc - vcm) * inv + comp[2], 0.0f, DUTY_MAX);
+            float d[3] = { 0.5f + (va - vcm) * inv + comp[0], 0.5f + (vb - vcm) * inv + comp[1],
+                           0.5f + (vc - vcm) * inv + comp[2] };
+            // Centred (min-max SVPWM) while the duties fit under DUTY_MAX.  Above that all three move
+            // down together - the line voltages do not change - so the top one sits at DUTY_MAX and the
+            // bottom one may reach 0: its low side then stays on all period, with no switching and so no
+            // dead time to make up.  That uses the whole 0..DUTY_MAX range, DUTY_MAX / sqrt(3) * Vbus less
+            // the compensation (~20.5 V on 36.4 V), where centred duties stopped at (2 DUTY_MAX - 1) /
+            // sqrt(3) * Vbus (~20.2 V).  The low-side sampling only gains: the zero vector sampled
+            // (all low sides on) grows.
+            float hi = fmaxf(d[0], fmaxf(d[1], d[2]));
+            if (hi > DUTY_MAX) {
+                float sh = hi - DUTY_MAX;
+                d[0] -= sh;
+                d[1] -= sh;
+                d[2] -= sh;
+            }
+            for (int x = 0; x < 3; x++) {
+                m.duty_prev[x] = m.duty[x];
+                m.duty[x]      = clampf(d[x], 0.0f, DUTY_MAX);
+            }
             hw::writeDuty(k, (uint16_t)(m.duty[0] * PWM_ARR), (uint16_t)(m.duty[1] * PWM_ARR),
                           (uint16_t)(m.duty[2] * PWM_ARR));
+            // The interrupt starts just after the peak, counting down; the writes must land before the next
+            // peak's update.  A write while the counter counts down again (past the next peak) would load two
+            // periods late (bring-up: takeVolt().late counts writes made after the valley, still in time).
+            if (!((k ? TIM8 : TIM1)->CR1 & TIM_CR1_DIR)) m.late_n++;
         }
 
         // Rotate the last applied voltage into the frame at angle th, for loop integrators.
@@ -361,26 +425,36 @@ namespace foc {
                 float wref = m.dir * g_omega_cmd + g_phi_rate;
                 m.pos_int = clampf(iq - kp * m.eps - kd * (wref - m.obs_w), -g_tun.iq_limit, g_tun.iq_limit);
                 m.id_cl   = id;   // fades to 0
+                m.fw_id   = 0;    // field weakening starts from none (it is a high-speed matter)
             }
             g_mode = Mode::Closed;
         }
 
         void handbackToOpen() {
             // Open loop drives the same reference angle (the rotor is on it, within eps), while the
-            // closed loop's torque current fades out (iq_carry).
+            // closed loop's torque current fades out (iq_carry).  The trims start from the closed loop's own
+            // state - its current references and its integrators plus feed-forward at those references,
+            // turned from its frame (the observed angle) into the reference frame (ref = observed + eps) -
+            // not from this instant's measured current and last commanded voltage, which carry the sense
+            // noise (Kp passes it straight into the voltage).  On board 1 that once seeded motor 2 ~2 A short
+            // of the spin current: it could not hold the rotor and the slip check stopped the spin 70 ms
+            // after the hand-back (2026-11-20).  The hand-over seeds the same way (handoverToClosed).
             for (int k = 0; k < 2; k++) {
-                Motor& m = mot[k];
-                float s, c;
-                fastSinCos(m.ref, &s, &c);
-                float  id = m.ial * c + m.ibe * s;
-                float  iq = -m.ial * s + m.ibe * c;
-                float  vd, vq;
-                voltageIn(m, m.ref, &vd, &vq);
-                // The soft loop applies trim + feed-forward (currentLoop): start the trims from the
-                // voltage already applied LESS the feed-forward for the current already flowing, so
-                // the feed-forward is not counted twice (that was a whole back-EMF, ~1.2 V on q at
-                // 1500 RPM, as a step).  The one step left is the intended one, below.
-                float we = m.dir * g_omega_cmd + g_phi_rate;   // the speed the open loop feeds forward
+                Motor& m     = mot[k];
+                float  we_cl = m.obs_w;   // the speed the closed loop fed forward
+                float  vdc   = m.int_d - we_cl * g_tun.l * m.iq_ref;
+                float  vqc   = m.int_q + we_cl * g_tun.l * m.id_ref + we_cl * g_tun.flux;
+                float  se, ce;
+                fastSinCos(m.eps, &se, &ce);
+                float id = m.id_ref * ce + m.iq_ref * se;
+                float iq = -m.id_ref * se + m.iq_ref * ce;
+                float vd = vdc * ce + vqc * se;
+                float vq = -vdc * se + vqc * ce;
+                // The soft loop applies trim + feed-forward (currentLoop): start the trims from that voltage
+                // LESS the feed-forward for the current already flowing, so the feed-forward is not counted
+                // twice (that was a whole back-EMF, ~1.2 V on q at 1500 RPM, as a step).  The one step left
+                // is the intended one, below.
+                float we   = m.dir * g_omega_cmd + g_phi_rate;   // the speed the open loop feeds forward
                 m.int_d    = vd - (g_tun.r * id - we * g_tun.l * iq);
                 m.int_q    = vq - (g_tun.r * iq + we * g_tun.l * id + we * g_tun.flux);
                 // Carry the angle loop's integral - the steady load - not the iq of this instant,
@@ -425,6 +499,7 @@ namespace foc {
                     mot[k].obs_w  = 0;
                     mot[k].obs_w_lock = 0;
                     mot[k].valpha = mot[k].vbeta = 0;
+                    mot[k].va_prev = mot[k].vb_prev = 0;
                 }
                 return;
             }
@@ -433,7 +508,8 @@ namespace foc {
                 // Low sides on (duty 0) for a few periods to charge the DRV8300 bootstrap capacitors.
                 hw::writeDuty(0, 0, 0, 0);
                 hw::writeDuty(1, 0, 0, 0);
-                for (int k = 0; k < 2; k++) mot[k].duty[0] = mot[k].duty[1] = mot[k].duty[2] = 0;
+                for (int k = 0; k < 2; k++)
+                    for (int x = 0; x < 3; x++) mot[k].duty[x] = mot[k].duty_prev[x] = 0;
                 g_precharge--;
                 return;
             }
@@ -533,7 +609,7 @@ namespace foc {
                     m.pos_int  = clampf(m.pos_int + ki * m.eps * DT, -g_tun.iq_limit, g_tun.iq_limit);
                     m.iq_ref   = clampf(kp * m.eps + kd * werr + m.pos_int, -g_tun.iq_limit, g_tun.iq_limit);
                     m.id_cl    = slew(m.id_cl, 0.0f, CL_ID_RAMP_A_S * DT);
-                    m.id_ref   = m.id_cl;
+                    m.id_ref   = m.id_cl - m.fw_id;
                     m.theta    = m.obs_angle;
                     m.speed_err_frac = fabsf(werr) / fmaxf(g_omega_cmd, 1.0f);
                     currentLoop(k, m.obs_w, true, false);
@@ -554,6 +630,16 @@ namespace foc {
             { (uint16_t)ADC5->JDR1, (uint16_t)ADC5->JDR2, (uint16_t)ADC4->JDR1 },
         };
         hw::slowKickFromIsr();   // after the current samples, so it ends long before the next trigger
+        if (!g_brk_frozen) {
+            BrkEntry& e = g_brk[g_brk_n % BRK_RING];
+            e.cmp       = hw::comparatorOutputs();
+            for (int k = 0; k < 2; k++)
+                for (int p = 0; p < 3; p++) {
+                    e.raw[k * 3 + p]  = raw[k][p];
+                    e.duty[k * 3 + p] = (uint16_t)(mot[k].duty_prev[p] * 10000.0f);
+                }
+            g_brk_n++;
+        }
         {
             uint32_t isr = USART2->ISR;   // sampled, not cleared: the UART interrupt clears them (a lower bound)
             if (isr & USART_ISR_ORE) g_uart_err[0]++;
@@ -662,11 +748,26 @@ namespace foc {
         return g_enable_fail;
     }
 
+    bool brkDump(int i, float amps[6], float duty[6], uint8_t* cmp) {
+        // i = 0 is the newest entry (the interrupt that saw the break), BRK_RING - 1 the oldest.
+        if (!g_brk_frozen || i < 0 || i >= BRK_RING || (uint32_t)i >= g_brk_n) return false;
+        const BrkEntry& e = g_brk[(g_brk_n - 1 - i) % BRK_RING];
+        for (int k = 0; k < 2; k++)
+            for (int p = 0; p < 3; p++) {
+                amps[k * 3 + p] = SENSE_SIGN * ((float)e.raw[k * 3 + p] - mot[k].off[p]) * SENSE_A_PER_LSB * mot[k].gain[p];
+                duty[k * 3 + p] = e.duty[k * 3 + p] / 10000.0f;
+            }
+        *cmp = e.cmp;
+        return true;
+    }
+
     bool enable() {
         if (g_enabled) return true;
         g_enable_fail = "";
         if (g_fault != FaultNone) { g_enable_fail = "a fault is latched"; return false; }
         if (hw::breakLatched(0) || hw::breakLatched(1)) { g_enable_fail = "a timer break is latched"; return false; }
+        g_brk_n       = 0;       // a new run: the last fault's post-mortem is dropped
+        g_brk_frozen  = false;
         __disable_irq();
         for (int k = 0; k < 2; k++) resetControl(mot[k]);
         g_mode       = Mode::Open;
@@ -866,6 +967,28 @@ namespace foc {
         m.n        = 0;
         __enable_irq();
         return t;
+    }
+
+    VoltStats takeVolt(int k) {
+        VoltStats v;
+        __disable_irq();
+        Motor& m  = mot[k];
+        v.vmax    = voltageLimit();
+        v.u       = m.u;
+        v.u_max   = m.u_max;
+        v.sat     = m.sat_n;
+        v.n       = m.u_n;
+        v.fw_id   = m.fw_id;
+        v.late    = m.late_n;
+        v.id      = m.id;
+        v.iq      = m.iq;
+        v.vd      = m.vd;
+        v.vq      = m.vq;
+        v.obs_rpm = m.obs_w / RPM_TO_RAD;
+        m.u_max   = 0;
+        m.sat_n = m.u_n = m.late_n = 0;
+        __enable_irq();
+        return v;
     }
 
     void takeIsrStats(uint32_t* max_us, uint32_t* count) {

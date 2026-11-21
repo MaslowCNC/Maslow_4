@@ -572,6 +572,31 @@ static void printStat() {
         linkEvent("MSG", "STAT M%d i %.2f %.2f %.2f dq %.2f %.2f v %.2f %.2f obs %.0f rpm flux %.2f max %.1f A", k + 1,
                   t[k].ia, t[k].ib, t[k].ic, t[k].id, t[k].iq, t[k].vd, t[k].vq, t[k].obs_rpm, t[k].obs_flux, t[k].imax);
     }
+    foc::VoltStats v[2] = { foc::takeVolt(0), foc::takeVolt(1) };
+    linkEvent("MSG", "STAT volts: limit %.2f V | M1 demand %.3f (peak %.3f) clipped %lu of %lu fw %.2f A after-valley %lu | M2 demand "
+                     "%.3f (peak %.3f) clipped %lu of %lu fw %.2f A after-valley %lu",
+              v[0].vmax, v[0].u, v[0].u_max, (unsigned long)v[0].sat, (unsigned long)v[0].n, v[0].fw_id, (unsigned long)v[0].late,
+              v[1].u, v[1].u_max, (unsigned long)v[1].sat, (unsigned long)v[1].n, v[1].fw_id, (unsigned long)v[1].late);
+}
+
+// #VLOG <ms>: one compact line per interval for high-speed runs - speeds, dq currents and voltages, the
+// voltage demand against the limit (last / peak since the previous line), clipped periods, field weakening.
+static uint32_t g_vlog_every = 0, g_vlog_last = 0;
+static uint32_t g_cmp_hi[6], g_cmp_polls;   // comparator highs seen by the main loop's polls (loop())
+
+static void printVlog() {
+    foc::VoltStats v[2] = { foc::takeVolt(0), foc::takeVolt(1) };
+    char           m[2][110];
+    for (int k = 0; k < 2; k++)
+        snprintf(m[k], sizeof(m[k]), "M%d %.0f dq %+.2f %+.2f v %+.2f %+.2f u %.3f/%.3f sat %lu fw %.2f", k + 1, v[k].obs_rpm,
+                 v[k].id, v[k].iq, v[k].vd, v[k].vq, v[k].u, v[k].u_max, (unsigned long)v[k].sat, v[k].fw_id);
+    linkEvent("MSG", "VLOG %.0f rpm %s vbus %.2f lim %.2f zerr %+.1f | %s | %s | cmp %lu %lu %lu %lu %lu %lu /%lu", foc::speedCommandRpm(),
+              foc::mode() == foc::Mode::Closed ? "CL" : foc::mode() == foc::Mode::Open ? "OL" : "off", hw::vbus(), v[0].vmax,
+              rad2deg(foc::zErrorRad()), m[0], m[1], (unsigned long)g_cmp_hi[0], (unsigned long)g_cmp_hi[1],
+              (unsigned long)g_cmp_hi[2], (unsigned long)g_cmp_hi[3], (unsigned long)g_cmp_hi[4], (unsigned long)g_cmp_hi[5],
+              (unsigned long)g_cmp_polls);
+    for (int i = 0; i < 6; i++) g_cmp_hi[i] = 0;
+    g_cmp_polls = 0;
 }
 
 // Maintenance commands, "#..." on the link ($Spindle/G474=SEND <line> on the XY board passes them through).
@@ -733,6 +758,13 @@ static void maintenance(const char* line) {
         printStat();
     } else if (!strcmp(word, "LOG")) {
         g_stat_every = n >= 2 && a > 0 ? (uint32_t)a : 0;
+    } else if (!strcmp(word, "VLOG")) {
+        g_vlog_every = n >= 2 && a > 0 ? (uint32_t)(a < 20 ? 20 : a) : 0;
+        foc::takeVolt(0);
+        foc::takeVolt(1);
+    } else if (!strcmp(word, "FW") && n >= 2 && a >= 0 && a <= 6) {
+        tu.fw_max_a = a;
+        if (n >= 3 && b >= 0.5f && b <= 1.0f) tu.fw_target = b;
     } else if (!strcmp(word, "ALIGN")) {
         float v = n >= 2 ? a : 0.5f;
         if (g_spinning || foc::enabled()) {
@@ -778,8 +810,57 @@ static void maintenance(const char* line) {
         tu.l    = b;
         tu.flux = c;
     } else if (!strcmp(word, "TRIP") && n >= 2) {
+        // #TRIP <sw A> [comparator A] [motor 2 comparator A]: the comparators see the sense input before
+        // the PGA, up to ~40 A (the ADC, and so the software trip, stops at ~21 A).
         if (a > 0 && a <= 20) tu.sw_trip_a = a;
-        if (n >= 3 && b > 0 && b <= 21) hw::setHardwareTripAmps(b);
+        if (n >= 3 && b > 0 && b <= 40) hw::setHardwareTripAmps(b);
+        if (n >= 4 && c > 0 && c <= 40) hw::setHardwareTripAmps(1, c);
+        linkEvent("MSG", "TRIP: software %.1f A x %d periods, comparators M1 %.1f A M2 %.1f A, break filter %lu",
+                  tu.sw_trip_a, SW_TRIP_COUNT, hw::hardwareTripAmps(0), hw::hardwareTripAmps(1),
+                  (unsigned long)hw::breakFilter());
+    } else if (!strcmp(word, "BKF") && n >= 2 && a >= 0 && a <= 15) {
+        if (foc::enabled()) {
+            linkEvent("WARN", "BKF refused: the drive must be off");
+        } else {
+            uint32_t before = TIM1->BDTR;
+            hw::setBreakFilter((uint32_t)a);
+            linkEvent("MSG", "BKF: break filter %lu (9 = fDTS/8 x 8 = 0.38 us, 12 = fDTS/16 x 8 = 0.75 us, 15 = fDTS/32 x 8 = 1.5 us); "
+                             "TIM1 BDTR %08lx -> %08lx, TIM8 %08lx",
+                      (unsigned long)hw::breakFilter(), (unsigned long)before, (unsigned long)TIM1->BDTR,
+                      (unsigned long)TIM8->BDTR);
+        }
+    } else if (!strcmp(word, "CMPTEST") && n >= 2) {
+        // #CMPTEST <A> [ms] (bring-up, drive off): would the comparators break at this threshold on the idle
+        // sense noise alone?  Clears both break flags, watches for ms (max 100), reports which latched and how
+        // often each comparator read high, then puts the thresholds back.
+        if (foc::enabled() || g_spinning) {
+            linkEvent("WARN", "CMPTEST refused: the drive must be off");
+        } else {
+            float    old0 = hw::hardwareTripAmps(0), old1 = hw::hardwareTripAmps(1);
+            uint32_t ms   = n >= 3 && b >= 1 ? (b > 100 ? 100 : (uint32_t)b) : 100;
+            hw::setHardwareTripAmps(a);
+            delayMicroseconds(50);
+            TIM1->SR = ~TIM_SR_BIF;
+            TIM8->SR = ~TIM_SR_BIF;
+            uint32_t hi[6] = { 0 }, reads = 0;
+            uint32_t t0    = millis();
+            while (millis() - t0 < ms) {
+                uint16_t c6[6];
+                hw::comparatorHighCounts(c6, 100);
+                for (int i = 0; i < 6; i++) hi[i] += c6[i];
+                reads += 100;
+            }
+            bool b1 = TIM1->SR & TIM_SR_BIF, b8 = TIM8->SR & TIM_SR_BIF;
+            hw::setHardwareTripAmps(0, old0);
+            hw::setHardwareTripAmps(1, old1);
+            delayMicroseconds(50);
+            TIM1->SR = ~TIM_SR_BIF;
+            TIM8->SR = ~TIM_SR_BIF;
+            linkEvent("MSG", "CMPTEST %.1f A, %lu ms, filter %lu: break M1 %s M2 %s | comparator highs per %lu reads: M1 %lu %lu %lu M2 %lu %lu %lu",
+                      a, (unsigned long)ms, (unsigned long)hw::breakFilter(), b1 ? "LATCHED" : "no", b8 ? "LATCHED" : "no",
+                      (unsigned long)reads, (unsigned long)hi[0], (unsigned long)hi[1], (unsigned long)hi[2], (unsigned long)hi[3],
+                      (unsigned long)hi[4], (unsigned long)hi[5]);
+        }
     } else if (!strcmp(word, "NOISE")) {
         uint32_t samples = (n >= 2 && a >= 1) ? (uint32_t)a : 2000;
         foc::startNoise(samples);
@@ -788,7 +869,7 @@ static void maintenance(const char* line) {
                   samples / (PWM_FREQUENCY_HZ / 1000.0f));
     } else if (!strcmp(word, "SPIN") && n >= 3) {
         // Bench spin that stops itself: it does not depend on the link delivering the S0.
-        float    rpm = a < 0 ? 0 : a > 12000 ? 12000 : a;   // bench: loose motors
+        float    rpm = a < 0 ? 0 : a > MAX_COMMAND_RPM ? MAX_COMMAND_RPM : a;
         uint32_t ms  = b < 100 ? 100 : b > 30000 ? 30000 : (uint32_t)b;
         setSpindleSpeed(rpm);
         g_spin_until = millis() + ms;
@@ -909,6 +990,21 @@ static void maintenance(const char* line) {
         dumpRxLog();
     } else if (!strcmp(word, "BRK")) {
         reportBreak();
+    } else if (!strcmp(word, "BRKDUMP")) {
+        // #BRKDUMP [first]: six entries from `first` back (0 = the interrupt that saw the break), newest first;
+        // more at once overflow the link's transmit buffer.
+        int first = n >= 2 && a >= 0 && a < 16 ? (int)a : 0;
+        int shown = 0;
+        for (int i = first; i < first + 6 && i < 16; i++) {
+            float   amps[6], duty[6];
+            uint8_t cmp;
+            if (!foc::brkDump(i, amps, duty, &cmp)) continue;
+            linkEvent("MSG", "BRKD %3d us: M1 %+6.2f %+6.2f %+6.2f M2 %+6.2f %+6.2f %+6.2f A | cmp %02x | duty M1 %.3f %.3f %.3f M2 %.3f %.3f %.3f",
+                      -50 * i, amps[0], amps[1], amps[2], amps[3], amps[4], amps[5], cmp, duty[0], duty[1], duty[2], duty[3],
+                      duty[4], duty[5]);
+            shown++;
+        }
+        if (!shown) linkEvent("MSG", "BRKDUMP: no fault recorded since the drive was last enabled");
     } else if (!strcmp(word, "MOE")) {
         probeMoe();
     } else if (!strcmp(word, "DUMP")) {
@@ -928,9 +1024,12 @@ static void maintenance(const char* line) {
     } else if (!strcmp(word, "VER")) {
         linkEvent("MSG", "spindle firmware %s, %s %s", FW_VERSION, __DATE__, __TIME__);
     } else {
-        linkEvent("MSG", "# commands: STAT LOG <ms> ALIGN [V] [ms] CL <0|1> CUR <kp> <ki> POS <kp> <kd> <ki> "
-                         "POSBW <min> <full rpm> OLKI <ki> DTC <ns> IHOLD/ISPIN/IBOOST/ILIM <A> OBS <R> <L> <flux> "
-                         "TRIP <sw A> [hw A] NOISE [samples] SLOW <0|1|2> DUMP [samples] [channel] BRK MOE LOAD <us> SPIN <rpm> <ms> RXLOG PREV GCAL [V] GAIN GAIN1/GAIN2 <a> <b> <c> JMEAS <rpm> GSAVE GCLEAR FLASHCRC <len> CALDBG DBANK <0|1> VER");
+        linkEvent("MSG", "# commands: STAT LOG <ms> VLOG <ms> ALIGN [V] [ms] CL <0|1> CUR <kp> <ki> POS <kp> <kd> <ki> POSBW <min> <full rpm> "
+                         "OLKI <ki> DTC <ns> IHOLD/ISPIN/IBOOST/ILIM <A> OBS <R> <L> <flux> FW <A> [share] TRIP <sw A> [hw A] [hw M2] "
+                         "SPIN <rpm> <ms> JMEAS <rpm> VER");
+        linkEvent("MSG", "# bring-up: NOISE [samples] SLOW <0|1|2> DUMP [samples] [channel] BRK BKF <0-15> CMPTEST <A> [ms] BRKDUMP "
+                         "[first] MOE LOAD <us> RXLOG PREV GCAL [V] GAIN GAIN1/GAIN2 <a> <b> <c> GSAVE GCLEAR FLASHCRC <len> CALDBG "
+                         "DBANK <0|1>");
         return;
     }
     if (strcmp(word, "STAT") && strcmp(word, "VER") && strcmp(word, "ALIGN") && strcmp(word, "NOISE") && strcmp(word, "SLOW") &&
@@ -938,12 +1037,14 @@ static void maintenance(const char* line) {
         strcmp(word, "MOE") && strcmp(word, "LOAD") && strcmp(word, "SPIN") && strcmp(word, "RXLOG") &&
         strcmp(word, "PREV") && strcmp(word, "GCAL") && strncmp(word, "GAIN", 4) && strcmp(word, "JMEAS") &&
         strcmp(word, "GSAVE") && strcmp(word, "GCLEAR") &&
-        strcmp(word, "FLASHCRC") && strcmp(word, "CALDBG") && strcmp(word, "DBANK")) {
+        strcmp(word, "FLASHCRC") && strcmp(word, "CALDBG") && strcmp(word, "DBANK") && strcmp(word, "VLOG") &&
+        strcmp(word, "TRIP") && strcmp(word, "BKF") && strcmp(word, "CMPTEST") && strcmp(word, "BRKDUMP")) {
         linkEvent("MSG", "tuning: cur %.3f/%.0f pos %.2f/%.3f/%.1f bw %.2f/%.0f olki %.1f I hold %.1f spin %.1f "
-                         "boost %.1f lim %.1f obs R %.3f L %.1fuH flux %.2fmWb trip %.1f A dtc %.0f ns CL %d",
+                         "boost %.1f lim %.1f obs R %.3f L %.1fuH flux %.2fmWb trip %.1f A dtc %.0f ns CL %d fw %.1f A/%.2f",
                   tu.cur_kp, tu.cur_ki, tu.pos_kp, tu.pos_kd, tu.pos_ki, tu.pos_bw_min, tu.pos_bw_full_rpm, tu.ol_ki,
                   tu.hold_a, tu.spin_a, tu.boost_a, tu.iq_limit,
-                  tu.r, tu.l * 1e6f, tu.flux * 1e3f, tu.sw_trip_a, tu.deadtime_ns, (int)tu.closed_loop_allowed);
+                  tu.r, tu.l * 1e6f, tu.flux * 1e3f, tu.sw_trip_a, tu.deadtime_ns, (int)tu.closed_loop_allowed, tu.fw_max_a,
+                  tu.fw_target);
     }
 }
 
@@ -1251,7 +1352,7 @@ static const char* crumbName(uint32_t step) {
     static const char* const names[] = { "?", "slow analog", "link input", "fault check", "2 ms sampling",
                                          "analog limits", "align", "spin supervision", "tool state machine",
                                          "reported state", "fan", "status line", "#LOG", "#NOISE report",
-                                         "#DUMP print", "trip recorder", "LED", "end of loop" };
+                                         "#VLOG print", "trip recorder", "LED", "end of loop" };
     return step < sizeof(names) / sizeof(names[0]) ? names[step] : "?";
 }
 
@@ -1352,6 +1453,12 @@ void setup() {
 void loop() {
     g_loop_count++;
     hw::watchdogKick();
+    {   // #VLOG: how often each over-current comparator reads high (spikes the break filter rejects)
+        uint8_t bits = hw::comparatorOutputs();
+        for (int i = 0; i < 6; i++)
+            if (bits & (1u << i)) g_cmp_hi[i]++;
+        g_cmp_polls++;
+    }
     uint32_t now = millis();
     if (g_spin_until && (int32_t)(now - g_spin_until) >= 0) {
         g_spin_until = 0;
@@ -1463,6 +1570,11 @@ void loop() {
         g_stat_last = now;
         CRUMB(12);
         printStat();
+    }
+    if (g_vlog_every && now - g_vlog_last >= g_vlog_every) {
+        g_vlog_last = now;
+        CRUMB(14);
+        printVlog();
     }
     if (!g_init_ok) {
         static uint32_t last = 0;
