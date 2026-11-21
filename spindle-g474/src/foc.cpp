@@ -69,6 +69,7 @@ namespace foc {
         struct Motor {
             int   dir;
             float off[3];                 // ADC zero, counts
+            float gain[3];                // per-phase current gain correction (#GCAL), 1 = nominal
             float ia, ib, ic;             // A
             float ial, ibe;               // A, stationary frame
             float duty[3];                // duties in force during this sample
@@ -76,6 +77,7 @@ namespace foc {
             float flux_a, flux_b;
             float ial_prev, ibe_prev;
             float obs_angle, obs_w;       // rad, rad/s (electrical = mechanical, 1 pole pair)
+            float obs_w_lock;             // rad/s, slower average for the hand-over lock test
             float obs_da;                 // observer angle step this period
             // control
             float theta;
@@ -118,6 +120,7 @@ namespace foc {
         volatile bool  g_req_closed   = false;
         volatile bool  g_req_open     = false;
         volatile float g_align_volts  = 0;   // > 0: voltage-mode align test at angle 0
+        volatile float g_align_va = 0, g_align_vb = 0;   // the align vector (alpha, beta), V
 
         volatile uint8_t g_fault       = FaultNone;
         volatile int8_t  g_fault_motor = -1;
@@ -161,6 +164,7 @@ namespace foc {
             m.flux_a = m.flux_b = 0;
             m.ial_prev = m.ibe_prev = 0;
             m.obs_w = 0;
+            m.obs_w_lock = 0;
             m.int_d = m.int_q = 0;
             m.vd = m.vq = m.valpha = m.vbeta = 0;
             m.pos_int = m.id_cl = m.iq_carry = 0;
@@ -195,7 +199,7 @@ namespace foc {
         void senseCurrents(int k, const uint16_t raw[3], bool rebuild) {
             Motor& m = mot[k];
             float  i[3];
-            for (int p = 0; p < 3; p++) i[p] = SENSE_SIGN * ((float)raw[p] - m.off[p]) * SENSE_A_PER_LSB;
+            for (int p = 0; p < 3; p++) i[p] = SENSE_SIGN * ((float)raw[p] - m.off[p]) * SENSE_A_PER_LSB * m.gain[p];
             if (rebuild) {
                 // The highest-duty phase has the shortest low-side time, so its sample sits closest to
                 // the switching edge; rebuild it from the other two (they sum to zero).  ESC1 bench.
@@ -225,6 +229,7 @@ namespace foc {
             float da = wrapPi(a - m.obs_angle);
             m.obs_angle = a;
             m.obs_w += (da / DT - m.obs_w) * fminf(DT / OBS_SPEED_TAU_S, 1.0f);
+            m.obs_w_lock += (m.obs_w - m.obs_w_lock) * (DT / OBS_LOCK_TAU_S);
             m.obs_da = da;
         }
 
@@ -410,6 +415,7 @@ namespace foc {
                 for (int k = 0; k < 2; k++) {
                     mot[k].flux_a = mot[k].flux_b = 0;
                     mot[k].obs_w  = 0;
+                    mot[k].obs_w_lock = 0;
                     mot[k].valpha = mot[k].vbeta = 0;
                 }
                 return;
@@ -424,11 +430,12 @@ namespace foc {
                 return;
             }
 
-            // Voltage-mode align test (bring-up): a fixed voltage on the phase A axis, no current loop.
+            // Voltage-mode align test (bring-up): a fixed voltage vector (phase A axis unless #GCAL turns
+            // it), no current loop.
             if (g_align_volts > 0) {
                 for (int k = 0; k < 2; k++) {
-                    mot[k].valpha = g_align_volts;
-                    mot[k].vbeta  = 0;
+                    mot[k].valpha = g_align_va;
+                    mot[k].vbeta  = g_align_vb;
                     modulate(k, false);   // raw: the align test reads the sense, not the drive
                 }
                 return;
@@ -598,6 +605,7 @@ namespace foc {
         mot[1].dir = -1 * SPINDLE_DIRECTION;
         for (int k = 0; k < 2; k++) {
             for (int p = 0; p < 3; p++) mot[k].off[p] = 2010.0f;   // ~1.62 V; replaced by calibrateOffsets
+            for (int p = 0; p < 3; p++) mot[k].gain[p] = 1.0f;     // nominal until #GCAL
             mot[k].c = 0;
             resetControl(mot[k]);
         }
@@ -707,7 +715,7 @@ namespace foc {
         if (w <= 0) return false;
         for (int k = 0; k < 2; k++) {
             const Motor& m = mot[k];
-            if (fabsf(m.obs_w - m.dir * w) > tol * w) return false;
+            if (fabsf(m.obs_w_lock - m.dir * w) > tol * w) return false;
             float fl = sqrtf(m.flux_a * m.flux_a + m.flux_b * m.flux_b) / g_tun.flux;
             if (fl < 0.7f) return false;
         }
@@ -846,7 +854,30 @@ namespace foc {
     bool startAlignTest(float volts) {
         if (volts <= 0 || volts > 3.0f) { g_enable_fail = "align voltage outside 0-3 V"; return false; }
         if (!enable()) return false;
+        __disable_irq();
+        g_align_va    = volts;
+        g_align_vb    = 0;
         g_align_volts = volts;
+        __enable_irq();
         return true;
+    }
+
+    void setAlignVector(float volts, float angle_rad) {
+        float s, c;
+        fastSinCos(angle_rad, &s, &c);
+        __disable_irq();
+        g_align_va = volts * c;
+        g_align_vb = volts * s;
+        __enable_irq();
+    }
+
+    void setPhaseGains(int k, const float g[3]) {
+        __disable_irq();
+        for (int p = 0; p < 3; p++) mot[k].gain[p] = g[p];
+        __enable_irq();
+    }
+
+    void phaseGains(int k, float g[3]) {
+        for (int p = 0; p < 3; p++) g[p] = mot[k].gain[p];
     }
 }

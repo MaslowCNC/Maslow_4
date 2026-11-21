@@ -85,6 +85,8 @@ constexpr float OBS_TRUST_TOL   = 0.2f;
 constexpr float OL_CUR_KI       = 12.0f;     // V per A s
 constexpr float OL_CARRY_FADE_A_S = 40.0f;   // closed-loop torque current fades at hand-back
 constexpr float OBS_SPEED_TAU_S = 0.005f;    // BENCH: observer speed filter
+constexpr float OBS_LOCK_TAU_S  = 0.030f;    // the hand-over lock test's own speed average: board 1's observers
+                                             // ripple ~5-8 % at 1x / 2x electrical under the 3 A open-loop hold
 constexpr float LOST_FRACTION   = 0.30f;     // BENCH: observer this far off the command ...
 constexpr uint32_t LOST_MS      = 100;       // ... this long = lost lock (stop)
 constexpr uint32_t CL_SETTLE_MS = 300;       // BENCH: no lost-lock check right after the hand-over

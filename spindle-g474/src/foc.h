@@ -107,4 +107,9 @@ namespace foc {
     // Bring-up: hold motor m's current vector at electrical angle 0 (phase A axis) with `amps`,
     // the other motor off; returns false if refused.  Stop with disable().
     bool startAlignTest(float amps);
+    // #GCAL: turn the running align test's voltage vector (angle 0 = phase A axis).
+    void setAlignVector(float volts, float angle_rad);
+    // Per-phase current gain corrections (#GCAL / #GAIN), 1 = nominal.  Not kept across a reboot.
+    void setPhaseGains(int m, const float g[3]);
+    void phaseGains(int m, float g[3]);
 }

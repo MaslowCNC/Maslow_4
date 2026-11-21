@@ -92,12 +92,32 @@ an assumption the next one relies on. Stop at the first surprise.
     `#OBS 0.31 75e-6 7.84e-3` (SI units) before the next try.
   - A fault during a `#SPIN` bench test is no longer latched into the status line's fault code: the
     XY board would otherwise run its job recovery ($STOP, then a Z re-home 'G') - motion on a bench.
+- **Per-phase current gains (`#GCAL`, 2026-11-20):** 0.8 V DC vectors at 0-300 deg in 60 deg steps (rotors
+  snap, nothing spins), +/- pairs remove the offsets, Kirchhoff (ia+ib+ic = 0) gives the gains.
+  Board 1: M1 a 1.111 b 0.906 c 0.983, M2 a 0.889 b 1.076 c 1.035 (channels up to 11 % off: copper in
+  the 5 mOhm sense paths). The pure-gain model fits to 0.001 A; an independent ALIGN now sums to
+  -0.03 / -0.06 A (was -0.31 / +0.26) and both motors draw the same current. Apparent R per axis
+  0.28-0.35 ohm, mean 0.32 (`#OBS 0.32 75e-6 7.84e-3`). The gains are not stored yet: re-run `#GCAL`
+  or `#GAIN1` / `#GAIN2 <a> <b> <c>` after every reboot or reflash.
+  - Observer at the 3 A open-loop 2000 RPM hold: speed ripple M1 12.1 -> 7.6 %, M2 11.6 -> 4.7 % (M2 now
+    100 % inside 10 %); what is left on M1 is 2x electrical plus its phase B (U9) noise.
+  - The hand-over lock test now averages the observer speed over 30 ms (`OBS_LOCK_TAU_S`; the rest still
+    uses the 5 ms filter). With it: **"closed loop: observers locked at 2000 RPM"** - the first hardware
+    hand-over (interrupt 43 us in closed loop, 0 overruns).
+  - **Closed loop then oscillated and tripped:** 109 ms after the hand-over (speed ramping 2005 -> 2520)
+    the M1 comparator tripped (20 A). Both motors oscillated at ~52 Hz, growing: M2 observer speed
+    1100-3550 RPM, iq +-8 A at its limit, Z error to 25 deg; M1 iq -6.7..+11 A, 14.6 A peak. 52 Hz is far
+    above the angle loop's designed natural frequency (~9-17 Hz with 10/0.12/100 and J 1e-5), so suspect
+    the derivative term on a still-rippling observer speed (5-8 % = 10-16 rad/s -> 1-2 A of iq at
+    kd 0.12; the 5 ms speed filter lags ~57 deg at 50 Hz) and M1's phase B noise, before the inertia.
+    Next: lower kd / the low-speed bandwidth (`#POS`, `#POSBW`), filter the derivative, or fix the U9
+    noise first.
 - New maintenance commands: `#NOISE [samples]`, `#SLOW <0|1|2>`, `#DUMP [samples] [channel]` (consecutive
   raw samples, 16 per line; `D <channel> <first sample> <values>`), `#BRK`, `#MOE`, `#LOAD <us>` (pad the
   interrupt, drive off), `#SPIN <rpm> <ms>` (bench spin that stops itself), `#RXLOG` (last 256 link
   bytes), `#PREV` (the previous boot's record: last main-loop step, longest interrupt, CPU fault).
   `#STAT` adds uptime, reset reason, overruns, longest interrupt since boot, main-loop rate, link
-  counters. `#ALIGN <V> [ms]` takes a duration (max 5 s). A CPU fault now turns both bridges
+  counters. `#ALIGN <V> [ms]` takes a duration (max 5 s). `#GCAL [V]` per-phase gain calibration, `#GAIN` / `#GAIN1` / `#GAIN2`. A CPU fault now turns both bridges
   off and sends `ERR:spindle CPU fault ... pc=...` over the link (`addr2line -e firmware.elf <pc>`).
 
 ## Verified without hardware

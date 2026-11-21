@@ -36,6 +36,13 @@ static const char*       g_boot_reason = "";   // this boot's reset reason (#STA
 static uint32_t          g_prev[8];            // the previous boot's backup registers (crumbsInit)
 static uint32_t g_spin_until = 0;   // #SPIN: when the timed bench spin ramps down (0 = none)
 static bool     g_bench_spin = false;   // a #SPIN test is running: outside the XY board's job control
+static int      g_gcal_step  = -1;      // #GCAL: -1 idle, else the voltage vector at step x 60 deg
+static bool     g_gcal_avg   = false;   // averaging this step's currents (noise accumulator)
+static uint32_t g_gcal_t     = 0;       // when this step's settling ends
+static float    g_gcal_v     = 0.8f;    // calibration voltage
+static float    g_gcal_m[6][2][3];      // mean phase currents per step, motor, phase (A, nominal gains)
+constexpr uint32_t GCAL_SETTLE_MS = 400;
+constexpr uint32_t GCAL_SAMPLES   = 10000;   // 0.5 s at 20 kHz
 // #RXLOG (bring-up): the last 256 raw bytes received on the link.
 static uint8_t  g_rxlog[256];
 static uint32_t g_rxlog_n = 0;
@@ -562,6 +569,80 @@ static void printStat() {
 
 // Maintenance commands, "#..." on the link ($Spindle/G474=SEND <line> on the XY board passes them through).
 // The ESP32 firmware ignores lines starting with '#', so the XY side can send them to either board.
+// #GCAL result: per-phase current gains from the three +/- phase-axis tests.  The true phase currents of
+// a star-connected motor sum to zero, so with the offsets removed (+ minus - halves) the three gains are
+// the null vector of the measured 3x3 current pattern (the sum of its rows' cyclic cross products),
+// normalised to a mean of 1.  V/I along each axis gives the apparent phase resistance.
+static void finishGcal() {
+    static const int pos[3] = { 0, 2, 4 }, neg[3] = { 3, 5, 1 };   // steps: 0 +A, 1 -C, 2 +B, 3 -A, 4 +C, 5 -B
+    static const char ph[3] = { 'a', 'b', 'c' };
+    for (int k = 0; k < 2; k++) {
+        float d[3][3];
+        for (int t = 0; t < 3; t++)
+            for (int p = 0; p < 3; p++) d[t][p] = 0.5f * (g_gcal_m[pos[t]][k][p] - g_gcal_m[neg[t]][k][p]);
+        for (int t = 0; t < 3; t++)
+            linkEvent("MSG", "GCAL M%d +%c test: a %+.3f b %+.3f c %+.3f A (sum %+.3f)", k + 1, ph[t], d[t][0], d[t][1],
+                      d[t][2], d[t][0] + d[t][1] + d[t][2]);
+        float g[3] = { 0, 0, 0 };
+        for (int t = 0; t < 3; t++) {
+            const float* u = d[t];
+            const float* w = d[(t + 1) % 3];
+            g[0] += u[1] * w[2] - u[2] * w[1];
+            g[1] += u[2] * w[0] - u[0] * w[2];
+            g[2] += u[0] * w[1] - u[1] * w[0];
+        }
+        float sum = g[0] + g[1] + g[2];
+        bool  ok  = fabsf(sum) > 1e-9f;
+        if (ok)
+            for (int p = 0; p < 3; p++) g[p] *= 3.0f / sum;
+        for (int p = 0; p < 3; p++)
+            if (!(g[p] > 0.6f && g[p] < 1.6f)) ok = false;
+        float after[3], r[3];
+        for (int t = 0; t < 3; t++) {
+            after[t] = g[0] * d[t][0] + g[1] * d[t][1] + g[2] * d[t][2];
+            float it = g[t] * d[t][t];
+            r[t]     = it > 0.05f ? g_gcal_v / it : NAN;
+        }
+        if (ok) foc::setPhaseGains(k, g);
+        linkEvent("MSG", "GCAL M%d gains a %.3f b %.3f c %.3f (%s) | sums after %+.3f %+.3f %+.3f A | apparent R a %.3f b %.3f c %.3f ohm",
+                  k + 1, g[0], g[1], g[2], ok ? "applied" : "NOT applied: out of range", after[0], after[1], after[2], r[0],
+                  r[1], r[2]);
+    }
+}
+
+// #GCAL steps, from loop(): settle, average, record, turn the vector 60 degrees.
+static void serviceGcal(uint32_t now) {
+    if (g_gcal_step < 0) return;
+    if (!foc::enabled()) {
+        g_gcal_step = -1;
+        linkEvent("WARN", "GCAL aborted: the drive turned off");
+        return;
+    }
+    if (!g_gcal_avg) {
+        if ((int32_t)(now - g_gcal_t) >= 0) {
+            foc::startNoise(GCAL_SAMPLES);
+            g_gcal_avg = true;
+        }
+        return;
+    }
+    if (!foc::noiseDone()) return;
+    g_gcal_avg = false;
+    for (int k = 0; k < 2; k++)
+        for (int p = 0; p < 3; p++) {
+            foc::NoiseStats st;
+            foc::noiseResult(k, p, &st);
+            g_gcal_m[g_gcal_step][k][p] = SENSE_SIGN * (st.mean - st.offset) * SENSE_A_PER_LSB;
+        }
+    if (++g_gcal_step >= 6) {
+        g_gcal_step = -1;
+        foc::disable();
+        finishGcal();
+        return;
+    }
+    foc::setAlignVector(g_gcal_v, g_gcal_step * (float)M_PI / 3.0f);
+    g_gcal_t = now + GCAL_SETTLE_MS;
+}
+
 static void maintenance(const char* line) {
     foc::Tuning& tu = foc::tuning();
     float        a = 0, b = 0, c = 0;
@@ -643,6 +724,41 @@ static void maintenance(const char* line) {
                   (unsigned long)(millis() / 1000), (unsigned long)g_prev[0], (unsigned long)g_prev[1],
                   (unsigned long)g_prev[2], (unsigned long)g_prev[3]);
         crumbsReport();
+    } else if (!strcmp(word, "GCAL")) {
+        float v = n >= 2 ? a : 0.8f;
+        if (g_spinning || foc::enabled() || g_gcal_step >= 0 || g_align_until) {
+            linkEvent("WARN", "GCAL refused: the drive is busy");
+        } else if (v < 0.1f || v > 1.5f) {
+            linkEvent("WARN", "GCAL refused: 0.1-1.5 V");
+        } else if (!enableDrive("GCAL")) {
+            linkEvent("WARN", "GCAL refused: drive enable failed (%s)", g_drive_fail);
+        } else if (foc::disable(), !foc::startAlignTest(v)) {
+            linkEvent("WARN", "GCAL refused: align start failed (%s)", foc::enableFailReason());
+        } else {
+            static const float nominal[3] = { 1.0f, 1.0f, 1.0f };
+            foc::setPhaseGains(0, nominal);   // measure against the nominal scale
+            foc::setPhaseGains(1, nominal);
+            g_gcal_v    = v;
+            g_gcal_step = 0;
+            g_gcal_avg  = false;
+            g_gcal_t    = millis() + 2 * GCAL_SETTLE_MS;   // the first snap can be up to 180 degrees
+            linkEvent("MSG", "GCAL: %.2f V at 0-300 deg in 60 deg steps, %lu ms settle + %lu ms average each; the rotors "
+                             "snap to each vector",
+                      v, (unsigned long)GCAL_SETTLE_MS, (unsigned long)(GCAL_SAMPLES / (PWM_FREQUENCY_HZ / 1000)));
+        }
+    } else if (!strcmp(word, "GAIN")) {
+        for (int k = 0; k < 2; k++) {
+            float g[3];
+            foc::phaseGains(k, g);
+            linkEvent("MSG", "GAIN M%d a %.3f b %.3f c %.3f", k + 1, g[0], g[1], g[2]);
+        }
+    } else if ((!strcmp(word, "GAIN1") || !strcmp(word, "GAIN2")) && n >= 4) {
+        float g[3] = { a, b, c };
+        bool  ok   = true;
+        for (int p = 0; p < 3; p++)
+            if (!(g[p] > 0.5f && g[p] < 2.0f)) ok = false;
+        if (ok) foc::setPhaseGains(word[4] - '1', g);
+        linkEvent(ok ? "MSG" : "WARN", "%s %.3f %.3f %.3f %s", word, g[0], g[1], g[2], ok ? "set" : "refused (0.5-2.0)");
     } else if (!strcmp(word, "RXLOG")) {
         dumpRxLog();
     } else if (!strcmp(word, "BRK")) {
@@ -668,13 +784,13 @@ static void maintenance(const char* line) {
     } else {
         linkEvent("MSG", "# commands: STAT LOG <ms> ALIGN [V] [ms] CL <0|1> CUR <kp> <ki> POS <kp> <kd> <ki> "
                          "POSBW <min> <full rpm> OLKI <ki> DTC <ns> IHOLD/ISPIN/IBOOST/ILIM <A> OBS <R> <L> <flux> "
-                         "TRIP <sw A> [hw A] NOISE [samples] SLOW <0|1|2> DUMP [samples] [channel] BRK MOE LOAD <us> SPIN <rpm> <ms> RXLOG PREV VER");
+                         "TRIP <sw A> [hw A] NOISE [samples] SLOW <0|1|2> DUMP [samples] [channel] BRK MOE LOAD <us> SPIN <rpm> <ms> RXLOG PREV GCAL [V] GAIN GAIN1/GAIN2 <a> <b> <c> VER");
         return;
     }
     if (strcmp(word, "STAT") && strcmp(word, "VER") && strcmp(word, "ALIGN") && strcmp(word, "NOISE") && strcmp(word, "SLOW") &&
         strcmp(word, "DUMP") && strcmp(word, "BRK") &&
         strcmp(word, "MOE") && strcmp(word, "LOAD") && strcmp(word, "SPIN") && strcmp(word, "RXLOG") &&
-        strcmp(word, "PREV")) {
+        strcmp(word, "PREV") && strcmp(word, "GCAL") && strncmp(word, "GAIN", 4)) {
         linkEvent("MSG", "tuning: cur %.3f/%.0f pos %.2f/%.3f/%.1f bw %.2f/%.0f olki %.1f I hold %.1f spin %.1f "
                          "boost %.1f lim %.1f obs R %.3f L %.1fuH flux %.2fmWb trip %.1f A dtc %.0f ns CL %d",
                   tu.cur_kp, tu.cur_ki, tu.pos_kp, tu.pos_kd, tu.pos_ki, tu.pos_bw_min, tu.pos_bw_full_rpm, tu.ol_ki,
@@ -1108,15 +1224,16 @@ void loop() {
         if (g_noise_pending && foc::noiseDone()) {
             g_noise_pending = false;
             for (int k = 0; k < 2; k++) {
-                float amps[3], sd[3];
+                float amps[3], sd[3], g[3];
+                foc::phaseGains(k, g);   // the same per-phase gains the drive uses (#GCAL)
                 for (int p = 0; p < 3; p++) {
                     foc::NoiseStats st;
                     foc::noiseResult(k, p, &st);
-                    amps[p] = SENSE_SIGN * (st.mean - st.offset) * SENSE_A_PER_LSB;
-                    sd[p]   = st.sd * SENSE_A_PER_LSB;
+                    amps[p] = SENSE_SIGN * (st.mean - st.offset) * SENSE_A_PER_LSB * g[p];
+                    sd[p]   = st.sd * SENSE_A_PER_LSB * g[p];
                 }
-                linkEvent("MSG", "ALIGN M%d averaged over 100 ms: ia %+.2f ib %+.2f ic %+.2f A (sample sd %.2f %.2f %.2f A)",
-                          k + 1, amps[0], amps[1], amps[2], sd[0], sd[1], sd[2]);
+                linkEvent("MSG", "ALIGN M%d averaged over 100 ms: ia %+.2f ib %+.2f ic %+.2f A, sum %+.2f (sample sd %.2f %.2f %.2f A)",
+                          k + 1, amps[0], amps[1], amps[2], amps[0] + amps[1] + amps[2], sd[0], sd[1], sd[2]);
             }
         }
         printStat();
@@ -1124,7 +1241,8 @@ void loop() {
         linkEvent("MSG", "ALIGN done: expect ia ~ +V/R, ib ~ ic ~ -ia/2 on both motors (sign check)");
     }
 
-    if (g_align_until == 0) {
+    serviceGcal(now);
+    if (g_align_until == 0 && g_gcal_step < 0) {
         CRUMB(7);
         superviseSpin();
         CRUMB(8);
