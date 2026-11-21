@@ -24,6 +24,8 @@ INNER, IN1, FORCE, DRY = "--inner" in flags, "--in1" in flags, "--force" in flag
 ACCEPT = float(flags[flags.index("--accept") + 1]) if "--accept" in flags else 0.85
 CHAIN = int(flags[flags.index("--chain") + 1]) if "--chain" in flags else None
 STEP = float(flags[flags.index("--step") + 1]) if "--step" in flags else 0.1
+MAXVIAS = int(flags[flags.index("--vias") + 1]) if "--vias" in flags else 99   # extra vias allowed
+MINSAVE = float(flags[flags.index("--save") + 1]) if "--save" in flags else 2.0
 PCB = D + "Unified Control Board.kicad_pcb"
 b = pcbnew.LoadBoard(PCB)
 dru = open(D + "Unified Control Board.kicad_dru").read()
@@ -251,7 +253,7 @@ if runs:
     gb = min(goals, key=lambda q: (q[0] - e0[0]) ** 2 + (q[1] - e0[1]) ** 2)
     print("  chain %.1f mm, %d vias -> new %.1f mm, %d vias (%s), from (%.2f, %.2f) %s to (%.2f, %.2f) %s" % (
         old_len, old_vias, new_len, new_vias, "/".join(r[0][:-3] for r in runs), sa[0], sa[1], sa[2], gb[0], gb[1], gb[2]))
-    ok = FORCE or (new_len <= ACCEPT * old_len and old_len - new_len >= 2.0)
+    ok = FORCE or (new_len <= ACCEPT * old_len and old_len - new_len >= MINSAVE and new_vias <= old_vias + MAXVIAS)
     if ok and not DRY:
         kr.add_runs(b, NET, runs, W, snap_start=(sa[0], sa[1]), snap_end=(gb[0], gb[1]), keep=keep)
 else:

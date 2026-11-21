@@ -13,7 +13,8 @@ import netreview as nr
 
 D = sys.argv[1].rstrip("/") + "/"
 LOG = sys.argv[2]
-ONLY = set(sys.argv[3:])
+EXTRA = [a for a in sys.argv[3:] if a.startswith("--") or a.replace(".", "").isdigit()]   # passed on to reroute.py
+ONLY = set(a for a in sys.argv[3:] if a not in EXTRA)
 PY = sys.executable
 KICAD_CLI = "/Applications/KiCad/KiCad.app/Contents/MacOS/kicad-cli"
 SKIP = re.compile(r"IS[ABC][12]|S[ABC][12]|U9_SYNC|USBD[+-]|3V3A")
@@ -66,7 +67,7 @@ for excess, net in todo:
         d = cand[0]
         tried.add((d["a"], d["b"]))
         shutil.copyfile(PCB, backup)
-        out = subprocess.run([PY, os.path.join(HERE, "reroute.py"), D, net, d["a"], d["b"], "--inner"],
+        out = subprocess.run([PY, os.path.join(HERE, "reroute.py"), D, net, d["a"], d["b"], "--inner"] + EXTRA,
                              capture_output=True, text=True).stdout
         lines = [l.strip() for l in out.splitlines() if "chain" in l or "re-routed" in l or "kept" in l or " not " in l or "nothing" in l]
         verdict = "kept original"
