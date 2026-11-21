@@ -28,6 +28,11 @@ namespace hw {
 
     // Set the comparator threshold (phase amps in the low-side conduction direction).
     void setHardwareTripAmps(float amps);
+    // Bring-up (#BRK): how many of `reads` reads found each comparator's output high (m1 a,b,c, m2 a,b,c),
+    // a timer's status register (BIF = break latched), and the comparator threshold in amps.
+    void     comparatorHighCounts(uint16_t counts[6], int reads);
+    uint32_t timerStatus(int motor);
+    float    hardwareTripAmps();
 
     // Raw injected samples of the last PWM period, motor m, phase p.
     uint16_t rawCurrent(int m, int p);

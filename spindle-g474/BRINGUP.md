@@ -52,8 +52,18 @@ an assumption the next one relies on. Stop at the first surprise.
   printf but not float scanf, so `sscanf("%f")` parsed nothing: `#TRIP`, `#IHOLD`, `#POS`, `#OBS`, `#LOG`
   silently did nothing (`#ALIGN` only worked because 0.5 V is its default). Now built with
   `PIO_FRAMEWORK_ARDUINO_NANOLIB_FLOAT_SCANF`; check any tuning command's echo after a reflash.
+- **Found and fixed (G474): no drive enable ever succeeded.** `hw::enableOutputs()` read MOE back right
+  after setting it, but MOE reads set only ~1 us later (break filter fDTS/8 x 8); every `#ALIGN` was
+  refused with "TIM1 MOE would not set". It now polls up to 5 us and fails only on a break or timeout.
+  Found with `#BRK` (break flags, MOE, SR/BDTR/AF1, comparator activity) and `#MOE` (MOE read-back timing).
+- **Step 4 (`#ALIGN 0.5`, default trips, 36 V at 0.3 A limit) passed:** averaged over 100 ms,
+  M1 ia +1.43 ib -0.92 ic -0.82 A, M2 ia +1.70 ib -0.70 ic -0.74 A. `SENSE_SIGN = -1` is right and each
+  sense input reads its own phase (ib ~ ic ~ -ia/2; sums -0.31 / +0.26 A, within the offset/noise
+  error). Both bridges carried current. The currents are above the 0.5-1.2 A estimate (R nearer
+  0.3 ohm than 0.39?). Sense noise while switching = idle (all U9). ISR 14 us with both bridges
+  modulating.
 - New maintenance commands: `#NOISE [samples]`, `#SLOW <0|1|2>`, `#DUMP [samples] [channel]` (consecutive
-  raw samples, 16 per line; `D <channel> <first sample> <values>`). A CPU fault now turns both bridges
+  raw samples, 16 per line; `D <channel> <first sample> <values>`), `#BRK`, `#MOE`. A CPU fault now turns both bridges
   off and sends `ERR:spindle CPU fault ... pc=...` over the link (`addr2line -e firmware.elf <pc>`).
 
 ## Verified without hardware

@@ -85,11 +85,14 @@ static void notifyZHomed() {
 }
 
 // Enable the drive (open loop at the angles it last had) if it is safe to.
+static const char* g_drive_fail = "";
+
 static bool enableDrive(const char* why) {
     if (foc::enabled()) return true;
-    if (!g_init_ok) return false;
+    g_drive_fail = "";
+    if (!g_init_ok) { g_drive_fail = "init failed"; return false; }
     uint32_t now = millis();
-    if ((int32_t)(g_enable_allowed_ms - now) > 0) return false;   // still coasting down
+    if ((int32_t)(g_enable_allowed_ms - now) > 0) { g_drive_fail = "coast lockout"; return false; }   // still coasting down
     float vb = hw::vbus();
     if (vb < VBUS_MIN_V || vb > VBUS_MAX_V) {
         static uint32_t last = 0;
@@ -97,16 +100,22 @@ static bool enableDrive(const char* why) {
             last = now;
             linkEvent("WARN", "%s refused: bus %.1f V outside %.0f-%.0f V", why, vb, VBUS_MIN_V, VBUS_MAX_V);
         }
+        g_drive_fail = "bus voltage";
         return false;
     }
     if (hw::breakLatched(0) || hw::breakLatched(1)) {
         if (!hw::clearBreak(0) || !hw::clearBreak(1)) {
             linkEvent("WARN", "%s refused: hardware over-current comparator still tripped (0x%02x)", why,
                       hw::comparatorOutputs());
+            g_drive_fail = "break would not clear";
             return false;
         }
     }
-    return foc::enable();
+    if (!foc::enable()) {
+        g_drive_fail = foc::enableFailReason();
+        return false;
+    }
+    return true;
 }
 
 static void disableDrive(bool from_speed) {
@@ -419,6 +428,47 @@ static int      g_dump_chan     = 6;      // 0-5 = one channel (M1 a b c, M2 a b
 static uint32_t g_dump_last_ms  = 0;
 constexpr int   DUMP_PER_LINE   = 16;
 
+// Why a drive enable fails (#BRK, and after a refused ALIGN).
+static void reportBreak() {
+    uint16_t hi[6];
+    hw::comparatorHighCounts(hi, 2000);
+    uint32_t sr1 = hw::timerStatus(0), sr8 = hw::timerStatus(1);
+    linkEvent("MSG", "BRK: fault %u | TIM1 break %s MOE %d SR %04lx BDTR %08lx AF1 %08lx | TIM8 break %s MOE %d SR %04lx "
+                     "BDTR %08lx AF1 %08lx | comparator highs /2000: M1 %u %u %u M2 %u %u %u | threshold %.1f A",
+              (unsigned)foc::faultCode(), (sr1 & TIM_SR_BIF) ? "LATCHED" : "clear", (int)hw::outputsEnabled(0),
+              (unsigned long)sr1, (unsigned long)TIM1->BDTR, (unsigned long)TIM1->AF1,
+              (sr8 & TIM_SR_BIF) ? "LATCHED" : "clear", (int)hw::outputsEnabled(1), (unsigned long)sr8,
+              (unsigned long)TIM8->BDTR, (unsigned long)TIM8->AF1, hi[0], hi[1], hi[2], hi[3], hi[4], hi[5],
+              hw::hardwareTripAmps());
+}
+
+// #MOE (bring-up, drive must be off): how long each timer's MOE takes to read back set.  Duties are 0,
+// so MOE on means low sides on for ~10 us: no current path at standstill.
+static void probeMoe() {
+    if (foc::enabled()) {
+        linkEvent("WARN", "MOE probe refused: the drive is enabled");
+        return;
+    }
+    TIM_TypeDef* const tims[2] = { TIM1, TIM8 };
+    for (int m = 0; m < 2; m++) {
+        TIM_TypeDef* t = tims[m];
+        __disable_irq();
+        t->CCR1 = t->CCR2 = t->CCR3 = 0;
+        t->BDTR |= TIM_BDTR_MOE;
+        uint32_t at_once = t->BDTR;
+        uint32_t c0      = DWT->CYCCNT;
+        while (DWT->CYCCNT - c0 < SystemCoreClock / 1000000) {}        // 1 us
+        uint32_t after1 = t->BDTR;
+        while (DWT->CYCCNT - c0 < SystemCoreClock / 100000) {}         // 10 us
+        uint32_t after10 = t->BDTR, sr = t->SR;
+        t->BDTR &= ~TIM_BDTR_MOE;
+        __enable_irq();
+        linkEvent("MSG", "MOE probe TIM%d: MOE at once %d, after 1 us %d, after 10 us %d (SR %04lx)", m == 0 ? 1 : 8,
+                  (int)((at_once & TIM_BDTR_MOE) != 0), (int)((after1 & TIM_BDTR_MOE) != 0),
+                  (int)((after10 & TIM_BDTR_MOE) != 0), (unsigned long)sr);
+    }
+}
+
 static void reportNoise() {
     static const char ph[3] = { 'a', 'b', 'c' };
     for (int k = 0; k < 2; k++) {
@@ -469,8 +519,12 @@ static void maintenance(const char* line) {
         float v = n >= 2 ? a : 0.5f;
         if (g_spinning || foc::enabled()) {
             linkEvent("WARN", "ALIGN refused: the drive is enabled");
-        } else if (!enableDrive("ALIGN") || (foc::disable(), !foc::startAlignTest(v))) {
-            linkEvent("WARN", "ALIGN refused (0.1-3 V, drive must be enable-able)");
+        } else if (!enableDrive("ALIGN")) {
+            linkEvent("WARN", "ALIGN refused: drive enable failed (%s)", g_drive_fail);
+            reportBreak();
+        } else if (foc::disable(), !foc::startAlignTest(v)) {
+            linkEvent("WARN", "ALIGN refused: align start failed (%s)", foc::enableFailReason());
+            reportBreak();
         } else {
             g_align_until  = millis() + 300;
             g_align_avg_at = millis() + 150;   // average the settled half: 2000 samples = 100 ms
@@ -513,6 +567,10 @@ static void maintenance(const char* line) {
         g_noise_pending = true;
         linkEvent("MSG", "NOISE: sampling %lu periods (%.0f ms)", (unsigned long)samples,
                   samples / (PWM_FREQUENCY_HZ / 1000.0f));
+    } else if (!strcmp(word, "BRK")) {
+        reportBreak();
+    } else if (!strcmp(word, "MOE")) {
+        probeMoe();
     } else if (!strcmp(word, "DUMP")) {
         if (g_dump_print >= 0) {
             linkEvent("WARN", "DUMP refused: still printing the last one");
@@ -532,11 +590,12 @@ static void maintenance(const char* line) {
     } else {
         linkEvent("MSG", "# commands: STAT LOG <ms> ALIGN [V] CL <0|1> CUR <kp> <ki> POS <kp> <kd> <ki> "
                          "POSBW <min> <full rpm> OLKI <ki> DTC <ns> IHOLD/ISPIN/IBOOST/ILIM <A> OBS <R> <L> <flux> "
-                         "TRIP <sw A> [hw A] NOISE [samples] SLOW <0|1|2> DUMP [samples] [channel] VER");
+                         "TRIP <sw A> [hw A] NOISE [samples] SLOW <0|1|2> DUMP [samples] [channel] BRK VER");
         return;
     }
     if (strcmp(word, "STAT") && strcmp(word, "VER") && strcmp(word, "ALIGN") && strcmp(word, "NOISE") && strcmp(word, "SLOW") &&
-        strcmp(word, "DUMP")) {
+        strcmp(word, "DUMP") && strcmp(word, "BRK") &&
+        strcmp(word, "MOE")) {
         linkEvent("MSG", "tuning: cur %.3f/%.0f pos %.2f/%.3f/%.1f bw %.2f/%.0f olki %.1f I hold %.1f spin %.1f "
                          "boost %.1f lim %.1f obs R %.3f L %.1fuH flux %.2fmWb trip %.1f A dtc %.0f ns CL %d",
                   tu.cur_kp, tu.cur_ki, tu.pos_kp, tu.pos_kd, tu.pos_ki, tu.pos_bw_min, tu.pos_bw_full_rpm, tu.ol_ki,

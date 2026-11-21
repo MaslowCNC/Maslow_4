@@ -570,10 +570,17 @@ namespace foc {
         return true;
     }
 
+    const char* g_enable_fail = "";
+
+    const char* enableFailReason() {
+        return g_enable_fail;
+    }
+
     bool enable() {
         if (g_enabled) return true;
-        if (g_fault != FaultNone) return false;
-        if (hw::breakLatched(0) || hw::breakLatched(1)) return false;
+        g_enable_fail = "";
+        if (g_fault != FaultNone) { g_enable_fail = "a fault is latched"; return false; }
+        if (hw::breakLatched(0) || hw::breakLatched(1)) { g_enable_fail = "a timer break is latched"; return false; }
         __disable_irq();
         for (int k = 0; k < 2; k++) resetControl(mot[k]);
         g_mode       = Mode::Open;
@@ -582,9 +589,13 @@ namespace foc {
         g_omega_cmd  = 0;
         hw::writeDuty(0, 0, 0, 0);
         hw::writeDuty(1, 0, 0, 0);
-        bool ok = hw::enableOutputs(0) && hw::enableOutputs(1);
+        bool ok1 = hw::enableOutputs(0);
+        bool ok  = ok1 && hw::enableOutputs(1);
         if (ok) g_enabled = true;
-        else outputsOff();
+        else {
+            g_enable_fail = ok1 ? "TIM8 MOE would not set" : "TIM1 MOE would not set";
+            outputsOff();
+        }
         __enable_irq();
         return ok;
     }
@@ -642,6 +653,10 @@ namespace foc {
 
     float maxSpeedErrorFraction() {
         return fmaxf(mot[0].speed_err_frac, mot[1].speed_err_frac);
+    }
+
+    uint8_t faultCode() {
+        return g_fault;
     }
 
     uint8_t takeFault(char* detail, size_t n) {
@@ -748,7 +763,7 @@ namespace foc {
     void setVbus(float v) { g_vbus = v; }
 
     bool startAlignTest(float volts) {
-        if (volts <= 0 || volts > 3.0f) return false;
+        if (volts <= 0 || volts > 3.0f) { g_enable_fail = "align voltage outside 0-3 V"; return false; }
         if (!enable()) return false;
         g_align_volts = volts;
         return true;

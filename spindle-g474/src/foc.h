@@ -63,6 +63,8 @@ namespace foc {
     // Faults the interrupt detected (it has already turned the outputs off).  Read-and-clear.
     enum Fault : uint8_t { FaultNone = 0, FaultOverCurrent = 1, FaultBreak = 2 };
     uint8_t takeFault(char* detail, size_t n);
+    uint8_t faultCode();   // the latched fault, without clearing it
+    const char* enableFailReason();   // why the last enable() / startAlignTest() returned false
 
     // Snapshot and reset the per-interval telemetry of motor m.
     MotorTelemetry take(int m);

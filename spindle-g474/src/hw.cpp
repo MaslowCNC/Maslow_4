@@ -431,7 +431,14 @@ namespace hw {
         TIM_TypeDef* t = TIMS[m];
         if (t->SR & TIM_SR_BIF) return false;
         t->BDTR |= TIM_BDTR_MOE;
-        return (t->BDTR & TIM_BDTR_MOE) != 0;   // a break input still high keeps MOE clear
+        // MOE reads back set only after a short resynchronisation (board 1: clear at once, set 1 us later,
+        // with the break filter at fDTS/8 x 8).  Reading it straight away made every enable fail.
+        uint32_t c0 = DWT->CYCCNT;
+        while (!(t->BDTR & TIM_BDTR_MOE)) {
+            if (t->SR & TIM_SR_BIF) return false;                            // a break cleared it
+            if (DWT->CYCCNT - c0 > SystemCoreClock / 200000) return false;   // 5 us: a break input still high
+        }
+        return true;
     }
 
     void disableOutputs(int m) {
@@ -464,6 +471,23 @@ namespace hw {
             if (HAL_COMP_GetOutputLevel(&hcomp[i]) == COMP_OUTPUT_LEVEL_HIGH) bits |= 1u << i;
         }
         return bits;
+    }
+
+    void comparatorHighCounts(uint16_t counts[6], int reads) {
+        COMP_TypeDef* const inst[6] = { COMP1, COMP2, COMP4, COMP6, COMP7, COMP5 };
+        for (int i = 0; i < 6; i++) counts[i] = 0;
+        for (int r = 0; r < reads; r++)
+            for (int i = 0; i < 6; i++)
+                if (inst[i]->CSR & COMP_CSR_VALUE) counts[i]++;
+    }
+
+    uint32_t timerStatus(int m) {
+        return TIMS[m]->SR;
+    }
+
+    float hardwareTripAmps() {
+        uint32_t code = DAC3->DHR12R1 & 0xFFF;
+        return ((float)code / 4095.0f * ADC_VREF - VINP_ZERO_V) / VINP_V_PER_A;
     }
 
     void setHardwareTripAmps(float amps) {
