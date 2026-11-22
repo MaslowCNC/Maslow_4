@@ -169,7 +169,14 @@ Almost everything this found came from v1.0's routing.
   - it stays off In1, the VCC plane that feeds the motor stages;
   - it keeps clear of the sense nets;
   - the sense nets themselves were only straightened, keeping 0.25 mm more than the clearance.
-- **Totals:** 3194 → 1909 track segments, 597 → 577 vias, 5796 → 5307 mm of track.
+- **Back on 45/90 degrees.** The review's string-pulls had left 38 % of the track length at odd angles.
+  `tools/octi.py` re-routed about 330 runs on 45/90 (2.9 % of the length is now off-angle, v1.0 had 1.5 %).
+  PHB2's bump into U22 pin 15 is now one 0.3 mm run.
+- **Hand edits merged.** Some hand edits had been made on the v1.0 copy, and step 7 of the log goes through them net by net:
+  - applied: WiFi LED, INLA2, TR IN2 and BL IN1;
+  - not applied where v1.1's route is shorter or clashes with it;
+  - not applied for PHA1, because it cuts Q10's pour island off.
+- **Totals:** 3194 → 2167 track segments, 597 → 577 vias, 5796 → 5330 mm of track.
 
 Schematic: R178 and C164 are on the Spindle Drive sheet, where PB4's no-connect became the `U9_SYNC` label.
 C165 is on the root sheet with the `RT` and `U9_SYNC` labels. The title block is Rev 1.1, so the silkscreen reads
@@ -184,11 +191,11 @@ C165 is on the root sheet with the `RT` and `U9_SYNC` labels. The title block is
 
 - **ERC:** no new problems (42 `pin_not_driven` against 43 in v1.0).
 - **DRC** (with schematic parity): no errors, nothing unconnected, no dangling tracks or vias.
-  - 189 warnings: track width, silkscreen and footprint-library ones, as in v1.0's 267.
+  - 192 warnings: track width, silkscreen and footprint-library ones, as in v1.0's 267.
   - 237 at the stub clean-up (change 5). The 30 that went before that were the 14 dangling items, track-width
     warnings on the thin stub fragments, and silkscreen warnings that left with the moved parts.
-  - The route review (change 6) took off 48 more: track-width warnings on fragments and on runs of segments that
-    are now merged. A few narrow motor-phase and VCC runs come back as "new" only because their segments changed.
+  - The route review (change 6) took off 45 more, mostly track-width warnings on fragments. The count of track-width
+    warnings on the narrow phase taps moves with how many segments each tap is drawn in, not with the copper.
 - **GND connectivity:** `tools/repair.py --list` finds no GND pour island cut off from the main GND, in v1.0 or now.
   - It follows thermal spokes and pad-to-track links. `tools/gndcheck.py` can't, so its component count isn't a
     count of islands.
@@ -290,6 +297,10 @@ KP=/Applications/KiCad/KiCad.app/Contents/Frameworks/Python.framework/Versions/C
     - or, with `--fewer K`, K fewer vias at no more than 0.5 mm longer.
   - `detours.py <dir> <log> [--local] [reroute.py options] [net ...]`: runs reroute.py on every detour, worst first,
     then `repair.py`. A full DRC follows each change, and the board goes back if anything new appears.
+  - `octi.py <dir> [--nets RE] [--keep NET,...] [--adaptive] [--corridor MM]`: puts every off-angle run back on 45/90.
+    Each run is routed again on its own layer by an A* over 45/90 moves with a cost on bends. A full DRC follows, and
+    any run near something new goes back (step 8 of the route review). Pour splits it can't trace to a run still need
+    finding by putting runs back one at a time; `repair.py --list` shows the GND ones.
   - `repair.py <dir> <net> --before islands.json`: after a re-route, removes the net's dead copper and stitches any
     GND pour island the change cut off from the main GND (the part with the most pads). `--snapshot islands.json`
     records the islands first, `--list` prints the cut-off islands and `--stitch-all` stitches them.

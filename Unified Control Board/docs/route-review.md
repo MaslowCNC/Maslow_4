@@ -214,7 +214,7 @@ re-route of that stretch (allowed up to 4 mm longer) found it with two: 20.1 mm,
 - **Six fragments stay**, on INHA1, INHB1, INLA1 and INLB2. Each sits where v1.0's tracks are exactly at the
   clearance limit, and merging them moved a vertex into a clearance error (tried, and undone).
 
-## Result
+## Result after step 6
 
 | | 1f082cd76 | Now |
 |---|---|---|
@@ -233,3 +233,88 @@ re-route of that stretch (allowed up to 4 mm longer) found it with two: 20.1 mm,
   - nets that cross the board round the stage blocks.
 
 ![Step 5 and 6, before (after step 4) and after, two nets to a row: Axis Health LED, SDA1 / BoardCOM1, SPINDLE_BOOT_X / INHC1, 12V_GD](route-review-step5.png)
+
+## Step 7: hand edits from the v1.0 copy
+
+Some hand edits were made on the board in the FluidNC-g474fw worktree, which is the v1.0 layout on branch
+36V-G474-firmware, and are uncommitted there. They touch 16 nets and change only tracks and vias. Its copper is
+identical to the v1.0 tag's, so each edit is a clean diff against v1.0. Each net was compared with v1.1:
+
+| Result | Nets | Why |
+|---|---|---|
+| Applied | WiFi LED, INLA2 | Whole net; it fits v1.1 as drawn |
+| Applied | TR IN2 | Its straightened jog; the copper it replaces was unchanged in v1.1 |
+| Applied | BL IN1 | The straight run into its pad, with v1.0's upper section, which the new WiFi LED route sits beside. Its bottom section stays as v1.1 has it, because v1.0's crosses the re-routed Net-(U5-IPROPI) |
+| Kept v1.1's | SDA3, INHC1, INLC1, 12V_GD, USB5V, INHB2, INLC2, SPINDLE_BOOT_X | v1.1's route is 2–32 mm shorter, or has fewer vias |
+| Kept v1.1's | SB1 | Its v1.1 route is the U9-noise fix |
+| Not applied | GHB1 | Its new via sits on INHA2's re-routed In2 track (a short) and too close to PHB1 |
+| Not applied | INLA1 | The track that replaces its removed via runs into the re-routed INLC1 |
+| Not applied | PHA1 | Breaks a connection. The shortened top track no longer reaches the top pour, which cuts Q10's bottom pour island off from the rest of PHA1. DRC on the v1.0 copy shows the same unconnected item |
+
+The edits made in KiCad on this board itself are kept: SPINDLE_RST_X, SPINDLE_BOOT_X, PHC2 and TR IN2, moved onto
+45/90. SPINDLE_RST_X's old 1.2 mm entry into U8 pin 39, which they left dangling, was removed.
+
+## Step 8: back to 45/90 degrees
+
+The string-pulls and router clean-ups of steps 2–6 cut corners at any angle. That left 37.7 % of the board's
+track length (2006 mm) off the 45/90 directions; v1.0 had 1.5 %. `tools/octi.py` puts it back:
+
+- **Runs.** A run is a stretch of track between pads, vias, junctions, width changes and pour connections. Before
+  re-routing, a track is split where another track's end, a via or a pad lands on its middle, but never within
+  0.15 mm of its ends: KiCad would call such a short piece dangling.
+- **Which runs.** Every run with a segment off 45/90 is re-routed on its own layer, inside a 2 mm corridor round the
+  old route. So is a run more than 0.4 mm longer than the 45/90 distance between its ends.
+- **The search.** A* over the eight 45/90 directions on a 0.05 mm grid laid through the run's first end. Each 45° of
+  turn costs 0.6 mm, so the route keeps few corners, and no turn is sharper than 90°. The last two non-parallel
+  segments are stretched so the route lands exactly on the run's other end.
+- **Clearances.** The board's clearance plus 0.05 mm. Routes keep off the analog nets as before. The sense nets,
+  U9_SYNC and 3V3A keep at least the spacing their current route already has at its tightest point.
+- **What is kept.** An off-angle run's new route if it is at most 12 % + 0.3 mm longer; a 45/90 run's only if
+  0.2 mm shorter. Hand-routed nets (the step 7 ones and the KiCad edits) are only touched where off-angle.
+- **The gate.** A full DRC follows, and runs near anything new go back. Then the pour check runs.
+
+Two passes converted about 330 runs. Ten went back because their new route cut a pour (DRC can't always tell
+which run did it, so these were found by putting runs back one at a time):
+
+| Pour that was cut | Runs put back |
+|---|---|
+| The top pour around U20 pin 47 | INLB1 (top) |
+| A ring of In2 tracks round a 3V3-plane patch at U20, which cut two 3V3 vias off | INLB1 (In2); INHA2 (In2) went back too while searching |
+| R112's bottom pour island | GLC1_G, GLC1 |
+| 3V3 at (8.2, 28.8) | 3V3, SDA, SDA1 (In2) |
+
+PHB2's bump into U22 pin 15 (y 32.40 up to 32.22, then down to the pin at 32.65) was a v1.0 junction where the
+pieces overlap instead of meeting. It ran through 0.15, 0.20 and 0.24 mm bits, too short for the pass to join up.
+It is now one 0.3 mm run from C122: horizontal, one 45° step, straight into the pin. 0.3 mm is this board's width
+for Kelvin pins, so its three narrow-track warnings went too.
+
+A last sweep removed 126 pieces that lay wholly inside a pad or via of their own net: router landing steps and v1.0
+leftovers.
+
+What stays off 45/90 (156 mm):
+- **3V3 (45 mm).** Re-routed in the first pass, but its new runs broke plane connections, so its old ones stand.
+- **PHA2 (20 mm).** Its wide motor tracks don't fit a 45/90 route in their corridor even 4 mm wide. v1.0 already had
+  12 mm off-angle there.
+- **SDA1, INLB2, GHA2_G and some GND tracks** (10–16 mm each). Put back for pour connectivity, or no 45/90 route fits.
+- **WiFi LED.** Its curve is drawn as many tiny segments, and stays as drawn.
+
+85 grid-step pieces under 0.06 mm remain. These are the one-cell (0.05 mm) jogs and end steps that let a 45/90
+route line up with a pad or a gap. They are 45/90 themselves; merging them would put the neighbours off-angle.
+
+![All copper in one busy area (x 6–30, y 22–46), before and after step 8. Top red, In2 brown, bottom blue, vias black](route-review-45-90.png)
+
+![PHB2 at U22 pin 15, before and after: the bump is gone and the In2 leg is vertical + 45°](route-review-u22-phb2.png)
+
+## Result after step 8
+
+| | 1f082cd76 | After step 6 | Now |
+|---|---|---|---|
+| Track segments | 3194 | 1909 | 2167 |
+| Vias | 597 | 577 | 577 |
+| Track length | 5795.7 mm | 5307.4 mm | 5329.7 mm |
+| Track length off 45/90 | 4.3 % | 37.7 % | 2.9 % |
+
+- **DRC with schematic parity:** no errors, nothing unconnected, nothing dangling, 192 warnings. These are the same
+  kinds as before. Track-width warnings on narrow phase taps vary with how many segments a tap is drawn in.
+- **GND:** `repair.py --list` finds no pour island cut off.
+- **Tracing:** netreview finds no dead copper and no one-layer vias in any of the 141 nets.
