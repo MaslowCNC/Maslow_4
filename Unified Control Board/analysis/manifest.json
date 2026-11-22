@@ -78,10 +78,10 @@
     },
     "2026-09-24_1749": {
       "source_hashes": {
-        "Unified Control Board.kicad_pcb": "sha256:1877bdfae4679a6f4b19f74f038d04c64aab4f799ee608a1e7dc9500238e6e5f",
-        "Unified Control Board.kicad_sch": "sha256:f3e77c86661043f17dd9ebe858c39e7f1bd133afece14a8a32ea708954ad5465",
-        "schematic.json": "sha256:b33fc30402c7838d6fd8f99378c3c5efe14ca54bb72c7439102cd8c2bd8527da",
-        "pcb.json": "sha256:bfc3ae00d0cd8a478cd503aa7957539415774826cd4497ae9b878d9ad767efc4"
+        "Unified Control Board.kicad_pcb": "sha256:80998fb3e53ddd699613a02a61e5eb3dfbb30a0477d993511b8711117ebf92c2",
+        "Unified Control Board.kicad_sch": "sha256:22bcff58516dddf67529b5ca1fa9bf01112e16f8ffe5f4bc66be4da04cf79817",
+        "schematic.json": "sha256:719e2218100a78c39e9311d5ba1d2682ae36dace3c2da5c7ef8b6530864868be",
+        "pcb.json": "sha256:d5f588ffad2c296caf3981ac897590e55c3722c5c3e0b2b3fd0339a0513d69c8"
       },
       "outputs": {
         "schematic": "schematic.json",
@@ -94,7 +94,7 @@
       "scripts": {
         "pcb": "analyze_pcb.py Unified Control Board.kicad_pcb"
       },
-      "generated": "2026-11-05T11:28:15-08:00",
+      "generated": "2026-11-21T19:24:55-08:00",
       "pinned": false
     }
   }

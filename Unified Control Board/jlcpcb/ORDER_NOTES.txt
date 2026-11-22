@@ -1,22 +1,24 @@
 Unified Control Board (36 V, STM32G474 spindle drive) - JLCPCB order notes
-Generated 2026-11-05 from Unified Control Board.kicad_pcb (KiCad 10.0.5), branch 36V-G474-spindle
+Generated 2026-11-21 from Unified Control Board.kicad_pcb (KiCad 10), board revision v1.1, branch 36V-board-v1.1
+(v1.0's files, generated 2026-11-05 and 2026-11-16, are at tag hw/ucb-36v/v1.0)
 Regenerate: KiCad python jlcpcb/gen_jlcpcb.py "Unified Control Board.kicad_pcb" jlcpcb
 
 FILES
   UnifiedControlBoard_Gerbers.zip    -> PCB quote page (gerbers + PTH/NPTH drill)
-  UnifiedControlBoard_BOM_JLCPCB.csv -> PCB Assembly: BOM (68 lines, one per LCSC part, 236 parts)
-  UnifiedControlBoard_CPL_JLCPCB.csv -> PCB Assembly: CPL / pick-and-place (236 parts: 69 top, 167 bottom)
+  UnifiedControlBoard_BOM_JLCPCB.csv -> PCB Assembly: BOM (69 lines, one per LCSC part, 238 parts)
+  UnifiedControlBoard_CPL_JLCPCB.csv -> PCB Assembly: CPL / pick-and-place (238 parts: 69 top, 169 bottom)
   UnifiedControlBoard_JLCPCB.zip     -> all of the above in one archive
 
 PCB SETTINGS
-  Layers: 4 (F.Cu GND pour / In1.Cu VCC 36 V / In2.Cu 3V3 / B.Cu GND pour)
+  Layers: 4 (F.Cu GND pour / In1.Cu VCC 36 V / In2.Cu 3V3, with GND islands under the motor stages and the
+    3V3 buck / B.Cu GND pour)
   Thickness: 1.6 mm, outer copper 1 oz
   Size: ~102.3 x 121.4 mm
   Min track/space: 0.1 / 0.1 mm (Fine net class: MCU, logic, sense and I2C nets);
     0.15 / 0.15 mm elsewhere; plane pours (GND, 3V3, VCC) 0.25 mm clearance
-  Vias: 0.6 / 0.3 mm (597 vias)
-  Via covering: Epoxy filled & capped -- 111 via drill holes sit inside SMD pads (current-sense filter
-    caps on the top side over their node vias, driver exposed pads, regulator thermal pad)
+  Vias: 0.6 / 0.3 mm (583 vias)
+  Via covering: Epoxy filled & capped -- 117 via drill holes sit inside 57 SMD pads (current-sense filter
+    caps on the top side over their node vias, driver exposed pads, regulator thermal pad, FET drain pads)
 
 ASSEMBLY SETTINGS
   Type: Standard PCBA, BOTH sides
@@ -25,26 +27,33 @@ ASSEMBLY SETTINGS
 
 CHECK BEFORE CONFIRMING
   - Review part rotations in JLCPCB's placement preview: ICs (U20 G474, U21/U22 DRV8300 QFN),
-    diodes, LEDs, the USB-C connector, electrolytics, and all bottom-side parts.
+    diodes, LEDs, the USB-C connector, electrolytics, and all bottom-side parts. New since the v1.0
+    order: the 3V3 buck moved to the bottom edge and turned 180 deg (U9, L1, D5, C31, C32), its small
+    parts were re-placed (C23, C29, C30, C33, R27, R29, R30, R31), and C164, C165 and R178 are new.
+    D5 is the only polarised part among them: its cathode (pad 1) faces U9's SW pin.
   - Confirm stock for DRV8300DRGE (U21, U22), STM32G474RBT3 (U20) and AON7264E (12x).
+  - Stock lookup on 2026-11-21 (community LCSC database, can lag): C14663 (100 nF/50 V 0603, 25x) and
+    C19666 (4.7 uF 0603, C144) showed 0; C53672 (IR12-21C/TR8, CGQ1) 105; C2830323 (ZDSD01GLGEAG, U7)
+    583. If C14663 is really out, C15725 (100 nF/100 V 0603) is already in this BOM and fits every
+    C14663 position.
   - C18 (bottom, 22 uF) sits about 0.05 mm from the XT60 housing outline: check it in the 3D
     preview.
+  - C33, C23 and L1 (3V3 buck output, bottom) sit 1.0-1.5 mm from the curved bottom edge, like
+    other parts on this board (SW1-SW3 0.5 mm, C72 0.75 mm).
 
-DESIGN STATUS
-  DRC: 0 errors, 0 unconnected, schematic parity clean. Remaining warnings: thin phase taps and
-  FET drain stubs (inside pours), library-version notices, silkscreen overlaps, 14 small dead-end
-  overhangs on connected tracks. ERC: 47 "pin not driven" notices from imported symbols, same as
-  the original design.
-  Pre-order review changes (2026-11-05): XY driver IPROPI resistors R1/R11/R12/R21 = 680R
-  (DRV8251A AIPROPI 1575 uA/A: ITRIP 3.08 A, IPROPI sense 1.07 V/A -- firmware current scaling
-  is 7% higher than on the DRV8876 board); C160-C163 100 nF/100 V at the DRV8251A VM pins;
-  GVDD caps C104/C124 = 10 uF/25 V; C5/C9/C16 = 100 nF/100 V; C34 (NRST) moved next to U20;
-  D5 moved beside U9's SW pin (no In2 detour on the switch node).
-  Footprint fix (2026-11-16, after JLCPCB DFM feedback on the first build): C28/C74/C75
-  (10 mm electrolytics, C116211/C178596) and D5 (SMA) had their pads turned 90 deg inside the
-  footprint, so the leads overhung the pads. Pads now run along the lead axis like C27/D1/D2;
-  C74 moved 0.75 mm left, C75 1.45 mm up, SWCLK/INHC1 bends and one DETECTORLED via nudged
-  to clear the longer pads. Library footprints in MaslowMerged.pretty corrected too.
+DESIGN STATUS (v1.1)
+  DRC with schematic parity: 0 errors, 0 unconnected, nothing dangling. 192 warnings: thin phase taps
+  and FET drain stubs (inside pours), library-version notices, silkscreen overlaps. ERC: 46 "pin not
+  driven" notices from imported symbols and missing power flags, as in v1.0.
+  Changes since the v1.0 order are listed in REVISIONS.md (v1.1, changes 1-7): SB1 rerouted away from
+  the buck, FB1 -> R178 4.7R + C164 22 uF (3V3A filter), C165 10 pF from G474 PB4 to U9 RT/CLK (sync),
+  the buck moved to the bottom edge, stubs removed, every route reviewed and put on 45/90 degrees,
+  and the pre-order review's buck grounding (5 vias under U9, 3 output vias, an In2 GND island).
+  docs/design-review-v1.1.md is the pre-order review.
+  Carried over from the v1.0 order: XY driver IPROPI resistors R1/R11/R12/R21 = 680R (DRV8251A
+  AIPROPI 1575 uA/A: ITRIP 3.08 A, IPROPI sense 1.07 V/A); C160-C163 100 nF/100 V at the DRV8251A
+  VM pins; GVDD caps C104/C124 = 10 uF/25 V; the 2026-11-16 footprint fix for C28/C74/C75 and D5
+  (pads along the lead axis).
   CN10 (fan/vacuum) pin 2 is VCC 36 V: only plug in a 36 V-rated device.
   Bottom-side parts stay clear of the r18 / r27 contact circles (connectors CN1/2/5/7/9/11 as on
   Maslow-Main).

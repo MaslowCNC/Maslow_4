@@ -178,6 +178,24 @@ Almost everything this found came from v1.0's routing.
   - not applied for PHA1, because it cuts Q10's pour island off.
 - **Totals:** 3194 → 2167 track segments, 597 → 577 vias, 5796 → 5330 mm of track.
 
+**7. Pre-order review: the buck's grounding** (`docs/design-review-v1.1.md`, `tools/v1.1_buck_grounding.py`).
+
+The review before ordering found three weaknesses in the buck's layout. The script that moved the buck (change 4)
+had left them: it only placed vias in the gaps of the top-layer track bundle that crosses the new spot.
+- **U9's exposed pad** had 2 ground vias; v1.0 had 5. It has 5 again, in the gaps between INLA1, BoardCOM1 and
+  SPINDLE_RST_X above it.
+- **The 3.3 V output** reached the 3V3 plane through one via on a 0.3 mm track; v1.0 had 3 vias. Two more now sit
+  on the output copper, between C33 and L1 and below C23.
+- **The switching loop's ground return.** On the bottom layer, the pours at C32's ground pad and at D5's anode
+  don't meet, so the return current crossed to the top-layer pour through vias 5–10 mm away. v1.0's loop was no
+  better. The loop also sat over the 3V3 plane, so the 36 V switch node coupled into 3V3.
+  - New zone `GND In2 under the buck`: a GND island on In2 under C32, U9, D5, the switch node and L1's switch pad
+    (109 mm², the settings of `GND In2 under the stages`). Nine GND vias stitch it.
+  - A GND via at (−5.30, 69.80), 1.1 mm from C32's ground pad, on a 0.6 mm track.
+  - The 3V3 plane keeps its structure: the buck's three output vias and the feedback via stay in it.
+
+Nothing else in the review needed a board change. The JLCPCB files in `jlcpcb/` are regenerated from this board.
+
 Schematic: R178 and C164 are on the Spindle Drive sheet, where PB4's no-connect became the `U9_SYNC` label.
 C165 is on the root sheet with the `RT` and `U9_SYNC` labels. The title block is Rev 1.1, so the silkscreen reads
 "36V   v1.1".
@@ -189,7 +207,8 @@ C165 is on the root sheet with the `RT` and `U9_SYNC` labels. The title block is
 
 ### Checks (as of this commit)
 
-- **ERC:** no new problems (42 `pin_not_driven` against 43 in v1.0).
+- **ERC:** no new problems (42 `pin_not_driven` against 43 in v1.0, plus 4 missing power flags and one stray
+  no-connect flag that v1.0 has too).
 - **DRC** (with schematic parity): no errors, nothing unconnected, no dangling tracks or vias.
   - 192 warnings: track width, silkscreen and footprint-library ones, as in v1.0's 267.
   - 237 at the stub clean-up (change 5). The 30 that went before that were the 14 dangling items, track-width
@@ -201,6 +220,8 @@ C165 is on the root sheet with the `RT` and `U9_SYNC` labels. The title block is
     count of islands.
   - The route review's TEMP2 re-route split R144's bottom-layer pour off; a stitching via at (−24.69, 33.30) joins it
     again.
+  - The pre-order review added a GND island on In2 under the buck (change 7). The In1 VCC plane is one piece and
+    the In2 3V3 plane has 6 islands (v1.0: 7), with 35 vias and pads in its main part (v1.0: 33).
   - Two GND stitching vias at (−22.56, 50.5) and (−23.56, 50.5) are gone: SB1's bottom leg cut off the small
     island they sat on.
   - The first v1.1 commit's stitching via at (−2.10, 61.55), for the ground pocket at U9's old RT pin, left with
@@ -215,10 +236,11 @@ C165 is on the root sheet with the `RT` and `U9_SYNC` labels. The title block is
 1. **Look over the moved buck, U9_SYNC and the re-routed nets in KiCad.** All were placed or routed by script. DRC
    is clean, but nobody has looked at them in the editor yet. `docs/route-review.md` lists every re-routed net, and
    its images show the biggest changes.
-2. **Regenerate the JLCPCB files** with `jlcpcb/gen_jlcpcb.py`. The BOM, CPL and gerbers in `jlcpcb/` are still
-   v1.0's.
-   - New parts: R178 (C144651), C164 (C45783), C165 (C32949). FB1 (C1002) is gone.
-   - The CPL changes for every moved part (U9, L1, D5, C23, C29–C33, R27, R29–R31, C165).
+2. **At JLCPCB.** The files in `jlcpcb/` are regenerated for v1.1 (69 BOM lines, 238 parts, 583 vias);
+   `jlcpcb/ORDER_NOTES.txt` has the settings.
+   - Check the rotations of the moved buck parts and the three new parts in the placement preview.
+   - Confirm stock. On 2026-11-21 a lookup showed 0 for C14663 (100 nF/50 V 0603, 25 places) and C19666 (4.7 µF
+     0603, C144). C15725, already in the BOM, fits every C14663 position.
 3. **Optional: a board-revision code.** Neither MCU can currently tell v1.0 from v1.1, and the firmware needs that
    to pick the trip thresholds. Two cheap ways:
    - a strap on a spare G474 pin (PD2 pin 55, or PF0/PF1 pins 5–6);
@@ -229,6 +251,13 @@ C165 is on the root sheet with the `RT` and `U9_SYNC` labels. The title block is
 - **Pin.** Set PB4 to AF2 (TIM3_CH1). After reset, PB4 is JTRST with a pull-up. SWD only uses PA13/PA14, so taking
   PB4 doesn't affect flashing or debugging. PB4 is unconnected on v1.0, so the same build can drive it on any
   board.
+  - Set `UCPD1_DBDIS` in `PWR_CR3` first: PB4 is also UCPD1_CC2, and the G474 can switch a 5.1 kΩ pull-down onto it
+    when PA10 is high.
+  - When not syncing, drive PB4 low as a push-pull output. U9's RT/CLK pin is noise-sensitive and U9_SYNC is a
+    45 mm track that reaches it through C165.
+- **Check the swing at bring-up.** The clock must rise above 2.0 V at RT/CLK (worst case). Through C165's 10 pF
+  that is 3.3 V × 10/(10 + C_pin): 2.5 V if the pin is 3 pF, 2.0 V if it is 6.5 pF. TI gives no pin capacitance.
+  If U9 doesn't lock (the switch node stays near 480 kHz), fit 22 pF at C165.
 - **Period.** TIM3 counts at 170 MHz with ARR = 339, giving 500 kHz. That is exactly 25 PWM periods (TIM1's 20 kHz
   centre-aligned period is 8500 ticks). 24× would be 354.2 ticks, which isn't a whole number.
 - **Phase lock.** Slave TIM3 to TIM1's TRGO in reset mode, so its phase is fixed relative to the PWM.
@@ -261,6 +290,8 @@ KP=/Applications/KiCad/KiCad.app/Contents/Frameworks/Python.framework/Versions/C
   run a second time.
 - `v1.1_u9move.py`: the buck move (change 4), applied after `v1.1_pcb.py`. Also a record; it checks U9's old
   position, so it won't run twice.
+- `v1.1_buck_grounding.py`: the pre-order review's vias and In2 GND island (change 7). A record too: it stops if
+  its zone already exists.
 - `u9map.py <new> <old> <out.png>`: renders the buck before/after map in `docs/`.
 - `v1.1_stubs.py [--apply]`: finds tracks that run past their last connection (DRC's `track_dangling`) and cuts each
   back to it, one pass per run. Three things learned the hard way:

@@ -5,13 +5,13 @@
       "Application": "Pcbnew",
       "Version": "10.0.5"
     },
-    "CreationDate": "2026-11-16T09:36:26-08:00"
+    "CreationDate": "2026-11-21T19:22:46-08:00"
   },
   "GeneralSpecs": {
     "ProjectId": {
       "Name": "Unified Control Board",
       "GUID": "556e6966-6965-4642-9043-6f6e74726f6c",
-      "Revision": "rev?"
+      "Revision": "1.1"
     },
     "Size": {
       "X": 102.262,
