@@ -55,10 +55,11 @@ zero. Two v1.0 boards give the same result to the third decimal:
 | board 1 | 1.111 | 0.906 | 0.983 | 0.889 | 1.076 | 1.035 |
 | board 2 | 1.111 | 0.905 | 0.984 | 0.886 | 1.078 | 1.037 |
 
-A correction of up to ±11 % that repeats between boards comes from the layout (where each sense net taps its
-shunt, and the copper the tap shares with the motor current), not from the 1 % parts. The firmware stores the
-correction per board (`#GSAVE`). v1.1 moves SB1's tap to R114's own pad, so motor 1 phase B should change there:
-run `#GCAL` on the first v1.1 board and compare. The other five taps are as in v1.0.
+A correction of up to ±11 % that repeats between boards comes from the design, not from the 1 % parts. The
+likely cause is the layout: where each sense net taps its shunt, and the copper that tap shares with the motor
+current. That has not been checked against the copper. The firmware stores the correction per board (`#GSAVE`).
+v1.1 moves SB1's tap to R114's own pad and re-routes many other nets, so run `#GCAL` on the first v1.1 board and
+compare all six.
 
 ### Reworks to try on a v1.0 board
 
