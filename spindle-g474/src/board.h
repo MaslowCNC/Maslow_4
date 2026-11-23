@@ -79,23 +79,27 @@ constexpr uint32_t DEADTIME_NS      = 100;
 // ---- U9 (TPS54360B 3V3 buck) sync clock: PB4 = TIM3_CH1 (AF2), through 10-22 pF into U9 RT/CLK ----
 // v1.1 has C165 + net U9_SYNC; a v1.0 board needs the bodge in REVISIONS.md (PB4 is unconnected without it).
 // 500 kHz = exactly 25 clocks per 20 kHz PWM period (8500 / 340 ticks), started from TIM1's update event at
-// the peak, so the buck's switching keeps a fixed phase against the current samples.  The buck turns its high
-// side on about 26 ticks after the clock's rising edge (55 ns after the falling edge) and off one on-time later:
-// ~31 ticks (0.18 us) from 36 V, ~230 ticks (1.35 us) from USB's 4.6 V.  Rank 1 of every ADC samples at about
-// +15 ticks from the peak, ADC5's rank 2 (motor 2 phase B) about 120 ticks later.
-// Phase sweep on board 2 (v1.0 + bodge, USB power, BRINGUP.md "U9 sync"): every channel's sd <= 5.8 counts for a
-// rising edge 150-190 ticks after the peak (unsynchronised: 15-125); edges on the samples at 60-110 and 290-20.
-// From 36 V the switch-off edge follows the switch-on edge, which predicts a quiet window of about 140-260.
-// 170 is inside both.
+// the peak, so the buck's switching keeps a fixed phase against the current samples.  Rank 1 of every ADC samples
+// at about +15 ticks from the peak, ADC5's rank 2 (motor 2 phase B) about 120 ticks later.
+// Phase sweeps on board 2 (v1.0 + bodge, BRINGUP.md "Board 2"), sd of the six channels:
+//  - 36 V, logic load only: quiet (rms 10-11 counts, unsynchronised 120) for a rising edge 10-40 ticks after the
+//    peak, worse from 5 and 45, a plateau of 30-40 at 110-240 and worse than unsynchronised at 280-320.  U9 runs in
+//    discontinuous mode there (short on-time, then the inductor current reaches zero and the switch node rings),
+//    so more than its two edges matter.
+//  - USB power (U9 from 4.6 V, on-time ~1.35 us): quiet at 30 and 140-190.
+// 30 is inside both.  Check it again under motor load (the 36 V rail moves, the logic load does not).
 constexpr uint32_t SYNC_PERIOD_TICKS = 340;   // 500 kHz at 170 MHz
 constexpr uint32_t SYNC_HIGH_TICKS   = 17;    // 100 ns high pulse
-constexpr uint32_t SYNC_RISE_TICKS   = 170;   // rising edge, ticks after the PWM peak (0 .. 339)
+constexpr uint32_t SYNC_RISE_TICKS   = 30;    // rising edge, ticks after the PWM peak (0 .. 339)
 // The clock must divide the PWM period exactly (a PWM_FREQUENCY_OVERRIDE_HZ experiment build leaves it off).
 constexpr bool     SYNC_AVAILABLE    = 2 * PWM_ARR == 25 * SYNC_PERIOD_TICKS;
 // Start the clock at boot, before the current-sense zero is measured: once U9 is locked its ripple lands on the
 // samples as a fixed offset (board 2 on USB power: up to ~100 counts on M1b), which the zero then takes out.
 // A board without the capacitor (v1.0 unmodified) just toggles an unconnected pin.  #SYNC 0 turns it off.
 constexpr bool SYNC_AT_BOOT = SYNC_AVAILABLE;
+// U9's ripple offset follows its input voltage (board 2: booted on USB, then 36 V moved M1b's zero by ~55 counts),
+// so with the clock running the zero is measured again when the bus moves this far, with the drive off.
+constexpr float SYNC_REZERO_V = 4.0f;
 
 // ---- Pins driven as plain GPIO ----
 #define PIN_BEAM_DETECT   PA5

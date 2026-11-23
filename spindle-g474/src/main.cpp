@@ -97,6 +97,15 @@ static bool    g_hold_release_requested = false;
 static bool    g_home_requested     = false;
 static bool    g_remove_tool_requested = false;
 static bool    g_spinning           = false;   // the ESP32's velocity_mode: a spindle speed is in force
+// Bus voltage when the current-sense zero was last measured (NAN until the slow analog has settled after it).
+static float    g_zero_vbus          = NAN;
+static uint32_t g_zero_ms            = 0;
+static uint32_t g_vbus_moved_ms      = 0;
+static void     noteSenseZero() {
+    g_zero_vbus     = NAN;
+    g_zero_ms       = millis();
+    g_vbus_moved_ms = 0;
+}
 static bool    g_init_ok            = false;
 static const char* g_init_why       = "";
 static uint32_t g_enable_allowed_ms = 0;       // coast lockout after a stop from speed
@@ -1035,6 +1044,7 @@ static void maintenance(const char* line) {
             }
             delay(5);
             if (!foc::calibrateOffsets(2000, &why)) linkEvent("WARN", "SYNC: current-sense zero not re-measured: %s", why);
+            noteSenseZero();
         }
         int32_t spread = 0;
         int32_t err    = hw::syncRunning() ? hw::syncPhaseError(&spread) : 0;
@@ -1486,6 +1496,7 @@ void setup() {
         delay(20);   // a few hundred samples of the OPAMPs settling
         BOOT_TRACE_POINT("OPAMP settling delay done");
         g_init_ok = foc::calibrateOffsets(2000, &why);
+        noteSenseZero();
         BOOT_TRACE_POINT(g_init_ok ? "offset calibration ok" : "offset calibration FAILED");
     }
     if (!g_init_ok) {
@@ -1523,6 +1534,27 @@ void loop() {
 
     CRUMB(1);
     hw::serviceSlowAnalog();
+    // With U9 locked its ripple sits on the samples as an offset that depends on U9's input voltage: if the bus
+    // has moved (USB first, then 36 V; or the 36 V switched off and on) measure the zero again, drive off only.
+    if (g_init_ok && isnan(g_zero_vbus) && now - g_zero_ms > 500) g_zero_vbus = hw::vbus();
+    if (g_init_ok && hw::syncRunning() && !isnan(g_zero_vbus) && !foc::enabled() && !g_spinning && g_align_until == 0 &&
+        g_gcal_step < 0) {
+        float vb = hw::vbus();
+        if (fabsf(vb - g_zero_vbus) < SYNC_REZERO_V) {
+            g_vbus_moved_ms = 0;
+        } else if (!g_vbus_moved_ms) {
+            g_vbus_moved_ms = now;
+        } else if (now - g_vbus_moved_ms > 500) {   // settled
+            const char* why = "";
+            if (foc::calibrateOffsets(2000, &why)) {
+                linkEvent("MSG", "current-sense zero re-measured: bus %.1f -> %.1f V (U9's ripple offset follows its input)",
+                          g_zero_vbus, vb);
+            } else {
+                linkEvent("WARN", "current-sense zero not re-measured after a bus change: %s", why);
+            }
+            noteSenseZero();
+        }
+    }
     CRUMB(2);
     pollLink();
 

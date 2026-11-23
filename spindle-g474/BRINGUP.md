@@ -231,7 +231,7 @@ an assumption the next one relies on. Stop at the first surprise.
   [first]` (the 16 interrupts before the last fault: raw phase currents, comparator outputs, duties).
   `#SPIN` now goes to `MAX_COMMAND_RPM` (24000).
 
-## Board 2 results (2026-11-23, USB power only): U9 sync clock
+## Board 2 results (2026-11-23, USB power and 36 V, no motors): U9 sync clock
 
 Board 2 is a second v1.0 board (ESP32-S3 USB serial / MAC 14:63:93:28:62:6C, hostname `maslow`, 192.168.1.245
 on the office WiFi) with the sync bodge from the board's REVISIONS.md: a 22 pF capacitor stood on R30 pad 1
@@ -253,26 +253,42 @@ on the office WiFi) with the sync bodge from the board's REVISIONS.md: a 22 pF c
   U9's RT/CLK pin, which is held at ~0.5 V while U9 runs. An open wire would add little; a short to ground
   would time out.
 - **`#SYNC`: U9 locks.** 500 kHz on PB4 (TIM3_CH1), exactly 25 clocks per PWM period, started from TIM1's
-  update at the peak. `#NOISE 4000`, drive off, sd in counts (0.0104 A/count):
+  update at the peak. `#NOISE 4000`, drive off, no motors, sd in counts (0.0104 A/count):
 
   | | M1a | M1b | M1c | M2a | M2b | M2c |
   |---|---|---|---|---|---|---|
-  | clock off | 34.4 | 125.2 | 22.7 | 36.0 | 21.6 | 14.9 |
-  | clock on, rising edge 170 ticks after the peak (default) | 3.8 | 3.8 | 1.8 | 1.8 | 1.9 | 1.5 |
+  | USB power, clock off | 34.4 | 125.2 | 22.7 | 36.0 | 21.6 | 14.9 |
+  | USB power, clock on (rising edge 170 ticks after the peak) | 3.8 | 3.8 | 1.8 | 1.8 | 1.9 | 1.5 |
+  | 36.4 V, clock off | 58-61 | 272-276 | 39-41 | 62-65 | 42-44 | 30-31 |
+  | 36.4 V, clock on, 30 ticks (the default) | 8.9-9.3 | 21-24 | 8.5-8.6 | 7.8-7.9 | 4.9-5.5 | 6.8 |
 
   Locking turns U9's ripple into a fixed offset per channel (up to ~240 counts on M1b at the worst phase),
   so the clock starts at boot before the zero is measured, `#SYNC` changes are refused while the drive runs,
-  and every change re-measures the zero.
-- **Phase sweep** (`#SYNC 1 <rise>` in 10-tick steps, `tools/syncsweep.py`): every channel's sd <= 5.8 for a
-  rising edge 150-190 ticks after the peak, <= 7.1 at 140 and 240-260. U9's switch-on edge lands on the
-  rank-1 samples at 290-20, its switch-off edge (1.35 us later on 4.6 V) at 60-110. ADC5's rank 2 (M2b) is
-  ~120 ticks later and sees the same edges at 90-130 and 200-230. From 36 V the switch-off edge is only
-  ~31 ticks after the switch-on edge, which predicts a quiet window of about 140-260: the default 170 is in
-  both. A first build put the clock edge on the peak: the trigger starts TIM3 from 0 whatever CNT was
-  preset to, so `syncStart` now measures the phase against TIM1 and moves the counter (error 0, spread 0).
-- **Not tested yet: 36 V.** Next: 36 V, no motors, `#NOISE 4000` with `#SYNC 0` and `#SYNC 1`, `#CMPTEST`,
-  and a phase sweep there (`python3 tools/syncsweep.py <ip> 100:300:10`). If it holds, the trips can go back to 20 A
-  comparators and 15 A x 3 software (step 7 raised them for U9's noise) on boards with the clock.
+  and every change re-measures the zero. The offset also follows U9's input voltage: booted on USB, then 36 V
+  moved M1b's zero by ~55 counts. So with the clock running the zero is measured again when the bus moves by
+  more than 4 V (`SYNC_REZERO_V`, drive off, after 0.5 s settled). That path is not exercised yet (switch the
+  36 V off and on with USB connected: one `current-sense zero re-measured` line each way).
+- **Spectra** (`#DUMP 1024 <channel>`, 36 V): clock off, 55-60 % of the power on M1b and M2a sits at 4-6 kHz
+  (U9's alias); clock on, that peak is gone. M2a is left with low, flat noise (sd 7.6). M1b's remainder is
+  mostly bursts: runs of ~8 samples (0.4 ms) up to +267 counts with quiet samples between, likely the XY
+  ESP32's WiFi bursts changing U9's load. SB1 runs over U9 on v1.0; v1.1 moves both.
+- **Phase sweeps** (`#SYNC 1 <rise>`, `tools/syncsweep.py`; each step re-measures the zero, so look at sd):
+  - 36 V: rms of the six sds 10-11 for a rising edge 10-40 ticks after the peak (14 at 5 and 45), a plateau of
+    30-40 at 110-240, and worse than unsynchronised at 280-320 (M1b up to 361). U9 runs in discontinuous mode
+    there: a short on-time, then the inductor current reaches zero and the switch node rings, so more than its
+    two edges matter. The first default, 170, was a prediction from the edges alone and sat on the plateau.
+  - USB power (U9 on-time ~1.35 us): every sd <= 5.8 at 150-190 (<= 7.1 at 140 and 240-260), and rms 5.2 at 30;
+    U9's edges land on the samples at 60-110 and 290-20.
+  - The default is 30: in the 36 V window and quiet on USB. Check it again under motor load: the 36 V rail
+    moves then, the logic load on U9 does not.
+- **Phase setting.** A first build put the clock edge on the peak: the trigger starts TIM3 from 0 whatever CNT
+  was preset to. `syncStart` now measures the phase against TIM1 and moves the counter (error 0, spread 0).
+- **Comparators (`#CMPTEST`, 36 V, drive off, break filter 0.75 us): no difference.** No break latched at 20,
+  15, 10 or 7 A with the clock on or off, and the comparator outputs read high about as often either way (at
+  15 A: 70-96 of ~135 000 reads on motor 1). The clock moves the sampled noise, not the analog spikes the
+  filter already rejects. Board 1's comparator trips came while switching at 24000 RPM; keep the raised trips
+  (30 A comparators, 18 A x 5 software) until a spin with the clock shows the margin. The software trip works
+  on samples, so it is the one the clock should let come back down (15 A x 3).
 - New commands: `#SYNC` (status), `#SYNC 1 [rise ticks]`, `#SYNC 0` (PB4 driven low); `#PINCAP [reps]`
   (drive off). PB4 is now driven low from `hw::init` (UCPD1 dead-battery pull-down disabled first).
 
