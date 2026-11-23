@@ -259,7 +259,7 @@ C165 is on the root sheet with the `RT` and `U9_SYNC` labels. The title block is
 
 ### Firmware for the sync clock
 
-Written on branch `36V-G474-firmware` (commits 680483506 and 4606e6f0c, `spindle-g474/`; details in its
+Written on branch `36V-G474-firmware` (commits 680483506, 4606e6f0c and 7130b2304, `spindle-g474/`; details in its
 BRINGUP.md, "Board 2 results"). It drives every board the same way: on a v1.0 board without the bodge PB4 is
 unconnected.
 
@@ -277,7 +277,12 @@ unconnected.
 - **Order at boot.** The clock starts before the current-sense zero is measured: once U9 locks, its ripple lands
   on the samples as a fixed offset (up to ~240 counts on M1b at the worst phase). `#SYNC` changes are refused
   while the drive runs and re-measure the zero. The offset also follows U9's input voltage, so the zero is
-  measured again when the bus moves by more than 4 V with the drive off (USB first, then 36 V).
+  measured again when the bus has moved by more than 4 V and is steady, with the drive off (USB first, then
+  36 V). Seen on board 2 when the 36 V was switched off and on.
+- **The clock can't block the drive.** At a bad phase the ripple pushes a zero past the firmware's sense-fault
+  limit (2010 ± 310 counts; at 36 V, M1b at phases 280-320). The firmware then stops the clock and measures the
+  zero without it, and tries the clock again after the next bus change. At the default phase the zeros are
+  1971-2024 at 36 V, and M1b's shift from its clock-off zero (+58 counts) is flat across 10-50.
 - **Verified on board 2** (v1.0 + bodge with a 22 pF capacitor, no motors, 2026-11-23). U9 also runs from USB
   through D2 (VSUP is diode-ORed from VCC and USB 5 V), so the first tests needed no 36 V.
   - `#PINCAP`: PB4 takes ~575 ns to rise on its pull-up, against 171-253 ns for the unconnected PB3, PB5 and PD2:
@@ -291,7 +296,7 @@ unconnected.
     rejects. On a v1.0 board it is worth less than the SB1 reroute.
 - **Still to measure:** noise and trips while spinning (board 2 has no motors yet; board 1 has no bodge). Then
   the software trip can come back from 18 A x 5 towards 15 A x 3; the comparators stay at 30 A until a spin shows
-  their margin. Also switch the 36 V off and on with USB connected once, to see the bus-change re-zero.
+  their margin.
 
 ## Tools
 
