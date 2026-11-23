@@ -233,8 +233,9 @@ an assumption the next one relies on. Stop at the first surprise.
 
 ## Board 2 results (2026-11-23, USB power, 36 V, then both motors to 24000 RPM): U9 sync clock
 
-Board 2 is a second v1.0 board (ESP32-S3 USB serial / MAC 14:63:93:28:62:6C, hostname `maslow`, 192.168.1.245
-on the office WiFi) with the sync bodge from the board's REVISIONS.md: a 22 pF capacitor stood on R30 pad 1
+Board 2 is a second v1.0 board (ESP32-S3 USB serial / MAC 14:63:93:28:62:6C; hostname `36vMaslow`, so
+`36vmaslow.local`, 192.168.1.245 on the office WiFi; it was `maslow` for the tests below, and board 1 is the
+similar-looking `maslow36v.local`) with the sync bodge from the board's REVISIONS.md: a 22 pF capacitor stood on R30 pad 1
 (U9 RT/CLK) and a wire to U20 pin 57 (PB4).
 
 - **Bring-up from blank.** Its ESP32-S3 was blank (ROM loop: `invalid header: 0xffffffff`, TG0WDT resets).
