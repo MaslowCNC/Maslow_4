@@ -62,8 +62,8 @@ These are the v1.1 changes done by hand, in order of value. Coordinates are KiCa
 4. **Sync bodge** (one capacitor, one wire; route in `docs/v1.0-sync-bodge.svg`).
    - Fit a 10 pF C0G capacitor (0402 or 0603) standing on end on R30's pad 1, which is U9's RT/CLK node, on the
      bottom. Only pad 1 is used: R30's pad 2 is ground, so the capacitor must not lie across R30.
-   - Solder a fine insulated wire (30 AWG Kynar or enamelled) to U20 pin 57 (PB4), the 7th pin from the left on the
-     top row as the board sits in KiCad. PB4, and pins 56 and 58 beside it, are unconnected on v1.0.
+   - Solder a fine insulated wire (30 AWG Kynar or enamelled) to U20 pin 57 (PB4), the 8th pin from the left on the
+     top row as the board sits in KiCad (pin 64 is the top-left corner pin, beside the pin-1 dot). PB4, and pins 56 and 58 beside it, are unconnected on v1.0.
    - Top side, 8 mm: lay it up past C140 and R177 to J1's lower alignment hole at (-38.6, 51.0) and push it through.
      The hole is unplated. Using it means the Tag-Connect plug no longer seats; if you need SWD, take the wire around
      the left board edge near (-40, 65) instead (20 mm on top).
