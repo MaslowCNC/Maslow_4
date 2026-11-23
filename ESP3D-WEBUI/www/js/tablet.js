@@ -920,13 +920,34 @@ const sendMove = (cmd, options = {}) => {
 }
 
 const moveHome = () => {
-  if (!checkHomed()) {
-    return;
-  }
-
+  tabletClick();
+  // machine.moveTo refuses X/Y until belt lengths are known; runButtonAction shows why.
   checkZHomeAndProceed(() => {
-    move({ X: 0, Y: 0 });
+    runButtonAction(
+      id("tablettab_move_to_xy_home"),
+      "Move XY to Home",
+      () => machine.moveTo({ x: 0, y: 0 })
+    );
   });
+}
+
+// Allowed in any Maslow state, like a Z jog: machine.moveTo only refuses X/Y without belt lengths.
+const moveZHome = () => {
+  tabletClick();
+  const go = () => runButtonAction(
+    id("tablettab_move_to_z_home"),
+    "Move Z to Home",
+    () => machine.moveTo({ z: 0 })
+  );
+
+  // Z home is the work Z origin, at machine Z = WCO[2]. Only warn if that is below the machine minimum.
+  const machineZ = MPOS && MPOS.length >= 3 ? MPOS[2] : null;
+  const workZeroZ = WCO && WCO.length >= 3 ? WCO[2] : null;
+  if (machineZ !== null && workZeroZ !== null && workZeroZ < Z_HOME_MIN_SAFE_MM) {
+    checkZHomeAndProceed(go, workZeroZ - machineZ);
+  } else {
+    go();
+  }
 }
 
 function saveSerialMessages() {
@@ -1375,18 +1396,7 @@ function tabletGrblState(grbl, response) {
 
   const digits = gCodeModal.units === 'G20' ? 4 : 2;
 
-  if (WPOS) {
-    WPOS.forEach((pos, index) => {
-      setTextContent(`wpos-${axisNames[index]}`, Number(pos * factor).toFixed(index > 2 ? 2 : digits));
-    })
-  }
-
-  if (MPOS) {
-    MPOS.forEach((pos, index) => {
-      const axisName = axisNames[index].toUpperCase();
-      setTextContent(`mpos-${axisNames[index]}`, `|${axisName}m: ${Number(pos * factor).toFixed(index > 2 ? 2 : digits)}|`);
-    })
-  }
+  updatePositionDisplay(WPOS, MPOS, factor, digits);
 
   // On the first status update that has both WCO and MPOS data, proactively
   // show the Z safety popup if machine Z is already above the safe threshold.
@@ -1397,6 +1407,19 @@ function tabletGrblState(grbl, response) {
     checkZHomeAndProceed(() => {}, 0);
   }
 }
+
+const updatePositionDisplay = (wpos, mpos, factor, digits) => {
+  ["x", "y", "z"].forEach((axis, index) => {
+    if (wpos) {
+      setTextContent(`wpos-${axis}`, Number(wpos[index] * factor).toFixed(digits));
+    }
+    if (mpos) {
+      setTextContent(`mpos-${axis}`, Number(mpos[index] * factor).toFixed(digits));
+    }
+  });
+};
+
+globalThis.__tabletPositionTestApi = { updatePositionDisplay };
 
 let gCodeFilename = '';
 
@@ -2197,6 +2220,7 @@ function tabletInit() {
     // Buttons - Fourth Row
     id("tablettab_set_z_home").addEventListener("click", openSetZHomePopup);
     id("tablettab_move_to_xy_home").addEventListener("click", moveHome);
+    id("tablettab_move_to_z_home").addEventListener("click", moveZHome);
     id("tablettab_toggle_units").addEventListener("click", toggleUnits);
     id("tablettab_set_xy_home").addEventListener("click", openSetHomePopup);
 
@@ -2910,7 +2934,11 @@ const runButtonAction = async (button, label, action) => {
     await op.accepted;
   } catch (err) {
     addMessage(`${label} not sent: ${err.detail ?? err.reason}`);
-    showButtonWarning(button, err.reason === "rejected" ? "Rejected" : "Not sent");
+    if (err.reason === "not-ready") {
+      alertdlg(label, err.detail); // refused for a reason the user needs to read, not a lost click
+    } else {
+      showButtonWarning(button, err.reason === "rejected" ? "Rejected" : "Not sent");
+    }
     return;
   } finally {
     button.classList.remove("machine-action-busy");
@@ -2928,16 +2956,16 @@ const runButtonAction = async (button, label, action) => {
   }
 };
 
-/** Swap a button's text for a short warning, then put it back. */
+/** Swap a button's contents for a short warning, then put them back (icons included). */
 const showButtonWarning = (button, text) => {
   if (button.classList.contains("machine-action-warning")) {
     return;
   }
-  const original = button.textContent;
+  const original = [...button.childNodes];
   button.textContent = text;
   button.classList.add("machine-action-warning");
   scheduleCallback(() => {
-    button.textContent = original;
+    button.replaceChildren(...original);
     button.classList.remove("machine-action-warning");
   }, BUTTON_WARNING_MS);
 };
