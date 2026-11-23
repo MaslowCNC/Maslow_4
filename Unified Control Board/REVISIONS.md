@@ -10,7 +10,7 @@ changes with it.
 | Revision | In git | Status |
 |---|---|---|
 | v1.0 | tag `hw/ucb-36v/v1.0` (commit 484b1944b) | Built and assembled: board 1 (`maslow36v.local`) |
-| v1.1 | branch `36V-board-v1.1` | Layout done, DRC clean. Fab files not regenerated, sync firmware not written |
+| v1.1 | branch `36V-board-v1.1` | Layout done, DRC clean, fab files in `jlcpcb/`, ordered at JLCPCB (Nov 2026). Sync firmware written and verified on a v1.0 bodge (USB power) |
 
 To open an older revision without touching your checkout:
 
@@ -73,7 +73,7 @@ These are the v1.1 changes done by hand, in order of value. Coordinates are KiCa
      near (-33, 69). No sense trace is crossed.
    - The capacitor belongs at the RT end: the wire then carries the driven 3.3 V clock, and the high-impedance RT
      node stays 2 mm long.
-   - Harmless until the sync firmware below drives PB4: until then the pin sits at a steady level.
+   - The sync firmware below drives it from boot. Fitted and verified on board 2 (22 pF, USB power): U9 locks.
 
 ## v1.1 (in progress)
 
@@ -257,36 +257,35 @@ C165 is on the root sheet with the `RT` and `U9_SYNC` labels. The title block is
    - a strap on a spare G474 pin (PD2 pin 55, or PF0/PF1 pins 5–6);
    - a different value in the XY board's version divider, passed on to the G474.
 
-### Firmware for the sync clock (not written yet)
+### Firmware for the sync clock
 
-- **Pin.** Set PB4 to AF2 (TIM3_CH1). After reset, PB4 is JTRST with a pull-up. SWD only uses PA13/PA14, so taking
-  PB4 doesn't affect flashing or debugging. PB4 is unconnected on v1.0, so the same build can drive it on any
-  board.
-  - Set `UCPD1_DBDIS` in `PWR_CR3` first: PB4 is also UCPD1_CC2, and the G474 can switch a 5.1 kΩ pull-down onto it
-    when PA10 is high.
-  - When not syncing, drive PB4 low as a push-pull output. U9's RT/CLK pin is noise-sensitive and U9_SYNC is a
-    45 mm track that reaches it through C165.
-- **Check the swing at bring-up.** The clock must rise above 2.0 V at RT/CLK (worst case). Through C165's 10 pF
-  that is 3.3 V × 10/(10 + C_pin): 2.5 V if the pin is 3 pF, 2.0 V if it is 6.5 pF. TI gives no pin capacitance.
-  If U9 doesn't lock (the switch node stays near 480 kHz), fit 22 pF at C165.
-- **Period.** TIM3 counts at 170 MHz with ARR = 339, giving 500 kHz. That is exactly 25 PWM periods (TIM1's 20 kHz
-  centre-aligned period is 8500 ticks). 24× would be 354.2 ticks, which isn't a whole number.
-- **Phase lock.** Slave TIM3 to TIM1's TRGO in reset mode, so its phase is fixed relative to the PWM.
-  - TRGO must fire once per PWM period: 12.5 sync periods per half-period is not a whole number. TIM1 already runs
-    with RCR = 1 (one update per period), so TRGO = update works.
-  - TRGO is free to change: it is `TIM_TRGO_RESET` now, and the ADC trigger uses TRGO2 (OC4REF).
-- **Pulse.** Make the high pulse about 100 ns (17 ticks).
-  - SW rises about 55 ns after the clock's falling edge. At about 9 % duty (3.3 V from 36 V) its on-time is about
-    0.18 µs.
-  - So the clock and switch edges all fall within about 0.35 µs of each 2 µs period. Place that window away from
-    the ADC sampling instants: the injected conversions start on TRGO2, 20 ticks before the PWM peak, and each
-    ADC's later ranks follow it.
-- **Lock time.** The buck's PLL takes about 78 µs to lock.
-- **Measure.**
-  - Compare `#NOISE`, `#CMPTEST` and a 24k spin against v1.0's BRINGUP.md numbers.
-  - If the noise is down, the trips can go back to 20 A (comparator) and 15 A × 3 (software) on v1.1.
-  - Sync stops the sampled bursts but not what the comparators see in analog. On a v1.0 board it is worth less than
-    the SB1 reroute.
+Written on branch `36V-G474-firmware` (commit 680483506, `spindle-g474/`; details in its BRINGUP.md, "Board 2
+results"). It drives every board the same way: on a v1.0 board without the bodge PB4 is unconnected.
+
+- **Pin.** PB4 = TIM3_CH1 on AF2. `hw::init` sets `UCPD1_DBDIS` (PB4 is also UCPD1_CC2) and drives PB4 low;
+  `#SYNC 0` drives it low again.
+- **Clock.** 500 kHz (ARR 339 at 170 MHz), exactly 25 periods per 20 kHz PWM period, 100 ns high (17 ticks).
+- **Phase.** TIM1's TRGO is its update event (once per period, at the peak); TIM3 starts on it in trigger mode.
+  The trigger starts TIM3 from 0 whatever CNT was preset to, so `syncStart` then measures the phase against
+  TIM1's counter and moves TIM3's (error 0, spread 0 on board 2). Both count the same clock, so it holds.
+- **Where the edges go.** The rising edge is 170 ticks (1.0 µs) after the PWM peak. U9 switches on ~26 ticks
+  after it and off one on-time later (~31 ticks from 36 V, ~230 from USB's 4.6 V). The samples are at about +15
+  ticks (every ADC's rank 1) and ~120 ticks later (ADC5 rank 2, motor 2 phase B). A phase sweep on board 2
+  found 150-190 quiet on USB power; 36 V predicts 140-260.
+- **Order at boot.** The clock starts before the current-sense zero is measured: once U9 locks, its ripple lands
+  on the samples as a fixed offset (up to ~240 counts on M1b at the worst phase). `#SYNC` changes are refused
+  while the drive runs and re-measure the zero.
+- **Verified on board 2** (v1.0 + bodge with a 22 pF capacitor, USB power only, 2026-11-23). U9 runs from USB
+  through D2 (VSUP is diode-ORed from VCC and USB 5 V), so it switches at ~4.6 V even without 36 V.
+  - `#PINCAP`: PB4 takes ~575 ns to rise on its pull-up, against 171-253 ns for the unconnected PB3, PB5 and PD2:
+    the wire and capacitor are connected through to U9's RT/CLK pin.
+  - `#NOISE` sd in counts (M1 a b c, M2 a b c): clock off 34 / 125 / 23 / 36 / 22 / 15, clock on 3.8 / 3.8 / 1.8 /
+    1.8 / 1.9 / 1.5. The averages move with the clock's phase, which happens only if U9 is locked.
+- **Still to measure at 36 V** (no motors first): `#NOISE` with the clock off and on, `#CMPTEST`, and a phase
+  sweep (`spindle-g474/tools/syncsweep.py`). Then a 24k spin against board 1's numbers. If the noise stays down,
+  the trips can go back to 20 A (comparator) and 15 A x 3 (software) on boards with the clock.
+  - Sync stops the sampled bursts but not what the comparators see in analog. On a v1.0 board it is worth less
+    than the SB1 reroute.
 
 ## Tools
 
