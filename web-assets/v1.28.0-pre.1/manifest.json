@@ -1,0 +1,30 @@
+{
+  "tag_name": "v1.28.0-pre.1",
+  "published_at": "2026-11-23T21:13:31Z",
+  "files": {
+    "firmware.bin": {
+      "sha256": "22a961b2281774e7959328f3ef26b1c43fd466159167c196dfc53c6d426a8d2c",
+      "size_bytes": 2915232
+    },
+    "index.html.gz": {
+      "sha256": "6c7f242f3b16e25eedbef0443b7c58616cf39643c0359d5fd68a99417be8de2d",
+      "size_bytes": 156880
+    },
+    "bootloader.bin": {
+      "sha256": "3a06e81d78e928687d7acd8abcd069543a4413de4398e2e2940a97b3fc739fd8",
+      "size_bytes": 19984
+    },
+    "partitions.bin": {
+      "sha256": "f4b243596d46dce408c9a1417152f6c0303dd014c420382661d50c1a73a9e645",
+      "size_bytes": 3072
+    },
+    "boot_app0.bin": {
+      "sha256": "f94c5d786a7a8fab06ac5d10e33bf37711a6697636dc037559ea19cc410a17f0",
+      "size_bytes": 8192
+    },
+    "littlefs.bin": {
+      "sha256": "c69712a0daa408e1a9023e8ace40fcd8dfff16743669bb7f6f70aadcc0be6f85",
+      "size_bytes": 2097152
+    }
+  }
+}
