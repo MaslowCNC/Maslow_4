@@ -2297,6 +2297,9 @@ const showGCode = (gcode, append = false, updateToolpath = true) => {
   const isLoadStatusText = gcode === "Loading GCode file..." || gcode.startsWith("Error loading GCode file:");
   if (!append && gcode !== "" && !isLoadStatusText && typeof clearFindAnchorsTrace === "function") {
     clearFindAnchorsTrace();
+    if (typeof resetToolpathZoom === "function") {
+      resetToolpathZoom(); // a new file starts fitted
+    }
   }
 
   gCodeLoaded = gcode !== "";
