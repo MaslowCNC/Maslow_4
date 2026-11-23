@@ -45,6 +45,21 @@ The G474 firmware works around it (spindle-g474 on branch `36V-G474-firmware`, B
 
 The defaults were 20 A and 15 A × 3.
 
+### Known on v1.0: the per-phase current gains are off by the same amounts on every board
+
+The firmware's `#GCAL` measures each phase's sense gain from the rule that a star motor's three currents sum to
+zero. Two v1.0 boards give the same result to the third decimal:
+
+| | M1 a | M1 b | M1 c | M2 a | M2 b | M2 c |
+|---|---|---|---|---|---|---|
+| board 1 | 1.111 | 0.906 | 0.983 | 0.889 | 1.076 | 1.035 |
+| board 2 | 1.111 | 0.905 | 0.984 | 0.886 | 1.078 | 1.037 |
+
+A correction of up to ±11 % that repeats between boards comes from the layout (where each sense net taps its
+shunt, and the copper the tap shares with the motor current), not from the 1 % parts. The firmware stores the
+correction per board (`#GSAVE`). v1.1 moves SB1's tap to R114's own pad, so motor 1 phase B should change there:
+run `#GCAL` on the first v1.1 board and compare. The other five taps are as in v1.0.
+
 ### Reworks to try on a v1.0 board
 
 These are the v1.1 changes done by hand, in order of value. Coordinates are KiCad board coordinates in mm.
@@ -294,9 +309,18 @@ unconnected.
   - `#CMPTEST` (drive off): no break at 20, 15, 10 or 7 A with the clock on or off, and the comparators read high
     about as often either way. Sync moves the sampled noise, not the analog spikes the 0.75 µs break filter
     rejects. On a v1.0 board it is worth less than the SB1 reroute.
-- **Still to measure:** noise and trips while spinning (board 2 has no motors yet; board 1 has no bodge). Then
-  the software trip can come back from 18 A x 5 towards 15 A x 3; the comparators stay at 30 A until a spin shows
-  their margin.
+- **Spinning** (board 2, both motors loose, 36.2 V, 15 spins to 24,000 RPM without a fault; BRINGUP.md has the
+  table). Clock on against clock off:
+  - Measurement error (the sum of the three phase currents, which is zero in the motor): 0.30 / 0.18 A against
+    2.15 / 0.94 A at 3,000 RPM (motor 1 / motor 2), 0.48 / 0.40 A against 2.19 / 1.00 A at 12,000, and 1.1 / 0.65 A
+    against 2.4 / 1.2 A at 24,000.
+  - Torque-current ripple at 12,000 RPM: 0.23 / 0.11 A against 1.24 / 0.99 A.
+  - At 24,000 RPM motor 1 no longer runs into the voltage limit: 0.00-0.01 % of the PWM periods clipped against
+    5.5-5.8 %. Board 1, never synchronised, clips 6-8 % there.
+  - Largest single phase-current sample at 24,000 RPM: 8.6-9.6 A against 13.2-14.4 A (motor 1).
+  - With the original trips (software 15 A, comparators 20 A, 0.75 µs filter) a 24,000 RPM run passed with the
+    clock. The firmware's defaults stay raised (18 A × 5, 30 A), because the same build runs boards without the
+    capacitor. Still to do: the same under cutting load, where the real current comes on top.
 
 ## Tools
 
