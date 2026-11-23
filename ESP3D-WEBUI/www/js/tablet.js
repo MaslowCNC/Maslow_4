@@ -1723,7 +1723,9 @@ const tabletCalOpenOptionalSettings = () => openModal("optional-settings-popup")
 // report), not its own click history: a job or a stop also turns the spindle on and off, and a
 // button that only remembered its last click would send M3 to a spindle that is already running.
 let tabletSpindleOn = false;
-const TABLET_SPINDLE_RPM = 12000; // the spindle board's top commanded speed
+// Spindle On speed: the 36 V board's G474 drive runs to 24000 RPM (20000 leaves voltage headroom for a cut); the 24 V
+// Mini's spindle board tops out at 12000.
+const tabletSpindleRpm = () => (maslowBoard === "unified36v" ? 20000 : 12000);
 
 const tabletShowSpindleState = (on) => {
   tabletSpindleOn = on;
@@ -1740,8 +1742,9 @@ const tabletToggleSpindle = () => {
     sendCommand("M5");
     addMessage("Spindle OFF");
   } else {
-    sendCommand(`M3 S${TABLET_SPINDLE_RPM}`);
-    addMessage(`Spindle ON (${TABLET_SPINDLE_RPM} RPM)`);
+    const rpm = tabletSpindleRpm();
+    sendCommand(`M3 S${rpm}`);
+    addMessage(`Spindle ON (${rpm} RPM)`);
   }
   tabletShowSpindleState(!tabletSpindleOn);
 };
