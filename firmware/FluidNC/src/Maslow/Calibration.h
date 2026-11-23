@@ -57,6 +57,7 @@ public:
     int  getCurrentState();
     bool isRecoveringBelts() const { return recoveringBelts; }  // Apply Tension recovering belts from UNKNOWN
     void printCurrentState();
+    void requireApplyTension();  // READY_TO_CUT -> EXTENDEDOUT after an e-stop is cleared
     bool requestStateChange(int newState);
     void stopTakingSlack();  // $STOP during Apply Tension
 
