@@ -1182,6 +1182,8 @@ const stopRed = "#ce654c";
 //   it Idle for seconds after that; the spinner stays until the first move (Run or Hold).
 const jobHasMoved = (s) => s.grbl === "Run" || s.grbl === "Hold";
 const jobIsRunning = (s) => !!s.job || s.grbl === "Run" || s.grbl === "Hold";
+const shouldShowJobBounds = (s, { ready, loaded, hasBounds }) =>
+  ready && loaded && !jobIsRunning(s) && hasBounds;
 const playButtonMode = (s, { loaded, starting }) => {
   if (starting) {
     return "starting";
@@ -1201,7 +1203,20 @@ const playButtonMode = (s, { loaded, starting }) => {
 let jobStarting = false;
 
 if (typeof globalThis !== "undefined") {
-  globalThis.__tabletJobTestApi = { playButtonMode, jobHasMoved };
+  globalThis.__tabletJobTestApi = { playButtonMode, jobHasMoved, jobIsRunning, shouldShowJobBounds };
+}
+
+let boundsJobRunning = typeof machine !== "undefined" && jobIsRunning(machine.state);
+if (typeof machine !== "undefined") {
+  machine.on("state", (s) => {
+    const isRunning = jobIsRunning(s);
+    if (isRunning !== boundsJobRunning) {
+      boundsJobRunning = isRunning;
+      if (typeof updateJobBoundsDisplay === "function") {
+        updateJobBoundsDisplay();
+      }
+    }
+  });
 }
 
 function setRunControls() {

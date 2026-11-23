@@ -32,6 +32,24 @@ describe("Start button mode", () => {
     expect(mode({ grbl: "Run", maslow: 7, job: null })).toBe("running");
   });
 
+  test("a reported job remains running during brief Idle states", () => {
+    const isRunning = g.__tabletJobTestApi.jobIsRunning;
+    expect(isRunning({ grbl: "Idle", job })).toBe(true);
+    expect(isRunning({ grbl: "Run", job: null })).toBe(true);
+    expect(isRunning({ grbl: "Hold", job: null })).toBe(true);
+    expect(isRunning({ grbl: "Idle", job: null })).toBe(false);
+  });
+
+  test("job bounds show only when ready and no job is running", () => {
+    const showBounds = g.__tabletJobTestApi.shouldShowJobBounds;
+    const ready = { ready: true, loaded: true, hasBounds: true };
+    expect(showBounds({ grbl: "Idle", job: null }, ready)).toBe(true);
+    expect(showBounds({ grbl: "Idle", job }, ready)).toBe(false);
+    expect(showBounds({ grbl: "Run", job: null }, ready)).toBe(false);
+    expect(showBounds({ grbl: "Hold", job: null }, ready)).toBe(false);
+    expect(showBounds({ grbl: "Idle", job: null }, { ...ready, loaded: false })).toBe(false);
+  });
+
   test("ready again once the job is over", () => {
     expect(mode({ grbl: "Idle", maslow: 7, job: null, stopped: { line: 40, file: "/part.nc" } })).toBe("ready");
   });

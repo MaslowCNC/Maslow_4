@@ -2040,7 +2040,12 @@ var updateJobBoundsDisplay = function() {
     const isReadyToCut = typeof maslowStatus !== "undefined" && maslowStatus.state === MASLOW_STATE_READY_TO_CUT;
     const hasLoadedGCode = typeof gCodeLoaded !== "undefined" && gCodeLoaded &&
         typeof gCodeFilename !== "undefined" && !!gCodeFilename;
-    const showBounds = isReadyToCut && hasLoadedGCode && jobBboxExists();
+    const state = typeof machine !== "undefined" ? machine.state : {};
+    const showBounds = shouldShowJobBounds(state, {
+        ready: isReadyToCut,
+        loaded: hasLoadedGCode,
+        hasBounds: jobBboxExists()
+    });
 
     if (boundsContainer) {
         boundsContainer.style.display = showBounds ? "" : "none";
