@@ -73,7 +73,7 @@ These are the v1.1 changes done by hand, in order of value. Coordinates are KiCa
      near (-33, 69). No sense trace is crossed.
    - The capacitor belongs at the RT end: the wire then carries the driven 3.3 V clock, and the high-impedance RT
      node stays 2 mm long.
-   - The sync firmware below drives it from boot. Fitted and verified on board 2 (22 pF, USB power): U9 locks.
+   - The sync firmware below drives it from boot. Fitted and verified on board 2 (22 pF, USB and 36 V): U9 locks.
 
 ## v1.1 (in progress)
 
@@ -259,8 +259,9 @@ C165 is on the root sheet with the `RT` and `U9_SYNC` labels. The title block is
 
 ### Firmware for the sync clock
 
-Written on branch `36V-G474-firmware` (commit 680483506, `spindle-g474/`; details in its BRINGUP.md, "Board 2
-results"). It drives every board the same way: on a v1.0 board without the bodge PB4 is unconnected.
+Written on branch `36V-G474-firmware` (commits 680483506 and 4606e6f0c, `spindle-g474/`; details in its
+BRINGUP.md, "Board 2 results"). It drives every board the same way: on a v1.0 board without the bodge PB4 is
+unconnected.
 
 - **Pin.** PB4 = TIM3_CH1 on AF2. `hw::init` sets `UCPD1_DBDIS` (PB4 is also UCPD1_CC2) and drives PB4 low;
   `#SYNC 0` drives it low again.
@@ -268,24 +269,29 @@ results"). It drives every board the same way: on a v1.0 board without the bodge
 - **Phase.** TIM1's TRGO is its update event (once per period, at the peak); TIM3 starts on it in trigger mode.
   The trigger starts TIM3 from 0 whatever CNT was preset to, so `syncStart` then measures the phase against
   TIM1's counter and moves TIM3's (error 0, spread 0 on board 2). Both count the same clock, so it holds.
-- **Where the edges go.** The rising edge is 170 ticks (1.0 µs) after the PWM peak. U9 switches on ~26 ticks
-  after it and off one on-time later (~31 ticks from 36 V, ~230 from USB's 4.6 V). The samples are at about +15
-  ticks (every ADC's rank 1) and ~120 ticks later (ADC5 rank 2, motor 2 phase B). A phase sweep on board 2
-  found 150-190 quiet on USB power; 36 V predicts 140-260.
+- **Where the edges go: measured, not predicted.** The rising edge is 30 ticks (0.18 µs) after the PWM peak. At
+  36 V with only the logic load U9 runs in discontinuous mode: a short on-time, then the inductor current
+  reaches zero and the switch node rings. A phase sweep at 36 V found 10-40 quiet, a noisy plateau at 110-240
+  and 280-320 worse than no clock at all. My first default (170, worked out from U9's two edges alone) sat on
+  the plateau. 30 is also quiet on USB power.
 - **Order at boot.** The clock starts before the current-sense zero is measured: once U9 locks, its ripple lands
   on the samples as a fixed offset (up to ~240 counts on M1b at the worst phase). `#SYNC` changes are refused
-  while the drive runs and re-measure the zero.
-- **Verified on board 2** (v1.0 + bodge with a 22 pF capacitor, USB power only, 2026-11-23). U9 runs from USB
-  through D2 (VSUP is diode-ORed from VCC and USB 5 V), so it switches at ~4.6 V even without 36 V.
+  while the drive runs and re-measure the zero. The offset also follows U9's input voltage, so the zero is
+  measured again when the bus moves by more than 4 V with the drive off (USB first, then 36 V).
+- **Verified on board 2** (v1.0 + bodge with a 22 pF capacitor, no motors, 2026-11-23). U9 also runs from USB
+  through D2 (VSUP is diode-ORed from VCC and USB 5 V), so the first tests needed no 36 V.
   - `#PINCAP`: PB4 takes ~575 ns to rise on its pull-up, against 171-253 ns for the unconnected PB3, PB5 and PD2:
     the wire and capacitor are connected through to U9's RT/CLK pin.
-  - `#NOISE` sd in counts (M1 a b c, M2 a b c): clock off 34 / 125 / 23 / 36 / 22 / 15, clock on 3.8 / 3.8 / 1.8 /
-    1.8 / 1.9 / 1.5. The averages move with the clock's phase, which happens only if U9 is locked.
-- **Still to measure at 36 V** (no motors first): `#NOISE` with the clock off and on, `#CMPTEST`, and a phase
-  sweep (`spindle-g474/tools/syncsweep.py`). Then a 24k spin against board 1's numbers. If the noise stays down,
-  the trips can go back to 20 A (comparator) and 15 A x 3 (software) on boards with the clock.
-  - Sync stops the sampled bursts but not what the comparators see in analog. On a v1.0 board it is worth less
-    than the SB1 reroute.
+  - `#NOISE` sd in counts (M1 a b c, M2 a b c), 36.4 V: clock off 58 / 273 / 39 / 62 / 42 / 30, clock on 9 / 21 /
+    9 / 8 / 5 / 7. On USB power: 34 / 125 / 23 / 36 / 22 / 15 -> 4 / 4 / 2 / 2 / 2 / 2.
+  - The spectrum's peak at U9's alias (4-6 kHz, 55-60 % of the power with the clock off) is gone with it on.
+    M1b keeps short bursts (~0.4 ms, likely WiFi load steps on U9): SB1 runs over U9 on v1.0, v1.1 moves both.
+  - `#CMPTEST` (drive off): no break at 20, 15, 10 or 7 A with the clock on or off, and the comparators read high
+    about as often either way. Sync moves the sampled noise, not the analog spikes the 0.75 µs break filter
+    rejects. On a v1.0 board it is worth less than the SB1 reroute.
+- **Still to measure:** noise and trips while spinning (board 2 has no motors yet; board 1 has no bodge). Then
+  the software trip can come back from 18 A x 5 towards 15 A x 3; the comparators stay at 30 A until a spin shows
+  their margin. Also switch the 36 V off and on with USB connected once, to see the bus-change re-zero.
 
 ## Tools
 
