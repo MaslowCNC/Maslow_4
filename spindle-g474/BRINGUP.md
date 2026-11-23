@@ -310,7 +310,7 @@ on the office WiFi) with the sync bodge from the board's REVISIONS.md: a 22 pF c
     same to the third decimal, so the per-phase gain errors come from the v1.0 layout (sense routing), not from
     part tolerances. They could be the firmware's defaults for v1.0; v1.1 moves SB1, so measure it again there.
   - Open loop 1000 RPM, closed loop 3000 (locked at 2000, handed back at 1500), then 6000, 12000, 18000, 24000:
-    no fault in 14 spins. One interrupt of 51 us at each hand-over to closed loop counts as an overrun (one per
+    no fault in 15 spins. One interrupt of 51 us at each hand-over to closed loop counts as an overrun (one per
     spin, never in a row); otherwise 44-45 us longest, as on board 1.
   - `#NOISE` now also gives each motor's **phase sum** (gain-corrected amps). A star motor's currents sum to
     zero, so it is the measurement's own error, also while the motors run (the channels then show real current).
