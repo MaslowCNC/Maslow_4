@@ -59,10 +59,20 @@ These are the v1.1 changes done by hand, in order of value. Coordinates are KiCa
    - Run a wire on the bottom from R114 pin 1 (−20.1, 44.2) to R117 pin 1 (−24.0, 66.2).
    - The old detour is then left attached only at the shunt, 5 mΩ from ground.
 3. **3V3A filter.** Replace FB1 with a 4.7 Ω 0603 and add 10–22 µF on 3V3A next to C145.
-4. **Sync bodge.**
-   - Fit a 10 pF C0G capacitor on R30's pad 1, which is U9's RT/CLK node, on the bottom.
-   - Run a fine wire from its other end to U20 pin 57 (PB4). PB4 is unconnected on v1.0.
-   - Needs the sync firmware described below.
+4. **Sync bodge** (one capacitor, one wire; route in `docs/v1.0-sync-bodge.svg`).
+   - Fit a 10 pF C0G capacitor (0402 or 0603) standing on end on R30's pad 1, which is U9's RT/CLK node, on the
+     bottom. Only pad 1 is used: R30's pad 2 is ground, so the capacitor must not lie across R30.
+   - Solder a fine insulated wire (30 AWG Kynar or enamelled) to U20 pin 57 (PB4), the 7th pin from the left on the
+     top row as the board sits in KiCad. PB4, and pins 56 and 58 beside it, are unconnected on v1.0.
+   - Top side, 8 mm: lay it up past C140 and R177 to J1's lower alignment hole at (-38.6, 51.0) and push it through.
+     The hole is unplated. Using it means the Tag-Connect plug no longer seats; if you need SWD, take the wire around
+     the left board edge near (-40, 65) instead (20 mm on top).
+   - Bottom side, about 59 mm: down the left edge, along the curved bottom edge to about (-17, 73), then diagonally up
+     past C29 to the capacitor's free end. Tape it down. The closest sense net is ISB1, 1.2 mm away for a few mm
+     near (-33, 69). No sense trace is crossed.
+   - The capacitor belongs at the RT end: the wire then carries the driven 3.3 V clock, and the high-impedance RT
+     node stays 2 mm long.
+   - Harmless until the sync firmware below drives PB4: until then the pin sits at a steady level.
 
 ## v1.1 (in progress)
 
