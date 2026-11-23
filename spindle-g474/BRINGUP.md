@@ -269,8 +269,9 @@ on the office WiFi) with the sync bodge from the board's REVISIONS.md: a 22 pF c
   by more than 4 V (`SYNC_REZERO_V`) and is steady, with the drive off. Switching the 36 V off and on with USB
   connected gave `current-sense zero re-measured: bus 4.9 -> 36.4 V` on the way up. On the way down the first
   version fired twice (36.3 -> 26.3 V, 18.0 -> 5.1 V) because the bus capacitors drain over seconds; it now
-  waits until the bus moves less than 0.5 V per 100 ms for half a second (the steady-bus version is not
-  cycled yet). The bus rests at ~5 V with the 36 V off and USB on.
+  waits until the bus moves less than 0.5 V per 100 ms for half a second. A second cycle with that version
+  gave one line each way (36.4 -> 5.0 V, 5.0 -> 36.4 V), no reset of the G474, and afterwards the same zeros
+  and noise as before it (means within 2.2 counts). The bus rests at ~5 V with the 36 V off and USB on.
 - **The clock can never block the drive.** The zero check (2010 +-310 counts, a sense fault beyond) fails at a
   bad phase: at 36 V, phases 280-320 push M1b more than 310 counts out. `measureSenseZero` then stops the clock
   and measures without it, at boot, after `#SYNC` and after a bus change (`#SYNC` reports STOPPED). A bus
