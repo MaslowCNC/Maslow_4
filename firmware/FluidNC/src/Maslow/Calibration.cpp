@@ -1424,19 +1424,40 @@ bool Calibration::takeSlackFunc() {
             diff[_BL] = calibration_data[0][2] - measurementToXYPlane(kinematics->computeBL(x, y, currentZ), blTotalZ);
             diff[_BR] = calibration_data[0][3] - measurementToXYPlane(kinematics->computeBR(x, y, currentZ), brTotalZ);
             log_info("Center point deviation: TL: " << diff[_TL] << " TR: " << diff[_TR] << " BL: " << diff[_BL] << " BR: " << diff[_BR]);
-            constexpr double accurateThreshold = 12.0;
-            constexpr double warningThreshold  = 25.0;
+            // Above the failure line the belts don't go to Ready to Cut.  It used to be 25 mm, with
+            // only a warning from 12 mm, after which the step counts were set from the encoders
+            // while the planner's targets come from the anchors: the first move then corrects the
+            // odd belt by the whole deviation, fighting the other three (2026-11-19: BL +22.3 mm).
+            // A calibrated machine reads a few mm (BL 0.35, BR 2.5 the same day).
+            constexpr double accurateThreshold = 6.0;
+            constexpr double warningThreshold  = 12.0;
             const double      maxDeviation =
                 std::max(std::max(std::abs(diff[_TL]), std::abs(diff[_TR])), std::max(std::abs(diff[_BL]), std::abs(diff[_BR])));
             if (maxDeviation > warningThreshold) {
-                log_error("Center point deviation over "
-                          << warningThreshold << "mm, your coordinate system is not accurate, maybe try running Find Anchors again?");
-                //Should we enter an alarm state here to prevent things from going wrong?
+                // TL and TR set the position, so their deviations are ~0 by construction and only BL
+                // and BR say anything.  One of them far off while the other fits points at that belt's
+                // zero (a retract while its encoder was failing, say), not at the anchors, and Find
+                // Anchors would build the bad zero into them.
+                const int    worst      = std::abs(diff[_BL]) >= std::abs(diff[_BR]) ? _BL : _BR;
+                const int    other      = worst == _BL ? _BR : _BL;
+                const char*  worstName  = worst == _BL ? "Bottom Left" : "Bottom Right";
+                const char*  otherName  = worst == _BL ? "Bottom Right" : "Bottom Left";
+                const double otherError = std::abs(diff[other]);
+                if (otherError < std::abs(diff[worst]) / 3.0 && otherError <= accurateThreshold) {
+                    log_error("Apply Tension failed: one belt is off. The "
+                              << worstName << " belt is " << diff[worst] << "mm from where the anchors put it, while the " << otherName
+                              << " belt fits within " << otherError
+                              << "mm. Its belt length is probably wrong, not the anchors: unhook the belts, Retract All, Extend and "
+                                 "Apply Tension again. If it still reads off, run Find Anchors");
+                } else {
+                    log_error("Center point deviation over "
+                              << warningThreshold << "mm, your coordinate system is not accurate, maybe try running Find Anchors again?");
+                }
 
                 //Reset
                 takeSlackState = 0;
                 retractionMonitorInitialized = false;
-                requestStateChange(TENSIONED);  // belts are tight; Find Anchors is the next step
+                requestStateChange(TENSIONED);  // belts are tight; Find Anchors (or a retract) is the next step
                 return true;
             } else {
                 if (maxDeviation > accurateThreshold) {

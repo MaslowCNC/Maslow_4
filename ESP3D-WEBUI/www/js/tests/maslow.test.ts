@@ -6,6 +6,7 @@ import {
   MaslowErrMsgKeyValueCantUse,
   MaslowErrMsgKeyValueSuffix,
   maslowMsgHandling,
+  maslowInfoMsgHandling,
   processMaslowConfigResponse
 } from "../maslow";
 
@@ -170,5 +171,28 @@ describe('maslowMsgHandling', () => {
     } finally {
       global.updateJobBoundsDisplay = previousUpdate;
     }
+  });
+});
+
+describe("Apply Tension failure dialog", () => {
+  beforeEach(() => {
+    document.body.innerHTML = "";
+  });
+
+  const buttons = () => Array.from(document.querySelectorAll("#apply-tension-failed-modal button")).map((b) => b.textContent);
+
+  test("deviation over the limit offers Find Anchors", () => {
+    maslowInfoMsgHandling("[MSG:ERR: Center point deviation over 12mm, your coordinate system is not accurate, maybe try running Find Anchors again?]");
+    expect(document.querySelector("#apply-tension-failed-modal h3")?.textContent).toBe("Couldn't confirm the machine's position");
+    expect(buttons()).toEqual(["Not now", "Find Anchors"]);
+  });
+
+  test("one belt off says to retract, not Find Anchors", () => {
+    maslowInfoMsgHandling(
+      "[MSG:ERR: Apply Tension failed: one belt is off. The Bottom Left belt is 22.26mm from where the anchors put it, while the Bottom Right belt fits within 2.46mm. Its belt length is probably wrong, not the anchors: unhook the belts, Retract All, Extend and Apply Tension again. If it still reads off, run Find Anchors]"
+    );
+    expect(document.querySelector("#apply-tension-failed-modal h3")?.textContent).toBe("One belt doesn't match");
+    expect(document.querySelector("#apply-tension-failed-modal p")?.textContent).toContain("Retract All");
+    expect(buttons()).toEqual(["OK"]);
   });
 });
