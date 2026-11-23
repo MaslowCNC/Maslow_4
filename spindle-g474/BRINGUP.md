@@ -265,9 +265,18 @@ on the office WiFi) with the sync bodge from the board's REVISIONS.md: a 22 pF c
   Locking turns U9's ripple into a fixed offset per channel (up to ~240 counts on M1b at the worst phase),
   so the clock starts at boot before the zero is measured, `#SYNC` changes are refused while the drive runs,
   and every change re-measures the zero. The offset also follows U9's input voltage: booted on USB, then 36 V
-  moved M1b's zero by ~55 counts. So with the clock running the zero is measured again when the bus moves by
-  more than 4 V (`SYNC_REZERO_V`, drive off, after 0.5 s settled). That path is not exercised yet (switch the
-  36 V off and on with USB connected: one `current-sense zero re-measured` line each way).
+  moved M1b's zero by ~55 counts. So with the clock running the zero is measured again when the bus has moved
+  by more than 4 V (`SYNC_REZERO_V`) and is steady, with the drive off. Switching the 36 V off and on with USB
+  connected gave `current-sense zero re-measured: bus 4.9 -> 36.4 V` on the way up. On the way down the first
+  version fired twice (36.3 -> 26.3 V, 18.0 -> 5.1 V) because the bus capacitors drain over seconds; it now
+  waits until the bus moves less than 0.5 V per 100 ms for half a second (the steady-bus version is not
+  cycled yet). The bus rests at ~5 V with the 36 V off and USB on.
+- **The clock can never block the drive.** The zero check (2010 +-310 counts, a sense fault beyond) fails at a
+  bad phase: at 36 V, phases 280-320 push M1b more than 310 counts out. `measureSenseZero` then stops the clock
+  and measures without it, at boot, after `#SYNC` and after a bus change (`#SYNC` reports STOPPED). A bus
+  change tries the clock again, since the offset depends on U9's input. Tested by `#SYNC 1 300`: warned,
+  stopped, zero measured; `#SYNC 1` brought it back. `#NOISE` now prints the zeros: at the default phase and
+  36.4 V they are 1971 / 2024 / 1972 / 1974 / 1971 / 1977.
 - **Spectra** (`#DUMP 1024 <channel>`, 36 V): clock off, 55-60 % of the power on M1b and M2a sits at 4-6 kHz
   (U9's alias); clock on, that peak is gone. M2a is left with low, flat noise (sd 7.6). M1b's remainder is
   mostly bursts: runs of ~8 samples (0.4 ms) up to +267 counts with quiet samples between, likely the XY
@@ -277,6 +286,9 @@ on the office WiFi) with the sync bodge from the board's REVISIONS.md: a 22 pF c
     30-40 at 110-240, and worse than unsynchronised at 280-320 (M1b up to 361). U9 runs in discontinuous mode
     there: a short on-time, then the inductor current reaches zero and the switch node rings, so more than its
     two edges matter. The first default, 170, was a prediction from the edges alone and sat on the plateau.
+  - Zero shift from the clock-off zero at 36 V (the ripple at the sample instant): M1b +50..+58 and flat across
+    10-50, the other channels within +-12 (so a little timing drift does not move the zero); M1b +135..+216
+    across 110-230, -211 at 270, beyond the fault limit at 280-320.
   - USB power (U9 on-time ~1.35 us): every sd <= 5.8 at 150-190 (<= 7.1 at 140 and 240-260), and rms 5.2 at 30;
     U9's edges land on the samples at 60-110 and 290-20.
   - The default is 30: in the 36 V window and quiet on USB. Check it again under motor load: the 36 V rail

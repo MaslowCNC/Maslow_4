@@ -97,19 +97,19 @@ static bool    g_hold_release_requested = false;
 static bool    g_home_requested     = false;
 static bool    g_remove_tool_requested = false;
 static bool    g_spinning           = false;   // the ESP32's velocity_mode: a spindle speed is in force
-// Bus voltage when the current-sense zero was last measured (NAN until the slow analog has settled after it).
-static float    g_zero_vbus          = NAN;
-static uint32_t g_zero_ms            = 0;
-static uint32_t g_vbus_moved_ms      = 0;
-static void     noteSenseZero() {
-    g_zero_vbus     = NAN;
-    g_zero_ms       = millis();
-    g_vbus_moved_ms = 0;
-}
 static bool    g_init_ok            = false;
 static const char* g_init_why       = "";
 static uint32_t g_enable_allowed_ms = 0;       // coast lockout after a stop from speed
 static uint8_t g_load_warn_mask     = 0;
+// Bus voltage when the current-sense zero was last measured (NAN after the boot zero, until a steady reading).
+static float    g_zero_vbus          = NAN;
+static uint32_t g_zero_ms            = 0;
+// The bus is "steady" once it has moved less than 0.5 V per 100 ms for half a second.
+static float    g_vbus_track         = NAN;
+static uint32_t g_vbus_track_ms      = 0;
+static uint32_t g_vbus_steady_since  = 0;
+// The U9 sync clock is meant to be running (boot default or #SYNC 1); it can still be stopped by measureSenseZero.
+static bool     g_sync_wanted        = false;
 
 // ------------------------------------------------------------------ helpers
 
@@ -119,6 +119,24 @@ static bool beamBlocked() { return digitalRead(PIN_BEAM_DETECT) != 0; }
 
 static void notifyZHomed() {
     linkWriteIfRoom("ZHOMED\n", 7);
+}
+
+// Measure the current-sense zero (drive off).  With U9 locked to the sync clock its ripple is part of the zero;
+// at a bad clock phase that can push a channel past the sense-fault limit (board 2, 36 V, phases 280-320: M1b
+// more than 310 counts out).  The clock must never be what keeps the drive from running, so it is stopped then
+// and the zero measured without it.
+static bool measureSenseZero(const char* what, bool boot, const char** why) {
+    bool ok = foc::calibrateOffsets(2000, why);
+    if (!ok && hw::syncRunning()) {
+        linkEvent("WARN", "%s: current-sense zero failed with the U9 sync clock on (%s): clock stopped, measuring without it",
+                  what, *why);
+        hw::syncStop();
+        delay(5);
+        ok = foc::calibrateOffsets(2000, why);
+    }
+    g_zero_vbus = boot ? NAN : hw::vbus();
+    g_zero_ms   = millis();
+    return ok;
 }
 
 // Enable the drive (open loop at the angles it last had) if it is safe to.
@@ -553,6 +571,12 @@ static void reportNoise() {
         }
         linkEvent("MSG", "NOISE M%d (counts vs zero, %.4f A/count): %s", k + 1, SENSE_A_PER_LSB, buf);
     }
+    // The zeros themselves: nominal 2010 counts (1.62 V), a sense fault beyond +-310.  With the sync clock on they
+    // include U9's ripple at the sample instant.
+    foc::NoiseStats z[6];
+    for (int c = 0; c < 6; c++) foc::noiseResult(c / 3, c % 3, &z[c]);
+    linkEvent("MSG", "NOISE zero (counts, nominal 2010, fault beyond +-310): M1 %.0f %.0f %.0f M2 %.0f %.0f %.0f", z[0].offset,
+              z[1].offset, z[2].offset, z[3].offset, z[4].offset, z[5].offset);
 }
 static uint32_t g_stat_last    = 0;
 
@@ -1038,19 +1062,21 @@ static void maintenance(const char* line) {
             const char* why = "";
             if (a < 0.5f) {
                 hw::syncStop();
+                g_sync_wanted = false;
             } else {
                 uint32_t rise = n >= 3 && b >= 0 ? (uint32_t)b : SYNC_RISE_TICKS;
-                if (!hw::syncStart(rise, &why)) linkEvent("WARN", "SYNC start failed: %s", why);
+                g_sync_wanted = hw::syncStart(rise, &why);
+                if (!g_sync_wanted) linkEvent("WARN", "SYNC start failed: %s", why);
             }
             delay(5);
-            if (!foc::calibrateOffsets(2000, &why)) linkEvent("WARN", "SYNC: current-sense zero not re-measured: %s", why);
-            noteSenseZero();
+            if (!measureSenseZero("SYNC", false, &why)) linkEvent("WARN", "SYNC: current-sense zero not measured: %s", why);
         }
         int32_t spread = 0;
         int32_t err    = hw::syncRunning() ? hw::syncPhaseError(&spread) : 0;
         linkEvent("MSG", "SYNC: %s, %lu Hz, rising edge %lu ticks after the PWM peak, phase error %ld ticks (spread %ld) | "
                          "TIM3 CR1 %lx SMCR %lx, clock %lu Hz | PB4 mode %lu AF %lu | PWR CR3 %08lx",
-                  hw::syncRunning() ? "RUNNING" : "off (PB4 low)", (unsigned long)(TIMER_CLOCK_HZ / SYNC_PERIOD_TICKS),
+                  hw::syncRunning() ? "RUNNING" : g_sync_wanted ? "STOPPED (sense zero out of range with it on; PB4 low)" : "off (PB4 low)",
+                  (unsigned long)(TIMER_CLOCK_HZ / SYNC_PERIOD_TICKS),
                   (unsigned long)hw::syncRise(), (long)err, (long)spread, (unsigned long)TIM3->CR1, (unsigned long)TIM3->SMCR,
                   (unsigned long)hw::tim3ClockHz(), (unsigned long)((GPIOB->MODER >> 8) & 3),
                   (unsigned long)((GPIOB->AFR[0] >> 16) & 15), (unsigned long)PWR->CR3);
@@ -1472,6 +1498,7 @@ void setup() {
             // Before the offset calibration below (board.h); the buck locks in ~80 us, well inside the settling delay.
             const char* swhy = "";
             if (hw::syncStart(SYNC_RISE_TICKS, &swhy)) {
+                g_sync_wanted = true;
                 BOOT_TRACE_POINT("U9 sync clock on");
             } else {
                 linkEvent("WARN", "U9 sync clock did not start: %s", swhy);
@@ -1495,8 +1522,7 @@ void setup() {
     if (g_init_ok) {
         delay(20);   // a few hundred samples of the OPAMPs settling
         BOOT_TRACE_POINT("OPAMP settling delay done");
-        g_init_ok = foc::calibrateOffsets(2000, &why);
-        noteSenseZero();
+        g_init_ok = measureSenseZero("boot", true, &why);
         BOOT_TRACE_POINT(g_init_ok ? "offset calibration ok" : "offset calibration FAILED");
     }
     if (!g_init_ok) {
@@ -1535,24 +1561,30 @@ void loop() {
     CRUMB(1);
     hw::serviceSlowAnalog();
     // With U9 locked its ripple sits on the samples as an offset that depends on U9's input voltage: if the bus
-    // has moved (USB first, then 36 V; or the 36 V switched off and on) measure the zero again, drive off only.
-    if (g_init_ok && isnan(g_zero_vbus) && now - g_zero_ms > 500) g_zero_vbus = hw::vbus();
-    if (g_init_ok && hw::syncRunning() && !isnan(g_zero_vbus) && !foc::enabled() && !g_spinning && g_align_until == 0 &&
-        g_gcal_step < 0) {
+    // has moved (USB first, then 36 V; or the 36 V switched off and on) measure the zero again, drive off only,
+    // and only once the bus is steady (the bus capacitors take seconds to drain).
+    if (now - g_vbus_track_ms >= 100) {
         float vb = hw::vbus();
-        if (fabsf(vb - g_zero_vbus) < SYNC_REZERO_V) {
-            g_vbus_moved_ms = 0;
-        } else if (!g_vbus_moved_ms) {
-            g_vbus_moved_ms = now;
-        } else if (now - g_vbus_moved_ms > 500) {   // settled
-            const char* why = "";
-            if (foc::calibrateOffsets(2000, &why)) {
-                linkEvent("MSG", "current-sense zero re-measured: bus %.1f -> %.1f V (U9's ripple offset follows its input)",
-                          g_zero_vbus, vb);
-            } else {
-                linkEvent("WARN", "current-sense zero not re-measured after a bus change: %s", why);
+        if (isnan(g_vbus_track) || fabsf(vb - g_vbus_track) > 0.5f) g_vbus_steady_since = now;
+        g_vbus_track    = vb;
+        g_vbus_track_ms = now;
+    }
+    if (g_init_ok && now - g_vbus_steady_since > 500 && now - g_zero_ms > 500) {
+        if (isnan(g_zero_vbus)) {
+            g_zero_vbus = g_vbus_track;   // the boot zero: the slow analog was not running yet when it was taken
+        } else if (g_sync_wanted && fabsf(g_vbus_track - g_zero_vbus) > SYNC_REZERO_V && !foc::enabled() && !g_spinning &&
+                   g_align_until == 0 && g_gcal_step < 0) {
+            float       from = g_zero_vbus;
+            const char* why  = "";
+            if (!hw::syncRunning()) {   // stopped at the old bus voltage: it may be fine at this one
+                if (hw::syncStart(hw::syncRise(), &why)) delay(5);
             }
-            noteSenseZero();
+            if (measureSenseZero("bus change", false, &why)) {
+                linkEvent("MSG", "current-sense zero re-measured: bus %.1f -> %.1f V (U9's ripple offset follows its input)", from,
+                          g_vbus_track);
+            } else {
+                linkEvent("WARN", "current-sense zero not measured after a bus change: %s", why);
+            }
         }
     }
     CRUMB(2);
