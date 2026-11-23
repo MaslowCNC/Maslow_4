@@ -29,6 +29,13 @@ Format: **title** — what goes wrong, where, and how we found it.
 
 ## Medium: stopping
 
+- [ ] **A G0/G1 Z move outside Ready To Cut e-stops the machine.** The 15 mm belt
+  position-error check (`Maslow.cpp`, `safety_control`) runs in `Cycle` whatever the Maslow
+  state, though the belts are only driven in Ready To Cut. After Release Tension the error is
+  already 65–72 mm, so any move e-stops (seen 2026-11-23 with Z home as `G0 Z0`). Jogs (`$J`)
+  are exempt. Z home now jogs; the tablet's `Z0` and `Z_TOP` shortcuts (`sendMove`) still
+  send moves. Fix: skip the check unless the belts are under position control.
+
 - [ ] **0x18 during a Maslow belt operation alarms.** Retract, extend, take slack and
   calibrate run in Home state, where a reset goes through `Homing::fail` (ALARM "Homing fail
   reset"). The motors stop at once, and the `$STOP` that follows clears the alarm, but the
