@@ -143,8 +143,11 @@ void MotorUnit::update() {
 
 // Reads the encoder value and updates it's position
 bool MotorUnit::updateEncoderPosition() {
-    if (!Maslow.I2CMux.setPort(_encoderAddress))
+    _encoderReads++;
+    if (!Maslow.I2CMux.setPort(_encoderAddress)) {
+        _encoderReadFailures++;
         return false;
+    }
 
     String encAddrLabel = Maslow.axis_id_to_label(_encoderAddress);
 #if MASLOW_DISABLE_BOOT_SELFTEST
@@ -163,6 +166,7 @@ bool MotorUnit::updateEncoderPosition() {
                 log_warn("Encoder I2C error " << error << " on " << encAddrLabel.c_str());
             }
 #endif
+            _encoderReadFailures++;
             return false;
         }
         return true;
@@ -173,6 +177,7 @@ bool MotorUnit::updateEncoderPosition() {
 #endif
         //Maslow.panic();
     }
+    _encoderReadFailures++;
     return false;
 }
 
@@ -232,26 +237,94 @@ bool MotorUnit::comply() {
     return true;
 }
 
-// Pulls_tight and zeros axis; returns true when done
-bool MotorUnit::retract() {
-    if (!retractPendingZero) {
-        if (!pull_tight(Maslow.calibration.retractCurrentThreshold))
-            return false;
-        retractPendingZero = true;
-    }
+// Retract limits.  A healthy encoder fails no reads at all (none in a whole Find Anchors run or
+// cut on 2026-11-19), so a few failures already mean a bad connection.
+constexpr uint32_t RETRACT_MAX_READ_FAILURES = 3;    // failed reads allowed while pulling the belt in
+constexpr int      ZERO_MAX_ATTEMPTS         = 3;    // tries at a zero that reads back as 0
+constexpr int      ZERO_CHECK_READS          = 5;    // good reads of the new zero needed to accept it
+constexpr int      ZERO_CHECK_MAX_READS      = 20;   // reads allowed to get them
+constexpr double   ZERO_TOLERANCE_MM         = 0.5;  // how far from 0 a read of the new zero may be
 
-    stop();
-    if (!updateEncoderPosition()) {
+// Pulls_tight and zeros axis; returns true when done.  Returns false while it is still working,
+// and also when it gives up without zeroing: retractRefusal() then says why.
+bool MotorUnit::retract() {
+    if (_retractRefusal.length()) {
         return false;
     }
 
-    lastRetractOffset = getPosition();
-    if (!zero()) {
+    if (!retractPendingZero) {
+        if (!retractCounting) {
+            retractCounting      = true;
+            retractStartFailures = _encoderReadFailures;
+            retractStartReads    = _encoderReads;
+        }
+        if (!pull_tight(Maslow.calibration.retractCurrentThreshold))
+            return false;
+        retractPendingZero = true;
+        zeroAttempts       = 0;
+        zeroSet            = false;
+
+        // Failed reads while the belt moves can lose whole turns of the encoder, and a loose
+        // cable that fails reads also corrupts some, so the belt end may not be where the
+        // count says.  Zeroing it would build that error into everything after (2026-11-19:
+        // BL zeroed ~22 mm off, and Find Anchors then moved the BL anchor to match).
+        const uint32_t failed = _encoderReadFailures - retractStartFailures;
+        if (failed >= RETRACT_MAX_READ_FAILURES) {
+            stop();
+            _retractRefusal = "its encoder failed " + String(failed) + " of " + String(_encoderReads - retractStartReads) +
+                              " reads while the belt was pulled in";
+            return false;
+        }
+    }
+
+    stop();
+
+    if (!zeroSet) {
+        if (++zeroAttempts > ZERO_MAX_ATTEMPTS) {
+            _retractRefusal = "its encoder did not read back 0 after zeroing (" + String(ZERO_MAX_ATTEMPTS) + " tries)";
+            return false;
+        }
+        if (!updateEncoderPosition()) {
+            return false;
+        }
+        if (zeroAttempts == 1) {
+            lastRetractOffset = getPosition();
+        }
+        if (!zero()) {
+            return false;
+        }
+        zeroSet        = true;
+        zeroCheckReads = 0;
+        zeroGoodReads  = 0;
+        return false;
+    }
+
+    // zero() takes the angle it reads as the reference for every later position.  A read that
+    // is corrupted but raises no I2C error can't be caught there; a flipped top bit is exactly
+    // half a turn (~22 mm).  So read the new zero back a few times before trusting it.
+    if (++zeroCheckReads > ZERO_CHECK_MAX_READS) {
+        _retractRefusal = "its encoder failed too many reads while the zero was checked";
+        return false;
+    }
+    if (!updateEncoderPosition()) {
+        return false;
+    }
+    if (std::abs(getPosition()) > ZERO_TOLERANCE_MM) {
+        log_warn(label().c_str() << " belt read " << getPosition() << "mm just after zeroing, zeroing again");
+        zeroSet = false;
+        return false;
+    }
+    if (++zeroGoodReads < ZERO_CHECK_READS) {
         return false;
     }
 
     retractPendingZero = false;
+    retractCounting    = false;
     return true;
+}
+
+String MotorUnit::label() const {
+    return Maslow.axis_id_to_label(_encoderAddress);
 }
 
 double MotorUnit::getLastRetractOffset() const {
@@ -405,6 +478,9 @@ void MotorUnit::reset() {
     retract_baseline         = 700;
     incrementalThresholdHits = 0;
     retractPendingZero       = false;
+    retractCounting          = false;
+    zeroSet                  = false;
+    _retractRefusal          = "";
     amtToMove                = 0;
     lastPosition             = getPosition();
     beltSpeedTimer           = millis();

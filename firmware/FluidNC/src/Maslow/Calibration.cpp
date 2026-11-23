@@ -353,11 +353,39 @@ void Calibration::setExtendedState(bool tl, bool tr, bool bl, bool br) {
     extended[_BR] = br;
 }
 
+// The UI's name for the belt operation a state runs, for messages
+static const char* operationName(int state) {
+    switch (state) {
+        case RETRACTING:
+            return "Retract";
+        case EXTENDING:
+            return "Extend";
+        case TAKING_SLACK:
+            return "Apply Tension";
+        case CALIBRATION_IN_PROGRESS:
+            return "Find Anchors";
+        default:
+            return "Belt operation";
+    }
+}
+
 //Request a state change to a new state. Returns true on success and false on failure (although return value is never used atm)
 bool Calibration::requestStateChange(int newState) {
     log_info("Requesting state change from " << stateNames[currentState].name << " to " << stateNames[newState].name);
 
     bool success = false;
+
+    // Extend, Apply Tension and Find Anchors all trust the encoders' belt lengths, so none starts
+    // while one is failing reads.  Retract still does: it re-measures the belts, and refuses to
+    // zero one whose encoder fails during it.
+    if (newState == EXTENDING || newState == TAKING_SLACK || newState == CALIBRATION_IN_PROGRESS) {
+        std::string why;
+        if (Maslow.failingEncoder(why) >= 0) {
+            log_error("Cannot start " << operationName(newState) << ": " << why.c_str());
+            printCurrentState();
+            return false;
+        }
+    }
 
     switch (newState) {
         case UNKNOWN:  //We can enter unknown from any stable state (the machine is not currently performing an action)
@@ -688,7 +716,57 @@ void Calibration::printDiagnostics() {
     log_info("  axisHomed  TL/TR/BL/BR = " << axisHomed[_TL] << axisHomed[_TR] << axisHomed[_BL] << axisHomed[_BR]);
 }
 
+// A belt operation can't go on once a belt's length is in doubt: a retract would zero the belt
+// in the wrong place, and Extend, Apply Tension or Find Anchors would build the error into the
+// lengths or the anchors.  Stop it, say why, and leave the belts UNKNOWN so the next step is a
+// retract.  Returns true if it stopped the operation.
+bool Calibration::stopOnEncoderFailure() {
+    std::string why;
+    int         failingArm = -1;
+    if (currentState == RETRACTING) {
+        for (int arm = _TL; arm < ARM_COUNT && failingArm < 0; arm++) {
+            if (retracting[arm] && Maslow.axis[arm].retractRefusal().length()) {
+                failingArm = arm;
+                why        = std::string("the ") + Maslow.axis[arm].label().c_str() + " belt was not zeroed because " +
+                      Maslow.axis[arm].retractRefusal().c_str() + ". Check its encoder cable, then Retract All again";
+            }
+        }
+    } else if (currentState == EXTENDING || currentState == TAKING_SLACK || currentState == CALIBRATION_IN_PROGRESS) {
+        failingArm = Maslow.failingEncoder(why);
+        if (failingArm >= 0) {
+            why += ". The belt lengths are no longer known: once it is fixed, unhook the belts and Retract All";
+        }
+    }
+    if (failingArm < 0) {
+        return false;
+    }
+
+    log_error(operationName(currentState) << " stopped: " << why.c_str());
+    Maslow.stopMotors();
+    for (int arm = _TL; arm < ARM_COUNT; arm++) {
+        retracting[arm] = false;
+        Maslow.axis[arm].reset();
+    }
+    if (currentState == CALIBRATION_IN_PROGRESS) {
+        resetCalibrationState();
+    }
+    if (currentState == TAKING_SLACK) {
+        takeSlack       = false;
+        recoveringBelts = false;
+        if (calibration_data) {
+            deallocateCalibrationMemory();
+        }
+    }
+    requestStateChange(UNKNOWN);
+    sys.set_state(State::Idle);
+    return true;
+}
+
 void Calibration::home() {
+    if (stopOnEncoderFailure()) {
+        return;
+    }
+
     switch (currentState) {
         case RETRACTING:
             //run all the retract functions untill we hit the current limit

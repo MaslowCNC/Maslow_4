@@ -96,6 +96,9 @@ public:
     void   blinkIPAddress();
     void   print_motor_currents();
     bool   updateEncoderPositions();
+    // An arm whose encoder failed reads recently enough that its belt length can't be trusted,
+    // or -1.  `why` names the belt and says how many reads failed, for the error message.
+    int    failingEncoder(std::string& why) const;
     void   setTargets(float xTarget, float yTarget, float zTarget, bool tl = true, bool tr = true, bool bl = true, bool br = true);
     void   setEncoderGeometry(float beltToothSpacing, float encoderTeeth);
     double getTargetX();
@@ -253,6 +256,12 @@ private:
     unsigned long complyCallTimer  = millis();
     unsigned int  panicCount       = 0;
     bool          watchdogFired    = false;
+
+    // Encoder read failures are counted in one-second windows (updateEncoderPositions).  The last
+    // window with trouble in it is kept for failingEncoder().
+    uint32_t      encoderTroubleReads[ARM_COUNT]    = { 0, 0, 0, 0 };
+    uint32_t      encoderTroubleFailures[ARM_COUNT] = { 0, 0, 0, 0 };
+    unsigned long encoderTroubleMs[ARM_COUNT]       = { 0, 0, 0, 0 };
 
     //Servo fault pin state, so the fault is reported when it starts and ends rather than every PID cycle
     bool          servoFaultActive  = false;
