@@ -10,7 +10,11 @@
 
 // ---- Motor (both spindle motors are the same part) ----
 constexpr int   POLE_PAIRS      = 1;
-constexpr float PHASE_R_OHM     = 0.32f;     // board 1 #GCAL (0.28-0.35 per axis, FETs + shunts + wiring); ESC1 bench 0.39
+// Board 2, standstill sweep (#ALIGN 0.2-1.2 V, 2026-11-23): V = 0.257 / 0.269 ohm x I + 0.086 / 0.088 V on the phase A
+// axis (motor 1 / 2); phase A is the lowest of the three (#GCAL), so the mean is ~0.28.  The 0.32 used before was
+// #GCAL's V / I at 0.8 V, which has the dead-time loss in it.  FETs + shunts + wiring included.  A board's stored
+// calibration (#GSAVE) overrides this: set it there too (#OBS).
+constexpr float PHASE_R_OHM     = 0.28f;
 constexpr float PHASE_L_H       = 75e-6f;    // BENCH
 constexpr float FLUX_WB         = 7.84e-3f;  // BENCH (ESC1, bus-corrected; the ESP32 VSWEEP gave 7.28)
 
@@ -55,10 +59,16 @@ constexpr float MAX_MODULATION  = 1.0f;
 constexpr float FW_MAX_A        = 3.0f;
 constexpr float FW_TARGET       = 0.95f;
 constexpr float FW_KI           = 3000.0f;   // A per second per unit of demand over the target
-// GUESS: effective dead time to compensate (the DRV8300's 200 ns plus the timer's 100 ns, minus
-// FET switching overlap); measure it at bring-up (#DTC) - the ESC1 fit put the loss at ~0.42 V.
-constexpr float DEADTIME_COMP_NS = 250.0f;
-constexpr float DT_COMP_KNEE_A  = 0.2f;      // ESP32 sync-sense: SYNC_DT_COMP_KNEE_A
+// Dead-time compensation: its size (as a dead time) and the phase current at which it reaches that size.
+// Measured on board 2 (2026-11-23, BRINGUP.md "Rough running"): the standstill sweep above puts the loss at
+// 0.065 V per phase = 90 ns at 36.4 V (the DRV8300's and the timer's dead time, less the FETs' switching delays).
+// The compensation is a voltage along each phase's own current, so below the knee it acts as a negative
+// resistance of (size as volts) / knee.  At 250 ns and 0.2 A that was 0.9 ohm against 0.28 ohm of winding: a DC
+// current of (0.18 V / R) = ~0.55 A latched into each motor, the observer's flux sat 8-18 % off centre, and the
+// angle loop swung the torque current +-1.0-1.4 A once per turn (3000 RPM, loose motors).  The knee must stay
+// above size / R (0.23 A here); 1.0 A leaves the winding 0.21 ohm and runs as smoothly as no compensation.
+constexpr float DEADTIME_COMP_NS = 90.0f;
+constexpr float DT_COMP_KNEE_A  = 1.0f;
 
 // ---- Sensorless closed loop ----
 constexpr float CL_ENTER_RPM    = 2000.0f;   // BENCH: the observer is not trusted below this

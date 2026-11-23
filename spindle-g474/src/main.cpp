@@ -491,6 +491,8 @@ static uint32_t g_stat_every   = 0;
 static bool     g_noise_pending = false;
 static volatile uint32_t g_loop_count = 0;   // main-loop passes, reported per second by #STAT
 static uint32_t g_align_avg_at  = 0;      // when to start averaging the align currents (millis)
+static int      g_scope_print   = -1;     // next #SCOPE line to print, -1 = none
+static uint32_t g_scope_last_ms = 0;
 static int      g_dump_print    = -1;     // next #DUMP line to print, -1 = none
 static int      g_dump_rows     = 0;      // samples captured
 static int      g_dump_chan     = 6;      // 0-5 = one channel (M1 a b c, M2 a b c), 6 = all
@@ -582,6 +584,15 @@ static void reportNoise() {
     for (int k = 0; k < 2; k++) foc::noisePhaseSum(k, &ps[k][0], &ps[k][1], &ps[k][2], &ps[k][3]);
     linkEvent("MSG", "NOISE phase sum (A, %lu samples, true sum 0): M1 mean %+.3f sd %.3f [%+.2f..%+.2f] | M2 mean %+.3f sd %.3f [%+.2f..%+.2f]",
               (unsigned long)z[0].n, ps[0][0], ps[0][1], ps[0][2], ps[0][3], ps[1][0], ps[1][1], ps[1][2], ps[1][3]);
+    // The control signals over the same samples (drive running): what repeats every turn shows here, not in #VLOG.
+    for (int k = 0; k < 2; k++) {
+        float r[5][4];
+        for (int j = 0; j < 5; j++) foc::noiseRipple(k, j, &r[j][0], &r[j][1], &r[j][2], &r[j][3]);
+        linkEvent("MSG", "NOISE ripple M%d: angle err %+.1f sd %.2f [%+.1f..%+.1f] deg | speed est sd %.0f [%.0f..%.0f] rpm | "
+                         "iq_ref %+.2f sd %.2f [%+.2f..%+.2f] | iq sd %.2f | id %+.2f sd %.2f A",
+                  k + 1, r[0][0], r[0][1], r[0][2], r[0][3], r[1][1], r[1][2], r[1][3], r[2][0], r[2][1], r[2][2], r[2][3], r[3][1],
+                  r[4][0], r[4][1]);
+    }
 }
 static uint32_t g_stat_last    = 0;
 
@@ -835,6 +846,7 @@ static void maintenance(const char* line) {
         tu.ol_ki = a;
     } else if (!strcmp(word, "DTC") && n >= 2 && a >= 0 && a <= 1000) {
         tu.deadtime_ns = a;
+        if (n >= 3 && b >= 0.05f && b <= 10) tu.dt_knee_a = b;
     } else if (!strcmp(word, "IHOLD") && n >= 2 && a >= 0 && a <= 6) {
         tu.hold_a = a;
     } else if (!strcmp(word, "ISPIN") && n >= 2 && a >= 0 && a <= 8) {
@@ -1103,6 +1115,22 @@ static void maintenance(const char* line) {
                       reps, pins[0].name, avg[0] * ns, mx[0] * ns, pins[1].name, avg[1] * ns, mx[1] * ns, pins[2].name, avg[2] * ns,
                       mx[2] * ns, pins[3].name, avg[3] * ns, mx[3] * ns, ref > 0 ? avg[3] / ref : 0.0f);
         }
+    } else if (!strcmp(word, "SCOPE")) {
+        // #SCOPE <motor 1|2> [every n-th sample]: 1024 samples of that motor's flux a/b, angle error, observer
+        // speed, iq_ref, iq, id and reference angle, then one hex line per 32 samples and channel:
+        // "X <channel 0-7> <first sample> <32 x 4 hex digits, int16>".  tools/scope.py reads them.
+        if (g_scope_print >= 0) {
+            linkEvent("WARN", "SCOPE refused: still printing the last one");
+        } else {
+            int motor = n >= 2 && a >= 1.5f ? 1 : 0;
+            int decim = n >= 3 && b >= 1 ? (b > 100 ? 100 : (int)b) : 1;
+            foc::startScope(motor, decim);
+            g_scope_print = 0;
+            // A row takes two interrupts (channels 0-3, then 4-7).
+            linkEvent("MSG", "SCOPE: motor %d, 1024 samples, every %d (%.1f ms), flux %.3f mWb: X <ch: 0 flux a, 1 flux b (1e-4 of flux), "
+                             "2 angle err (0.01 deg), 3 speed (rpm), 4 iq_ref, 5 iq, 6 id (mA), 7 ref (0.01 deg)> <first> <hex>",
+                      motor + 1, 2 * decim, 1024.0f * 2 * decim * 1000.0f / PWM_FREQUENCY_HZ, foc::tuning().flux * 1e3f);
+        }
     } else if (!strcmp(word, "SLOW") && n >= 2) {
         hw::setSlowMode((int)a);
         linkEvent("MSG", "SLOW: slow ADC2 conversions %s", a < 0.5f ? "free-running" : a < 1.5f ? "after the current samples" : "off");
@@ -1110,11 +1138,11 @@ static void maintenance(const char* line) {
         linkEvent("MSG", "spindle firmware %s, %s %s", FW_VERSION, __DATE__, __TIME__);
     } else {
         linkEvent("MSG", "# commands: STAT LOG <ms> VLOG <ms> ALIGN [V] [ms] CL <0|1> CUR <kp> <ki> POS <kp> <kd> <ki> POSBW <min> <full rpm> "
-                         "OLKI <ki> DTC <ns> IHOLD/ISPIN/IBOOST/ILIM <A> OBS <R> <L> <flux> FW <A> [share] TRIP <sw A> [hw A] [hw M2] "
+                         "OLKI <ki> DTC <ns> [knee A] IHOLD/ISPIN/IBOOST/ILIM <A> OBS <R> <L> <flux> FW <A> [share] TRIP <sw A> [hw A] [hw M2] "
                          "SPIN <rpm> <ms> JMEAS <rpm> VER");
         linkEvent("MSG", "# bring-up: NOISE [samples] SLOW <0|1|2> DUMP [samples] [channel] BRK BKF <0-15> CMPTEST <A> [ms] BRKDUMP "
                          "[first] MOE LOAD <us> RXLOG PREV GCAL [V] GAIN GAIN1/GAIN2 <a> <b> <c> GSAVE GCLEAR FLASHCRC <len> CALDBG "
-                         "DBANK <0|1> SYNC [0|1 [rise]] PINCAP [reps]");
+                         "DBANK <0|1> SYNC [0|1 [rise]] PINCAP [reps] SCOPE <motor> [n]");
         return;
     }
     if (strcmp(word, "STAT") && strcmp(word, "VER") && strcmp(word, "ALIGN") && strcmp(word, "NOISE") && strcmp(word, "SLOW") &&
@@ -1124,12 +1152,12 @@ static void maintenance(const char* line) {
         strcmp(word, "GSAVE") && strcmp(word, "GCLEAR") &&
         strcmp(word, "FLASHCRC") && strcmp(word, "CALDBG") && strcmp(word, "DBANK") && strcmp(word, "VLOG") &&
         strcmp(word, "TRIP") && strcmp(word, "BKF") && strcmp(word, "CMPTEST") && strcmp(word, "BRKDUMP") &&
-        strcmp(word, "SYNC") && strcmp(word, "PINCAP")) {
+        strcmp(word, "SYNC") && strcmp(word, "PINCAP") && strcmp(word, "SCOPE")) {
         linkEvent("MSG", "tuning: cur %.3f/%.0f pos %.2f/%.3f/%.1f bw %.2f/%.0f olki %.1f I hold %.1f spin %.1f "
-                         "boost %.1f lim %.1f obs R %.3f L %.1fuH flux %.2fmWb trip %.1f A dtc %.0f ns CL %d fw %.1f A/%.2f",
+                         "boost %.1f lim %.1f obs R %.3f L %.1fuH flux %.2fmWb trip %.1f A dtc %.0f ns/%.2f A CL %d fw %.1f A/%.2f",
                   tu.cur_kp, tu.cur_ki, tu.pos_kp, tu.pos_kd, tu.pos_ki, tu.pos_bw_min, tu.pos_bw_full_rpm, tu.ol_ki,
                   tu.hold_a, tu.spin_a, tu.boost_a, tu.iq_limit,
-                  tu.r, tu.l * 1e6f, tu.flux * 1e3f, tu.sw_trip_a, tu.deadtime_ns, (int)tu.closed_loop_allowed, tu.fw_max_a,
+                  tu.r, tu.l * 1e6f, tu.flux * 1e3f, tu.sw_trip_a, tu.deadtime_ns, tu.dt_knee_a, (int)tu.closed_loop_allowed, tu.fw_max_a,
                   tu.fw_target);
     }
 }
@@ -1667,6 +1695,20 @@ void loop() {
         g_noise_pending = false;
         CRUMB(13);
         reportNoise();
+    }
+    // #SCOPE lines: 32 samples of one channel each as hex, one line every 20 ms.
+    if (g_scope_print >= 0 && foc::scopeDone() && now - g_scope_last_ms >= 20 && Link.availableForWrite() >= 180) {
+        g_scope_last_ms = now;
+        const int per = 32, lines_per_chan = 1024 / per;
+        int       ch = g_scope_print / lines_per_chan, first = (g_scope_print % lines_per_chan) * per;
+        char      buf[160];
+        int       len = snprintf(buf, sizeof(buf), "X %d %d ", ch, first);
+        for (int i = first; i < first + per; i++) len += snprintf(buf + len, sizeof(buf) - len, "%04x", (uint16_t)foc::scopeValue(i, ch));
+        linkEvent("MSG", "%s", buf);
+        if (++g_scope_print >= lines_per_chan * foc::SCOPE_CH) {
+            g_scope_print = -1;
+            linkEvent("MSG", "SCOPE done");
+        }
     }
     // #DUMP lines: DUMP_PER_LINE samples of one channel each, one line every 10 ms so the XY board's
     // log keeps up.  g_dump_print counts lines: channel-major over the captured samples.

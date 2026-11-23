@@ -1,3 +1,10 @@
+// The control interrupt took 44-45 us of the 50 us period on boards 1 and 2 (two motors: observer, angle loop,
+// current loops, modulator), and a few us more with a bring-up capture running starved the main loop until the
+// watchdog reset the chip (board 2, 2026-11-23).  About 30 calls per interrupt went to the library's fminf /
+// fmaxf / sqrtf: with these options the compiler emits them inline (no NaN or errno handling, which nothing
+// here relies on: no isnan / isfinite in this file).
+#pragma GCC optimize("O3", "fast-math")
+
 #include "foc.h"
 #include "hw.h"
 #include "board.h"
@@ -164,6 +171,27 @@ namespace foc {
         // errors) even while the motor runs, when the channels themselves show the real currents.
         int64_t           g_noise_ps_sum[2], g_noise_ps_sq[2];
         int32_t           g_noise_ps_min[2], g_noise_ps_max[2];
+        // ... and of each motor's control signals over the same samples (what a ripple once or more per turn does
+        // to them; #VLOG's 200 ms lines are a whole number of turns apart at most speeds and do not show it):
+        // angle error eps (0.1 mrad), observer speed (0.1 rad/s), iq_ref, iq, id (mA).
+        // One motor's one signal per interrupt, in turn: all ten at once took more than the ~4 us the closed
+        // loop leaves of the 50 us period, and eight overruns in a row stopped the drive (board 2).
+        constexpr int     RIP_N = 5;
+        struct Rip {
+            int64_t  sum, sq;
+            int32_t  mn, mx;
+            uint32_t n;
+        };
+        Rip               g_rip[2][RIP_N];
+        uint32_t          g_rip_i = 0;
+
+        // #SCOPE: one motor's internal signals at the sample rate (or every n-th sample), for the ripple's shape.
+        constexpr int     SCOPE_MAX = 1024;
+        int16_t           g_scope[SCOPE_MAX][SCOPE_CH];
+        volatile bool     g_scope_on = false;
+        volatile int      g_scope_n  = 0;
+        int               g_scope_motor = 0, g_scope_decim = 1, g_scope_skip = 0;
+        bool              g_scope_half = false;
 
         // Fault post-mortem (#BRKDUMP): the last BRK_RING interrupts' raw samples, the comparator outputs read
         // at each interrupt's start and the duties in force during each sample, frozen when a fault (a
@@ -188,7 +216,7 @@ namespace foc {
         Tuning g_tun = {
             CUR_KP, CUR_KI, POS_KP, POS_KD, POS_KI, POS_BW_MIN, POS_BW_FULL_RPM, OL_CUR_KI,
             HOLD_CURRENT_A, SPINUP_CURRENT_A, Z_MOVE_BOOST_A, IQ_LIMIT_A,
-            PHASE_R_OHM, PHASE_L_H, FLUX_WB, SW_TRIP_A, DEADTIME_COMP_NS, true, FW_MAX_A, FW_TARGET,
+            PHASE_R_OHM, PHASE_L_H, FLUX_WB, SW_TRIP_A, DEADTIME_COMP_NS, DT_COMP_KNEE_A, true, FW_MAX_A, FW_TARGET,
         };
 
         void resetControl(Motor& m) {
@@ -345,14 +373,16 @@ namespace foc {
             float  vcm = 0.5f * (fmaxf(va, fmaxf(vb, vc)) + fminf(va, fminf(vb, vc)));
             float  inv = 1.0f / fmaxf(g_vbus, 5.0f);
             // Dead-time compensation: during the dead time a leg follows its current's body diode,
-            // which costs dt/T * Vbus against the current.  Add it back, softened through zero
-            // current (knee as the ESP32 sync-sense build).  The observer reads the commanded
-            // voltage, so it needs the applied one to match it.
+            // which costs dt/T * Vbus against the current.  Add it back, in proportion to the current up
+            // to the knee (config.h: a steep knee makes it a negative resistance larger than the
+            // winding's).  The observer reads the commanded voltage, so it needs the applied one to
+            // match it.
             float  comp[3] = { 0, 0, 0 };
             if (dt_comp) {
                 float vdt = g_tun.deadtime_ns * 1e-9f / PWM_PERIOD_S;   // as a duty
                 const float i[3] = { m.ia, m.ib, m.ic };
-                for (int x = 0; x < 3; x++) comp[x] = vdt * clampf(i[x] / DT_COMP_KNEE_A, -1.0f, 1.0f);
+                const float inv_knee = 1.0f / fmaxf(g_tun.dt_knee_a, 0.05f);
+                for (int x = 0; x < 3; x++) comp[x] = vdt * clampf(i[x] * inv_knee, -1.0f, 1.0f);
             }
             float d[3] = { 0.5f + (va - vcm) * inv + comp[0], 0.5f + (vb - vcm) * inv + comp[1],
                            0.5f + (vc - vcm) * inv + comp[2] };
@@ -670,6 +700,26 @@ namespace foc {
                 if (v < g_noise_ps_min[k]) g_noise_ps_min[k] = v;
                 if (v > g_noise_ps_max[k]) g_noise_ps_max[k] = v;
             }
+            {
+                if (++g_rip_i >= 2 * RIP_N) g_rip_i = 0;
+                const int    k = g_rip_i >= RIP_N ? 1 : 0, j = g_rip_i - k * RIP_N;
+                const Motor& m = mot[k];
+                float        x;
+                switch (j) {
+                    case 0: x = m.eps * 10000.0f; break;
+                    case 1: x = m.obs_w * 10.0f; break;
+                    case 2: x = m.iq_ref * 1000.0f; break;
+                    case 3: x = m.iq * 1000.0f; break;
+                    default: x = m.id * 1000.0f; break;
+                }
+                int32_t v = (int32_t)x;
+                Rip&    r = g_rip[k][j];
+                r.sum += v;
+                r.sq += (int64_t)v * v;
+                if (v < r.mn) r.mn = v;
+                if (v > r.mx) r.mx = v;
+                r.n++;
+            }
             if (++g_noise_n >= g_noise_target) g_noise_on = false;
         }
         if (g_dump_on) {
@@ -684,6 +734,28 @@ namespace foc {
             g_cal_n++;
         } else {
             step(raw);
+        }
+        if (g_scope_on && ++g_scope_skip >= g_scope_decim) {
+            // Half a row per interrupt (the closed loop leaves ~4 us of the period): channels 0-3, then 4-7.
+            g_scope_skip   = 0;
+            const Motor& m = mot[g_scope_motor];
+            int16_t*     r = g_scope[g_scope_n];
+            const float  kdeg = 5729.578f;
+            if (!g_scope_half) {
+                const float kf = 10000.0f / g_tun.flux;
+                r[0] = (int16_t)clampf(m.flux_a * kf, -32000.0f, 32000.0f);
+                r[1] = (int16_t)clampf(m.flux_b * kf, -32000.0f, 32000.0f);
+                r[2] = (int16_t)clampf(m.eps * kdeg, -32000.0f, 32000.0f);
+                r[3] = (int16_t)clampf(m.obs_w * 9.549297f, -32000.0f, 32000.0f);
+                g_scope_half = true;
+            } else {
+                r[4] = (int16_t)clampf(m.iq_ref * 1000.0f, -32000.0f, 32000.0f);
+                r[5] = (int16_t)clampf(m.iq * 1000.0f, -32000.0f, 32000.0f);
+                r[6] = (int16_t)clampf(m.id * 1000.0f, -32000.0f, 32000.0f);
+                r[7] = (int16_t)clampf(m.ref * kdeg, -32000.0f, 32000.0f);
+                g_scope_half = false;
+                if (++g_scope_n >= SCOPE_MAX) g_scope_on = false;
+            }
         }
         if (g_iqacc_on) {
             for (int k = 0; k < 2; k++) g_iqacc_sum[k] += mot[k].dir * mot[k].iq;
@@ -925,6 +997,7 @@ namespace foc {
             g_noise_ps_sq[k]  = 0;
             g_noise_ps_min[k] = INT32_MAX;
             g_noise_ps_max[k] = INT32_MIN;
+            for (int j = 0; j < RIP_N; j++) g_rip[k][j] = { 0, 0, INT32_MAX, INT32_MIN, 0 };
         }
         g_noise_n      = 0;
         g_noise_target = samples ? samples : 1;
@@ -976,6 +1049,36 @@ namespace foc {
         *sd_a   = var > 0 ? (float)(sqrt(var) * scale) : 0.0f;
         *min_a  = (float)(g_noise_ps_min[k] * scale);
         *max_a  = (float)(g_noise_ps_max[k] * scale);
+    }
+
+    void noiseRipple(int k, int sig, float* mean, float* sd, float* mn, float* mx) {
+        // eps in degrees, the observer speed in RPM, the three currents in A
+        static const double scale[RIP_N] = { 1e-4 * 57.29578, 0.1 * 9.549297, 1e-3, 1e-3, 1e-3 };
+        const Rip& r = g_rip[k][sig];
+        double     n = r.n ? (double)r.n : 1.0, mu = (double)r.sum / n, var = (double)r.sq / n - mu * mu;
+        *mean = (float)(mu * scale[sig]);
+        *sd   = var > 0 ? (float)(sqrt(var) * scale[sig]) : 0.0f;
+        *mn   = (float)(r.mn * scale[sig]);
+        *mx   = (float)(r.mx * scale[sig]);
+    }
+
+    void startScope(int motor, int decim) {
+        __disable_irq();
+        g_scope_motor = motor ? 1 : 0;
+        g_scope_decim = decim < 1 ? 1 : decim;
+        g_scope_skip  = 0;
+        g_scope_half  = false;
+        g_scope_n     = 0;
+        g_scope_on    = true;
+        __enable_irq();
+    }
+
+    bool scopeDone() {
+        return !g_scope_on && g_scope_n > 0;
+    }
+
+    int16_t scopeValue(int row, int ch) {
+        return g_scope[row][ch];
     }
 
     MotorTelemetry take(int k) {

@@ -106,6 +106,16 @@ namespace foc {
     // The same samples' phase sum per motor (gain-corrected, in the sense chain's amps): a star motor's true sum
     // is zero, so this is the measurement error, also while the motor runs.
     void noisePhaseSum(int m, float* mean_a, float* sd_a, float* min_a, float* max_a);
+    // ... and the control signals' ripple over the same samples.  sig: 0 angle error eps (deg), 1 observer speed
+    // (RPM), 2 iq_ref, 3 iq, 4 id (A).
+    void noiseRipple(int m, int sig, float* mean, float* sd, float* mn, float* mx);
+    // Bring-up (#SCOPE): 1024 rows of one motor, a row every 2 x decim interrupts (channels 0-3 in one, 4-7 in the
+    // next): flux a, flux b (1e-4 of the flux constant), eps (0.01 deg), observer speed (RPM), iq_ref, iq, id (mA),
+    // reference angle (0.01 deg).
+    constexpr int SCOPE_CH = 8;
+    void    startScope(int motor, int decim);
+    bool    scopeDone();
+    int16_t scopeValue(int row, int ch);
     // Bring-up (#DUMP): consecutive raw samples of all six channels, counts relative to each zero.
     int  startDump(int samples);   // returns the number it will capture (max 1024)
     bool dumpDone();
@@ -122,6 +132,7 @@ namespace foc {
         float r, l, flux;
         float sw_trip_a;
         float deadtime_ns;              // dead-time compensation (0 = off)
+        float dt_knee_a;                // ... reaches its full size at this phase current (#DTC <ns> [knee A])
         bool  closed_loop_allowed;
         float fw_max_a;                 // closed loop: field-weakening d current limit (A, 0 = off; #FW)
         float fw_target;                // ... starts when the voltage demand passes this share of the limit

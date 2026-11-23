@@ -312,7 +312,8 @@ similar-looking `maslow36v.local`) with the sync bodge from the board's REVISION
     part tolerances. They could be the firmware's defaults for v1.0; v1.1 moves SB1, so measure it again there.
   - Open loop 1000 RPM, closed loop 3000 (locked at 2000, handed back at 1500), then 6000, 12000, 18000, 24000:
     no fault in 15 spins. One interrupt of 51 us at each hand-over to closed loop counts as an overrun (one per
-    spin, never in a row); otherwise 44-45 us longest, as on board 1.
+    spin, never in a row); otherwise 44-45 us longest, as on board 1 (30-31 us and no overrun since the
+    change in "Rough running" below).
   - `#NOISE` now also gives each motor's **phase sum** (gain-corrected amps). A star motor's currents sum to
     zero, so it is the measurement's own error, also while the motors run (the channels then show real current).
 
@@ -345,9 +346,90 @@ similar-looking `maslow36v.local`) with the sync bodge from the board's REVISION
     1.8 A of margin). The defaults stay at 18 A x 5 and 30 A: the same firmware runs boards without the capacitor.
     With the clock there is room for 15 A x 3 again; under cutting load the real current comes on top.
 - New commands: `#SYNC` (status), `#SYNC 1 [rise ticks]`, `#SYNC 0` (PB4 driven low); `#PINCAP [reps]`
-  (drive off). `#NOISE` adds the zeros and the phase sums. PB4 is now driven low from `hw::init` (UCPD1
+  (drive off), `#SCOPE <motor> [n]`, `#DTC <ns> [knee A]`. `#NOISE` adds the zeros, the phase sums and the
+  control signals' ripple. PB4 is now driven low from `hw::init` (UCPD1
   dead-battery pull-down disabled first). `tools/syncsweep.py` (phase sweep) and `tools/spinab.py` (one bench
   spin with the clock on or off, with a summary).
+
+## Rough running: dead-time compensation and interrupt time (board 2, 2026-11-23)
+
+After the sync clock the motors still ran rough. Both motors loose, 36.3 V, clock on, about 3000-6000 RPM (one
+check at 12100). `docs/rough-running-torque-command.html` shows the torque command before and after.
+
+**How it was found.** `#VLOG`'s 200 ms lines are a whole number of turns apart at any multiple of 300 RPM, so they
+show the same rotor angle every time and hide whatever repeats per turn (the "iq sd" column in the spin table
+above has that flaw). Use an odd speed (3070, 6130), `#NOISE` (now with the angle error's, the observer speed's
+and the torque command's ripple, and the per-phase DC currents via `tools/ripple.py`) and `#SCOPE <motor>`
+(1024 rows of one motor's flux, angle error, speed estimate, iq_ref, iq, id; `tools/scope.py` splits them into
+1x, 2x, 3x, 4x and 6x per turn).
+
+**What it was: once per turn.** At 3070 RPM in closed loop, as shipped (250 ns, knee 0.2 A, R 0.32):
+
+| once per turn | motor 1 | motor 2 |
+|---|---|---|
+| angle error (reference - observer) | +-8.5 deg | +-12.2 deg |
+| observer speed | +-242 RPM | +-346 RPM |
+| torque command iq_ref (its mean: -0.27 / +0.17 A) | +-1.00 A | +-1.43 A |
+| observer flux circle off centre | 8 % | 18 % |
+| DC current in the windings | 0.51 A | 0.60 A |
+
+2x per turn was a fifth of that, 3x and 6x nothing: not dead-time harmonics, not the two-shunt sectors.
+
+**Cause: the dead-time compensation.** Sweeping `#DTC` at 3070 RPM (knee 0.2 A):
+
+| compensation | DC current A, M1 / M2 | angle error sd deg | iq_ref sd A |
+|---|---|---|---|
+| 0 | 0.03 / 0.02 | 1.2 / 0.8 | 0.15 / 0.10 |
+| 125 ns | 0.15 / 0.26 | 2.2 / 4.1 | 0.26 / 0.49 |
+| 250 ns (was the default) | 0.51 / 0.60 | 6.5 / 8.9 | 0.77 / 1.05 |
+| 375 ns | 0.80 / 0.92 | 10.4 / 13.6 | 1.23 / 1.60 |
+| 500 ns | 0.99 / 1.23 | 13.3 / 18.1 | 1.58 / 2.14 |
+
+The compensation adds a voltage along each phase's own current: below its knee it is a negative resistance of
+(its size in volts) / knee. 250 ns is 0.18 V at 36.4 V, so 0.9 ohm against ~0.28 ohm of winding: any DC current
+grows until the compensation saturates, at 0.18 V / R = ~0.57 A - the DC current measured. That current drags the
+observer's flux off centre (nothing but the clamp re-centres it), the angle estimate wobbles once per turn, and
+the angle loop's P and D terms turn the wobble into torque.
+
+**Its real size: 90 ns.** Standstill sweep, `#ALIGN` 0.2-1.2 V (no compensation in that mode), six points per motor:
+V = 0.257 ohm x I + 0.086 V (motor 1), 0.269 ohm x I + 0.088 V (motor 2), on the phase A axis. The offset is 4/3
+of the per-phase loss: 0.065 V = 90 ns at 36.4 V, not 250. And R is ~0.26 on that axis, ~0.28 as the mean of the
+three phases (phase A is the lowest in `#GCAL`): the 0.32 in use was `#GCAL`'s V / I at 0.8 V, dead-time loss
+included.
+
+**New defaults: 90 ns, knee 1.0 A (`#DTC <ns> [knee A]`), R 0.28.** Size and knee together at 3070 RPM:
+
+| compensation, knee | DC current A, M1 / M2 | angle error sd deg | iq_ref sd A |
+|---|---|---|---|
+| 250 ns, 0.2 A | 0.51 / 0.59 | 6.5 / 8.7 | 0.77 / 1.04 |
+| 250 ns, 1.0 A | 0.07 / 0.17 | 1.5 / 3.0 | 0.18 / 0.36 |
+| 130 ns, 0.2 A | 0.14 / 0.27 | 2.1 / 4.3 | 0.25 / 0.52 |
+| 130 ns, 1.0 A | 0.03 / 0.04 | 1.3 / 1.2 | 0.16 / 0.15 |
+| off | 0.02 / 0.02 | 1.2 / 0.8 | 0.15 / 0.10 |
+
+From a fresh boot with the new defaults: 3070 RPM angle error sd 1.3 / 0.9 deg and iq_ref sd 0.17 / 0.11 A (were
+6.5 / 8.8 and 0.77 / 1.04); 6130 RPM 1.4 / 1.6 deg and 0.24 / 0.28 A (were 3.1 / 4.5 and 0.51 / 0.77); open loop
+at 1300 RPM 4.9 / 3.3 deg (7.2 / 4.4 with the old values). The flux constant stays 7.84 mWb: 8.0 helps motor 1
+and hurts motor 2. **A board's stored calibration overrides R:** on board 2 `#OBS 0.28 75e-6 7.84e-3` and `#GSAVE`
+are done; board 1 still has 0.32 stored.
+
+**What is left** at 3070 RPM: 2x per turn, +-1.4 / +-0.9 deg and +-0.18 / +-0.12 A of torque command, and on motor 1
+4x (+-0.6 deg: its flux is ~3 % above the constant, so the clamp clips it). Unequal phase resistances would give
+2x of this size (`#GCAL`: phase A 0.28-0.30 ohm, B and C 0.33-0.35); not tested. Open loop below 2000 RPM still
+swings +-8 deg peak to peak: the rotor on its current vector, as before.
+
+**The control interrupt was at its limit.** It took 44-45 us of the 50 us period in closed loop (the next sample
+is ready ~48.7 us after the interrupt starts). Two things showed it: a first version of the ripple statistics
+(all ten signals in every interrupt) overran eight times in a row and the overrun protection stopped the drive;
+then a build with one more line in the modulator starved the main loop during a `#NOISE` capture and the
+watchdog reset the chip (the motors coast in both cases). About 30 calls per interrupt went to the library's
+`fminf` / `fmaxf` / `sqrtf`. `#pragma GCC optimize("O3", "fast-math")` in foc.cpp makes them inline: closed loop
+30-31 us, open loop 28 us, the hand-over interrupt 35 us (was 51, one overrun per spin), no overruns since.
+The capture tools now cost one signal (`#NOISE`) or half a row (`#SCOPE`) per interrupt. The program is at 95 %
+of the flash (121 KB of 127 KB) in the bench build.
+
+**Not tested yet:** the new values above 6130 RPM (field weakening and the trips at 24000 were measured with the
+old ones), anything under load, and board 1.
 
 ## Verified without hardware
 

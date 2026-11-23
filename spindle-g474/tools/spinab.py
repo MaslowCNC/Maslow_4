@@ -18,7 +18,8 @@ vlog_s = float(sys.argv[5]) if len(sys.argv) > 5 else 3.0
 noise_runs = int(sys.argv[6]) if len(sys.argv) > 6 else 3
 noise_n = int(sys.argv[7]) if len(sys.argv) > 7 else 20000
 
-BAD = re.compile(r"\bERR\b|ERR:|FAULT|\bfault|over-current|slipped|slip stop|refused|lost lock|fell|did not lock|WARN|aborted")
+BAD = re.compile(r"\bERR\b|ERR:|FAULT|\bfault|over-current|slipped|slip stop|refused|lost lock|fell|did not lock|WARN|aborted|"
+                 r"reset reason|^boot:|Booting")
 R = 2 * 3.14159265 / 60
 # ramp: open loop to 2000 RPM at 250 rad/s^2, 2000..14000 at 500, above at 150 (config.h), + the lock
 ramp = min(rpm, 2000) * R / 250 + max(0, min(rpm, 14000) - 2000) * R / 500 + max(0, rpm - 14000) * R / 150 + 0.6
