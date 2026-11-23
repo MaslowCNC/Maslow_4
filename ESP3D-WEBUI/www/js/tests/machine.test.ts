@@ -221,14 +221,6 @@ describe("motion", () => {
     await z;
   });
 
-  test("an absolute jog goes to a work position, also outside ready to cut", async () => {
-    reply("<Idle|MPos:0,0,0|FS:0,0|MS:4>");
-    const op = g.machine.jog({ z: 0 }, { feed: 400, absolute: true });
-    expect(lastSent()).toBe("$J=G90 G21 F400 Z0\n");
-    reply("ok", "<Jog|MPos:0,0,1>", "<Idle|MPos:0,0,2>");
-    await op;
-  });
-
   test("a rejected jog reports the firmware error", async () => {
     const op = g.machine.jog({ x: 1 }, { feed: 1000 });
     reply("error:8");

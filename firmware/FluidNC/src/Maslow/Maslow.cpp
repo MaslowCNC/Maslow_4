@@ -1385,9 +1385,13 @@ void Maslow_::safety_control() {
             tick[i] = true;
         }
 
-        //If the motor has a position error greater than 15mm and we are running a file or jogging
+        //If the motor has a position error greater than 15mm and we are running a file or a move.
+        //Only in Ready To Cut: the belts are under position control only then (update() runs the PID
+        //only in READY_TO_CUT). Outside it the error is meaningless, e.g. 65 mm after Release Tension,
+        //and a Z-only move (G0 Z0 to Z home) must be allowed like a Z jog.
         previousPositionError[i] = axis[i].getPositionError();
-        if ((abs(axis[i].getPositionError()) > 15) && (sys.state() == State::Cycle || (sys.state() == State::Idle && Job::active()))) {
+        if ((abs(axis[i].getPositionError()) > 15) && calibration.currentState == READY_TO_CUT &&
+            (sys.state() == State::Cycle || (sys.state() == State::Idle && Job::active()))) {
             positionErrorCounter[i]++;
             log_warn("Position error on " << axis_id_to_label(i).c_str() << " axis exceeded 15mm while running. Error is "
                                           << axis[i].getPositionError() << "mm" << " Counter: " << positionErrorCounter[i]);

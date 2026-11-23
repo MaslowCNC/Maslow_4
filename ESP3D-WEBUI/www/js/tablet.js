@@ -870,14 +870,13 @@ const moveHome = () => {
   });
 }
 
-// A jog, not a move, so it follows the Z jog rules: allowed in any Maslow state. A G0 outside
-// Ready To Cut trips the firmware's belt position-error e-stop.
+// Allowed in any Maslow state, like a Z jog: machine.moveTo only refuses X/Y without belt lengths.
 const moveZHome = () => {
   tabletClick();
   const go = () => runButtonAction(
     id("tablettab_move_to_z_home"),
     "Move Z to Home",
-    () => machine.jog({ z: 0 }, { feed: JogFeedrate("Z"), absolute: true })
+    () => machine.moveTo({ z: 0 })
   );
 
   // Z home is the work Z origin, at machine Z = WCO[2]. Only warn if that is below the machine minimum.
