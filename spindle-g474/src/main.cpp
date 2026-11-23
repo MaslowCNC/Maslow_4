@@ -577,6 +577,11 @@ static void reportNoise() {
     for (int c = 0; c < 6; c++) foc::noiseResult(c / 3, c % 3, &z[c]);
     linkEvent("MSG", "NOISE zero (counts, nominal 2010, fault beyond +-310): M1 %.0f %.0f %.0f M2 %.0f %.0f %.0f", z[0].offset,
               z[1].offset, z[2].offset, z[3].offset, z[4].offset, z[5].offset);
+    // A star motor's three currents sum to zero: what the sum shows is measurement error, at any speed.
+    float ps[2][4];
+    for (int k = 0; k < 2; k++) foc::noisePhaseSum(k, &ps[k][0], &ps[k][1], &ps[k][2], &ps[k][3]);
+    linkEvent("MSG", "NOISE phase sum (A, %lu samples, true sum 0): M1 mean %+.3f sd %.3f [%+.2f..%+.2f] | M2 mean %+.3f sd %.3f [%+.2f..%+.2f]",
+              (unsigned long)z[0].n, ps[0][0], ps[0][1], ps[0][2], ps[0][3], ps[1][0], ps[1][1], ps[1][2], ps[1][3]);
 }
 static uint32_t g_stat_last    = 0;
 

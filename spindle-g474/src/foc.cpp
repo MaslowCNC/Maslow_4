@@ -159,6 +159,11 @@ namespace foc {
         uint32_t          g_noise_sum[2][3];
         uint64_t          g_noise_sq[2][3];
         uint16_t          g_noise_min[2][3], g_noise_max[2][3];
+        // ... and of each motor's phase sum, gain-corrected, in 1/16 counts.  A star-connected motor's three
+        // currents sum to zero, so this is the measurement's own error (common-mode noise, zero and gain
+        // errors) even while the motor runs, when the channels themselves show the real currents.
+        int64_t           g_noise_ps_sum[2], g_noise_ps_sq[2];
+        int32_t           g_noise_ps_min[2], g_noise_ps_max[2];
 
         // Fault post-mortem (#BRKDUMP): the last BRK_RING interrupts' raw samples, the comparator outputs read
         // at each interrupt's start and the duties in force during each sample, frozen when a fault (a
@@ -655,6 +660,16 @@ namespace foc {
                     if (v < g_noise_min[k][p]) g_noise_min[k][p] = v;
                     if (v > g_noise_max[k][p]) g_noise_max[k][p] = v;
                 }
+            for (int k = 0; k < 2; k++) {
+                const Motor& m = mot[k];
+                float ps = m.gain[0] * ((float)raw[k][0] - m.off[0]) + m.gain[1] * ((float)raw[k][1] - m.off[1]) +
+                           m.gain[2] * ((float)raw[k][2] - m.off[2]);
+                int32_t v = (int32_t)(ps * 16.0f);
+                g_noise_ps_sum[k] += v;
+                g_noise_ps_sq[k] += (int64_t)v * v;
+                if (v < g_noise_ps_min[k]) g_noise_ps_min[k] = v;
+                if (v > g_noise_ps_max[k]) g_noise_ps_max[k] = v;
+            }
             if (++g_noise_n >= g_noise_target) g_noise_on = false;
         }
         if (g_dump_on) {
@@ -905,6 +920,12 @@ namespace foc {
                 g_noise_min[k][p] = 0xFFFF;
                 g_noise_max[k][p] = 0;
             }
+        for (int k = 0; k < 2; k++) {
+            g_noise_ps_sum[k] = 0;
+            g_noise_ps_sq[k]  = 0;
+            g_noise_ps_min[k] = INT32_MAX;
+            g_noise_ps_max[k] = INT32_MIN;
+        }
         g_noise_n      = 0;
         g_noise_target = samples ? samples : 1;
         g_noise_on     = true;
@@ -944,6 +965,17 @@ namespace foc {
         out->min    = g_noise_min[k][p];
         out->max    = g_noise_max[k][p];
         out->n      = g_noise_n;
+    }
+
+    void noisePhaseSum(int k, float* mean_a, float* sd_a, float* min_a, float* max_a) {
+        const double scale = SENSE_A_PER_LSB / 16.0;
+        double       n     = (double)g_noise_n;
+        double       mean  = (double)g_noise_ps_sum[k] / n;
+        double       var   = (double)g_noise_ps_sq[k] / n - mean * mean;
+        *mean_a = (float)(mean * scale);
+        *sd_a   = var > 0 ? (float)(sqrt(var) * scale) : 0.0f;
+        *min_a  = (float)(g_noise_ps_min[k] * scale);
+        *max_a  = (float)(g_noise_ps_max[k] * scale);
     }
 
     MotorTelemetry take(int k) {

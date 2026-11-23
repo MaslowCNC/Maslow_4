@@ -231,7 +231,7 @@ an assumption the next one relies on. Stop at the first surprise.
   [first]` (the 16 interrupts before the last fault: raw phase currents, comparator outputs, duties).
   `#SPIN` now goes to `MAX_COMMAND_RPM` (24000).
 
-## Board 2 results (2026-11-23, USB power and 36 V, no motors): U9 sync clock
+## Board 2 results (2026-11-23, USB power, 36 V, then both motors to 24000 RPM): U9 sync clock
 
 Board 2 is a second v1.0 board (ESP32-S3 USB serial / MAC 14:63:93:28:62:6C, hostname `maslow`, 192.168.1.245
 on the office WiFi) with the sync bodge from the board's REVISIONS.md: a 22 pF capacitor stood on R30 pad 1
@@ -302,8 +302,51 @@ on the office WiFi) with the sync bodge from the board's REVISIONS.md: a 22 pF c
   filter already rejects. Board 1's comparator trips came while switching at 24000 RPM; keep the raised trips
   (30 A comparators, 18 A x 5 software) until a spin with the clock shows the margin. The software trip works
   on samples, so it is the one the clock should let come back down (15 A x 3).
+- **Spinning, both motors loose, 36.2 V** (2026-11-23, `tools/spinab.py`: 3 s of `#VLOG 200` and 3 x 20000-sample
+  `#NOISE` at speed per run). Steps 4-7 on board 2 first:
+  - `#ALIGN 0.5`: M1 +1.42 / -0.86 / -0.81 A, M2 +1.70 / -0.69 / -0.73 A (board 1: +1.43 / -0.92 / -0.82, +1.70 /
+    -0.70 / -0.74). `#GCAL`: M1 1.111 / 0.905 / 0.984, M2 0.886 / 1.078 / 1.037, apparent R 0.28-0.35 ohm,
+    stored with `#GSAVE` (dual bank). Board 1's gains are 1.111 / 0.906 / 0.983 and 0.889 / 1.076 / 1.035: the
+    same to the third decimal, so the per-phase gain errors come from the v1.0 layout (sense routing), not from
+    part tolerances. They could be the firmware's defaults for v1.0; v1.1 moves SB1, so measure it again there.
+  - Open loop 1000 RPM, closed loop 3000 (locked at 2000, handed back at 1500), then 6000, 12000, 18000, 24000:
+    no fault in 14 spins. One interrupt of 51 us at each hand-over to closed loop counts as an overrun (one per
+    spin, never in a row); otherwise 44-45 us longest, as on board 1.
+  - `#NOISE` now also gives each motor's **phase sum** (gain-corrected amps). A star motor's currents sum to
+    zero, so it is the measurement's own error, also while the motors run (the channels then show real current).
+
+  | RPM | clock | Z error deg | iq sd A, M1 / M2 | M1 demand mean / peak | M1 clipped | phase-sum sd A, M1 / M2 | M1 phase-sum extremes A | largest sample A, M1 / M2 |
+  |---|---|---|---|---|---|---|---|---|
+  | 0 (off) | on | | | | | 0.26-0.28 / 0.15 | -2.5..+2.3 | |
+  | 0 (off) | off | | | | | 2.15 / 0.91 | -8.4..+2.7 | |
+  | 3000 | on | -10.5..+6.3 | 0.47 / 0.13 | 0.121 / 0.155 | 0 | 0.30 / 0.18 | -1.9..+2.3 | 2.9 / 1.6 |
+  | 3000 | off | -5.0..+1.3 | 1.09 / 1.07 | 0.117 / 0.290 | 0 | 2.15 / 0.94 | -9.9..+3.2 | 10.5 / 3.6 |
+  | 6000 | on | -4.2..+1.9 | 0.39 / 0.15 | 0.252 / 0.277 | 0 | 0.30 / 0.24 | -2.2..+2.4 | 3.4 / 1.5 |
+  | 12000 | on | -1.4..+0.9 | 0.23 / 0.11 | 0.496 / 0.524 | 0 | 0.48 / 0.40 | -2.4..+2.6 | 4.3 / 2.1 |
+  | 12000 | off | -1.9..+2.0 | 1.24 / 0.99 | 0.491 / 0.642 | 0 | 2.19 / 1.00 | -9.9..+3.4 | 12.2 / 4.0 |
+  | 18000 | on | -3.2..+1.4 | 0.20 / 0.20 | 0.742 / 0.772 | 0 | 0.60 / 0.56 | -2.2..+2.0 | 4.3 / 3.1 |
+  | 24000 | on (3 runs) | -5.0..+4.1 | 0.36-0.53 / 0.21-0.40 | 0.91-0.97 / 1.004-1.007 | 0.00-0.01 % | 1.0-1.1 / 0.62-0.65 | -4.9..+2.6 | 8.6-9.6 / 4.4-4.5 |
+  | 24000 | off (2 runs) | -6.0..+3.2 | 1.67-2.41 / 0.55-1.02 | 0.96 / 1.135-1.152 | 5.5-5.8 % | 2.4 / 1.15-1.17 | -10.8..+3.4 | 13.2-14.4 / 6.2-6.5 |
+
+  - With the clock the measurement error while spinning is 2-7 times smaller (phase-sum sd), the torque-current
+    ripple 2-10 times smaller, and at 24000 RPM motor 1 no longer clips: 0.00-0.01 % of the periods against
+    5.5-5.8 % without it (board 1, never synchronised: 6-8 % and a peak demand of 1.12-1.13, the same as board 2
+    with the clock off). Motor 1 still sits at the voltage limit there with 1.9-3.0 A of field weakening.
+  - The Z error is no better with the clock at 3000 RPM (three other runs with it on: +3..+8 deg): down there it
+    follows the observers, not the sense noise.
+  - The phase-sum error grows with speed with the clock on too (motor 1: 0.30 A at 3000, 1.1 A at 24000), and at
+    24000 motor 1's phase b reads 1.8 A rms against 2.8-3.5 on a and c. Likely the bridge's own switching near the
+    sample as the duty nears the limit (the low side of one phase is on only briefly there). Not looked into.
+  - **Trips.** The largest single phase sample at 24000 RPM is 8.6-9.6 A with the clock and 13.2-14.4 A without
+    (motor 1, on ~3-5 A of real current). With `#TRIP 15 20` (the original thresholds: software 15 A, here x 5
+    periods, comparators 20 A, break filter 0.75 us) a 24000 RPM run passed with the clock, the comparators
+    reading high 9 times in 33000 main-loop reads; it also passed once without the clock (largest sample 13.2 A:
+    1.8 A of margin). The defaults stay at 18 A x 5 and 30 A: the same firmware runs boards without the capacitor.
+    With the clock there is room for 15 A x 3 again; under cutting load the real current comes on top.
 - New commands: `#SYNC` (status), `#SYNC 1 [rise ticks]`, `#SYNC 0` (PB4 driven low); `#PINCAP [reps]`
-  (drive off). PB4 is now driven low from `hw::init` (UCPD1 dead-battery pull-down disabled first).
+  (drive off). `#NOISE` adds the zeros and the phase sums. PB4 is now driven low from `hw::init` (UCPD1
+  dead-battery pull-down disabled first). `tools/syncsweep.py` (phase sweep) and `tools/spinab.py` (one bench
+  spin with the clock on or off, with a summary).
 
 ## Verified without hardware
 

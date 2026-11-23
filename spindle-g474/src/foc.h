@@ -103,6 +103,9 @@ namespace foc {
     void startNoise(uint32_t samples);
     bool noiseDone();
     void noiseResult(int m, int phase, NoiseStats* out);
+    // The same samples' phase sum per motor (gain-corrected, in the sense chain's amps): a star motor's true sum
+    // is zero, so this is the measurement error, also while the motor runs.
+    void noisePhaseSum(int m, float* mean_a, float* sd_a, float* min_a, float* max_a);
     // Bring-up (#DUMP): consecutive raw samples of all six channels, counts relative to each zero.
     int  startDump(int samples);   // returns the number it will capture (max 1024)
     bool dumpDone();
