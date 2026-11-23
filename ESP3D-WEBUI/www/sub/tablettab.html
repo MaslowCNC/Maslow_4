@@ -115,13 +115,16 @@
               style="background-color: #f2f0e4;" title="Set XY home position">Define XY Home</div>
           </div>
           <div id="tablettab-position-display" class="maslow-grid-container"
-            style="grid-template-columns: repeat(3, minmax(0, 1fr));">
+            style="grid-template-columns: 25% minmax(0, 1fr) minmax(0, 1fr);">
+            <!-- A Z, then the same house as the XY home button (hBtn in toolpath-displayer.js) -->
             <div id="tablettab_move_to_z_home" class="maslow-grid-item maslow-grid-item-btn"
-              style="background-color: #f2f0e4; border: 0; color: #337ab7; font: inherit;" title="Move Z to Home"
-              aria-label="Move Z to Home">
-              <span>Z</span>
-              <svg width="32" height="32" viewBox="0 0 24 24" aria-hidden="true">
-                <path fill="currentColor" d="M12 3 2 12h3v9h6v-6h2v6h6v-9h3L12 3z"></path>
+              style="background-color: #f2f0e4; border-right: 2px solid grey; aspect-ratio: auto;"
+              title="Move Z to Home" aria-label="Move Z to Home">
+              <svg width="62" height="32" viewBox="-100 54 284 146" aria-hidden="true" stroke="black" stroke-width="0.5">
+                <path fill="#9784b5" d="M-95 57H-5V77L-70 177.5H-5V197.5H-95V177.5L-30 77H-95Z" />
+                <path fill="#b7a1d0" d="M55.7 197.5H152.2L152.6 74.1 132.4 73.7 131.4 110.3 103.5 84 54.3 131.4Z" />
+                <rect fill="#dad0e6" stroke="none" x="74.1" y="146.2" width="29.8" height="51" />
+                <path fill="#9784b5" d="M103.5 84 167.3 145 181.1 132.2 103 57 25 131.4 40.6 145Z" />
               </svg>
             </div>
             <div class="maslow-grid-item">
