@@ -859,28 +859,35 @@ const sendMove = (cmd, options = {}) => {
 }
 
 const moveHome = () => {
-  if (!checkHomed()) {
-    return;
-  }
-
+  tabletClick();
+  // machine.moveTo refuses X/Y until belt lengths are known; runButtonAction shows why.
   checkZHomeAndProceed(() => {
-    move({ X: 0, Y: 0 });
+    runButtonAction(
+      id("tablettab_move_to_xy_home"),
+      "Move XY to Home",
+      () => machine.moveTo({ x: 0, y: 0 })
+    );
   });
 }
 
+// A jog, not a move, so it follows the Z jog rules: allowed in any Maslow state. A G0 outside
+// Ready To Cut trips the firmware's belt position-error e-stop.
 const moveZHome = () => {
   tabletClick();
+  const go = () => runButtonAction(
+    id("tablettab_move_to_z_home"),
+    "Move Z to Home",
+    () => machine.jog({ z: 0 }, { feed: JogFeedrate("Z"), absolute: true })
+  );
+
+  // Z home is the work Z origin, at machine Z = WCO[2]. Only warn if that is below the machine minimum.
   const machineZ = MPOS && MPOS.length >= 3 ? MPOS[2] : null;
   const workZeroZ = WCO && WCO.length >= 3 ? WCO[2] : null;
-  const zDeltaMm = machineZ !== null && workZeroZ !== null ? workZeroZ - machineZ : 0;
-
-  checkZHomeAndProceed(() => {
-    runButtonAction(
-      id("tablettab_move_to_z_home"),
-      "Move Z to Home",
-      () => machine.moveTo({ z: 0 })
-    );
-  }, zDeltaMm);
+  if (machineZ !== null && workZeroZ !== null && workZeroZ < Z_HOME_MIN_SAFE_MM) {
+    checkZHomeAndProceed(go, workZeroZ - machineZ);
+  } else {
+    go();
+  }
 }
 
 function saveSerialMessages() {
@@ -2866,7 +2873,11 @@ const runButtonAction = async (button, label, action) => {
     await op.accepted;
   } catch (err) {
     addMessage(`${label} not sent: ${err.detail ?? err.reason}`);
-    showButtonWarning(button, err.reason === "rejected" ? "Rejected" : "Not sent");
+    if (err.reason === "not-ready") {
+      alertdlg(label, err.detail); // refused for a reason the user needs to read, not a lost click
+    } else {
+      showButtonWarning(button, err.reason === "rejected" ? "Rejected" : "Not sent");
+    }
     return;
   } finally {
     button.classList.remove("machine-action-busy");
@@ -2884,16 +2895,16 @@ const runButtonAction = async (button, label, action) => {
   }
 };
 
-/** Swap a button's text for a short warning, then put it back. */
+/** Swap a button's contents for a short warning, then put them back (icons included). */
 const showButtonWarning = (button, text) => {
   if (button.classList.contains("machine-action-warning")) {
     return;
   }
-  const original = button.textContent;
+  const original = [...button.childNodes];
   button.textContent = text;
   button.classList.add("machine-action-warning");
   scheduleCallback(() => {
-    button.textContent = original;
+    button.replaceChildren(...original);
     button.classList.remove("machine-action-warning");
   }, BUTTON_WARNING_MS);
 };

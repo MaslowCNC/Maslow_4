@@ -429,8 +429,11 @@ const machine = (() => {
 	const resetCalibration = () => simpleOperation("reset calibration", "$CALRESET");
 
 	// Motion
-	/** Relative jog by {x, y, z} mm at feed mm/min. Done when the jog has finished. */
-	const jog = (delta, { feed } = {}) => {
+	/**
+	 * Relative jog by {x, y, z} mm at feed mm/min, or with absolute, a jog to {x, y, z} mm in work
+	 * coordinates. Done when the jog has finished.
+	 */
+	const jog = (delta, { feed, absolute = false } = {}) => {
 		const words = axisWords(delta);
 		if (!words.length) {
 			throw new TypeError("machine.jog: no axis given");
@@ -441,7 +444,7 @@ const machine = (() => {
 		if (xyNotReady(delta)) {
 			return notReady("jog", "Can't jog X/Y: belt lengths are unknown (machine not ready to cut)");
 		}
-		const line = `$J=G91 G21 F${fmt(feed)} ${words.join(" ")}`;
+		const line = `$J=${absolute ? "G90" : "G91"} G21 F${fmt(feed)} ${words.join(" ")}`;
 		return operation("jog", async ({ accept, resolve, ended }) => {
 			const motion = trackMotion("jog");
 			ended.then(motion.stop);
