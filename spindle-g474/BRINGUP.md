@@ -428,8 +428,16 @@ watchdog reset the chip (the motors coast in both cases). About 30 calls per int
 The capture tools now cost one signal (`#NOISE`) or half a row (`#SCOPE`) per interrupt. The program is at 95 %
 of the flash (121 KB of 127 KB) in the bench build.
 
-**Not tested yet:** the new values above 6130 RPM (field weakening and the trips at 24000 were measured with the
-old ones), anything under load, and board 1.
+**Up to speed with the new values** (`tools/spinab.py`, clock on, same day): no fault, no overrun, interrupt 31 us.
+
+| RPM | largest phase sample A, M1 / M2 | phase rms A, M1 / M2 (was) | M1 demand mean / peak | M1 clipped | M1 field weakening |
+|---|---|---|---|---|---|
+| 12100 | 3.1 / 1.5 (was 4.3 / 2.1) | 0.59-0.77 / 0.44-0.64 (0.89-1.06 / 0.75-0.93) | 0.498 / 0.534 | 0 | 0 |
+| 18070 | 3.5 / 2.5 (was 4.3 / 3.1) | 1.09-1.24 / 0.83-1.03 (1.42-1.62 / 1.15-1.22) | 0.738 / 0.771 | 0 | 0 |
+| 24000 | 8.4 / 4.1 (was 8.6-9.6 / 4.4-4.5) | 1.55-3.27 / 1.20-1.47 (1.79-3.53 / 1.36-1.75) | 0.965 / 0.987 | 0 % | 2.95 A |
+
+Motor 1 at 24000 still runs at the field-weakening limit (3 A); unchanged by this. **Not tested yet:** load and
+board 1.
 
 ## Verified without hardware
 
