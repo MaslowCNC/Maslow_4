@@ -13,7 +13,7 @@ PCB SETTINGS
   Layers: 4 (F.Cu GND pour / In1.Cu VCC 36 V / In2.Cu 3V3, with GND islands under the motor stages and the
     3V3 buck / B.Cu GND pour)
   Thickness: 1.6 mm, outer copper 1 oz
-  Size: ~102.3 x 121.4 mm
+  Size: 101.58 x 120.77 mm board outline (111.58 x 120.77 mm with JLCPCB's 5 mm edge rails left and right)
   Min track/space: 0.1 / 0.1 mm (Fine net class: MCU, logic, sense and I2C nets);
     0.15 / 0.15 mm elsewhere; plane pours (GND, 3V3, VCC) 0.25 mm clearance
   Vias: 0.6 / 0.3 mm (583 vias)
