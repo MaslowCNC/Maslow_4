@@ -59,7 +59,8 @@ These are the v1.1 changes done by hand, in order of value. Coordinates are KiCa
    - Run a wire on the bottom from R114 pin 1 (−20.1, 44.2) to R117 pin 1 (−24.0, 66.2).
    - The old detour is then left attached only at the shunt, 5 mΩ from ground.
 3. **3V3A filter.** Replace FB1 with a 4.7 Ω 0603 and add 10–22 µF on 3V3A next to C145.
-4. **Sync bodge** (one capacitor, one wire; route in `docs/v1.0-sync-bodge.svg`).
+4. **Sync bodge** (one capacitor, one wire; route in `docs/v1.0-sync-bodge.svg`, capacitor in
+   `docs/v1.0-sync-capacitor-3d.svg`).
    - Fit a 10 pF C0G capacitor (0402 or 0603) standing on end on R30's pad 1, which is U9's RT/CLK node, on the
      bottom. Only pad 1 is used: R30's pad 2 is ground, so the capacitor must not lie across R30.
    - Solder a fine insulated wire (30 AWG Kynar or enamelled) to U20 pin 57 (PB4), the 8th pin from the left on the
