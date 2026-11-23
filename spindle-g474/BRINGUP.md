@@ -231,6 +231,51 @@ an assumption the next one relies on. Stop at the first surprise.
   [first]` (the 16 interrupts before the last fault: raw phase currents, comparator outputs, duties).
   `#SPIN` now goes to `MAX_COMMAND_RPM` (24000).
 
+## Board 2 results (2026-11-23, USB power only): U9 sync clock
+
+Board 2 is a second v1.0 board (ESP32-S3 USB serial / MAC 14:63:93:28:62:6C, hostname `maslow`, 192.168.1.245
+on the office WiFi) with the sync bodge from the board's REVISIONS.md: a 22 pF capacitor stood on R30 pad 1
+(U9 RT/CLK) and a wire to U20 pin 57 (PB4).
+
+- **Bring-up from blank.** Its ESP32-S3 was blank (ROM loop: `invalid header: 0xffffffff`, TG0WDT resets).
+  Flashed over USB with esptool: `firmware.factory.bin` at 0x0 and `littlefs.bin` at 0x5F0000. Stage the
+  filesystem first: with `PLATFORMIO_DATA_DIR=.pio/fsdata` (as `scripts/flash-maslow.sh` sets it) `buildfs`
+  packs that folder, and an empty one gives an empty filesystem. Copy `FluidNC/data/*` into it. WiFi was set
+  by the user through the board's `maslow` access point. Board id read 600 mV (unified36v); the config was
+  created from `maslow-mini-36v.yaml`. The blank G474 took `$Spindle/G474=FLASH` first time (113 KB, ~25 s).
+  Its flash is still dual bank (OPTR 0xFFEFF8AA, as shipped); board 1 was moved to single bank (above).
+  No `#GCAL` record yet.
+- **U9 runs on USB power.** VSUP is diode-ORed from VCC (D1) and USB 5 V (D2), so U9 switches from ~4.6 V
+  with only USB connected (duty ~70 %, on-time ~1.35 us). Its alias shows on every sense channel at
+  4.9-5.1 kHz (U9 at ~485 or ~495 kHz on 4.6 V; board 1 at 36 V: 480.7 kHz).
+- **`#PINCAP`: the bodge is connected.** Rise time on the internal pull-up: PB4 571-576 ns, the unconnected
+  PB3 / PB5 / PD2 171-235 ns, so PB4 carries ~3x their load. That fits the wire plus the capacitor into
+  U9's RT/CLK pin, which is held at ~0.5 V while U9 runs. An open wire would add little; a short to ground
+  would time out.
+- **`#SYNC`: U9 locks.** 500 kHz on PB4 (TIM3_CH1), exactly 25 clocks per PWM period, started from TIM1's
+  update at the peak. `#NOISE 4000`, drive off, sd in counts (0.0104 A/count):
+
+  | | M1a | M1b | M1c | M2a | M2b | M2c |
+  |---|---|---|---|---|---|---|
+  | clock off | 34.4 | 125.2 | 22.7 | 36.0 | 21.6 | 14.9 |
+  | clock on, rising edge 170 ticks after the peak (default) | 3.8 | 3.8 | 1.8 | 1.8 | 1.9 | 1.5 |
+
+  Locking turns U9's ripple into a fixed offset per channel (up to ~240 counts on M1b at the worst phase),
+  so the clock starts at boot before the zero is measured, `#SYNC` changes are refused while the drive runs,
+  and every change re-measures the zero.
+- **Phase sweep** (`#SYNC 1 <rise>` in 10-tick steps, `tools/syncsweep.py`): every channel's sd <= 5.8 for a
+  rising edge 150-190 ticks after the peak, <= 7.1 at 140 and 240-260. U9's switch-on edge lands on the
+  rank-1 samples at 290-20, its switch-off edge (1.35 us later on 4.6 V) at 60-110. ADC5's rank 2 (M2b) is
+  ~120 ticks later and sees the same edges at 90-130 and 200-230. From 36 V the switch-off edge is only
+  ~31 ticks after the switch-on edge, which predicts a quiet window of about 140-260: the default 170 is in
+  both. A first build put the clock edge on the peak: the trigger starts TIM3 from 0 whatever CNT was
+  preset to, so `syncStart` now measures the phase against TIM1 and moves the counter (error 0, spread 0).
+- **Not tested yet: 36 V.** Next: 36 V, no motors, `#NOISE 4000` with `#SYNC 0` and `#SYNC 1`, `#CMPTEST`,
+  and a phase sweep there (`python3 tools/syncsweep.py <ip> 100:300:10`). If it holds, the trips can go back to 20 A
+  comparators and 15 A x 3 software (step 7 raised them for U9's noise) on boards with the clock.
+- New commands: `#SYNC` (status), `#SYNC 1 [rise ticks]`, `#SYNC 0` (PB4 driven low); `#PINCAP [reps]`
+  (drive off). PB4 is now driven low from `hw::init` (UCPD1 dead-battery pull-down disabled first).
+
 ## Verified without hardware
 
 - `pio run` and `pio run -e g474-bench` build (87 KB of 128 KB flash, 61 KB of 128 KB RAM).

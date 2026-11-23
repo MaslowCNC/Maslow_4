@@ -39,6 +39,20 @@ namespace hw {
             HAL_GPIO_Init(port, &g);
         }
 
+        // ---------------------------------------------------------------- U9 sync clock pin
+        bool     g_sync_on   = false;
+        uint32_t g_sync_rise = SYNC_RISE_TICKS;
+
+        void syncPinLow() {
+            GPIOB->BRR = GPIO_PIN_4;
+            GPIO_InitTypeDef g = {};
+            g.Pin   = GPIO_PIN_4;
+            g.Mode  = GPIO_MODE_OUTPUT_PP;
+            g.Pull  = GPIO_NOPULL;
+            g.Speed = GPIO_SPEED_FREQ_LOW;
+            HAL_GPIO_Init(GPIOB, &g);
+        }
+
         // ---------------------------------------------------------------- PWM timers
         uint32_t deadtimeTicks() {
             // DTG[7:5] = 0xx: DT = DTG * tDTS, tDTS = 1/170 MHz = 5.9 ns, up to 127 ticks (747 ns)
@@ -326,6 +340,13 @@ namespace hw {
         __HAL_RCC_ADC345_CLK_ENABLE();
         __HAL_RCC_DAC3_CLK_ENABLE();
         __HAL_RCC_DAC4_CLK_ENABLE();
+        __HAL_RCC_TIM3_CLK_ENABLE();
+        __HAL_RCC_PWR_CLK_ENABLE();
+
+        // PB4 (U9 sync clock) low, as a push-pull output, until #SYNC starts the clock.  After reset it is
+        // JTRST with a pull-up, and also UCPD1's CC2: the dead-battery pull-down must be off first.
+        PWR->CR3 |= PWR_CR3_UCPD_DBDIS;
+        syncPinLow();
 
         // A debugger halt stops the PWM timers, which turns the bridges off.
         __HAL_DBGMCU_FREEZE_TIM1();
@@ -601,6 +622,156 @@ namespace hw {
     void setFanDuty(uint8_t duty) {
         uint32_t arr = TIM4->ARR + 1;
         TIM4->CCR1   = (uint32_t)duty * arr / 255u;
+    }
+
+
+    // ---------------------------------------------------------------- U9 sync clock
+    uint32_t tim3ClockHz() {
+        // APB1 timers run at PCLK1, or twice it when APB1 is divided.
+        uint32_t pclk1 = HAL_RCC_GetPCLK1Freq();
+        return (RCC->CFGR & RCC_CFGR_PPRE1_2) ? 2 * pclk1 : pclk1;
+    }
+
+    bool syncStart(uint32_t rise, const char** why) {
+        if (!SYNC_AVAILABLE) { *why = "the PWM period is not 25 sync periods (PWM frequency override)"; return false; }
+        if (!(TIM1->CR1 & TIM_CR1_CEN)) { *why = "PWM timers not running"; return false; }
+        if (tim3ClockHz() != TIMER_CLOCK_HZ) { *why = "TIM3 clock differs from TIM1's"; return false; }
+        syncStop();
+        rise %= SYNC_PERIOD_TICKS;
+        TIM3->CR1   = 0;
+        TIM3->SMCR  = 0;
+        TIM3->PSC   = 0;
+        TIM3->ARR   = SYNC_PERIOD_TICKS - 1;
+        TIM3->CCMR1 = (6u << TIM_CCMR1_OC1M_Pos) | TIM_CCMR1_OC1PE;   // PWM mode 1: high while CNT < CCR1
+        TIM3->CCR1  = SYNC_HIGH_TICKS;
+        TIM3->EGR   = TIM_EGR_UG;                                     // load ARR/CCR1 (clears CNT)
+        // The counter wraps to 0 (rising edge) `rise` ticks after it starts.
+        TIM3->CNT   = (SYNC_PERIOD_TICKS - rise) % SYNC_PERIOD_TICKS;
+        TIM3->SR    = 0;
+        TIM3->CCER  = TIM_CCER_CC1E;
+        // TIM1 TRGO = update event, once per PWM period at the peak (RCR = 1, start() aligned it).  TIM3 in
+        // trigger mode on ITR0 (= TIM1 TRGO): the first event sets CEN; later ones change nothing.  Both
+        // timers count the same 170 MHz clock, so the phase then never drifts.
+        TIM1->CR2  = (TIM1->CR2 & ~TIM_CR2_MMS) | TIM_CR2_MMS_1;
+        TIM3->SMCR = (0u << TIM_SMCR_TS_Pos) | TIM_SMCR_SMS_2 | TIM_SMCR_SMS_1;
+        GPIO_InitTypeDef g = {};
+        g.Pin       = GPIO_PIN_4;
+        g.Mode      = GPIO_MODE_AF_PP;
+        g.Pull      = GPIO_NOPULL;
+        g.Speed     = GPIO_SPEED_FREQ_HIGH;
+        g.Alternate = GPIO_AF2_TIM3;
+        HAL_GPIO_Init(GPIOB, &g);
+        uint32_t t0 = micros();
+        while (!(TIM3->CR1 & TIM_CR1_CEN)) {
+            if (micros() - t0 > 1000) {
+                syncStop();
+                *why = "TIM3 never triggered from TIM1";
+                return false;
+            }
+        }
+        g_sync_on   = true;
+        g_sync_rise = rise;
+        // The trigger starts TIM3 from 0 at the peak whatever CNT was preset to (board 2: the first start put the
+        // rising edge on the peak).  So measure the phase against TIM1 and move the counter.  A move lands L ticks
+        // after the read it is based on, so the first move (k = 0) leaves an error of -L; the next uses k = L.
+        int32_t k = 0;
+        for (int i = 0; i < 5; i++) {
+            int32_t spread, e = syncPhaseError(&spread);
+            if (e >= -1 && e <= 1) break;
+            if (i > 0) k -= e;
+            const int32_t P     = (int32_t)SYNC_PERIOD_TICKS;
+            uint32_t      delta = (uint32_t)((((k - e) % P) + P) % P);
+            __disable_irq();
+            uint32_t c = TIM3->CNT + delta;
+            if (c >= SYNC_PERIOD_TICKS) c -= SYNC_PERIOD_TICKS;
+            TIM3->CNT = c;
+            __enable_irq();
+        }
+        return true;
+    }
+
+    void syncStop() {
+        TIM3->CR1  = 0;
+        TIM3->SMCR = 0;
+        TIM3->CCER = 0;
+        syncPinLow();
+        g_sync_on = false;
+    }
+
+    bool     syncRunning() { return g_sync_on && (TIM3->CR1 & TIM_CR1_CEN); }
+    uint32_t syncRise() { return g_sync_rise; }
+
+    int32_t syncPhaseError(int32_t* spread) {
+        // Read both counters back to back and work out TIM3's count expected from TIM1's position.
+        int32_t lo = 1 << 30, hi = -(1 << 30), sum = 0;
+        const int N = 16;
+        for (int i = 0; i < N; i++) {
+            __disable_irq();
+            uint32_t c1  = TIM1->CNT;
+            uint32_t dir = TIM1->CR1 & TIM_CR1_DIR;
+            uint32_t c3  = TIM3->CNT;
+            __enable_irq();
+            // Ticks since the peak: counting down from ARR, or up again after the valley.
+            uint32_t since = dir ? (PWM_ARR - c1) : (PWM_ARR + c1);
+            int32_t  want  = (int32_t)((since + SYNC_PERIOD_TICKS - g_sync_rise) % SYNC_PERIOD_TICKS);
+            int32_t  e     = (int32_t)c3 - want;
+            if (e > (int32_t)SYNC_PERIOD_TICKS / 2) e -= SYNC_PERIOD_TICKS;
+            if (e < -(int32_t)SYNC_PERIOD_TICKS / 2) e += SYNC_PERIOD_TICKS;
+            lo = e < lo ? e : lo;
+            hi = e > hi ? e : hi;
+            sum += e;
+            delayMicroseconds(7);
+        }
+        if (spread) *spread = hi - lo;
+        return sum / N;
+    }
+
+    uint32_t pinRiseCycles(char port, int pin, int reps, uint32_t* maxCycles) {
+        GPIO_TypeDef* gp = port == 'B' ? GPIOB : port == 'D' ? GPIOD : nullptr;
+        if (!gp || pin < 0 || pin > 15) return 0;
+        if (port == 'D') __HAL_RCC_GPIOD_CLK_ENABLE();
+        bool resume = port == 'B' && pin == 4 && g_sync_on;
+        if (port == 'B' && pin == 4) syncStop();
+        const uint32_t sh = 2 * pin, bit = 1u << pin;
+        uint32_t moder = gp->MODER, pupdr = gp->PUPDR, otyper = gp->OTYPER, odr = gp->ODR;
+        gp->OTYPER &= ~bit;
+        gp->PUPDR = (gp->PUPDR & ~(3u << sh)) | (1u << sh);   // pull-up
+        const uint32_t limit = SystemCoreClock / 50000;       // 20 us
+        uint64_t total = 0;
+        uint32_t worst = 0, good = 0;
+        for (int r = 0; r < reps; r++) {
+            gp->BRR   = bit;
+            gp->MODER = (gp->MODER & ~(3u << sh)) | (1u << sh);   // output, low
+            delayMicroseconds(50);                                 // discharge whatever hangs on the pin
+            __disable_irq();
+            uint32_t c0 = DWT->CYCCNT;
+            gp->MODER &= ~(3u << sh);                              // input: the pull-up takes over
+            uint32_t dt;
+            while (!(gp->IDR & bit)) {
+                if (DWT->CYCCNT - c0 > limit) break;
+            }
+            dt = DWT->CYCCNT - c0;
+            __enable_irq();
+            if (dt > limit) continue;
+            total += dt;
+            worst = dt > worst ? dt : worst;
+            good++;
+            delayMicroseconds(20);
+            watchdogKick();   // 500 reps x 4 pins is ~150 ms
+        }
+        gp->MODER  = moder;
+        gp->PUPDR  = pupdr;
+        gp->OTYPER = otyper;
+        gp->ODR    = odr;
+        if (port == 'B' && pin == 4) {
+            syncPinLow();
+            if (resume) {
+                const char* why;
+                syncStart(g_sync_rise, &why);
+            }
+        }
+        if (maxCycles) *maxCycles = worst;
+        return good ? (uint32_t)(total / good) : 0;
     }
 
     void watchdogStart() {

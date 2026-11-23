@@ -27,7 +27,7 @@
 HardwareSerial Link(PA_3_ALT1, PA_2_ALT1);   // USART2: RX PA3, TX PA2 (the ROM bootloader's port too)
 
 static const char* LINK_IDENTITY = "I:Maslow-Spindle,proto=1";
-static const char* FW_VERSION    = "g474-0.1";
+static const char* FW_VERSION    = "g474-0.2";
 
 // ------------------------------------------------------------------ link output
 
@@ -1018,6 +1018,50 @@ static void maintenance(const char* line) {
                       g_dump_rows, (unsigned long)PWM_FREQUENCY_HZ, DUMP_PER_LINE);
             g_dump_print = 0;
         }
+    } else if (!strcmp(word, "SYNC")) {
+        // #SYNC: status.  #SYNC 1 [rise ticks after the peak]: start the U9 sync clock on PB4.  #SYNC 0: stop
+        // it (PB4 driven low).  The buck needs about 80 us to lock; it free-runs on R30 (~480 kHz) otherwise.
+        // Starting, stopping or moving it shifts the sense zero (the buck's ripple lands on the samples as an
+        // offset), so it is refused while the drive runs and the zero is measured again afterwards.
+        if (n >= 2 && (foc::enabled() || g_spinning)) {
+            linkEvent("WARN", "SYNC refused: the drive must be off");
+        } else if (n >= 2) {
+            const char* why = "";
+            if (a < 0.5f) {
+                hw::syncStop();
+            } else {
+                uint32_t rise = n >= 3 && b >= 0 ? (uint32_t)b : SYNC_RISE_TICKS;
+                if (!hw::syncStart(rise, &why)) linkEvent("WARN", "SYNC start failed: %s", why);
+            }
+            delay(5);
+            if (!foc::calibrateOffsets(2000, &why)) linkEvent("WARN", "SYNC: current-sense zero not re-measured: %s", why);
+        }
+        int32_t spread = 0;
+        int32_t err    = hw::syncRunning() ? hw::syncPhaseError(&spread) : 0;
+        linkEvent("MSG", "SYNC: %s, %lu Hz, rising edge %lu ticks after the PWM peak, phase error %ld ticks (spread %ld) | "
+                         "TIM3 CR1 %lx SMCR %lx, clock %lu Hz | PB4 mode %lu AF %lu | PWR CR3 %08lx",
+                  hw::syncRunning() ? "RUNNING" : "off (PB4 low)", (unsigned long)(TIMER_CLOCK_HZ / SYNC_PERIOD_TICKS),
+                  (unsigned long)hw::syncRise(), (long)err, (long)spread, (unsigned long)TIM3->CR1, (unsigned long)TIM3->SMCR,
+                  (unsigned long)hw::tim3ClockHz(), (unsigned long)((GPIOB->MODER >> 8) & 3),
+                  (unsigned long)((GPIOB->AFR[0] >> 16) & 15), (unsigned long)PWR->CR3);
+    } else if (!strcmp(word, "PINCAP")) {
+        // #PINCAP [reps]: rise time on the internal pull-up of PB4 (the sync clock pin) and three unconnected
+        // pins for reference.  Extra capacitance on PB4 (the bodge wire, the capacitor) shows as extra time.
+        if (foc::enabled() || g_spinning) {
+            linkEvent("WARN", "PINCAP refused: the drive must be off");
+        } else {
+            int reps = n >= 2 && a >= 1 ? (a > 500 ? 500 : (int)a) : 100;
+            struct P { char port; int pin; const char* name; } pins[] = {
+                { 'B', 3, "PB3 pin 56" }, { 'B', 5, "PB5 pin 58" }, { 'D', 2, "PD2 pin 55" }, { 'B', 4, "PB4 pin 57" } };
+            uint32_t avg[4], mx[4];
+            for (int i = 0; i < 4; i++) avg[i] = hw::pinRiseCycles(pins[i].port, pins[i].pin, reps, &mx[i]);
+            float ref = (avg[0] + avg[1] + avg[2]) / 3.0f;
+            float ns  = 1e9f / SystemCoreClock;
+            linkEvent("MSG", "PINCAP %d reps, rise to logic 1 on the pull-up, ns avg/max: %s %.0f/%.0f, %s %.0f/%.0f, %s %.0f/%.0f, "
+                             "%s %.0f/%.0f | PB4 = %.1f x the reference pins (0 = timed out)",
+                      reps, pins[0].name, avg[0] * ns, mx[0] * ns, pins[1].name, avg[1] * ns, mx[1] * ns, pins[2].name, avg[2] * ns,
+                      mx[2] * ns, pins[3].name, avg[3] * ns, mx[3] * ns, ref > 0 ? avg[3] / ref : 0.0f);
+        }
     } else if (!strcmp(word, "SLOW") && n >= 2) {
         hw::setSlowMode((int)a);
         linkEvent("MSG", "SLOW: slow ADC2 conversions %s", a < 0.5f ? "free-running" : a < 1.5f ? "after the current samples" : "off");
@@ -1029,7 +1073,7 @@ static void maintenance(const char* line) {
                          "SPIN <rpm> <ms> JMEAS <rpm> VER");
         linkEvent("MSG", "# bring-up: NOISE [samples] SLOW <0|1|2> DUMP [samples] [channel] BRK BKF <0-15> CMPTEST <A> [ms] BRKDUMP "
                          "[first] MOE LOAD <us> RXLOG PREV GCAL [V] GAIN GAIN1/GAIN2 <a> <b> <c> GSAVE GCLEAR FLASHCRC <len> CALDBG "
-                         "DBANK <0|1>");
+                         "DBANK <0|1> SYNC [0|1 [rise]] PINCAP [reps]");
         return;
     }
     if (strcmp(word, "STAT") && strcmp(word, "VER") && strcmp(word, "ALIGN") && strcmp(word, "NOISE") && strcmp(word, "SLOW") &&
@@ -1038,7 +1082,8 @@ static void maintenance(const char* line) {
         strcmp(word, "PREV") && strcmp(word, "GCAL") && strncmp(word, "GAIN", 4) && strcmp(word, "JMEAS") &&
         strcmp(word, "GSAVE") && strcmp(word, "GCLEAR") &&
         strcmp(word, "FLASHCRC") && strcmp(word, "CALDBG") && strcmp(word, "DBANK") && strcmp(word, "VLOG") &&
-        strcmp(word, "TRIP") && strcmp(word, "BKF") && strcmp(word, "CMPTEST") && strcmp(word, "BRKDUMP")) {
+        strcmp(word, "TRIP") && strcmp(word, "BKF") && strcmp(word, "CMPTEST") && strcmp(word, "BRKDUMP") &&
+        strcmp(word, "SYNC") && strcmp(word, "PINCAP")) {
         linkEvent("MSG", "tuning: cur %.3f/%.0f pos %.2f/%.3f/%.1f bw %.2f/%.0f olki %.1f I hold %.1f spin %.1f "
                          "boost %.1f lim %.1f obs R %.3f L %.1fuH flux %.2fmWb trip %.1f A dtc %.0f ns CL %d fw %.1f A/%.2f",
                   tu.cur_kp, tu.cur_ki, tu.pos_kp, tu.pos_kd, tu.pos_ki, tu.pos_bw_min, tu.pos_bw_full_rpm, tu.ol_ki,
@@ -1413,6 +1458,15 @@ void setup() {
         }
         g_init_ok = hw::start(&why);
         BOOT_TRACE_POINT(g_init_ok ? "hw::start ok, ADC interrupt on" : "hw::start FAILED");
+        if (g_init_ok && SYNC_AT_BOOT) {
+            // Before the offset calibration below (board.h); the buck locks in ~80 us, well inside the settling delay.
+            const char* swhy = "";
+            if (hw::syncStart(SYNC_RISE_TICKS, &swhy)) {
+                BOOT_TRACE_POINT("U9 sync clock on");
+            } else {
+                linkEvent("WARN", "U9 sync clock did not start: %s", swhy);
+            }
+        }
     }
 #ifdef BOOT_TRACE
     if (g_init_ok) {

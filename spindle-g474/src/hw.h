@@ -53,6 +53,22 @@ namespace hw {
 
     void setFanDuty(uint8_t duty);   // 0..255 on VAC_CONTROL
 
+    // U9 sync clock on PB4 (board.h).  Off (the default) drives PB4 low.  syncStart needs the PWM timers
+    // running (after start()); rise = rising edge in timer ticks after the PWM peak.
+    bool syncStart(uint32_t rise, const char** why);
+    void syncStop();
+    bool syncRunning();
+    uint32_t syncRise();
+    // Bring-up: phase of the sync clock against TIM1, ticks (should equal the rise setting), and the
+    // timer clocks (TIM3 must count at the same 170 MHz as TIM1 to stay locked).
+    int32_t syncPhaseError(int32_t* spread);
+    uint32_t tim3ClockHz();
+
+    // Bring-up (#PINCAP): CPU cycles a pin takes to rise from 0 V to a logic 1 on its internal pull-up
+    // (~40 kOhm), averaged over reps; 0 = timed out.  The extra capacitance on a pin shows as extra time.
+    // Only unconnected pins: PB3, PB4 (stopping the sync clock first), PB5, PD2.
+    uint32_t pinRiseCycles(char port, int pin, int reps, uint32_t* maxCycles);
+
     void watchdogStart();
     void watchdogKick();
 
