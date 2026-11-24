@@ -504,8 +504,8 @@ Same spin at each speed, `tools/ripple.py`, motor 1 / motor 2. "old" = `#PLL 0;#
   -77 %), and the DC current is gone (0.54 / 0.71 -> 0.03 / 0.14 A).
 - **The measured torque current still ripples as before** (iq sd 0.74 / 0.51 A at 20030). It is twice per turn:
   iq +-0.99 / +-0.65 A and id +-1.14 / +-0.66 A at 667 Hz, plus id +-0.55 / +-0.45 A three times per turn. That is
-  the phases' own asymmetry driving current the ~420 Hz current loop cannot hold down, not the estimate. Next: a
-  twice-per-turn term in the current loop.
+  the phases' own asymmetry driving current the ~420 Hz current loop cannot hold down, not the estimate. The
+  twice-per-turn term in the current loop is the next section.
 - **What the learner finds is the same at every speed and from run to run**: twice per turn 1.37-1.56 deg at
   -162..-167 deg (motor 1) and 0.92-1.01 deg at -60..-67 (motor 2); once per turn 0.2-0.7 deg (motor 1, wanders at
   3070 RPM) and 0.6-0.9 deg (motor 2). The twice-per-turn figures match the captures taken before it existed.
@@ -527,6 +527,69 @@ Same spin at each speed, `tools/ripple.py`, motor 1 / motor 2. "old" = `#PLL 0;#
   Flash: 123892 of 126976 bytes in the bench build.
 
 **Not tested:** load (a cut), a Z move while spinning, above 20030 RPM with these on, and board 1.
+
+## Twice-per-turn current compensation (board 2, 2026-11-24, loose motors)
+
+The motors' three phases are not equal, so the back-EMF has a small part that turns backward (negative
+sequence): 3.2 % of the main one on board 2's motor 1, 1.8 % on motor 2. In the rotor's frame that is a voltage
+turning backward at twice the rotor's speed - 0.52 / 0.29 V at 667 Hz at 20000 RPM - and the ~400 Hz current
+loops cannot hold against it. The drive now adds the opposite voltage, `we x flux x e^(-j 2 theta)`, and learns
+that flux from the current error (`config.h` `CUR2_GAIN`, `foc.cpp` `cur2Gain`). `#CUR2 <gain>` sets the
+learning rate (default 0.05 per radian turned, 0 = off and forgotten); `#CUR2` prints what each motor has
+learned. It learns in closed loop above 2500 RPM, holds below, and every start learns afresh (~3 turns).
+
+`tools/ripple.py`, off and on in the same spin, motor 1 / motor 2. The backward current is the part of
+`id + j iq` that turns backward twice per turn in a `#SCOPE` capture (`tools/scope.py` prints it now).
+
+| RPM | compensation | backward current, A | measured iq sd, A | measured id sd, A | phase current rms, A | learned flux: % of the flux constant at deg |
+|---|---|---|---|---|---|---|
+| 3070 | off | 0.047 / 0.028 | 0.19 / 0.10 | 0.16 / 0.08 | 0.24 / 0.20 | |
+| | on | 0.002-0.006 / 0.000-0.004 | 0.19 / 0.10 | 0.15 / 0.08 | 0.24 / 0.19 | 2.7-3.0 at -118..-125 / 1.8-2.0 at +156..+163 |
+| 6130 | off | 0.196 / 0.113 | 0.23 / 0.13 | 0.22 / 0.13 | 0.25 / 0.16 | |
+| | on | 0.006 / 0.003 | 0.19 / 0.10 | 0.16 / 0.10 | 0.22 / 0.13 | 3.0-3.2 at -112..-115 / 1.7-1.9 at +159..+163 |
+| 12100 | off | 0.662 / 0.379 | 0.48 / 0.30 | 0.53 / 0.30 | 0.51 / 0.32 | |
+| | on | 0.004 / 0.002 | 0.18 / 0.12 | 0.20 / 0.16 | 0.22 / 0.17-0.22 | 3.2 at -109..-111 / 1.7-1.8 at +159..+161 |
+| 20030 | off | 1.09 / 0.68 | 0.74 / 0.52 | 0.93 / 0.60 | 0.84 / 0.56 | |
+| | on | 0.001-0.004 / 0.001-0.006 | 0.19 / 0.22 | 0.44 / 0.38 | 0.35 / 0.32 | 3.1-3.2 at -103..-106 / 1.7-1.8 at +153..+155 |
+
+- **The backward current is gone at every speed.** At 20030 RPM the motors carry 0.35 / 0.32 A rms per phase
+  unloaded, was 0.84 / 0.56 (copper loss -83 % / -67 %; with the estimator of two days ago it was 1.36 / 1.18 A),
+  and the measured torque current ripples 0.19 / 0.22 A sd, was 0.74 / 0.52.
+- **What it learns is a property of each motor**: the same size at every speed and from run to run, its angle
+  moving ~17 deg (motor 1) and ~6 deg (motor 2) between 3070 and 20030 RPM. It agrees with the twice-per-turn
+  wobble the observer's pattern learner finds (1.4-1.6 deg = 2.4-2.8 %, 0.9-1.0 deg = 1.6-1.8 %).
+- **The loop model it learns through is right within 8 % and 10 deg** at all four speeds, both motors (they turn
+  opposite ways): the flux the model works out from an "off" capture's backward current against the flux then
+  learned. That is the margin: the learning converges while the model's phase is within 90 deg of the truth.
+  Learning rates 0.02, 0.05 and 0.1 learned the same flux.
+- **Speed changes**: ramping between 6130 and 12100 RPM (500 rad/s^2) the backward current stays under 0.03 A.
+  A 1000 RPM step at 3070 RPM moves the angle error +-1.6-2.3 deg with it on and off alike.
+- **Starts, stops, hand-overs** on boot defaults (learning from 2500 RPM in the ramp): runs to 3070, 6130,
+  12100 and 20030 RPM, three start / stop cycles at 6130, and one spin that dropped to open loop at 1000 RPM
+  and came back up twice (the flux is kept through open loop). No fault, no interrupt overrun.
+- **Two minutes at 20030 RPM** (30 measurements, the build in this commit): the learned flux stayed at
+  3.1-3.2 % at -103..-106 deg / 1.7-1.9 % at +152..+155, phase current 0.33-0.37 / 0.33-0.34 A rms, no fault.
+- **What is left at 20030 RPM** (captures): id three times per turn +-0.56 / +-0.47 A, as before; motor 2's iq
+  once per turn +-0.25 A; ~0.20 / 0.14 A rms of the rest. The three-times part sits on the d axis only and
+  grows faster than the speed (0.02 / 0.01 A at 3070 RPM, 0.05 / 0.03 at 6130, 0.19 / 0.11 at 12100), and
+  motor 2's average torque current reads 0.13 A of braking at 12100 and 20030 RPM, which a motor turning
+  steadily cannot have. Both look like the current measurement at high duty (short low-side time), not
+  current: find that out before compensating it the same way - a term here would put the opposite into the
+  real current.
+- **Kicks, with the compensation on and off alike**: about once or twice a minute a rotor falls 2-4 deg behind
+  for a few tens of ms (motor 1 mostly: that second's angle error spans 3-4 deg against 1.5-2.5, the torque
+  command swings 0.3-0.4 A). Not caught in a capture yet.
+- **Interrupt time**: 36-37 us with it off, 38 us on, longest seen since boot 42 us (the next sample is ready at
+  ~48.7 us). Its gain follows the speed slowly and is worked out in the main loop every 2 ms
+  (`foc::background`); in the interrupt it made that 38 / 39 us, longest 43.
+- **Simulation** (`test/sim`, README.md; the model's phases are unequal as board 2's now): the same backward
+  current without it (0.16 / 0.09 A at 6000 RPM, 0.95 / 0.54 A at 18000) and 0.01 A or less with it - also
+  under the 15 and 36 mNm load steps, during the Z move while spinning, at 24000 RPM with the field weakening at
+  its limit, over the sweep's 75 cases of motor-constant errors, and with R at half or twice the firmware's.
+- Flash: 125068 of 126976 bytes in the bench build (98.5 %), 124116 in `g474`.
+
+**Not tested on hardware:** load (a cut) and a Z move while spinning (simulation only), above 20030 RPM with it
+on, the XY board's Spindle On path (bench `#SPIN` only), and board 1.
 
 ## Verified without hardware
 

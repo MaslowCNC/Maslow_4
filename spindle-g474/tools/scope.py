@@ -5,6 +5,9 @@
 # three and six times per electrical turn (= per mechanical turn: one pole pair), and where the observer's flux
 # circle sits.  Once per turn = something constant in the stator frame (a DC current or flux offset); twice =
 # unequal phases; three times = the two-shunt rebuild's sectors; six times = dead time.
+# It also splits the current (id + j iq) into parts that turn in the control frame.  The part turning backward twice
+# per turn is a backward-turning (negative-sequence) stator current: unequal phases, what "#CUR2" cancels.
+import cmath
 import math
 import re
 import sys
@@ -104,6 +107,40 @@ print("  %-28s %9s %8s | amplitude repeating per turn: %8s %8s %8s %8s %8s | res
 for name, x in sig.items():
     mean, sd, amp, res = harmonics(x)
     print("  %-28s %9.3f %8.3f |                               %8.3f %8.3f %8.3f %8.3f %8.3f | %8.3f" % (name, mean, sd, amp[0], amp[1], amp[2], amp[3], amp[4], res))
+
+
+def rotating(xd, xq, ang):
+    # id + j iq = the sum over k of part[k] x exp(j k ang): least squares on both axes, then cos / sin to +k / -k
+    hs = (1, 2, 3)
+    cols = [[1.0] * len(ang)]
+    for h in hs:
+        cols.append([math.cos(h * t) for t in ang])
+        cols.append([math.sin(h * t) for t in ang])
+    n = len(cols)
+    Am = [[sum(a * b for a, b in zip(cols[i], cols[j])) for j in range(n)] for i in range(n)]
+    cd = solve(Am, [sum(a * b for a, b in zip(cols[i], xd)) for i in range(n)])
+    cq = solve(Am, [sum(a * b for a, b in zip(cols[i], xq)) for i in range(n)])
+    part = {0: complex(cd[0], cq[0])}
+    for k, h in enumerate(hs):
+        A, B = complex(cd[1 + 2 * k], cq[1 + 2 * k]), complex(cd[2 + 2 * k], cq[2 + 2 * k])
+        part[h], part[-h] = (A - 1j * B) / 2, (A + 1j * B) / 2
+    return part
+
+
+# the control angle = reference - angle error (the angle error is sampled one interrupt earlier: it moves slowly)
+thc = [t - math.radians(e) for t, e in zip(th, sig["angle error deg"])]
+part = rotating(sig["id A"], sig["iq A"], thc)
+pa = lambda z: "%.3f at %+4.0f" % (abs(z), math.degrees(cmath.phase(z)))
+print("  current's parts turning in the control frame (A at deg): steady %s | once per turn: backward %s, forward %s" % (pa(part[0]), pa(part[-1]), pa(part[1])))
+print("      twice: backward %s, forward %s | three times: backward %s, forward %s" % (pa(part[-2]), pa(part[2]), pa(part[-3]), pa(part[3])))
+# The flux "#CUR2" would have to add to cancel the backward twice-per-turn part, by the loop model (foc.cpp cur2Gain)
+# with the default R, L and current-loop gains: volts per amp at -2 we, over we.
+R_, L_, KP_, KI_, TAU_ = 0.28, 75e-6, 0.2, 1000.0, 1.5 / 20000.0
+we = sum(c["ch"][3][i] for i in idx) / len(idx) * math.pi / 30.0   # signed, this motor's own frame
+if abs(we) > 100:
+    lam = -part[-2] * (cmath.exp(-2j * we * TAU_) * (R_ - 1j * we * L_) - 1j * we * L_ + KP_ + 1j * KI_ / (2 * we)) / we
+    print("      the twice-per-turn compensation is short by %.2f %% of the flux constant at %+.0f deg (loop model, default R, L, gains;"
+          " \"#CUR2\" prints what the drive has learned)" % (abs(lam) / (c["flux"] * 1e-3) * 100.0, math.degrees(cmath.phase(lam))))
 ca, cb = harmonics(fa)[0], harmonics(fb)[0]   # fitted with the harmonics: a part turn at the end does not shift it
 rad = [math.hypot(a - ca, b - cb) for a, b in zip(fa, fb)]
 big = max(max(abs(a), abs(b)) for a, b in zip(fa, fb))

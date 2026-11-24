@@ -138,6 +138,19 @@ constexpr float OBS_HARM_MIN_RPM = 2500.0f;
 // (d flux = gain x angle step x (1 - |flux|^2 / constant^2) x flux): an offset of the circle then decays within
 // ~1 / gain radians instead of sitting wherever the clamp left it.  #OBSK <gain>, 0 = off (clamp only, as before).
 constexpr float OBS_CENTRE_GAIN = 0.5f;
+// Twice-per-turn current compensation (closed loop; #CUR2 <gain>, 0 = off; BRINGUP.md "Twice-per-turn current
+// compensation").  The motors' three phases are not equal: on board 2 the back-EMF carries a backward-turning
+// (negative-sequence) part of 3.2 % (motor 1) and 1.8 % (motor 2) of the main one.  In the rotor's frame that is a
+// voltage turning backward at twice the rotor's speed, 0.52 / 0.29 V at 20000 RPM = 667 Hz, where the current loops
+// (~400 Hz) cannot hold against it: +-1.1 / +-0.7 A of current that does no work.  The drive adds the opposite
+// voltage, we x flux x e^(-j 2 theta), and learns that flux (two numbers per motor, nearly the same at every speed)
+// from the current error turned forward by 2 theta, through the loop's own model (foc.cpp cur2Gain; what the drive
+// learned matched the model's answer within 8 % and 10 deg from 3070 to 20030 RPM, both motors).  The gain is the
+// share of the remaining error taken out per radian turned: 0.05 settles in ~3 turns; 0.02 and 0.1 learned the same.
+// It learns in closed loop above OBS_HARM_MIN_RPM (below that this current is under 0.05 A) and holds its flux below;
+// it does not learn while the voltage limit clips.  Every start learns it afresh.
+constexpr float CUR2_GAIN       = 0.05f;
+constexpr float CUR2_MAX        = 0.05f;     // each component of its flux is limited to this share of the flux constant
 constexpr float OBS_LOCK_TAU_S  = 0.030f;    // the hand-over lock test's own speed average: board 1's observers
                                              // ripple ~5-8 % at 1x / 2x electrical under the 3 A open-loop hold
 constexpr float LOST_FRACTION   = 0.30f;     // BENCH: observer this far off the command ...

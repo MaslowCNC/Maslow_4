@@ -100,6 +100,7 @@ namespace foc {
             float theta;
             float id, iq, id_ref, iq_ref;
             float int_d, int_q;
+            float cur2_a, cur2_b;         // closed loop: the twice-per-turn compensation's flux (Wb; config.h CUR2_GAIN)
             float vd, vq;
             float valpha, vbeta;          // last commanded voltage
             float va_prev, vb_prev;       // ... the one before: in force over the period that just ended (the observer's input)
@@ -224,8 +225,9 @@ namespace foc {
             CUR_KP, CUR_KI, POS_KP, POS_KD, POS_KI, POS_BW_MIN, POS_BW_FULL_RPM, OL_CUR_KI,
             HOLD_CURRENT_A, SPINUP_CURRENT_A, Z_MOVE_BOOST_A, IQ_LIMIT_A,
             PHASE_R_OHM, PHASE_L_H, FLUX_WB, SW_TRIP_A, DEADTIME_COMP_NS, DT_COMP_KNEE_A, true, FW_MAX_A, FW_TARGET,
-            OBS_PLL_HZ, OBS_CENTRE_GAIN, OBS_HARM_GAIN,
+            OBS_PLL_HZ, OBS_CENTRE_GAIN, OBS_HARM_GAIN, CUR2_GAIN,
         };
+        volatile float g_cur2_kr = 0, g_cur2_ki = 0;   // the twice-per-turn compensation's learning gain (background())
 
         void resetControl(Motor& m) {
             m.flux_a = m.flux_b = 0;
@@ -235,6 +237,7 @@ namespace foc {
             m.obs_angle = m.obs_da = m.obs_err = 0;
             m.h[0] = m.h[1] = m.h[2] = m.h[3] = m.h_mean = m.h_pat = 0;
             m.int_d = m.int_q = 0;
+            m.cur2_a = m.cur2_b = 0;
             m.vd = m.vq = m.valpha = m.vbeta = 0;
             m.va_prev = m.vb_prev = 0;
             m.pos_int = m.id_cl = m.iq_carry = 0;
@@ -366,6 +369,20 @@ namespace foc {
             return MAX_MODULATION * (DUTY_MAX - vdt) * g_vbus * INV_SQRT3;
         }
 
+        // The twice-per-turn compensation's learning gain at electrical speed w > 0 (config.h CUR2_GAIN): gain x period
+        // x the volts the loop needs at -2w in the control frame for one amp of the current's part there,
+        //   1 / T = e^(-j d) (R - j w L) - j w L + Kp + j Ki / (2 w),   d = 2 w x 1.5 periods:
+        // the winding, the decoupling on the measured current, the PI, and the 1.5 periods between a sample and its
+        // voltage (the output is turned forward for the frame's own rotation, not for this part, which turns
+        // backward in the frame at 2w).  For a motor turning the other way it is minus the complex conjugate.
+        inline void cur2Gain(float w, float* kr, float* ki) {
+            const float d = 2.0f * PWM_DELAY_PERIODS * DT * w, d2 = d * d;
+            const float cd = 1.0f - d2 * (0.5f - d2 * (1.0f / 24.0f)), sd = d * (1.0f - d2 * (1.0f / 6.0f));
+            const float wl = w * g_tun.l, g = g_tun.cur2_gain * DT;
+            *kr = g * (cd * g_tun.r - sd * wl + g_tun.cur_kp);
+            *ki = g * (g_tun.cur_ki / (2.0f * w) - cd * wl - sd * g_tun.r - wl);
+        }
+
         // dq current loops for one motor at angle m.theta, electrical speed we.
         //   soft = false (closed loop): PI current loops, ~400 Hz (ESC1 gains), decoupling + EMF feed-forward.
         //   soft = true  (open loop): a voltage drive - R*I, L and back-EMF feed-forward - trimmed by a
@@ -383,6 +400,7 @@ namespace foc {
             const float L = g_tun.l;
             float ed = m.id_ref - m.id, eq = m.iq_ref - m.iq;
             float vd, vq, int_d, int_q;
+            float n_a = m.cur2_a, n_b = m.cur2_b;
             if (soft) {
                 float vd_ff = g_tun.r * m.id_ref - we * L * m.iq_ref;
                 float vq_ff = g_tun.r * m.iq_ref + we * L * m.id_ref + (emf_ff ? we * g_tun.flux : 0.0f);
@@ -397,6 +415,21 @@ namespace foc {
                 int_q = clampf(m.int_q + g_tun.cur_ki * eq * DT, -vmax, vmax);
                 vd = g_tun.cur_kp * ed + int_d + vd_ff;
                 vq = g_tun.cur_kp * eq + int_q + vq_ff;
+                // Twice-per-turn compensation (config.h CUR2_GAIN): a voltage we x flux that turns backward in this
+                // frame at twice the rotor's angle - what unequal phases add to the back-EMF.  The flux is learned
+                // from the current error turned forward by the same angle (its steady part is the current's
+                // backward-turning part), through the loop model's gain (cur2Gain; zero while it does not learn).
+                if (g_tun.cur2_gain > 0.0f) {
+                    const float st = 2.0f * s * c, ct = c * c - s * s;
+                    const float ea = ed * ct - eq * st, eb = ed * st + eq * ct;
+                    const float k0 = g_cur2_kr, ki = g_cur2_ki, kr = we < 0.0f ? -k0 : k0, lim = CUR2_MAX * g_tun.flux;
+                    n_a = clampf(n_a + kr * ea - ki * eb, -lim, lim);
+                    n_b = clampf(n_b + kr * eb + ki * ea, -lim, lim);
+                    vd += we * (n_a * ct + n_b * st);
+                    vq += we * (n_b * ct - n_a * st);
+                } else {
+                    n_a = n_b = 0;
+                }
             }
             float mag = sqrtf(vd * vd + vq * vq);
             m.u       = mag / fmaxf(vmax, 1e-3f);
@@ -409,8 +442,10 @@ namespace foc {
                 m.sat_n++;
                 // Saturated: hold the integrators where they were (no wind-up).
             } else {
-                m.int_d = int_d;
-                m.int_q = int_q;
+                m.int_d  = int_d;
+                m.int_q  = int_q;
+                m.cur2_a = n_a;
+                m.cur2_b = n_b;
             }
             // Field weakening (closed loop, #FW): the demand's excess over fw_target of the limit winds
             // up a negative d current (the caller subtracts fw_id from id_ref); below it, it unwinds.
@@ -1135,6 +1170,12 @@ namespace foc {
         *ph2  = fastAtan2(m.h[3], m.h[2]) * d;
     }
 
+    void cur2(int k, float* share, float* deg) {
+        const Motor& m = mot[k];
+        *share = sqrtf(m.cur2_a * m.cur2_a + m.cur2_b * m.cur2_b) / g_tun.flux;
+        *deg   = fastAtan2(m.cur2_b, m.cur2_a) * (180.0f / PI_F);
+    }
+
     void startScope(int motor, int decim) {
         __disable_irq();
         g_scope_motor = motor ? 1 : 0;
@@ -1206,6 +1247,16 @@ namespace foc {
         g_isr_max_cycles = 0;
         g_isr_count      = 0;
         __enable_irq();
+    }
+
+    void background() {
+        // The twice-per-turn compensation learns in closed loop above OBS_HARM_MIN_RPM and holds its flux below.  Its
+        // gain follows the speed, slowly: worked out here, so the interrupt does not spend a division on it.
+        float kr = 0, ki = 0;
+        const float w = g_omega_cmd;
+        if (g_mode == Mode::Closed && w > OBS_HARM_MIN_RPM * RPM_TO_RAD) cur2Gain(w, &kr, &ki);
+        g_cur2_kr = kr;
+        g_cur2_ki = ki;
     }
 
     Tuning& tuning() { return g_tun; }

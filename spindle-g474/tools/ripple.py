@@ -9,7 +9,7 @@
 #   "#SCOPE 1 8;#SPIN 4070 30000"   a step of the speed with a capture across it (the script follows the new speed)
 # A setting a step changes stays until the spindle MCU resets: end with the step that puts it back.
 # A measurement is one "#NOISE 20000" (1 s): per-phase DC current, the phase-sum error and the ripple of the angle
-# error, the observer speed and the torque command.  Pick a speed that is NOT a multiple of 300 RPM, so the 500 ms
+# error, the observer speed and the torque command; then "#CUR2" (what the twice-per-turn compensation has learned).  Pick a speed that is NOT a multiple of 300 RPM, so the 500 ms
 # #VLOG lines do not land on the same rotor angle every time.
 # Sends E (coast) on any failure line, |zerr| > 25 deg, vbus > 41 V or a board temperature > 70 C.
 import math
@@ -104,6 +104,7 @@ NO = re.compile(r"NOISE M(\d) .*?: a mean (\S+) sd (\S+) .*?\| b mean (\S+) sd (
 PS = re.compile(r"NOISE phase sum .*?: M1 mean (\S+) sd (\S+) .*?\| M2 mean (\S+) sd (\S+)")
 RP = re.compile(r"NOISE ripple M(\d): angle err (\S+) sd (\S+) \[(\S+?)\.\.(\S+?)\] deg \| speed est sd (\S+) \[(\S+?)\.\.(\S+?)\] rpm \| "
                 r"iq_ref (\S+) sd (\S+) \[(\S+?)\.\.(\S+?)\] \| iq sd (\S+) \| id (\S+) sd (\S+) A")
+C2 = re.compile(r"CUR2 gain (\S+): M1 (\S+) % of the flux at (\S+) deg \| M2 (\S+) % at (\S+) deg")
 A_PER = 0.0104
 rows = []
 
@@ -114,6 +115,8 @@ def measure(label):
     mark = len(log)
     send("#NOISE 20000")
     pump(1.9)
+    send("#CUR2")          # what the twice-per-turn current compensation has learned
+    pump(0.3)
     send("#STAT")
     pump(0.5)
     seg = [l[8:] for l in log[mark:]]
@@ -135,6 +138,9 @@ def measure(label):
         m = PS.match(l)
         if m:
             row["ps0"], row["ps1"] = float(m.group(2)), float(m.group(4))
+        m = C2.match(l)
+        if m:
+            row["c2"] = "%s %%@%s  %s %%@%s (gain %s)" % (m.group(2), m.group(3), m.group(4), m.group(5), m.group(1))
         m = RP.match(l)
         if m:
             k = int(m.group(1)) - 1
@@ -224,9 +230,9 @@ for r in rows:
     if any(x not in r for x in need):
         print("  %-26s | (a #NOISE line did not come back)" % r["label"][:26])
         continue
-    print("  %-26s | %5.2f %5.2f  | %4.1f/%5.1f  %4.1f/%5.1f  | %4.0f/%5.0f  %4.0f/%5.0f  | %4.2f/%4.1f  %4.2f/%4.1f | %4.2f %4.2f | %+5.2f %4.2f %+5.2f %4.2f | %4.2f  %4.2f | isr %s us" % (
+    print("  %-26s | %5.2f %5.2f  | %4.1f/%5.1f  %4.1f/%5.1f  | %4.0f/%5.0f  %4.0f/%5.0f  | %4.2f/%4.1f  %4.2f/%4.1f | %4.2f %4.2f | %+5.2f %4.2f %+5.2f %4.2f | %4.2f  %4.2f | isr %s us | 2x comp M1, M2: %s" % (
         r["label"][:26], r["dc0"], r["dc1"], r["eps_sd0"], r["eps_pp0"], r["eps_sd1"], r["eps_pp1"], r["w_sd0"], r["w_pp0"], r["w_sd1"], r["w_pp1"],
-        r["iqr_sd0"], r["iqr_pp0"], r["iqr_sd1"], r["iqr_pp1"], r["iq_sd0"], r["iq_sd1"], r["id0"], r.get("id_sd0", 0), r["id1"], r.get("id_sd1", 0), r.get("ps0", 0), r.get("ps1", 0), r.get("isr", "?")))
+        r["iqr_sd0"], r["iqr_pp0"], r["iqr_sd1"], r["iqr_pp1"], r["iq_sd0"], r["iq_sd1"], r["id0"], r.get("id_sd0", 0), r["id1"], r.get("id_sd1", 0), r.get("ps0", 0), r.get("ps1", 0), r.get("isr", "?"), r.get("c2", "-")))
 for l in log:
     t = l[8:]
     if re.search(r"ABORT|WARN|ERR|fault|locked|open loop below", t) and "Slow Maslow" not in t and not t.startswith(("NOISE", ">>", "X ")):

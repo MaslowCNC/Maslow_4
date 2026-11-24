@@ -115,6 +115,9 @@ namespace foc {
     constexpr int SCOPE_CH = 8;
     // The learned once / twice per turn pattern of motor m's observer angle: amplitude (deg) and phase (deg) each.
     void    harmonics(int m, float* amp1, float* ph1, float* amp2, float* ph2);
+    // The twice-per-turn current compensation motor m has learned: its flux as a share of the flux constant, and
+    // its angle in the control frame (deg).
+    void    cur2(int m, float* share, float* deg);
     void    startScope(int motor, int decim);
     bool    scopeDone();
     int16_t scopeValue(int row, int ch);
@@ -141,8 +144,10 @@ namespace foc {
         float pll_hz;                   // tracking filter on the observer's angle, natural frequency (0 = off; #PLL)
         float obs_gain;                 // flux re-centring gain per radian (0 = clamp only; #OBSK)
         float harm_gain;                // learning rate of the angle's once / twice per turn pattern (0 = off; #HARM)
+        float cur2_gain;                // learning rate of the twice-per-turn current compensation (0 = off; #CUR2)
     };
     Tuning& tuning();
+    void background();   // main loop, every 2 ms: what follows the speed slowly and the interrupt need not work out
     void setVbus(float v);
 
     // Bring-up: hold motor m's current vector at electrical angle 0 (phase A axis) with `amps`,

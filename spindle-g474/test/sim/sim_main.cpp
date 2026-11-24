@@ -5,6 +5,8 @@
 //
 // flux_factor / R_factor scale the MODEL's motor against what the firmware assumes, e.g.
 // "./sim 1e-5 0.93" is a motor whose flux is the ESP32 VSWEEP's 7.28 mWb while the firmware uses 7.84.
+// The model's phases are unequal as board 2's motors are (ASYM=<share 1>,<share 2> of backward-turning back-EMF,
+// default 0.032,0.018; ASYM=0,0 for equal phases).  CUR2=0 turns the firmware's compensation for it off.
 //
 // The hardware is replaced by an average-value model: the ISR runs at each PWM peak with the
 // phase currents it would sample, the duties it writes take effect half a period later (the
@@ -73,14 +75,23 @@ struct Pmsm {
     double ia = 0, ib = 0;
     double th = 0, w = 0; // electrical = mechanical (1 pole pair); th unwrapped
     double load = 0;      // N m, opposing motion
+    // Each phase's share of the flux (ASYM).  Unequal phases add a backward-turning (negative-sequence) part to the
+    // back-EMF: one phase at 1 + 2 s and the other two at 1 - s make it s of the main part, which stays as it was.
+    // Board 2's motors: 3.2 % and 1.8 %.
+    double kph[3] = { 1, 1, 1 };
     void step(const double u[3], double dt) {
         double ic = -ia - ib;
-        double e[3], k[3] = { 0, 2 * M_PI / 3, -2 * M_PI / 3 }, i[3] = { ia, ib, ic };
-        for (int x = 0; x < 3; x++) e[x] = -psi * w * sin(th - k[x]);
-        ia += (u[0] - R * ia - e[0]) / L * dt;
-        ib += (u[1] - R * ib - e[1]) / L * dt;
+        double g[3], g0 = 0, k[3] = { 0, 2 * M_PI / 3, -2 * M_PI / 3 }, i[3] = { ia, ib, ic };
+        for (int x = 0; x < 3; x++) {
+            g[x] = -kph[x] * psi * sin(th - k[x]);   // d(flux linkage) / d(angle)
+            g0 += g[x] / 3;
+        }
+        // A star point with no neutral wire: what the three phases have in common drives no current, makes no torque.
+        for (int x = 0; x < 3; x++) g[x] -= g0;
+        ia += (u[0] - R * ia - g[0] * w) / L * dt;
+        ib += (u[1] - R * ib - g[1] * w) / L * dt;
         double T = 0;
-        for (int x = 0; x < 3; x++) T += -psi * i[x] * sin(th - k[x]);
+        for (int x = 0; x < 3; x++) T += g[x] * i[x];
         double fr = B * w + (w > 0 ? load : w < 0 ? -load : 0);
         w += (T - fr) / J * dt;
         th += w * dt;
@@ -182,14 +193,29 @@ static void supervise() {
 static double zReal();
 static double zErrDeg();
 static double pk_z = 0, pk_i = 0, pk_ang = 0;   // peaks since the last report
+// Each motor's backward-turning (negative-sequence) stator current, from the model's own currents and rotor angle:
+// the mean of i x e^(+j theta) over the last 0.2 s of each run().  In the rotor's frame it turns twice per turn.
+static double neg_re[2], neg_im[2], neg_amps[2];
+static long   neg_n = 0;
 static bool   faulted = false;
 
 static double trace_from = -1, trace_to = -1;   // TRACE=<from>,<to> (s): a line every 5 ms
 
 static void run(double seconds) {
-    long n = lround(seconds / PWM_PERIOD_S);
+    long n = lround(seconds / PWM_PERIOD_S), tail = lround(0.2 / PWM_PERIOD_S);
+    neg_n = 0;
+    neg_re[0] = neg_re[1] = neg_im[0] = neg_im[1] = 0;
     for (long i = 0; i < n; i++) {
         period();
+        if (i % 40 == 0) foc::background();   // main loop, every 2 ms
+        if (n - i <= tail) {
+            for (int k = 0; k < 2; k++) {
+                double al = mot[k].ia, be = (mot[k].ia + 2 * mot[k].ib) / sqrt(3.0), c = cos(mot[k].th), sn = sin(mot[k].th);
+                neg_re[k] += al * c - be * sn;
+                neg_im[k] += al * sn + be * c;
+            }
+            neg_n++;
+        }
         if (g_t >= trace_from && g_t <= trace_to && i % 100 == 0) {
             foc::MotorTelemetry a = foc::take(0), b = foc::take(1);
             printf("TRACE %7.3f mode %d cmd %6.0f  M1 %7.1f M2 %7.1f rpm  zerr %+6.2f  M1 dq %+5.2f %+5.2f  M2 dq %+5.2f %+5.2f  "
@@ -213,6 +239,7 @@ static void run(double seconds) {
             faulted = true;
         }
     }
+    for (int k = 0; k < 2; k++) neg_amps[k] = neg_n ? hypot(neg_re[k], neg_im[k]) / neg_n : 0;
 }
 
 // The physical Z: half the sum of the rotor angles (rad), and its reference at the start.
@@ -228,9 +255,9 @@ static void check(bool ok, const char* what) {
 
 static void report(const char* label) {
     printf("%7.3f s  %-18s mode %d cmd %6.0f  M1 %7.0f M2 %7.0f rpm  zerr %+6.2f deg  peak: zerr %5.1f deg, rotor %5.1f deg, "
-           "I %5.1f A\n",
+           "I %5.1f A  backward current %.3f / %.3f A\n",
            g_t, label, (int)foc::mode(), foc::speedCommandRpm(), mot[0].w * 60 / (2 * M_PI), mot[1].w * 60 / (2 * M_PI),
-           zErrDeg(), pk_z, pk_ang, pk_i);
+           zErrDeg(), pk_z, pk_ang, pk_i, neg_amps[0], neg_amps[1]);
     pk_z = pk_ang = pk_i = 0;
 }
 
@@ -241,8 +268,15 @@ int main(int argc, char** argv) {
         mot[k].psi *= kf;
         mot[k].R *= kr;
     }
-    printf("model: J %.1e kg m^2, flux %.2f mWb, R %.3f ohm (firmware assumes %.2f mWb, %.3f ohm)\n", J,
-           mot[0].psi * 1e3, mot[0].R, FLUX_WB * 1e3, PHASE_R_OHM);
+    // ASYM=<share 1>,<share 2>: the back-EMF's backward-turning share, motor 1 (its phase a) and motor 2 (its phase b).
+    double asym[2] = { 0.032, 0.018 };   // board 2's motors (BRINGUP.md "Twice-per-turn current compensation")
+    if (const char* a = getenv("ASYM")) sscanf(a, "%lf,%lf", &asym[0], &asym[1]);
+    for (int x = 0; x < 3; x++) {
+        mot[0].kph[x] = x == 0 ? 1 + 2 * asym[0] : 1 - asym[0];
+        mot[1].kph[x] = x == 1 ? 1 + 2 * asym[1] : 1 - asym[1];
+    }
+    printf("model: J %.1e kg m^2, flux %.2f mWb, R %.3f ohm (firmware assumes %.2f mWb, %.3f ohm), backward back-EMF %.1f / %.1f %%\n",
+           J, mot[0].psi * 1e3, mot[0].R, FLUX_WB * 1e3, PHASE_R_OHM, asym[0] * 100, asym[1] * 100);
     if (const char* tr = getenv("TRACE")) sscanf(tr, "%lf,%lf", &trace_from, &trace_to);
     if (const char* u = getenv("UPDATE")) g_update = !strcmp(u, "valley") ? 0 : !strcmp(u, "late") ? 1 : 2;
     sim_tim1.CR1 = sim_tim8.CR1 = TIM_CR1_DIR;   // duty writes always before the valley (period() applies them there)
@@ -251,6 +285,8 @@ int main(int argc, char** argv) {
     if (const char* d = getenv("OLKI")) foc::tuning().ol_ki = atof(d);
     if (const char* p = getenv("POS")) sscanf(p, "%f,%f,%f", &foc::tuning().pos_kp, &foc::tuning().pos_kd, &foc::tuning().pos_ki);
     if (const char* f = getenv("FW")) foc::tuning().fw_max_a = atof(f);
+    if (const char* g = getenv("CUR2")) foc::tuning().cur2_gain = atof(g);   // 0 = no twice-per-turn compensation
+    const bool comp = foc::tuning().cur2_gain > 0;
     if (const char* b = getenv("BRAKE")) for (int k = 0; k < 2; k++) mot[k].B = atof(b);
     run(0.01);   // a few idle periods
 
@@ -288,6 +324,7 @@ int main(int argc, char** argv) {
               fabs(mot[1].w * 60 / (2 * M_PI) - (-1 * SPINDLE_DIRECTION) * 6000) < 120,
           "both motors at 6000 RPM in opposite senses");
     check(fabs(zErrDeg()) < 5, "Z unchanged through spin-up and the hand-over");
+    if (comp) check(neg_amps[0] < 0.03 && neg_amps[1] < 0.03, "twice-per-turn compensation: backward current < 0.03 A at 6000 RPM");
 
     // 4. Z move while spinning: -45 deg (1 mm down) and back.
     foc::setPhaseTarget(45 * M_PI / 180);
@@ -309,6 +346,7 @@ int main(int argc, char** argv) {
     pz = pk_z;
     report("M1 +36 mNm");
     check(pz < 20, "36 mNm step: Z peak error < 20 deg of phase (0.44 mm)");
+    if (comp) check(neg_amps[0] < 0.05 && neg_amps[1] < 0.05, "twice-per-turn compensation: backward current < 0.05 A under the load");
     mot[0].load = 0;
     run(0.5);
     report("load off");
@@ -347,6 +385,7 @@ int main(int argc, char** argv) {
     report("18000 RPM");
     check(fabs(fabs(mot[1].w * 60 / (2 * M_PI)) - 18000) < 400, "18000 RPM reached on 36 V");
     check(fabs(zErrDeg()) < 5, "Z held at 18000 RPM");
+    if (comp) check(neg_amps[0] < 0.05 && neg_amps[1] < 0.05, "twice-per-turn compensation: backward current < 0.05 A at 18000 RPM");
 
     // 6b. Up to 24000 RPM (TOP=<rpm> to change): the back-EMF is then ~19.7 V of the ~20.3 V limit on
     // the model's 36 V bus, with the model's viscous drag (~16 mNm, ~1.4 A of iq) on top.

@@ -66,8 +66,8 @@ vectors. The XY board's own Z planning (10 mm/s² = 450°/s²) is well inside it
 ## Simulation
 
 `test/sim` compiles the real `src/foc.cpp` on the host against two PMSM models (R-L-back-EMF per
-phase, rigid rotor with viscous friction, 300 ns dead time, 1.5 LSB sense noise, the PWM's
-half-period delay) and runs: hold, a 90° standstill Z move, spin-up through the hand-over to
+phase with the phases unequal as on board 2's motors, rigid rotor with viscous friction, 300 ns
+dead time, 1.5 LSB sense noise, the PWM's half-period delay) and runs: hold, a 90° standstill Z move, spin-up through the hand-over to
 6000 RPM, a Z move while spinning, 15 and 36 mNm load steps on one motor, 18000 RPM, spin-down
 through the hand-back. It checks speeds, senses and the physical Z (half the sum of the rotor
 angles) against the phase offset throughout.
@@ -78,6 +78,9 @@ c++ -std=c++17 -O2 -I. -I../../src sim_main.cpp ../../src/foc.cpp -o sim
 ./sim [J_kgm2] [flux_factor] [R_factor]      # model motor vs. the firmware's constants
 TRACE=23.3,24.2 ./sim                         # a state line every 5 ms in that window
 POS=10,0.12,100 OLKI=12 ./sim                 # try gains
+ASYM=0,0 ./sim                                # equal phases (default 0.032,0.018: board 2's motors)
+CUR2=0 ./sim                                  # without the twice-per-turn current compensation
+TOP=18000 ./sim                               # skip the 24000 RPM stage
 ./sweep.sh                                    # 75 runs: J 5e-6..2e-5 x R 0.8..1.3 x flux 0.93..1.07
 ```
 
@@ -101,6 +104,23 @@ on over-current at the hand-back. The angle loop's bandwidth is now scaled down 
 hand-over band did not help. The hand-back also no longer counts the open loop's feed-forward
 twice (it was a back-EMF's worth of voltage step) and carries the angle loop's integral rather than
 the iq of that instant. These are what to look at first on the bench (BRINGUP.md).
+
+Twice-per-turn current compensation (2026-11-24, BRINGUP.md): the model's phases are unequal by
+default now (3.2 % and 1.8 % of backward-turning back-EMF, as measured on board 2), and each report
+line gives the backward-turning stator current from the model's own currents. Without the
+compensation it is 0.16 / 0.09 A at 6000 RPM, 0.95 / 0.54 A at 18000 and 1.22 / 0.69 A at 24000 (the
+bench: 0.20 / 0.11 A at 6130, 1.09 / 0.68 A at 20030). With it: 0.004 / 0.002 A at 6000 RPM and during
+the Z move there, 0.009 A under the 15 and 36 mNm load steps, 0.004 / 0.002 A at 18000 and
+0.006 / 0.003 A at 24000 with the field weakening at its limit. Over the sweep's 75 cases it stays
+under 0.010 A in every stage, and under 0.012 A with the model's R at half or twice the firmware's.
+With 8 % on both motors (past the compensation's 5 % limit per component) it takes out what it can
+(2.16 -> 0.85 / 0.34 A at 18000 RPM) and stays stable. Three checks cover it.
+
+The same day's runs, compensation or not: the default case fails one check, the 15 mNm step's Z peak
+(11.6 deg against 10; `config.h` has had that since the angle gains were scaled to the measured
+inertia). `TOP=18000 ./sweep.sh`: no case slips a rotor. `./sweep.sh` (to 24000 RPM): the 15 cases
+with 7 % more flux than the firmware assumes cannot reach 24000 RPM on the model's 36 V and slip
+there.
 
 ### Files
 
@@ -134,6 +154,10 @@ at reset.
 | `#DTC ns` | dead-time compensation (0 = off) |
 | `#IHOLD A`, `#ISPIN A`, `#IBOOST A`, `#ILIM A` | open-loop hold / spin-up / Z-move boost currents, closed-loop Iq limit |
 | `#OBS R L flux` | observer motor constants (Ω, H, Wb) |
+| `#PLL Hz` | tracking filter on the observer's angle (default 80 Hz; 0 = the raw angle and a 5 ms speed filter) |
+| `#OBSK gain` | pulls the flux estimate's length to the flux constant, per radian turned (default 0.5; 0 = clamp only) |
+| `#HARM [gain]` | prints the once / twice per turn pattern each observer's angle has, as learned; a gain sets the learning rate (default 0.05 per radian; 0 = off and forgotten) |
+| `#CUR2 [gain]` | prints the twice-per-turn current compensation each motor has learned (its flux as a share of the flux constant, and its angle); a gain sets the learning rate (default 0.05 per radian; 0 = off and forgotten) |
 | `#TRIP sw_A [hw_A] [hw_A motor 2]` | software per-sample trip and comparator thresholds (up to 40 A; echoes them) |
 | `#FW A [share]` | closed-loop field weakening: up to `A` of negative d current once the voltage demand passes `share` of the limit (default 3 A, 0.95) |
 | `#VLOG ms` | one line every `ms` (0 = off): speeds, dq currents and voltages, voltage demand against the limit, clipped periods, field weakening, comparator highs |
