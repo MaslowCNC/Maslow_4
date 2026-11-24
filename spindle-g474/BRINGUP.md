@@ -439,6 +439,37 @@ of the flash (121 KB of 127 KB) in the bench build.
 Motor 1 at 24000 still runs at the field-weakening limit (3 A); unchanged by this. **Not tested yet:** load and
 board 1.
 
+## What is left at 20000 RPM (board 2, 2026-11-23, new dead-time values, clock on, loose motors)
+
+Two spins at 20030 RPM (not a multiple of 300), `tools/ripple.py` + `#SCOPE`; both agree within ~10 %.
+
+| repeating per turn | motor 1: 1x | 2x | motor 2: 1x | 2x |
+|---|---|---|---|---|
+| angle error (reference - observer), deg | 1.5-1.8 | 1.5-1.6 | 3.4-3.8 | 1.3 |
+| observer speed, RPM | 51-60 | 51-52 | 115-127 | 44-45 |
+| torque command iq_ref, A | 0.27-0.32 | 0.27-0.28 | 0.61-0.68 | 0.24 |
+| measured iq, A | 0.04-0.08 | 0.85-0.88 | 0.49-0.53 | 0.36 |
+| measured id, A | 0.82-0.95 | 2.2 | 1.6-1.8 | 1.6 |
+
+- **The motors carry ~1.2-1.5 A rms per phase to deliver 0.1-0.3 A of torque current.** id swings +-1.6-2.2 A (sd
+  1.7 A on both motors) and iq +-0.4-0.9 A, at 333 and 667 Hz. Phase rms against speed, unloaded: 0.2 A at 3070,
+  0.25-0.36 at 6130, 0.6-0.8 at 12100, 1.1-1.2 at 18070, 1.2-1.5 at 20030: it grows with the back-EMF.
+- **Once per turn = the observer's angle wobble times the back-EMF.** The current loop builds its voltage in the
+  observer's frame; a frame that wobbles by d radians turns the 16.4 V vector by d, a d-axis error of d x 16.4 V
+  against 0.58 ohm (winding + current loop at 333 Hz). Predicted id from the measured wobble: 0.76 A (motor 1),
+  1.72 A (motor 2); measured 0.82 and 1.60. The rotor itself cannot follow at 333 Hz: the wobble is estimate error.
+  It comes from the flux circle sitting off centre: 1.8-2.7 % (motor 1), 4.8-6.1 % (motor 2). Motor 2's flux reads
+  0.972-0.976 of the constant at this speed, so the clamp lets its circle float; its offset and DC current
+  (0.61 -> 0.76 A) crept up over the ~70 s of the two spins. Motor 1 reads 1.005-1.008 and sits on the clamp.
+- **Twice per turn is more than the wobble explains** (predicted 0.9 / 0.8 A of id, measured 2.2 / 1.6 A), and the
+  angle's 2x term is the same 1.3-1.6 deg at 3070 and at 20030 RPM. That points at an asymmetry of fixed relative
+  size, about 5 % - the three phases' back-EMF, or the inverter side - which the current loop (~420 Hz) cannot
+  hold down at 667 Hz. Not separated yet.
+- 3x, 4x and 6x are small (id 3x 0.5-0.6 A is the largest). The phase-sum error is 0.68-0.70 A sd on both motors.
+- Next, in order: a tracking filter between the observer and the control frame (angle and speed), so neither the
+  transforms nor the angle loop's D term see the ripple; re-centre the flux (drift correction, a flux constant
+  per motor); then the 2x term (a resonant term in the current loop, or more current-loop bandwidth: `#CUR`).
+
 ## Verified without hardware
 
 - `pio run` and `pio run -e g474-bench` build (87 KB of 128 KB flash, 61 KB of 128 KB RAM).

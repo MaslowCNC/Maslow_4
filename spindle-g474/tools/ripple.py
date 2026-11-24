@@ -210,16 +210,16 @@ finally:
 open(out, "w").write("\n".join(log) + "\n")
 
 print("%s: %d RPM%s" % (out.split("/")[-1], rpm, "  *** ABORTED ***" if aborted else ""))
-print("  %-26s | DC current A | angle err sd / p-p deg | speed est sd / p-p rpm | iq_ref sd / p-p A |  iq sd A  | id mean A  | phase-sum sd A" % "step")
-print("  %-26s |   M1    M2   |    M1          M2      |     M1          M2     |    M1        M2    |  M1   M2  |  M1    M2  |  M1    M2" % "")
+print("  %-26s | DC current A | angle err sd / p-p deg | speed est sd / p-p rpm | iq_ref sd / p-p A |  iq sd A  | id mean, sd A | phase-sum sd A" % "step")
+print("  %-26s |   M1    M2   |    M1          M2      |     M1          M2     |    M1        M2    |  M1   M2  |  M1         M2       |  M1    M2" % "")
 for r in rows:
     need = ["dc0", "dc1", "ps0"] + ["%s%d" % (a, k) for a in ("eps_sd", "eps_pp", "w_sd", "w_pp", "iqr_sd", "iqr_pp", "iq_sd", "id") for k in (0, 1)]
     if any(x not in r for x in need):
         print("  %-26s | (a #NOISE line did not come back)" % r["label"][:26])
         continue
-    print("  %-26s | %5.2f %5.2f  | %4.1f/%5.1f  %4.1f/%5.1f  | %4.0f/%5.0f  %4.0f/%5.0f  | %4.2f/%4.1f  %4.2f/%4.1f | %4.2f %4.2f | %+5.2f %+5.2f | %4.2f  %4.2f | isr %s us" % (
+    print("  %-26s | %5.2f %5.2f  | %4.1f/%5.1f  %4.1f/%5.1f  | %4.0f/%5.0f  %4.0f/%5.0f  | %4.2f/%4.1f  %4.2f/%4.1f | %4.2f %4.2f | %+5.2f %4.2f %+5.2f %4.2f | %4.2f  %4.2f | isr %s us" % (
         r["label"][:26], r["dc0"], r["dc1"], r["eps_sd0"], r["eps_pp0"], r["eps_sd1"], r["eps_pp1"], r["w_sd0"], r["w_pp0"], r["w_sd1"], r["w_pp1"],
-        r["iqr_sd0"], r["iqr_pp0"], r["iqr_sd1"], r["iqr_pp1"], r["iq_sd0"], r["iq_sd1"], r["id0"], r["id1"], r.get("ps0", 0), r.get("ps1", 0), r.get("isr", "?")))
+        r["iqr_sd0"], r["iqr_pp0"], r["iqr_sd1"], r["iqr_pp1"], r["iq_sd0"], r["iq_sd1"], r["id0"], r.get("id_sd0", 0), r["id1"], r.get("id_sd1", 0), r.get("ps0", 0), r.get("ps1", 0), r.get("isr", "?")))
 for l in log:
     t = l[8:]
     if re.search(r"ABORT|WARN|ERR|fault|locked|open loop below", t) and "Slow Maslow" not in t and not t.startswith(("NOISE", ">>", "X ")):
