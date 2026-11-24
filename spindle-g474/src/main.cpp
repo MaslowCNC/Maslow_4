@@ -844,6 +844,18 @@ static void maintenance(const char* line) {
         tu.pos_bw_full_rpm = b;
     } else if (!strcmp(word, "OLKI") && n >= 2 && a >= 0 && a <= 1000) {
         tu.ol_ki = a;
+    } else if (!strcmp(word, "PLL") && n >= 2 && a >= 0 && a <= 400) {
+        tu.pll_hz = a;      // tracking filter on the observer's angle, Hz (0 = off: the raw angle and its filtered rate)
+    } else if (!strcmp(word, "HARM")) {
+        // #HARM [gain]: the learned once / twice per turn pattern of each observer's angle; a gain sets the learning
+        // rate (0 = off and forgotten).
+        if (n >= 2 && a >= 0 && a <= 1) tu.harm_gain = a;
+        float h[2][4];
+        for (int k = 0; k < 2; k++) foc::harmonics(k, &h[k][0], &h[k][1], &h[k][2], &h[k][3]);
+        linkEvent("MSG", "HARM gain %.3f: M1 1x %.2f deg at %+.0f, 2x %.2f deg at %+.0f | M2 1x %.2f deg at %+.0f, 2x %.2f deg at %+.0f",
+                  tu.harm_gain, h[0][0], h[0][1], h[0][2], h[0][3], h[1][0], h[1][1], h[1][2], h[1][3]);
+    } else if (!strcmp(word, "OBSK") && n >= 2 && a >= 0 && a <= 5) {
+        tu.obs_gain = a;    // flux re-centring gain per radian (0 = off: the clamp only)
     } else if (!strcmp(word, "DTC") && n >= 2 && a >= 0 && a <= 1000) {
         tu.deadtime_ns = a;
         if (n >= 3 && b >= 0.05f && b <= 10) tu.dt_knee_a = b;
@@ -1138,7 +1150,7 @@ static void maintenance(const char* line) {
         linkEvent("MSG", "spindle firmware %s, %s %s", FW_VERSION, __DATE__, __TIME__);
     } else {
         linkEvent("MSG", "# commands: STAT LOG <ms> VLOG <ms> ALIGN [V] [ms] CL <0|1> CUR <kp> <ki> POS <kp> <kd> <ki> POSBW <min> <full rpm> "
-                         "OLKI <ki> DTC <ns> [knee A] IHOLD/ISPIN/IBOOST/ILIM <A> OBS <R> <L> <flux> FW <A> [share] TRIP <sw A> [hw A] [hw M2] "
+                         "OLKI <ki> DTC <ns> [knee A] PLL <Hz> OBSK <gain> HARM [gain] IHOLD/ISPIN/IBOOST/ILIM <A> OBS <R> <L> <flux> FW <A> [share] TRIP <sw A> [hw A] [hw M2] "
                          "SPIN <rpm> <ms> JMEAS <rpm> VER");
         linkEvent("MSG", "# bring-up: NOISE [samples] SLOW <0|1|2> DUMP [samples] [channel] BRK BKF <0-15> CMPTEST <A> [ms] BRKDUMP "
                          "[first] MOE LOAD <us> RXLOG PREV GCAL [V] GAIN GAIN1/GAIN2 <a> <b> <c> GSAVE GCLEAR FLASHCRC <len> CALDBG "
@@ -1152,13 +1164,13 @@ static void maintenance(const char* line) {
         strcmp(word, "GSAVE") && strcmp(word, "GCLEAR") &&
         strcmp(word, "FLASHCRC") && strcmp(word, "CALDBG") && strcmp(word, "DBANK") && strcmp(word, "VLOG") &&
         strcmp(word, "TRIP") && strcmp(word, "BKF") && strcmp(word, "CMPTEST") && strcmp(word, "BRKDUMP") &&
-        strcmp(word, "SYNC") && strcmp(word, "PINCAP") && strcmp(word, "SCOPE")) {
+        strcmp(word, "SYNC") && strcmp(word, "PINCAP") && strcmp(word, "SCOPE") && strcmp(word, "HARM")) {
         linkEvent("MSG", "tuning: cur %.3f/%.0f pos %.2f/%.3f/%.1f bw %.2f/%.0f olki %.1f I hold %.1f spin %.1f "
-                         "boost %.1f lim %.1f obs R %.3f L %.1fuH flux %.2fmWb trip %.1f A dtc %.0f ns/%.2f A CL %d fw %.1f A/%.2f",
+                         "boost %.1f lim %.1f obs R %.3f L %.1fuH flux %.2fmWb trip %.1f A dtc %.0f ns/%.2f A CL %d fw %.1f A/%.2f pll %.0f Hz obsk %.2f",
                   tu.cur_kp, tu.cur_ki, tu.pos_kp, tu.pos_kd, tu.pos_ki, tu.pos_bw_min, tu.pos_bw_full_rpm, tu.ol_ki,
                   tu.hold_a, tu.spin_a, tu.boost_a, tu.iq_limit,
                   tu.r, tu.l * 1e6f, tu.flux * 1e3f, tu.sw_trip_a, tu.deadtime_ns, tu.dt_knee_a, (int)tu.closed_loop_allowed, tu.fw_max_a,
-                  tu.fw_target);
+                  tu.fw_target, tu.pll_hz, tu.obs_gain);
     }
 }
 

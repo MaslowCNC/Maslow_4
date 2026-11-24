@@ -86,9 +86,16 @@ namespace foc {
             // MXLEMMING flux observer (SimpleFOCDrivers' MXLEMMINGObserverSensor, as on the ESC1)
             float flux_a, flux_b;
             float ial_prev, ibe_prev;
-            float obs_angle, obs_w;       // rad, rad/s (electrical = mechanical, 1 pole pair)
+            float obs_angle, obs_w;       // rad, rad/s (electrical = mechanical, 1 pole pair): the tracking filter's
+                                          // angle and speed (config.h OBS_PLL_HZ), or the flux's own angle (atan2)
+                                          // and its filtered rate
             float obs_w_lock;             // rad/s, slower average for the hand-over lock test
-            float obs_da;                 // observer angle step this period
+            float obs_da;                 // obs_angle's step this period
+            float obs_err;                // the flux's angle - obs_angle (0 with the tracking filter off)
+            float h[4];                   // the flux angle's learned pattern: sin, cos of the reference angle, sin, cos
+                                          // of twice it (rad)
+            float h_mean;                 // ... and the slow average of flux angle - reference it is learned around
+            float h_pat;                  // ... its value, as last worked out
             // control
             float theta;
             float id, iq, id_ref, iq_ref;
@@ -217,6 +224,7 @@ namespace foc {
             CUR_KP, CUR_KI, POS_KP, POS_KD, POS_KI, POS_BW_MIN, POS_BW_FULL_RPM, OL_CUR_KI,
             HOLD_CURRENT_A, SPINUP_CURRENT_A, Z_MOVE_BOOST_A, IQ_LIMIT_A,
             PHASE_R_OHM, PHASE_L_H, FLUX_WB, SW_TRIP_A, DEADTIME_COMP_NS, DT_COMP_KNEE_A, true, FW_MAX_A, FW_TARGET,
+            OBS_PLL_HZ, OBS_CENTRE_GAIN, OBS_HARM_GAIN,
         };
 
         void resetControl(Motor& m) {
@@ -224,6 +232,8 @@ namespace foc {
             m.ial_prev = m.ibe_prev = 0;
             m.obs_w = 0;
             m.obs_w_lock = 0;
+            m.obs_angle = m.obs_da = m.obs_err = 0;
+            m.h[0] = m.h[1] = m.h[2] = m.h[3] = m.h_mean = m.h_pat = 0;
             m.int_d = m.int_q = 0;
             m.vd = m.vq = m.valpha = m.vbeta = 0;
             m.va_prev = m.vb_prev = 0;
@@ -282,18 +292,70 @@ namespace foc {
             m.n++;
         }
 
-        void observerUpdate(Motor& m) {
+        // ref: this period's reference angle (the pattern learner's phase; see OBS_HARM_GAIN); turn_now: this
+        // motor's turn to work on its pattern.
+        void observerUpdate(Motor& m, float ref, bool turn_now) {
             const float R = g_tun.r, L = g_tun.l, F = g_tun.flux;
-            m.flux_a = clampf(m.flux_a + (m.va_prev - R * m.ial) * DT - L * (m.ial - m.ial_prev), -F, F);
-            m.flux_b = clampf(m.flux_b + (m.vb_prev - R * m.ibe) * DT - L * (m.ibe - m.ibe_prev), -F, F);
+            float fa = m.flux_a + (m.va_prev - R * m.ial) * DT - L * (m.ial - m.ial_prev);
+            float fb = m.flux_b + (m.vb_prev - R * m.ibe) * DT - L * (m.ibe - m.ibe_prev);
+            float lim = F;
+            if (g_tun.obs_gain > 0.0f) {
+                // Pull the vector's length toward the flux constant, in proportion to the angle turned: an offset of
+                // the circle shows as a length error that changes sign around the turn, and decays (config.h).
+                float k = g_tun.obs_gain * g_omega_cmd * DT * (1.0f - (fa * fa + fb * fb) / (F * F));
+                k = clampf(k, -0.2f, 0.2f);
+                fa += k * fa;
+                fb += k * fb;
+                lim = 1.2f * F;   // the clamp only bounds a standstill's drift now
+            }
+            m.flux_a   = clampf(fa, -lim, lim);
+            m.flux_b   = clampf(fb, -lim, lim);
             m.ial_prev = m.ial;
             m.ibe_prev = m.ibe;
-            float a  = fastAtan2(m.flux_b, m.flux_a);
-            float da = wrapPi(a - m.obs_angle);
-            m.obs_angle = a;
-            m.obs_w += (da / DT - m.obs_w) * fminf(DT / OBS_SPEED_TAU_S, 1.0f);
+            float a = fastAtan2(m.flux_b, m.flux_a);
+            if (g_tun.pll_hz > 0.0f) {
+                // Tracking filter: second order, critically damped.  Its integrator is the speed.
+                const float wn = TWO_PI_F * g_tun.pll_hz;
+                // What repeats once and twice per turn in the observer's angle, learned against the REFERENCE angle
+                // (smooth by construction) and taken out before the tracking filter.  Learning from the filter's
+                // own error was tried first and ran away at 3070 RPM: below the filter's bandwidth that error is
+                // turned by more than 90 deg against the pattern.  The two motors take turns, one per interrupt
+                // (both in one cost 7 us of it); the other holds its last value, under 0.5 deg stale at 24000 RPM.
+                if (g_tun.harm_gain <= 0.0f) {
+                    m.h[0] = m.h[1] = m.h[2] = m.h[3] = m.h_mean = m.h_pat = 0;
+                } else {
+                    if (turn_now) {
+                        float s1, c1;
+                        fastSinCos(ref, &s1, &c1);
+                        const float s2 = 2.0f * s1 * c1, c2 = c1 * c1 - s1 * s1;
+                        m.h_pat = m.h[0] * s1 + m.h[1] * c1 + m.h[2] * s2 + m.h[3] * c2;
+                        if (g_mode == Mode::Closed && g_omega_cmd > OBS_HARM_MIN_RPM * RPM_TO_RAD) {
+                            const float turned = 2.0f * g_omega_cmd * DT;           // radians since this motor's last go
+                            float e = wrapPi(a - m.h_pat - ref) - m.h_mean;         // the rotor's own lag is the slow part
+                            m.h_mean += 0.02f * turned * e;
+                            const float g = g_tun.harm_gain * turned * e;
+                            m.h[0] = clampf(m.h[0] + g * s1, -0.05f, 0.05f);
+                            m.h[1] = clampf(m.h[1] + g * c1, -0.05f, 0.05f);
+                            m.h[2] = clampf(m.h[2] + g * s2, -0.05f, 0.05f);
+                            m.h[3] = clampf(m.h[3] + g * c2, -0.05f, 0.05f);
+                        }
+                    }
+                    a = wrapPi(a - m.h_pat);
+                }
+                float err = wrapPi(a - m.obs_angle);
+                m.obs_w += wn * wn * err * DT;
+                float step  = (m.obs_w + 2.0f * wn * err) * DT;
+                m.obs_angle = wrapPi(m.obs_angle + step);
+                m.obs_da    = step;
+                m.obs_err   = err;
+            } else {
+                float da    = wrapPi(a - m.obs_angle);
+                m.obs_angle = a;
+                m.obs_w += (da / DT - m.obs_w) * fminf(DT / OBS_SPEED_TAU_S, 1.0f);
+                m.obs_da  = da;
+                m.obs_err = 0;
+            }
             m.obs_w_lock += (m.obs_w - m.obs_w_lock) * (DT / OBS_LOCK_TAU_S);
-            m.obs_da = da;
         }
 
         // The current loops' voltage limit (V, magnitude of vd/vq): the modulator's linear range - the
@@ -594,16 +656,18 @@ namespace foc {
             // Each rotor's angle against its reference: always in closed loop; in open loop once the
             // observer is trusted (above OBS_TRUST_RPM and tracking), so an open-loop slip is seen too.
             bool fast = g_omega_cmd > OBS_TRUST_RPM * RPM_TO_RAD;
+            static int pattern_turn = 0;
+            pattern_turn ^= 1;
             for (int k = 0; k < 2; k++) {
                 Motor& m = mot[k];
-                observerUpdate(m);
                 float ref  = wrapPi(m.dir * g_alpha + g_phi + m.c);
+                observerUpdate(m, ref, k == pattern_turn);
                 float dref = wrapPi(ref - m.ref);
                 m.ref      = ref;
                 if (m.eps_valid) {
                     m.eps += dref - m.obs_da;
                     if (g_mode == Mode::Open && !fast) m.eps_valid = false;
-                } else if (g_mode == Mode::Open && fast &&
+                } else if (g_mode == Mode::Open && fast && fabsf(m.obs_err) < 0.35f &&
                            fabsf(m.obs_w - m.dir * g_omega_cmd) < OBS_TRUST_TOL * g_omega_cmd) {
                     m.eps       = wrapPi(m.ref - m.obs_angle);   // the load angle, now followed unwrapped
                     m.eps_valid = true;
@@ -1060,6 +1124,15 @@ namespace foc {
         *sd   = var > 0 ? (float)(sqrt(var) * scale[sig]) : 0.0f;
         *mn   = (float)(r.mn * scale[sig]);
         *mx   = (float)(r.mx * scale[sig]);
+    }
+
+    void harmonics(int k, float* amp1, float* ph1, float* amp2, float* ph2) {
+        const Motor& m = mot[k];
+        const float  d = 180.0f / PI_F;
+        *amp1 = sqrtf(m.h[0] * m.h[0] + m.h[1] * m.h[1]) * d;
+        *ph1  = fastAtan2(m.h[1], m.h[0]) * d;
+        *amp2 = sqrtf(m.h[2] * m.h[2] + m.h[3] * m.h[3]) * d;
+        *ph2  = fastAtan2(m.h[3], m.h[2]) * d;
     }
 
     void startScope(int motor, int decim) {

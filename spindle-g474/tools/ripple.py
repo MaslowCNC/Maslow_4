@@ -6,6 +6,8 @@
 #   base                 measure only
 #   "#DTC 150"           send the command(s) (';' between several), let it settle, then measure
 #   scope1 / scope2      "#SCOPE" capture of motor 1 / 2 (tools/scope.py reads it from the log)
+#   "#SCOPE 1 8;#SPIN 4070 30000"   a step of the speed with a capture across it (the script follows the new speed)
+# A setting a step changes stays until the spindle MCU resets: end with the step that puts it back.
 # A measurement is one "#NOISE 20000" (1 s): per-phase DC current, the phase-sum error and the ripple of the angle
 # error, the observer speed and the torque command.  Pick a speed that is NOT a multiple of 300 RPM, so the 500 ms
 # #VLOG lines do not land on the same rotor angle every time.
@@ -159,6 +161,7 @@ try:
     send("#VLOG 500")
     pump(0.2)
     send("#SPIN %d 30000" % rpm)
+    rpm_now = rpm
     spin_end = time.time() + 30.0
     t_end = time.time() + ramp + 4.0
     while at_speed is None and time.time() < t_end and not aborted:
@@ -172,7 +175,7 @@ try:
                 abort("the drive stopped")
             break
         if spin_end - time.time() < 12.0:
-            send("#SPIN %d 30000" % rpm)   # stay at speed
+            send("#SPIN %d 30000" % rpm_now)   # stay at speed
             spin_end = time.time() + 30.0
             pump(0.2)
         if st in ("scope1", "scope2"):
@@ -185,7 +188,11 @@ try:
         if st != "base":
             for c in st.split(";"):
                 send(c.strip())
-                pump(0.25)
+                m = re.match(r"#SPIN (\d+) (\d+)", c.strip())
+                if m and int(m.group(1)) > 0:   # a step of the speed: follow it
+                    rpm_now = int(m.group(1))
+                    spin_end = time.time() + int(m.group(2)) / 1000.0
+                pump(0.05 if c.strip().startswith("#SCOPE") else 0.25)
             pump(0.8)
         measure(st)
     if not aborted:

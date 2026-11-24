@@ -111,7 +111,33 @@ constexpr float OBS_TRUST_TOL   = 0.2f;
 // damping a stiff current loop would cancel (see foc.cpp currentLoop).
 constexpr float OL_CUR_KI       = 12.0f;     // V per A s
 constexpr float OL_CARRY_FADE_A_S = 40.0f;   // closed-loop torque current fades at hand-back
-constexpr float OBS_SPEED_TAU_S = 0.005f;    // BENCH: observer speed filter
+constexpr float OBS_SPEED_TAU_S = 0.005f;    // BENCH: observer speed filter (only with the tracking filter off)
+// Tracking filter between the flux observer and the control (BRINGUP.md "What is left at 20000 RPM"): the angle
+// atan2 gives wobbles once and twice per turn (flux circle off centre, unequal phases) by more than the rotor can
+// move, and at speed the control turned that into amps - a frame that wobbles by d turns the back-EMF-sized voltage
+// by d, and the angle loop's D term multiplies the wobble's rate.  A second-order tracking loop (critically damped)
+// follows the angle; its angle is the control frame and the angle error, its integrator the speed.  Its bandwidth
+// must stay above the angle loop's (~17 Hz) and below the ripple (once per turn = RPM / 60 Hz).  #PLL <Hz>, 0 = off.
+// Board 2, a 1000 RPM step at 3070 RPM (500 rad/s^2): fine at 50 and 80 Hz; at 30 Hz the angle loop went unstable
+// and a rotor slipped 90 deg (the filter's lag takes the D term's damping away: its speed lags 59 deg at the angle
+// loop's 17 Hz with 30 Hz, 38 deg with 50, 24 deg with 80; the plain 5 ms filter it replaces lagged 28 deg).
+constexpr float OBS_PLL_HZ      = 80.0f;
+// What repeats once and twice per turn in the observer's angle is learned and taken out before the tracking filter:
+// a sine and a cosine of the REFERENCE angle and of twice it, each coefficient moved by gain x error per radian
+// turned (~2 / gain radians to settle: 6 turns), around the slow average of observer angle - reference (the load
+// angle).  The twice-per-turn part is the same angle at every speed (unequal phases: 1.4-1.6 deg on board 2's
+// motor 1, 0.9-1.0 on motor 2), so no filter can take it out at low speed without lag; this has none.  To the angle
+// loop it is a notch at once and twice per turn, so it learns only above OBS_HARM_MIN_RPM, where once per turn is
+// above that loop's crossover (the learning is sure to converge where the loop's gain is under 1); below that speed the
+// pattern is held.  Each coefficient is limited to 0.05 rad.  The two motors take turns, one per interrupt: 3.5 us.
+// The first version learned from the tracking filter's own error and ran away at 3070 RPM (BRINGUP.md).
+// #HARM <gain> sets it, 0 = off; #HARM alone prints what each motor has learned.
+constexpr float OBS_HARM_GAIN    = 0.05f;
+constexpr float OBS_HARM_MIN_RPM = 2500.0f;
+// The flux estimate's length is pulled toward the flux constant by this share of the error per radian turned
+// (d flux = gain x angle step x (1 - |flux|^2 / constant^2) x flux): an offset of the circle then decays within
+// ~1 / gain radians instead of sitting wherever the clamp left it.  #OBSK <gain>, 0 = off (clamp only, as before).
+constexpr float OBS_CENTRE_GAIN = 0.5f;
 constexpr float OBS_LOCK_TAU_S  = 0.030f;    // the hand-over lock test's own speed average: board 1's observers
                                              // ripple ~5-8 % at 1x / 2x electrical under the 3 A open-loop hold
 constexpr float LOST_FRACTION   = 0.30f;     // BENCH: observer this far off the command ...

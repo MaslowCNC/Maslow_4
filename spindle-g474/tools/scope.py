@@ -44,6 +44,16 @@ sig = {
     "id A": [c["ch"][6][i] / 1000.0 for i in idx],
     "flux magnitude / nominal": [math.hypot(a, b) for a, b in zip(fa, fb)],
 }
+# The observer's own angle (atan2 of the flux) against the angle the control uses (reference - angle error): what the
+# tracking filter keeps out of the control.  The reference is sampled one interrupt after the flux, so the mean
+# holds one sample of rotation; only the ripple means something.
+ref_deg = [c["ch"][7][i] / 100.0 for i in idx]
+wob = []
+for k in range(len(idx)):
+    d = math.degrees(math.atan2(fb[k], fa[k])) - (ref_deg[k] - sig["angle error deg"][k])
+    wob.append((d + 180.0) % 360.0 - 180.0)
+m0 = sorted(wob)[len(wob) // 2]
+sig["observer - control angle deg"] = [((w - m0 + 180.0) % 360.0 - 180.0) for w in wob]
 # rotor phase: the reference angle, unwrapped
 ref = [c["ch"][7][i] / 100.0 * math.pi / 180 for i in idx]
 th = [ref[0]]
@@ -90,15 +100,19 @@ def harmonics(x):
 
 print("%s capture %d: motor %d, %d samples over %.1f ms = %.2f turns at %.0f RPM, flux constant %.2f mWb" % (
     log.split("/")[-1], want, c["motor"], len(idx), (idx[-1] - idx[0]) * dt * 1000, turns, rpm, c["flux"]))
-print("  %-26s %9s %8s | amplitude repeating per turn: %8s %8s %8s %8s %8s | rest (rms)" % ("signal", "mean", "sd", "1x", "2x", "3x", "4x", "6x"))
+print("  %-28s %9s %8s | amplitude repeating per turn: %8s %8s %8s %8s %8s | rest (rms)" % ("signal", "mean", "sd", "1x", "2x", "3x", "4x", "6x"))
 for name, x in sig.items():
     mean, sd, amp, res = harmonics(x)
-    print("  %-26s %9.3f %8.3f |                               %8.3f %8.3f %8.3f %8.3f %8.3f | %8.3f" % (name, mean, sd, amp[0], amp[1], amp[2], amp[3], amp[4], res))
-ca, cb = sum(fa) / len(fa), sum(fb) / len(fb)
+    print("  %-28s %9.3f %8.3f |                               %8.3f %8.3f %8.3f %8.3f %8.3f | %8.3f" % (name, mean, sd, amp[0], amp[1], amp[2], amp[3], amp[4], res))
+ca, cb = harmonics(fa)[0], harmonics(fb)[0]   # fitted with the harmonics: a part turn at the end does not shift it
 rad = [math.hypot(a - ca, b - cb) for a, b in zip(fa, fb)]
-clamp = sum(1 for a, b in zip(fa, fb) if abs(a) >= 0.9995 or abs(b) >= 0.9995)
-print("  flux circle: centre (%+.3f, %+.3f) of the flux constant, radius %.3f (min %.3f, max %.3f); %.1f %% of the samples sit on the clamp" % (
-    ca, cb, sum(rad) / len(rad), min(rad), max(rad), 100.0 * clamp / len(fa)))
+big = max(max(abs(a), abs(b)) for a, b in zip(fa, fb))
+if big > 1.0005:
+    lim = "re-centring on (no clamp at the flux constant; largest component %.3f)" % big
+else:
+    lim = "%.1f %% of the samples sit on the clamp" % (100.0 * sum(1 for a, b in zip(fa, fb) if abs(a) >= 0.9995 or abs(b) >= 0.9995) / len(fa))
+print("  flux circle: centre (%+.3f, %+.3f) of the flux constant, radius %.3f (min %.3f, max %.3f); %s" % (
+    ca, cb, sum(rad) / len(rad), min(rad), max(rad), lim))
 if csv:
     with open(csv, "w") as f:
         f.write("t_ms,turns,flux_a,flux_b,angle_err_deg,speed_rpm,iq_ref_A,iq_A,id_A\n")

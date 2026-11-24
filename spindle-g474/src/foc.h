@@ -113,6 +113,8 @@ namespace foc {
     // next): flux a, flux b (1e-4 of the flux constant), eps (0.01 deg), observer speed (RPM), iq_ref, iq, id (mA),
     // reference angle (0.01 deg).
     constexpr int SCOPE_CH = 8;
+    // The learned once / twice per turn pattern of motor m's observer angle: amplitude (deg) and phase (deg) each.
+    void    harmonics(int m, float* amp1, float* ph1, float* amp2, float* ph2);
     void    startScope(int motor, int decim);
     bool    scopeDone();
     int16_t scopeValue(int row, int ch);
@@ -136,6 +138,9 @@ namespace foc {
         bool  closed_loop_allowed;
         float fw_max_a;                 // closed loop: field-weakening d current limit (A, 0 = off; #FW)
         float fw_target;                // ... starts when the voltage demand passes this share of the limit
+        float pll_hz;                   // tracking filter on the observer's angle, natural frequency (0 = off; #PLL)
+        float obs_gain;                 // flux re-centring gain per radian (0 = clamp only; #OBSK)
+        float harm_gain;                // learning rate of the angle's once / twice per turn pattern (0 = off; #HARM)
     };
     Tuning& tuning();
     void setVbus(float v);

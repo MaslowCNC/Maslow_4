@@ -469,6 +469,64 @@ Two spins at 20030 RPM (not a multiple of 300), `tools/ripple.py` + `#SCOPE`; bo
 - Next, in order: a tracking filter between the observer and the control frame (angle and speed), so neither the
   transforms nor the angle loop's D term see the ripple; re-centre the flux (drift correction, a flux constant
   per motor); then the 2x term (a resonant term in the current loop, or more current-loop bandwidth: `#CUR`).
+  The first two are done: next section.
+
+## A smoother angle estimate: tracking filter, re-centring, pattern learner (board 2, 2026-11-23, loose motors)
+
+Three pieces between the flux observer and the control, each with a bench switch (`config.h` has the reasoning):
+
+| piece | default | command | what it does |
+|---|---|---|---|
+| tracking filter | 80 Hz | `#PLL <Hz>`, 0 = off | a second-order loop follows the observer's angle; its angle is the control frame, its integrator the speed |
+| re-centring | 0.5 per radian | `#OBSK <gain>`, 0 = off | pulls the flux estimate's length to the flux constant, so the circle cannot sit off centre |
+| pattern learner | 0.05 per radian | `#HARM <gain>`, 0 = off; `#HARM` prints | learns what repeats once and twice per turn in the observer's angle and takes it out |
+
+Same spin at each speed, `tools/ripple.py`, motor 1 / motor 2. "old" = `#PLL 0;#OBSK 0` (the estimator as it was).
+
+| RPM | setting | angle error sd, deg | torque command sd, A | measured iq sd, A | measured id sd, A | phase current rms, A | DC current, A |
+|---|---|---|---|---|---|---|---|
+| 3070 | old | 1.24 / 0.87 | 0.16 / 0.11 | 0.23 / 0.13 | 0.17 / 0.08 | 0.22 / 0.14 | 0.03 / 0.02 |
+| | filter + re-centring | 1.34 / 1.02 | 0.19 / 0.15 | 0.25 / 0.16 | 0.17 / 0.09 | 0.24 / 0.16 | 0.04 / 0.03 |
+| | all three (default) | 0.32 / 0.22 | 0.03 / 0.02 | 0.20 / 0.10 | 0.16 / 0.08 | 0.20 / 0.12 | 0.02 / 0.04 |
+| 6130 | old | 1.21 / 1.68 | 0.21 / 0.29 | 0.24 / 0.26 | 0.30 / 0.20 | 0.28 / 0.24 | 0.04 / 0.05 |
+| | filter + re-centring | 0.83 / 0.73 | 0.17 / 0.14 | 0.22 / 0.14 | 0.26 / 0.15 | 0.24 / 0.15 | 0.05 / 0.08 |
+| | all three (default) | 0.25 / 0.18 | 0.03 / 0.02 | 0.23 / 0.13 | 0.22 / 0.12 | 0.23 / 0.13 | 0.05 / 0.07 |
+| 12100 | old | 1.43 / 2.01 | 0.25 / 0.36 | 0.41 / 0.34 | 0.91 / 0.68 | 0.71 / 0.54 | 0.06 / 0.16 |
+| | filter + re-centring | 0.54 / 0.49 | 0.11 / 0.10 | 0.44 / 0.26 | 0.60 / 0.36 | 0.53 / 0.32 | 0.07 / 0.12 |
+| | all three (default) | 0.24 / 0.15 | 0.03 / 0.02 | 0.48 / 0.29 | 0.53 / 0.30 | 0.51 / 0.30 | 0.08 / 0.13 |
+| 20030 | old | 2.22 / 2.79 | 0.39 / 0.49 | 0.61 / 0.52 | 1.82 / 1.59 | 1.36 / 1.18 | 0.54 / 0.71 |
+| | filter + re-centring | 0.46 / 0.52 | 0.08 / 0.08 | 0.73 / 0.50 | 0.98 / 0.66 | 0.86 / 0.59 | 0.07 / 0.09 |
+| | all three (default) | 0.26 / 0.38 | 0.03 / 0.05 | 0.74 / 0.51 | 0.92 / 0.60 | 0.83 / 0.56 | 0.03 / 0.14 |
+
+- **The torque command is flat now**: 0.03 / 0.02-0.05 A sd at every speed (was 0.16-0.39 / 0.11-0.49). In the angle
+  the control uses, what repeats once or twice per turn is under 0.04 deg at 20030 RPM and under 0.2 deg at 3070.
+- **At 20030 RPM the motors carry 0.83 / 0.56 A rms per phase unloaded, was 1.36 / 1.18** (copper loss -63 % /
+  -77 %), and the DC current is gone (0.54 / 0.71 -> 0.03 / 0.14 A).
+- **The measured torque current still ripples as before** (iq sd 0.74 / 0.51 A at 20030). It is twice per turn:
+  iq +-0.99 / +-0.65 A and id +-1.14 / +-0.66 A at 667 Hz, plus id +-0.55 / +-0.45 A three times per turn. That is
+  the phases' own asymmetry driving current the ~420 Hz current loop cannot hold down, not the estimate. Next: a
+  twice-per-turn term in the current loop.
+- **What the learner finds is the same at every speed and from run to run**: twice per turn 1.37-1.56 deg at
+  -162..-167 deg (motor 1) and 0.92-1.01 deg at -60..-67 (motor 2); once per turn 0.2-0.7 deg (motor 1, wanders at
+  3070 RPM) and 0.6-0.9 deg (motor 2). The twice-per-turn figures match the captures taken before it existed.
+  Learning rates 0.02, 0.05 and 0.1 gave the same result at 3070 and 20030 RPM.
+- **The filter alone does little at low speed**: at 3070 RPM once per turn is 51 Hz, inside an 80 Hz filter, and
+  the old 5 ms speed filter was a little quieter (table). The learner is what works there.
+- **A 30 Hz tracking filter is unstable.** A 1000 RPM step at 3070 RPM (500 rad/s^2): fine at 50 and 80 Hz and
+  with the old estimator (angle error +-1.7-2.4 deg, settled in ~100 ms; the same with the learner on); at 30 Hz
+  the angle loop oscillated, a rotor slipped 90 deg and the slip protection stopped the drive. The filter's lag
+  takes the D term's damping away (59 deg at the angle loop's 17 Hz with 30 Hz, 24 deg with 80).
+- **The first learner ran away.** It learned from the tracking filter's own error; at 3070 RPM it built a false
+  12.6-13.5 deg once-per-turn pattern within ~10 s (angle error sd 13-16 deg, torque command sd 1.7-2.2 A; the
+  spin ended normally). Below the filter's bandwidth that error is turned by more than 90 deg against the
+  pattern. Now it learns against the reference angle, only above 2500 RPM, 0.05 rad per coefficient at most.
+- **Interrupt time**: 32 us without the learner, 36 us with it (longest seen since boot 39-40 us; the next sample
+  is ready at ~48.7 us). Both motors' learners in one interrupt took 39 us, so they take turns.
+- Starts through the hand-over at 2000 RPM and stops through the hand-back at 1500 RPM: 8 spins with the filter
+  and re-centring on, 3 of the starts and 3 of the stops with the learner on too. No fault, no interrupt overrun.
+  Flash: 123892 of 126976 bytes in the bench build.
+
+**Not tested:** load (a cut), a Z move while spinning, above 20030 RPM with these on, and board 1.
 
 ## Verified without hardware
 
