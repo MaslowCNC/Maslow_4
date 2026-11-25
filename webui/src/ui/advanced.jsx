@@ -55,7 +55,7 @@ function lockReason(k, d) {
   return null;
 }
 
-function SettingsList({ list, k, ctx, filter }) {
+export function SettingsList({ list, k, ctx, filter }) {
   const { d, send } = ctx;
   const sl = d.settingsList || { status: "idle" };
   const [drafts, setDrafts] = useState({});

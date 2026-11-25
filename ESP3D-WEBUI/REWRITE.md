@@ -220,6 +220,17 @@ These are FluidNC's `MPos`, `WCO` and `WPos = MPos − WCO`.
 - sections that fold open (Next or Setup, Details, Jog, Files);
 - Run and Stop fixed at the bottom.
 
+**Legacy UI** (2026-11-25, `webui/src/ui/legacy.jsx`): Settings › Display › Theme › Legacy, per browser, or
+`?look=legacy` for one visit. For anyone finding the switch hard; it won't get new features, so the new
+UI is the default and a bar on top says "You are in the legacy UI" with Switch to the new UI. It draws the old Maslow tab
+(state label, Setup / Options / action / Release Tension tiles, the jog grid, file picker, Play / Stop,
+serial messages) over the new logic: `machine.state`, `derive()`, actions through `machine.js`. It works
+like the old page: no setup steps or prompts, the old state names, and it answers the page-only questions
+itself (retract checked, tool and Z, work piece secure), so there's no tool check or Set Z step; Define Z
+Home is on the jog grid. Kept from the new UI: unavailable buttons are disabled, no Pause, the Play / Stop
+row never scrolls away, pop-ups and incidents (an OK alert) cover only the drawing, and Home Z or Remove tool lock
+the controls while Z moves. Its Settings tab shows the Maslow and FluidNC lists, as the old page did. About 7 KB gzipped.
+
 **Rules:**
 
 - The mode and Stop are always in view.
@@ -477,6 +488,10 @@ currents; Extend distance, spoil board and stock thickness, Reboot.
 | Motor current history (the old Debugging tab had live gauges only, which the motor rings cover) | Debugging tab (hidden) | **Done** (2026-11-20, simulator only): Settings › Jobs lists the last 10 jobs (when, how long, how it ended); each opens to its motor current and belt error chart, a CSV download and the job's log (Download log). Recorded in this browser (one row a second, IndexedDB); only while the page is open, so a sleeping phone or background tab leaves gaps. `webui/src/device/jobrecord.js` |
 | Feed override, motors off, probe | Main › GRBL and Controls panels | Probably not needed on a Maslow; decide |
 | Camera, preferences, languages, login, UI lock, macros, credits | navbar, dialogs | Mostly unused; decide to keep or drop |
+| Spindle speed override, jog feed rate (mm/min) | Main › GRBL and Controls panels | Missing; decide with the feed override (found while building the legacy UI, 2026-11-25) |
+| SD card space (used / total) | Main › SD Files | Missing |
+| The file's G-code as text, under the preview | Maslow tab (`tablettab_gcode`) | Missing; decide |
+| On-screen numpad for the jog step sizes | Maslow tab (`numpad.js`) | Missing; phones bring their own keyboard; decide |
 
 *From Maslow-Main* (merged into `firmwareRewrite` by #1170, 2026-11-25; the current UI has these, the new UI doesn't):
 

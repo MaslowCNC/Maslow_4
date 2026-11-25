@@ -39,7 +39,7 @@ const ACT = [
   ["reboot", "Reboot device", "Restarts the board. It reconnects on its own."],
   ["stop", "Stop", "Stops the belts at once, turns the spindle off and lifts Z. The job's progress is saved (needs firmware)."]
 ];
-function available(k, d) {
+export function available(k, d) {
   const s = SCREENS[k];
   if (!d.connected || d.hotspot) return k === "lost" ? ["reboot"] : [];
   if (d.fluid === "Alarm" || k === "recovery") return ["clearError", "reboot"];
@@ -78,7 +78,7 @@ function StateSection({ k, ctx, close }) {
 
 const SECTIONS = [["state", "State"], ["device", "Device"], ["network", "Network"], ["frame", "Frame and belts"], ["home", "Home"], ["tool", "Tool and Z"], ["jobs", "Jobs"], ["display", "Display"], ["advanced", "Advanced"]];
 
-export function Settings({ k, ctx, onClose, theme, setTheme, compact, stop, section = "state" }) {
+export function Settings({ k, ctx, onClose, theme, setTheme, look, setLook, compact, stop, section = "state" }) {
   const [sec, setSec] = useState(section);
   const { d } = ctx, s = SCREENS[k];
   const busy = s.moving || s.mode === "Job" || !d.connected;
@@ -103,8 +103,20 @@ export function Settings({ k, ctx, onClose, theme, setTheme, compact, stop, sect
     <Row label="Last stick-out" hint="Set when you measure a tool."><span class="mono">{d.zFromStickout ? `${d.zFromStickout} mm` : "–"}</span></Row>
     <Row label="Z after Stop" hint="Stop leaves Z where it is, so the bit may stay in the work. Continue lifts it to at least 2 mm above work Z 0 before moving."><span>Stays put</span><span class="note">set in firmware</span></Row></>;
   else if (sec === "jobs") body = <JobsSection recorder={ctx.recorder} />;
-  else if (sec === "display") body = <><h4>Display</h4>
-    <Row label="Panels"><select value={theme} onChange={e => setTheme(e.currentTarget.value)}><option value="dark">Dark</option><option value="light">Light</option></select></Row></>;
+  // One choice: Light, Dark, or the legacy UI (the old page's layout, ui/legacy.jsx), which says what it is in its tooltip
+  else if (sec === "display") {
+    const cur = look === "legacy" ? "legacy" : theme;
+    const pick = (v) => { if (v === "legacy") { setLook("legacy"); onClose(); } else { setTheme(v); setLook("new"); } };
+    const LEGACY = "Legacy UI: looks and works like the old Maslow page, for anyone finding the switch hard. It won't get new features.";
+    body = <><h4>Display</h4>
+      <Row label="Theme"><div class="subtabs" role="radiogroup" aria-label="Theme">
+        {[["light", "Light"], ["dark", "Dark"], ["legacy", "Legacy"]].map(([v, n]) =>
+          <button type="button" role="radio" aria-checked={cur === v} aria-selected={cur === v} title={v === "legacy" ? LEGACY : ""} onClick={() => pick(v)}>
+            {n}{v === "legacy" && <svg class="warnicon" viewBox="0 0 24 24" width="16" height="16" role="img" aria-label={LEGACY}>
+              <path d="M12 2 1 21h22L12 2z" fill="#d4a32c" /><path d="M12 9v5M12 17v1.5" stroke="#1b1d22" stroke-width="2.2" stroke-linecap="round" /></svg>}
+          </button>)}
+      </div></Row></>;
+  }
   else body = <AdvancedSection k={k} ctx={ctx}>
     <Row label="Command box" hint="A box under the log that sends a line to the machine as typed, for support. No checks: motion and calibration commands run too. Remembered in this browser.">
       <label class="check"><input type="checkbox" checked={ctx.commandBox} onChange={e => ctx.setCommandBox(e.currentTarget.checked)} /> Show</label></Row>

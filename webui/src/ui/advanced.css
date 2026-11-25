@@ -79,3 +79,4 @@
 .fedit { width: 100%; box-sizing: border-box; resize: vertical; min-height: 200px; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--sep);
   background: var(--input); color: var(--text); font: 13px/1.5 var(--font-mono); tab-size: 2; white-space: pre; overflow: auto; }
 .fedit:focus-visible { outline: 2px solid var(--lilac); outline-offset: 1px; }
+.subtabs .warnicon { margin-left: 6px; vertical-align: -3px; }
