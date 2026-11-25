@@ -295,6 +295,9 @@ arrives. The full table of states, subheaders and actions is the UI modes map.
 - **Stock thickness isn't part of setup** (decided 2026-11-13): calibration doesn't use it, so
   Secure the work piece only asks that the work piece is clamped. It stays in Settings › Frame and
   belts for anyone who wants to set it. Add it back to setup if calibration starts using it.
+  **To revisit (2026-11-25):** since Maslow-Main #1164, Find Anchors uses anchor Z + spoil board + stock
+  thickness, the same height cutting uses, so a wrong stock thickness now costs accuracy (gap list, "From
+  Maslow-Main").
 - **The tool and Z steps.** Once the position is confirmed, the machine checks for a tool by
   itself: the spindle board raises the spindle through its top-of-travel light beam.
   - **A bit is found: Set Z** (revised 2026-11-25), with three buttons. **Set Z** makes where the bit is
@@ -475,6 +478,16 @@ currents; Extend distance, spoil board and stock thickness, Reboot.
 | Feed override, motors off, probe | Main › GRBL and Controls panels | Probably not needed on a Maslow; decide |
 | Camera, preferences, languages, login, UI lock, macros, credits | navbar, dialogs | Mostly unused; decide to keep or drop |
 
+*From Maslow-Main* (merged into `firmwareRewrite` by #1170, 2026-11-25; the current UI has these, the new UI doesn't):
+
+| Change | Current UI / firmware | In the new UI |
+|---|---|---|
+| Stock thickness counts in Find Anchors (#1164) | Find Anchors and cutting both use anchor Z + spoil board + stock thickness. A wrong value scales X (about 1.7 % with 25 mm of spoil board plus stock) | Missing: stock thickness is only in Settings › Frame and belts. Ask or confirm it in setup, before Find anchors or in Secure the work piece, and warn when it changes after the anchors were found |
+| Wrong `encoderTeeth` warning (#1162, #1163) | On connect, compares `encoderTeeth` with the board from `[ESP800]` (22 on the 4.1, 35 on the Mini); the popup gives the scaled Extend distance and says to restart, then Retract, Extend, Apply tension, Find anchors | Missing: an incident on connect |
+| Move Z to Home: go to work Z 0 (#1157) | Jog pad button, `machine.moveTo({ z: 0 })` (G0). The firmware now allows it in any Maslow state (the belt position-error e-stop runs only in Ready to cut) | Missing: the house goes to XY home only, and Home Z is the spindle board's homing. Needs a "go to Z 0" with a label that can't be confused with Home Z |
+| Receive a G-code file from Abundance (#1166) | Abundance opens the machine's UI and hands it a file with `window.postMessage`; the UI uploads and selects it, never runs it (`docs/protocol.md` §7, `jobreceiver.js`) | Missing |
+| Update check streams (#1142) | Release / Experimental / Nightly, newer by semver | Part of the missing firmware update row above: copy these rules |
+
 Most needed first, all done on 2026-11-18 (simulator only so far): the command box and saving the log,
 Park and work area settings, spindle on / off, and the belt motor test.
 
@@ -493,6 +506,14 @@ current UI's popups do:
 | Spoil board, stock thickness, extend distance | `Maslow_spoilboardThickness`, `Maslow_workThickness`, `Maslow_Extend_Dist` | Set Scale and Thickness, Config | Done earlier |
 
 Checked against the simulator only, not yet on a machine.
+
+*Small style and usability fixes* (collected here and done together in one pass; add to the list as
+they come up):
+
+| Where | Problem | Fix to consider |
+|---|---|---|
+| Settings › Network | After saving a new WiFi password, people don't know they have to restart the board: Restart now is usually below the fold | After a save that needs a restart, prompt for it (Restart now / Later), or scroll the Restart now button into view and highlight it |
+| Settings (phone) | The section pills scroll sideways with no sign there are more: Advanced is off screen at 375 px | Fade the right edge, or wrap the pills onto two rows |
 
 **3. Build and ship** (not started; waits until part 2 is done, decided 2026-11-20):
 
