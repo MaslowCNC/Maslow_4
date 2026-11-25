@@ -1,7 +1,7 @@
 import { useState } from "preact/hooks";
 import { SCREENS, STEP_HELP, isSetup, stepName } from "../flow/screens.js";
 import { ask, mainActions } from "../flow/asks.jsx";
-import { Btn, AppHeader, ModePill, DetailCards, progress, Segs, StepArt, Frame, LogView, JogPad, DetailsBody, FilesBody, UploadBtn, VisReadouts, CommandBox, SaveLogBtn } from "./parts.jsx";
+import { Btn, BackArrow, mainButtons, AppHeader, ModePill, DetailCards, progress, Segs, StepArt, Frame, LogView, JogPad, DetailsBody, FilesBody, UploadBtn, VisReadouts, CommandBox, SaveLogBtn } from "./parts.jsx";
 
 export const StopBtn = ({ send, label = "Stop" }) => <button class="btn danger" type="button" onClick={() => send("stop")}>{label}</button>;
 
@@ -10,11 +10,11 @@ function SetupBar({ k, ctx, onSettings }) {
   const s = SCREENS[k], step = s.step, q = ask(k, ctx);
   const { skipped, label } = progress(step, ctx.a.ran);
   return <div class="banner gtop">
-    <div class="gmeta"><span style="display:flex;align-items:center;gap:8px"><ModePill s={s} small />{label}</span><b>{stepName(k)}</b><Segs step={step} skipped={skipped} /></div>
+    <div class="gmeta"><span style="display:flex;align-items:center;gap:8px"><BackArrow buttons={q.buttons} /><ModePill s={s} small />{label}</span><b>{stepName(k)}</b><Segs step={step} skipped={skipped} /></div>
     <div class="gthumb"><StepArt step={step} d={ctx.d} class="" /></div>
     <span class={`gtext${q.alert ? " alert" : ""}`}>{q.text}</span>
     {q.input}
-    <div class="bbtns">{q.buttons.map(b => <Btn b={b} />)}
+    <div class="bbtns">{mainButtons(q.buttons).map(b => <Btn b={b} />)}
       {ctx.d.connected && !q.buttons.some(b => b.style === "stopping") && <StopBtn send={ctx.send} />}</div>
     {open && <div class="gmore"><div class="gbig"><StepArt step={step} d={ctx.d} class="" /><span>Placeholder: moving line art showing how to {stepName(k).toLowerCase()}</span></div>
       <div class="ghelp"><b>{stepName(k)}</b><ol>{STEP_HELP[step].map(x => <li>{x}</li>)}</ol></div></div>}
@@ -27,10 +27,10 @@ function ModeBar({ k, ctx, onSettings }) {
   const s = SCREENS[k], q = ask(k, ctx), main = mainActions(k, ctx);
   const showStop = ctx.d.connected && k !== "wifi";
   return <div class="banner combined" style={`--tone:${s.tone}`}>
-    <div class="bstate"><ModePill s={s} />{s.sub && <span class="sub">{s.sub}</span>}</div>
+    <div class="bstate"><BackArrow buttons={q.buttons} /><ModePill s={s} />{s.sub && <span class="sub">{s.sub}</span>}</div>
     <span class={`bexplain${s.alert || q.alert ? " alert" : ""}`}>{q.text || s.msg}</span>
     {q.input}
-    <div class="bbtns">{[...q.buttons, ...main].map(b => <Btn b={b} />)}{showStop && <StopBtn send={ctx.send} />}</div>
+    <div class="bbtns">{[...mainButtons(q.buttons), ...main].map(b => <Btn b={b} />)}{showStop && <StopBtn send={ctx.send} />}</div>
   </div>;
 }
 

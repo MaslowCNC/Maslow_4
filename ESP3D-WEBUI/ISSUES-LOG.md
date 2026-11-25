@@ -370,6 +370,58 @@ Tested from the new UI (`webui/`, `?device=machine`) on a Maslow Mini.
   with "Re-home Z first" while it needs homing; until the field exists, this can't be detected without
   reading log text.
 
+## Session 2026-11-25, firmware firmwareRewrite daeb9761-dirty (with the `TS` tool-state field)
+
+Tested from the new UI (`webui/`, `?device=machine`) on a Maslow Mini. The spindle board ran the repo's
+`spindle/` code with the tool-state field and `Z_MOVE_VOLTAGE_BOOST = 0`.
+
+| # | Area | Status |
+|---|---|---|
+| 24 | Spindle: Z loses its position after lowering under load; the firmware doesn't know | open, to discuss with BarbourSmith / Tristan |
+| 25 | New UI: the Set Z helper's seated-height distance is a guess (20 mm) | open |
+
+### 24. Z loses its position after lowering under load, and nothing notices
+
+- **What happened:** after loading a bit (Z set to 0 at the seated position, 12:42:29), the tension was
+  released (12:43:30, belts extended) and Z was jogged down. The XY board reported `MPos` Z −50.000, but
+  the spindle was visibly only about 8 mm below where it started. The spindle board logged no warning, and
+  the report still said `TS:3` (tool loaded, Z fine).
+- **Cause (from the code):** the Mini's Z is the phase offset between the two spindle motors, driven open
+  loop, with no position feedback; the only reference is the beam at the top of travel. Two ways to lose it:
+  - **After the move:** once the machine is idle with the spindle off, the XY board sends `D` and the
+    spindle board powers both Z drivers down (`checkPhaseHoldPowerdown`, `spindle/src/main.cpp`), to keep
+    the drivers and fan cool. Nothing then holds the phase, so a load on the bit (the machine's weight
+    once the bit is pushed into something, especially with slack belts) back-drives Z upward.
+  - **During the move:** an open-loop motor that can't push harder skips without knowing.
+
+  Either way the XY board keeps its own Z, and the spindle board only flags "needs homing" after an
+  over-current, not after a slip like this. The next job would cut at the wrong depth.
+- **Recover:** Home Z (`$Spindle/Home`) raises to the beam whatever the boards think, then sets Z 0 on
+  both. Don't jog Z first.
+- **Fix, to decide (spindle firmware):**
+  1. Keep the Z drivers on while Z carries load: below the seated height, or while the belts are
+     tensioned (costs driver heat and fan noise when idle).
+  2. Hold at a low current after a move instead of fully off.
+  3. Treat any release under load as a lost position (`TS:1`, needs homing), so a job asks for Home Z first.
+  4. A floor on how far Z may go below the seated height, so it can't be driven hard into the work.
+
+  Real slip detection would need position feedback the board doesn't have. Probably 1 or 2, plus 4.
+- **New UI must:** nothing it can do without a signal from the firmware. Once the firmware marks the
+  position lost (`TS:1`), the UI already blocks the flow with Re-home Z (the "Recovery failed" screen;
+  its wording assumes a spindle fault and should be made general).
+
+### 25. The Set Z helper's distance from the seated bit to the work is a guess
+
+- **What it does:** the Set Z helper (`webui/`, Setup › Set Z) asks for the bit's stick-out and sets work
+  Z 0 at machine Z = stick-out − 20 mm, then lowers the bit there. That assumes a seated bit's socket face is 20 mm above the work
+  surface (`SEAT_TO_WORK` in `webui/src/flow/screens.js`). Nobody measured the 20 mm, and it changes with
+  the spoil board, the stock and how the sled sits, so cuts can be too deep or too shallow, and the bit can be
+  lowered into the work or stop above it.
+- **Fix, to decide:** measure the real distance on the Mini (seat a bit, jog it to the work, read `MPos` Z),
+  then work it out from a measured constant plus the spoil board and stock thickness settings. Or have the
+  firmware set Z from the stick-out (the planned `setZFromStickout` command), so the UI doesn't guess.
+- **Until then:** use plain Set Z (jog the bit to the work first) when the depth matters.
+
 ## Still to test
 
 Held back on 2026-11-06 so we didn't lose a good calibration before trying a cut:

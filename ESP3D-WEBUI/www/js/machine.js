@@ -34,6 +34,18 @@ const machine = (() => {
 		CALIBRATION_COMPUTING: 9,
 		TENSIONED: 10, // Apply Tension done, but the belts don't fit the saved anchors: Find Anchors next
 	};
+	// The Maslow Mini's tool and Z state, from the TS status field (docs/protocol.md). Only a machine
+	// with a spindle board sends it.
+	const TOOL = {
+		UNKNOWN: 0, // no word from the spindle board, or its firmware is older
+		NEEDS_HOMING: 1, // an over-current lost the Z zero: Home Z before cutting
+		HOMING: 2,
+		LOADED: 3, // a tool broke the beam at the top of travel
+		NO_TOOL: 4,
+		LOADING: 5, // a tool was put in: pulling it down until it seats
+		REMOVING: 6,
+		FAULT_RECOVERY: 7, // a spindle fault: stopping the job, then re-homing Z
+	};
 	const MOVING_STATES = ["Run", "Jog", "Home"];
 	// How long a Maslow operation may take to show its start state in a status report.
 	const START_WAIT_MS = 3000;
@@ -48,6 +60,8 @@ const machine = (() => {
 	 * units:       the firmware's G-code units, "mm" or "inch" (machine actions always send G21)
 	 * motorCurrent: {tl, tr, bl, br}, raw ADC 0-4095 (Debug tab converts to mA), from MC; null until known
 	 * spindleSpeed: the spindle speed the machine reports (RPM, the second FS value; 0 = off), null until known
+	 * tool:        the Mini's tool and Z state (TOOL) from the TS field; null when the report has no TS
+	 *              (no spindle board, or older firmware)
  * job:         {pct, file, line} while a file runs, else null
 	 * stopped:     {line, file} after a job ended early (STOP, an error in the file, a spindle
 	 *              fault), from the STOPPED field: resumeFile(file, line) continues it. null once
@@ -69,6 +83,7 @@ const machine = (() => {
 		belts: null,
 		motorCurrent: null,
 		spindleSpeed: null,
+		tool: null,
 	};
 	let statusCount = 0; // status reports seen, to wait for a fresh one
 	let beltLengthsFromStatus = false; // a BL field has been seen (firmware that reports it)
@@ -110,6 +125,7 @@ const machine = (() => {
 		let wpos = null;
 		let job = null;
 		let stopped = null;
+		let tool = null;
 		for (const field of fields.slice(1)) {
 			const i = field.indexOf(":");
 			const key = field.slice(0, i);
@@ -122,6 +138,8 @@ const machine = (() => {
 				state.wco = xyz(value);
 			} else if (key === "MS") {
 				state.maslow = Number(value);
+			} else if (key === "TS") {
+				tool = Number(value);
 			} else if (key === "BL") {
 				// "?" = that belt's length is unknown (e.g. it moved while the motors were off)
 				const [tl, tr, bl, br] = value.split(",").map((v) => (v === "?" ? null : Number(v)));
@@ -154,6 +172,7 @@ const machine = (() => {
 		}
 		state.job = job;
 		state.stopped = stopped;
+		state.tool = Number.isInteger(tool) ? tool : null;
 		statusCount++;
 	};
 
@@ -1000,6 +1019,7 @@ const machine = (() => {
 		on,
 		handleLine,
 		MASLOW,
+		TOOL,
 		// belts and calibration
 		retractBelts,
 		extendBelts,

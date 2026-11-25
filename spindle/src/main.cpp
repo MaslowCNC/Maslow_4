@@ -624,6 +624,24 @@ static const char* machineStateName(MachineState s) {
     return "?";
 }
 
+// The tool sub-machine state as sent to the XY board in the status line's Z: field.  The XY
+// board reports it to clients as the status report's TS: field (docs/protocol.md), so keep the
+// numbers stable:
+//   2 = homing (also Booting: the power-up homing starts on its own), 1 = needs homing,
+//   3 = tool loaded, 4 = no tool, 5 = loading a tool, 6 = removing the tool.
+uint8_t toolStateCode() {
+    switch (g_tool_state) {
+        case MachineState::NeedsHoming:      return 1;
+        case MachineState::Booting:
+        case MachineState::Homing:           return 2;
+        case MachineState::IdleToolLoaded:   return 3;
+        case MachineState::IdleToolUnloaded: return 4;
+        case MachineState::LoadingTool:      return 5;
+        case MachineState::UnloadingTool:    return 6;
+        default:                             return 0;
+    }
+}
+
 // Change the reported state, printing "state: <old> -> <new>" to the ESP3D console (and USB)
 // on every transition.  A no-op when the state is unchanged, so it is safe to call each loop.
 static void setMachineState(MachineState s) {
@@ -1217,7 +1235,7 @@ static void housekeepingTask(void* arg) {
         // line already fits the TX buffer so this write can never block; if the buffer is
         // momentarily full we skip and retry next pass.
         if (now_ms - last_status_time >= LINK_STATUS_INTERVAL_MS &&
-            Serial1.availableForWrite() >= 48) {   // longest status line is ~36 chars
+            Serial1.availableForWrite() >= 48) {   // longest status line is ~40 chars
             last_status_time = now_ms;
             sendStatus(Serial1, mc1, mc2);
         }

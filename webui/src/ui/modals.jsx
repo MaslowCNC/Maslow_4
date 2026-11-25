@@ -33,6 +33,8 @@ const ACT = [
   ["release", "Release tension", "Slackens the belts a little so you can reach the work piece. The belt lengths are kept."],
   ["findAnchors", "Find anchors", "Measures the frame to find each anchor point. About 11 minutes."],
   ["toolCheck", "Check the tool", "Raises the spindle through the light beam to see if a bit is loaded."],
+  ["removeTool", "Remove tool", "Raises the spindle until the bit clears the light beam, so you can take it out. Maslow Mini only."],
+  ["rehomeZ", "Home Z", "Raises the spindle to the top-of-travel light beam to find Z again. Maslow Mini only."],
   ["clearError", "Clear error ($X)", "Clears the error so the device can move again."],
   ["reboot", "Reboot device", "Restarts the board. It reconnects on its own."],
   ["stop", "Stop", "Stops the belts at once, turns the spindle off and lifts Z. The job's progress is saved (needs firmware)."]
@@ -47,13 +49,13 @@ function available(k, d) {
     case 2: return ["extend", "retract", "reboot"];
     case 4: return ["tension", "findAnchors", "retract", "reboot"];
     // No Retract while the belts are tight: retracting under tension gives a false zero (ISSUES-LOG). Release first.
-    case 7: return ["release", "toolCheck", "findAnchors", "reboot"];
+    case 7: return ["release", "toolCheck", "removeTool", "rehomeZ", "findAnchors", "reboot"];
     case 10: return ["findAnchors", "tension", "release", "reboot"];
   }
   return ["reboot"];
 }
 const NEED = { retract: "Not while the belts are tight: release tension first.", extend: "Only once the belts are retracted.", tension: "Only once the belts are extended or tension was released.",
-  release: "Only while the belts are tensioned.", findAnchors: "Only once the belts are extended or tensioned.", toolCheck: "Only once the position is confirmed.",
+  release: "Only while the belts are tensioned.", findAnchors: "Only once the belts are extended or tensioned.", toolCheck: "Only once the position is confirmed.", removeTool: "Only once the position is confirmed.", rehomeZ: "Only once the position is confirmed.",
   clearError: "Only after an error.", reboot: "", stop: "Nothing is moving." };
 
 function StateSection({ k, ctx, close }) {
@@ -66,7 +68,8 @@ function StateSection({ k, ctx, close }) {
       <div class="mini"><span>Firmware reports</span><b>Maslow {d.maslow} · {d.fluid}</b></div></div>
     <p class={s.alert ? "alert" : ""} style="margin:0">{s.msg}</p>
     <div class="actgrid">{ACT.map(([id, label, what]) => {
-      const ok = on.includes(id), tip = what + (ok ? "" : " " + why(id));
+      // Mini-only actions stay greyed out until the page knows this is a Mini (machine.js notYet says why)
+      const ok = on.includes(id) && !d.notYet?.[id], tip = what + (ok ? "" : " " + (d.notYet?.[id] ? d.notYet[id] + "." : why(id)));
       return <span class="actpair"><button class={`btn ${id === "stop" ? "danger" : "ghost"}`} type="button" disabled={!ok}
         onClick={() => { close(); ctx.send(id); }}>{label}</button><span class="qhelp" tabindex="0" data-tip={tip} aria-label={tip}>?</span></span>;
     })}</div>

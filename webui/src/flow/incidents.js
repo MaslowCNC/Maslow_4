@@ -40,11 +40,14 @@ export const holding = () => ({
   clearWithStop: true
 });
 
-/** The spindle tripped during a job; the machine ended the job and re-homed Z (simulator, and later the firmware field). */
-export const spindleFault = (line) => ({
+/** The spindle tripped during a job; the machine ended the job and re-homed Z. rehomed false: the firmware gave up
+ * before Z was re-homed (it then needs Home Z). */
+export const spindleFault = (line, rehomed = true) => ({
   kind: "spindleFault",
   title: "The spindle tripped",
-  detail: `The job stopped${line ? ` at line ${line.toLocaleString()}` : ""}, and the machine re-homed Z.`,
-  next: "Check the bit isn't damaged. The tool check runs next, then you can continue the job.",
+  detail: `The job stopped${line ? ` at line ${line.toLocaleString()}` : ""}` +
+    (rehomed ? ", and the machine re-homed Z." : ". The machine couldn't re-home Z, so the Z position isn't known."),
+  next: rehomed ? "Check the bit isn't damaged. The tool check runs next, then you can continue the job."
+    : "Check the bit isn't damaged, then re-home Z. The tool check runs next, then you can continue the job.",
   ack: "Got it, check the tool"
 });

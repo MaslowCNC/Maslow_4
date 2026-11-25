@@ -445,6 +445,18 @@ describe("runFile", () => {
   });
 });
 
+describe("tool state", () => {
+  test("TS gives the Mini's tool state, and null without the field", () => {
+    expect(g.machine.state.tool).toBe(null);
+    reply("<Idle|MPos:0,0,0|MS:7|TS:3>");
+    expect(g.machine.state.tool).toBe(g.machine.TOOL.LOADED);
+    reply("<Idle|MPos:0,0,0|MS:7|TS:7>");
+    expect(g.machine.state.tool).toBe(g.machine.TOOL.FAULT_RECOVERY);
+    reply("<Idle|MPos:0,0,0|MS:7>");
+    expect(g.machine.state.tool).toBe(null);
+  });
+});
+
 describe("stopped jobs", () => {
   test("STOPPED gives the stopped job, and goes away with the field", () => {
     reply("<Idle|MPos:0,0,0|MS:7|STOPPED:1234,/jobs/a,b.nc>");

@@ -1,5 +1,6 @@
 import { useState } from "preact/hooks";
 import { jobFit } from "./fit.js";
+import { SEAT_TO_WORK, helperZ } from "./screens.js";
 
 // What each screen asks for in the top bar, and what its buttons do. The rule from REWRITE.md: whatever the
 // top bar asks for can be completed in the top bar (small inputs here, bigger tasks in a pop-up opened from here).
@@ -7,11 +8,13 @@ import { jobFit } from "./fit.js";
 // ctx: { d: device state, a: answers, setA(patch), send(action, payload), mark(step) }
 // Returns { text, buttons: [{ label, onClick, style }], input }
 
-function StickoutInput({ onSave }) {
-  const [v, setV] = useState("31.5");
+// The stick-out must leave the tip above the work surface (under SEAT_TO_WORK), or the helper would set Z below it
+function StickoutInput({ onSave, value }) {
+  const [v, setV] = useState(value != null ? String(value) : "");
+  const n = parseFloat(v), ok = n > 0 && n < SEAT_TO_WORK;
   return <span class="binput">
-    <label class="field"><span>Stick-out</span><input value={v} onInput={e => setV(e.currentTarget.value)} aria-label="Stick-out in mm" /> mm</label>
-    <button class="btn" type="button" onClick={() => { const n = parseFloat(v); if (n > 0) onSave(n); }}>Save measurement</button>
+    <label class="field"><span>Stick-out</span><input value={v} onInput={e => setV(e.currentTarget.value)} aria-label="Stick-out in mm" style="width:70px" /> mm</label>
+    <button class="btn" type="button" disabled={!ok} title={ok || !v ? "" : `From 0 to ${SEAT_TO_WORK} mm`} onClick={() => ok && onSave(n)}>Set Z</button>
   </span>;
 }
 
@@ -56,6 +59,10 @@ function askFor(k, ctx) {
   const { d, a, setA, send, mark } = ctx;
   const B = (label, onClick, style = "") => ({ label, onClick, style });
   const stop = (label = "Stop") => B(label, () => send("stop"), "stopping");
+  // Back to the previous step this page asked about: it forgets that answer, so the step can be checked or redone.
+  // Steps the machine reports (belts, anchors) can't be undone by an answer: redo them with their own action.
+  // It shows as a small arrow at the left of the bar (BackArrow), not with the other buttons.
+  const back = (patch) => ({ ...B("Back to the previous step", () => setA(patch), "ghost"), back: true });
   switch (k) {
     case "wifi": return { text: "Choose a WiFi network for the machine to join, or keep using its hotspot. If you always use the hotspot, Hotspot only stops this screen from coming back.",
       buttons: [B("Join network", () => ctx.openSettings?.("network")), B("Use the hotspot only", () => send("saveNetwork", { mode: "AP" }), "ghost")] };
@@ -66,7 +73,7 @@ function askFor(k, ctx) {
     case "retracted": return { text: "Check each arm by eye: are all four belts fully wound in?",
       buttons: [B("Yes, all retracted", () => setA({ retractChecked: true })), B("No, retract again", () => send("retract"), "ghost")] };
     case "toextend": return { text: "Belts retracted and checked. Press Extend belts, then pull each one out toward its anchor.",
-      buttons: [B("Extend belts", () => { mark(1); send("extend"); }), B("Retract again", () => { setA({ retractChecked: false }); send("retract"); }, "ghost")] };
+      buttons: [B("Extend belts", () => { mark(1); send("extend"); }), B("Retract again", () => { setA({ retractChecked: false }); send("retract"); }, "ghost"), back({ retractChecked: false })] };
     case "extending": return { text: "Pull each belt out and attach it to its anchor. Press Done when all four are attached.",
       buttons: [B("Done extending", () => send("doneExtending")), stop("Stop extending")] };
     case "extstopped": return { text: "Extending stopped. Extend again, or retract from where the belts are.",
@@ -82,41 +89,43 @@ function askFor(k, ctx) {
     case "anchors": return { text: "Measuring the frame to find each anchor point. Keep clear of the sled and belts.", buttons: [stop("Stop finding anchors")] };
     case "noanchors": return { text: "Check each belt is hooked to its anchor, then try again.",
       buttons: [B("Find anchors again", () => send("findAnchors")), B("Retract belts", () => { setA({ retractChecked: false }); send("retract"); }, "ghost")] };
+    // The machine reports no tool state (TS): a 4.1, or older firmware on a Mini. The tool check can only be skipped
     case "tcheck": return d.toolSteps === false
-      // The real machine's tool steps wait for Tristan's tool field; until then the user can go on without them
-      ? { text: "The tool check isn't connected to the machine yet. Skip it to go on, and set Z the way you do today.",
+      ? { text: "This machine doesn't report whether a bit is loaded (a Maslow 4.1, or older firmware on a Mini). Skip the tool check, and set Z the way you do today.",
           buttons: [{ ...B("Skip the tool check", () => { mark(4); setA({ zDone: true }); }),
-            temp: "the tool check needs the tool state the firmware is adding" }, stop()] }
+            temp: "only for machines that don't report the tool state" }, stop()] }
       : { text: "Checking for a tool. The spindle rises through the light beam.", buttons: [stop()] };
-    case "toolq": return { text: "A bit is loaded. Have you set Z for this tool?",
-      buttons: [B("Yes, Z is set", () => { mark(4); setA({ zDone: true }); }), B("No, set Z", () => { mark(4); mark(5); setA({ measuring: true, stickout: null }); }, "ghost")] };
-    case "notool": return { text: "No bit loaded. Measure a tool to load one, or continue without a tool.",
-      buttons: [B("Measure a tool", () => { mark(4); mark(5); setA({ measuring: true, stickout: null }); }), B("Continue without a tool", () => { mark(4); setA({ zDone: true }); }, "ghost")] };
-    case "recovered": return { text: "Job stopped by a spindle fault. Check the bit isn't damaged, then check for a tool again.",
-      buttons: [B("Check the tool", () => setA({ faultSeen: true, zDone: false, measuring: false, stickout: null }))] };
-    case "toolremove": return { text: "Press Remove tool, then take the bit out so you can measure it.", buttons: [B("Remove tool", () => send("removeTool"))] };
+    // A bit is loaded: Set Z where the bit is now (jogged down to the work), or let the helper work it out from the
+    // stick-out, or take the bit out. The step is done once the report's work offset (WCO) shows the new Z.
+    case "setz": return { text: "A bit is loaded. Jog it down to the work surface and press Set Z, or use the Set Z helper.",
+      buttons: [B("Set Z", () => { setA({ zTarget: d.pos.z }); send("setZ"); }),
+        B("Set Z helper", () => setA({ helper: true, zTarget: null }), "ghost"),
+        B("Remove tool", () => { setA({ zTarget: null }); send("removeTool"); }, "ghost")] };
+    case "zhelper": return { text: `Measure how far the bit sticks out of the spindle socket, from the socket face to the tip. The bit is lowered to the work and Z is set there (assuming the seated socket face is ${SEAT_TO_WORK} mm above the work).`,
+      buttons: [back({ helper: false, zTarget: null })],
+      input: <StickoutInput value={a.stickout} onSave={n => { const z = helperZ(n); setA({ stickout: n, zTarget: z }); send("lowerToWork", { z }); }} /> };
     case "toolfreeing": return { text: "Raising the spindle so the bit can come out. Take it out once the spindle stops.", buttons: [stop()] };
-    case "measure": return { text: "Measure how far the bit sticks out of the spindle socket, from the socket face to the tip.",
-      buttons: [], input: <StickoutInput onSave={n => setA({ stickout: n })} /> };
-    case "toolload": return { text: `Load the bit back in at ${a.stickout} mm stick-out and tighten the collet. The device detects it.`,
-      buttons: [B("Measure again", () => setA({ stickout: null }), "ghost")] };
-    case "zsetting": return { text: "Setting Z from the measured stick-out.", buttons: [stop()] };
+    case "toolload": return { text: "No bit loaded. Put a bit in and push it up into the light beam: the device pulls it in and seats it. Or continue with no tool.",
+      buttons: [B("Continue with no tool", () => { mark(4); setA({ zDone: true }); }, "ghost")] };
+    case "toolseating": return { text: "Bit detected. Let go once the spindle starts pulling it in; it stops when the bit is seated.", buttons: [stop()] };
     // No stock thickness here: calibration doesn't use it yet, so it lives in Settings for anyone who wants to set it
     case "secure": return { text: "Is your work piece set up and secure?",
       buttons: [B("Release tension", () => { setA({ securing: true }); send("release"); }, "ghost"),
-        B("It's secure", () => { mark(6); setA({ secured: true }); })] };
+        B("It's secure", () => { mark(6); setA({ secured: true }); }), back({ zDone: false, helper: false, zTarget: null })] };
     case "releasing": return { text: "Belts are slack. Secure the work piece, then apply tension again.", buttons: [B("Apply tension", () => send("tension"))] };
-    case "choosefile": return { text: "Choose a job file, or upload one.", buttons: [],
+    case "choosefile": return { text: "Choose a job file, or upload one.",
       input: <FilePicker files={d.files} onPick={f => { mark(7); setA({ file: f }); }}
-        onUpload={() => Promise.resolve(send("uploadFile")).then(f => { if (f) { mark(7); setA({ file: f }); } })} /> };
+        onUpload={() => Promise.resolve(send("uploadFile")).then(f => { if (f) { mark(7); setA({ file: f }); } })} />,
+      buttons: [back({ secured: false })] };
     case "error": return { text: d.error?.reason || "", buttons: [B("Clear error ($X)", () => send("clearError"))] };
-    case "recovery": return { text: "Clear it by re-homing Z. (To be tested on the machine.)", buttons: [B("Re-home Z", () => send("rehomeZ"))] };
+    case "recovery": return { text: "Z lost its position (the spindle board needs homing). Re-home Z, then the tool check runs again.",
+      buttons: [B("Re-home Z", () => { setA({ zDone: false, helper: false, zTarget: null }); send("rehomeZ"); })] };
     case "incident": {
       const i = d.incident;
       return { text: `${i.title}. ${i.detail} ${i.next}`,
         // After a spindle fault the tool check runs again, so the page forgets the tool and Z answers
         buttons: i.clearWithStop ? [stop("Stop to clear")] : [B(i.ack || "Got it", () => {
-          if (i.kind === "spindleFault") setA({ faultSeen: true, zDone: false, measuring: false, stickout: null });
+          if (i.kind === "spindleFault") setA({ faultSeen: true, zDone: false, helper: false, zTarget: null });
           send("ackIncident");
         })] };
     }
@@ -126,7 +135,9 @@ function askFor(k, ctx) {
     // Ready to cut says when the job doesn't fit: outside the work area is a warning, past the frame blocks Run
     case "ready": {
       const fit = fitFor(d, a);
-      return fit && (fit.level === "outside" || fit.level === "pastFrame") ? { text: fit.text, alert: true, buttons: [] } : { text: "", buttons: [] };
+      // Back to setup: the last setup step (the job file) asks again, and its Back goes further
+      const toSetup = { ...back({ file: null }), label: "Back to setup" };
+      return fit && (fit.level === "outside" || fit.level === "pastFrame") ? { text: fit.text, alert: true, buttons: [toSetup] } : { text: "", buttons: [toSetup] };
     }
     // Continue from the stopped line, or one the user types; Discard forgets the stopped job ($SD/Discard)
     case "stopped": {

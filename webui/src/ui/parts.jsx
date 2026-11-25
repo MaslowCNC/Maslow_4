@@ -12,6 +12,14 @@ import logo from "../assets/maslow-logo.webp";
 export const Btn = ({ b }) => <button class={`btn ${b.style}${b.temp ? " temp" : ""}`} type="button" onClick={b.onClick}
   disabled={b.disabled} title={b.temp ? `Temporary: ${b.temp}` : b.title}>{b.label}{b.temp && <span class="temptag">Temporary</span>}</button>;
 
+// The step's Back (a button with back: true from ask()), as a small arrow at the left of the bar
+export const BackArrow = ({ buttons }) => {
+  const b = buttons.find(x => x.back);
+  return b ? <button class="backarrow" type="button" aria-label={b.label} title={b.label} disabled={b.disabled} onClick={b.onClick}>
+    <svg viewBox="0 0 10 16" width="9" height="14" aria-hidden="true"><path d="M8 2L2 8l6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg></button> : null;
+};
+export const mainButtons = (buttons) => buttons.filter(b => !b.back);
+
 export const Svg = ({ html, class: c }) => <span class={c} dangerouslySetInnerHTML={{ __html: html }} />;
 
 export const ModePill = ({ s, small }) =>

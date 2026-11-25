@@ -388,7 +388,7 @@ plus a log line `Motion is disabled: <reason>` when Maslow has blocked motion.
 ### 5.1 Status report
 
 ```
-<State[|N:seq]|MPos:x,y,z[|Bf:blocks,bytes][|Ln:n]|FS:feed,spindle|MS:n[|Pn:pins][|WCO:x,y,z][|Ov:f,r,s[|A:SCFM]]|BL:tl,tr,bl,br|BE:tl,tr,bl,br|MC:tl,tr,bl,br[|SD:pct,file[,line]][|STOPPED:line,file]>
+<State[|N:seq]|MPos:x,y,z[|Bf:blocks,bytes][|Ln:n]|FS:feed,spindle|MS:n[|TS:n][|Pn:pins][|WCO:x,y,z][|Ov:f,r,s[|A:SCFM]]|BL:tl,tr,bl,br|BE:tl,tr,bl,br|MC:tl,tr,bl,br[|SD:pct,file[,line]][|STOPPED:line,file]>
 ```
 
 Example while jogging, a report that carries the belts:
@@ -410,6 +410,7 @@ Example while jogging, a report that carries the belts:
 | `Ov:feed,rapid,spindle` | every 10th / 20th report | overrides in % |
 | `A:SCFM` | with Ov, when on | S/C spindle CW/CCW, F flood, M mist |
 | `MS:n` | yes (Maslow) | Maslow calibration state, 0–10 (section 5.3) |
+| `TS:n` | on a machine with a spindle board (Maslow Mini) | the tool and Z state: 0 unknown (no word from the spindle board, or its firmware is older), 1 needs homing (an over-current lost the Z zero; Z moves are refused until Home Z), 2 homing Z, 3 a tool is loaded, 4 no tool, 5 loading a tool (one broke the beam; pulling it in), 6 removing the tool, 7 recovering from a spindle fault (stopping the job, then re-homing Z) |
 | `N:seq` | only on a WebSocket opened with `?report_seq` (Maslow) | this channel's report sequence number, +1 per report; a jump means reports were dropped. For measuring delivery (`scripts/report_monitor.mjs`); the UI doesn't ask for it |
 | `BL:tl,tr,bl,br` | yes (Maslow) | belt lengths, mm, 2 decimals; `?` for a belt whose length is unknown (not restored at boot and not retracted since) |
 | `BE:tl,tr,bl,br` | yes (Maslow) | each belt's position error (encoder position minus target), mm, 3 decimals |

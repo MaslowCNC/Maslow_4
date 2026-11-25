@@ -40,6 +40,17 @@ up in a new session, read "Where we are", "How to work on it" and "What we still
 - **Tested on the Mini, from the dev server (2026-11-18):** belt labels, motor rings, command box, Save log, settings read
   and save, Set home, Settings › Home, delete, spindle on / off. **Not yet:** Continue from a changed
   line, Discard, the belt motor test, the fit check.
+- **The Mini's tool check is connected (2026-11-20; on the Mini 2026-11-25):** the
+  firmware reports the tool state in the status report's `TS` field, and the tool steps and the spindle-fault
+  screens follow it. **On the Mini (2026-11-25):** both boards flashed (spindle by USB, boost kept at 0 V; WiFi
+  OTA to the spindle board failed both times). Seen working: `TS:3` in the report; the tool check answered by
+  itself with no Z move; Remove tool (TS 6 → 4, about 15 s) and reloading the bit (TS 5 → 3, about 12 s), each
+  re-zeroing Z; Home Z from the jog pad (re-synced Z after issue 24). The revised Set Z step (2026-11-25): Set Z,
+  the Set Z helper (15 mm stick-out after Home Z: offset Z −5, bit lowered to machine Z −5, work Z 0) and Remove
+  tool, on the Mini. **Not yet on the machine:** Continue with no tool; reloading the page mid-setup; a spindle fault
+  (TS 7, can't be triggered on purpose: unit tests and the simulator only). **Known gap:** Home Z clears the work Z
+  offset, but a page past the Set Z step doesn't go back to it. Issue 24 (Z slips under load) and 25 (the helper's
+  20 mm guess) are open. The PR to `firmwareRewrite` should @-mention @tristan-huber for the report field.
 - **Next:** the rest of the gap list ("What we still need" › 2), and the 4.1's setup flow.
 
 ## How to work on it
@@ -251,7 +262,7 @@ arrives. The full table of states, subheaders and actions is the UI modes map.
 3. Apply tension
 4. Find anchors
 5. Check the tool
-6. Measure the tool
+6. Set Z
 7. Secure the work piece
 8. Choose a job file
 
@@ -285,14 +296,21 @@ arrives. The full table of states, subheaders and actions is the UI modes map.
   belts for anyone who wants to set it. Add it back to setup if calibration starts using it.
 - **The tool and Z steps.** Once the position is confirmed, the machine checks for a tool by
   itself: the spindle board raises the spindle through its top-of-travel light beam.
-  - **A bit is found:** "Have you set Z for this tool?" Yes goes on; No leads to Measure the tool.
-  - **No bit:** measure one, or continue without a tool.
-  - **Measure the tool:** Remove tool raises the spindle until the bit clears the beam; the user
-    takes it out, enters how far it sticks out of the socket, and puts it back. The machine
-    detects the bit when it breaks the beam and sets Z from the measurement. No "loaded" button.
+  - **A bit is found: Set Z** (revised 2026-11-25), with three buttons. **Set Z** makes where the bit is
+    now work Z 0 (jog it to the work first). **Set Z helper** asks for the stick-out, lowers the bit to the work and sets
+    work Z 0 there (no jogging by hand), assuming the seated socket face is 20 mm above the work (a guess: ISSUES-LOG issue 25). **Remove tool**
+    raises the spindle until the bit is out, then Load the tool. The step is done once the report's work
+    offset shows the new Z.
+  - **No bit: Load the tool.** The board seats a bit put into the beam by itself, then Set Z. Or
+    **Continue with no tool**.
+  - **Back** on every step the page asks about (2026-11-25) clears that answer so the step can be redone;
+    the belt steps are redone with their own actions.
 
-  These steps are the Maslow Mini's (its spindle board). They need the tool and spindle-board state,
-  which mo is adding. The 4.1 sets Z with its own steppers; its flow is still to define.
+  These steps are the Maslow Mini's (its spindle board). **Done** (2026-11-20): they follow the report's `TS`
+  field (`docs/protocol.md`). The spindle board homes Z at power-up, so on the machine the check is the field's
+  answer, not a new move. One stopgap, orange and tagged "Temporary": **Skip the tool check**, only when the
+  report has no `TS` (the 4.1, or older firmware). The 4.1 sets Z with its own steppers; its
+  flow is still to define.
 - **Secure the work piece** asks rather than assumes: the user may have calibrated on top of a
   large enough work piece. Its tip: belts too tight? Release tension, secure it, Apply tension
   again; the belt lengths are kept.
@@ -335,13 +353,13 @@ spindle fault. A hold is cleared with Stop instead. These incidents live in `web
 |---|---|---|
 | The machine restarted | The page reconnects and the machine is back in an earlier setup state than it left (a boot restores Belts retracted or Belts extended at best) | Setup again, from the step the state calls for |
 | The job stopped on an error | A job ends on an error in the file | Job stopped: continue from the line, or run from the start |
-| The spindle tripped | The spindle faulted and the machine ended the job and re-homed Z (simulator now; the real machine once the spindle field exists) | The tool check, then Job stopped |
+| The spindle tripped | The report's `TS` leaves 7 (recovering): the machine ended the job and re-homed Z, or gave up (`TS` 1, needs homing: then Re-home Z) | The tool check, then Job stopped |
 | The machine is holding | Held with no job running | Cleared with Stop |
 
 - **Spindle fault:** the machine holds, ends the job, re-homes Z (up to the top of travel), and reports
   `READY_TO_CUT` again; the job leaves `STOPPED`. The UI shows **Job: Spindle fault: recovering**,
-  with no Run, until recovery finishes, then the tool check. It needs the spindle-board state
-  mo is adding, because during recovery the machine already looks ready. (Maslow Mini only.)
+  with no Run, until recovery finishes, then the tool check. **Done** (2026-11-20): from `TS` 7, since during
+  recovery the machine already looks ready. (Maslow Mini only.)
 - **Emergency stop** comes from the machine's button or an error it detects (such as a belt over
   15 mm off target during a job), never from the UI. Alarm wins over every other state. Motion
   stays blocked until `$X` (Clear error) or a power cycle. Z isn't raised, so the bit may be in the
@@ -503,7 +521,7 @@ them is to agree with Tristan). No firmware change needed:
 | Set home XY, Set Z | `G10 L20 P0 X0 Y0`, `G10 L20 P0 Z0` |
 | Park | a `moveTo()` to the park position, or its own action |
 | Clear error | `$X` |
-| Check for a tool, remove the tool, re-home Z | `$Spindle/Home`, `$Spindle/RemoveTool`, finished from Tristan's new tool field |
+| Check for a tool, remove the tool, re-home Z | `$Spindle/Home`, `$Spindle/RemoveTool`; the screens follow the report's `TS` field |
 | Reboot | `[ESP444]RESTART` (HTTP), if it belongs in `machine.js` |
 
 **5. In the firmware** (status report changes are reviewed by Tristan or BarbourSmith, and a field
@@ -511,12 +529,12 @@ sent only while it applies, like `STOPPED`, is preferred):
 
 | Need | For | Who |
 |---|---|---|
-| Tool state and spindle-board state (Z homing, needs homing, recovering from a fault) | The Mini's tool steps and spindle fault screens; refusing jobs while Z can't move (issue 23) | mo |
+| Tool state and spindle-board state (Z homing, needs homing, recovering from a fault) | The Mini's tool steps and spindle fault screens; refusing jobs while Z can't move (issue 23) | mo. **Done** (2026-11-20, builds; not yet on the machine, needs review from Tristan or BarbourSmith): `TS:n` in the report on machines with a spindle board, from the spindle board's new `Z:` status field; `machine.state.tool`. Refusing jobs while Z needs homing is still open |
 | Which machine this is (Maslow Mini or 4.1) | Picking the setup flow | To decide |
 | Find anchors progress, e.g. point n of total | The 11-minute Find anchors step | Tristan |
 | Why an operation failed, and the alarm reason | The message in the top bar and the Error screen | Tristan |
 | Done extending | Belts pay out until the user says they're attached | Tristan |
-| Set Z from the measured stick-out | The Mini's Measure the tool | mo |
+| Set Z from the measured stick-out | The Mini's Set Z helper (today a 20 mm guess in the UI, ISSUES-LOG 25) | mo |
 
 ## Open questions
 

@@ -2,15 +2,22 @@
 // what the device reports, and what the user has answered or confirmed on this page. derive() is that rule.
 
 export const STEPS = ["Retract belts", "Extend belts", "Apply tension", "Find anchors",
-  "Check the tool", "Measure the tool", "Secure the work piece", "Choose a job file"];
+  "Check the tool", "Set Z", "Secure the work piece", "Choose a job file"];
 
 // Answers the user gives on this page. They reset whenever the page (re)connects, because the device may have
 // changed in the meantime: setup starts again from whatever the machine reports.
 export const freshAnswers = () => ({
   retractChecked: false,
-  zDone: false, measuring: false, stickout: null, zBase: null, secured: false, securing: false,
+  zDone: false, helper: false, stickout: null, zTarget: null, secured: false, securing: false,
   file: null, stoppedSeen: false, contLine: null, faultSeen: false, ran: []
 });
+
+// The Set Z helper's guess at the geometry: a seated bit's socket face sits this far above the work surface, so the
+// tip is (SEAT_TO_WORK − stick-out) above it. A stopgap number, to be measured properly (ISSUES-LOG.md, issue 25).
+export const SEAT_TO_WORK = 20;
+// The work Z 0 the helper sets, in machine Z: the board makes machine Z 0 where the bit seated, so the work
+// surface is (SEAT_TO_WORK − stick-out) below that
+export const helperZ = (stickout) => +(stickout - SEAT_TO_WORK).toFixed(3);
 
 export const T = { setup: "var(--setup)", ready: "var(--ready)", job: "var(--job)", error: "var(--danger)", wait: "var(--muted)" };
 
@@ -38,14 +45,11 @@ export const SCREENS = {
   anchors: { mode: "Setup", tone: T.setup, sub: "Finding anchor points", step: 3, nopos: true, moving: true, msg: "Measuring the frame. This takes about 11 minutes" },
   noanchors: { mode: "Error", tone: T.error, sub: "Can't find anchors", step: 3, nopos: true, alert: true, msg: "Find anchors didn't finish. Check each belt is hooked to its anchor, then try again" },
   tcheck: { mode: "Setup", tone: T.setup, sub: "Checking for a tool", step: 4, moving: true, msg: "Position confirmed. Raising the spindle through the light beam to see if a bit is loaded" },
-  toolq: { mode: "Setup", tone: T.setup, sub: "Tool found", step: 4, msg: "A bit is loaded. Have you set Z for this tool?" },
-  notool: { mode: "Setup", tone: T.setup, sub: "No tool loaded", step: 4, msg: "No bit was detected. Measure a tool to load one, or continue without a tool" },
-  recovered: { mode: "Setup", tone: T.setup, sub: "Job stopped: spindle fault", step: 4, alert: true, msg: "The spindle tripped and the job ended. Z was re-homed. Check the bit is still OK, then check for a tool again" },
-  toolremove: { mode: "Setup", tone: T.setup, sub: "Remove the tool", step: 5, msg: "Press Remove tool. The spindle rises so you can take the bit out and measure it" },
-  toolfreeing: { mode: "Setup", tone: T.setup, sub: "Removing the tool", step: 5, moving: true, msg: "Raising the spindle until the bit clears the light beam" },
-  measure: { mode: "Setup", tone: T.setup, sub: "Measure the tool", step: 5, msg: "Measure how far the bit sticks out of the spindle socket, then enter it" },
-  toolload: { mode: "Setup", tone: T.setup, sub: "Load the tool", name: "Load the tool", step: 5, msg: "Put the bit back in at the stick-out you measured. The device detects it when the bit breaks the beam" },
-  zsetting: { mode: "Setup", tone: T.setup, sub: "Setting Z", step: 5, moving: true, msg: "Setting Z from the measured stick-out" },
+  setz: { mode: "Setup", tone: T.setup, sub: "Set Z", step: 5, msg: "A bit is loaded. Set Z where the bit is now, use the Set Z helper, or remove the tool" },
+  zhelper: { mode: "Setup", tone: T.setup, sub: "Set Z helper", name: "Set Z helper", step: 5, msg: "Measure how far the bit sticks out of the spindle socket. Z is set from it" },
+  toolfreeing: { mode: "Setup", tone: T.setup, sub: "Removing the tool", name: "Remove the tool", step: 5, moving: true, msg: "Raising the spindle until the bit clears the light beam" },
+  toolload: { mode: "Setup", tone: T.setup, sub: "Load the tool", name: "Load the tool", step: 5, msg: "No bit loaded. Put a bit in: the device detects it when it breaks the light beam. Or continue with no tool" },
+  toolseating: { mode: "Setup", tone: T.setup, sub: "Loading the tool", name: "Load the tool", step: 5, moving: true, msg: "The bit broke the light beam. The spindle pulls it down until it's seated" },
   secure: { mode: "Setup", tone: T.setup, sub: "Secure the work piece", step: 6, msg: "Make sure the work piece is clamped down" },
   releasing: { mode: "Setup", tone: T.setup, sub: "Tension released", step: 6, nopos: true, msg: "The belts are slack so you can reach the work piece. Apply tension again once it's secure" },
   choosefile: { mode: "Setup", tone: T.setup, sub: "Choose a job file", step: 7, msg: "Tool, Z and work piece are ready. Choose what to cut" },
@@ -91,16 +95,11 @@ export function derive(d, a) {
       return "extended";
     }
     case 7: {
-      if (d.lastJob?.result === "fault" && !a.faultSeen) return "recovered";
       if (!a.zDone) {
-        if (a.measuring) {
-          if (d.settingZ) return "zsetting";
-          if (d.tool === "removing") return "toolfreeing";
-          if (a.stickout == null) return d.tool === "loaded" ? "toolremove" : "measure";
-          return d.tool === "loaded" ? "zsetting" : "toolload";
-        }
-        if (d.tool === "loaded") return "toolq";
-        if (d.tool === "none") return "notool";
+        if (d.tool === "removing") return "toolfreeing";  // Remove tool, from this step, the jog pad or another connection
+        if (d.tool === "loading") return "toolseating";   // a bit put in: found once it's seated
+        if (d.tool === "none") return "toolload";
+        if (d.tool === "loaded") return a.helper ? "zhelper" : "setz";
         return "tcheck";
       }
       if (!a.secured) return "secure";
@@ -122,8 +121,8 @@ export const STEP_HELP = [
   ["Press Extend belts.", "Pull each belt out by hand toward its anchor.", "Hook the end of each belt onto its anchor.", "When all four are attached, press Done extending. Stop extending keeps the belt lengths, so you can extend again or retract."],
   ["Check that all four belts are attached and nothing is in their way.", "Press Apply tension. The belts wind in to take up the slack, which takes about 30 seconds.", "The device checks its position against the saved anchors.", "If a belt winds in more than 300 mm, check that it's attached. If the position doesn't fit, Find anchors runs next."],
   ["Keep clear of the sled and belts.", "The sled moves to a grid of points and measures each one. This takes about 11 minutes.", "If it fails, check that each belt is hooked to its anchor, then try again."],
-  ["The device raises the spindle through the light beam to check for a bit.", "If a bit is found, say whether you've set Z for this tool.", "If none is found, measure a tool to load, or continue without one."],
-  ["Press Remove tool. The spindle rises so the bit can come out, then take it out.", "Measure how far it sticks out of the spindle socket, from the socket face to the tip, and enter it.", "Load it back in at that stick-out and tighten the collet. The device detects it when the bit breaks the light beam.", "Z is set from the measurement."],
+  ["The device raises the spindle through the light beam to check for a bit.", "If a bit is found, set Z for it next.", "If none is found, load one, or continue with no tool."],
+  ["Set Z: jog the bit down to the work surface, then press Set Z. Where the bit is now becomes work Z 0.", "Or the Set Z helper: measure how far the bit sticks out of the spindle socket, from the socket face to the tip, and enter it. Z is set from it.", "To change the bit, press Remove tool. The spindle rises so the bit can come out. Put the new one in: the device detects it when it breaks the light beam.", "No bit? Continue with no tool."],
   ["Clamp or screw the work piece down so it can't move.", "Belts too tight to reach the clamps? Release tension, secure the work piece, then apply tension again."],
   ["Upload a G-code file (.nc), or choose one already on the device.", "Check the preview fits on the work piece."]
 ];

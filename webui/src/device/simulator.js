@@ -51,14 +51,15 @@ function initialState() {
   return {
     connected: false, everConnected: false, hotspot: false, connectId: 0,
     maslow: 0, fluid: "Idle",
-    tool: "unknown",              // unknown | checking | loaded | none | removing | removed | waiting
+    // As the real machine's report (TS): unknown | checking | loaded | none | loading | removing | needsHoming
+    tool: "unknown",
     settingZ: false, zFromStickout: null, zSetCount: 0,  // zSetCount goes up each time Z is set from a stick-out
     spindle: "off",               // off | on | recovering | recoveryFailed
     motorTest: null,              // the last belt motor test: { passed: [arm], failed: [{ arm, problem }] }
     error: null,                  // { reason } while in Alarm
     job: null,                    // { file, line, total, running }
     gcode: null,                  // the chosen file, read: { file, status: "ready", ...readGcode() } (machine.js has the same)
-    lastJob: null,                // { file, result: "success" | "stopped" | "fault", line }
+    lastJob: null,                // { file, result: "success" | "stopped", line }
     motion: null,                 // tracing | parking
     result: null,                 // the last setup step's result, e.g. { step: "tension", outcome: "nofit", message }
     restored: false,              // came back from a reboot with belt lengths restored
@@ -258,13 +259,16 @@ export function createSimulator() {
       log("[MSG:INFO: SpindleBoard: Tool removal: raising Z to eject any loaded tool]");
       set({ tool: "removing" });
       ask("Removing the tool", "Z rises until the bit has passed the beam and it's clear for 500 ms. About 14 s.",
-        [["Bit out: beam clear for 500 ms", () => { log("[MSG:INFO: SpindleBoard: Tool removed: beam clear for 500ms]"); set({ tool: "removed", pending: null }); }]]);
+        [["Bit out: beam clear for 500 ms", () => { log("[MSG:INFO: SpindleBoard: Tool removed: beam clear for 500ms]"); set({ tool: "none", pending: null }); }]]);
     },
+    // The tool stays "none" (as the machine reports it) until a bit breaks the beam
     watchForTool() {
-      set({ tool: "waiting" });
       ask("Waiting for the bit", "The board watches the beam. When an inserted bit breaks it, the board lowers Z until the beam is clear for 400 ms.",
-        [["Bit inserted and seated", () => { log("[MSG:INFO: SpindleBoard: Tool loaded: beam clear for 400ms]", "[MSG:INFO: SpindleBoard: spindle re-homed Z - reset XY Z position to 0]");
-          set({ tool: "loaded", pos: { ...s.pos, z: 0 }, pending: null }); }]]);
+        [["Bit inserted: it breaks the beam", () => { log("[MSG:INFO: SpindleBoard: Tool loading: beam interrupted, lowering Z until the beam clears]");
+          set({ tool: "loading" });
+          ask("Loading the tool", "Z lowers until the beam has been clear for 400 ms. About 13 s on the machine.",
+            [["Bit seated", () => { log("[MSG:INFO: SpindleBoard: Tool loaded: beam clear for 400ms]", "[MSG:INFO: SpindleBoard: spindle re-homed Z - reset XY Z position to 0]");
+              set({ tool: "loaded", pos: { ...s.pos, z: 0 }, pending: null }); }]]); }]]);
     },
     setZFromStickout({ stickout }) {
       log(`(planned) Set Z from a ${stickout} mm stick-out`);
@@ -369,7 +373,10 @@ export function createSimulator() {
     },
     rehomeZ() {
       log("$Spindle/Home");
-      ask("Re-homing Z", "Z rises to the top of travel.", [["Z homed", () => set({ spindle: "off", tool: "unknown", pos: { ...s.pos, z: 0 }, pending: null })]]);
+      set({ spindle: "off", tool: "checking" });
+      ask("Re-homing Z", "Z rises to the top of travel, and the beam shows whether a bit is loaded.", [
+        ["Z homed: a bit is loaded", () => set({ tool: "loaded", pos: { ...s.pos, z: 0 }, pending: null })],
+        ["Z homed: no bit", () => set({ tool: "none", pos: { ...s.pos, z: 0 }, pending: null })]]);
     },
     // The network settings, over HTTP on the machine. Reading and scanning answer after a moment, as the board does.
     readNetwork() {
@@ -409,6 +416,8 @@ export function createSimulator() {
     setHomeXY({ x = s.pos.x, y = s.pos.y } = {}) { log(`setWorkZero x=${x} y=${y}`); set({ wco: { ...s.wco, x, y } }); },
     resetHome() { log("setWorkZero x=0 y=0 z=0"); set({ wco: { x: 0, y: 0, z: 0 } }); },
     setZ({ z = s.pos.z } = {}) { log(`setWorkZero z=${z}`); set({ wco: { ...s.wco, z } }); },
+    // The Set Z helper: work Z 0 at machine Z z, then Z lowered there (machine.js does it as two commands)
+    lowerToWork({ z }) { log(`setWorkZero z=${z}`, `G53 G1 Z${z}`); set({ wco: { ...s.wco, z }, pos: { ...s.pos, z } }); },
     // The demo files aren't real, so each reads as a generated sample of its size; an uploaded file is read for real
     chooseFile({ file }) {
       const f = s.files.find(x => x.name === file);
@@ -453,10 +462,12 @@ export function createSimulator() {
         set({ fluid: "Run", spindle: "off", lastJob: { file: s.job.file, result: "success" }, job: null, motion: "parking", pending: null });
         ask("Parking", "A finished job parks by itself.", [["Parked", () => set({ motion: null, fluid: "Idle", pending: null })]]); }],
       ["Spindle fault", () => { log("[MSG:WARN: SpindleBoard: driver over-current (nFAULT retries) - spindle stopped]", "[MSG:INFO: SpindleBoard: machine stopped after the spindle fault - ending the job ($STOP)]");
-        set({ fluid: "Idle", spindle: "recovering", lastJob: { file: s.job.file, result: "fault", line: 1240 }, job: null });
+        // As the machine reports it: TS 7 while it recovers, and the job left STOPPED
+        set({ fluid: "Idle", spindle: "recovering", tool: "checking", lastJob: { file: s.job.file, result: "stopped", line: 1240 }, job: null });
         ask("Spindle fault: recovering", "The job ends, Z lifts and re-homes by itself. About 8 s on the machine.", [
-          ["Recovery finished", () => { log("[MSG:INFO: SpindleBoard: Z re-homed after the spindle fault; work Z zero restored - ready to cut]"); set({ spindle: "off", tool: "unknown", pending: null, incident: spindleFault(s.lastJob?.line) }); }],
-          ["Recovery failed", () => set({ spindle: "recoveryFailed", pending: null }), "bad"]
+          ["Recovery finished", () => { log("[MSG:INFO: SpindleBoard: Z re-homed after the spindle fault; work Z zero restored - ready to cut]"); set({ spindle: "off", tool: "loaded", pending: null, incident: spindleFault(s.lastJob?.line) }); }],
+          // The firmware gave up before re-homing: Z needs homing (TS 1)
+          ["Recovery failed", () => set({ spindle: "recoveryFailed", tool: "needsHoming", pending: null, incident: spindleFault(s.lastJob?.line, false) }), "bad"]
         ]); }, "bad"],
       ["Emergency stop (position error)", () => { log("[MSG:ERR: Emergency stop! Stopping all motors]");
         set({ fluid: "Alarm", spindle: "off", error: { reason: "Position error over 15 mm on the top right belt" }, job: null, pending: null }); }, "bad"]
@@ -483,6 +494,7 @@ export function createSimulator() {
   // more while the belts or a job move. During a job the file line advances, the load swings between the top and
   // bottom motors as the sled moves, and now and then one motor spikes (a hard plunge, a snag) with a belt error.
   const BUSY = [1, 3, 5, 6, 8];
+  let spike = null;   // { arm, ticks } while one motor spikes
   setInterval(() => {
     if (!s.connected) return;
     const moving = BUSY.includes(s.maslow) || s.job || s.motion;
@@ -521,4 +533,3 @@ export function createSimulator() {
     isSimulated: true
   };
 }
-  let spike = null;   // { arm, ticks } while one motor spikes

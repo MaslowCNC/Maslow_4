@@ -79,11 +79,12 @@ export function App() {
   useEffect(() => { if (k === "tcheck" && d.tool === "unknown" && !d.pending) send("toolCheck"); }, [k, d.tool, d.pending]);
   // Waiting for the bit to be put back in: the board watches the beam by itself
   useEffect(() => { if (k === "toolload" && (d.tool === "removed" || d.tool === "none") && !d.pending) send("watchForTool"); }, [k, d.tool, d.pending]);
-  // The bit is seated: set Z from the measured stick-out (planned firmware command). zBase is how many times Z had
-  // been set when this measurement started, so measuring the same stick-out twice still sets Z again.
-  useEffect(() => { if (a.measuring) setA({ zBase: d.zSetCount }); }, [a.measuring]);
-  useEffect(() => { if (k === "zsetting" && !d.settingZ && !d.pending && d.zSetCount === a.zBase) send("setZFromStickout", { stickout: a.stickout }); }, [k, d.settingZ, d.pending, a.zBase]);
-  useEffect(() => { if (a.measuring && a.zBase != null && d.zSetCount > a.zBase) setA({ zDone: true, measuring: false }); }, [d.zSetCount]);
+  // Set Z (here, or the helper lowering the bit to the work) is done once the report shows the work offset it asked
+  // for and the bit there: work Z 0
+  useEffect(() => {
+    const near = (v) => Math.abs(v - a.zTarget) < 0.005;
+    if (a.zTarget != null && !a.zDone && near(d.wco.z) && near(d.pos.z)) { mark(4); mark(5); setA({ zDone: true, helper: false, zTarget: null }); }
+  }, [d.wco.z, d.pos.z, a.zTarget]);
   // A new retract, from whichever button, needs a new check by eye
   useEffect(() => { if (d.maslow === 1) setA({ retractChecked: false }); }, [d.maslow]);
   // Tension is back on after releasing it to secure the work piece
