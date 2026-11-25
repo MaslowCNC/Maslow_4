@@ -51,7 +51,7 @@ up in a new session, read "Where we are", "How to work on it" and "What we still
   (TS 7, can't be triggered on purpose: unit tests and the simulator only). Home Z clears the work Z offset, so the page goes
   back to Set Z (keeping the work piece and file answers); Reset home resets X and Y only (decided 2026-11-25).
   Home Z from another tab with a bit loaded isn't noticed (the report may never show homing). Issue 24 (Z slips under load) is open; 25 is fixed
-  (seat to work measured at 33.5 mm, 2026-11-25). The PR to `firmwareRewrite` should @-mention @tristan-huber for the report field.
+  (seat to work set to 30 mm, 2026-11-25). The PR to `firmwareRewrite` should @-mention @tristan-huber for the report field.
 - **Next:** the rest of the gap list ("What we still need" › 2), and the 4.1's setup flow.
 
 ## How to work on it
@@ -571,7 +571,7 @@ sent only while it applies, like `STOPPED`, is preferred):
 | Find anchors progress, e.g. point n of total | The 11-minute Find anchors step | Tristan |
 | Why an operation failed, and the alarm reason | The message in the top bar and the Error screen | Tristan |
 | Done extending | Belts pay out until the user says they're attached | Tristan |
-| Set Z from the measured stick-out | The Mini's Set Z helper (seat to work measured at 33.5 mm, 2026-11-25, ISSUES-LOG 25) | mo |
+| Set Z from the measured stick-out | The Mini's Set Z helper (seat to work set to 30 mm, 2026-11-25, ISSUES-LOG 25) | mo |
 
 ## Open questions
 
