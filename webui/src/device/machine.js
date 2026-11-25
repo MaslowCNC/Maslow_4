@@ -6,9 +6,10 @@
 // anchors), running a file, Trace boundary, jogging, Set home XY, Set Z, Park, Clear error, the belt motor test, and
 // on the Mini Home Z, Remove tool and Spindle on / off. Each goes through a machine.js action, and its Operation is kept in state.op so the screens can
 // show "starting", then nothing (done) or why it failed. The screen itself still comes from the machine's state, so
-// every connection shows the same thing. The tool steps come next: they need the spindle board's status field.
+// every connection shows the same thing. On the Mini the tool steps and the spindle-fault screens follow the report's
+// TS field (machine.state.tool); without it (the 4.1, or older firmware) the tool check can only be skipped.
 
-import { restarted, jobFailed, holding } from "../flow/incidents.js";
+import { restarted, jobFailed, holding, spindleFault } from "../flow/incidents.js";
 import { readGcode, boundaryPath } from "../gcode/reader.js";
 import { MACHINE_SETTINGS, settingError } from "./settings.js";
 import { parseSettingsList, valueError, espSetCommand, withValues } from "./settingslist.js";
@@ -36,14 +37,31 @@ const ACTIONS = {
 };
 // The spindle board's actions, Mini only. Their Operation ends when the firmware answers ok, which only means the
 // board was sent the command: it finishes 1 to 40 s later, and can fail (a tool removal that can't clear the beam).
-// Until the status report has a spindle board field, the page says "sent", never "done", and the board's own log
-// lines tell the rest. When the field exists, machine.js waits for it and these become ordinary actions.
+// So the page says "sent", never "done"; the screens follow the report's tool state (TS) for the rest.
 const SPINDLE_BOARD = ["rehomeZ", "removeTool"];
 const NO_SPINDLE_BOARD = "This machine has no spindle board (the Maslow 4.1's Z is set by eye)";
 // Mini-only actions: the spindle board's, and switching the spindle (the 4.1's config has no spindle to drive)
 const MINI_ONLY = [...SPINDLE_BOARD, "spindleOn", "spindleOff"];
 const NO_SPINDLE = "This machine's spindle isn't controlled by the board (the Maslow 4.1 has no spindle output)";
 const isMini = (name) => /^Maslow Mini/.test(name || "");
+// The report's TS field (machine.js TOOL) → the tool state the screens read (the simulator's names). 7, recovering
+// from a spindle fault, and 1, Z needs homing, show as the spindle's state instead (spindleFrom).
+const TOOL_STATES = { 1: "needsHoming", 2: "checking", 3: "loaded", 4: "none", 5: "loading", 6: "removing", 7: "checking" };
+const TS_RECOVERING = 7, TS_NEEDS_HOMING = 1;
+
+// The screens' tool fields from the report's TS (null without the field) and spindle speed. Recovering from a spindle
+// fault (TS 7) and Z needing homing (TS 1) show as the spindle's state; otherwise the spindle is on while FS is above 0.
+export function toolFields(ts, spindleSpeed) {
+  return {
+    toolSteps: ts != null && ts !== 0, toolCode: ts, tool: TOOL_STATES[ts] || "unknown",
+    spindle: ts === TS_RECOVERING ? "recovering" : ts === TS_NEEDS_HOMING ? "recoveryFailed" : spindleSpeed > 0 ? "on" : "off"
+  };
+}
+// The firmware finished (or gave up) recovering from a spindle fault: TS left 7
+export const recoveryEnded = (before, ts) => before === TS_RECOVERING && ts != null && ts !== TS_RECOVERING;
+
+// Setting Z from the measured stick-out isn't in the firmware yet: the measure step ends with the user setting Z
+const NO_STICKOUT_Z = "Setting Z from the measured stick-out needs a firmware change";
 
 // Jog speeds, as the current UI's defaults (prefDefs.js: xy_feedrate, z_feedrate)
 const JOG_FEED = { xy: 2500, z: 300 };
@@ -63,20 +81,22 @@ export function createMachine({ host = location.host } = {}) {
     incident: null,          // something the user must acknowledge before the flow goes on (flow/incidents.js)
     op: null,                // { action, phase: "starting" | "running" | "failed", detail, maslowAt } for this page's last action
     beltsKnown: 0,           // how many belt lengths the machine knows (BL "?" = unknown)
-    toolSteps: false,        // the tool check, measure and load aren't connected yet (they need the tool field)
+    toolSteps: false,        // the report carries the tool state (TS, Mini only); without it the tool check can only be skipped
+    toolCode: null,          // the last TS value, to notice a spindle-fault recovery ending
     notYet: {                // actions this page can't send yet, and why; their buttons are disabled with the reason
       // Until [ESP800] says which machine this is; readMachine() then enables them on a Mini
       rehomeZ: "Waiting to learn which machine this is",
       removeTool: "Waiting to learn which machine this is",
       spindleOn: "Waiting to learn which machine this is",
       spindleOff: "Waiting to learn which machine this is",
+      setZFromStickout: NO_STICKOUT_Z,
       // Extend distance 0 means "until Done extending", which today's firmware doesn't support: it would extend 0 mm
       extendUntilDone: "0 needs the Done extending firmware change. Until then, Extend stops at the distance set here."
     },
     machine: null,           // the machine's name from [ESP800], e.g. "Maslow Mini"; null until known
     extendDist: null,        // Maslow_Extend_Dist, mm
     maslow: null, fluid: "", statusSeen: false,
-    tool: "unknown", settingZ: false, zSetCount: 0, spindle: "off", error: null,
+    tool: "unknown", settingZ: false, zSetCount: 0, spindle: "off", error: null,   // tool: TOOL_STATES
     motorTest: null,         // the last belt motor test: { passed: [arm], failed: [{ arm, problem }] }
     job: null, lastJob: null, motion: null, result: null, restored: false,
     gcode: null,             // the chosen file, read: { file, status: "reading" | "ready" | "failed", detail?, ...readGcode() }
@@ -177,17 +197,22 @@ export function createMachine({ host = location.host } = {}) {
     const op = s.op?.phase === "failed" && ms.maslow !== s.op.maslowAt ? null : s.op;
     // Held with no job running and nothing of ours in progress: the user has to clear it with Stop
     let incident = s.incident;
-    if (ms.grbl === "Hold" && !ms.job && !op && !incident) incident = holding();
+    const ts = ms.tool;   // TS: the Mini's tool state, null without the field
+    // A spindle fault holds the machine on purpose while the firmware ends the job: that's the recovery screen, not a hold
+    if (ms.grbl === "Hold" && !ms.job && !op && !incident && ts !== TS_RECOVERING) incident = holding();
     if (incident?.kind === "holding" && ms.grbl !== "Hold") incident = null;
+    // The firmware finished (or gave up) recovering from a spindle fault: say so, then the tool check runs again
+    if (recoveryEnded(s.toolCode, ts) && !alarm) {
+      incident = spindleFault(ms.stopped?.line, ts !== TS_NEEDS_HOMING);
+    }
     return {
       incident, op, beltsKnown: [b.tl, b.tr, b.bl, b.br].filter(v => v != null).length,
+      ...toolFields(ts, ms.spindleSpeed),
       maslow: ms.maslow, fluid: ms.grbl,
       pos: ms.mpos || s.pos, wco: ms.wco || s.wco,
       belts: [b.tl, b.tr, b.bl, b.br].map(v => v ?? 0),
       beltUnknown: [b.tl, b.tr, b.bl, b.br].map(v => v == null),
       motorCurrent: ms.motorCurrent,
-      // On while the report's spindle speed (FS) is above 0: a job, Stop or another connection changes it too
-      spindle: ms.spindleSpeed > 0 ? "on" : "off",
       // Each belt's position error (BE, mm), TL, TR, BL, BR; null until reported. The job recorder keeps it
       beltError: b.etl == null ? null : [b.etl, b.etr, b.ebl, b.ebr],
       job: ms.job ? { file: baseName(ms.job.file), line: ms.job.line ?? 0, total: lineCount(ms.job.file), running: true } : null,
@@ -711,13 +736,25 @@ export function createMachine({ host = location.host } = {}) {
     }
     if (s.notYet[action]) { log(`Not sent: ${action} (${s.notYet[action]})`); emit(); return; }
     // Set home XY / Set Z: the work origin where the machine is now, through Tristan's setWorkZero
-    if (action === "resetHome") { run(action, () => m.setWorkZero({ x: 0, y: 0, z: 0 })); return; }
+    // Reset home is X and Y only: work Z belongs to the Set Z step
+    if (action === "resetHome") { run(action, () => m.setWorkZero({ x: 0, y: 0 })); return; }
     if (action === "setHomeXY" || action === "setZ") {
       const p = m.state.mpos;
       if (!p) { log(`Not sent: ${action} (the machine's position isn't known yet)`); emit(); return; }
       // payload: the new home in machine coordinates ({x, y} or {z}); without one, here
       const q = payload || {};
       run(action, () => m.setWorkZero(action === "setZ" ? { z: q.z ?? p.z } : { x: q.x ?? p.x, y: q.y ?? p.y }));
+      return;
+    }
+    // The Set Z helper: work Z 0 at machine Z payload.z (the work surface), then lower the bit there, so it ends
+    // touching the work with work Z 0. The move only starts once the offset is set.
+    if (action === "lowerToWork") {
+      run(action, () => {
+        const first = m.setWorkZero({ z: payload.z });
+        const op = (async () => { await first; await m.moveTo({ z: payload.z }, { machineCoords: true, feed: JOG_FEED.z }); })();
+        op.accepted = first.accepted;
+        return op;
+      });
       return;
     }
     // Belt motor test ($TEST): the result comes back in the firmware's log lines, kept in state.motorTest

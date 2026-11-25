@@ -67,6 +67,12 @@ namespace Spindles {
 
         static constexpr const char* TRIP_FILE = "/spindle_trip.csv";
 
+        // The tool state for the status report's TS: field (docs/protocol.md): the spindle board's
+        // own code from its status line (1 needs homing, 2 homing, 3 tool loaded, 4 no tool,
+        // 5 loading a tool, 6 removing the tool), 7 while this board recovers from a spindle fault,
+        // and 0 when unknown (no recent status line, or spindle firmware without the Z: field).
+        uint8_t toolStateReport() const;
+
         // The single active instance, so the Maslow loop can stream Z to it
         // without depending on the spindle factory internals.
         static SpindleBoard* instance;
@@ -124,6 +130,7 @@ namespace Spindles {
         char    _rx_buf[400];  // the trip recording's CSV header line is ~330 chars
         size_t  _rx_len     = 0;
         uint8_t _last_fault = 0;
+        uint8_t _tool_state = 0;  // Z: from the latest status line, 0 if absent
 
         // Set when the spindle board reports a fault; cleared only by a deliberate M3/M4.
         // While set, speeds queued by the stepper ISR are dropped: the blocks still in the

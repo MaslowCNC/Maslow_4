@@ -233,6 +233,11 @@
   .gthumb svg { width: 100%; height: auto; display: block; }
   .gmeta { display: grid; gap: 4px; flex: none; min-width: 150px; }
   .gmeta .segs { width: 150px; }
+  /* Back to the previous step: a quiet arrow at the left of the bar */
+  .backarrow { display: inline-grid; place-items: center; width: 22px; height: 22px; margin-left: -4px; padding: 0; border: 0; border-radius: 6px;
+    background: none; color: var(--muted); cursor: pointer; flex: none; }
+  .backarrow:hover:not(:disabled) { color: var(--text); background: color-mix(in srgb, var(--text) 10%, transparent); }
+  .backarrow:disabled { opacity: .4; cursor: default; }
   .gmeta span { font: 600 12px var(--font-mono); color: var(--muted); }
   .gmeta b { font: 700 15px var(--font-display); }
   .gtext { flex: 1 1 220px; min-width: 0; font-size: 13px; color: var(--muted); }

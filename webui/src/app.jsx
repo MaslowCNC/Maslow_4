@@ -65,7 +65,11 @@ export function App() {
 
   const setA = (patch) => setAnswers(prev => ({ ...prev, ...patch }));
   const mark = (step) => setAnswers(prev => prev.ran.includes(step) ? prev : { ...prev, ran: [...prev.ran, step] });
-  const send = (action, payload) => device.send(action, payload);
+  // Home Z clears the work Z offset (the firmware zeroes Z at the seated bit), so the page asks for Set Z again.
+  // The other answers (work piece, file) stay. A bit already in the beam homes at once, so the report may never show
+  // homing: this page's own Home Z counts too, from any button.
+  const zLost = { zDone: false, helper: false, zTarget: null };
+  const send = (action, payload) => { if (action === "rehomeZ" && !d.notYet?.rehomeZ) setA(zLost); return device.send(action, payload); };
   const k = derive(d, a);
   const openSettings = (section = "state") => setModal({ name: "settings", section });
   const ctx = { d, a, setA, send, mark, tolerance, setTolerance, sledMass, setSledMass, commandBox, setCommandBox, openSettings, recorder };
@@ -79,11 +83,14 @@ export function App() {
   useEffect(() => { if (k === "tcheck" && d.tool === "unknown" && !d.pending) send("toolCheck"); }, [k, d.tool, d.pending]);
   // Waiting for the bit to be put back in: the board watches the beam by itself
   useEffect(() => { if (k === "toolload" && (d.tool === "removed" || d.tool === "none") && !d.pending) send("watchForTool"); }, [k, d.tool, d.pending]);
-  // The bit is seated: set Z from the measured stick-out (planned firmware command). zBase is how many times Z had
-  // been set when this measurement started, so measuring the same stick-out twice still sets Z again.
-  useEffect(() => { if (a.measuring) setA({ zBase: d.zSetCount }); }, [a.measuring]);
-  useEffect(() => { if (k === "zsetting" && !d.settingZ && !d.pending && d.zSetCount === a.zBase) send("setZFromStickout", { stickout: a.stickout }); }, [k, d.settingZ, d.pending, a.zBase]);
-  useEffect(() => { if (a.measuring && a.zBase != null && d.zSetCount > a.zBase) setA({ zDone: true, measuring: false }); }, [d.zSetCount]);
+  // Set Z (here, or the helper lowering the bit to the work) is done once the report shows the work offset it asked
+  // for and the bit there: work Z 0
+  useEffect(() => {
+    const near = (v) => Math.abs(v - a.zTarget) < 0.005;
+    if (a.zTarget != null && !a.zDone && near(d.wco.z) && near(d.pos.z)) { mark(4); mark(5); setA({ zDone: true, helper: false, zTarget: null }); }
+  }, [d.wco.z, d.pos.z, a.zTarget]);
+  // Home Z from another connection, when the report shows it homing (TS 2)
+  useEffect(() => { if (d.tool === "checking" && a.zDone) setA(zLost); }, [d.tool]);
   // A new retract, from whichever button, needs a new check by eye
   useEffect(() => { if (d.maslow === 1) setA({ retractChecked: false }); }, [d.maslow]);
   // Tension is back on after releasing it to secure the work piece

@@ -28,6 +28,7 @@
 #include "Job.h"
 #include "Maslow/Maslow.h"  // Maslow: calibration state and belts in the status report
 #include "Maslow/JobResume.h"  // Maslow: |STOPPED: for resuming a stopped job
+#include "Spindles/SpindleBoard.h"  // Maslow: |TS: the Mini's tool state
 
 #include <map>
 #include <freertos/task.h>
@@ -545,6 +546,12 @@ void report_realtime_status(Channel& channel) {
     // Maslow: the calibration state (MaslowEnums.h, 0-9) in every report.  Clients ignore
     // fields they don't know, so standard senders are unaffected.
     msg << "|MS:" << Maslow.calibration.getCurrentState();
+
+    // Maslow Mini: the spindle board's tool state (SpindleBoard::toolStateReport), only on a
+    // machine with a spindle board.
+    if (Spindles::SpindleBoard::instance) {
+        msg << "|TS:" << int(Spindles::SpindleBoard::instance->toolStateReport());
+    }
 
     if (report_pin_string.length()) {
         msg << "|Pn:" << report_pin_string;

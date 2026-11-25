@@ -430,9 +430,9 @@ void sendStatus(Stream& out, MotorController& mc1, MotorController& mc2) {
     float phase_deg = phase_offset.current * 180.0f / PI;
     float rpm = fabsf(mc1.enabled ? mc1.current_velocity : 0.0f) * 60.0f / (2.0f * PI);
     // L: advisory load-warning bits (1 = motor 1, 2 = motor 2), after F: so the XY board's
-    // strstr("F:") parser is unaffected.
-    out.printf("T:%s,P:%.1f,R:%.0f,F:%u,L:%u\n", state, phase_deg, rpm, (unsigned)g_fault_code,
-               (unsigned)loadWarnMask());
+    // strstr("F:") parser is unaffected.  Z: the tool state (toolStateCode()), last for the same reason.
+    out.printf("T:%s,P:%.1f,R:%.0f,F:%u,L:%u,Z:%u\n", state, phase_deg, rpm, (unsigned)g_fault_code,
+               (unsigned)loadWarnMask(), (unsigned)toolStateCode());
 }
 
 // Process one complete command line from either the USB or the inter-board link.

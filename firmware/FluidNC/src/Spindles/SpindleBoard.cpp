@@ -609,7 +609,11 @@ namespace Spindles {
                         log_warn(name() << ": ignoring spindle ZHOMED while machine is busy (state " << (int)st << ")");
                     }
                 }
-                // Expected: "T:<state>,P:<deg>,R:<rpm>,F:<code>"
+                // Expected: "T:<state>,P:<deg>,R:<rpm>,F:<code>,L:<bits>,Z:<tool state>"
+                if (strncmp(_rx_buf, "T:", 2) == 0) {
+                    const char* z = strstr(_rx_buf, ",Z:");
+                    _tool_state   = z ? (uint8_t)strtol(z + 3, nullptr, 10) : 0;
+                }
                 const char* f = strstr(_rx_buf, "F:");
                 if (f) {
                     uint8_t fault = (uint8_t)strtol(f + 2, nullptr, 10);
@@ -658,6 +662,16 @@ namespace Spindles {
             _trip_refetch = false;
             sendTripRequest(false);
         }
+    }
+
+    uint8_t SpindleBoard::toolStateReport() const {
+        if (_recovery != FaultRecovery::None) {
+            return 7;
+        }
+        if (_last_rx_ms == 0 || millis() - _last_rx_ms > LINK_SILENCE_MS || _tool_state > 6) {
+            return 0;
+        }
+        return _tool_state;
     }
 
     // Configuration registration

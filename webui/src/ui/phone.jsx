@@ -1,7 +1,7 @@
 import { useState } from "preact/hooks";
 import { SCREENS, isSetup, stepName } from "../flow/screens.js";
 import { ask, mainActions } from "../flow/asks.jsx";
-import { Btn, AppHeader, ModePill, progress, Segs, StepArt, Frame, LogView, CommandBox, SaveLogBtn, JogPad, DetailsBody, FilesBody, jogLock, workPos } from "./parts.jsx";
+import { Btn, AppHeader, ModePill, progress, Segs, StepArt, Frame, LogView, CommandBox, SaveLogBtn, JogPad, DetailsBody, FilesBody, jogLock, workPos , BackArrow, mainButtons } from "./parts.jsx";
 
 // Defined outside Phone so its children keep their state (typed values) across re-renders
 function Section({ id, name, tag, summary, sec, toggle, children }) {
@@ -23,18 +23,18 @@ export function Phone({ k, ctx, onSettings, overlay }) {
   return <div class="phoneapp">
     <header class="p-head">
       <AppHeader d={ctx.d} onSettings={onSettings} />
-      <div class="p-top"><ModePill s={s} /><span class="sub">{s.sub}</span></div>
+      <div class="p-top"><BackArrow buttons={q.buttons} /><ModePill s={s} /><span class="sub">{s.sub}</span></div>
       {setup ? <div class="p-prog"><span>{label}</span><Segs step={s.step} skipped={skipped} /></div>
         : <div class={`p-msg${s.alert || q.alert ? " alert" : ""}`}>{q.text || s.msg}</div>}
     </header>
     <main class="p-body">
       <div class="accvis"><Frame k={k} d={ctx.d} /></div>
       <div class="acc">
-        <Section sec={sec} toggle={toggle} id="step" name={setup ? "Setup" : "Next"} summary={setup ? stepName(k) : q.buttons.length ? q.buttons[0].label : "Nothing to do"}>
+        <Section sec={sec} toggle={toggle} id="step" name={setup ? "Setup" : "Next"} summary={setup ? stepName(k) : mainButtons(q.buttons)[0]?.label || "Nothing to do"}>
           {setup && <StepArt step={s.step} d={ctx.d} />}
           <p class="note" style={`color:${q.alert ? "var(--danger)" : "var(--text)"}`}>{q.text || s.msg}</p>
           {q.input}
-          {q.buttons.length > 0 && <div class="row">{q.buttons.map(b => <Btn b={b} />)}</div>}
+          {mainButtons(q.buttons).length > 0 && <div class="row">{mainButtons(q.buttons).map(b => <Btn b={b} />)}</div>}
         </Section>
         <Section sec={sec} toggle={toggle} id="details" name="Details" summary={s.nopos ? "No position yet" : `Work X ${workPos(ctx.d).x.toFixed(1)}  Y ${workPos(ctx.d).y.toFixed(1)}`}>
           <DetailsBody k={k} d={ctx.d} a={ctx.a} />
