@@ -69,8 +69,8 @@ test("Set Z: the helper while a bit is loaded; removing the bit leads to Load th
 });
 
 test("the helper's work Z 0: the seated socket face 20 mm above the work, less the stick-out", () => {
-  assert.equal(helperZ(5), -15);
-  assert.equal(helperZ(12.5), -7.5);
+  assert.equal(helperZ(5), -28.5);
+  assert.equal(helperZ(12.5), -21);
 });
 
 test("a spindle fault shows recovering with no Run, and a failed recovery asks for Home Z", () => {

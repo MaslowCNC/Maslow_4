@@ -13,8 +13,9 @@ export const freshAnswers = () => ({
 });
 
 // The Set Z helper's guess at the geometry: a seated bit's socket face sits this far above the work surface, so the
-// tip is (SEAT_TO_WORK − stick-out) above it. A stopgap number, to be measured properly (ISSUES-LOG.md, issue 25).
-export const SEAT_TO_WORK = 20;
+// tip is (SEAT_TO_WORK − stick-out) above it. Measured on the Mini on 2026-11-25 (ISSUES-LOG.md, issue 25). The sled rides on
+// the work, so the spoil board and stock thickness don't change it.
+export const SEAT_TO_WORK = 33.5;
 // The work Z 0 the helper sets, in machine Z: the board makes machine Z 0 where the bit seated, so the work
 // surface is (SEAT_TO_WORK − stick-out) below that
 export const helperZ = (stickout) => +(stickout - SEAT_TO_WORK).toFixed(3);

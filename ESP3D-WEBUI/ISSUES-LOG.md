@@ -378,7 +378,7 @@ Tested from the new UI (`webui/`, `?device=machine`) on a Maslow Mini. The spind
 | # | Area | Status |
 |---|---|---|
 | 24 | Spindle: Z loses its position after lowering under load; the firmware doesn't know | open, to discuss with BarbourSmith / Tristan |
-| 25 | New UI: the Set Z helper's seated-height distance is a guess (20 mm) | open |
+| 25 | New UI: the Set Z helper's seated-height distance was a guess (20 mm) | fixed: measured 33.5 mm (2026-11-25) |
 
 ### 24. Z loses its position after lowering under load, and nothing notices
 
@@ -421,6 +421,9 @@ Tested from the new UI (`webui/`, `?device=machine`) on a Maslow Mini. The spind
   then work it out from a measured constant plus the spoil board and stock thickness settings. Or have the
   firmware set Z from the stick-out (the planned `setZFromStickout` command), so the UI doesn't guess.
 - **Until then:** use plain Set Z (jog the bit to the work first) when the depth matters.
+- **Fixed (2026-11-25):** measured on the Mini as 33.5 mm, now `SEAT_TO_WORK`. The sled rides on the work, so
+  the spoil board and stock thickness don't change it (the note above was wrong); a tilted sled or a bit that
+  doesn't seat at the same height still would.
 
 ## Still to test
 
