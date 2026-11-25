@@ -146,6 +146,14 @@ void Maslow_::begin(void (*sys_rt)()) {
     initialized = true;
 }
 
+// Whether the belts are under position control. FluidNC reports Idle whenever a job's motion pauses
+// (M3/M5/M6, G4, a slow SD read), but the job is still running: switching the motors off then lets the
+// most heavily loaded belt's gearbox slide and the sled settle, so the belts are held until the job ends.
+static bool beltsHeld() {
+    State state = sys.state();
+    return state == State::Jog || state == State::Cycle || state == State::Hold || (state == State::Idle && Job::active());
+}
+
 // Maslow main loop, everything is processed here
 void Maslow_::update() {
     updateCount++;
@@ -167,8 +175,6 @@ void Maslow_::update() {
         wdt_registered = true;
     }
     esp_task_wdt_reset();
-
-    static State prevState = sys.state();
 
     // Watchdog fired: rapid double-blink on both RED and WiFi LEDs (distinct from the slow
     // 300 ms error blink).  Triggered when update() is not called for > UPDATE_WATCHDOG_MS.
@@ -221,8 +227,13 @@ void Maslow_::update() {
         digitalWrite(ETHERNETLEDPIN, HIGH);
     }
 
-    //Save the z-axis position if the prevous state was jog or cycle and the current state is idle
-    if ((prevState == State::Jog || prevState == State::Cycle) && sys.state() == State::Idle) {
+    // Save the z-axis position when the belts stop being held and the machine is idle: after a jog, a move,
+    // or the end of a job (not at every pause inside a job, where a flash write would stall both cores)
+    static bool prevBeltsHeld = false;
+    bool        held          = beltsHeld();
+    bool        holdEnded     = prevBeltsHeld && !held;
+    prevBeltsHeld             = held;
+    if (holdEnded && sys.state() == State::Idle) {
         saveZPos();
         // Only save belt positions when in READY_TO_CUT, RETRACTED, EXTENDEDOUT or TENSIONED state (belts are tight and valid)
         int currentMaslowState = calibration.getCurrentState();
@@ -266,8 +277,7 @@ void Maslow_::update() {
             firstUpdateCall = false;
         }
         int  calibrationState = calibration.getCurrentState();
-        bool beltMotionActive = sys.state() == State::Cycle || sys.state() == State::Jog || sys.state() == State::Hold ||
-                                sys.state() == State::Homing || calibrationState == RETRACTING || calibrationState == EXTENDING ||
+        bool beltMotionActive = held || sys.state() == State::Homing || calibrationState == RETRACTING || calibrationState == EXTENDING ||
                                 calibrationState == TAKING_SLACK || calibrationState == CALIBRATION_IN_PROGRESS ||
                                 calibrationState == RELEASE_TENSION;
         unsigned int watchdogLimit = beltMotionActive ? ACTIVE_UPDATE_WATCHDOG_MS : IDLE_UPDATE_WATCHDOG_MS;
@@ -312,8 +322,8 @@ void Maslow_::update() {
 
         //------------------------ Maslow State Machine
 
-        //-------Jog or G-code execution.
-        if (sys.state() == State::Jog || sys.state() == State::Cycle || sys.state() == State::Hold) {
+        //-------Jog or G-code execution, including pauses inside a job
+        if (held) {
             // With MaslowKinematics, read belt motor positions directly from the axis system
             // Axis mapping: A=TL, B=TR, C=BL, D=BR, Z=Router
             float beltLength[ARM_COUNT];
@@ -354,7 +364,7 @@ void Maslow_::update() {
         else if (sys.state() == State::Homing) {
             homeCallCount++;
             calibration.home();
-        } else {  //This is confusing to understand. This is an else if so this is only run if we are not in jog, cycle, or homing
+        } else {  // Not held (no jog, move or job) and not homing
             // Clear any motor override flags to ensure motors stop
             calibration.clearMotorOverrides();
             Maslow.stopMotors();
@@ -376,8 +386,6 @@ void Maslow_::update() {
 
         print_motor_currents();
     }
-
-    prevState = sys.state();  //Store for next time
 }
 
 //------------------------------------------------------
@@ -1390,9 +1398,13 @@ void Maslow_::safety_control() {
             tick[i] = true;
         }
 
-        //If the motor has a position error greater than 15mm and we are running a file or jogging
+        //If the motor has a position error greater than 15mm and we are running a file or a move.
+        //Only in Ready To Cut: the belts are under position control only then (update() runs the PID
+        //only in READY_TO_CUT). Outside it the error is meaningless, e.g. 65 mm after Release Tension,
+        //and a Z-only move (G0 Z0 to Z home) must be allowed like a Z jog.
         previousPositionError[i] = axis[i].getPositionError();
-        if ((abs(axis[i].getPositionError()) > 15) && (sys.state() == State::Cycle)) {
+        if ((abs(axis[i].getPositionError()) > 15) && calibration.currentState == READY_TO_CUT &&
+            (sys.state() == State::Cycle || (sys.state() == State::Idle && Job::active()))) {
             positionErrorCounter[i]++;
             log_warn("Position error on " << axis_id_to_label(i).c_str() << " axis exceeded 15mm while running. Error is "
                                           << axis[i].getPositionError() << "mm" << " Counter: " << positionErrorCounter[i]);

@@ -119,6 +119,18 @@ namespace BoardId {
         return detectedBoard == Board::Unified || detectedBoard == Board::Unified36V;
     }
 
+    int expectedEncoderTeeth() {
+        switch (detectedBoard) {
+            case Board::Maslow41:
+                return 22;
+            case Board::Unified:
+            case Board::Unified36V:
+                return 35;
+            default:
+                return 0;
+        }
+    }
+
     const char* boardName(Board board) {
         switch (board) {
             case Board::Maslow41:

@@ -365,9 +365,14 @@ namespace Machine {
                                          "    brY: 0.0\n"
                                          "    brZ: 100.0\n"
                                          "    beltEndExtension: 30.0\n"
-                                         "    armLength: 123.4\n"
+                                         // The Mini (35-tooth encoders) is 151 mm from the arm's pivot to the belt end's pivot
+                                         "    armLength: " +
+                                         std::string(BoardId::expectedEncoderTeeth() == 35 ? "121.0" : "123.4") +
+                                         "\n"
                                          "    beltToothSpacing: 1.9988\n"
-                                         "    encoderTeeth: 22.0\n"
+                                         "    encoderTeeth: " +
+                                         std::string(BoardId::expectedEncoderTeeth() == 35 ? "35.0" : "22.0") +
+                                         "\n"
                                          "    maxSegmentLength: 5.0\n"
                                          "    fixedZ: false\n";
 

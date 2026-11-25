@@ -14,6 +14,7 @@
 #include <cmath>
 #include <algorithm>
 #include "../Maslow/Maslow.h"
+#include "../Maslow/BoardId.h"
 
 /*
 Default configuration for Maslow CNC:
@@ -449,6 +450,12 @@ namespace Kinematics {
         // This is important when calibration results are saved and reloaded
         calculateCenter();
         Maslow.setEncoderGeometry(_beltToothSpacing, _encoderTeeth);
+        int expectedTeeth = BoardId::expectedEncoderTeeth();
+        if (expectedTeeth > 0 && std::fabs(_encoderTeeth - expectedTeeth) > 0.01f) {
+            log_warn("encoderTeeth is " << _encoderTeeth << " but a " << BoardId::boardName(BoardId::board()) << " has " << expectedTeeth
+                                        << ": belt lengths will be wrong. Set kinematics/MaslowKinematics/encoderTeeth to "
+                                        << expectedTeeth);
+        }
         log_debug("Center coordinates recalculated after configuration load: X=" << _centerX << " Y=" << _centerY);
     }
 

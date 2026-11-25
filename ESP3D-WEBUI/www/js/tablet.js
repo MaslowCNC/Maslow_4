@@ -511,6 +511,67 @@ const tabletShowBoardControls = () => {
   }
 };
 
+// Teeth on the encoder roller, by [ESP800] board. A wrong encoderTeeth scales every belt length.
+const EXPECTED_ENCODER_TEETH = { maslow41: 22, unified: 35, unified36v: 35 };
+const BOARD_MACHINE_NAMES = { maslow41: "Maslow 4.1", unified: "Maslow Mini", unified36v: "Maslow Mini" };
+
+// The firmware's upper limit for Maslow_Extend_Dist (mm).
+const EXTEND_DIST_MAX = 4250;
+
+/**
+ * The warning to show for this board and encoderTeeth value, or "" when it matches or the board is unknown.
+ * extendDistText is the current Maslow_Extend_Dist, if it could be read: it was saved at the wrong scale too.
+ */
+const encoderTeethWarning = (board, teethText, extendDistText) => {
+  const expected = EXPECTED_ENCODER_TEETH[board];
+  const teeth = Number.parseFloat(teethText);
+  if (!expected || !Number.isFinite(teeth) || Math.abs(teeth - expected) < 0.01) {
+    return "";
+  }
+  const errorPct = Math.abs(teeth / expected - 1) * 100;
+  // Belt lengths have been read at teeth/expected of their true size, so once the teeth are fixed the
+  // same Extend Dist pays out a different amount of belt. Scale it to pay out what it did before.
+  const extendDist = Number.parseFloat(extendDistText);
+  const newExtendDist = teeth > 0 && extendDist > 0
+    ? Math.min(EXTEND_DIST_MAX, Math.ceil(extendDist * expected / teeth))
+    : 0;
+  const extendStep = newExtendDist
+    ? `<code>$/Maslow_Extend_Dist=${newExtendDist}</code> (it is ${extendDist} now, measured at the old scale)`
+    : `<code>$/Maslow_Extend_Dist=N</code>, where N is the current Extend Dist times ${expected}/${teeth}`
+      + ` (it was measured at the old scale)`;
+  return `This machine is a ${BOARD_MACHINE_NAMES[board]}, whose encoders have ${expected} teeth, but encoderTeeth `
+    + `is set to ${teeth}. Every belt length will be off by about ${errorPct.toFixed(0)}%, so calibration and cuts will be wrong.`
+    + `<br><br>To fix it, send these from the console, one at a time:`
+    + `<br><code>$/kinematics/MaslowKinematics/encoderTeeth=${expected}</code>`
+    + `<br>${extendStep}`
+    + `<br><code>$CO</code> (save config)`
+    + `<br><br>Then restart the machine and calibrate it again: Retract All, Extend All, Apply Tension, then Find Anchors.`
+    + ` The saved frame size was measured at the old scale too, so it stays wrong until Find Anchors runs.`;
+};
+
+// Warn once per page load: the setting only changes when the config is edited.
+let encoderTeethWarningShown = false;
+const checkEncoderTeeth = () => {
+  if (encoderTeethWarningShown || !EXPECTED_ENCODER_TEETH[maslowBoard]) {
+    return;
+  }
+  machine.getSetting("kinematics/MaslowKinematics/encoderTeeth").then(async (teeth) => {
+    if (!encoderTeethWarning(maslowBoard, teeth)) {
+      return;
+    }
+    // The warning gives the corrected Extend Dist when it can read the current one.
+    const extendDist = await machine.getSetting("Maslow_Extend_Dist").catch(() => "");
+    if (!encoderTeethWarningShown) {
+      encoderTeethWarningShown = true;
+      alertdlg("Wrong Encoder Teeth", encoderTeethWarning(maslowBoard, teeth, extendDist));
+    }
+  }).catch((err) => console.warn("Could not read encoderTeeth:", err.detail ?? err.reason));
+};
+
+if (typeof globalThis !== "undefined") {
+  globalThis.__tabletEncoderTeethTestApi = { encoderTeethWarning };
+}
+
 const loadFixedZSetting = () => {
   SendPrinterCommand("$/kinematics/MaslowKinematics/fixedZ");
 };
@@ -864,13 +925,34 @@ const sendMove = (cmd, options = {}) => {
 }
 
 const moveHome = () => {
-  if (!checkHomed()) {
-    return;
-  }
-
+  tabletClick();
+  // machine.moveTo refuses X/Y until belt lengths are known; runButtonAction shows why.
   checkZHomeAndProceed(() => {
-    move({ X: 0, Y: 0 });
+    runButtonAction(
+      id("tablettab_move_to_xy_home"),
+      "Move XY to Home",
+      () => machine.moveTo({ x: 0, y: 0 })
+    );
   });
+}
+
+// Allowed in any Maslow state, like a Z jog: machine.moveTo only refuses X/Y without belt lengths.
+const moveZHome = () => {
+  tabletClick();
+  const go = () => runButtonAction(
+    id("tablettab_move_to_z_home"),
+    "Move Z to Home",
+    () => machine.moveTo({ z: 0 })
+  );
+
+  // Z home is the work Z origin, at machine Z = WCO[2]. Only warn if that is below the machine minimum.
+  const machineZ = MPOS && MPOS.length >= 3 ? MPOS[2] : null;
+  const workZeroZ = WCO && WCO.length >= 3 ? WCO[2] : null;
+  if (machineZ !== null && workZeroZ !== null && workZeroZ < Z_HOME_MIN_SAFE_MM) {
+    checkZHomeAndProceed(go, workZeroZ - machineZ);
+  } else {
+    go();
+  }
 }
 
 function saveSerialMessages() {
@@ -1319,18 +1401,7 @@ function tabletGrblState(grbl, response) {
 
   const digits = gCodeModal.units === 'G20' ? 4 : 2;
 
-  if (WPOS) {
-    WPOS.forEach((pos, index) => {
-      setTextContent(`wpos-${axisNames[index]}`, Number(pos * factor).toFixed(index > 2 ? 2 : digits));
-    })
-  }
-
-  if (MPOS) {
-    MPOS.forEach((pos, index) => {
-      const axisName = axisNames[index].toUpperCase();
-      setTextContent(`mpos-${axisNames[index]}`, `|${axisName}m: ${Number(pos * factor).toFixed(index > 2 ? 2 : digits)}|`);
-    })
-  }
+  updatePositionDisplay(WPOS, MPOS, factor, digits);
 
   // On the first status update that has both WCO and MPOS data, proactively
   // show the Z safety popup if machine Z is already above the safe threshold.
@@ -1341,6 +1412,19 @@ function tabletGrblState(grbl, response) {
     checkZHomeAndProceed(() => {}, 0);
   }
 }
+
+const updatePositionDisplay = (wpos, mpos, factor, digits) => {
+  ["x", "y", "z"].forEach((axis, index) => {
+    if (wpos) {
+      setTextContent(`wpos-${axis}`, Number(wpos[index] * factor).toFixed(digits));
+    }
+    if (mpos) {
+      setTextContent(`mpos-${axis}`, Number(mpos[index] * factor).toFixed(digits));
+    }
+  });
+};
+
+globalThis.__tabletPositionTestApi = { updatePositionDisplay };
 
 let gCodeFilename = '';
 
@@ -1587,6 +1671,7 @@ const requestMachineState = () => {
   SendPrinterCommand("$MINFO");
   requestModes();
   loadFixedZSetting();
+  checkEncoderTeeth();
   loadCornerValues();
   if (typeof loadParkSettings === 'function') {
     loadParkSettings();
@@ -2140,6 +2225,7 @@ function tabletInit() {
     // Buttons - Fourth Row
     id("tablettab_set_z_home").addEventListener("click", openSetZHomePopup);
     id("tablettab_move_to_xy_home").addEventListener("click", moveHome);
+    id("tablettab_move_to_z_home").addEventListener("click", moveZHome);
     id("tablettab_toggle_units").addEventListener("click", toggleUnits);
     id("tablettab_set_xy_home").addEventListener("click", openSetHomePopup);
 
@@ -2853,7 +2939,11 @@ const runButtonAction = async (button, label, action) => {
     await op.accepted;
   } catch (err) {
     addMessage(`${label} not sent: ${err.detail ?? err.reason}`);
-    showButtonWarning(button, err.reason === "rejected" ? "Rejected" : "Not sent");
+    if (err.reason === "not-ready") {
+      alertdlg(label, err.detail); // refused for a reason the user needs to read, not a lost click
+    } else {
+      showButtonWarning(button, err.reason === "rejected" ? "Rejected" : "Not sent");
+    }
     return;
   } finally {
     button.classList.remove("machine-action-busy");
@@ -2871,16 +2961,16 @@ const runButtonAction = async (button, label, action) => {
   }
 };
 
-/** Swap a button's text for a short warning, then put it back. */
+/** Swap a button's contents for a short warning, then put them back (icons included). */
 const showButtonWarning = (button, text) => {
   if (button.classList.contains("machine-action-warning")) {
     return;
   }
-  const original = button.textContent;
+  const original = [...button.childNodes];
   button.textContent = text;
   button.classList.add("machine-action-warning");
   scheduleCallback(() => {
-    button.textContent = original;
+    button.replaceChildren(...original);
     button.classList.remove("machine-action-warning");
   }, BUTTON_WARNING_MS);
 };
