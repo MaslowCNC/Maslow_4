@@ -45,9 +45,10 @@ export function available(k, d) {
   if (d.fluid === "Alarm" || k === "recovery") return ["clearError", "reboot"];
   if (s.moving || k === "cutting") return ["stop"];
   switch (d.maslow) {
-    case 0: return ["retract", "reboot"];
-    case 2: return ["extend", "retract", "reboot"];
-    case 4: return ["tension", "findAnchors", "retract", "reboot"];
+    // Remove tool only moves Z (the spindle board), so it's also offered while the belts are slack
+    case 0: return ["retract", "removeTool", "reboot"];
+    case 2: return ["extend", "retract", "removeTool", "reboot"];
+    case 4: return ["tension", "findAnchors", "retract", "removeTool", "reboot"];
     // No Retract while the belts are tight: retracting under tension gives a false zero (ISSUES-LOG). Release first.
     case 7: return ["release", "toolCheck", "removeTool", "rehomeZ", "findAnchors", "reboot"];
     case 10: return ["findAnchors", "tension", "release", "reboot"];
@@ -55,7 +56,7 @@ export function available(k, d) {
   return ["reboot"];
 }
 const NEED = { retract: "Not while the belts are tight: release tension first.", extend: "Only once the belts are retracted.", tension: "Only once the belts are extended or tension was released.",
-  release: "Only while the belts are tensioned.", findAnchors: "Only once the belts are extended or tensioned.", toolCheck: "Only once the position is confirmed.", removeTool: "Only once the position is confirmed.", rehomeZ: "Only once the position is confirmed.",
+  release: "Only while the belts are tensioned.", findAnchors: "Only once the belts are extended or tensioned.", toolCheck: "Only once the position is confirmed.", removeTool: "Only while the belts are slack, or once the position is confirmed.", rehomeZ: "Only once the position is confirmed.",
   clearError: "Only after an error.", reboot: "", stop: "Nothing is moving." };
 
 function StateSection({ k, ctx, close }) {
