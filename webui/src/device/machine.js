@@ -736,7 +736,8 @@ export function createMachine({ host = location.host } = {}) {
     }
     if (s.notYet[action]) { log(`Not sent: ${action} (${s.notYet[action]})`); emit(); return; }
     // Set home XY / Set Z: the work origin where the machine is now, through Tristan's setWorkZero
-    if (action === "resetHome") { run(action, () => m.setWorkZero({ x: 0, y: 0, z: 0 })); return; }
+    // Reset home is X and Y only: work Z belongs to the Set Z step
+    if (action === "resetHome") { run(action, () => m.setWorkZero({ x: 0, y: 0 })); return; }
     if (action === "setHomeXY" || action === "setZ") {
       const p = m.state.mpos;
       if (!p) { log(`Not sent: ${action} (the machine's position isn't known yet)`); emit(); return; }

@@ -229,7 +229,7 @@ function HomeSection({ ctx, busy }) {
   const off = busy || !!d.notYet?.setHomeXY;
   const field = (label, v, set) => <label class="field"><span>{label}</span>
     <input type="text" inputmode="decimal" class="mono" value={v} onInput={e => set(e.currentTarget.value)} aria-label={`Home ${label} in mm`} style="width:80px" /></label>;
-  const isReset = d.wco.x === 0 && d.wco.y === 0 && d.wco.z === 0;
+  const isReset = d.wco.x === 0 && d.wco.y === 0;   // Z is the Set Z step's, so Reset home leaves it
   return <><h4>Home</h4>
     <p class="note">The jog pad's Set home XY and Set Z put home where the machine is now. Here you can type it instead, in
       machine coordinates.</p>
@@ -241,8 +241,8 @@ function HomeSection({ ctx, busy }) {
       {field("Z", z, setZ)} mm
       <button class="btn ghost" type="button" disabled={off || !!zErr || zN === d.wco.z} onClick={() => send("setZ", { z: zN })}>Set</button></Row>
     {zErr && <p class="note" style="color:var(--danger)">{zErr}</p>}
-    <Row label="Reset home" hint="Puts home back on the machine's own 0, 0, 0, so work and machine positions read the same.">
-      <button class="btn ghost" type="button" disabled={off || isReset} onClick={() => { send("resetHome"); setX("0.0"); setY("0.0"); setZ("0.0"); }}>{isReset ? "Already reset" : "Reset home"}</button></Row></>;
+    <Row label="Reset home" hint="Puts home X, Y back on the machine's own 0, 0, so work and machine X and Y read the same. Z stays as Set Z left it.">
+      <button class="btn ghost" type="button" disabled={off || isReset} onClick={() => { send("resetHome"); setX("0.0"); setY("0.0"); }}>{isReset ? "Already reset" : "Reset home"}</button></Row></>;
 }
 
 // Network: the WiFi the board joins, what it does when it can't, and its hotspot. These are the board's own flash

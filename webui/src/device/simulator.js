@@ -371,12 +371,13 @@ export function createSimulator() {
         ["Magnet not detected on Bottom Left", () => done([{ arm: "Bottom Left", problem: "Magnet not detected" }]), "bad"]
       ]);
     },
+    // As the firmware: homing zeroes machine Z at the top of travel and the work Z offset with it
     rehomeZ() {
       log("$Spindle/Home");
       set({ spindle: "off", tool: "checking" });
       ask("Re-homing Z", "Z rises to the top of travel, and the beam shows whether a bit is loaded.", [
-        ["Z homed: a bit is loaded", () => set({ tool: "loaded", pos: { ...s.pos, z: 0 }, pending: null })],
-        ["Z homed: no bit", () => set({ tool: "none", pos: { ...s.pos, z: 0 }, pending: null })]]);
+        ["Z homed: a bit is loaded", () => set({ tool: "loaded", pos: { ...s.pos, z: 0 }, wco: { ...s.wco, z: 0 }, pending: null })],
+        ["Z homed: no bit", () => set({ tool: "none", pos: { ...s.pos, z: 0 }, wco: { ...s.wco, z: 0 }, pending: null })]]);
     },
     // The network settings, over HTTP on the machine. Reading and scanning answer after a moment, as the board does.
     readNetwork() {
@@ -414,7 +415,7 @@ export function createSimulator() {
     // Setting a home moves the work zero, not the machine: the machine position stays as it was
     // The new home in machine coordinates; without one, here
     setHomeXY({ x = s.pos.x, y = s.pos.y } = {}) { log(`setWorkZero x=${x} y=${y}`); set({ wco: { ...s.wco, x, y } }); },
-    resetHome() { log("setWorkZero x=0 y=0 z=0"); set({ wco: { x: 0, y: 0, z: 0 } }); },
+    resetHome() { log("setWorkZero x=0 y=0"); set({ wco: { ...s.wco, x: 0, y: 0 } }); },
     setZ({ z = s.pos.z } = {}) { log(`setWorkZero z=${z}`); set({ wco: { ...s.wco, z } }); },
     // The Set Z helper: work Z 0 at machine Z z, then Z lowered there (machine.js does it as two commands)
     lowerToWork({ z }) { log(`setWorkZero z=${z}`, `G53 G1 Z${z}`); set({ wco: { ...s.wco, z }, pos: { ...s.pos, z } }); },

@@ -48,8 +48,9 @@ up in a new session, read "Where we are", "How to work on it" and "What we still
   re-zeroing Z; Home Z from the jog pad (re-synced Z after issue 24). The revised Set Z step (2026-11-25): Set Z,
   the Set Z helper (15 mm stick-out after Home Z: offset Z −5, bit lowered to machine Z −5, work Z 0) and Remove
   tool, on the Mini. **Not yet on the machine:** Continue with no tool; reloading the page mid-setup; a spindle fault
-  (TS 7, can't be triggered on purpose: unit tests and the simulator only). **Known gap:** Home Z clears the work Z
-  offset, but a page past the Set Z step doesn't go back to it. Issue 24 (Z slips under load) and 25 (the helper's
+  (TS 7, can't be triggered on purpose: unit tests and the simulator only). Home Z clears the work Z offset, so the page goes
+  back to Set Z (keeping the work piece and file answers); Reset home resets X and Y only (decided 2026-11-25).
+  Home Z from another tab with a bit loaded isn't noticed (the report may never show homing). Issue 24 (Z slips under load) and 25 (the helper's
   20 mm guess) are open. The PR to `firmwareRewrite` should @-mention @tristan-huber for the report field.
 - **Next:** the rest of the gap list ("What we still need" › 2), and the 4.1's setup flow.
 
