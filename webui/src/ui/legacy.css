@@ -1,0 +1,222 @@
+/* The legacy UI: the old page's Maslow tab (ESP3D-WEBUI/www/css/tablet.css and bootstrap's navbar), over the
+   new UI's logic. Its own light tokens, so the shared parts (the frame drawing, Settings) follow along. */
+.legacy {
+  --page: #fff; --canvas: #fff; --panel: #fff; --panel-border: #d6d6d6; --sep: #e7e7e7; --input: #fff; --hover: #f2f0e4;
+  --text: #333; --muted: #6b6b6b; --lilac: #8d4bb0; --sub: #f5f5f5; --on-accent: #fff; --on-go: #fff;
+  --setup: #337ab7; --ready: #4aa85c; --job: #8d4bb0; --danger: #ce654c; --warn: #b8860b; --temp: #c2410c;
+  --node: #444; --wire: #8f8a97; --line2: #b3aebb; --canvas2: #e8e2ee;
+  --font-sans: Arial, sans-serif; --font-display: Arial, sans-serif;
+  color-scheme: light;
+  height: 100vh; height: 100dvh; display: grid; grid-template-rows: auto auto minmax(0, 1fr);
+  background: #fff; color: #7a7a7a; font: 14px/1.42 Arial, sans-serif;
+}
+.legacy button { font-family: inherit; }
+.legacy button:focus-visible, .legacy input:focus-visible, .legacy select:focus-visible { outline: 2px solid #337ab7; outline-offset: 1px; }
+
+/* The bar above the navbar */
+.cl-legacybar { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4px 12px; padding: 6px 12px;
+  background: #fcf8e3; border-bottom: 1px solid #faebcc; color: #8a6d3b; font-size: 14px; }
+.cl-legacybar button { background: #337ab7; border: 1px solid #2e6da4; color: #fff; border-radius: 4px; padding: 4px 12px; font-size: 13px; cursor: pointer; min-height: 32px; }
+
+/* Navbar */
+.cl-nav { display: flex; align-items: center; gap: 4px; min-height: 52px; padding: 0 2em 0 12px; background: #f8f8f8; border-bottom: 1px solid #e7e7e7; }
+.cl-brand { font-size: 18px; color: #777; margin-right: 12px; display: grid; line-height: 1.1; }
+.cl-brand small { font-size: 12px; }
+.cl-tabs { display: flex; align-self: stretch; align-items: flex-end; }
+.cl-tabs button { background: transparent; color: #337ab7; border: 1px solid #f1f1f1; border-bottom: 0; padding: 8px 14px; font-size: 14px; cursor: pointer; min-height: 40px; }
+.cl-tabs button.on { background: #fff; color: #555; border-color: #ddd; border-radius: 4px 4px 0 0; }
+.cl-gap { flex: 1; }
+.cl-spin { color: #ce654c; font-weight: bold; font-size: 13px; }
+.cl-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--c); margin: 0 14px; }
+.cl-menu { background: none; border: 0; color: #337ab7; cursor: pointer; min-width: 44px; min-height: 44px; }
+
+/* Drawing on the left (70 %), controls on the right (30 %) */
+.cl-main { display: grid; grid-template-columns: 70% 30%; min-height: 0; }
+.cl-display { position: relative; padding: 6px; display: grid; grid-template-rows: minmax(0, 1fr) auto; min-height: 0; }
+.cl-canvas { border: 1px solid #000; border-radius: 5px; background: #fff; display: grid; place-items: center; min-height: 0; overflow: hidden; position: relative; }
+.cl-canvas .framesvg { display: block; width: 100%; height: 100%; }
+.cl-canvas .framesvg svg { width: 100%; height: 100%; }
+.cl-canvas .visempty { color: #999; }
+.cl-views { display: flex; gap: 4px; justify-content: flex-end; padding-top: 4px; }
+.cl-views button { border: 1px solid #ccc; background: #fff; color: #337ab7; border-radius: 3px; padding: 2px 10px; cursor: pointer; }
+.cl-views button[aria-pressed="true"] { background: #337ab7; color: #fff; border-color: #337ab7; }
+.cl-host { position: absolute; inset: 0; z-index: 30; }
+.cl-host > .modal-bg { position: absolute; inset: 0; }
+.cl-controls { overflow-y: auto; min-height: 0; padding: 6px 6px 0 0; }
+.cl-section { border: 1px solid #d6d6d6; border-radius: 4px; background: #fafafa; padding: 3px; margin: 0 0 6px 4px; }
+
+/* State label */
+.cl-state { text-align: center; font-weight: bold; font-size: 24px; color: #555; padding: 2px 4px; }
+
+/* Tiles: the old square grid buttons. Disabled is real (the button can't be pressed) and looks it. */
+.cl-tile { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; border: 0; border-radius: 0; padding: 4px;
+  font-size: 12px; text-align: center; color: #fff; cursor: pointer; min-height: 44px; min-width: 0; }
+.cl-tile:hover:not(:disabled) { filter: brightness(.94); }
+.cl-tile:active:not(:disabled) { filter: brightness(.85); }
+.cl-tile:disabled { cursor: not-allowed; filter: grayscale(1) opacity(.45); }
+.cl-tile.cream { background: #f2f0e4; color: #337ab7; }
+.cl-tile.green { background: #4aa85c; font-weight: bold; font-size: 14px; }
+.cl-tile.green2 { background: #4caf50; }
+.cl-tile.orange { background: #f5b129; }
+.cl-tile.blue { background: #337ab7; }
+.cl-tile.red { background: #ce654c; }
+.cl-tile.grey { background: #a0a0a0; }
+.cl-tile.temp { background: #f0883e; outline: 2px dashed #a14f12; outline-offset: -4px; }
+.cl-empty { visibility: hidden; }
+.cl-grid4 { display: grid; grid-template-columns: repeat(4, 1fr); }
+.cl-grid4 .cl-tile { aspect-ratio: 1 / .55; }
+.cl-belts { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 8px; padding: 4px 8px; font-size: 12px; color: #555; }
+.cl-belts.stale { opacity: .5; }
+.cl-beltlabel { grid-column: 1 / -1; text-align: center; font-weight: bold; }
+.cl-belt { display: flex; align-items: center; justify-content: center; gap: 6px; }
+
+/* Jog grid: the Z column on the left, the XY pad in lilac */
+.cl-jog { display: grid; grid-template-columns: repeat(4, 1fr); }
+.cl-jog .cl-tile { aspect-ratio: 1 / .7; }
+.cl-jog .zb { border-right: 2px solid grey; flex-direction: row; }
+.cl-jog .jc { background: #9d88c0; }
+.cl-jog .jd { background: #b69fcb; }
+.cl-jog label.cl-tile { cursor: text; }
+.cl-jog input { width: 70%; text-align: center; font: 14px Arial, sans-serif; color: #7a7a7a; background: transparent; border: 0; border-bottom: 1px dashed #bbb; }
+.cl-lock { margin: 4px 6px 0; font-size: 12px; color: #a33a22; }
+.cl-pos { width: 100%; font-size: 12px; text-align: center; color: #7a7a7a; padding: 4px 0; }
+.cl-pos.stale { opacity: .5; }
+.cl-mpos { color: #aaa; font-size: 11px; }
+
+/* Job: the file picker, Play / Stop / state, the bounds */
+.cl-files { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 1fr) minmax(0, 1fr); gap: 0; align-items: stretch; }
+.cl-files select { font: 16px Arial, sans-serif; color: #555; border: 1px solid #ccc; border-radius: 4px; padding: 6px; min-width: 0; min-height: 50px; background: #fff; }
+.cl-files .cl-tile { min-height: 50px; }
+.cl-play { display: grid; grid-template-columns: repeat(3, 1fr); position: sticky; bottom: 0; z-index: 5; }
+.cl-play .cl-tile { aspect-ratio: 1 / .6; }
+.cl-status { font-size: 16px; cursor: default; }
+.cl-resume { padding: 4px; }
+.cl-resbtn { background: none; border: 0; color: #fff; font: bold 14px Arial, sans-serif; cursor: pointer; padding: 4px; min-height: 32px; }
+.cl-resbtn:disabled { opacity: .5; cursor: not-allowed; }
+.cl-resume input { width: 80%; text-align: center; font: 14px Arial, sans-serif; border: 0; border-radius: 3px; padding: 2px; }
+.cl-bounds { display: grid; grid-template-columns: 30% 70%; margin-top: 4px; }
+.cl-boundsinfo { padding: 5px; background: #f8f9fa; border: 1px solid #ddd; border-radius: 3px; font-size: 12px; color: #555; }
+.cl-warn { color: #a33a22; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+
+/* Serial messages */
+.cl-serial .log { height: 220px; overflow: auto; margin: 0; padding: 6px; background: #fff; color: #7a7a7a; font: 13px/1.4 Arial, sans-serif; white-space: pre-wrap; }
+.cl-serialfoot { display: flex; align-items: center; justify-content: space-between; padding: 4px; font-size: 12px; }
+.cl-serialfoot .iconbtn { background: #337ab7; color: #fff; border: 0; border-radius: 4px; min-width: 36px; min-height: 30px; cursor: pointer; }
+.cl-serial .cmdbox { display: flex; gap: 4px; padding: 4px 0; }
+.cl-serial .cmdbox input { flex: 1; min-width: 0; font: 13px monospace; padding: 6px; border: 1px solid #ccc; border-radius: 4px; color: #333; background: #fff; }
+.cl-serial .cmdbox .btn { background: #337ab7; color: #fff; border: 0; border-radius: 4px; padding: 0 12px; }
+
+/* Prompt and pop-up buttons: the old calibration pop-up's flat uppercase buttons */
+.cl-pbtn { border: 0; border-radius: 0; padding: 10px 14px; font-size: 13px; text-transform: uppercase; color: #fff; cursor: pointer; min-height: 44px; }
+.cl-pbtn.green { background: #4aa85c; } .cl-pbtn.blue { background: #337ab7; } .cl-pbtn.red { background: #ce654c; } .cl-pbtn.lilac { background: #b69fcb; }
+.cl-pbtn:hover:not(:disabled) { filter: brightness(.94); }
+.cl-pbtn:disabled { background: #d0d0d0; color: #777; cursor: not-allowed; }
+.cl-pop-bg { position: absolute; inset: 0; z-index: 25; background: rgba(0, 0, 0, .5); display: grid; place-items: center; padding: 12px; }
+.cl-pop { background: #fff; border-radius: 8px; padding: 20px; width: min(560px, 100%); color: #333; }
+.cl-pop h3 { text-align: center; margin: 0 0 4px; font-size: 22px; }
+.cl-pop hr { border: 0; border-top: 1px dashed #999; margin: 12px 0; }
+.cl-alerttext { margin: 0; font-size: 16px; }
+.cl-alertrow { display: flex; justify-content: center; }
+.cl-poprow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin: 8px 0; }
+
+/* Phone: one column, as the old one; Play / Stop stay pinned at the bottom */
+.legacy.narrow { height: auto; min-height: 100dvh; grid-template-rows: auto auto auto; padding-bottom: 96px; }
+.legacy.narrow .cl-nav { padding-right: 6px; }
+.legacy.narrow .cl-brand small { display: none; }
+.legacy.narrow .cl-main { grid-template-columns: 100%; }
+.legacy.narrow .cl-canvas { aspect-ratio: 3 / 2; }
+.legacy.narrow .cl-controls { overflow: visible; padding: 0 6px; }
+.legacy.narrow .cl-section { margin-left: 0; }
+.legacy.narrow .cl-tile { font-size: 15px; }
+.legacy.narrow .cl-state { font-size: 18px; }
+.legacy.narrow .cl-play { position: fixed; left: 0; right: 0; bottom: 0; z-index: 60; background: #fafafa; border-top: 1px solid #d6d6d6; }
+.legacy.narrow .cl-play .cl-tile { aspect-ratio: auto; min-height: 84px; }
+.legacy.narrow .cl-host { position: fixed; inset: 0 0 84px 0; z-index: 50; }
+.legacy.narrow .cl-pop-bg { position: fixed; bottom: 84px; z-index: 50; }
+.legacy.narrow .cl-alerttext { margin: 0; font-size: 16px; }
+.cl-alertrow { display: flex; justify-content: center; }
+.cl-poprow { gap: 8px; }
+
+/* Settings in the legacy UI: shown in place of the drawing, as the old page's settings tab (bootstrap 3's nav tabs, form
+   controls and buttons), so the controls column with Stop stays beside it */
+.legacy .cl-host .modal-bg { background: #fff; padding: 0; place-items: stretch; }
+.legacy .cl-host .modal { width: 100%; height: 100%; border: 1px solid #000; border-radius: 5px; box-shadow: none; color: #333;
+  grid-template-columns: 1fr; grid-template-rows: auto auto minmax(0, 1fr); font-family: Arial, sans-serif; }
+.legacy .cl-host .mhead { grid-column: 1; justify-content: center; position: relative; border: 0; padding: 14px 56px 6px; }
+.legacy .cl-host .mhead h3 { font: 500 26px Arial, sans-serif; color: #333; }
+.legacy .cl-host .mhead small { display: none; }
+.legacy .cl-host .mhead > span { position: absolute; right: 10px; top: 10px; }
+.legacy .cl-host .gear { background: #fff; border: 1px solid #ccc; border-radius: 4px; color: #333; }
+.legacy .cl-host .mnav { display: flex; flex-wrap: wrap; gap: 0; border-right: 0; border-bottom: 1px solid #ddd; padding: 0 10px; overflow: visible; }
+.legacy .cl-host .mnav button { flex: none; margin-bottom: -1px; padding: 10px 15px; min-height: 42px; border: 1px solid transparent; border-radius: 4px 4px 0 0;
+  background: none; color: #337ab7; font: 14px Arial, sans-serif; }
+.legacy .cl-host .mnav button:hover { background: #eee; border-color: #eee #eee #ddd; }
+.legacy .cl-host .mnav button[aria-current="true"] { background: #fff; color: #555; font-weight: normal; border-color: #ddd #ddd transparent; }
+.legacy .cl-host .modal.compact .mnav { flex-wrap: nowrap; overflow-x: auto; }
+.legacy .cl-host .mbody { font-size: 14px; }
+.legacy .cl-host .mbody h4 { font: 500 20px Arial, sans-serif; color: #333; }
+.legacy .cl-host .srow { border-bottom-color: #eee; }
+.legacy .cl-host .note, .legacy .cl-host .srow > span small { color: #777; }
+.legacy .cl-host .mini { background: #f5f5f5; border-color: #ddd; border-radius: 4px; }
+/* form-control */
+.legacy .cl-host input[type=text], .legacy .cl-host input[type=number], .legacy .cl-host input[type=password], .legacy .cl-host select {
+  background: #fff; color: #555; border: 1px solid #ccc; border-radius: 4px; min-height: 34px; padding: 6px 12px; font: 14px Arial, sans-serif;
+  box-shadow: inset 0 1px 1px rgba(0, 0, 0, .075); }
+.legacy .cl-host input:focus, .legacy .cl-host select:focus { border-color: #66afe9; outline: 0; box-shadow: inset 0 1px 1px rgba(0,0,0,.075), 0 0 8px rgba(102, 175, 233, .6); }
+/* btn: the new UI's button kinds as bootstrap's success (green), default (white), danger (red) */
+.legacy .cl-host .btn { font: 14px/1.42 Arial, sans-serif; border-radius: 4px; min-height: 34px; padding: 6px 12px; border: 1px solid #4cae4c; background: #5cb85c; color: #fff; }
+.legacy .cl-host .btn:hover:not(:disabled) { filter: brightness(.92); }
+.legacy .cl-host .btn.ghost { background: #fff; border-color: #ccc; color: #333; }
+.legacy .cl-host .btn.danger { background: #d9534f; border-color: #d43f3a; color: #fff; }
+.legacy .cl-host .btn.stopping { background: #fff; border-color: #d43f3a; color: #d9534f; }
+.legacy .cl-host .btn.temp { background: #f0ad4e; border: 1px dashed #a14f12; color: #fff; }
+.legacy .cl-host .btn:disabled { opacity: .65; }
+/* The sub-tabs (Advanced's Tools / Maslow / FluidNC, as the old radio filter): a bootstrap button group */
+.legacy .cl-host .subtabs { gap: 0; }
+.legacy .cl-host .subtabs button { min-height: 34px; border-radius: 0; border: 1px solid #ccc; margin-left: -1px; background: #fff; color: #333; font: 14px Arial, sans-serif; }
+.legacy .cl-host .subtabs button:first-child { border-radius: 4px 0 0 4px; margin-left: 0; }
+.legacy .cl-host .subtabs button:last-child { border-radius: 0 4px 4px 0; }
+.legacy .cl-host .subtabs button[aria-selected="true"] { background: #337ab7; border-color: #2e6da4; color: #fff; font-weight: normal; }
+.legacy .cl-host .rawfoot { background: #fff; }
+.legacy .cl-host .modal.compact .mnav { padding: 0 6px; gap: 0; }
+.legacy .cl-host .modal.compact .mnav button { border-radius: 4px 4px 0 0; border-color: transparent; font-size: 14px; min-height: 42px; padding: 10px 12px; }
+.legacy .cl-host .modal.compact .mnav button[aria-current="true"] { border-color: #ddd #ddd transparent; }
+
+/* The settings tab: the old page's FluidNC tab (a title, Restart / Refresh, radio filters, a bordered striped table) */
+.cl-settings { overflow: auto; min-height: 0; border: 1px solid #000; border-radius: 5px; padding: 0 16px; color: #333; background: #fff; }
+.cl-settings h2 { text-align: center; font: 500 30px Arial, sans-serif; margin: 20px 0 10px; }
+.cl-setbtns { display: flex; justify-content: center; gap: 20px; }
+.cl-settings hr { border: 0; border-top: 1px solid #eee; margin: 16px 0; }
+.bs { font: 14px/1.42 Arial, sans-serif; border-radius: 4px; padding: 6px 12px; min-height: 34px; cursor: pointer; color: #fff; border: 1px solid transparent; }
+.bs.danger { background: #d9534f; border-color: #d43f3a; } .bs.primary { background: #337ab7; border-color: #2e6da4; }
+.bs.success { background: #5cb85c; border-color: #4cae4c; } .bs.default { background: #fff; border-color: #ccc; color: #333; }
+.bs:disabled { opacity: .65; cursor: not-allowed; }
+.cl-setfilters { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px 20px; margin-bottom: 10px; }
+.cl-setfilters label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+.cl-setfilters input[type=search] { border: 1px solid #ccc; border-radius: 4px; padding: 6px 12px; font: 14px Arial, sans-serif; min-height: 34px; }
+.cl-list { max-width: 760px; margin: 0 auto 0; border: 1px solid #ddd; }
+.cl-list > p.note:first-child { display: none; }   /* the new UI's explanation of the list */
+.cl-list .note { padding: 6px 8px; color: #a94442; font-size: 13px; margin: 0; }
+.cl-list .rawgroup { gap: 0; }
+.cl-list .rawgroup h5 { margin: 0; padding: 8px; background: #f5f5f5; border-bottom: 1px solid #ddd; font: bold 14px Arial, sans-serif; color: #333; text-transform: none; letter-spacing: 0; }
+.cl-list .srow { display: grid; grid-template-columns: 45% 1fr; gap: 0; padding: 0; border-bottom: 1px solid #ddd; align-items: stretch; }
+.cl-list .srow:nth-child(even) { background: #f9f9f9; }
+.cl-list .srow:hover { background: #f5f5f5; }
+.cl-list .srow > span, .cl-list .srow > .val { padding: 6px 8px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.cl-list .srow > span { border-right: 1px solid #ddd; font-size: 14px; }
+.cl-list .srow > span small { color: #777; font-size: 12px; flex-basis: 100%; margin: 0; }
+.cl-list .rawrow { border-left: 0; }
+.cl-list .rawrow.changed > span { box-shadow: inset 3px 0 #337ab7; }
+.cl-list .rawname { font: 14px Arial, sans-serif; }
+.cl-list input[type=text], .cl-list input[type=password], .cl-list select { background: #fff; color: #555; border: 1px solid #ccc; border-radius: 4px; min-height: 34px;
+  padding: 6px 12px; font: 14px Arial, sans-serif; width: min(260px, 100%); box-sizing: border-box; box-shadow: inset 0 1px 1px rgba(0,0,0,.075); }
+.cl-list .rawfoot { position: sticky; bottom: 0; margin: 0; padding: 8px; background: #fff; border-top: 1px solid #ddd; display: flex; flex-wrap: wrap;
+  justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; color: #555; }
+.cl-list .btn { font: 14px/1.42 Arial, sans-serif; border-radius: 4px; min-height: 34px; padding: 6px 12px; border: 1px solid #4cae4c; background: #5cb85c; color: #fff; }
+.cl-list .btn.ghost { background: #fff; border-color: #ccc; color: #333; }
+.cl-list .btn:disabled { opacity: .65; cursor: not-allowed; }
+.legacy.narrow .cl-settings { border: 0; padding: 0 4px; }
+.legacy.narrow .cl-list .srow { grid-template-columns: 1fr; }
+.legacy.narrow .cl-list .srow > span { border-right: 0; }
+.cl-list input.mono { font-family: Arial, sans-serif; }

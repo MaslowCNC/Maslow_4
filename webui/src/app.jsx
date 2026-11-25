@@ -4,6 +4,7 @@ import { createMachine } from "./device/machine.js";
 import { derive, freshAnswers, isSetup } from "./flow/screens.js";
 import { Desktop } from "./ui/desktop.jsx";
 import { Phone } from "./ui/phone.jsx";
+import { Legacy, legacyAnswers } from "./ui/legacy.jsx";
 import { TOLERANCE, SLED_MASS } from "./accuracy.js";
 import { Settings } from "./ui/modals.jsx";
 import { SimPanel } from "./ui/sim.jsx";
@@ -52,6 +53,18 @@ function useStoredFlag(key) {
 // The sled's mass with the router (kg), for the workspace on a vertical frame. Also per browser, until the firmware
 // has a setting for it
 const useSledMass = () => useStored("maslow.sledMass", SLED_MASS);
+// The interface (Settings › Display): "new", or "legacy" (the old page's layout, ui/legacy.jsx). Per browser; ?look=legacy
+// or ?look=new picks one for this visit without saving it.
+const LOOK_KEY = "maslow.look";
+const lookParam = new URLSearchParams(location.search).get("look");
+function useLook() {
+  const [look, setLookState] = useState(() => {
+    if (lookParam === "legacy" || lookParam === "new") return lookParam;
+    try { return localStorage.getItem(LOOK_KEY) === "legacy" ? "legacy" : "new"; } catch { return "new"; }
+  });
+  const set = (v) => { setLookState(v); try { localStorage.setItem(LOOK_KEY, v); } catch { /* not remembered */ } };
+  return [look, set];
+}
 
 export function App() {
   const d = useDevice();
@@ -61,6 +74,7 @@ export function App() {
   const [tolerance, setTolerance] = useTolerance();
   const [sledMass, setSledMass] = useSledMass();
   const [commandBox, setCommandBox] = useStoredFlag("maslow.commandBox");
+  const [look, setLook] = useLook();
   const narrow = useNarrow();
 
   const setA = (patch) => setAnswers(prev => ({ ...prev, ...patch }));
@@ -70,9 +84,12 @@ export function App() {
   // homing: this page's own Home Z counts too, from any button.
   const zLost = { zDone: false, helper: false, zTarget: null };
   const send = (action, payload) => { if (action === "rehomeZ" && !d.notYet?.rehomeZ) setA(zLost); return device.send(action, payload); };
-  const k = derive(d, a);
+  // The legacy UI works like the old page: it never asks the page-only questions (retract checked, tool and Z, work piece
+  // secure), so derive() goes from tension straight to Ready to cut once a file is chosen
+  const ans = look === "legacy" ? legacyAnswers(a, d) : a;
+  const k = derive(d, ans);
   const openSettings = (section = "state") => setModal({ name: "settings", section });
-  const ctx = { d, a, setA, send, mark, tolerance, setTolerance, sledMass, setSledMass, commandBox, setCommandBox, openSettings, recorder };
+  const ctx = { d, a: ans, setA, send, mark, tolerance, setTolerance, sledMass, setSledMass, commandBox, setCommandBox, openSettings, recorder };
 
   useEffect(() => { send("connect"); }, []);
   // The device reads the chosen file (for the preview and Trace boundary) whenever the choice changes
@@ -82,7 +99,9 @@ export function App() {
   // Once the position is confirmed, the device checks for a tool on its own
   useEffect(() => { if (k === "tcheck" && d.tool === "unknown" && !d.pending) send("toolCheck"); }, [k, d.tool, d.pending]);
   // Waiting for the bit to be put back in: the board watches the beam by itself
-  useEffect(() => { if (k === "toolload" && (d.tool === "removed" || d.tool === "none") && !d.pending) send("watchForTool"); }, [k, d.tool, d.pending]);
+  // (the legacy UI has no Load the tool step, so there it's whenever the belts are ready and no job runs)
+  const waitingForBit = k === "toolload" || (look === "legacy" && d.connected && d.maslow === 7 && !d.job);
+  useEffect(() => { if (waitingForBit && (d.tool === "removed" || d.tool === "none") && !d.pending) send("watchForTool"); }, [waitingForBit, d.tool, d.pending]);
   // Set Z (here, or the helper lowering the bit to the work) is done once the report shows the work offset it asked
   // for and the bit there: work Z 0
   useEffect(() => {
@@ -101,11 +120,11 @@ export function App() {
   // Stop is in the top bar, which pop-ups don't cover, so they don't carry their own
   const mprops = { ctx, compact: narrow, stop: false };
   const overlay = modal?.name === "settings"
-    ? <Settings key={modal.section} k={k} {...mprops} section={modal.section} theme={theme} setTheme={setTheme} onClose={() => setModal(null)} />
+    ? <Settings key={modal.section} k={k} {...mprops} section={modal.section} theme={theme} setTheme={setTheme} look={look} setLook={setLook} onClose={() => setModal(null)} />
     : null;
-  const props = { k, ctx, onSettings: () => openSettings(), overlay };
+  const props = { k, ctx, onSettings: () => openSettings(), overlay, closeOverlay: () => setModal(null) };
   return <div class={`appshell${narrow ? " narrow" : ""}`} data-panels={theme}>
-    {narrow ? <Phone {...props} /> : <Desktop {...props} />}
+    {look === "legacy" ? <Legacy {...props} narrow={narrow} onNewUI={() => setLook("new")} /> : narrow ? <Phone {...props} /> : <Desktop {...props} />}
     {device.isSimulated && <SimPanel d={d} device={device} />}
   </div>;
 }
