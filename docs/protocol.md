@@ -525,3 +525,53 @@ state from `MS` only. Older firmware (before `MS`) has only this line.
   `ok`" helper with a timeout. Until then they run outside the channel's ordering (section 2).
 - **A reply can follow a reset** (section 3, soft reset). A client that sends a new line right
   after 0x18 could match that stray reply to it. Waiting for the start message avoids it.
+
+## 7. Receiving a file from another web page
+
+[Abundance](https://abundance.maslowcnc.com) is served over https, and a browser won't let an
+https page make requests to the machine, which is plain http (mixed content). An https page may
+open an http page in a new tab, though, and the two can talk with `window.postMessage`. So
+Abundance opens our UI and hands it the G-code, and our UI uploads the file to its own machine
+with `/upload`, as the Upload button does. This needs nothing from the firmware. The code is in
+`ESP3D-WEBUI/www/js/jobreceiver.js`.
+
+The sender (Abundance):
+
+1. Opens the machine's UI and keeps the window: `const w = window.open("http://maslow.local/", "maslow")`.
+   Don't pass `noopener`, which would cut the link between the two tabs.
+2. Posts `{type: "maslow:hello"}` to `w` every 500 ms until `maslow:ready` comes back. The UI
+   doesn't answer until it has connected to the machine, and a message posted while the tab is
+   still loading is lost, so the sender has to repeat it. Give up after about 30 s.
+3. Posts the file and waits for `maslow:result` with the same `id`.
+
+Use the machine's origin (`new URL(address).origin`) as the `targetOrigin` of every `postMessage`,
+and check that replies have that `event.origin` and come from `w` (`event.source === w`).
+
+| Message | Direction | Fields |
+|---|---|---|
+| `maslow:hello` | to the UI | none |
+| `maslow:ready` | from the UI | `version` (1) |
+| `maslow:gcode` | to the UI | `id` (any value, echoed in the result), `name` (file name), `gcode` (a string or a Blob) |
+| `maslow:result` | from the UI | `version`, `id`, `ok`. When `ok`: `name` and `path` of the file on the SD card. When not: `reason` and `detail` (a sentence for the user) |
+
+`reason` is one of:
+
+| `reason` | Meaning |
+|---|---|
+| `invalid` | `gcode` was empty or not a string or Blob |
+| `not-ready` | the UI has not finished connecting to the machine |
+| `busy` | the machine is running a job or moving, or another upload is in progress |
+| `rejected`, `bad-reply`, `failed` | the upload itself failed (`machine.files.upload`) |
+
+What the UI does with a file:
+
+- It uploads it into the folder the file list is showing (the SD card root unless the user has
+  opened another one) and loads it for preview, exactly like a file chosen with the Upload button.
+  A file of the same name is replaced.
+- **It never starts a job.** The user presses Play.
+- The name is reduced to a plain file name: no path, characters outside `A-Z a-z 0-9 . _ - space`
+  become `_`, `.nc` is added unless it already ends in a G-code extension, and it is cut to 60
+  characters. The result carries the name actually used.
+- Messages are accepted only from `https://abundance.maslowcnc.com`, and from `http://localhost`
+  or `http://127.0.0.1` on any port for people developing Abundance. Anything else is ignored
+  without a reply. Replies go only to the origin that asked.

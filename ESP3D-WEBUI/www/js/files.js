@@ -708,7 +708,18 @@ function files_start_upload() {
 		return;
 	}
 
-	const dir = files_currentPath();
+	// A failed upload has already been shown by files_upload_failed
+	files_upload_files(files_currentPath(), files).catch(() => {});
+	setValue("files_input_file", "");
+}
+
+/**
+ * Upload files (a FileList or array of File) into dir, show the new listing, and load the first
+ * file if it is G-code. Used by the Upload button and by jobreceiver.js. Resolves with
+ * {name, path, size} of the first file; rejects with machine.files.upload's error, after
+ * showing it.
+ */
+function files_upload_files(dir, files) {
 	for (const file of files) {
 		FileUploadNotice(file);
 	}
@@ -728,13 +739,16 @@ function files_start_upload() {
 
 	displayBlock("files_uploading_msg");
 	displayNone("files_navigation_buttons");
-	if (direct_sd) {
-		machine.files
-			.upload(dir, files, { onProgress: FilesUploadProgressDisplay })
-			.then((listing) => files_upload_success(listing, uploadedFile))
-			.catch(files_upload_failed);
-	}
-	setValue("files_input_file", "");
+	return machine.files.upload(dir, files, { onProgress: FilesUploadProgressDisplay }).then(
+		(listing) => {
+			files_upload_success(listing, uploadedFile);
+			return uploadedFile;
+		},
+		(err) => {
+			files_upload_failed(err);
+			throw err;
+		},
+	);
 }
 
 const files_upload_success = (listing, uploadedFile) => {

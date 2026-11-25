@@ -29,6 +29,7 @@ Format: **title** — what goes wrong, where, and how we found it.
 
 ## Medium: stopping
 
+
 - [ ] **0x18 during a Maslow belt operation alarms.** Retract, extend, take slack and
   calibrate run in Home state, where a reset goes through `Homing::fail` (ALARM "Homing fail
   reset"). The motors stop at once, and the `$STOP` that follows clears the alarm, but the
