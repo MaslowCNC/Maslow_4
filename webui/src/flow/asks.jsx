@@ -18,6 +18,17 @@ function StickoutInput({ onSave, value }) {
   </span>;
 }
 
+// The spoil board raises the sled, and Find anchors works out the belt angles from it, so it's offered (filled in with
+// the saved value) right before Find anchors runs. Saved like Settings › Frame and belts does it.
+function SpoilInput({ value, send }) {
+  const [v, setV] = useState(String(value ?? 0));
+  const n = parseFloat(v), ok = n >= 0 && n <= 50;
+  return <span class="binput">
+    <label class="field"><span>Spoil board</span><input type="text" inputmode="decimal" value={v} onInput={e => setV(e.currentTarget.value)} aria-label="Spoil board thickness in mm" style="width:70px" /> mm</label>
+    <button class="btn ghost" type="button" disabled={!ok || n === value} title={ok || !v ? "" : "From 0 to 50 mm"} onClick={() => send("setSpoilboard", { mm: n })}>Save</button>
+  </span>;
+}
+
 function FilePicker({ files, onPick, onUpload }) {
   const [v, setV] = useState(files[0]?.name || "");
   return <span class="binput">
@@ -84,10 +95,12 @@ function askFor(k, ctx) {
     case "tensioning": return { text: "Taking up the slack, then checking the position against the anchors.", buttons: [stop()] };
     case "notattached": return { text: "A belt wound in more than 300 mm. Check every belt is hooked to its anchor, then carry on.",
       buttons: [B("Continue applying tension", () => send("tension")), B("Retract belts", () => { setA({ retractChecked: false }); send("retract"); }, "ghost")] };
-    case "tensionfail": return { text: "The belt lengths don't match the saved anchors. Find anchors measures them again; the belts stay attached.",
-      buttons: [B("Find anchors", () => { mark(3); send("findAnchors"); }), B("Apply tension again", () => send("tension"), "ghost")] };
+    case "tensionfail": return { text: "The belt lengths don't match the saved anchors. Find anchors measures them again; the belts stay attached. Sled on a spoil board? Enter its thickness first.",
+      buttons: [B("Find anchors", () => { mark(3); send("findAnchors"); }), B("Apply tension again", () => send("tension"), "ghost")],
+      input: <SpoilInput value={d.workArea?.spoil} send={send} /> };
     case "anchors": return { text: "Measuring the frame to find each anchor point. Keep clear of the sled and belts.", buttons: [stop("Stop finding anchors")] };
     case "noanchors": return { text: "Check each belt is hooked to its anchor, then try again.",
+      input: <SpoilInput value={d.workArea?.spoil} send={send} />,
       buttons: [B("Find anchors again", () => send("findAnchors")), B("Retract belts", () => { setA({ retractChecked: false }); send("retract"); }, "ghost")] };
     // The machine reports no tool state (TS): a 4.1, or older firmware on a Mini. The tool check can only be skipped
     case "tcheck": return d.toolSteps === false
@@ -108,7 +121,7 @@ function askFor(k, ctx) {
     case "toolload": return { text: "No bit loaded. Put a bit in and push it up into the light beam: the device pulls it in and seats it. Or continue with no tool.",
       buttons: [B("Continue with no tool", () => { mark(4); setA({ zDone: true }); }, "ghost")] };
     case "toolseating": return { text: "Bit detected. Let go once the spindle starts pulling it in; it stops when the bit is seated.", buttons: [stop()] };
-    // No stock thickness here: calibration doesn't use it yet, so it lives in Settings for anyone who wants to set it
+    // No stock thickness here: it lives in Settings, and the expanded help says to set it before cutting (REWRITE.md, Setup steps)
     case "secure": return { text: "Is your work piece set up and secure?",
       buttons: [B("Release tension", () => { setA({ securing: true }); send("release"); }, "ghost"),
         B("It's secure", () => { mark(6); setA({ secured: true }); }), back({ zDone: false, helper: false, zTarget: null })] };

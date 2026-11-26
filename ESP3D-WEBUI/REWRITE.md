@@ -303,19 +303,20 @@ arrives. The full table of states, subheaders and actions is the UI modes map.
 - **Spoil board thickness** raises the sled above the frame, so the firmware adds it to every
   anchor's height when it works out belt lengths. A wrong value costs accuracy, most near the
   anchors. It's set in Settings › Frame and belts.
-- **Spoil board and stock thickness stay in Settings** (decided 2026-11-26, replacing 2026-11-13). Since
+- **Spoil board at Find anchors, stock in Settings** (decided 2026-11-26, replacing 2026-11-13). Since
   Maslow-Main #1164, Find anchors and cutting both work out belt lengths from anchor Z + spoil board + stock
   thickness (`MaslowKinematics.cpp`, `Calibration.cpp`). Anchors and the spoil board rarely change; the
   stock does. So:
-  - **Setup asks for neither** (revised 2026-11-26). Both stay in Settings › Frame and belts, default 0 in
+  - **Find anchors offers the spoil board thickness** (revised again 2026-11-26, built): the screens that lead
+    to Find anchors (`tensionfail`, `noanchors`) have a Spoil board box filled in with the saved value and a
+    Save (`setSpoilboard`). The stock isn't asked. Both are also in Settings › Frame and belts, default 0 in
     the shipped `maslow-mini.yaml` and `maslow-m4.yaml` (the simulator's 12.7 / 6.35 are demo values only).
-    Find anchors shows the spoil board and stock it will use, as plain text, because it reads both: a stock
-    value left from the last job skews the anchors.
+    The legacy layout doesn't get the box: it keeps them in its Settings tab, as the old UI did.
   - **The setup notes say to set them:**
-    - Find anchors' tip: for more accuracy, set the spoil board thickness in Settings › Frame and belts
-      before running it (and the stock thickness to what the sled is sitting on now, usually 0).
+    - Find anchors' expanded help: if the sled sits on a board while calibrating, enter that thickness first,
+      for accuracy; keep the stock at 0 unless the sled is on the work piece now. (Built.)
     - Secure the work piece's tip: to improve accuracy, set the stock thickness in Settings before cutting.
-      A new sheet needs only the new thickness, not a new Find anchors.
+      A new sheet needs only the new thickness, not a new Find anchors (Built.)
 - **The tool and Z steps.** Once the position is confirmed, the machine checks for a tool by
   itself: the spindle board raises the spindle through its top-of-travel light beam.
   - **A bit is found: Set Z** (revised 2026-11-25), with three buttons. **Set Z** makes where the bit is
@@ -504,7 +505,7 @@ currents; Extend distance, spoil board and stock thickness, Reboot.
 
 | Change | Current UI / firmware | In the new UI |
 |---|---|---|
-| Stock thickness counts in Find Anchors (#1164) | Find Anchors and cutting both use anchor Z + spoil board + stock thickness. A wrong value scales X (about 1.7 % with 25 mm of spoil board plus stock) | Missing. Decided 2026-11-26 (Setup steps): setup asks for neither; Find anchors shows both; they stay in Settings, and Secure the work piece's tip says to set it |
+| Stock thickness counts in Find Anchors (#1164) | Find Anchors and cutting both use anchor Z + spoil board + stock thickness. A wrong value scales X (about 1.7 % with 25 mm of spoil board plus stock) | **Done** (2026-11-26, simulator only): Find anchors offers the spoil board; stock stays in Settings, and Secure the work piece's help says to set it |
 | Wrong `encoderTeeth` warning (#1162, #1163) | On connect, compares `encoderTeeth` with the board from `[ESP800]` (22 on the 4.1, 35 on the Mini); the popup gives the scaled Extend distance and says to restart, then Retract, Extend, Apply tension, Find anchors | Missing: an incident on connect |
 | Move Z to Home: go to work Z 0 (#1157) | Jog pad button, `machine.moveTo({ z: 0 })` (G0). The firmware now allows it in any Maslow state (the belt position-error e-stop runs only in Ready to cut) | Missing: the house goes to XY home only, and Home Z is the spindle board's homing. Needs a "go to Z 0" with a label that can't be confused with Home Z |
 | Receive a G-code file from Abundance (#1166) | Abundance opens the machine's UI and hands it a file with `window.postMessage`; the UI uploads and selects it, never runs it (`docs/protocol.md` §7, `jobreceiver.js`) | Missing |
