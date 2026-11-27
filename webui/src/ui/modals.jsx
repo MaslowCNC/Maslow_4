@@ -79,13 +79,17 @@ function StateSection({ k, ctx, close }) {
 
 const SECTIONS = [["state", "State"], ["device", "Device"], ["network", "Network"], ["frame", "Frame and belts"], ["home", "Home"], ["tool", "Tool and Z"], ["jobs", "Jobs"], ["display", "Display"], ["advanced", "Advanced"]];
 
-export function Settings({ k, ctx, onClose, theme, setTheme, look, setLook, compact, stop, section = "state" }) {
-  const [sec, setSec] = useState(section);
+// stacked (the phone layout): the sections as a list first, then one section at a time with a way back to the list
+export function Settings({ k, ctx, onClose, theme, setTheme, look, setLook, compact, stacked, stop, section }) {
+  const [sec, setSec] = useState(section || (stacked ? null : "state"));
   const { d } = ctx, s = SCREENS[k];
   const busy = s.moving || s.mode === "Job" || !d.connected;
-  const nav = <nav class="mnav">{SECTIONS.map(([id, n]) => <button type="button" aria-current={id === sec} onClick={() => setSec(id)}>{n}</button>)}</nav>;
+  const nav = stacked
+    ? sec && <div class="mback"><button type="button" class="linkbtn" onClick={() => setSec(null)}>‹ All settings</button><b>{SECTIONS.find(x => x[0] === sec)[1]}</b></div> || <div />
+    : <nav class="mnav">{SECTIONS.map(([id, n]) => <button type="button" aria-current={id === sec} onClick={() => setSec(id)}>{n}</button>)}</nav>;
   let body;
-  if (sec === "state") body = <StateSection k={k} ctx={ctx} close={onClose} />;
+  if (!sec) body = <nav class="slist" aria-label="Settings sections">{SECTIONS.map(([id, n]) => <button type="button" onClick={() => setSec(id)}>{n}<span aria-hidden="true">›</span></button>)}</nav>;
+  else if (sec === "state") body = <StateSection k={k} ctx={ctx} close={onClose} />;
   else if (sec === "device") body = <><h4>Device</h4>
     <NameRow ctx={ctx} busy={busy} />
     <Row label="Firmware"><span class="mono">Simulated device</span><button class="btn ghost" type="button" disabled={busy}>Update firmware</button></Row>

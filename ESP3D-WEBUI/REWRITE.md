@@ -219,11 +219,22 @@ These are FluidNC's `MPos`, `WCO` and `WPos = MPos − WCO`.
   File** cards along the bottom. It has no Run or Stop of its own;
 - Jog / Home tall on the right, where a thumb reaches on a tablet, with File management below it.
 
-**Phone: layout B:**
-- the mode and connection in the header;
-- a small frame drawing;
-- sections that fold open (Next or Setup, Details, Jog, Files);
-- Run and Stop fixed at the bottom.
+**Phone: side tabs** (`webui/src/ui/phone.jsx`, `phone.css`; decided 2026-11-27, replacing layout B's folding
+sections, which hid the Setup answers under the Run / Stop bar and scrolled about 300 px at 360 × 640):
+- the header: connection and ⚙, then the mode and its one-line message (or the setup progress);
+- a rail of tabs down the left edge (icon and label): Setup or Next, Frame, Jog, Files, Details, Log. Each tab is one
+  panel that fits the screen without scrolling (checked at 375 × 812 and 360 × 640). The open tab is remembered per
+  browser. A dot on Setup / Next means it's asking something while another tab is open, and an incident or error
+  brings it forward;
+- Setup / Next: the step's drawing, its question and its answers at the bottom of the panel, by the thumb. Outside
+  setup (a job running, Ready to cut), the frame drawing, the Position and File cards (progress during a job) and the
+  question all at once; in landscape the drawing is on the left and the Position card is left to Jog and Details.
+  Frame: the drawing full size with Frame / Toolpath and the Belts, Motors and Area toggles;
+- Run and Stop fixed at the bottom. In landscape (height under 500 px) the header is one line, the tabs show icons
+  only, and Run and Stop run down the right edge;
+- Settings opens as a list of sections, then one section with ‹ All settings (the legacy look keeps its pills).
+- Decision note: left rail picked over a right rail (thumb reach) and a bottom tab bar (loses height in landscape),
+  2026-11-27. On the Set Z step, the jog pad's Set Z now completes the step too, since the jog pad is on its own tab.
 
 **Legacy UI** (2026-11-25, `webui/src/ui/legacy.jsx`): Settings › Display › Theme › Legacy, per browser, or
 `?look=legacy` for one visit. For anyone finding the switch hard; it won't get new features, so the new
@@ -241,13 +252,13 @@ the controls while Z moves. Its Settings tab shows the Maslow and FluidNC lists,
 - The mode and Stop are always in view.
 - **Prompts are completed where they're asked.** If the top bar asks for something, it can be done
   in the top bar: the stick-out, the job file. Bigger tasks
-  open a pop-up from the bar. On a phone, the header and the Setup section play this part.
+  open a pop-up from the bar. On a phone, the Setup / Next tab plays this part.
 - **The setup bar expands** with an arrow on its bottom edge: a big step graphic beside fuller
   numbered instructions. It's closed by default. The big graphic is where the line art for
   first-time users goes (on hold).
 - **The Status, Position and File cards:** the File card shows the progress bar, line and percent
   during a job, otherwise the chosen file's size, depth and line count (from the G-code reader). On a
-  phone they're in the Details section, with Belts (live lengths, `BL`) and Motors (currents, `MC`)
+  phone they're on the Details tab, with Belts (live lengths, `BL`) and Motors (currents, `MC`)
   as tabs. Values go grey with "out of date" when the machine stops answering.
 - **Settings pop-up** (⚙ at the end of the top bar; draft):
 
@@ -554,7 +565,7 @@ they come up):
 | Where | Problem | Fix to consider |
 |---|---|---|
 | Settings › Network | After saving a new WiFi password, people don't know they have to restart the board: Restart now is usually below the fold | After a save that needs a restart, prompt for it (Restart now / Later), or scroll the Restart now button into view and highlight it |
-| Settings (phone) | The section pills scroll sideways with no sign there are more: Advanced is off screen at 375 px | Fade the right edge, or wrap the pills onto two rows |
+| Settings (phone) | The section pills scroll sideways with no sign there are more: Advanced is off screen at 375 px | **Done 2026-11-27:** a list of sections, then one section with ‹ All settings (the legacy look keeps the pills) |
 
 **3. Build and ship** (**done on `firmwareRewrite`, 2026-11-27**, except firmware update in the new UI):
 

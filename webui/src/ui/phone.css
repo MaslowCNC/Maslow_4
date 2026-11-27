@@ -1,0 +1,83 @@
+/* ---------- Phone layout: tabs on a rail, one panel at a time (ui/phone.jsx) ---------- */
+.phoneapp.tabbed .p-msg { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.p-main { min-height: 0; display: flex; }
+
+.p-rail { flex: none; display: flex; flex-direction: column; gap: 2px; padding: 6px 4px; background: var(--panel); overflow: auto; }
+.p-rail { border-right: 1px solid var(--sep); }
+.p-rail button { position: relative; flex: 1 1 0; max-height: 76px; min-height: 48px; width: 64px; display: grid; place-items: center; align-content: center; gap: 3px;
+  background: none; border: 0; border-radius: 10px; color: var(--muted); font: 600 11px var(--font-sans); cursor: pointer; padding: 4px 2px; }
+.p-rail button[aria-selected="true"] { background: var(--input); color: var(--lilac); }
+.p-rail button:focus-visible { outline: 2px solid var(--lilac); outline-offset: -2px; }
+/* Setup / Next asks something while another tab is open */
+.p-rail button.dot::after { content: ""; position: absolute; top: 6px; right: 12px; width: 9px; height: 9px; border-radius: 50%;
+  background: var(--setup); box-shadow: 0 0 0 2px var(--panel); }
+
+.p-panel { flex: 1 1 auto; min-width: 0; min-height: 0; overflow: auto; padding: 10px; display: flex; flex-direction: column; }
+.p-panel > * { flex: 1 1 auto; min-height: 0; }
+
+/* Setup / Next: heading, drawing, then the question and its answers at the bottom */
+.pt-next { display: flex; flex-direction: column; gap: 10px; }
+.pt-step { margin: 0; font: 700 15px var(--font-sans); color: var(--text); }
+.pt-art { flex: 1 1 auto; min-height: 90px; }
+.pt-art svg { width: 100%; height: 100%; max-width: 340px; max-height: 100%; }
+.pt-ask { display: grid; gap: 10px; margin-top: auto; }
+.pt-q { margin: 0; font-size: 15px; line-height: 1.4; color: var(--text); }
+.pt-q.alert { color: var(--danger); }
+.pt-ask .row { flex-wrap: wrap; }
+.pt-ask .btn { min-height: 48px; flex: 1 1 140px; }
+.pt-ask .binput { flex-wrap: wrap; }
+.pt-next .minis { grid-template-columns: 1fr; flex: none; }
+.pt-draw.pt-small { min-height: 100px; }
+/* The Status card repeats the question below it */
+.pt-next .minis > .mini:first-child { display: none; }
+
+.pt-frame { display: flex; flex-direction: column; gap: 8px; }
+.pt-tools { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.pt-tools .tgl { min-height: 36px; }
+.pt-draw { position: relative; flex: 1 1 auto; min-height: 160px; background: var(--panel); border-radius: 12px; overflow: hidden; }
+.pt-draw .framesvg { position: absolute; inset: 0; }
+
+.pt-jog, .pt-files, .pt-info { display: grid; gap: 10px; align-content: start; }
+.pt-jog .note { margin: 0; }
+.pt-log { min-height: 0; }
+
+/* Landscape phone: header on one line, Run and Stop down the right edge, icon-only tabs */
+@media (orientation: landscape) and (max-height: 500px) {
+  .phoneapp.tabbed { grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto minmax(0, 1fr); }
+  .phoneapp.tabbed .p-head { grid-column: 1; display: flex; align-items: center; gap: 10px; padding: 6px 10px; }
+  .phoneapp.tabbed .p-head .apphead { order: 2; flex: 1; border: 0; padding: 0; min-height: 0; flex-wrap: nowrap; }
+  .phoneapp.tabbed .p-head .p-top { order: 1; flex: none; }
+  .phoneapp.tabbed .p-head .p-top .sub, .phoneapp.tabbed .p-msg, .phoneapp.tabbed .p-prog { display: none; }
+  .phoneapp.tabbed .p-main { grid-column: 1; grid-row: 2; }
+  .phoneapp.tabbed .p-act { grid-column: 2; grid-row: 1 / 3; border-top: 0; border-left: 1px solid var(--sep); display: flex;
+    padding: 8px calc(8px + env(safe-area-inset-right, 0px)) 8px 8px; }
+  .phoneapp.tabbed .p-act .row { flex-direction: column; justify-content: flex-end; width: 112px; }
+  .phoneapp.tabbed .p-act .btn { flex: none; min-height: 64px; }
+  /* The jog pad in two columns: the arrows on the left, the step, readout and Set buttons on the right */
+  .pt-jog .jogwrap { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); align-items: start; }
+  .pt-jog .posrow { grid-template-columns: 50px repeat(3, minmax(0, 1fr)); font-size: 11px; gap: 4px; }
+  .pt-jog .jogwrap > * { grid-column: 2; }
+  .pt-jog .jogwrap > .compass { grid-column: 1; grid-row: 1 / span 4; }
+  .pt-jog .jogwrap > .locked { grid-column: 1 / -1; grid-row: 1 / -1; }
+  .pt-jog .jogtop { flex-wrap: wrap; }
+  /* Outside setup: the drawing on the left, the cards and the question on the right */
+  .pt-run { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-auto-rows: min-content; gap: 8px 10px; align-content: start; }
+  .pt-run > .pt-draw { grid-column: 1; grid-row: 1 / span 3; min-height: 0; height: 100%; }
+  .pt-run > * { grid-column: 2; }
+  .pt-run .pt-q { font-size: 14px; }
+  /* No room for the Position card beside the drawing: it's on the Jog and Details tabs */
+  .pt-run .minis > .mini:nth-child(2) { display: none; }
+  .pt-jog .jogbox .compass button { min-height: 44px; }
+  .p-rail button span { display: none; }
+  .p-rail button { width: 52px; min-height: 44px; }
+}
+
+/* Settings on a phone (ui/modals.jsx, stacked): the sections as a list, then one section with a way back */
+.slist { display: grid; gap: 0; margin: -10px 0; }
+.slist button { display: flex; align-items: center; justify-content: space-between; min-height: 44px; padding: 0 12px; border: 0; border-radius: 10px;
+  background: none; color: var(--text); font: 500 15px var(--font-sans); cursor: pointer; text-align: left; }
+.slist button:hover, .slist button:focus-visible { background: var(--input); }
+.slist button span { color: var(--muted); font-size: 18px; }
+.mback { display: flex; align-items: center; gap: 12px; padding: 0 14px; min-height: 44px; border-bottom: 1px solid var(--sep); }
+.mback .linkbtn { font-size: 13px; color: var(--lilac); min-height: 44px; }
+.mback b { font: 700 14px var(--font-sans); }

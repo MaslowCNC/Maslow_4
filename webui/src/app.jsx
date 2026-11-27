@@ -85,12 +85,17 @@ export function App() {
   // The other answers (work piece, file) stay. A bit already in the beam homes at once, so the report may never show
   // homing: this page's own Reset Z counts too, from any button.
   const zLost = { zDone: false, helper: false, zTarget: null };
-  const send = (action, payload) => { if (action === "rehomeZ" && !d.notYet?.rehomeZ) setA(zLost); return device.send(action, payload); };
+  // On the Set Z step, Set Z from the jog pad counts too (on a phone the jog pad is on its own tab), once the report shows it
+  const send = (action, payload) => {
+    if (action === "rehomeZ" && !d.notYet?.rehomeZ) setA(zLost);
+    if (action === "setZ" && k === "setz") setA({ zTarget: d.pos.z });
+    return device.send(action, payload);
+  };
   // The legacy UI works like the old page: it never asks the page-only questions (retract checked, tool and Z, work piece
   // secure), so derive() goes from tension straight to Ready to cut once a file is chosen
   const ans = look === "legacy" ? legacyAnswers(a, d) : a;
   const k = derive(d, ans);
-  const openSettings = (section = "state") => setModal({ name: "settings", section });
+  const openSettings = (section) => setModal({ name: "settings", section });
   const ctx = { d, a: ans, notice, setNotice, setA, send, mark, tolerance, setTolerance, sledMass, setSledMass, commandBox, setCommandBox, openSettings, recorder };
 
   useEffect(() => { send("connect"); }, []);
@@ -142,7 +147,7 @@ export function App() {
   useEffect(() => { if (d.job) setA({ stoppedSeen: false, faultSeen: false }); }, [!!d.job]);
 
   // Stop is in the top bar, which pop-ups don't cover, so they don't carry their own
-  const mprops = { ctx, compact: narrow, stop: false };
+  const mprops = { ctx, compact: narrow, stacked: narrow && look !== "legacy", stop: false };
   const overlay = modal?.name === "settings"
     ? <Settings key={modal.section} k={k} {...mprops} section={modal.section} theme={theme} setTheme={setTheme} look={look} setLook={setLook} onClose={() => setModal(null)} />
     : null;
