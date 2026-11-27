@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "preact/hooks";
+import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { createSimulator } from "./device/simulator.js";
 import { createMachine } from "./device/machine.js";
 import { derive, freshAnswers, isSetup } from "./flow/screens.js";
@@ -11,6 +11,7 @@ import { SimPanel } from "./ui/sim.jsx";
 import { createRecorder } from "./device/jobrecord.js";
 import { openJobStore } from "./device/jobstore.js";
 import { exampleJobs } from "./device/jobrecord.sample.js";
+import { handleMessage } from "./device/jobreceiver.js";
 
 // The device behind the UI: the real machine (machine.js) or the simulator, both with the same interface
 // (getState, subscribe, send). ?device=machine or ?device=sim picks one. Otherwise the page uses the machine
@@ -76,12 +77,13 @@ export function App() {
   const [commandBox, setCommandBox] = useStoredFlag("maslow.commandBox");
   const [look, setLook] = useLook();
   const narrow = useNarrow();
+  const [notice, setNotice] = useState(null);         // { text, bad }: a file received from Abundance, in the header
 
   const setA = (patch) => setAnswers(prev => ({ ...prev, ...patch }));
   const mark = (step) => setAnswers(prev => prev.ran.includes(step) ? prev : { ...prev, ran: [...prev.ran, step] });
-  // Home Z clears the work Z offset (the firmware zeroes Z at the seated bit), so the page asks for Set Z again.
+  // Reset Z (rehomeZ) clears the work Z offset (the firmware zeroes Z at the seated bit), so the page asks for Set Z again.
   // The other answers (work piece, file) stay. A bit already in the beam homes at once, so the report may never show
-  // homing: this page's own Home Z counts too, from any button.
+  // homing: this page's own Reset Z counts too, from any button.
   const zLost = { zDone: false, helper: false, zTarget: null };
   const send = (action, payload) => { if (action === "rehomeZ" && !d.notYet?.rehomeZ) setA(zLost); return device.send(action, payload); };
   // The legacy UI works like the old page: it never asks the page-only questions (retract checked, tool and Z, work piece
@@ -89,9 +91,31 @@ export function App() {
   const ans = look === "legacy" ? legacyAnswers(a, d) : a;
   const k = derive(d, ans);
   const openSettings = (section = "state") => setModal({ name: "settings", section });
-  const ctx = { d, a: ans, setA, send, mark, tolerance, setTolerance, sledMass, setSledMass, commandBox, setCommandBox, openSettings, recorder };
+  const ctx = { d, a: ans, notice, setNotice, setA, send, mark, tolerance, setTolerance, sledMass, setSledMass, commandBox, setCommandBox, openSettings, recorder };
 
   useEffect(() => { send("connect"); }, []);
+  // A G-code file from Abundance (device/jobreceiver.js, docs/protocol.md §7): uploaded to the SD card and chosen as
+  // the job file, as Upload does. Never run. Refused while a job runs or the machine moves, or before it's connected.
+  const live = useRef();
+  live.current = { d };
+  useEffect(() => {
+    const onMessage = (event) => handleMessage(event, {
+      ready: () => live.current.d.connected && !live.current.d.closed,
+      state: () => ({ job: live.current.d.job, grbl: live.current.d.fluid }),
+      upload: async (file) => {
+        try {
+          return await device.send("receiveFile", { file });
+        } catch (err) {
+          setNotice({ text: `Could not receive ${file.name}: ${err.detail || err.reason}`, bad: true });
+          throw err;
+        }
+      },
+      notify: (name, why) => setNotice({ text: `Could not receive ${name}: ${why.detail}`, bad: true }),
+      received: ({ name }) => { mark(7); setA({ file: name }); setNotice({ text: `Received ${name} from Abundance` }); }
+    });
+    addEventListener("message", onMessage);
+    return () => removeEventListener("message", onMessage);
+  }, []);
   // The device reads the chosen file (for the preview and Trace boundary) whenever the choice changes
   useEffect(() => { send("chooseFile", { file: a.file }); }, [a.file]);
   // A (re)connection means the device may have changed: setup starts again from what the machine reports
@@ -108,7 +132,7 @@ export function App() {
     const near = (v) => Math.abs(v - a.zTarget) < 0.005;
     if (a.zTarget != null && !a.zDone && near(d.wco.z) && near(d.pos.z)) { mark(4); mark(5); setA({ zDone: true, helper: false, zTarget: null }); }
   }, [d.wco.z, d.pos.z, a.zTarget]);
-  // Home Z from another connection, when the report shows it homing (TS 2)
+  // Reset Z from another connection, when the report shows it homing (TS 2)
   useEffect(() => { if (d.tool === "checking" && a.zDone) setA(zLost); }, [d.tool]);
   // A new retract, from whichever button, needs a new check by eye
   useEffect(() => { if (d.maslow === 1) setA({ retractChecked: false }); }, [d.maslow]);

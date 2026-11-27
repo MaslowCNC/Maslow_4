@@ -1,8 +1,20 @@
 import { useEffect, useState } from "preact/hooks";
+import { sampleGcode } from "../device/simulator.js";
 
 // The tester stands in for the machine here. Each question is something the real firmware will report once the
 // adapter replaces the simulator. It's docked, not modal, so Stop and the rest of the screen stay usable.
 // It folds away while there's nothing to answer, and opens again for each new question.
+// Abundance hands a file to the page with postMessage (device/jobreceiver.js). This posts the same message from the
+// page itself (localhost is an allowed origin) and logs the reply to the console.
+let sent = 0;
+function sendFromAbundance() {
+  const id = `sim-${++sent}`;
+  const onReply = (e) => { if (e.data?.type === "maslow:result" && e.data.id === id) { removeEventListener("message", onReply); console.info("Abundance got", e.data); } };
+  addEventListener("message", onReply);
+  const gcode = sampleGcode({ name: "abundance-part", w: 240, h: 160, depth: 6 });
+  postMessage({ type: "maslow:gcode", id, name: "abundance-part.nc", gcode }, location.origin);
+}
+
 export function SimPanel({ d, device }) {
   const p = d.pending;
   const [manual, setManual] = useState(null);
@@ -27,6 +39,8 @@ export function SimPanel({ d, device }) {
             : <button type="button" class="btn ghost" onClick={() => device.event("reconnect")}>Reconnect</button>}
           <button type="button" class="btn ghost" onClick={() => device.event("emergencyStop")} disabled={!d.connected}>Press the emergency button</button>
           <button type="button" class="btn ghost" onClick={() => device.event("boardReset")} disabled={!d.connected}>Board resets</button>
+          <button type="button" class="btn ghost" onClick={sendFromAbundance}>Send a file from Abundance</button>
+          <button type="button" class="btn ghost" onClick={() => device.event("wrongTeeth")} disabled={!d.connected}>Connect with the wrong encoderTeeth</button>
           <button type="button" class="btn ghost" onClick={() => device.event("toggleVertical")}>{d.frame?.vertical ? "Lay the frame flat" : "Stand the frame vertically"}</button>
         </div>
       </details>

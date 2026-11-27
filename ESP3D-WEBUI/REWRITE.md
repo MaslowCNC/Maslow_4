@@ -24,8 +24,8 @@ up in a new session, read "Where we are", "How to work on it" and "What we still
   Mini flow on a real Maslow Mini (`?device=machine`) and on the simulator (`?device=sim`):
   - setup (retract, extend, tension, find anchors, tool check, secure, choose file), Run, Stop,
     Continue from a typed line, Discard, Trace boundary, incidents (acknowledge first);
-  - jog pad (one XY step, Z step, labelled arrows), Set home XY / Set Z (one click, here), Home Z,
-    Park, Remove tool;
+  - jog pad (one XY step, Z step, labelled arrows, a house for XY home and one for work Z 0), Set home XY /
+    Set Z (one click, here), Reset Z (the spindle board's homing, called Home Z before 2026-11-26), Park, Remove tool;
   - Frame tab (live belt lengths, motor current rings, Workspace accuracy overlay, the file's
     toolpath in light gray) and Toolpath tab (the file alone, fitted);
   - files: list, upload, delete; the File card with size and X / Y range; the fit check (below);
@@ -460,7 +460,7 @@ of the current UI on 2026-11-18 (its Tablet, Main and Settings tabs show; Camera
 Debugging are hidden by default).
 
 Already in the new UI: Retract, Extend, Apply tension, Find anchors, Release tension, Stop; jog with
-a step, go to XY home, Set home XY, Set Z, Home Z, Remove tool, Park; SD files (list, upload,
+a step, go to XY home, go to work Z 0, Set home XY, Set Z, Reset Z, Remove tool, Park; SD files (list, upload,
 delete); Run, Continue after a stop, Trace boundary; log, state, toolpath on the frame, motor
 currents; Extend distance, spoil board and stock thickness, Reboot.
 
@@ -512,9 +512,9 @@ currents; Extend distance, spoil board and stock thickness, Reboot.
 | Change | Current UI / firmware | In the new UI |
 |---|---|---|
 | Stock thickness counts in Find Anchors (#1164) | Find Anchors and cutting both use anchor Z + spoil board + stock thickness. A wrong value scales X (about 1.7 % with 25 mm of spoil board plus stock) | **Done** (2026-11-26, simulator only): Find anchors offers the spoil board; stock stays in Settings, and Secure the work piece's help says to set it |
-| Wrong `encoderTeeth` warning (#1162, #1163) | On connect, compares `encoderTeeth` with the board from `[ESP800]` (22 on the 4.1, 35 on the Mini); the popup gives the scaled Extend distance and says to restart, then Retract, Extend, Apply tension, Find anchors | Missing: an incident on connect |
-| Move Z to Home: go to work Z 0 (#1157) | Jog pad button, `machine.moveTo({ z: 0 })` (G0). The firmware now allows it in any Maslow state (the belt position-error e-stop runs only in Ready to cut) | Missing: the house goes to XY home only, and Home Z is the spindle board's homing. Needs a "go to Z 0" with a label that can't be confused with Home Z |
-| Receive a G-code file from Abundance (#1166) | Abundance opens the machine's UI and hands it a file with `window.postMessage`; the UI uploads and selects it, never runs it (`docs/protocol.md` §7, `jobreceiver.js`) | Missing |
+| Wrong `encoderTeeth` warning (#1162, #1163) | On connect, compares `encoderTeeth` with the board from `[ESP800]` (22 on the 4.1, 35 on the Mini); the popup gives the scaled Extend distance and says to restart, then Retract, Extend, Apply tension, Find anchors | **Done** (2026-11-26, simulator only): an incident on connect with Fix it (sets the teeth and the scaled Extend distance, `$CO`, then offers Restart now), once per connection (`device/encoderteeth.js`) |
+| Move Z to Home: go to work Z 0 (#1157) | Jog pad button, `machine.moveTo({ z: 0 })` (G0). The firmware now allows it in any Maslow state (the belt position-error e-stop runs only in Ready to cut) | **Done** (2026-11-26, simulator only): a house (Z 0) between +Z and −Z, locked like the jog pad; the spindle board's Home Z is now Reset Z (not in the legacy layout) |
+| Receive a G-code file from Abundance (#1166) | Abundance opens the machine's UI and hands it a file with `window.postMessage`; the UI uploads and selects it, never runs it (`docs/protocol.md` §7, `jobreceiver.js`) | **Done** (2026-11-26, simulator only): `device/jobreceiver.js` (same rules and replies, tested against the old one), uploads, chooses the file and says so in the header; the simulator panel has Send a file from Abundance |
 | Update check streams (#1142) | Release / Experimental / Nightly, newer by semver | Part of the missing firmware update row above: copy these rules |
 
 Most needed first, all done on 2026-11-18 (simulator only so far): the command box and saving the log,
