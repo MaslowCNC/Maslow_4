@@ -2,6 +2,12 @@ import { defineConfig } from "vite";
 import preact from "@preact/preset-vite";
 import { viteSingleFile } from "vite-plugin-singlefile";
 import { lookup } from "node:dns/promises";
+import { execSync } from "node:child_process";
+
+// The page's version, as the firmware's: the git tag it was built from (Settings › Device › System status)
+function pageVersion() {
+  try { return execSync("git describe --tags --always --dirty", { encoding: "utf8" }).trim(); } catch { return "dev"; }
+}
 
 // The machine the dev server forwards to, for http://localhost:5199/?device=machine. MASLOW_HOST overrides
 // maslow.local. The name is looked up once at startup: on some Macs each .local lookup takes about 5 s.
@@ -19,6 +25,7 @@ export default defineConfig(async ({ command }) => {
   const machine = command === "serve" ? await machineAddress() : null;
   return {
     plugins: [preact(), viteSingleFile()],
+    define: { __PAGE_VERSION__: JSON.stringify(pageVersion()) },
     build: { target: "es2020", assetsInlineLimit: 100000000 },
     server: {
       // machine.js and wscommands.js are imported from ESP3D-WEBUI/www/js, outside this folder
@@ -30,6 +37,7 @@ export default defineConfig(async ({ command }) => {
         "/command": { target: `http://${machine}` },
         "/SD": { target: `http://${machine}` },   // file contents, to count a job's lines
         "/files": { target: `http://${machine}` },   // the board's flash files (Settings › Advanced › Files)
+        "/updatefw": { target: `http://${machine}` },   // firmware update (Settings › Device)
         // A flash file's contents: the board serves /maslow.yaml at its own path, which here is Vite's
         "/flashfs": { target: `http://${machine}`, rewrite: (p) => p.replace(/^\/flashfs/, "") }
       } : undefined
