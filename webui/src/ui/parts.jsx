@@ -6,6 +6,7 @@ import { STEPS, SCREENS, isSetup } from "../flow/screens.js";
 import { stepArt, visSvg, frameMap, toolpathSvg, toolpathView, workspaceCaption, currentColour, MAX_CURRENT_MA } from "../art.js";
 import { makeFrame, accuracyMap, safeRect, checkJob, startRing, TOLERANCE, SLED_MASS } from "../accuracy.js";
 import logo from "../assets/maslow-logo.webp";
+import { UpdateNotice } from "./device.jsx";
 
 // A top-bar button. b.temp marks one that exists only until the firmware rewrite is finished: it shows orange,
 // tagged "Temporary", and its tooltip says what it's waiting for. Every stopgap like this should use it.
@@ -296,13 +297,14 @@ export function JogPad({ k, d, send }) {
 const BELT_NAMES = ["TL", "TR", "BL", "BR"];
 // The app header, above the setup or mode bar on every screen: the Maslow logo, the machine this page is
 // connected to, the connection, and Settings. These live only here.
-export function AppHeader({ d, onSettings, notice, setNotice }) {
+export function AppHeader({ d, onSettings, openSettings, notice, setNotice }) {
   return <header class="apphead">
     <img class="logo" src={logo} alt="Maslow" />
     <MachineTag d={d} />
     {d.spindle === "on" && <span class="spintag" role="status"><i class="spindot" aria-hidden="true" />Spindle running</span>}
     {notice && <span class={`noticetag${notice.bad ? " bad" : ""}`} role="status">{notice.text}
       <button type="button" aria-label="Dismiss" onClick={() => setNotice(null)}>×</button></span>}
+    {openSettings && <UpdateNotice d={d} openSettings={openSettings} />}
     <span class="apphead-gap" />
     <Conn d={d} />
     <button class="gear" type="button" aria-label="Settings" onClick={onSettings}>⚙</button>

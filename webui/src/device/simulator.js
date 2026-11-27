@@ -8,6 +8,9 @@ import { sampleValues, sampleAnswer } from "./settingslist.sample.js";
 import { NET_IDLE, NET_SETTINGS, netChanges } from "./network.js";
 import { FLASH_IDLE, MAX_EDIT, flashActions } from "./flashfiles.js";
 import { createFlashFs } from "./flashfiles.sample.js";
+import { parseFileList } from "./flashfiles.js";
+import { UPDATE_IDLE, updateActions, checkFirmware, safeTag } from "./update.js";
+import { SIM_RELEASES, simFirmware, simManifest } from "./update.sample.js";
 
 // A stand-in for the machine. It holds the state the firmware would report and, whenever the real device would
 // answer (a step finishing, a fault, a tool being found), it asks the tester through `pending` instead of guessing.
@@ -65,6 +68,9 @@ function initialState() {
     result: null,                 // the last setup step's result, e.g. { step: "tension", outcome: "nofit", message }
     restored: false,              // came back from a reboot with belt lengths restored
     machine: "Maslow Mini",       // as the real machine reports it from [ESP800]
+    fwVersion: "v1.27.0",         // the firmware version [ESP800] reports
+    update: UPDATE_IDLE,          // check for updates, firmware update, system status (device/update.js)
+    internet: true,               // whether this computer can reach GitHub (the simulator panel turns it off)
     extendDist: 0,                // 0 = extend until the user presses Done extending
     workArea: { spoil: 12.7 },
     settings: defaultSettings(),  // work area (0 = automatic), park, scale, belt limits (device/settings.js)
@@ -171,6 +177,7 @@ export function createSimulator() {
     const teeth = /^encoderTeeth/.test(s.incident?.kind || "");
     set({ ...(teeth ? { incident: null } : {}), connected: true, everConnected: true, hotspot: false, maslow, fluid: "Idle", tool: "unknown", job: null, motion: null,
       result: null, spindle: "off", error: null, pending: null, connectId: s.connectId + 1, ...extra });
+    update.updateConnected(s.fwVersion);
   }
 
   // The board's flash files: an in-memory filesystem that answers like the firmware's /files (flashfiles.sample.js).
@@ -201,8 +208,65 @@ export function createSimulator() {
     }
   });
 
+  // Firmware update and system status (device/update.js), against a stand-in GitHub and board. Downloads and uploads
+  // take a few seconds with progress, and a written firmware restarts the board on the version the file said it was.
+  const PAGE = new Uint8Array([0x1f, 0x8b, 8, 0, ...new Array(2000).fill(1)]);
+  const releaseFiles = {};   // tag → { "firmware.bin", "index.html.gz", "manifest.json" }
+  const filesFor = (tag) => releaseFiles[tag] ||= (() => {
+    const fw = simFirmware(tag, 256 * 1024);
+    return { "firmware.bin": fw, "index.html.gz": PAGE, "manifest.json": simManifest(tag, fw, PAGE) };
+  })();
+  const fromMirror = (url) => {
+    const [tag, name] = url.split("/").slice(-2).map(decodeURIComponent);
+    const r = SIM_RELEASES.find((x) => safeTag(x.tag_name) === tag);
+    if (!r || !s.internet) throw new Error(s.internet ? "HTTP 404" : "Failed to fetch");
+    return filesFor(r.tag_name)[name];
+  };
+  const trickle = (total, ms, on) => new Promise((done) => {
+    let n = 0;
+    const t = setInterval(() => { n = Math.min(total, n + total / (ms / 100)); on(Math.round(n), total); if (n >= total) { clearInterval(t); done(); } }, 100);
+  });
+  const update = updateActions({
+    get: () => s.update,
+    set: (patch) => set({ update: { ...s.update, ...patch } }),
+    device: () => s,
+    log: (line) => { log(line); emit(); },
+    io: {
+      releases: () => later(null).then(() => { if (!s.internet) throw { offline: true, message: "Failed to fetch" }; return SIM_RELEASES; }),
+      fetchJson: (url) => later(null).then(() => fromMirror(url)),
+      async fetchBytes(url, on) { const b = fromMirror(url); await trickle(b.length, 1200, on); return b; },
+      sha256: async () => null,
+      async uploadPage(blob) { log(`POST /files /index.html.gz (${blob.size} bytes)`); await later(null); },
+      async uploadFirmware(blob, on) {
+        log(`POST /updatefw firmware.bin (${blob.size} bytes)`);
+        const version = checkFirmware(new Uint8Array(await blob.arrayBuffer())).version;
+        await trickle(blob.size, 4000, on);
+        // The board answers {"status":"3"}, then restarts on the new firmware about a second later
+        setTimeout(() => {
+          log("Restarting");
+          set({ connected: false, pending: null, fwVersion: version || s.fwVersion });
+          setTimeout(() => connectQuestion(true), 3000);
+        }, 1000);
+      },
+      async status() {
+        const flash = parseFileList(flashFs.request(new URLSearchParams({ path: "/" })));
+        const n = s.netSaved;
+        return later({
+          esp420: ["Chip ID: 23188", "CPU Cores: 2", "CPU Frequency: 240Mhz", "CPU Temperature: 47.3°C", "Free memory: 98.41 KB",
+            "SDK: v5.5.4", "Flash Size: 8.00 MB", `Mode=STA:SSID=${n.ssid}:Status=Connected:IP=192.168.1.42:MAC=DC-54-75-C1-0A-3C`,
+            `FW version: FluidNC ${s.fwVersion} (Maslow-Main-sim)`].map((l) => `[MSG:${l}]`).join("\n") + "\nok",
+          wifi: ["Hostname: " + n.hostname, "Current WiFi Mode: STA (DC-54-75-C1-0A-3C)", `Connected to: ${n.ssid}`, "Signal: 72%",
+            "Channel: 6", "IP Mode: DHCP", "IP: 192.168.1.42", "Gateway: 192.168.1.1", "Mask: 255.255.255.0", "DNS: 192.168.1.1",
+            "Available Size for LocalFS: 1.88 MB", "Web port: 80"].map((l) => `[MSG:${l}]`).join("\n"),
+          flash: { total: flash.total, free: flash.free }
+        });
+      }
+    }
+  });
+
   const actions = {
     ...flash,
+    ...update,
     ackIncident() { set({ incident: null }); },
     // The wrong-encoderTeeth incident's Fix: what machine.js sends, logged
     fixEncoderTeeth() {
@@ -497,6 +561,8 @@ export function createSimulator() {
 
   // Events a tester can cause at any time, from the simulator panel
   const events = {
+    // Whether this computer can reach GitHub: off is a computer on the machine's hotspot
+    toggleInternet() { set({ internet: !s.internet }); },
     disconnect() { log("Connection lost"); set({ connected: false, pending: null }); },
     // Maslow_vertical, as Find anchors saves it after detecting the orientation
     toggleVertical() { set({ frame: { ...s.frame, vertical: !s.frame.vertical } }); },

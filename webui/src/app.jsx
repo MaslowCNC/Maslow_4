@@ -8,6 +8,7 @@ import { Legacy, legacyAnswers } from "./ui/legacy.jsx";
 import { TOLERANCE, SLED_MASS } from "./accuracy.js";
 import { Settings } from "./ui/modals.jsx";
 import { SimPanel } from "./ui/sim.jsx";
+import { savedStream } from "./ui/device.jsx";
 import { createRecorder } from "./device/jobrecord.js";
 import { openJobStore } from "./device/jobstore.js";
 import { exampleJobs } from "./device/jobrecord.sample.js";
@@ -94,6 +95,14 @@ export function App() {
   const ctx = { d, a: ans, notice, setNotice, setA, send, mark, tolerance, setTolerance, sledMass, setSledMass, commandBox, setCommandBox, openSettings, recorder };
 
   useEffect(() => { send("connect"); }, []);
+  // Once the board's firmware version is known, check GitHub once per page load for a newer release in the chosen
+  // stream (Settings › Device), for the top bar's notice. Never installs; with no internet it says nothing.
+  const checked = useRef(false);
+  useEffect(() => {
+    if (checked.current || !d.connected || !d.fwVersion || d.update?.check) return;
+    checked.current = true;
+    send("checkUpdates", { stream: savedStream(), quiet: true });
+  }, [d.connected, d.fwVersion]);
   // A G-code file from Abundance (device/jobreceiver.js, docs/protocol.md §7): uploaded to the SD card and chosen as
   // the job file, as Upload does. Never run. Refused while a job runs or the machine moves, or before it's connected.
   const live = useRef();

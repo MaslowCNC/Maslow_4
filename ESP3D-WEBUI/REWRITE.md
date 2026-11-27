@@ -38,8 +38,8 @@ up in a new session, read "Where we are", "How to work on it" and "What we still
   `webui/` gzips it into `index.html.gz` (about 104 KB, checked against the 145 KB budget); `release.yml`,
   `compile-on-review.yml` and `flash-maslow.sh --fs` build it instead of the old UI, and the old UI no longer
   ships. Decided 2026-11-27: this is what `Maslow-Main` should get when `firmwareRewrite` merges, so it's the
-  default now, ahead of the rest of part 2. **Firmware update from the new UI is still missing:** until it
-  lands, update by USB or `/flash-maslow`. The machines still run the old page until their filesystem is
+  default now, ahead of the rest of part 2. **Firmware update is in Settings › Device** (2026-11-27,
+  simulator only; not yet tried on a machine). The machines still run the old page until their filesystem is
   updated (part 3).
 - **Tested on the Mini, from the dev server (2026-11-18):** belt labels, motor rings, command box, Save log, settings read
   and save, Set home, Settings › Home, delete, spindle on / off. **Not yet:** Continue from a changed
@@ -496,8 +496,8 @@ currents; Extend distance, spoil board and stock thickness, Reboot.
 | FluidNC and Maslow settings list | Settings tab (`settingstab.html`, `settings.js`) | **Done** (2026-11-20, simulator only): Settings › Advanced, tabs Tools / Maslow / FluidNC. Read with `[ESP400]`, typed editors, filter, Save sends only the changes (`[ESP401]` for flash settings; `setSetting()` then `$CO` for config items); off while moving or disconnected; "Restart" tag on network settings. `webui/src/device/settingslist.js` |
 | Config editor | Config tab (`configtab.js`, hidden) | **Done** (2026-11-20): every running config item (`maslow.yaml`) is editable in Settings › Advanced › Maslow / FluidNC. **Done** (2026-11-20, simulator only): editing the file as text (adding sections, items locked while running such as `stepping/engine`) is Settings › Advanced › Files › maslow.yaml › Edit: keeps the original as `maslow.yaml.bak` before the first save, Undo save, then Restart now |
 | Flash files (`maslow.yaml`, `index.html.gz`) | `SPIFFSdlg.js` | **Done** (2026-11-20, simulator only): Settings › Advanced › Files (`webui/src/ui/files.jsx`, `webui/src/device/flashfiles.js`): list, folders, upload, download, rename (with index-old / index-new names offered, a taken name refused), delete; warnings for the page and the config; off during a job or while disconnected. Uses `/files` as `SPIFFSdlg.js` does |
-| Firmware update, check for updates | `updatedlg.js`, `checkupdatesdlg.js` | Settings › Device has a disabled button |
-| System status (`[ESP420]`) | `statusdlg.js` | Partly in Settings › Device |
+| Firmware update, check for updates | `updatedlg.js`, `checkupdatesdlg.js` | **Done** (2026-11-27, simulator only; never uploaded to a machine yet): Settings › Device (`webui/src/ui/device.jsx`, `webui/src/device/update.js`). The browser checks GitHub's release list (says so plainly when it has no internet, e.g. on the hotspot) and shows the newest release in the stream with its notes. Install downloads `firmware.bin` and `index.html.gz` from the `web-assets/<tag>/` mirror, checked against that folder's `manifest.json` (tag, size, sha256 where the browser can: not over plain http); no fallback to `latest/`. Or choose the files from the computer. Each firmware is checked first: an ESP32-S3 app image, a Maslow build, its version read from the file (one firmware fits both boards, so no board check). Confirmation says it restarts and setup runs again from Apply tension. Then the page goes to `/files`, the firmware to `POST /updatefw` with progress (XHR), the restart, the reconnect, and `[ESP800]`'s version compared with the one installed. Off during a job, while moving, disconnected or read-only. Never automatic. Once per page load, after `[ESP800]` answers, the page checks the chosen stream quietly; a newer release shows "Firmware vX available" in the top bar, which opens Settings › Device (× hides it until the next release; not in the legacy look) |
+| System status (`[ESP420]`) | `statusdlg.js` | **Done** (2026-11-27, simulator only): Settings › Device › System status, `[ESP420]` plus `$wifi/status` (signal, channel, gateway, DNS) and the flash's free space; and this page's version (`git describe` at build time). The firmware reports no uptime |
 | Motor current history (the old Debugging tab had live gauges only, which the motor rings cover) | Debugging tab (hidden) | **Done** (2026-11-20, simulator only): Settings › Jobs lists the last 10 jobs (when, how long, how it ended); each opens to its motor current and belt error chart, a CSV download and the job's log (Download log). Recorded in this browser (one row a second, IndexedDB); only while the page is open, so a sleeping phone or background tab leaves gaps. `webui/src/device/jobrecord.js` |
 | Feed override, motors off, probe | Main › GRBL and Controls panels | **Dropped** (decided 2026-11-27). Probe may come back with the 4.1's Z flow |
 | Camera (IP webcam tab) | `camera.js` | **Dropped for now** (decided 2026-11-27); might come back as a Settings field plus a panel |
@@ -520,7 +520,7 @@ currents; Extend distance, spoil board and stock thickness, Reboot.
 | Wrong `encoderTeeth` warning (#1162, #1163) | On connect, compares `encoderTeeth` with the board from `[ESP800]` (22 on the 4.1, 35 on the Mini); the popup gives the scaled Extend distance and says to restart, then Retract, Extend, Apply tension, Find anchors | **Done** (2026-11-26, simulator only): an incident on connect with Fix it (sets the teeth and the scaled Extend distance, `$CO`, then offers Restart now), once per connection (`device/encoderteeth.js`) |
 | Move Z to Home: go to work Z 0 (#1157) | Jog pad button, `machine.moveTo({ z: 0 })` (G0). The firmware now allows it in any Maslow state (the belt position-error e-stop runs only in Ready to cut) | **Done** (2026-11-26, simulator only): a house (Z 0) between +Z and −Z, locked like the jog pad; the spindle board's Home Z is now Reset Z (not in the legacy layout) |
 | Receive a G-code file from Abundance (#1166) | Abundance opens the machine's UI and hands it a file with `window.postMessage`; the UI uploads and selects it, never runs it (`docs/protocol.md` §7, `jobreceiver.js`) | **Done** (2026-11-26, simulator only): `device/jobreceiver.js` (same rules and replies, tested against the old one), uploads, chooses the file and says so in the header; the simulator panel has Send a file from Abundance |
-| Update check streams (#1142) | Release / Experimental / Nightly, newer by semver | Part of the missing firmware update row above: copy these rules |
+| Update check streams (#1142) | Release / Experimental / Nightly, newer by semver | **Done** (2026-11-27, simulator only): the same rules in `device/update.js` (stream remembered per browser). No workflow publishes a `nightly` release yet, so that stream finds none |
 
 Most needed first, all done on 2026-11-18 (simulator only so far): the command box and saving the log,
 Park and work area settings, spindle on / off, and the belt motor test.
@@ -556,7 +556,7 @@ they come up):
 | Settings › Network | After saving a new WiFi password, people don't know they have to restart the board: Restart now is usually below the fold | After a save that needs a restart, prompt for it (Restart now / Later), or scroll the Restart now button into view and highlight it |
 | Settings (phone) | The section pills scroll sideways with no sign there are more: Advanced is off screen at 375 px | Fade the right edge, or wrap the pills onto two rows |
 
-**3. Build and ship** (**done on `firmwareRewrite`, 2026-11-27**, except firmware update in the new UI):
+**3. Build and ship** (**done on `firmwareRewrite`, 2026-11-27**):
 
 - `npm run build:board` (`webui/scripts/gzip-board.mjs`) gzips the Vite build into `dist/index.html.gz` and
   fails over 145 KB. It's in `firmware/FluidNC/data/`, the release asset and the `web-assets/` mirror.
@@ -566,7 +566,7 @@ they come up):
 - **The old UI doesn't ship** (decided 2026-11-27): not in the data folder, not as a release asset. To go
   back, build it (`cd ESP3D-WEBUI && npm run build:en`) and upload `dist/index.html.gz`, or install an
   older release.
-- **Firmware update** (Settings) is still missing: until it lands, update by USB or `/flash-maslow`.
+- **Firmware update** is Settings › Device (part 2 above). It writes the release's page as well as its firmware.
 - `?device=machine` isn't needed on the board: a production build served over http uses the machine
   (`app.jsx`), and talks to the socket at `/` and to `/upload`, `/command`, `/files` at the page's own address.
 - **Putting it on a machine that has the old page** (a firmware update leaves the page alone):
@@ -581,7 +581,7 @@ they come up):
      the simulator's stand-in has been tried so far. Check that it lands on the SD card, is chosen as the job file
      and isn't run, that the header says "Received … from Abundance", and that it's refused mid-job.
 
-  A firmware update leaves these files alone; uploading a filesystem image (`--fs`) replaces them all.
+  An update from Settings › Device replaces `index.html.gz` too (the release's page, as the old UI's update did); uploading a filesystem image (`--fs`) replaces them all.
   A second page isn't possible without a firmware change (the board downloads any file other than
   `index.html`), and isn't needed for now.
 
