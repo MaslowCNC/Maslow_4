@@ -13,6 +13,7 @@ import { createRecorder } from "./device/jobrecord.js";
 import { openJobStore } from "./device/jobstore.js";
 import { exampleJobs } from "./device/jobrecord.sample.js";
 import { handleMessage } from "./device/jobreceiver.js";
+import { UnitsCtx } from "./ui/parts.jsx";
 
 // The device behind the UI: the real machine (machine.js) or the simulator, both with the same interface
 // (getState, subscribe, send). ?device=machine or ?device=sim picks one. Otherwise the page uses the machine
@@ -68,6 +69,15 @@ function useLook() {
   return [look, set];
 }
 
+// Units (Settings › Display): "mm" or "in", per browser. Only what's shown and typed changes: the machine always works
+// in mm and is always sent mm (units.js).
+const UNITS_KEY = "maslow.units";
+function useUnits() {
+  const [u, setU] = useState(() => { try { return localStorage.getItem(UNITS_KEY) === "in" ? "in" : "mm"; } catch { return "mm"; } });
+  const set = (v) => { setU(v); try { localStorage.setItem(UNITS_KEY, v); } catch { /* not remembered */ } };
+  return [u, set];
+}
+
 export function App() {
   const d = useDevice();
   const [a, setAnswers] = useState(freshAnswers);
@@ -77,6 +87,7 @@ export function App() {
   const [sledMass, setSledMass] = useSledMass();
   const [commandBox, setCommandBox] = useStoredFlag("maslow.commandBox");
   const [look, setLook] = useLook();
+  const [units, setUnits] = useUnits();
   const narrow = useNarrow();
   const [notice, setNotice] = useState(null);         // { text, bad }: a file received from Abundance, in the header
 
@@ -97,7 +108,7 @@ export function App() {
   const ans = look === "legacy" ? legacyAnswers(a, d) : a;
   const k = derive(d, ans);
   const openSettings = (section) => setModal({ name: "settings", section });
-  const ctx = { d, a: ans, notice, setNotice, setA, send, mark, tolerance, setTolerance, sledMass, setSledMass, commandBox, setCommandBox, openSettings, recorder };
+  const ctx = { d, a: ans, notice, setNotice, setA, send, mark, tolerance, setTolerance, sledMass, setSledMass, commandBox, setCommandBox, openSettings, recorder, units, setUnits };
 
   useEffect(() => { send("connect"); }, []);
   // Once the board's firmware version is known, check GitHub once per page load for a newer release in the chosen
@@ -161,8 +172,8 @@ export function App() {
     ? <Settings key={modal.section} k={k} {...mprops} section={modal.section} theme={theme} setTheme={setTheme} look={look} setLook={setLook} onClose={() => setModal(null)} />
     : null;
   const props = { k, ctx, onSettings: () => openSettings(), overlay, closeOverlay: () => setModal(null) };
-  return <div class={`appshell${narrow ? " narrow" : ""}`} data-panels={theme}>
+  return <UnitsCtx.Provider value={units}><div class={`appshell${narrow ? " narrow" : ""}`} data-panels={theme}>
     {look === "legacy" ? <Legacy {...props} narrow={narrow} onNewUI={() => setLook("new")} /> : narrow ? <Phone {...props} /> : <Desktop {...props} />}
     {device.isSimulated && <SimPanel d={d} device={device} />}
-  </div>;
+  </div></UnitsCtx.Provider>;
 }

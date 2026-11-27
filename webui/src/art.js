@@ -1,5 +1,6 @@
 import { STEPS } from "./flow/screens.js";
 import { arcPoints } from "./gcode/reader.js";
+import { fmt, fmtU, fmtProse } from "./units.js";
 
 // Step graphics and the frame drawing, carried over from the mockup. They return SVG markup as strings.
 export function stepArt(i) {
@@ -72,10 +73,10 @@ function currentRings(currents) {
 // a: { tol, rect: { w, h } | null, job: checkJob() result | null, note: string | null (shown instead),
 //      hanging: the sled's mass in kg on a vertical frame, else null }
 const WS_OK = "#56b4e9", WS_BAD = "#e69f00";
-function accuracyOverlay(a, X, Y) {
+function accuracyOverlay(a, X, Y, unit = "mm") {
   if (a.note) return "";
   const r = a.rect, rect = r && r.w ? `<rect x="${X(-r.w / 2).toFixed(1)}" y="${Y(r.h / 2).toFixed(1)}" width="${(X(r.w / 2) - X(-r.w / 2)).toFixed(1)}" ` +
-    `height="${(Y(-r.h / 2) - Y(r.h / 2)).toFixed(1)}" fill="${WS_OK}" fill-opacity=".06" stroke="${WS_OK}" stroke-width="1.5" stroke-dasharray="2 4"><title>Cuts land within ±${a.tol} mm here (estimate)</title></rect>` : "";
+    `height="${(Y(-r.h / 2) - Y(r.h / 2)).toFixed(1)}" fill="${WS_OK}" fill-opacity=".06" stroke="${WS_OK}" stroke-width="1.5" stroke-dasharray="2 4"><title>Cuts land within ±${fmtProse(a.tol, unit)} here (estimate)</title></rect>` : "";
   if (!a.job) return rect;
   const seg = (p) => p.points.map((q, i) => `${i ? "L" : "M"}${X(q.x).toFixed(1)} ${Y(q.y).toFixed(1)}`).join("");
   const path = (ok) => a.job.pieces.filter((p) => p.ok === ok).map(seg).join("");
@@ -86,16 +87,16 @@ function accuracyOverlay(a, X, Y) {
 
 // The line that goes with the overlay, shown as a small caption at the drawing's bottom right (not in the SVG, so
 // it keeps its size and sits at the panel's edge): the workspace size, a warning when the job leaves it, or why there's none.
-export function workspaceCaption(a) {
+export function workspaceCaption(a, unit = "mm") {
   if (!a) return null;
   if (a.note) return { text: a.note, colour: "var(--muted)" };
   const r = a.rect;
   // A job that fits needs no message: the caption stays the estimate. Only a job that leaves the workspace says so.
-  if (!a.job || a.job.outside === 0) return { text: `Workspace Estimate: ${r && r.w ? `${Math.round(r.w)} × ${Math.round(r.h)} mm` : "none"}` +
+  if (!a.job || a.job.outside === 0) return { text: `Workspace Estimate: ${r && r.w ? `${fmt(r.w, unit, "size")} × ${fmtU(r.h, unit, "size")}` : "none"}` +
     (a.hanging ? ` (${a.hanging} kg sled)` : ""), colour: "var(--muted)" };
-  const worst = Number.isFinite(a.job.worst) ? `worst ±${a.job.worst.toFixed(1)} mm` : "past the frame";
+  const worst = Number.isFinite(a.job.worst) ? `worst ±${fmtU(a.job.worst, unit, "fine")}` : "past the frame";
   const some = a.job.pieces.some((p) => p.ok) ? "partly " : "";
-  return { text: `Job ${some}outside ±${a.tol} mm (${worst})`, colour: WS_BAD };
+  return { text: `Job ${some}outside ±${fmtProse(a.tol, unit)} (${worst})`, colour: WS_BAD };
 }
 
 // lengths: when given, each belt shows its live length (the Belts toggle).
@@ -140,7 +141,7 @@ export function toolpathSvg(moves, wco, X, Y, done = null, gray = false) {
 }
 
 // The Frame view. toolpath: an SVG string from toolpathSvg (drawn with frameMap(frameSize)), under the workspace overlay.
-export function visSvg(k, s, pos = { x: 0, y: 0 }, home = { x: 0, y: 0 }, lengths = null, currents = null, accuracy = null, frameSize = null, toolpath = "") {
+export function visSvg(k, s, pos = { x: 0, y: 0 }, home = { x: 0, y: 0 }, lengths = null, currents = null, accuracy = null, frameSize = null, toolpath = "", unit = "mm") {
   // The sled follows the machine position, scaled to the drawing. The cross marks the user's home (work 0, 0);
   // it's drawn over the sled and reaches past it, so it still shows when the sled sits on home.
   const { mapX, mapY } = frameMap(frameSize);
@@ -153,7 +154,7 @@ export function visSvg(k, s, pos = { x: 0, y: 0 }, home = { x: 0, y: 0 }, length
   return `<svg viewBox="0 0 410 270" role="img" aria-label="Device frame with the sled and toolpath" class="${s.stale ? "stale" : ""}">
     <rect x="30" y="30" width="350" height="210" fill="none" stroke="var(--line2)" stroke-opacity=".35" stroke-dasharray="3 5"/>
     ${toolpath}
-    ${accuracy ? accuracyOverlay(accuracy, mapX, mapY) : ""}
+    ${accuracy ? accuracyOverlay(accuracy, mapX, mapY, unit) : ""}
     ${unk ? "" : belts}${anchors}${currents ? currentRings(currents) : ""}
     ${unk ? `<text x="205" y="62" text-anchor="middle" fill="var(--muted)" font-family="var(--font-mono)" font-size="12">Sled position unknown</text>` : ""}
     <rect ${unk ? 'opacity="0"' : ""} x="${sledX - 13}" y="${sledY - 13}" width="26" height="26" rx="6" fill="var(--panel)" stroke="var(--lilac)" stroke-width="2"/>
@@ -166,21 +167,21 @@ export function visSvg(k, s, pos = { x: 0, y: 0 }, home = { x: 0, y: 0 }, length
 // home). The bit is a small circle at the work position; when it's outside the file's area it sits on the edge,
 // hollow and dashed, so it's still found. g: readGcode() result with its extent; work: { x, y } or null when the
 // position isn't known; done: the running job's line, or null.
-export function toolpathView(g, work, done = null) {
+export function toolpathView(g, work, done = null, unit = "mm") {
   const W = 410, H = 270, M = 22;
   const e = g.extent, ew = Math.max(e.max.x - e.min.x, 1), eh = Math.max(e.max.y - e.min.y, 1);
   const k = Math.min((W - 2 * M) / ew, (H - 2 * M) / eh);
   const cx = (e.min.x + e.max.x) / 2, cy = (e.min.y + e.max.y) / 2;
   const X = (x) => W / 2 + (x - cx) * k, Y = (y) => H / 2 - (y - cy) * k;
   const box = `<rect x="${X(e.min.x).toFixed(1)}" y="${Y(e.max.y).toFixed(1)}" width="${(ew * k).toFixed(1)}" height="${(eh * k).toFixed(1)}" ` +
-    `fill="none" stroke="var(--line2)" stroke-dasharray="3 5"><title>The file's extent: ${Math.round(ew)} × ${Math.round(eh)} mm</title></rect>`;
+    `fill="none" stroke="var(--line2)" stroke-dasharray="3 5"><title>The file's extent: ${fmt(ew, unit, "size")} × ${fmtU(eh, unit, "size")}</title></rect>`;
   const hx = X(0), hy = Y(0), home = hx >= 0 && hx <= W && hy >= 0 && hy <= H
     ? `<g stroke="var(--ready)" stroke-width="1.4"><title>Your home (work 0, 0)</title><line x1="${hx - 10}" y1="${hy}" x2="${hx + 10}" y2="${hy}"/><line x1="${hx}" y1="${hy - 10}" x2="${hx}" y2="${hy + 10}"/></g>` : "";
   let bit = "";
   if (work) {
     const bx = X(work.x), by = Y(work.y), cxB = Math.max(6, Math.min(W - 6, bx)), cyB = Math.max(6, Math.min(H - 6, by));
     const off = cxB !== bx || cyB !== by;
-    bit = `<g><title>The bit: X ${work.x.toFixed(1)} Y ${work.y.toFixed(1)}${off ? " (outside the file's area)" : ""}</title>` +
+    bit = `<g><title>The bit: X ${fmt(work.x, unit, "fine")} Y ${fmtU(work.y, unit, "fine")}${off ? " (outside the file's area)" : ""}</title>` +
       `<circle cx="${cxB.toFixed(1)}" cy="${cyB.toFixed(1)}" r="4.5" fill="${off ? "none" : "var(--lilac)"}" stroke="var(--lilac)" stroke-width="1.5"${off ? ' stroke-dasharray="2 2"' : ""}/></g>`;
   }
   return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="The chosen file's toolpath and the bit">${box}${toolpathSvg(g.moves, { x: 0, y: 0 }, X, Y, done)}${home}${bit}</svg>`;

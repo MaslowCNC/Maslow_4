@@ -6,6 +6,7 @@
 // Plain JS, no UI code. Tests: fit.test.js.
 
 import { effectiveWorkArea } from "../device/settings.js";
+import { fmt, fmtU } from "../units.js";
 
 // Rounding slack, as the current UI's WORK_AREA_BOUNDS_EPSILON_MM
 const EPS = 0.5;
@@ -37,26 +38,26 @@ const past = (j, b) => Math.max(b.minX - j.minX, j.maxX - b.maxX, b.minY - j.min
 // Returns null when there's nothing to check, else { level, text, job }:
 //   level "ok": inside the work area; "outside": outside the work area but inside the frame (allowed, warned);
 //   "pastFrame": past the frame, where the machine can't go (Run is blocked); "unknown": no anchors yet.
-export function jobFit(extent, wco, settings, frame) {
+export function jobFit(extent, wco, settings, frame, unit = "mm") {
   if (!extent || !wco) return null;
   const job = { minX: extent.min.x + wco.x, maxX: extent.max.x + wco.x, minY: extent.min.y + wco.y, maxY: extent.max.y + wco.y };
   const fb = frameBounds(frame);
   if (!fb) return { level: "unknown", text: "", job };
   if (!inside(job, fb)) {
     return { level: "pastFrame", job,
-      text: `The job goes ${past(job, fb).toFixed(0)} mm past the frame, where the machine can't reach.` };
+      text: `The job goes ${fmtU(past(job, fb), unit, "size")} past the frame, where the machine can't reach.` };
   }
   const wa = workAreaBounds(settings, frame);
   if (wa && !inside(job, wa)) {
     return { level: "outside", job,
-      text: `The job goes ${past(job, wa).toFixed(0)} mm outside the work area, where cuts are less accurate.` };
+      text: `The job goes ${fmtU(past(job, wa), unit, "size")} outside the work area, where cuts are less accurate.` };
   }
   return { level: "ok", text: "", job };
 }
 
 // Where the job sits from home (work coordinates), for the File card: "X −150 to 150, Y −100 to 100"
-export function jobPlacement(extent) {
+export function jobPlacement(extent, unit = "mm") {
   if (!extent) return "";
-  const n = (v) => (Math.abs(v) < 0.5 ? "0" : v.toFixed(0)).replace("-", "−");
+  const n = (v) => fmt(v, unit, "size").replace("-", "−");
   return `X ${n(extent.min.x)} to ${n(extent.max.x)}, Y ${n(extent.min.y)} to ${n(extent.max.y)}`;
 }
