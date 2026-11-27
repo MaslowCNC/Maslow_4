@@ -130,6 +130,7 @@ namespace Spindles {
         char    _rx_buf[400];  // the trip recording's CSV header line is ~330 chars
         size_t  _rx_len     = 0;
         uint8_t _last_fault = 0;
+        bool    _fault_seen = false;  // an F: field has been read since this board started
         uint8_t _tool_state = 0;  // Z: from the latest status line, 0 if absent
 
         // Set when the spindle board reports a fault; cleared only by a deliberate M3/M4.
