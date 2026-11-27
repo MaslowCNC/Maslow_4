@@ -15,6 +15,7 @@ import { readGcode, boundaryPath } from "../gcode/reader.js";
 import { MACHINE_SETTINGS, settingError } from "./settings.js";
 import { parseSettingsList, valueError, espSetCommand, withValues } from "./settingslist.js";
 import { FLASH_IDLE, flashActions, filesQuery, fileUrl, parentPath, parseFileList, statusFailed } from "./flashfiles.js";
+import { TOOLS_IDLE, toolActions } from "./tools.js";
 import { UPDATE_IDLE, updateActions, parseFwVersion, RELEASES_URL } from "./update.js";
 import { NET_IDLE, parseNetSettings, parseNetStatus, parseApList, onFallbackHotspot, setCommand, netChanges } from "./network.js";
 
@@ -123,7 +124,8 @@ export function createMachine({ host = location.host } = {}) {
     sd: null,                // the SD card's space from its listing: { used, total, percent } (sdSpace), null until listed
     upload: null,            // this page's upload in progress: { file, loaded, total } bytes
     net: NET_IDLE,           // the network settings (device/network.js), read when Settings › Network or Device opens
-    flash: FLASH_IDLE        // the board's own files (device/flashfiles.js), read when Settings › Advanced › Files opens
+    flash: FLASH_IDLE,       // the board's own files (device/flashfiles.js), read when Settings › Advanced › Files opens
+    tools: TOOLS_IDLE        // the tool library, /tools.json on the flash (device/tools.js), read on each connect
   };
 
   // Files read from the SD card through the G-code reader (gcode/reader.js), each fetched once: url → Promise of
@@ -491,6 +493,16 @@ export function createMachine({ host = location.host } = {}) {
       : s.job ? "Not while a job runs." : s.motion || s.fluid === "Run" || s.fluid === "Jog" ? "Not while the machine moves." : null),
     io: flashIo
   });
+  // The tool library is a flash file too, written the same way, under the same lock
+  const tools = toolActions({
+    get: () => s.tools,
+    set: (patch) => set({ tools: { ...s.tools, ...patch } }),
+    log: (line) => { log(line); emit(); },
+    lock: () => (!s.connected ? "Waiting for the device to answer." : s.readOnly ? "Another tab is driving the machine; this one can only look."
+      : s.job ? "Not while a job runs." : null),
+    failed: (a) => (statusFailed(a?.status) ? a.status : null),
+    io: flashIo
+  });
 
   // Firmware update, check for updates and system status (device/update.js). GitHub and its mirror are reached from
   // this browser; the board only gets the files. A fetch that can't connect at all is "offline": the computer may be
@@ -755,6 +767,7 @@ export function createMachine({ host = location.host } = {}) {
       readMachine();
       checkHotspot();
       listFiles();
+      tools.readTools();
     };
     ws.onmessage = (e) => onData(e.data);
     ws.onclose = (e) => {
@@ -886,6 +899,7 @@ export function createMachine({ host = location.host } = {}) {
     if (update[action]) return update[action](payload);
     // The board's files are HTTP too; changes are refused in flashActions while a job runs or nothing answers
     if (flash[action]) return flash[action](payload);
+    if (tools[action]) return tools[action](payload);
     if (!m) return;
     if (action === "command") { command(payload.line); return; }
     if (action === "run") { run("run", () => m.runFile(`/${payload.file}`)); return; }

@@ -60,10 +60,10 @@ test("the tool steps follow TS", () => {
   assert.equal(derive(mini(3), answers({ zDone: true })), "secure");
 });
 
-test("Set Z: the helper while a bit is loaded; removing the bit leads to Load the tool", () => {
-  assert.equal(derive(mini(3), answers({ helper: true })), "zhelper");
-  assert.equal(derive(mini(6), answers({ helper: true })), "toolfreeing");
-  assert.equal(derive(mini(4), answers({ helper: true })), "toolload");   // no bit: nothing to measure
+test("Set Z while a bit is loaded; removing the bit leads to Load the tool", () => {
+  assert.equal(derive(mini(3), answers({ zTarget: -15 })), "setz");          // lowering to the work: still Set Z until the report shows it
+  assert.equal(derive(mini(6), answers()), "toolfreeing");
+  assert.equal(derive(mini(4), answers()), "toolload");                     // no bit: nothing to set Z for
   assert.equal(derive(mini(5), answers()), "toolseating");
   assert.equal(derive(mini(4), answers({ zDone: true })), "secure");      // Continue with no tool
 });

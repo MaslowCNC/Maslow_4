@@ -80,3 +80,24 @@
   background: var(--input); color: var(--text); font: 13px/1.5 var(--font-mono); tab-size: 2; white-space: pre; overflow: auto; }
 .fedit:focus-visible { outline: 2px solid var(--lilac); outline-offset: 1px; }
 .subtabs .warnicon { margin-left: 6px; vertical-align: -3px; }
+
+/* Settings › Tool and Z › Tool library (ui/tools.jsx) */
+.tlib { display: grid; gap: 8px; border-top: 1px solid var(--sep); padding-top: 12px; }
+.tlhead { display: grid; gap: 2px; }
+.tlhead small { color: var(--muted); font-size: 12px; }
+.tlist { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.trow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; background: var(--input); }
+.tinfo { flex: 1 1 220px; min-width: 0; display: grid; gap: 2px; }
+.tinfo .mono { font-size: 12px; color: var(--muted); }
+.tinfo small { font-size: 12px; color: var(--muted); }
+.tacts { display: flex; gap: 6px; flex: none; }
+.tacts .btn { min-height: 44px; }
+.trow .fpanel { flex-basis: 100%; }
+.ttag { margin-left: 8px; padding: 1px 6px; border-radius: 4px; border: 1px solid var(--ready); color: var(--ready); font: 600 11px var(--font-sans); }
+.tgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.tfield { display: grid; gap: 4px; font-size: 13px; color: var(--muted); min-width: 0; }
+.tfield input, .tfield select { min-height: 44px; box-sizing: border-box; width: 100%; background: var(--input); border: 1px solid var(--sep);
+  color: var(--text); border-radius: 8px; padding: 0 10px; font: 14px var(--font-sans); }
+.tfield input.mono { font-family: var(--font-mono); }
+.tfield input[aria-invalid="true"] { border-color: var(--danger); }
+.tfield .bad { color: var(--danger); font-size: 12px; }
