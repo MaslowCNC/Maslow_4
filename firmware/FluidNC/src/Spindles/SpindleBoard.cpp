@@ -8,6 +8,7 @@
 #include "../Protocol.h"               // rtAlarm, ExecAlarm
 #include "../GCode.h"                  // gc_sync_position
 #include "../Planner.h"                // plan_sync_position
+#include "../Job.h"                    // Job::active
 #include "../Stepper.h"                // Stepper::isAwake (no flash writes while stepping)
 #include "../Maslow/Maslow.h"          // Maslow.resetUpdateWatchdog
 #include "../Settings.h"               // Sta/SSID and Sta/Password, looked up by name
@@ -383,9 +384,13 @@ namespace Spindles {
         // that booted into its alarm (the normal power-up state, before the machine is unlocked)
         // never sent the release at all, so the Z drivers stayed energized and the vacuum ran
         // continuously from power-up until the operator cleared the alarm.
-        State st     = sys.state();
-        bool  moving = st == State::Cycle || st == State::Jog || st == State::Homing || st == State::Hold ||
-                      st == State::SafetyDoor;
+        //
+        // A hold counts as at rest once it is complete and the belts have stopped: a hold with
+        // the spindle off and nothing pending (left after a spindle fault, say) otherwise kept
+        // the drivers and the fan on until someone pressed Stop.
+        State st      = sys.state();
+        bool  holding = st == State::Hold && !(sys.suspend().bit.holdComplete && !_belt_motion_active);
+        bool  moving  = st == State::Cycle || st == State::Jog || st == State::Homing || holding || st == State::SafetyDoor;
         bool atRest = !moving && _current_state == SpindleState::Disable;
 
         if (!atRest) {
@@ -435,6 +440,8 @@ namespace Spindles {
     static const uint32_t RECOVERY_IDLE_MS = 1000;
     // Give up on a step that has not completed in this long (e.g. the operator took over).
     static const uint32_t RECOVERY_STEP_TIMEOUT_MS = 30000;
+    // The suspend loop takes rtStopFromHold up within a pass or two; this long without means none runs.
+    static const uint32_t STOP_FROM_HOLD_WAIT_MS = 1000;
 
     void SpindleBoard::serviceFaultRecovery() {
         if (_recovery == FaultRecovery::None) {
@@ -473,6 +480,15 @@ namespace Spindles {
                 }
                 break;
             case FaultRecovery::WaitForIdle: {
+                // rtStopFromHold is only acted on by the main loop's suspend loop.  If nothing has
+                // taken it up, no suspend loop is running, so end the hold here instead of
+                // leaving the machine in Hold until the recovery times out.
+                if (rtStopFromHold && st == State::Hold && sys.suspend().bit.holdComplete &&
+                    now - _recovery_since_ms > STOP_FROM_HOLD_WAIT_MS) {
+                    log_warn(name() << ": the hold did not take the stop request - stopping the job directly");
+                    protocol_stop_from_hold();
+                    break;
+                }
                 static uint32_t idle_since = 0;
                 if (st != State::Idle || _belt_motion_active) {
                     idle_since = 0;
@@ -617,7 +633,20 @@ namespace Spindles {
                 const char* f = strstr(_rx_buf, "F:");
                 if (f) {
                     uint8_t fault = (uint8_t)strtol(f + 2, nullptr, 10);
-                    if (fault != 0 && _last_fault == 0) {
+                    if (fault != 0 && !_fault_seen && !Job::active()) {
+                        // Already set at the first status line this board has read: the spindle
+                        // board kept the fault through a reboot of this board (e.g. a firmware
+                        // update), so no cut was interrupted.  Pausing and recovering would hold a
+                        // machine with no job to stop.  Keep the spindle off and leave the Stop /
+                        // Reset Z to the operator.
+                        _fault_latched = true;
+                        _rpm_dirty     = false;
+                        sendSpeed(0);
+                        _current_state = SpindleState::Disable;
+                        log_error("SpindleBoard reported fault " << (int)fault);
+                        log_error(name() << ": the spindle board already had this fault when this board started - "
+                                           "re-home the Z before cutting");
+                    } else if (fault != 0 && _last_fault == 0) {
                         log_error("SpindleBoard reported fault " << (int)fault);
                         // The spindle has stopped, so the machine must stop too.  Pause it the way
                         // the Pause button does: a feed hold decelerates the belts to a stop and
@@ -642,6 +671,7 @@ namespace Spindles {
                                            " re-homing the Z once the machine is at rest");
                     }
                     _last_fault = fault;
+                    _fault_seen = true;
                 }
                 _rx_len = 0;
             } else if (_rx_len < sizeof(_rx_buf) - 1) {

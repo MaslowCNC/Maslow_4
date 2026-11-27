@@ -425,6 +425,51 @@ Tested from the new UI (`webui/`, `?device=machine`) on a Maslow Mini. The spind
   the spoil board and stock thickness don't change it (the note above was wrong); a tilted sled or a bit that
   doesn't seat at the same height still would.
 
+## Session 2026-11-27, firmware firmwareRewrite (firmware update over WiFi, #1174)
+
+Maslow Mini. The spindle board ran a test build with `Z_MOVE_VOLTAGE_BOOST = 0` and stayed powered while the
+XY board was updated and rebooted.
+
+| # | Area | Status |
+|---|---|---|
+| 26 | Firmware: an XY reboot while the spindle board held a fault left the machine in Hold, Z drivers and fan on | fixed in the spindle-fault-boot-hold branch, to test on the Mini |
+
+### 26. A spindle fault already latched at boot held the machine, with the Z drivers and fan left on
+
+- **What happened:** after the XY board rebooted, the spindle board's status line already carried a fault
+  (`F:` nonzero). The XY board paused the machine as for a fault mid-cut, tried to end the job and re-home,
+  and after 30 s logged `spindle fault recovery timed out (state 5) - press Stop, then re-home the Z
+  before cutting`. It stayed in `Hold:0` (`MS:4`, `TS:3`), and the spindle board's Z drivers and fan stayed on.
+- **Cause (from the code, `SpindleBoard.cpp`):**
+  1. `_last_fault` starts at 0, so the first status line's fault looked new: a feed hold from Idle (Hold
+     with the hold complete), then the mid-cut recovery.
+  2. The recovery asks the hold to end the job with `rtStopFromHold`, which only the main loop's suspend
+     loop (`protocol_exec_rt_suspend`) acts on. Here nothing took it up: the main loop wasn't in that loop
+     (why isn't proven; most likely it was inside something during start-up that only runs
+     `protocol_exec_rt_system`). When the recovery timed out it gave up and left the machine in Hold.
+  3. `updateHoldState()` counted any Hold as moving, so the `D` release (power the Z drivers down) never
+     went out while the machine sat in that hold.
+- **Fix (firmware):**
+  1. A fault already present in the first status line this board reads (and no job running) is only
+     reported: `SpindleBoard reported fault N` and `SpindleBoard: the spindle board already had this fault
+     when this board started - re-home the Z before cutting`. No hold and no automatic recovery; the speed is
+     latched off until a deliberate M3/M4, as after any fault. The spindle board clears it as before, on a
+     new speed or the first Z move after Reset Z. Chosen over running the recovery from Idle because that would re-home the Z
+     by itself right after a reboot, with nobody having asked for motion, and a driver fault (`F:1`)
+     blocks homing anyway.
+  2. If `rtStopFromHold` is still pending 1 s after the recovery set it, the recovery ends the job itself
+     (`protocol_stop_from_hold()`, the same steps the suspend loop runs, logged as `the hold did not take
+     the stop request - stopping the job directly`), so it carries on to Idle and the re-home.
+  3. A Hold counts as at rest once it is complete and the belts have stopped, so the `D` release goes out
+     (only with the spindle off, as before).
+- **New UI must:** nothing new for this case once the firmware is fixed: no hold happens, so the "holding"
+  incident doesn't show. But the status report has no field for "spindle fault latched": `TS` only shows 7
+  while recovering and 1 when Z needs homing. A fault present at connect therefore shows only in the log,
+  and `TS` reads the spindle board's own tool state (3 here). Follow-up to decide: a `TS` code or report
+  field for a latched fault, so the spindle-fault screens (`flow/incidents.js`, `toolFields` in
+  `device/machine.js`) can show it at connect. That changes the report, so it needs review from
+  tristan-huber or BarbourSmith.
+
 ## Still to test
 
 Held back on 2026-11-06 so we didn't lose a good calibration before trying a cut:

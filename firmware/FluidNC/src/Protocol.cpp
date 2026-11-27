@@ -1192,6 +1192,15 @@ static void protocol_manage_spindle() {
     }
 }
 
+void protocol_stop_from_hold() {
+    rtStopFromHold = false;
+    log_info("Stopping the paused job");
+    JobResume::noteStop();
+    mc_set_drop_motion(true);
+    Maslow.haltMotion();
+    rtMaslowStop = true;
+}
+
 // Handles system suspend procedures, such as feed hold, safety door, and parking motion.
 // The system will enter this loop, create local variables for suspend tasks, and return to
 // whatever function that invoked the suspend, resuming normal operation.
@@ -1212,12 +1221,7 @@ static void protocol_exec_rt_suspend() {
         // planner space from queuing the rest of its motion as it unwinds.  The main loop then
         // runs $STOP to save the positions.
         if (rtStopFromHold && sys.state() == State::Hold && sys.suspend().bit.holdComplete) {
-            rtStopFromHold = false;
-            log_info("Stopping the paused job");
-            JobResume::noteStop();
-            mc_set_drop_motion(true);
-            Maslow.haltMotion();
-            rtMaslowStop = true;
+            protocol_stop_from_hold();
             return;
         }
         // if a jogCancel comes in and we have a jog "in-flight" (parsed and handed over to mc_move_motors()),

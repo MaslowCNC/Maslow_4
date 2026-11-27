@@ -56,6 +56,10 @@ extern volatile bool rtStopFromHold;
 // stop-from-hold (a $STOP line from another channel is refused while the job is still active)
 // and by the spindle-fault recovery.  Cleared by maslow_stop().
 extern volatile bool rtMaslowStop;
+// End a paused job whose hold is complete: what protocol_exec_rt_suspend() does for
+// rtStopFromHold.  Also called by the spindle-fault recovery when no suspend loop is running to
+// act on rtStopFromHold.  Leaves the machine Idle with rtMaslowStop set.
+void protocol_stop_from_hold();
 
 extern volatile bool runLimitLoop;
 
