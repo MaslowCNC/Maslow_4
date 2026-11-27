@@ -558,6 +558,8 @@ Checked against the simulator only, not yet on a machine.
 |---|---|---|
 | Setup line art | The expanded setup bar's big step graphic | On hold since 2026-10-29. Pre-rendered SVG from the machine's 3D model, one named group per part, animated with CSS; three.js only as our own export tool. Pickup: `tools/line-art-prototype/` and the line-art pickup notes. Waits for the new machine's assembled model and a settled step list |
 | 3D toolpath viewer | The drawing's 3D tab (there, disabled, "Not built yet") | A small hand-written WebGL line viewer (no three.js in the page, size budget): the file's toolpath in 3D with depth, orbit and zoom, maybe the stock outline and the running line |
+| Tool library | Settings › Tool and Z, and the tool steps in Setup | Saved bits (name, type, diameter, stick-out), kept on the board (a `tools.json`, like `macros.json`) so every connection sees the same list. Pick the loaded bit at the tool check; the page remembers the last one used. Later the file's tool could be matched against it (added 2026-11-27) |
+| Stick-out suggestions | The Set Z helper's stick-out box | A drop-down of suggestions while typing: the saved tools' stick-outs and the last few values entered, newest first. Still a free text box; a suggestion only fills it in (added 2026-11-27) |
 
 *Small style and usability fixes* (collected here and done together in one pass; add to the list as
 they come up):
