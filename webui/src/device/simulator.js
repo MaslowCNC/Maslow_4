@@ -1,5 +1,6 @@
 import { COMMANDS } from "./commands.js";
-import { restarted, spindleFault } from "../flow/incidents.js";
+import { restarted, spindleFault, wrongEncoderTeeth, encoderTeethSaved } from "../flow/incidents.js";
+import { encoderTeethCheck, encoderTeethCommands } from "./encoderteeth.js";
 import { readGcode } from "../gcode/reader.js";
 import { MACHINE_SETTINGS, defaultSettings, settingError } from "./settings.js";
 import { parseSettingsList, valueError, espSetCommand, withValues } from "./settingslist.js";
@@ -166,7 +167,9 @@ export function createSimulator() {
   }
   function connected(maslow, extra = {}) {
     log("Connected", `[MSG:INFO: Current state: ${maslow}]`);
-    set({ connected: true, everConnected: true, hotspot: false, maslow, fluid: "Idle", tool: "unknown", job: null, motion: null,
+    // The encoderTeeth warning belongs to its connection, as in machine.js: a new one checks again (and the fix was saved)
+    const teeth = /^encoderTeeth/.test(s.incident?.kind || "");
+    set({ ...(teeth ? { incident: null } : {}), connected: true, everConnected: true, hotspot: false, maslow, fluid: "Idle", tool: "unknown", job: null, motion: null,
       result: null, spindle: "off", error: null, pending: null, connectId: s.connectId + 1, ...extra });
   }
 
@@ -201,6 +204,13 @@ export function createSimulator() {
   const actions = {
     ...flash,
     ackIncident() { set({ incident: null }); },
+    // The wrong-encoderTeeth incident's Fix: what machine.js sends, logged
+    fixEncoderTeeth() {
+      const c = s.incident?.check;
+      if (!c) return;
+      log(...encoderTeethCommands(c).filter(([cmd]) => !cmd.endsWith("=N")).map(([cmd]) => cmd));
+      set({ incident: encoderTeethSaved(c), ...(c.newExtendDist ? { extendDist: c.newExtendDist } : {}) });
+    },
     connect() { connectQuestion(false); },
 
     retract() {
@@ -411,6 +421,8 @@ export function createSimulator() {
       set({ connected: false, pending: null, net: { ...s.net, restartNeeded: false, save: null } });
       setTimeout(() => connectQuestion(true), 1200);
     },
+    // Z to work Z 0 (machine.js: G0 Z0 in work coordinates)
+    zToWork() { log("G90 G21 G0 Z0"); set({ pos: { ...s.pos, z: s.wco.z } }); },
     jog({ dx = 0, dy = 0, dz = 0 }) { set({ pos: { x: +(s.pos.x + dx).toFixed(3), y: +(s.pos.y + dy).toFixed(3), z: +(s.pos.z + dz).toFixed(3) } }); },
     // Setting a home moves the work zero, not the machine: the machine position stays as it was
     // The new home in machine coordinates; without one, here
@@ -433,6 +445,14 @@ export function createSimulator() {
       if (!s.connected) { log(`Not sent: ${text} (not connected)`); emit(); return; }
       log(...simReply(text));
       emit();
+    },
+    // A file from Abundance (device/jobreceiver.js): kept in this page, as an upload is
+    async receiveFile({ file }) {
+      const text = await file.text();
+      log(`Uploaded ${file.name} (kept in this page only)`);
+      set({ files: [...s.files.filter(f => f.name !== file.name), { name: file.name, size: `${Math.max(1, Math.round(file.size / 1024))} KB`, text }] });
+      if (s.gcode?.file === file.name) actions.chooseFile({ file: file.name });
+      return { name: file.name, path: `/${file.name}` };
     },
     // Upload: pick a real G-code file from this computer, as on the machine. It stays in this page (not saved anywhere),
     // so its preview, size, placement and fit check are the file's own. Outside a browser (tests) there's nothing to
@@ -480,6 +500,12 @@ export function createSimulator() {
     disconnect() { log("Connection lost"); set({ connected: false, pending: null }); },
     // Maslow_vertical, as Find anchors saves it after detecting the orientation
     toggleVertical() { set({ frame: { ...s.frame, vertical: !s.frame.vertical } }); },
+    // As machine.js finds it on connect: this Mini's config has the 4.1's 22 teeth
+    wrongTeeth() {
+      const c = encoderTeethCheck("unified", 22, s.extendDist);
+      log(`encoderTeeth is ${c.teeth}, but a ${c.machine} has ${c.expected}`);
+      set({ incident: wrongEncoderTeeth(c) });
+    },
     reconnect() { connectQuestion(false); },
     emergencyStop() { log("[MSG:ERR: Emergency stop! Stopping all motors]");
       set({ fluid: "Alarm", error: { reason: "Emergency button pressed" }, job: null, motion: null, spindle: "off", pending: null }); },

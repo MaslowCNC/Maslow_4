@@ -214,8 +214,8 @@ export function jogLock(k, d) {
 }
 
 // A button whose action the device may not support yet (d.notYet): then it's disabled and says why
-const NotYetBtn = ({ d, id, label, send }) => <button class="btn ghost" type="button" disabled={!!d.notYet?.[id]}
-  title={d.notYet?.[id]} onClick={() => send(id)}>{label}</button>;
+const NotYetBtn = ({ d, id, label, send, title }) => <button class="btn ghost" type="button" disabled={!!d.notYet?.[id]}
+  title={d.notYet?.[id] || title} onClick={() => send(id)}>{label}</button>;
 
 // Spindle on / off (Mini only). It follows the spindle speed the machine reports, so a job or Stop shows here too.
 // Turning it on needs the machine idle with no job; turning it off is refused only during a job (Stop ends the job
@@ -263,7 +263,8 @@ export function JogPad({ k, d, send }) {
     <div class="jogtop">
       <label class="chipin on"><span>Step</span><input type="text" inputmode="decimal" value={step} aria-label="XY step size in mm"
         onInput={e => setStep(e.currentTarget.value)} /><span>mm</span></label>
-      <NotYetBtn d={d} id="rehomeZ" label="Home Z" send={send} />
+      <NotYetBtn d={d} id="rehomeZ" label="Reset Z" send={send}
+        title="Raises the spindle to the light beam and makes that machine Z 0. Set Z again afterwards." />
       <NotYetBtn d={d} id="park" label="Park" send={send} />
     </div>
     <div class="compass">
@@ -275,13 +276,16 @@ export function JogPad({ k, d, send }) {
       </div>
       <div class="zcol">
         <button type="button" class="z" aria-label={`Z up ${zMm} mm`} disabled={!zMm} onClick={() => jz(1)}><Arrow deg={0} /><span class="jlabel">+Z</span></button>
+        {/* Z's home: work Z 0, the Z that Set Z set (G0). Reset Z, above, is the spindle board's homing to the beam */}
+        <button type="button" class="z home" aria-label="Move Z to your home (work Z 0)" title="Move Z to your home (work Z 0)"
+          disabled={!!lock} onClick={() => send("zToWork")}><House /><span class="jlabel">Z 0</span></button>
+        <button type="button" class="z" aria-label={`Z down ${zMm} mm`} disabled={!zMm} onClick={() => jz(-1)}><Arrow deg={180} /><span class="jlabel">−Z</span></button>
         <label class="zstep"><input type="text" inputmode="decimal" value={zStep} aria-label="Z step size in mm"
           onInput={e => setZStep(e.currentTarget.value)} /><span>mm</span></label>
-        <button type="button" class="z" aria-label={`Z down ${zMm} mm`} disabled={!zMm} onClick={() => jz(-1)}><Arrow deg={180} /><span class="jlabel">−Z</span></button>
       </div>
     </div>
     <PosReadout d={d} nopos={!!lock && SCREENS[k].nopos} />
-    {/* Home Z finds the top of travel (the spindle's light beam); Set Z makes where the bit is now work Z 0 */}
+    {/* Reset Z finds the top of travel (the spindle's light beam); Set Z makes where the bit is now work Z 0 */}
     {/* One click: home is where the machine is now. Typing a home, and Reset home, are in Settings › Home */}
     <div class="row"><NotYetBtn d={d} id="setHomeXY" label="Set home XY" send={send} />
       <NotYetBtn d={d} id="setZ" label="Set Z" send={send} /></div>
@@ -292,11 +296,13 @@ export function JogPad({ k, d, send }) {
 const BELT_NAMES = ["TL", "TR", "BL", "BR"];
 // The app header, above the setup or mode bar on every screen: the Maslow logo, the machine this page is
 // connected to, the connection, and Settings. These live only here.
-export function AppHeader({ d, onSettings }) {
+export function AppHeader({ d, onSettings, notice, setNotice }) {
   return <header class="apphead">
     <img class="logo" src={logo} alt="Maslow" />
     <MachineTag d={d} />
     {d.spindle === "on" && <span class="spintag" role="status"><i class="spindot" aria-hidden="true" />Spindle running</span>}
+    {notice && <span class={`noticetag${notice.bad ? " bad" : ""}`} role="status">{notice.text}
+      <button type="button" aria-label="Dismiss" onClick={() => setNotice(null)}>×</button></span>}
     <span class="apphead-gap" />
     <Conn d={d} />
     <button class="gear" type="button" aria-label="Settings" onClick={onSettings}>⚙</button>

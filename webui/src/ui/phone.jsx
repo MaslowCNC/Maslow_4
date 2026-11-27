@@ -22,7 +22,7 @@ export function Phone({ k, ctx, onSettings, overlay }) {
   const main = mainActions(k, ctx).map(b => ({ ...b, label: b.label.replace(/^Run .*/, "Run").replace(/^Continue from .*/, "Continue") }));
   return <div class="phoneapp">
     <header class="p-head">
-      <AppHeader d={ctx.d} onSettings={onSettings} />
+      <AppHeader d={ctx.d} onSettings={onSettings} notice={ctx.notice} setNotice={ctx.setNotice} />
       <div class="p-top"><BackArrow buttons={q.buttons} /><ModePill s={s} /><span class="sub">{s.sub}</span></div>
       {setup ? <div class="p-prog"><span>{label}</span><Segs step={s.step} skipped={skipped} /></div>
         : <div class={`p-msg${s.alert || q.alert ? " alert" : ""}`}>{q.text || s.msg}</div>}

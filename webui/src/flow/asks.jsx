@@ -131,16 +131,19 @@ function askFor(k, ctx) {
         onUpload={() => Promise.resolve(send("uploadFile")).then(f => { if (f) { mark(7); setA({ file: f }); } })} />,
       buttons: [back({ secured: false })] };
     case "error": return { text: d.error?.reason || "", buttons: [B("Clear error ($X)", () => send("clearError"))] };
-    case "recovery": return { text: "Z lost its position (the spindle board needs homing). Re-home Z, then the tool check runs again.",
-      buttons: [B("Re-home Z", () => { setA({ zDone: false, helper: false, zTarget: null }); send("rehomeZ"); })] };
+    case "recovery": return { text: "Z lost its position (the spindle board needs homing). Reset Z, then the tool check runs again.",
+      buttons: [B("Reset Z", () => { setA({ zDone: false, helper: false, zTarget: null }); send("rehomeZ"); })] };
     case "incident": {
       const i = d.incident;
       return { text: `${i.title}. ${i.detail} ${i.next}`,
         // After a spindle fault the tool check runs again, so the page forgets the tool and Z answers
-        buttons: i.clearWithStop ? [stop("Stop to clear")] : [B(i.ack || "Got it", () => {
-          if (i.kind === "spindleFault") setA({ faultSeen: true, zDone: false, helper: false, zTarget: null });
-          send("ackIncident");
-        })] };
+        // fix: a one-click fix offered beside the acknowledge button (a wrong encoderTeeth)
+        buttons: i.clearWithStop ? [stop("Stop to clear")] : [
+          ...(i.fix ? [B(i.fix.label, () => send(i.fix.action, i.fix.payload))] : []),
+          B(i.ack || "Got it", () => {
+            if (i.kind === "spindleFault") setA({ faultSeen: true, zDone: false, helper: false, zTarget: null });
+            send("ackIncident");
+          }, i.fix ? "ghost" : undefined)] };
     }
     case "othertab": return { text: "Only one tab per browser can be connected.", buttons: [B("Use this tab", () => send("reconnect"))] };
     case "toomany": return { text: "Close tabs or devices you aren't using.", buttons: [B("Reconnect", () => send("reconnect"))] };

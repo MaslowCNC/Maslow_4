@@ -1,3 +1,6 @@
+import { encoderTeethCommands } from "../device/encoderteeth.js";
+
+
 // Incidents: things that happened which the user has to know about before the flow goes on, such as the machine
 // restarting or a job ending on an error. The device raises one in its state (d.incident); the page shows it as an
 // Error screen that says what happened and what comes next, and waits until the user acknowledges it. Then the
@@ -36,18 +39,51 @@ export const holding = () => ({
   kind: "holding",
   title: "The machine is holding",
   detail: "Something paused the machine, for example a spindle fault. It won't move until the hold is cleared.",
-  next: "Press Stop to clear the hold. If the spindle faulted, re-home Z before cutting.",
+  next: "Press Stop to clear the hold. If the spindle faulted, press Reset Z before cutting.",
   clearWithStop: true
 });
 
 /** The spindle tripped during a job; the machine ended the job and re-homed Z. rehomed false: the firmware gave up
- * before Z was re-homed (it then needs Home Z). */
+ * before Z was re-homed (it then needs Reset Z). */
 export const spindleFault = (line, rehomed = true) => ({
   kind: "spindleFault",
   title: "The spindle tripped",
   detail: `The job stopped${line ? ` at line ${line.toLocaleString()}` : ""}` +
     (rehomed ? ", and the machine re-homed Z." : ". The machine couldn't re-home Z, so the Z position isn't known."),
   next: rehomed ? "Check the bit isn't damaged. The tool check runs next, then you can continue the job."
-    : "Check the bit isn't damaged, then re-home Z. The tool check runs next, then you can continue the job.",
+    : "Check the bit isn't damaged, then press Reset Z. The tool check runs next, then you can continue the job.",
   ack: "Got it, check the tool"
 });
+
+/** encoderTeeth doesn't match the board (device/encoderteeth.js encoderTeethCheck). Fix saves the right teeth and the
+ * scaled Extend distance; the machine then has to restart and be set up again. */
+export function wrongEncoderTeeth(c) {
+  const lines = encoderTeethCommands(c).map(([cmd]) => cmd).join(", then ");
+  return {
+    kind: "encoderTeeth", check: c,
+    title: "Wrong encoderTeeth setting",
+    detail: `This machine is a ${c.machine}, whose encoders have ${c.expected} teeth, but encoderTeeth is set to ${c.teeth}. ` +
+      `Every belt length is off by about ${c.errorPct} %, so calibration and cuts will be wrong.`,
+    next: `Fix it sets encoderTeeth to ${c.expected}` +
+      (c.newExtendDist ? ` and the Extend distance to ${c.newExtendDist} mm (it's ${c.extendDist} mm now, measured at the old scale)` : "") +
+      `, and saves the config. Or send ${lines} from the command box.` +
+      (c.newExtendDist ? "" : ` Scale the Extend distance by ${c.expected}/${c.teeth} yourself: it was measured at the old scale.`) +
+      " Then restart the machine and set it up again: Retract, Extend, Apply tension, then Find anchors (the saved frame was measured at the old scale too).",
+    fix: { label: "Fix it", action: "fixEncoderTeeth" },
+    ack: "Not now"
+  };
+}
+
+/** The fix was saved (or failed: detail). Nothing changes until the machine restarts. */
+export function encoderTeethSaved(c, failed) {
+  if (failed) return { ...wrongEncoderTeeth(c), detail: `Couldn't save the fix: ${failed}. ${wrongEncoderTeeth(c).detail}` };
+  return {
+    kind: "encoderTeethSaved", check: c,
+    title: "encoderTeeth saved",
+    detail: `encoderTeeth is now ${c.expected}${c.newExtendDist ? ` and the Extend distance ${c.newExtendDist} mm` : ""}, saved in the config. ` +
+      "The machine uses the new values after a restart.",
+    next: "Restart the machine, then set it up again: Retract, Extend, Apply tension, then Find anchors.",
+    fix: { label: "Restart now", action: "reboot" },
+    ack: "Later"
+  };
+}

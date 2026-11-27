@@ -248,6 +248,11 @@
   /* Spindle running: a red pulsing dot on the jog pad's toggle and in the app header */
   .spintag { display: inline-flex; align-items: center; gap: 6px; padding: 1px 8px; border: 1px solid var(--danger); border-radius: 999px;
     color: var(--danger); font: 600 11px var(--font-mono); white-space: nowrap; }
+  /* A file received from Abundance (or why it wasn't), in the app header until dismissed */
+  .noticetag { display: inline-flex; align-items: center; gap: 6px; padding: 1px 4px 1px 8px; border: 1px solid var(--lilac); border-radius: 999px;
+    color: var(--text); font: 600 11px var(--font-mono); min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .noticetag.bad { border-color: var(--danger); color: var(--danger); }
+  .noticetag button { background: none; border: 0; color: inherit; font: inherit; font-size: 14px; cursor: pointer; padding: 0 4px; min-height: 24px; }
   .spindot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: none; animation: spinpulse 1.2s ease-in-out infinite; }
   .spinbtn { gap: 6px; }
   .spinbtn.on { background: var(--danger); border-color: var(--danger); color: #fff; }
@@ -270,9 +275,9 @@
   .compass .home { color: var(--lilac); font-size: 12px; }
   .compass { grid-template-columns: 3fr 1fr; gap: 14px; }
   .compass .xy { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
-  .compass .zcol { display: grid; grid-template-rows: repeat(3, 1fr); gap: 6px; }
+  .compass .zcol { display: grid; grid-template-rows: repeat(3, 1fr) auto; gap: 6px; }
   .compass .z:disabled { opacity: .4; cursor: not-allowed; }
-  /* The Z step: its own value, between Z+ and Z− */
+  /* The Z step: its own value, under Z+, Z 0 and Z− */
   .zstep { display: flex; align-items: center; gap: 2px; padding: 0 6px; min-height: 44px; border-radius: 6px; background: var(--input);
     border: 1.5px solid var(--lilac); cursor: text; }
   .zstep input { width: 100%; min-width: 0; background: none; border: 0; color: var(--text); font: 700 15px var(--font-mono); text-align: right; padding: 0; }

@@ -4,12 +4,13 @@
 //
 // Actions so far: Stop, the belt steps of Setup (retract, extend, apply tension, release tension, find
 // anchors), running a file, Trace boundary, jogging, Set home XY, Set Z, Park, Clear error, the belt motor test, and
-// on the Mini Home Z, Remove tool and Spindle on / off. Each goes through a machine.js action, and its Operation is kept in state.op so the screens can
+// on the Mini Reset Z, Remove tool and Spindle on / off. Each goes through a machine.js action, and its Operation is kept in state.op so the screens can
 // show "starting", then nothing (done) or why it failed. The screen itself still comes from the machine's state, so
 // every connection shows the same thing. On the Mini the tool steps and the spindle-fault screens follow the report's
 // TS field (machine.state.tool); without it (the 4.1, or older firmware) the tool check can only be skipped.
 
-import { restarted, jobFailed, holding, spindleFault } from "../flow/incidents.js";
+import { restarted, jobFailed, holding, spindleFault, wrongEncoderTeeth, encoderTeethSaved } from "../flow/incidents.js";
+import { encoderTeethCheck, TEETH_PATH, EXTEND_PATH } from "./encoderteeth.js";
 import { readGcode, boundaryPath } from "../gcode/reader.js";
 import { MACHINE_SETTINGS, settingError } from "./settings.js";
 import { parseSettingsList, valueError, espSetCommand, withValues } from "./settingslist.js";
@@ -261,9 +262,47 @@ export function createMachine({ host = location.host } = {}) {
         if (isMini(machine)) delete notYet[a]; else notYet[a] = SPINDLE_BOARD.includes(a) ? NO_SPINDLE_BOARD : NO_SPINDLE;
       }
       set({ machine, notYet });
+      checkEncoderTeeth(tag, s.connectId);
     } catch (e) {
       log(`Couldn't read which machine this is: ${e.message}`);
       emit();
+    }
+  }
+
+  // A wrong encoderTeeth for this board (device/encoderteeth.js), checked once per connection once the board is known.
+  // It's an incident; if another one is showing (a restart), it waits until that one is acknowledged.
+  let queuedIncident = null;
+  function raise(incident) {
+    if (s.incident) queuedIncident = incident; else set({ incident });
+  }
+  async function checkEncoderTeeth(board, connectId) {
+    try {
+      const teeth = await m.getSetting(TEETH_PATH);
+      if (!encoderTeethCheck(board, teeth)) return;
+      const extend = await m.getSetting(EXTEND_PATH).catch(() => "");
+      const c = encoderTeethCheck(board, teeth, extend);
+      if (s.connectId !== connectId) return;   // a newer connection checks again
+      log(`encoderTeeth is ${c.teeth}, but a ${c.machine} has ${c.expected}`);
+      raise(wrongEncoderTeeth(c));
+    } catch (err) {
+      log(`Couldn't read encoderTeeth: ${err.detail || err.reason || err.message}`);
+      emit();
+    }
+  }
+  // The incident's Fix: the right teeth and the scaled Extend distance, then $CO. The machine uses them after a restart.
+  async function fixEncoderTeeth() {
+    const c = s.incident?.check;
+    if (!c) return;
+    try {
+      await m.setSetting(TEETH_PATH, c.expected);
+      if (c.newExtendDist) await m.setSetting(EXTEND_PATH, c.newExtendDist);
+      await m.saveConfig();
+      log(`encoderTeeth saved: ${c.expected}${c.newExtendDist ? `, Extend distance ${c.newExtendDist} mm` : ""}. Restart the machine to use it.`);
+      set({ incident: encoderTeethSaved(c), ...(c.newExtendDist ? { extendDist: c.newExtendDist } : {}) });
+    } catch (err) {
+      const detail = err.detail || err.reason || err.message;
+      log(`Couldn't save encoderTeeth: ${detail}`);
+      set({ incident: encoderTeethSaved(c, detail) });
     }
   }
 
@@ -566,6 +605,7 @@ export function createMachine({ host = location.host } = {}) {
   function checkRestart() {
     const after = m.state.maslow;
     if (beforeDrop != null && TENSIONED_OR_BUSY.includes(beforeDrop) && [0, 2, 4].includes(after) && after !== beforeDrop) {
+      if (s.incident) queuedIncident = s.incident;   // the encoderTeeth warning can arrive first: it shows next
       s = { ...s, incident: restarted(beforeDrop, after), op: null };
       log(`The machine restarted: it was in state ${beforeDrop}, now ${after}`);
     }
@@ -582,7 +622,10 @@ export function createMachine({ host = location.host } = {}) {
     globalThis.ws_source = ws;   // wscommands.js sends on this
     ws.onopen = () => {
       globalThis.wsCommands.reset();   // a new socket is a new firmware channel
-      s = { ...s, statusSeen: false, connectId: s.connectId + 1 };
+      // The encoderTeeth warning belongs to its connection: this one checks again (readMachine)
+      queuedIncident = null;
+      const teethIncident = /^encoderTeeth/.test(s.incident?.kind || "");
+      s = { ...s, statusSeen: false, connectId: s.connectId + 1, ...(teethIncident ? { incident: null } : {}) };
       log("Connected");
       emit();
       // What the current UI asks for on every new socket (tablet.js, requestMachineState)
@@ -620,39 +663,49 @@ export function createMachine({ host = location.host } = {}) {
     connect();
   }
 
-  // Upload a file the user picks to the SD card, the way the current UI does (POST /upload). Resolves with its
-  // name once it's on the card, or null if the user cancels.
+  // Put a file on the SD card, the way the current UI does (POST /upload), and read it for the preview from this copy, so
+  // the preview has it without fetching it back from the card. Resolves with { name, path }; rejects with
+  // { reason, detail } (the Abundance receiver passes them on).
+  async function putFile(f) {
+    const url = sdUrl(f.name);
+    const reading = f.text().then(readGcode);
+    reading.catch(() => {});
+    const form = new FormData();
+    form.append("path", "/");
+    form.append(`/${f.name}S`, String(f.size));
+    form.append("myfile[]", f, `/${f.name}`);
+    log(`Uploading ${f.name}`);
+    emit();
+    let r;
+    try {
+      r = await fetch("/upload", { method: "POST", body: form });
+    } catch (e) {
+      log(`Upload of ${f.name} failed: ${e.message}`);
+      emit();
+      throw { reason: "failed", detail: e.message };
+    }
+    if (!r.ok) {
+      log(`Upload of ${f.name} failed: HTTP ${r.status}`);
+      emit();
+      throw { reason: "rejected", detail: `The machine refused the upload (HTTP ${r.status})` };
+    }
+    log(`${f.name} uploaded`);
+    readings[url] = reading;   // replaces any older file of the same name
+    delete lines[`/${f.name}`];
+    delete lines[`/sd/${f.name}`];
+    if (chosen === f.name) chooseFile(f.name);   // the same name uploaded again: show the new one
+    await listFiles();
+    return { name: f.name, path: `/${f.name}` };
+  }
+
+  // Upload a file the user picks. Resolves with its name once it's on the card, or null if the user cancels or it fails.
   function uploadFile() {
     return new Promise((resolve) => {
       const input = Object.assign(document.createElement("input"), { type: "file", accept: ".nc,.gcode,.gc,.ngc,.tap,.txt" });
-      input.onchange = async () => {
+      input.onchange = () => {
         const f = input.files[0];
         if (!f) return resolve(null);
-        // Read it here, from the user's own copy, so the preview has it without fetching it back from the card
-        const url = sdUrl(f.name);
-        const reading = f.text().then(readGcode);
-        reading.catch(() => {});
-        const form = new FormData();
-        form.append("path", "/");
-        form.append(`/${f.name}S`, String(f.size));
-        form.append("myfile[]", f, `/${f.name}`);
-        log(`Uploading ${f.name}`);
-        emit();
-        try {
-          const r = await fetch("/upload", { method: "POST", body: form });
-          if (!r.ok) throw new Error(`HTTP ${r.status}`);
-          log(`${f.name} uploaded`);
-          readings[url] = reading;   // replaces any older file of the same name
-          delete lines[`/${f.name}`];
-          delete lines[`/sd/${f.name}`];
-          if (chosen === f.name) chooseFile(f.name);   // the same name uploaded again: show the new one
-          await listFiles();
-          resolve(f.name);
-        } catch (e) {
-          log(`Upload of ${f.name} failed: ${e.message}`);
-          emit();
-          resolve(null);
-        }
+        putFile(f).then((u) => resolve(u.name), () => resolve(null));
       };
       input.click();
     });
@@ -709,8 +762,10 @@ export function createMachine({ host = location.host } = {}) {
     if (action === "discardStopped") { run("discardStopped", () => m.discardStopped()); return; }
     if (action === "trace") { run("trace", () => traceFile(payload.file)); return; }
     if (action === "uploadFile") return uploadFile();
+    if (action === "receiveFile") return putFile(payload.file);   // a file from Abundance (device/jobreceiver.js)
     if (action === "deleteFile") { deleteFile(payload.name); return; }
-    if (action === "ackIncident") { set({ incident: null }); return; }
+    if (action === "ackIncident") { set({ incident: queuedIncident }); queuedIncident = null; return; }
+    if (action === "fixEncoderTeeth") { fixEncoderTeeth(); return; }
     if (action === "setStock") { setStock(payload.stock); return; }
     if (action === "setSpoilboard") { saveSetting(SETTINGS.spoil, payload.mm, "Spoil board thickness", { workArea: { ...s.workArea, spoil: payload.mm } }); return; }
     if (action === "setSettings") { saveSettings(payload.values || {}, payload.label || "Settings"); return; }
@@ -727,6 +782,13 @@ export function createMachine({ host = location.host } = {}) {
       const feed = delta.x || delta.y ? JOG_FEED.xy : JOG_FEED.z;
       const op = m.jog(delta, { feed });
       op.catch(err => { if (err.reason !== "reset") { log(`Jog: ${err.detail || err.reason}`); emit(); } });
+      return;
+    }
+    // Z to its home, work Z 0 (G0, #1157). The firmware allows it in any Maslow state: the belt position-error stop
+    // only runs in Ready to cut. The jog pad locks it like the jog buttons.
+    if (action === "zToWork") {
+      const op = m.moveTo({ z: 0 });
+      op.catch(err => { if (err.reason !== "reset") { log(`Move Z to work Z 0: ${err.detail || err.reason}`); emit(); } });
       return;
     }
     if (action === "stop") {

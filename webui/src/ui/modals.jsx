@@ -34,7 +34,7 @@ const ACT = [
   ["findAnchors", "Find anchors", "Measures the frame to find each anchor point. About 11 minutes."],
   ["toolCheck", "Check the tool", "Raises the spindle through the light beam to see if a bit is loaded."],
   ["removeTool", "Remove tool", "Raises the spindle until the bit clears the light beam, so you can take it out. Maslow Mini only."],
-  ["rehomeZ", "Home Z", "Raises the spindle to the top-of-travel light beam to find Z again. Maslow Mini only."],
+  ["rehomeZ", "Reset Z", "Raises the spindle to the top-of-travel light beam and makes that machine Z 0. Set Z again afterwards. Maslow Mini only."],
   ["clearError", "Clear error ($X)", "Clears the error so the device can move again."],
   ["reboot", "Reboot device", "Restarts the board. It reconnects on its own."],
   ["stop", "Stop", "Stops the belts at once, turns the spindle off and lifts Z. The job's progress is saved (needs firmware)."]
