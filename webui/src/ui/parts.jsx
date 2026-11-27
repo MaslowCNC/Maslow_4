@@ -1,4 +1,6 @@
-import { useState, useRef, useLayoutEffect } from "preact/hooks";
+import { createContext } from "preact";
+import { useState, useRef, useLayoutEffect, useEffect, useContext } from "preact/hooks";
+import { fmt, fmtU, prose, parseLength, numMode, JOG_STEPS, JOG_DEFAULT, unitName } from "../units.js";
 import { jobPlacement } from "../flow/fit.js";
 import { downloadLog } from "./logfile.js";
 import { adcToMilliamps } from "../device/jobrecord.js";
@@ -7,6 +9,10 @@ import { stepArt, visSvg, frameMap, toolpathSvg, toolpathView, workspaceCaption,
 import { makeFrame, accuracyMap, safeRect, checkJob, startRing, TOLERANCE, SLED_MASS } from "../accuracy.js";
 import logo from "../assets/maslow-logo.webp";
 import { UpdateNotice } from "./device.jsx";
+
+// The units the page shows (Settings › Display): "mm" or "in". App provides it; values in state stay mm (units.js).
+export const UnitsCtx = createContext("mm");
+export const useUnits = () => useContext(UnitsCtx);
 
 // A top-bar button. b.temp marks one that exists only until the firmware rewrite is finished: it shows orange,
 // tagged "Temporary", and its tooltip says what it's waiting for. Every stopgap like this should use it.
@@ -42,7 +48,7 @@ export const Segs = ({ step, skipped }) =>
   <div class="segs">{STEPS.map((_, i) => <i class={skipped[i] ? "skip" : i < step ? "done" : i === step ? "now" : ""} />)}</div>;
 
 export const StepArt = ({ step, d, class: c = "art" }) =>
-  <div class={c}><Svg html={stepArt(step)} /></div>;
+  <div class={c}><Svg html={prose(stepArt(step), useUnits())} /></div>;
 
 // view: "frame" (the frame, the belts and the sled, with the file's toolpath on it) or "toolpath" (the chosen file
 // alone, fitted to the drawing, with the bit as a small circle).
@@ -53,13 +59,13 @@ export const StepArt = ({ step, d, class: c = "art" }) =>
 // chosen job fits it (the Workspace toggle), from the anchors. The outline is drawn on the frame view; the caption
 // shows on both.
 export const Frame = ({ k, d, view = "frame", showLengths = false, showCurrents = false, showWorkspace = false, tolerance = TOLERANCE, sledMass = SLED_MASS }) => {
-  const s = SCREENS[k];
+  const s = SCREENS[k], u = useUnits();
   const acc = accuracyFor(d, tolerance, sledMass);
-  const cap = showWorkspace ? workspaceCaption(acc.overlay) : null;
+  const cap = showWorkspace ? workspaceCaption(acc.overlay, u) : null;
   const caption = cap && <span class="wscap" style={{ color: cap.colour }}>{cap.text}</span>;
   if (view === "toolpath") {
     const st = d.gcode?.status;
-    const html = st === "ready" && d.gcode.extent ? toolpathViewFor(d, s.nopos ? null : workPos(d)) : null;
+    const html = st === "ready" && d.gcode.extent ? toolpathViewFor(d, s.nopos ? null : workPos(d), u) : null;
     return <>{html ? <Svg class="framesvg" html={html} />
       : <div class="visempty">{st === "reading" ? "Reading the file…" : st === "failed" ? `Couldn't read the file: ${d.gcode.detail || "unknown error"}`
         : st === "ready" ? "This file has no cutting moves to show" : "Choose a file to see its toolpath"}</div>}{caption}</>;
@@ -68,7 +74,7 @@ export const Frame = ({ k, d, view = "frame", showLengths = false, showCurrents 
   const mc = d.motorCurrent;
   const currents = showCurrents ? (mc ? [mc.tl, mc.tr, mc.bl, mc.br].map(adcToMilliamps) : [null, null, null, null]) : null;
   return <><Svg class="framesvg" html={visSvg(k, s, d.pos, d.wco, lengths, currents, showWorkspace ? acc.overlay : null, acc.size,
-    toolpathFor(d, acc.size))} />{caption}</>;
+    toolpathFor(d, acc.size), u)} />{caption}</>;
 };
 
 // Belt lengths and motor currents as text, under the Belts and Motors toggles, on the Toolpath tab. A length is unknown before the machine
@@ -91,14 +97,14 @@ export function VisReadouts({ d, belts, motors }) {
 // The Toolpath view, kept until the file, the bit's position (to a tenth of a mm) or the running line change; the
 // running line redraws at most once a second, as a big file's path is large.
 let viewCache = { g: null, key: null, done: null, at: 0, value: "" };
-function toolpathViewFor(d, work) {
+function toolpathViewFor(d, work, unit) {
   const g = d.gcode;
   const base = (f) => String(f || "").split("/").pop();
   const done = d.job && base(d.job.file) === base(g.file) ? d.job.line : null;
-  const key = JSON.stringify([work && work.x.toFixed(1), work && work.y.toFixed(1), done == null]);
+  const key = JSON.stringify([work && work.x.toFixed(1), work && work.y.toFixed(1), done == null, unit]);
   const now = Date.now();
   if (g !== viewCache.g || key !== viewCache.key || (done !== viewCache.done && now - viewCache.at >= 1000)) {
-    viewCache = { g, key, done, at: now, value: toolpathView(g, work, done) };
+    viewCache = { g, key, done, at: now, value: toolpathView(g, work, done, unit) };
   }
   return viewCache.value;
 }
@@ -148,11 +154,10 @@ function accuracyFor(d, tol, mass) {
 
 // Work position (from the user's home) and machine position (from the anchors). WPos = MPos − WCO.
 export const workPos = (d) => ({ x: d.pos.x - d.wco.x, y: d.pos.y - d.wco.y, z: d.pos.z - d.wco.z });
-const f3 = (v) => (Math.abs(v) < 0.0005 ? 0 : v).toFixed(3);
 export function PosReadout({ d, nopos, stale }) {
-  const w = workPos(d), m = d.pos;
+  const w = workPos(d), m = d.pos, u = useUnits(), f3 = (v) => fmt(v, u, "position");
   const row = (label, p) => <div class="posrow"><span>{label}</span><b><i>X</i>{nopos ? "–" : f3(p.x)}</b><b><i>Y</i>{nopos ? "–" : f3(p.y)}</b><b><i>Z</i>{nopos ? "–" : f3(p.z)}</b></div>;
-  return <div class={`posgrid${stale ? " stale" : ""}`}>{row("Work", w)}{row("Machine", m)}</div>;
+  return <div class={`posgrid${stale ? " stale" : ""}`} title={`Positions in ${u === "in" ? "inches" : "mm"}`}>{row("Work", w)}{row("Machine", m)}</div>;
 }
 
 // The log, kept scrolled to the newest line unless the user has scrolled up to read
@@ -251,38 +256,50 @@ const JOG_DIRS = [[-1, 1, -45, ""], [0, 1, 0, "+Y"], [1, 1, 45, ""], [-1, 0, -90
 const DIR_NAMES = ["Up left", "Up", "Up right", "Left", "", "Right", "Down left", "Down", "Down right"];
 
 
+// A jog step box: [text, setText, the step in mm (0 when it isn't a positive length)]. Starts at the unit's default and
+// goes back to it when the units change, so a step typed in mm never jogs as inches.
+export function useJogStep(u, axis) {
+  const [text, setText] = useState(String(JOG_DEFAULT[u][axis]));
+  const first = useRef(true);
+  useEffect(() => { if (first.current) { first.current = false; return; } setText(String(JOG_DEFAULT[u][axis])); }, [u]);
+  const mm = parseLength(text, u);
+  return [text, setText, mm > 0 ? mm : 0];
+}
+// The step presets, offered as each step box's list
+export const JogSteps = ({ u }) => <datalist id="jogsteps">{JOG_STEPS[u].map(v => <option value={String(v)} />)}</datalist>;
+
 export function JogPad({ k, d, send }) {
-  // One XY step: the user's own value (10 mm to start). Z has its own step, typed between Z+ and Z−.
-  const [step, setStep] = useState("10");
-  const size = parseFloat(step) > 0 ? parseFloat(step) : 0;
-  const [zStep, setZStep] = useState("5");
-  const zMm = parseFloat(zStep) > 0 ? parseFloat(zStep) : 0;
+  // One XY step: the user's own value, typed in the page's units (10 mm or 0.5 in to start; presets in the box's list).
+  // Z has its own step, typed between Z+ and Z−. Both are sent as mm.
+  const u = useUnits();
+  const [step, setStep, size] = useJogStep(u, "xy");
+  const [zStep, setZStep, zMm] = useJogStep(u, "z");
   const lock = jogLock(k, d);
   const j = (dx, dy) => send("jog", { dx: dx * size, dy: dy * size, dz: 0 });
   const jz = dir => send("jog", { dx: 0, dy: 0, dz: dir * zMm });
-  return <div class="jogwrap">
+  return <div class="jogwrap"><JogSteps u={u} />
     <div class="jogtop">
-      <label class="chipin on"><span>Step</span><input type="text" inputmode="decimal" value={step} aria-label="XY step size in mm"
-        onInput={e => setStep(e.currentTarget.value)} /><span>mm</span></label>
+      <label class="chipin on"><span>Step</span><input type="text" inputmode={numMode(u)} list="jogsteps" value={step} aria-label={`XY step size in ${unitName(u)}`}
+        onInput={e => setStep(e.currentTarget.value)} /><span>{u}</span></label>
       <NotYetBtn d={d} id="rehomeZ" label="Reset Z" send={send}
         title="Raises the spindle to the light beam and makes that machine Z 0. Set Z again afterwards." />
       <NotYetBtn d={d} id="park" label="Park" send={send} />
     </div>
     <div class="compass">
       <div class="xy">{JOG_DIRS.map((v, i) => v
-        ? <button type="button" aria-label={`${DIR_NAMES[i]} ${size} mm`} disabled={!size} onClick={() => j(v[0], v[1])}>
+        ? <button type="button" aria-label={`${DIR_NAMES[i]} ${step} ${u}`} disabled={!size} onClick={() => j(v[0], v[1])}>
             <Arrow deg={v[2]} />{v[3] && <span class="jlabel">{v[3]}</span>}</button>
         : <button type="button" class="home" aria-label="Go to your home (work 0, 0)" title="Go to your home (work 0, 0)"
             onClick={() => send("jog", { dx: d.wco.x - d.pos.x, dy: d.wco.y - d.pos.y })}><House /></button>)}
       </div>
       <div class="zcol">
-        <button type="button" class="z" aria-label={`Z up ${zMm} mm`} disabled={!zMm} onClick={() => jz(1)}><Arrow deg={0} /><span class="jlabel">+Z</span></button>
+        <button type="button" class="z" aria-label={`Z up ${zStep} ${u}`} disabled={!zMm} onClick={() => jz(1)}><Arrow deg={0} /><span class="jlabel">+Z</span></button>
         {/* Z's home: work Z 0, the Z that Set Z set (G0). Reset Z, above, is the spindle board's homing to the beam */}
         <button type="button" class="z home" aria-label="Move Z to your home (work Z 0)" title="Move Z to your home (work Z 0)"
           disabled={!!lock} onClick={() => send("zToWork")}><House /><span class="jlabel">Z 0</span></button>
-        <button type="button" class="z" aria-label={`Z down ${zMm} mm`} disabled={!zMm} onClick={() => jz(-1)}><Arrow deg={180} /><span class="jlabel">−Z</span></button>
-        <label class="zstep"><input type="text" inputmode="decimal" value={zStep} aria-label="Z step size in mm"
-          onInput={e => setZStep(e.currentTarget.value)} /><span>mm</span></label>
+        <button type="button" class="z" aria-label={`Z down ${zStep} ${u}`} disabled={!zMm} onClick={() => jz(-1)}><Arrow deg={180} /><span class="jlabel">−Z</span></button>
+        <label class="zstep"><input type="text" inputmode={numMode(u)} list="jogsteps" value={zStep} aria-label={`Z step size in ${unitName(u)}`}
+          onInput={e => setZStep(e.currentTarget.value)} /><span>{u}</span></label>
       </div>
     </div>
     <PosReadout d={d} nopos={!!lock && SCREENS[k].nopos} />
@@ -316,6 +333,7 @@ export const MachineTag = ({ d }) => d.machine ? <span class="machinetag" title=
 
 // The File card: the running job's progress, or what the chosen file will cut
 function FileCard({ d, a }) {
+  const u = useUnits();
   if (d.job) {
     const pct = Number(d.job.total) > 0 ? Math.min(100, Math.round(100 * d.job.line / d.job.total)) : null;
     return <div class="mini"><span>File</span><b class="fname">{d.job.file}</b>
@@ -327,8 +345,9 @@ function FileCard({ d, a }) {
   const f = d.files.find(x => x.name === name) || {};
   const g = d.gcode?.file === name ? d.gcode : null;
   const e = g?.status === "ready" && g.extent;
-  const size = e ? `${(e.max.x - e.min.x).toFixed(0)} × ${(e.max.y - e.min.y).toFixed(0)} mm · ${jobPlacement(e)}` : f.w ? `${f.w} × ${f.h} mm` : null;
-  const depth = e ? `${Math.max(0, -e.min.z).toFixed(1)} mm deep` : f.depth != null ? `${f.depth} mm deep` : null;
+  const size = e ? `${fmt(e.max.x - e.min.x, u, "size")} × ${fmtU(e.max.y - e.min.y, u, "size")} · ${jobPlacement(e, u)}`
+    : f.w ? `${fmt(f.w, u, "size")} × ${fmtU(f.h, u, "size")}` : null;
+  const depth = e ? `${fmtU(Math.max(0, -e.min.z), u, "fine")} deep` : f.depth != null ? `${fmtU(f.depth, u, "fine")} deep` : null;
   const extra = [size, depth, f.minutes ? `about ${f.minutes} min` : null, g?.lineCount ? `${g.lineCount.toLocaleString()} lines` : null].filter(Boolean);
   return <div class="mini"><span>File</span><b class="fname">{name}</b>
     <small>{g?.status === "reading" ? "reading the file…" : g?.status === "failed" ? `couldn't read it: ${g.detail || ""}` : extra.join(" · ") || f.size}</small></div>;
@@ -355,10 +374,10 @@ export { adcToMilliamps };
 
 // The Status, Position and File cards
 export function DetailCards({ k, d, a }) {
-  const s = SCREENS[k];
+  const s = SCREENS[k], u = useUnits();
   return <div class="minis">
-    <div class="mini"><span>Status</span><p class={s.alert ? "alert" : ""}>{s.msg}</p></div>
-    <div class="mini"><span>Position</span><PosReadout d={d} nopos={s.nopos} stale={s.stale} /></div>
+    <div class="mini"><span>Status</span><p class={s.alert ? "alert" : ""}>{prose(s.msg, u)}</p></div>
+    <div class="mini"><span>Position · {u}</span><PosReadout d={d} nopos={s.nopos} stale={s.stale} /></div>
     <FileCard d={d} a={a} />
   </div>;
 }

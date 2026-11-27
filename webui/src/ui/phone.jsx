@@ -3,6 +3,7 @@ import { SCREENS, isSetup, stepName } from "../flow/screens.js";
 import { ask, mainActions } from "../flow/asks.jsx";
 import { Btn, AppHeader, ModePill, progress, Segs, StepArt, Frame, VisReadouts, LogView, CommandBox, SaveLogBtn, JogPad, DetailCards, DetailsBody, FilesBody, jogLock, BackArrow, mainButtons } from "./parts.jsx";
 import "./phone.css";
+import { prose } from "../units.js";
 
 // Phone layout: the mode is pinned on top and Run and Stop at the bottom (down the right edge in landscape). Between them a
 // rail of tabs down the left edge, each showing one panel that fits the screen, with no long scroll.
@@ -60,7 +61,7 @@ function NextTab({ k, ctx, q }) {
       : <><div class="pt-draw pt-small"><Frame k={k} d={ctx.d} showWorkspace tolerance={ctx.tolerance} sledMass={ctx.sledMass} /></div>
         <DetailCards k={k} d={ctx.d} a={ctx.a} /></>}
     <div class="pt-ask">
-      <p class={`pt-q${q.alert || s.alert ? " alert" : ""}`}>{q.text || s.msg}</p>
+      <p class={`pt-q${q.alert || s.alert ? " alert" : ""}`}>{q.text || prose(s.msg, ctx.units)}</p>
       {q.input}
       {btns.length > 0 && <div class="row">{btns.map(b => <Btn b={b} />)}</div>}
     </div>
@@ -99,7 +100,7 @@ export function Phone({ k, ctx, onSettings, overlay }) {
       <AppHeader d={ctx.d} onSettings={onSettings} openSettings={ctx.openSettings} notice={ctx.notice} setNotice={ctx.setNotice} />
       <div class="p-top"><BackArrow buttons={q.buttons} /><ModePill s={s} /><span class="sub">{s.sub}</span></div>
       {setup ? <div class="p-prog"><span>{label}</span><Segs step={s.step} skipped={skipped} /></div>
-        : <div class={`p-msg${s.alert || q.alert ? " alert" : ""}`}>{q.text || s.msg}</div>}
+        : <div class={`p-msg${s.alert || q.alert ? " alert" : ""}`}>{q.text || prose(s.msg, ctx.units)}</div>}
     </header>
     <main class="p-main">
       <nav class="p-rail" role="tablist" aria-label="Panels" aria-orientation="vertical">

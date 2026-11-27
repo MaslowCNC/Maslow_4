@@ -494,7 +494,7 @@ currents; Extend distance, spoil board and stock thickness, Reboot.
 | Belt motor test (Test) | Calibration popup | **Done** (2026-11-18): Settings › Advanced, `machine.testMotors()` (`$TEST`). Only while Idle with slack belts (Maslow 0, 2, 4): each motor pays its belt out at full power for up to 100 ms; shows each arm's result |
 | Set Z-Stop | Calibration popup | Not used on the Mini; the 4.1 needs it (its flow isn't defined) |
 | Set home by typing X / Y / Z | Set Home, Set Z Home popups | **Done** (2026-11-18): Set home XY / Set Z open a box filled in with "here"; XY in machine coordinates, Z relative to the current Z home |
-| mm / inch | Units toggle | **Needed** (decided 2026-11-27): mm only today; add mm / inch handling |
+| mm / inch | Units toggle | **Done** (2026-11-27, simulator only): Settings › Display › Units, per browser (the legacy look has the old Toggle Units button beside its position). Display and input only, `webui/src/units.js`: the machine is always sent mm, untouched boxes save the stored value (no drift); inch boxes take fractions ("1 1/2", `3/4"`); belt lengths, belt errors and the settings lists stay mm. Firmware checked: `report_inches` ($13) defaults off and the UI assumes it is (a client setting `$13=1` would break every position); Continue after a stopped G20 job replays the skipped lines in check mode, so G20 is restored before the entry move |
 | Discard a stopped job | Discard button | **Done** (2026-11-18): Discard on the Job stopped bar (`$SD/Discard`) |
 | Change the Continue line | Resume line with ▲▼ | **Done** (2026-11-18): a Line box on the Job stopped bar, the stopped line to start |
 

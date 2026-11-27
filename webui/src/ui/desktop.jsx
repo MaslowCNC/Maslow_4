@@ -1,6 +1,7 @@
 import { useState } from "preact/hooks";
 import { SCREENS, STEP_HELP, isSetup, stepName } from "../flow/screens.js";
 import { ask, mainActions } from "../flow/asks.jsx";
+import { prose } from "../units.js";
 import { Btn, BackArrow, mainButtons, AppHeader, ModePill, DetailCards, progress, Segs, StepArt, Frame, LogView, JogPad, DetailsBody, FilesBody, UploadBtn, VisReadouts, CommandBox, SaveLogBtn } from "./parts.jsx";
 
 export const StopBtn = ({ send, label = "Stop" }) => <button class="btn danger" type="button" onClick={() => send("stop")}>{label}</button>;
@@ -17,7 +18,7 @@ function SetupBar({ k, ctx, onSettings }) {
     <div class="bbtns">{mainButtons(q.buttons).map(b => <Btn b={b} />)}
       {ctx.d.connected && !q.buttons.some(b => b.style === "stopping") && <StopBtn send={ctx.send} />}</div>
     {open && <div class="gmore"><div class="gbig"><StepArt step={step} d={ctx.d} class="" /><span>Placeholder: moving line art showing how to {stepName(k).toLowerCase()}</span></div>
-      <div class="ghelp"><b>{stepName(k)}</b><ol>{STEP_HELP[step].map(x => <li>{x}</li>)}</ol></div></div>}
+      <div class="ghelp"><b>{stepName(k)}</b><ol>{STEP_HELP[step].map(x => <li>{prose(x, ctx.units)}</li>)}</ol></div></div>}
     <div class="gtoggle"><button type="button" aria-expanded={open} aria-label={`${open ? "Hide" : "Show"} step details`} onClick={() => setOpen(!open)}>
       <svg viewBox="0 0 16 10" width="16" height="10" aria-hidden="true"><path d="M2 2l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg></button></div>
   </div>;
@@ -28,7 +29,7 @@ function ModeBar({ k, ctx, onSettings }) {
   const showStop = ctx.d.connected && k !== "wifi";
   return <div class="banner combined" style={`--tone:${s.tone}`}>
     <div class="bstate"><BackArrow buttons={q.buttons} /><ModePill s={s} />{s.sub && <span class="sub">{s.sub}</span>}</div>
-    <span class={`bexplain${s.alert || q.alert ? " alert" : ""}`}>{q.text || s.msg}</span>
+    <span class={`bexplain${s.alert || q.alert ? " alert" : ""}`}>{q.text || prose(s.msg, ctx.units)}</span>
     {q.input}
     <div class="bbtns">{[...mainButtons(q.buttons), ...main].map(b => <Btn b={b} />)}{showStop && <StopBtn send={ctx.send} />}</div>
   </div>;

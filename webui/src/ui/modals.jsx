@@ -3,6 +3,7 @@ import { SCREENS } from "../flow/screens.js";
 import { ModePill, Conn, SpindleBtn, spindleLock } from "./parts.jsx";
 import { MACHINE_SETTINGS, settingError, effectiveWorkArea } from "../device/settings.js";
 import { AdvancedSection } from "./advanced.jsx";
+import { fmt, fmtU, fmtProse, prose, editText, editedMm, numMode, unitName } from "../units.js";
 import { JobsSection } from "./jobs.jsx";
 import { DeviceSection } from "./device.jsx";
 import { WIFI_MODES, OTHER_WIFI_MODES, NET_SETTINGS, netError, netChanges, netWarnings } from "../device/network.js";
@@ -68,7 +69,7 @@ function StateSection({ k, ctx, close }) {
     <div class="minis"><div class="mini"><span>Mode</span><b><ModePill s={s} small /> {s.sub}</b></div>
       <div class="mini"><span>Connection</span><b><Conn d={d} /></b></div>
       <div class="mini"><span>Firmware reports</span><b>Maslow {d.maslow} · {d.fluid}</b></div></div>
-    <p class={s.alert ? "alert" : ""} style="margin:0">{s.msg}</p>
+    <p class={s.alert ? "alert" : ""} style="margin:0">{prose(s.msg, ctx.units)}</p>
     <div class="actgrid">{ACT.map(([id, label, what]) => {
       // Mini-only actions stay greyed out until the page knows this is a Mini (machine.js notYet says why)
       const ok = on.includes(id) && !d.notYet?.[id], tip = what + (ok ? "" : " " + (d.notYet?.[id] ? d.notYet[id] + "." : why(id)));
@@ -104,8 +105,8 @@ export function Settings({ k, ctx, onClose, theme, setTheme, look, setLook, comp
       <Row label="Spindle" hint="Runs the spindle at 12,000 RPM outside a job: to check the bit runs true, or to cut by hand while you jog. Stop also turns it off.">
         <span class="mono">{d.spindle === "on" ? "Running" : "Off"}</span><SpindleBtn k={k} d={d} send={ctx.send} /></Row>
       {spindleLock(k, d) && <p class="note" style="margin:0">{spindleLock(k, d)}.</p>}</>}
-    <Row label="Last stick-out" hint="Set when you measure a tool."><span class="mono">{d.zFromStickout ? `${d.zFromStickout} mm` : "–"}</span></Row>
-    <Row label="Z after Stop" hint="Stop leaves Z where it is, so the bit may stay in the work. Continue lifts it to at least 2 mm above work Z 0 before moving."><span>Stays put</span><span class="note">set in firmware</span></Row></>;
+    <Row label="Last stick-out" hint="Set when you measure a tool."><span class="mono">{d.zFromStickout ? fmtU(d.zFromStickout, ctx.units) : "–"}</span></Row>
+    <Row label="Z after Stop" hint={prose("Stop leaves Z where it is, so the bit may stay in the work. Continue lifts it to at least 2 mm above work Z 0 before moving.", ctx.units)}><span>Stays put</span><span class="note">set in firmware</span></Row></>;
   else if (sec === "jobs") body = <JobsSection recorder={ctx.recorder} />;
   // One choice: Light, Dark, or the legacy UI (the old page's layout, ui/legacy.jsx), which says what it is in its tooltip
   else if (sec === "display") {
@@ -119,7 +120,12 @@ export function Settings({ k, ctx, onClose, theme, setTheme, look, setLook, comp
             {n}{v === "legacy" && <svg class="warnicon" viewBox="0 0 24 24" width="16" height="16" role="img" aria-label={LEGACY}>
               <path d="M12 2 1 21h22L12 2z" fill="#d4a32c" /><path d="M12 9v5M12 17v1.5" stroke="#1b1d22" stroke-width="2.2" stroke-linecap="round" /></svg>}
           </button>)}
-      </div></Row></>;
+      </div></Row>
+      <Row label="Units" hint="What positions, sizes and typed values use. The machine always works in mm and is always sent mm; belt lengths and the settings lists stay in mm. Remembered in this browser.">
+        <div class="subtabs" role="radiogroup" aria-label="Units">
+          {[["mm", "mm"], ["in", "inch"]].map(([v, n]) =>
+            <button type="button" role="radio" aria-checked={ctx.units === v} aria-selected={ctx.units === v} onClick={() => ctx.setUnits(v)}>{n}</button>)}
+        </div></Row></>;
   }
   else body = <AdvancedSection k={k} ctx={ctx}>
     <Row label="Command box" hint="A box under the log that sends a line to the machine as typed, for support. No checks: motion and calibration commands run too. Remembered in this browser.">
@@ -157,23 +163,24 @@ function MotorTest({ k, ctx }) {
 // extend. Extend distance 0 means "extend until I say the belts are attached" (Done extending); a set distance is
 // for a machine standing vertically, where the belts can't be pulled out by hand.
 function FrameSection({ ctx, busy }) {
-  const { d, send } = ctx;
-  const [ext, setExt] = useState(String(d.extendDist ?? 0));
-  const [spoil, setSpoil] = useState(String(d.workArea.spoil));
-  const [stock, setStock] = useState(String(d.stock ?? 0));
-  const extN = parseFloat(ext), spoilN = parseFloat(spoil), stockN = parseFloat(stock);
+  const { d, send } = ctx, u = ctx.units;
+  const [ext, setExt] = useState(editText(d.extendDist ?? 0, u));
+  const [spoil, setSpoil] = useState(editText(d.workArea.spoil, u));
+  const [stock, setStock] = useState(editText(d.stock ?? 0, u));
+  // An untouched box keeps the device's value exactly (units.js editedMm), so a rounded inch value is never saved
+  const extN = editedMm(ext, d.extendDist, u), spoilN = editedMm(spoil, d.workArea.spoil, u), stockN = editedMm(stock, d.stock, u);
   const extOk = extN >= 0 && !(extN === 0 && d.notYet?.extendUntilDone);
   return <><h4>Frame and belts</h4>
     <Row label="Extend distance" hint="0: the belts pay out until you press Done extending. Set a length if the machine stands vertically.">
-      <input type="text" inputmode="decimal" class="mono" value={ext} onInput={e => setExt(e.currentTarget.value)} style="width:90px" /> mm
+      <input type="text" inputmode={numMode(u)} class="mono" value={ext} onInput={e => setExt(e.currentTarget.value)} aria-label={`Extend distance in ${unitName(u)}`} style="width:90px" /> {u}
       <button class="btn ghost" type="button" disabled={busy || !extOk || extN === d.extendDist} onClick={() => send("setExtendDist", { mm: extN })}>Save</button></Row>
     {extN === 0 && d.notYet?.extendUntilDone &&
       <p class="note" style="color:var(--temp)"><b>Temporary:</b> {d.notYet.extendUntilDone}</p>}
     <Row label="Spoil board thickness" hint="Raises the sled, which changes the belt angles. 0 if there isn't one.">
-      <input type="text" inputmode="decimal" class="mono" value={spoil} onInput={e => setSpoil(e.currentTarget.value)} style="width:90px" /> mm
+      <input type="text" inputmode={numMode(u)} class="mono" value={spoil} onInput={e => setSpoil(e.currentTarget.value)} aria-label={`Spoil board thickness in ${unitName(u)}`} style="width:90px" /> {u}
       <button class="btn ghost" type="button" disabled={busy || !(spoilN >= 0) || spoilN === d.workArea.spoil} onClick={() => send("setSpoilboard", { mm: spoilN })}>Save</button></Row>
     <Row label="Stock thickness" hint="Optional. Calibration doesn't use it yet.">
-      <input type="text" inputmode="decimal" class="mono" value={stock} onInput={e => setStock(e.currentTarget.value)} style="width:90px" /> mm
+      <input type="text" inputmode={numMode(u)} class="mono" value={stock} onInput={e => setStock(e.currentTarget.value)} aria-label={`Stock thickness in ${unitName(u)}`} style="width:90px" /> {u}
       <button class="btn ghost" type="button" disabled={busy || !(stockN >= 0) || stockN === d.stock} onClick={() => send("setStock", { stock: stockN })}>Save</button></Row>
     <WorkAreaRow ctx={ctx} busy={busy} />
     <SettingGroup ctx={ctx} busy={busy} label="Work area centre offset" name="Work area centre offset" keys={[["offX", "X"], ["offY", "Y"]]}
@@ -181,14 +188,14 @@ function FrameSection({ ctx, busy }) {
     <SettingGroup ctx={ctx} busy={busy} label="Park position" name="Park position" keys={[["parkX", "X"], ["parkY", "Y"], ["parkZ", "Z"]]}
       hint="Where Park moves the sled. Z first, to this height above work Z 0; then X and Y, as machine position (0, 0 is where Apply tension leaves the sled)." />
     <SettingGroup ctx={ctx} busy={busy} label="Belt retraction limit" name="Belt retraction limit" keys={[["retractLimit"]]}
-      hint="Apply tension stops if a belt winds in more than this. Default 300 mm." />
+      hint={prose("Apply tension stops if a belt winds in more than this. Default 300 mm.", u)} />
     <SettingGroup ctx={ctx} busy={busy} label="Retraction force" name="Retraction force" keys={[["retractForce"]]}
       hint="How hard the motors pull before a belt counts as tight, when retracting and measuring. Default 1300." />
     <SettingGroup ctx={ctx} busy={busy} label="Scale" name="Scale" keys={[["scaleX", "X"], ["scaleY", "Y"]]}
       hint="Corrects cuts that come out a little too big or small. 1 is no change; 1.01 cuts 1 % larger. 0.8 to 1.2." />
     <Row label="Workspace tolerance" hint="The Workspace overlay shows where cuts should land within this, and whether the job stays inside. Remembered in this browser.">
       <select value={String(ctx.tolerance)} onChange={e => ctx.setTolerance(parseFloat(e.currentTarget.value))}>
-        {[0.5, 1, 2, 3, 5].map(v => <option value={String(v)}>±{v} mm</option>)}</select></Row>
+        {[0.5, 1, 2, 3, 5].map(v => <option value={String(v)}>±{u === "in" ? fmtU(v, u, 2) : `${v} mm`}</option>)}</select></Row>
     {d.frame?.vertical && <Row label="Sled weight" hint="The sled with the router fitted. On a vertical frame its weight stretches the belts, so the Workspace overlay needs it. Remembered in this browser.">
       <select value={String(ctx.sledMass)} onChange={e => ctx.setSledMass(parseFloat(e.currentTarget.value))}>
         {[4, 6, 8, 10, 12, 15].map(v => <option value={String(v)}>{v} kg</option>)}</select></Row>}
@@ -200,29 +207,30 @@ function FrameSection({ ctx, busy }) {
 function WorkAreaRow({ ctx, busy }) {
   const { d } = ctx;
   const a = effectiveWorkArea({ workW: d.settings?.workW ?? 0, workH: d.settings?.workH ?? 0 }, d.frame);
-  const mm = (v, auto) => (v == null ? "?" : `${Math.round(v)}${auto ? " (auto)" : ""}`);
+  const u = ctx.units, mm = (v, auto) => (v == null ? "?" : `${fmt(v, u, "size")}${auto ? " (auto)" : ""}`);
   return <SettingGroup ctx={ctx} busy={busy} label="Work area" name="Work area" keys={[["workW", "X"], ["workH", "Y"]]}
     hint={<>0 = automatic: worked out from how far the belts extend to the anchors (80 % of the frame's width, 60 % of its height).
-      {" "}Now {mm(a.w, a.auto.w)} × {mm(a.h, a.auto.h)} mm.</>} />;
+      {" "}Now {mm(a.w, a.auto.w)} × {mm(a.h, a.auto.h)} {u}.</>} />;
 }
 
 // One or more machine settings (device/settings.js) with one Save. Edited fields are kept as drafts; the rest show
 // the device's value, so a value read after the dialog opened still appears. Save sends only what changed.
 function SettingGroup({ ctx, busy, label, name, hint, keys }) {
-  const { d, send } = ctx;
+  const { d, send } = ctx, u = ctx.units;
   const [draft, setDraft] = useState({});
   const stored = (k) => d.settings?.[k];
-  const text = (k) => draft[k] ?? (stored(k) == null ? "" : String(stored(k)));
-  const values = Object.fromEntries(keys.map(([k]) => [k, text(k).trim() === "" ? NaN : Number(text(k))]));
-  const errors = keys.map(([k, sub]) => [sub, settingError(k, values[k])]).filter(([, e]) => e);
+  // Lengths (unit "mm") are shown and typed in the page's units and kept in mm; the rest as they are
+  const unit = MACHINE_SETTINGS[keys[0][0]].unit, len = unit === "mm";
+  const text = (k) => draft[k] ?? (stored(k) == null ? "" : len ? editText(stored(k), u) : String(stored(k)));
+  const values = Object.fromEntries(keys.map(([k]) => [k, text(k).trim() === "" ? NaN : len ? editedMm(text(k), stored(k), u) : Number(text(k))]));
+  const errors = keys.map(([k, sub]) => [sub, settingError(k, values[k], len ? (v) => fmtProse(v, u) : undefined)]).filter(([, e]) => e);
   const changed = keys.some(([k]) => values[k] !== stored(k));
-  const unit = MACHINE_SETTINGS[keys[0][0]].unit;
   const save = () => { send("setSettings", { values, label: name }); setDraft({}); };
   return <Row label={label} hint={hint}>
     {keys.map(([k, sub]) => <label class="setfield">{sub && <span>{sub}</span>}
-      <input type="text" inputmode="decimal" class="mono" value={text(k)} aria-label={`${label}${sub ? ` ${sub}` : ""}`}
+      <input type="text" inputmode={len ? numMode(u) : "decimal"} class="mono" value={text(k)} aria-label={`${label}${sub ? ` ${sub}` : ""}${len ? ` in ${unitName(u)}` : ""}`}
         placeholder={stored(k) == null ? "–" : ""} onInput={e => setDraft({ ...draft, [k]: e.currentTarget.value })} style="width:80px" /></label>)}
-    {unit && <span>{unit}</span>}
+    {unit && <span>{len ? u : unit}</span>}
     <button class="btn ghost" type="button" disabled={busy || errors.length > 0 || !changed} onClick={save}>Save</button>
     {changed && errors.length > 0 && <span class="note" style="flex-basis:100%;color:var(--danger)">
       {errors.map(([sub, e]) => (sub ? `${sub}: ${e}` : e)).join(" · ")}</span>}
@@ -234,31 +242,31 @@ function SettingGroup({ ctx, busy, label, name, hint, keys }) {
 // On a 4.1 the Z home must be 0–72 mm above the z-stop; the Mini's spindle board has its own Z range.
 const Z_HOME_MAX_MM = 72;
 function HomeSection({ ctx, busy }) {
-  const { d, send } = ctx;
-  const f = v => (Math.abs(v) < 0.0005 ? 0 : v).toFixed(1);
+  const { d, send } = ctx, u = ctx.units;
+  const f = v => editText(v, u, "position");
   const [x, setX] = useState(f(d.wco.x)), [y, setY] = useState(f(d.wco.y)), [z, setZ] = useState(f(d.wco.z));
-  const xN = parseFloat(x), yN = parseFloat(y), zN = parseFloat(z);
+  const xN = editedMm(x, d.wco.x, u, "position"), yN = editedMm(y, d.wco.y, u, "position"), zN = editedMm(z, d.wco.z, u, "position");
   const mini = /^Maslow Mini/.test(d.machine || "");
-  const xyErr = !Number.isFinite(xN) || !Number.isFinite(yN) ? "Enter X and Y in mm" : "";
-  const zErr = !Number.isFinite(zN) ? "Enter Z in mm"
-    : !mini && (zN < 0 || zN > Z_HOME_MAX_MM) ? `Z home must be 0–${Z_HOME_MAX_MM} mm above the z-stop` : "";
+  const xyErr = !Number.isFinite(xN) || !Number.isFinite(yN) ? `Enter X and Y in ${unitName(u)}` : "";
+  const zErr = !Number.isFinite(zN) ? `Enter Z in ${unitName(u)}`
+    : !mini && (zN < 0 || zN > Z_HOME_MAX_MM) ? `Z home must be 0–${fmtProse(Z_HOME_MAX_MM, u)} above the z-stop` : "";
   const off = busy || !!d.notYet?.setHomeXY;
   const field = (label, v, set) => <label class="field"><span>{label}</span>
-    <input type="text" inputmode="decimal" class="mono" value={v} onInput={e => set(e.currentTarget.value)} aria-label={`Home ${label} in mm`} style="width:80px" /></label>;
+    <input type="text" inputmode={numMode(u)} class="mono" value={v} onInput={e => set(e.currentTarget.value)} aria-label={`Home ${label} in ${unitName(u)}`} style="width:80px" /></label>;
   const isReset = d.wco.x === 0 && d.wco.y === 0;   // Z is the Set Z step's, so Reset home leaves it
   return <><h4>Home</h4>
     <p class="note">The jog pad's Set home XY and Set Z put home where the machine is now. Here you can type it instead, in
       machine coordinates.</p>
     <Row label="Home X, Y" hint="Machine position of the job's 0, 0.">
-      {field("X", x, setX)}{field("Y", y, setY)} mm
+      {field("X", x, setX)}{field("Y", y, setY)} {u}
       <button class="btn ghost" type="button" disabled={off || !!xyErr || (xN === d.wco.x && yN === d.wco.y)} onClick={() => send("setHomeXY", { x: xN, y: yN })}>Set</button></Row>
     {xyErr && <p class="note" style="color:var(--danger)">{xyErr}</p>}
     <Row label="Home Z" hint={mini ? "Machine Z of the job's Z 0." : "Machine Z of the job's Z 0: how far above the z-stop."}>
-      {field("Z", z, setZ)} mm
+      {field("Z", z, setZ)} {u}
       <button class="btn ghost" type="button" disabled={off || !!zErr || zN === d.wco.z} onClick={() => send("setZ", { z: zN })}>Set</button></Row>
     {zErr && <p class="note" style="color:var(--danger)">{zErr}</p>}
     <Row label="Reset home" hint="Puts home X, Y back on the machine's own 0, 0, so work and machine X and Y read the same. Z stays as Set Z left it.">
-      <button class="btn ghost" type="button" disabled={off || isReset} onClick={() => { send("resetHome"); setX("0.0"); setY("0.0"); }}>{isReset ? "Already reset" : "Reset home"}</button></Row></>;
+      <button class="btn ghost" type="button" disabled={off || isReset} onClick={() => { send("resetHome"); setX("0"); setY("0"); }}>{isReset ? "Already reset" : "Reset home"}</button></Row></>;
 }
 
 // Network: the WiFi the board joins, what it does when it can't, and its hotspot. These are the board's own flash

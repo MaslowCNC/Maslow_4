@@ -1,6 +1,7 @@
 import { useState } from "preact/hooks";
 import { jobFit } from "./fit.js";
 import { SEAT_TO_WORK, helperZ } from "./screens.js";
+import { editText, editedMm, fmtProse, numMode, unitName } from "../units.js";
 
 // What each screen asks for in the top bar, and what its buttons do. The rule from REWRITE.md: whatever the
 // top bar asks for can be completed in the top bar (small inputs here, bigger tasks in a pop-up opened from here).
@@ -9,23 +10,23 @@ import { SEAT_TO_WORK, helperZ } from "./screens.js";
 // Returns { text, buttons: [{ label, onClick, style }], input }
 
 // The stick-out must leave the tip above the work surface (under SEAT_TO_WORK), or the helper would set Z below it
-function StickoutInput({ onSave, value }) {
-  const [v, setV] = useState(value != null ? String(value) : "");
-  const n = parseFloat(v), ok = n > 0 && n < SEAT_TO_WORK;
+function StickoutInput({ onSave, value, unit }) {
+  const [v, setV] = useState(editText(value, unit));
+  const n = editedMm(v, value, unit), ok = n > 0 && n < SEAT_TO_WORK;
   return <span class="binput">
-    <label class="field"><span>Stick-out</span><input value={v} onInput={e => setV(e.currentTarget.value)} aria-label="Stick-out in mm" style="width:70px" /> mm</label>
-    <button class="btn" type="button" disabled={!ok} title={ok || !v ? "" : `From 0 to ${SEAT_TO_WORK} mm`} onClick={() => ok && onSave(n)}>Set Z</button>
+    <label class="field"><span>Stick-out</span><input value={v} inputmode={numMode(unit)} onInput={e => setV(e.currentTarget.value)} aria-label={`Stick-out in ${unitName(unit)}`} style="width:70px" /> {unit}</label>
+    <button class="btn" type="button" disabled={!ok} title={ok || !v ? "" : `From 0 to ${fmtProse(SEAT_TO_WORK, unit)}`} onClick={() => ok && onSave(n)}>Set Z</button>
   </span>;
 }
 
 // The spoil board raises the sled, and Find anchors works out the belt angles from it, so it's offered (filled in with
 // the saved value) right before Find anchors runs. Saved like Settings › Frame and belts does it.
-function SpoilInput({ value, send }) {
-  const [v, setV] = useState(String(value ?? 0));
-  const n = parseFloat(v), ok = n >= 0 && n <= 50;
+function SpoilInput({ value, send, unit }) {
+  const [v, setV] = useState(editText(value ?? 0, unit));
+  const n = editedMm(v, value, unit), ok = n >= 0 && n <= 50;
   return <span class="binput">
-    <label class="field"><span>Spoil board</span><input type="text" inputmode="decimal" value={v} onInput={e => setV(e.currentTarget.value)} aria-label="Spoil board thickness in mm" style="width:70px" /> mm</label>
-    <button class="btn ghost" type="button" disabled={!ok || n === value} title={ok || !v ? "" : "From 0 to 50 mm"} onClick={() => send("setSpoilboard", { mm: n })}>Save</button>
+    <label class="field"><span>Spoil board</span><input type="text" inputmode={numMode(unit)} value={v} onInput={e => setV(e.currentTarget.value)} aria-label={`Spoil board thickness in ${unitName(unit)}`} style="width:70px" /> {unit}</label>
+    <button class="btn ghost" type="button" disabled={!ok || n === value} title={ok || !v ? "" : `From 0 to ${fmtProse(50, unit)}`} onClick={() => send("setSpoilboard", { mm: n })}>Save</button>
   </span>;
 }
 
@@ -61,13 +62,13 @@ function LineInput({ value, onChange }) {
 }
 
 // The chosen job against the work area and the frame (fit.js), once the file has been read
-export function fitFor(d, a) {
+export function fitFor(d, a, unit = "mm") {
   const g = d.gcode?.status === "ready" && d.gcode.file === a.file ? d.gcode : null;
-  return g ? jobFit(g.extent, d.wco, d.settings, d.frame) : null;
+  return g ? jobFit(g.extent, d.wco, d.settings, d.frame, unit) : null;
 }
 
 function askFor(k, ctx) {
-  const { d, a, setA, send, mark } = ctx;
+  const { d, a, setA, send, mark } = ctx, u = ctx.units || "mm";
   const B = (label, onClick, style = "") => ({ label, onClick, style });
   const stop = (label = "Stop") => B(label, () => send("stop"), "stopping");
   // Back to the previous step this page asked about: it forgets that answer, so the step can be checked or redone.
@@ -93,14 +94,14 @@ function askFor(k, ctx) {
     case "restored": return { text: "Belt lengths restored from the encoders. A reboot always releases tension, so apply it again.",
       buttons: [B("Apply tension", () => { mark(2); send("tension"); })] };
     case "tensioning": return { text: "Taking up the slack, then checking the position against the anchors.", buttons: [stop()] };
-    case "notattached": return { text: "A belt wound in more than 300 mm. Check every belt is hooked to its anchor, then carry on.",
+    case "notattached": return { text: `A belt wound in more than ${fmtProse(300, u)}. Check every belt is hooked to its anchor, then carry on.`,
       buttons: [B("Continue applying tension", () => send("tension")), B("Retract belts", () => { setA({ retractChecked: false }); send("retract"); }, "ghost")] };
     case "tensionfail": return { text: "The belt lengths don't match the saved anchors. Find anchors measures them again; the belts stay attached. Sled on a spoil board? Enter its thickness first.",
       buttons: [B("Find anchors", () => { mark(3); send("findAnchors"); }), B("Apply tension again", () => send("tension"), "ghost")],
-      input: <SpoilInput value={d.workArea?.spoil} send={send} /> };
+      input: <SpoilInput value={d.workArea?.spoil} send={send} unit={u} /> };
     case "anchors": return { text: "Measuring the frame to find each anchor point. Keep clear of the sled and belts.", buttons: [stop("Stop finding anchors")] };
     case "noanchors": return { text: "Check each belt is hooked to its anchor, then try again.",
-      input: <SpoilInput value={d.workArea?.spoil} send={send} />,
+      input: <SpoilInput value={d.workArea?.spoil} send={send} unit={u} />,
       buttons: [B("Find anchors again", () => send("findAnchors")), B("Retract belts", () => { setA({ retractChecked: false }); send("retract"); }, "ghost")] };
     // The machine reports no tool state (TS): a 4.1, or older firmware on a Mini. The tool check can only be skipped
     case "tcheck": return d.toolSteps === false
@@ -114,9 +115,9 @@ function askFor(k, ctx) {
       buttons: [B("Set Z", () => { setA({ zTarget: d.pos.z }); send("setZ"); }),
         B("Set Z helper", () => setA({ helper: true, zTarget: null }), "ghost"),
         B("Remove tool", () => { setA({ zTarget: null }); send("removeTool"); }, "ghost")] };
-    case "zhelper": return { text: `Measure how far the bit sticks out of the spindle socket, from the socket face to the tip. The bit is lowered to the work and Z is set there (assuming the seated socket face is ${SEAT_TO_WORK} mm above the work).`,
+    case "zhelper": return { text: `Measure how far the bit sticks out of the spindle socket, from the socket face to the tip. The bit is lowered to the work and Z is set there (assuming the seated socket face is ${fmtProse(SEAT_TO_WORK, u)} above the work).`,
       buttons: [back({ helper: false, zTarget: null })],
-      input: <StickoutInput value={a.stickout} onSave={n => { const z = helperZ(n); setA({ stickout: n, zTarget: z }); send("lowerToWork", { z }); }} /> };
+      input: <StickoutInput value={a.stickout} unit={u} onSave={n => { const z = helperZ(n); setA({ stickout: n, zTarget: z }); send("lowerToWork", { z }); }} /> };
     case "toolfreeing": return { text: "Raising the spindle so the bit can come out. Take it out once the spindle stops.", buttons: [stop()] };
     case "toolload": return { text: "No bit loaded. Put a bit in and push it up into the light beam: the device pulls it in and seats it. Or continue with no tool.",
       buttons: [B("Continue with no tool", () => { mark(4); setA({ zDone: true }); }, "ghost")] };
@@ -150,7 +151,7 @@ function askFor(k, ctx) {
     case "lost": return { text: "Reconnecting automatically. If it doesn't come back, reboot the device or turn it off and on.", buttons: [B("Reboot device", () => send("reboot"), "ghost")] };
     // Ready to cut says when the job doesn't fit: outside the work area is a warning, past the frame blocks Run
     case "ready": {
-      const fit = fitFor(d, a);
+      const fit = fitFor(d, a, u);
       // Back to setup: the last setup step (the job file) asks again, and its Back goes further
       const toSetup = { ...back({ file: null }), label: "Back to setup" };
       return fit && (fit.level === "outside" || fit.level === "pastFrame") ? { text: fit.text, alert: true, buttons: [toSetup] } : { text: "", buttons: [toSetup] };

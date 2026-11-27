@@ -23,13 +23,13 @@ export const MACHINE_SETTINGS = {
 export const defaultSettings = () =>
   Object.fromEntries(Object.entries(MACHINE_SETTINGS).map(([k, v]) => [k, v.def]));
 
-// Why a value can't be saved, or null if it can
-export function settingError(key, value) {
+// Why a value can't be saved, or null if it can. show writes a limit for the message (a length in the page's units).
+export function settingError(key, value, show = (v) => String(v)) {
   const def = MACHINE_SETTINGS[key];
   if (!def) return "Unknown setting";
   if (typeof value !== "number" || !Number.isFinite(value)) return "Enter a number";
   if (def.integer && !Number.isInteger(value)) return "Enter a whole number";
-  if (value < def.min || value > def.max) return `Between ${def.min} and ${def.max}`;
+  if (value < def.min || value > def.max) return `Between ${show(def.min)} and ${show(def.max)}`;
   return null;
 }
 

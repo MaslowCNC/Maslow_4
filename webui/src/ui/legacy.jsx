@@ -1,7 +1,8 @@
 import { useState } from "preact/hooks";
 import { SCREENS, isSetup } from "../flow/screens.js";
 import { ask, mainActions, fitFor } from "../flow/asks.jsx";
-import { Frame, LogView, CommandBox, SaveLogBtn, jogLock, workPos, mainButtons, adcToMilliamps } from "./parts.jsx";
+import { Frame, LogView, CommandBox, SaveLogBtn, jogLock, workPos, mainButtons, adcToMilliamps, useJogStep, JogSteps } from "./parts.jsx";
+import { fmt, fmtU, prose, numMode, unitName } from "../units.js";
 import { available } from "./modals.jsx";
 import { SettingsList } from "./advanced.jsx";
 import { currentColour, MAX_CURRENT_MA } from "../art.js";
@@ -84,26 +85,27 @@ function Belts({ d, stale }) {
     })}</div>;
 }
 
-function Jog({ k, d, send }) {
-  const [step, setStep] = useState("10"), [zStep, setZStep] = useState("5");
-  const xy = parseFloat(step) > 0 ? parseFloat(step) : 0, z = parseFloat(zStep) > 0 ? parseFloat(zStep) : 0;
+// Steps are typed in the page's units (Settings › Display, or the units button here, as the old page's Toggle Units)
+// and sent as mm. Unlike the old page, toggling never sends G20 / G21 to the machine.
+function Jog({ k, d, send, u, setUnits }) {
+  const [step, setStep, xy] = useJogStep(u, "xy"), [zStep, setZStep, z] = useJogStep(u, "z");
   const lock = jogLock(k, d), s = SCREENS[k];
   const j = (dx, dy) => send("jog", { dx: dx * xy, dy: dy * xy, dz: 0 });
   const off = !!lock;
   const ny = (id) => off || !!d.notYet?.[id];
   const tip = (id) => lock ? lock[0] : d.notYet?.[id] || "";
   const dir = (dx, dy, deg, name, corner) => <button type="button" class={`cl-tile ${corner ? "jd" : "jc"}`} disabled={off || !xy}
-    aria-label={`${name} ${xy} mm`} title={tip()} onClick={() => j(dx, dy)}>{corner ? <Corner deg={deg} /> : <Arrow deg={deg} />}</button>;
-  const w = workPos(d), m = d.pos, f = (v) => s.nopos ? "–" : (Math.abs(v) < 0.0005 ? 0 : v).toFixed(3);
-  return <>
+    aria-label={`${name} ${step} ${u}`} title={tip()} onClick={() => j(dx, dy)}>{corner ? <Corner deg={deg} /> : <Arrow deg={deg} />}</button>;
+  const w = workPos(d), m = d.pos, f = (v) => s.nopos ? "–" : fmt(v, u, "position");
+  return <><JogSteps u={u} />
     <div class="cl-jog">
-      <button type="button" class="cl-tile cream zb" disabled={off || !z} aria-label={`Z up ${z} mm`} title={tip()} onClick={() => send("jog", { dx: 0, dy: 0, dz: z })}><ZArrow up /> Z</button>
+      <button type="button" class="cl-tile cream zb" disabled={off || !z} aria-label={`Z up ${zStep} ${u}`} title={tip()} onClick={() => send("jog", { dx: 0, dy: 0, dz: z })}><ZArrow up /> Z</button>
       {dir(-1, 1, 0, "Up left", true)}{dir(0, 1, 0, "Up")}{dir(1, 1, 90, "Up right", true)}
-      <label class="cl-tile cream zb"><input value={zStep} inputmode="decimal" aria-label="Z step in mm" onInput={e => setZStep(e.currentTarget.value)} /></label>
+      <label class="cl-tile cream zb"><input value={zStep} inputmode={numMode(u)} list="jogsteps" aria-label={`Z step in ${unitName(u)}`} onInput={e => setZStep(e.currentTarget.value)} /></label>
       {dir(-1, 0, -90, "Left")}
-      <label class="cl-tile cream"><input value={step} inputmode="decimal" aria-label="XY step in mm" onInput={e => setStep(e.currentTarget.value)} /></label>
+      <label class="cl-tile cream"><input value={step} inputmode={numMode(u)} list="jogsteps" aria-label={`XY step in ${unitName(u)}`} onInput={e => setStep(e.currentTarget.value)} /></label>
       {dir(1, 0, 90, "Right")}
-      <button type="button" class="cl-tile cream zb" disabled={off || !z} aria-label={`Z down ${z} mm`} title={tip()} onClick={() => send("jog", { dx: 0, dy: 0, dz: -z })}><ZArrow /> Z</button>
+      <button type="button" class="cl-tile cream zb" disabled={off || !z} aria-label={`Z down ${zStep} ${u}`} title={tip()} onClick={() => send("jog", { dx: 0, dy: 0, dz: -z })}><ZArrow /> Z</button>
       {dir(-1, -1, -90, "Down left", true)}{dir(0, -1, 180, "Down")}{dir(1, -1, 180, "Down right", true)}
       <button type="button" class="cl-tile cream zb" disabled={ny("setZ")} title={tip("setZ") || "Make where the bit is now work Z 0"} onClick={() => send("setZ")}>Define Z Home</button>
       <button type="button" class="cl-tile cream" disabled={off} aria-label="Go to your home (work 0, 0)" title={tip() || "Go to your home (work 0, 0)"}
@@ -112,6 +114,8 @@ function Jog({ k, d, send }) {
       <button type="button" class="cl-tile cream" disabled={ny("setHomeXY")} title={tip("setHomeXY") || "Make where the sled is now work X 0, Y 0"} onClick={() => send("setHomeXY")}>Define XY Home</button>
     </div>
     {lock && <p class="cl-lock"><b>{lock[0]}.</b> {lock[1]}</p>}
+    <button type="button" class="cl-units" title="Toggle Units: what positions and steps are shown and typed in. The machine is always sent mm."
+      onClick={() => setUnits(u === "in" ? "mm" : "in")}>{u === "in" ? "inch" : "mm"}</button>
     <table class={`cl-pos${s.stale ? " stale" : ""}`}><tbody>
       {["x", "y", "z"].map(a => <tr><td>{a.toUpperCase()}:</td><td>{f(w[a])}</td><td class="cl-mpos">machine {f(m[a])}</td></tr>)}
     </tbody></table>
@@ -166,12 +170,12 @@ function Bounds({ k, ctx, main }) {
   const { d, a } = ctx;
   if (!a.file) return null;
   const g = d.gcode?.file === a.file ? d.gcode : null, e = g?.status === "ready" && g.extent;
-  const fit = fitFor(d, a);
+  const u = ctx.units, fit = fitFor(d, a, u), c = (v) => fmt(v, u, "fine");
   const trace = main.find(b => b.label === "Trace boundary") || { disabled: true, title: "Only when ready to cut" };
   return <div class="cl-bounds">
     <Tile b={trace} class="cream">Trace Boundary</Tile>
     <div class="cl-boundsinfo"><b>Job Bounds:</b><br />{g?.status === "reading" ? "Reading the file…" : g?.status === "failed" ? `Couldn't read the file: ${g.detail || ""}`
-      : e ? `X ${e.min.x.toFixed(1)} to ${e.max.x.toFixed(1)}, Y ${e.min.y.toFixed(1)} to ${e.max.y.toFixed(1)}, ${Math.max(0, -e.min.z).toFixed(1)} mm deep` : "No file loaded"}
+      : e ? `X ${c(e.min.x)} to ${c(e.max.x)}, Y ${c(e.min.y)} to ${c(e.max.y)} ${u}, ${fmtU(Math.max(0, -e.min.z), u, "fine")} deep` : "No file loaded"}
       {fit?.text && <span class={fit.level === "outside" || fit.level === "pastFrame" ? "cl-warn" : ""}><br />{fit.text}</span>}</div>
   </div>;
 }
@@ -268,7 +272,7 @@ export function Legacy({ k, ctx, overlay, closeOverlay, narrow, onNewUI }) {
       </div>
       <div class="cl-controls">
         <section class="cl-section">
-          <div class="cl-state" style={`background:${tint}`} title={s.msg}>State: {label}</div>
+          <div class="cl-state" style={`background:${tint}`} title={prose(s.msg, ctx.units)}>State: {label}</div>
           <div class="cl-grid4">
             <button type="button" class="cl-tile cream cl-setup" onClick={() => setSetupOpen(true)}>
               <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="12" cy="12" r="3.5" fill="none" stroke="currentColor" stroke-width="2" />
@@ -279,7 +283,7 @@ export function Legacy({ k, ctx, overlay, closeOverlay, narrow, onNewUI }) {
           </div>
           <Belts d={d} stale={s.stale} />
         </section>
-        <section class="cl-section"><Jog k={k} d={d} send={ctx.send} /></section>
+        <section class="cl-section"><Jog k={k} d={d} send={ctx.send} u={ctx.units} setUnits={ctx.setUnits} /></section>
         <section class="cl-section cl-job">
           <Files k={k} ctx={ctx} />
           <Playback k={k} ctx={ctx} q={q} main={main} />
