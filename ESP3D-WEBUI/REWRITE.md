@@ -478,7 +478,7 @@ currents; Extend distance, spoil board and stock thickness, Reboot.
 | Belt motor test (Test) | Calibration popup | **Done** (2026-11-18): Settings › Advanced, `machine.testMotors()` (`$TEST`). Only while Idle with slack belts (Maslow 0, 2, 4): each motor pays its belt out at full power for up to 100 ms; shows each arm's result |
 | Set Z-Stop | Calibration popup | Not used on the Mini; the 4.1 needs it (its flow isn't defined) |
 | Set home by typing X / Y / Z | Set Home, Set Z Home popups | **Done** (2026-11-18): Set home XY / Set Z open a box filled in with "here"; XY in machine coordinates, Z relative to the current Z home |
-| mm / inch | Units toggle | mm only |
+| mm / inch | Units toggle | **Needed** (decided 2026-11-27): mm only today; add mm / inch handling |
 | Discard a stopped job | Discard button | **Done** (2026-11-18): Discard on the Job stopped bar (`$SD/Discard`) |
 | Change the Continue line | Resume line with ▲▼ | **Done** (2026-11-18): a Line box on the Job stopped bar, the stopped line to start |
 
@@ -494,12 +494,18 @@ currents; Extend distance, spoil board and stock thickness, Reboot.
 | Firmware update, check for updates | `updatedlg.js`, `checkupdatesdlg.js` | Settings › Device has a disabled button |
 | System status (`[ESP420]`) | `statusdlg.js` | Partly in Settings › Device |
 | Motor current history (the old Debugging tab had live gauges only, which the motor rings cover) | Debugging tab (hidden) | **Done** (2026-11-20, simulator only): Settings › Jobs lists the last 10 jobs (when, how long, how it ended); each opens to its motor current and belt error chart, a CSV download and the job's log (Download log). Recorded in this browser (one row a second, IndexedDB); only while the page is open, so a sleeping phone or background tab leaves gaps. `webui/src/device/jobrecord.js` |
-| Feed override, motors off, probe | Main › GRBL and Controls panels | Probably not needed on a Maslow; decide |
-| Camera, preferences, languages, login, UI lock, macros, credits | navbar, dialogs | Mostly unused; decide to keep or drop |
-| Spindle speed override, jog feed rate (mm/min) | Main › GRBL and Controls panels | Missing; decide with the feed override (found while building the legacy UI, 2026-11-25) |
+| Feed override, motors off, probe | Main › GRBL and Controls panels | **Dropped** (decided 2026-11-27). Probe may come back with the 4.1's Z flow |
+| Camera (IP webcam tab) | `camera.js` | **Dropped for now** (decided 2026-11-27); might come back as a Settings field plus a panel |
+| Languages | `translate.js`, `js/language/` | **To try** (decided 2026-11-27): translations for the new UI; size and how strings are looked up still to work out |
+| Macros | `macrodlg.js` | **New version, to build** (decided 2026-11-27): named buttons (a label plus one or more command lines) edited in Settings, saved on the board's flash as `macros.json` (the file manager's path), so every connection sees the same set. Shown as a Macros row on the jog pad only once the user has set at least one. Off during a job; a macro that moves the machine asks to confirm |
+| Login | `logindlg.js` | **Dropped** (decided 2026-11-27): the firmware is built without `ENABLE_AUTHENTICATION` |
+| UI lock | `controls.js` (`lock_UI`) | **Dropped** (decided 2026-11-27): jogging already locks by state. New idea instead: a sleep mode, so an idle page left open goes dormant (no accidental taps, less traffic) until woken |
+| Preferences | `preferencesdlg.js`, `preferences.json` | **Dropped** (decided 2026-11-27): Settings › Display covers what's left |
+| Credits | `creditsdlg.js` | **One line** (decided 2026-11-27): a one-line credit and the licence in Settings › Device |
+| Spindle speed override, jog feed rate (mm/min) | Main › GRBL and Controls panels | **Dropped** (decided 2026-11-27) |
 | SD card space (used / total) | Main › SD Files | Missing |
-| The file's G-code as text, under the preview | Maslow tab (`tablettab_gcode`) | Missing; decide |
-| On-screen numpad for the jog step sizes | Maslow tab (`numpad.js`) | Missing; phones bring their own keyboard; decide |
+| The file's G-code as text, under the preview | Maslow tab (`tablettab_gcode`) | **Not under the preview** (decided 2026-11-27): a G-code tab in the log instead, with line numbers, the running line highlighted and followed during a job |
+| On-screen numpad for the jog step sizes | Maslow tab (`numpad.js`) | **Dropped** (decided 2026-11-27): phones and tablets bring their own number keyboard |
 
 *From Maslow-Main* (merged into `firmwareRewrite` by #1170, 2026-11-25; the current UI has these, the new UI doesn't):
 
