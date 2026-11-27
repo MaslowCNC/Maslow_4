@@ -42,8 +42,16 @@ up in a new session, read "Where we are", "How to work on it" and "What we still
   #1174; a release install tried on the Mini). The Mini serves the new page since 2026-11-27 (flashed with `--fs`);
   other machines run the old page until their filesystem is updated (part 3).
 - **Tested on the Mini, from the dev server (2026-11-18):** belt labels, motor rings, command box, Save log, settings read
-  and save, Set home, Settings › Home, delete, spindle on / off. **Not yet:** Continue from a changed
-  line, Discard, the belt motor test, the fit check.
+  and save, Set home, Settings › Home, delete, spindle on / off. **On 2026-11-27:** the Set Z helper (the tip
+  landed just short of the work at 30 mm, so seat to work is now 31), mm / inch, Move Z to work Z 0 and Reset Z,
+  the fit check (warning shown, Run off past the frame), Continue from a changed line, Discard, Continue with no tool,
+  Remove tool and reloading a bit with slack belts (Extended, about 15 s out and 18 s back in),
+  the belt motor test (all four arms passed),
+  and no `encoderTeeth` warning with the right value (35). Fixed after the test: Check the tool (Settings ›
+  State) did nothing after Continue with no tool (the real adapter drops `toolCheck`; it now goes back to the
+  tool steps, and Reset Z when Z needs homing), and Remove tool was offered with no bit loaded (`TS:4`).
+  **Not yet:** the spoil board box at Find anchors,
+  the `encoderTeeth` warning with a wrong value, the phone layout on a real phone.
 - **The Mini's tool check is connected (2026-11-20; on the Mini 2026-11-25):** the
   firmware reports the tool state in the status report's `TS` field, and the tool steps and the spindle-fault
   screens follow it. **On the Mini (2026-11-25):** both boards flashed (spindle by USB, boost kept at 0 V; WiFi
@@ -55,7 +63,7 @@ up in a new session, read "Where we are", "How to work on it" and "What we still
   (TS 7, can't be triggered on purpose: unit tests and the simulator only). Home Z clears the work Z offset, so the page goes
   back to Set Z (keeping the work piece and file answers); Reset home resets X and Y only (decided 2026-11-25).
   Home Z from another tab with a bit loaded isn't noticed (the report may never show homing). Issue 24 (Z slips under load) is open; 25 is fixed
-  (seat to work set to 30 mm, 2026-11-25). The PR to `firmwareRewrite` should @-mention @tristan-huber for the report field.
+  (seat to work set to 31 mm, 2026-11-27). The PR to `firmwareRewrite` should @-mention @tristan-huber for the report field.
 - **Next:** the rest of the gap list ("What we still need" › 2), and the 4.1's setup flow.
 
 ## How to work on it
@@ -621,7 +629,7 @@ sent only while it applies, like `STOPPED`, is preferred):
 | Find anchors progress, e.g. point n of total | The 11-minute Find anchors step | Tristan |
 | Why an operation failed, and the alarm reason | The message in the top bar and the Error screen | Tristan |
 | Done extending | Belts pay out until the user says they're attached | Tristan |
-| Set Z from the measured stick-out | The Mini's Set Z helper (seat to work set to 30 mm, 2026-11-25, ISSUES-LOG 25) | mo |
+| Set Z from the measured stick-out | The Mini's Set Z helper (seat to work set to 31 mm, 2026-11-27, ISSUES-LOG 25) | mo |
 
 ## Open questions
 

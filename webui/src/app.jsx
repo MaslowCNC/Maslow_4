@@ -100,6 +100,14 @@ export function App() {
   // On the Set Z step, Set Z from the jog pad counts too (on a phone the jog pad is on its own tab), once the report shows it
   const send = (action, payload) => {
     if (action === "rehomeZ" && !d.notYet?.rehomeZ) setA(zLost);
+    // Check the tool (Settings › State) goes back to the tool steps. The Mini reports the bit itself (TS), so when
+    // the board already knows (a bit, or none) the page only forgets its Z answer: no bit leads to Load the tool.
+    // When it doesn't know, raising Z through the beam (Reset Z) is the check.
+    if (action === "toolCheck") {
+      setA(zLost);
+      if (d.tool === "none" || d.tool === "loaded") return;
+      if (d.tool === "needsHoming" && !d.notYet?.rehomeZ) return device.send("rehomeZ");
+    }
     if (action === "setZ" && k === "setz") setA({ zTarget: d.pos.z });
     return device.send(action, payload);
   };

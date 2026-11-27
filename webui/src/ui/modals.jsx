@@ -41,7 +41,12 @@ const ACT = [
   ["reboot", "Reboot device", "Restarts the board. It reconnects on its own."],
   ["stop", "Stop", "Stops the belts at once, turns the spindle off and lifts Z. The job's progress is saved (needs firmware)."]
 ];
+// What the State section offers now. Remove tool only while a bit may be loaded: TS 4 says the board saw none
 export function available(k, d) {
+  const on = baseAvailable(k, d);
+  return d.tool === "none" ? on.filter(a => a !== "removeTool") : on;
+}
+function baseAvailable(k, d) {
   const s = SCREENS[k];
   if (!d.connected || d.hotspot) return k === "lost" ? ["reboot"] : [];
   if (d.fluid === "Alarm" || k === "recovery") return ["clearError", "reboot"];
@@ -63,7 +68,7 @@ const NEED = { retract: "Not while the belts are tight: release tension first.",
 
 function StateSection({ k, ctx, close }) {
   const { d } = ctx, s = SCREENS[k], on = available(k, d);
-  const why = (id) => !d.connected ? "Waiting for the device to answer." : s.moving || k === "cutting" ? "Not while the device is moving. Press Stop first." : NEED[id] || "Not available in this state.";
+  const why = (id) => !d.connected ? "Waiting for the device to answer." : s.moving || k === "cutting" ? "Not while the device is moving. Press Stop first." : id === "removeTool" && d.tool === "none" ? "No bit is loaded." : NEED[id] || "Not available in this state.";
   return <>
     <h4>State</h4>
     <div class="minis"><div class="mini"><span>Mode</span><b><ModePill s={s} small /> {s.sub}</b></div>
