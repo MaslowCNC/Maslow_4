@@ -81,3 +81,6 @@
 .mback { display: flex; align-items: center; gap: 12px; padding: 0 14px; min-height: 44px; border-bottom: 1px solid var(--sep); }
 .mback .linkbtn { font-size: 13px; color: var(--lilac); min-height: 44px; }
 .mback b { font: 700 14px var(--font-sans); }
+
+/* The activity indicator beside the mode: the label goes when the mode bar already says it, and it never pushes the mode off */
+.phoneapp .p-top .acttag { max-width: 55%; }

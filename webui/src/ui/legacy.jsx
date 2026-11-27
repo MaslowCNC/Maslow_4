@@ -1,7 +1,7 @@
 import { useState } from "preact/hooks";
 import { SCREENS, isSetup } from "../flow/screens.js";
 import { ask, mainActions, fitFor } from "../flow/asks.jsx";
-import { Frame, LogView, CommandBox, SaveLogBtn, jogLock, workPos, mainButtons, adcToMilliamps, useJogStep, JogSteps } from "./parts.jsx";
+import { Frame, LogView, CommandBox, SaveLogBtn, jogLock, Activity, workPos, mainButtons, adcToMilliamps, useJogStep, JogSteps } from "./parts.jsx";
 import { fmt, fmtU, prose, numMode, unitName } from "../units.js";
 import { available } from "./modals.jsx";
 import { SettingsList } from "./advanced.jsx";
@@ -31,7 +31,7 @@ const ZArrow = ({ up }) => <svg viewBox="0 0 12 24" width="12" height="24" aria-
   <path d="M6 1l5 6H7v16H5V7H1z" fill="currentColor" /></svg>;
 
 // The tabs: Maslow (the drawing and controls) and Settings, which takes the drawing's place as the old settings tab did
-function Nav({ d, openSettings, openMenu, settingsOpen, closeSettings }) {
+function Nav({ k, d, openSettings, openMenu, settingsOpen, closeSettings }) {
   const [label, c] = !d.connected ? (d.everConnected ? ["Not responding", "#ce654c"] : ["Connecting", "#f5b129"])
     : d.hotspot ? ["Hotspot", "#f5b129"] : ["Connected", "#4aa85c"];
   return <nav class="cl-nav">
@@ -41,6 +41,7 @@ function Nav({ d, openSettings, openMenu, settingsOpen, closeSettings }) {
       <button type="button" role="tab" class={settingsOpen ? "on" : ""} aria-selected={settingsOpen} onClick={openSettings}>Settings</button>
     </div>
     <span class="cl-gap" />
+    <Activity k={k} d={d} />
     {d.spindle === "on" && <span class="cl-spin" role="status">Spindle running</span>}
     <span class="cl-dot" style={`--c:${c}`} title={label} role="status" aria-label={label} />
     <button type="button" class="cl-menu" aria-label="More settings" onClick={() => openMenu()}>
@@ -258,7 +259,7 @@ export function Legacy({ k, ctx, overlay, closeOverlay, narrow, onNewUI }) {
         is one click away */}
     <div class="cl-legacybar" role="note">You are in the legacy UI. It won't get new features.
       <button type="button" onClick={onNewUI}>Switch to the new UI</button></div>
-    <Nav d={d} openSettings={() => { closeOverlay(); setTab("settings"); }} openMenu={() => ctx.openSettings()} settingsOpen={tab === "settings"}
+    <Nav k={k} d={d} openSettings={() => { closeOverlay(); setTab("settings"); }} openMenu={() => ctx.openSettings()} settingsOpen={tab === "settings"}
       closeSettings={() => { closeOverlay(); setTab("maslow"); }} />
     <div class="cl-main">
       <div class="cl-display">

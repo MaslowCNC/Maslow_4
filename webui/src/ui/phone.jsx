@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import { SCREENS, isSetup, stepName } from "../flow/screens.js";
 import { ask, mainActions } from "../flow/asks.jsx";
-import { Btn, AppHeader, ModePill, progress, Segs, StepArt, Frame, VisReadouts, LogView, CommandBox, SaveLogBtn, JogPad, DetailCards, DetailsBody, FilesBody, jogLock, BackArrow, mainButtons } from "./parts.jsx";
+import { Btn, AppHeader, Activity, ModePill, progress, Segs, StepArt, Frame, VisReadouts, LogView, CommandBox, SaveLogBtn, JogPad, DetailCards, DetailsBody, FilesBody, jogLock, BackArrow, mainButtons } from "./parts.jsx";
 import "./phone.css";
 import { prose } from "../units.js";
 
@@ -98,7 +98,7 @@ export function Phone({ k, ctx, onSettings, overlay }) {
   return <div class="phoneapp tabbed">
     <header class="p-head">
       <AppHeader d={ctx.d} onSettings={onSettings} openSettings={ctx.openSettings} notice={ctx.notice} setNotice={ctx.setNotice} />
-      <div class="p-top"><BackArrow buttons={q.buttons} /><ModePill s={s} /><span class="sub">{s.sub}</span></div>
+      <div class="p-top"><BackArrow buttons={q.buttons} /><ModePill s={s} /><span class="sub">{s.sub}</span><Activity k={k} d={ctx.d} same={s.sub} /></div>
       {setup ? <div class="p-prog"><span>{label}</span><Segs step={s.step} skipped={skipped} /></div>
         : <div class={`p-msg${s.alert || q.alert ? " alert" : ""}`}>{q.text || prose(s.msg, ctx.units)}</div>}
     </header>
