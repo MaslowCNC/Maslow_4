@@ -343,11 +343,14 @@ arrives. The full table of states, subheaders and actions is the UI modes map.
       A new sheet needs only the new thickness, not a new Find anchors (Built.)
 - **The tool and Z steps.** Once the position is confirmed, the machine checks for a tool by
   itself: the spindle board raises the spindle through its top-of-travel light beam.
-  - **A bit is found: Set Z** (revised 2026-11-25), with three buttons. **Set Z** makes where the bit is
-    now work Z 0 (jog it to the work first). **Set Z helper** asks for the stick-out, lowers the bit to the work and sets
-    work Z 0 there (no jogging by hand), assuming the seated socket face is 20 mm above the work (a guess: ISSUES-LOG issue 25). **Remove tool**
-    raises the spindle until the bit is out, then Load the tool. The step is done once the report's work
-    offset shows the new Z.
+  - **A bit is found: Set Z** (revised 2026-11-27, replacing the separate Set Z helper screen). Two ways: **pick the
+    bit** from the tool library (asked at every tool check; the one last used in this browser is marked, not chosen),
+    which shows its saved stick-out, still editable, and **Set Z (auto)** lowers the bit to the work and sets work Z 0 there,
+    assuming the seated socket face is 31 mm above the work (ISSUES-LOG issue 25); "Another bit" types a stick-out, with
+    suggestions (shown at once if the library is empty). Once a bit is picked, Set Z manually is hidden (Back brings it
+    back). Or **Set Z manually**: jog the bit to the work, and where it is
+    becomes work Z 0. **Remove tool** raises the spindle until the bit is out, then Load the tool. The step is done once
+    the report's work offset shows the new Z.
   - **No bit: Load the tool.** The board seats a bit put into the beam by itself, then Set Z. Or
     **Continue with no tool**.
   - **Back** on every step the page asks about (2026-11-25) clears that answer so the step can be redone;
@@ -566,8 +569,8 @@ Checked against the simulator only, not yet on a machine.
 |---|---|---|
 | Setup line art | The expanded setup bar's big step graphic | On hold since 2026-10-29. Pre-rendered SVG from the machine's 3D model, one named group per part, animated with CSS; three.js only as our own export tool. Pickup: `tools/line-art-prototype/` and the line-art pickup notes. Waits for the new machine's assembled model and a settled step list |
 | 3D toolpath viewer | The drawing's 3D tab (there, disabled, "Not built yet") | A small hand-written WebGL line viewer (no three.js in the page, size budget): the file's toolpath in 3D with depth, orbit and zoom, maybe the stock outline and the running line |
-| Tool library | Settings › Tool and Z, and the tool steps in Setup | Saved bits (name, type, diameter, stick-out), kept on the board (a `tools.json`, like `macros.json`) so every connection sees the same list. Pick the loaded bit at the tool check; the page remembers the last one used. Later the file's tool could be matched against it (added 2026-11-27) |
-| Stick-out suggestions | The Set Z helper's stick-out box | A drop-down of suggestions while typing: the saved tools' stick-outs and the last few values entered, newest first. Still a free text box; a suggestion only fills it in (added 2026-11-27) |
+| Tool library | Settings › Tool and Z, and the tool steps in Setup | Saved bits (name, type, diameter, stick-out), kept on the board (a `tools.json`, like `macros.json`) so every connection sees the same list. Pick the loaded bit at the tool check; the page remembers the last one used. Later the file's tool could be matched against it (added 2026-11-27). **Done 2026-11-27** (simulator only): `device/tools.js`, edited in Settings › Tool and Z, a Bit picker on the Mini's tool steps; matching the file's tool is still a later idea |
+| Stick-out suggestions | The Set Z helper's stick-out box | A drop-down of suggestions while typing: the saved tools' stick-outs and the last few values entered, newest first. Still a free text box; a suggestion only fills it in (added 2026-11-27). **Done 2026-11-27** (simulator only): a datalist of the bits' stick-outs and the last 5 typed in this browser |
 
 *Small style and usability fixes* (collected here and done together in one pass; add to the list as
 they come up):

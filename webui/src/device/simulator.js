@@ -8,7 +8,8 @@ import { sampleValues, sampleAnswer } from "./settingslist.sample.js";
 import { NET_IDLE, NET_SETTINGS, netChanges } from "./network.js";
 import { FLASH_IDLE, MAX_EDIT, flashActions } from "./flashfiles.js";
 import { createFlashFs } from "./flashfiles.sample.js";
-import { parseFileList } from "./flashfiles.js";
+import { parseFileList, statusFailed } from "./flashfiles.js";
+import { TOOLS_IDLE, TOOLS_PATH, serializeTools, toolActions } from "./tools.js";
 import { UPDATE_IDLE, updateActions, checkFirmware, safeTag } from "./update.js";
 import { SIM_RELEASES, simFirmware, simManifest } from "./update.sample.js";
 
@@ -91,6 +92,7 @@ function initialState() {
     net: NET_IDLE,                // the network settings, as the machine adapter has them (device/network.js)
     netSaved: { ...SIM_NET },     // what the board would use after a restart
     flash: FLASH_IDLE,            // the board's own files (device/flashfiles.js), read when Settings › Advanced › Files opens
+    tools: TOOLS_IDLE,            // the tool library, /tools.json in the stand-in flash (device/tools.js), read on each connect
     pending: null                 // the question the simulator is asking the tester
   };
 }
@@ -177,6 +179,7 @@ export function createSimulator() {
     const teeth = /^encoderTeeth/.test(s.incident?.kind || "");
     set({ ...(teeth ? { incident: null } : {}), connected: true, everConnected: true, hotspot: false, maslow, fluid: "Idle", tool: "unknown", job: null, motion: null,
       result: null, spindle: "off", error: null, pending: null, connectId: s.connectId + 1, ...extra });
+    tools.readTools();
     update.updateConnected(s.fwVersion);
   }
 
@@ -206,6 +209,23 @@ export function createSimulator() {
         setTimeout(() => URL.revokeObjectURL(url), 1000);
       }
     }
+  });
+
+  // The tool library: a sample /tools.json in the stand-in flash, read on each connect; edits are saved there, so they
+  // last until the page reloads (and show in Settings › Advanced › Files)
+  flashFs.write(TOOLS_PATH, serializeTools([
+    { id: "t1", name: "1/4 in end mill", type: "endmill", diameter: 6.35, stickout: 15, notes: "2 flute upcut, for plywood" },
+    { id: "t2", name: "60° V-bit", type: "vbit", diameter: 12.7, stickout: 18 },
+    { id: "t3", name: "1/8 in ball nose", type: "ballnose", diameter: 3.175, stickout: 12 }
+  ]));
+  const tools = toolActions({
+    get: () => s.tools,
+    set: (patch) => set({ tools: { ...s.tools, ...patch } }),
+    log: (line) => log(line),
+    lock: () => (!s.connected ? "Waiting for the device to answer." : s.job ? "Not while a job runs." : null),
+    failed: (a) => (statusFailed(a?.status) ? a.status : null),
+    io: { read: async (path) => { const c = flashFs.read(path); return later(typeof c === "string" ? c : null); },
+      upload: (path, text) => later(flashFs.write(path, text)) }
   });
 
   // Firmware update and system status (device/update.js), against a stand-in GitHub and board. Downloads and uploads
@@ -266,6 +286,7 @@ export function createSimulator() {
 
   const actions = {
     ...flash,
+    ...tools,
     ...update,
     ackIncident() { set({ incident: null }); },
     // The wrong-encoderTeeth incident's Fix: what machine.js sends, logged

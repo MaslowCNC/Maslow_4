@@ -1,7 +1,8 @@
 import { useState } from "preact/hooks";
 import { jobFit } from "./fit.js";
 import { SEAT_TO_WORK, helperZ } from "./screens.js";
-import { editText, editedMm, fmtProse, numMode, unitName } from "../units.js";
+import { editText, editedMm, fmtU, fmtProse, numMode, unitName } from "../units.js";
+import { matchSuggestion, stickoutSuggestions } from "../device/tools.js";
 
 // What each screen asks for in the top bar, and what its buttons do. The rule from REWRITE.md: whatever the
 // top bar asks for can be completed in the top bar (small inputs here, bigger tasks in a pop-up opened from here).
@@ -9,13 +10,49 @@ import { editText, editedMm, fmtProse, numMode, unitName } from "../units.js";
 // ctx: { d: device state, a: answers, setA(patch), send(action, payload), mark(step) }
 // Returns { text, buttons: [{ label, onClick, style }], input }
 
-// The stick-out must leave the tip above the work surface (under SEAT_TO_WORK), or the helper would set Z below it
-function StickoutInput({ onSave, value, unit }) {
+// The stick-out must leave the tip above the work surface (under SEAT_TO_WORK), or the helper would set Z below it.
+// Still a free text box: the drop-down (a datalist) only suggests the saved bits' stick-outs and the last values typed
+// here (device/tools.js), and a suggestion keeps its exact mm even when it's shown rounded in inches.
+function StickoutInput({ onSave, value, unit, suggestions, label = "Set Z" }) {
   const [v, setV] = useState(editText(value, unit));
-  const n = editedMm(v, value, unit), ok = n > 0 && n < SEAT_TO_WORK;
+  const n = matchSuggestion(v, suggestions)?.mm ?? editedMm(v, value, unit), ok = n > 0 && n < SEAT_TO_WORK;
   return <span class="binput">
-    <label class="field"><span>Stick-out</span><input value={v} inputmode={numMode(unit)} onInput={e => setV(e.currentTarget.value)} aria-label={`Stick-out in ${unitName(unit)}`} style="width:70px" /> {unit}</label>
-    <button class="btn" type="button" disabled={!ok} title={ok || !v ? "" : `From 0 to ${fmtProse(SEAT_TO_WORK, unit)}`} onClick={() => ok && onSave(n)}>Set Z</button>
+    <label class="field"><span>Stick-out</span><input value={v} inputmode={numMode(unit)} list={suggestions.length ? "stickout-suggestions" : undefined} autocomplete="off"
+      onInput={e => setV(e.currentTarget.value)} aria-label={`Stick-out in ${unitName(unit)}`} style="width:80px" /> {unit}</label>
+    {suggestions.length > 0 && <datalist id="stickout-suggestions">{suggestions.map(x => <option value={x.text} label={x.label} />)}</datalist>}
+    <button class="btn" type="button" disabled={!ok} title={ok || !v ? "" : `From 0 to ${fmtProse(SEAT_TO_WORK, unit)}`} onClick={() => ok && onSave(n)}>{label}</button>
+  </span>;
+}
+
+// The Set Z step, with a bit loaded: pick it, or set Z manually (jog down, Set Z manually). The pick is this tool check's
+// answer (a.bitPick: a tool id, or OTHER for a bit not in the library), so every tool check asks again; the bit used
+// last in this browser (ctx.toolId) is marked in the list, not chosen for you, since it may not be the one loaded.
+// A pick shows the bit's saved stick-out (still changeable) and Set Z, which lowers the bit to the work and sets work
+// Z 0 there (lowerToWork). Nothing moves until Set Z. With an empty library the stick-out box shows at once.
+// "Edit the list…" opens Settings › Tool and Z.
+const EDIT = "__edit", OTHER = "__other";
+function SetZFromBit({ ctx }) {
+  const { d, a, setA, send } = ctx, u = ctx.units || "mm";
+  const list = d.tools?.list || [];
+  const bit = list.find(t => t.id === a.bitPick) || null;
+  const pick = !list.length ? OTHER : bit ? bit.id : a.bitPick === OTHER ? OTHER : "";
+  const lower = (n) => { const z = helperZ(n); ctx.addStickout?.(n); setA({ stickout: n, zTarget: z }); send("lowerToWork", { z }); };
+  return <span class="binput binputs">
+    {list.length > 0 && <span class="binput"><label class="field"><span>Bit</span>
+      <select class="fsel" value={pick} aria-label="Which bit is loaded" onChange={e => {
+        const v = e.currentTarget.value;
+        if (v === EDIT) { e.currentTarget.value = pick; ctx.openSettings?.("tool"); return; }
+        setA({ bitPick: v || null });
+        if (v && v !== OTHER) ctx.setToolId(v);
+      }}>
+        <option value="" disabled>Pick the loaded bit…</option>
+        {list.map(t => <option value={t.id}>{t.name} · ⌀{fmtU(t.diameter, u)}{t.id === ctx.toolId ? " · last used" : ""}</option>)}
+        <option value={OTHER}>Another bit: type its stick-out</option>
+        <option value={EDIT}>Edit the list…</option>
+      </select></label></span>}
+    {pick && <StickoutInput key={`${pick}:${u}`} value={bit ? bit.stickout : a.stickout} unit={u}
+      label="Set Z (auto)"
+      suggestions={stickoutSuggestions(list, ctx.recentStickouts, mm => editText(mm, u))} onSave={lower} />}
   </span>;
 }
 
@@ -109,15 +146,17 @@ function askFor(k, ctx) {
           buttons: [{ ...B("Skip the tool check", () => { mark(4); setA({ zDone: true }); }),
             temp: "only for machines that don't report the tool state" }, stop()] }
       : { text: "Checking for a tool. The spindle rises through the light beam.", buttons: [stop()] };
-    // A bit is loaded: Set Z where the bit is now (jogged down to the work), or let the helper work it out from the
-    // stick-out, or take the bit out. The step is done once the report's work offset (WCO) shows the new Z.
-    case "setz": return { text: "A bit is loaded. Jog it down to the work surface and press Set Z, or use the Set Z helper.",
-      buttons: [B("Set Z", () => { setA({ zTarget: d.pos.z }); send("setZ"); }),
-        B("Set Z helper", () => setA({ helper: true, zTarget: null }), "ghost"),
-        B("Remove tool", () => { setA({ zTarget: null }); send("removeTool"); }, "ghost")] };
-    case "zhelper": return { text: `Measure how far the bit sticks out of the spindle socket, from the socket face to the tip. The bit is lowered to the work and Z is set there (assuming the seated socket face is ${fmtProse(SEAT_TO_WORK, u)} above the work).`,
-      buttons: [back({ helper: false, zTarget: null })],
-      input: <StickoutInput value={a.stickout} unit={u} onSave={n => { const z = helperZ(n); setA({ stickout: n, zTarget: z }); send("lowerToWork", { z }); }} /> };
+    // A bit is loaded. Name it and Set Z from its saved stick-out in one click, or type a stick-out (a bit not in the
+    // library), or jog it down to the work and Set Z here, or take it out. Picking never moves anything by itself: the
+    // remembered bit may not be the one in the spindle, so the button names the bit. The step is done once the report's
+    // work offset (WCO) shows the new Z.
+    // Once a bit is picked, Set Z (auto) is the way and Set Z manually goes; Back clears the pick to bring it back
+    case "setz": return { text: a.bitPick
+        ? "Check the stick-out, then press Set Z (auto): the bit is lowered to the work and Z is set there. Back to set Z manually instead."
+        : "A bit is loaded. Pick it to set Z from its stick-out, or set Z manually: jog the bit down to the work surface, then press Set Z manually.",
+      buttons: [...(a.bitPick ? [back({ bitPick: null, zTarget: null })] : [B("Set Z manually", () => { setA({ zTarget: d.pos.z }); send("setZ"); }, "ghost")]),
+        B("Remove tool", () => { setA({ zTarget: null, bitPick: null }); send("removeTool"); }, "ghost")],
+      input: <SetZFromBit ctx={ctx} /> };
     case "toolfreeing": return { text: "Raising the spindle so the bit can come out. Take it out once the spindle stops.", buttons: [stop()] };
     case "toolload": return { text: "No bit loaded. Put a bit in and push it up into the light beam: the device pulls it in and seats it. Or continue with no tool.",
       buttons: [B("Continue with no tool", () => { mark(4); setA({ zDone: true }); }, "ghost")] };
@@ -125,7 +164,7 @@ function askFor(k, ctx) {
     // No stock thickness here: it lives in Settings, and the expanded help says to set it before cutting (REWRITE.md, Setup steps)
     case "secure": return { text: "Is your work piece set up and secure?",
       buttons: [B("Release tension", () => { setA({ securing: true }); send("release"); }, "ghost"),
-        B("It's secure", () => { mark(6); setA({ secured: true }); }), back({ zDone: false, helper: false, zTarget: null })] };
+        B("It's secure", () => { mark(6); setA({ secured: true }); }), back({ zDone: false, zTarget: null, bitPick: null })] };
     case "releasing": return { text: "Belts are slack. Secure the work piece, then apply tension again.", buttons: [B("Apply tension", () => send("tension"))] };
     case "choosefile": return { text: "Choose a job file, or upload one.",
       input: <FilePicker files={d.files} onPick={f => { mark(7); setA({ file: f }); }}
@@ -133,7 +172,7 @@ function askFor(k, ctx) {
       buttons: [back({ secured: false })] };
     case "error": return { text: d.error?.reason || "", buttons: [B("Clear error ($X)", () => send("clearError"))] };
     case "recovery": return { text: "Z lost its position (the spindle board needs homing). Reset Z, then the tool check runs again.",
-      buttons: [B("Reset Z", () => { setA({ zDone: false, helper: false, zTarget: null }); send("rehomeZ"); })] };
+      buttons: [B("Reset Z", () => { setA({ zDone: false, zTarget: null, bitPick: null }); send("rehomeZ"); })] };
     case "incident": {
       const i = d.incident;
       return { text: `${i.title}. ${i.detail} ${i.next}`,
@@ -142,7 +181,7 @@ function askFor(k, ctx) {
         buttons: i.clearWithStop ? [stop("Stop to clear")] : [
           ...(i.fix ? [B(i.fix.label, () => send(i.fix.action, i.fix.payload))] : []),
           B(i.ack || "Got it", () => {
-            if (i.kind === "spindleFault") setA({ faultSeen: true, zDone: false, helper: false, zTarget: null });
+            if (i.kind === "spindleFault") setA({ faultSeen: true, zDone: false, zTarget: null, bitPick: null });
             send("ackIncident");
           }, i.fix ? "ghost" : undefined)] };
     }

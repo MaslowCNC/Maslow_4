@@ -13,6 +13,7 @@ import { createRecorder } from "./device/jobrecord.js";
 import { openJobStore } from "./device/jobstore.js";
 import { exampleJobs } from "./device/jobrecord.sample.js";
 import { handleMessage } from "./device/jobreceiver.js";
+import { addRecent, readRecent } from "./device/tools.js";
 import { UnitsCtx } from "./ui/parts.jsx";
 
 // The device behind the UI: the real machine (machine.js) or the simulator, both with the same interface
@@ -78,6 +79,23 @@ function useUnits() {
   return [u, set];
 }
 
+// The tool library (device/tools.js) is on the board; which bit is loaded and the stick-outs typed at the Set Z step
+// are per browser, since each person at the machine says what they put in
+function useLoadedTool() {
+  const [id, setId] = useState(() => { try { return localStorage.getItem("maslow.loadedTool") || ""; } catch { return ""; } });
+  const set = (v) => { setId(v || ""); try { localStorage.setItem("maslow.loadedTool", v || ""); } catch { /* not remembered */ } };
+  return [id, set];
+}
+function useRecentStickouts() {
+  const [list, setList] = useState(() => { try { return readRecent(localStorage.getItem("maslow.stickouts")); } catch { return []; } });
+  const add = (mm) => setList((prev) => {
+    const next = addRecent(prev, mm);
+    try { localStorage.setItem("maslow.stickouts", JSON.stringify(next)); } catch { /* not remembered */ }
+    return next;
+  });
+  return [list, add];
+}
+
 export function App() {
   const d = useDevice();
   const [a, setAnswers] = useState(freshAnswers);
@@ -88,6 +106,8 @@ export function App() {
   const [commandBox, setCommandBox] = useStoredFlag("maslow.commandBox");
   const [look, setLook] = useLook();
   const [units, setUnits] = useUnits();
+  const [toolId, setToolId] = useLoadedTool();
+  const [recentStickouts, addStickout] = useRecentStickouts();
   const narrow = useNarrow();
   const [notice, setNotice] = useState(null);         // { text, bad }: a file received from Abundance, in the header
 
@@ -96,7 +116,7 @@ export function App() {
   // Reset Z (rehomeZ) clears the work Z offset (the firmware zeroes Z at the seated bit), so the page asks for Set Z again.
   // The other answers (work piece, file) stay. A bit already in the beam homes at once, so the report may never show
   // homing: this page's own Reset Z counts too, from any button.
-  const zLost = { zDone: false, helper: false, zTarget: null };
+  const zLost = { zDone: false, zTarget: null, bitPick: null };
   // On the Set Z step, Set Z from the jog pad counts too (on a phone the jog pad is on its own tab), once the report shows it
   const send = (action, payload) => {
     if (action === "rehomeZ" && !d.notYet?.rehomeZ) setA(zLost);
@@ -116,7 +136,8 @@ export function App() {
   const ans = look === "legacy" ? legacyAnswers(a, d) : a;
   const k = derive(d, ans);
   const openSettings = (section) => setModal({ name: "settings", section });
-  const ctx = { d, a: ans, notice, setNotice, setA, send, mark, tolerance, setTolerance, sledMass, setSledMass, commandBox, setCommandBox, openSettings, recorder, units, setUnits };
+  const ctx = { d, a: ans, notice, setNotice, setA, send, mark, tolerance, setTolerance, sledMass, setSledMass, commandBox, setCommandBox, openSettings, recorder, units, setUnits,
+    toolId, setToolId, recentStickouts, addStickout };
 
   useEffect(() => { send("connect"); }, []);
   // Once the board's firmware version is known, check GitHub once per page load for a newer release in the chosen
@@ -163,7 +184,7 @@ export function App() {
   // for and the bit there: work Z 0
   useEffect(() => {
     const near = (v) => Math.abs(v - a.zTarget) < 0.005;
-    if (a.zTarget != null && !a.zDone && near(d.wco.z) && near(d.pos.z)) { mark(4); mark(5); setA({ zDone: true, helper: false, zTarget: null }); }
+    if (a.zTarget != null && !a.zDone && near(d.wco.z) && near(d.pos.z)) { mark(4); mark(5); setA({ zDone: true, zTarget: null }); }
   }, [d.wco.z, d.pos.z, a.zTarget]);
   // Reset Z from another connection, when the report shows it homing (TS 2)
   useEffect(() => { if (d.tool === "checking" && a.zDone) setA(zLost); }, [d.tool]);

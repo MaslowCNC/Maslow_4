@@ -6,6 +6,7 @@ import { AdvancedSection } from "./advanced.jsx";
 import { fmt, fmtU, fmtProse, prose, editText, editedMm, numMode, unitName } from "../units.js";
 import { JobsSection } from "./jobs.jsx";
 import { DeviceSection } from "./device.jsx";
+import { ToolLibrary } from "./tools.jsx";
 import { WIFI_MODES, OTHER_WIFI_MODES, NET_SETTINGS, netError, netChanges, netWarnings } from "../device/network.js";
 
 // Pop-ups cover the panels only, so the top bar and Stop stay visible and clickable
@@ -111,7 +112,8 @@ export function Settings({ k, ctx, onClose, theme, setTheme, look, setLook, comp
         <span class="mono">{d.spindle === "on" ? "Running" : "Off"}</span><SpindleBtn k={k} d={d} send={ctx.send} /></Row>
       {spindleLock(k, d) && <p class="note" style="margin:0">{spindleLock(k, d)}.</p>}</>}
     <Row label="Last stick-out" hint="Set when you measure a tool."><span class="mono">{d.zFromStickout ? fmtU(d.zFromStickout, ctx.units) : "–"}</span></Row>
-    <Row label="Z after Stop" hint={prose("Stop leaves Z where it is, so the bit may stay in the work. Continue lifts it to at least 2 mm above work Z 0 before moving.", ctx.units)}><span>Stays put</span><span class="note">set in firmware</span></Row></>;
+    <Row label="Z after Stop" hint={prose("Stop leaves Z where it is, so the bit may stay in the work. Continue lifts it to at least 2 mm above work Z 0 before moving.", ctx.units)}><span>Stays put</span><span class="note">set in firmware</span></Row>
+    <ToolLibrary ctx={ctx} busy={s.mode === "Job"} /></>;
   else if (sec === "jobs") body = <JobsSection recorder={ctx.recorder} />;
   // One choice: Light, Dark, or the legacy UI (the old page's layout, ui/legacy.jsx), which says what it is in its tooltip
   else if (sec === "display") {

@@ -8,7 +8,7 @@ export const STEPS = ["Retract belts", "Extend belts", "Apply tension", "Find an
 // changed in the meantime: setup starts again from whatever the machine reports.
 export const freshAnswers = () => ({
   retractChecked: false,
-  zDone: false, helper: false, stickout: null, zTarget: null, secured: false, securing: false,
+  zDone: false, stickout: null, zTarget: null, bitPick: null, secured: false, securing: false,
   file: null, stoppedSeen: false, contLine: null, faultSeen: false, ran: []
 });
 
@@ -46,8 +46,7 @@ export const SCREENS = {
   anchors: { mode: "Setup", tone: T.setup, sub: "Finding anchor points", step: 3, nopos: true, moving: true, msg: "Measuring the frame. This takes about 11 minutes" },
   noanchors: { mode: "Error", tone: T.error, sub: "Can't find anchors", step: 3, nopos: true, alert: true, msg: "Find anchors didn't finish. Check each belt is hooked to its anchor, then try again" },
   tcheck: { mode: "Setup", tone: T.setup, sub: "Checking for a tool", step: 4, moving: true, msg: "Position confirmed. Raising the spindle through the light beam to see if a bit is loaded" },
-  setz: { mode: "Setup", tone: T.setup, sub: "Set Z", step: 5, msg: "A bit is loaded. Set Z where the bit is now, use the Set Z helper, or remove the tool" },
-  zhelper: { mode: "Setup", tone: T.setup, sub: "Set Z helper", name: "Set Z helper", step: 5, msg: "Measure how far the bit sticks out of the spindle socket. Z is set from it" },
+  setz: { mode: "Setup", tone: T.setup, sub: "Set Z", step: 5, msg: "A bit is loaded. Pick it to set Z from its stick-out, set Z manually, or remove the tool" },
   toolfreeing: { mode: "Setup", tone: T.setup, sub: "Removing the tool", name: "Remove the tool", step: 5, moving: true, msg: "Raising the spindle until the bit clears the light beam" },
   toolload: { mode: "Setup", tone: T.setup, sub: "Load the tool", name: "Load the tool", step: 5, msg: "No bit loaded. Put a bit in: the device detects it when it breaks the light beam. Or continue with no tool" },
   toolseating: { mode: "Setup", tone: T.setup, sub: "Loading the tool", name: "Load the tool", step: 5, moving: true, msg: "The bit broke the light beam. The spindle pulls it down until it's seated" },
@@ -100,7 +99,7 @@ export function derive(d, a) {
         if (d.tool === "removing") return "toolfreeing";  // Remove tool, from this step, the jog pad or another connection
         if (d.tool === "loading") return "toolseating";   // a bit put in: found once it's seated
         if (d.tool === "none") return "toolload";
-        if (d.tool === "loaded") return a.helper ? "zhelper" : "setz";
+        if (d.tool === "loaded") return "setz";
         return "tcheck";
       }
       if (!a.secured) return "secure";
@@ -123,7 +122,7 @@ export const STEP_HELP = [
   ["Check that all four belts are attached and nothing is in their way.", "Press Apply tension. The belts wind in to take up the slack, which takes about 30 seconds.", "The device checks its position against the saved anchors.", "If a belt winds in more than 300 mm, check that it's attached. If the position doesn't fit, Find anchors runs next."],
   ["Keep clear of the sled and belts.", "The sled moves to a grid of points and measures each one. This takes about 11 minutes.", "If it fails, check that each belt is hooked to its anchor, then try again.", "If the sled sits on a board while you calibrate (a spoil board), enter that thickness first, for accuracy. The stock thickness in Settings › Frame and belts counts too: keep it at 0 unless the sled is on the work piece now."],
   ["The device raises the spindle through the light beam to check for a bit.", "If a bit is found, set Z for it next.", "If none is found, load one, or continue with no tool."],
-  ["Set Z: jog the bit down to the work surface, then press Set Z. Where the bit is now becomes work Z 0.", "Or the Set Z helper: measure how far the bit sticks out of the spindle socket, from the socket face to the tip, and enter it. Z is set from it.", "To change the bit, press Remove tool. The spindle rises so the bit can come out. Put the new one in: the device detects it when it breaks the light beam.", "No bit? Continue with no tool."],
+  ["Pick the loaded bit from your tool library: its saved stick-out shows (change it if this bit sticks out differently). Press Set Z (auto): the bit is lowered to the work and Z is set from the stick-out.", "Bit not in the library? Pick Another bit, measure how far it sticks out of the spindle socket (socket face to tip) and type it in.", "Or, before picking a bit, set Z manually: jog the bit down to the work surface, then press Set Z manually. Where the bit is now becomes work Z 0.", "To change the bit, press Remove tool. The spindle rises so the bit can come out. Put the new one in: the device detects it when it breaks the light beam.", "No bit? Continue with no tool."],
   ["Clamp or screw the work piece down so it can't move.", "Belts too tight to reach the clamps? Release tension, secure the work piece, then apply tension again.", "For accuracy, set the stock thickness in Settings › Frame and belts before cutting. A new sheet needs only its thickness, not a new Find anchors."],
   ["Upload a G-code file (.nc), or choose one already on the device.", "Check the preview fits on the work piece."]
 ];
