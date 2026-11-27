@@ -541,6 +541,13 @@ current UI's popups do:
 
 Checked against the simulator only, not yet on a machine.
 
+*Planned new features* (not in the current UI; added 2026-11-27):
+
+| Feature | Where | Notes |
+|---|---|---|
+| Setup line art | The expanded setup bar's big step graphic | On hold since 2026-10-29. Pre-rendered SVG from the machine's 3D model, one named group per part, animated with CSS; three.js only as our own export tool. Pickup: `tools/line-art-prototype/` and the line-art pickup notes. Waits for the new machine's assembled model and a settled step list |
+| 3D toolpath viewer | The drawing's 3D tab (there, disabled, "Not built yet") | A small hand-written WebGL line viewer (no three.js in the page, size budget): the file's toolpath in 3D with depth, orbit and zoom, maybe the stock outline and the running line |
+
 *Small style and usability fixes* (collected here and done together in one pass; add to the list as
 they come up):
 
