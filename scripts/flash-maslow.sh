@@ -34,6 +34,7 @@ BUILD="$FW/.pio/build/$ENV_NAME"
 if [[ -n "${PIO:-}" ]]; then :
 elif command -v pio >/dev/null; then PIO=pio
 elif [[ -x "$HOME/.platformio-venv/bin/pio" ]]; then PIO="$HOME/.platformio-venv/bin/pio"
+elif [[ -x "$HOME/.platformio/penv/bin/pio" ]]; then PIO="$HOME/.platformio/penv/bin/pio"   # installer / VS Code
 else echo "PlatformIO not found. Install: python3 -m venv ~/.platformio-venv && ~/.platformio-venv/bin/pip install platformio" >&2; exit 1
 fi
 
@@ -132,12 +133,12 @@ esac
 export PLATFORMIO_DATA_DIR="$FW/.pio/fsdata"
 
 stage_fs() {
-    echo "== Building web UI"
-    (cd "$REPO/ESP3D-WEBUI" && { [[ -d node_modules ]] || npm ci --no-audit --no-fund; } && npm run build:en)
+    echo "== Building web UI (webui/)"
+    (cd "$REPO/webui" && { [[ -d node_modules ]] || npm ci --no-audit --no-fund; } && npm run build:board)
     # The committed data/index.html.gz can lag the UI source, so always use a fresh build.
     rm -rf "$PLATFORMIO_DATA_DIR" && mkdir -p "$PLATFORMIO_DATA_DIR"
     find "$FW/FluidNC/data" -maxdepth 1 -type f ! -name index.html.gz -exec cp {} "$PLATFORMIO_DATA_DIR/" \;
-    cp "$REPO/ESP3D-WEBUI/dist/index.html.gz" "$PLATFORMIO_DATA_DIR/"
+    cp "$REPO/webui/dist/index.html.gz" "$PLATFORMIO_DATA_DIR/"
     echo "Filesystem contents:"; ls -l "$PLATFORMIO_DATA_DIR"
 }
 

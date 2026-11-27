@@ -1,6 +1,6 @@
 # WebUI rewrite
 
-Why we're rewriting the WebUI, what we decided, and what's left. Updated 2026-11-20. To pick the work
+Why we're rewriting the WebUI, what we decided, and what's left. Updated 2026-11-27. To pick the work
 up in a new session, read "Where we are", "How to work on it" and "What we still need" › 2.
 
 **Related:**
@@ -34,9 +34,13 @@ up in a new session, read "Where we are", "How to work on it" and "What we still
     stock thickness, work area and offset, Park, scale, belt retraction limit, retraction force,
     Workspace tolerance, sled weight), Home (typed home, Reset home), Tool and Z (Spindle on / off,
     Mini only), Display, Advanced (command box, belt motor test).
-- **The machines still run the current UI.** All testing on the Mini is from the local dev server
-  (`?device=machine`); the new UI isn't on any board yet. Decided 2026-11-20: keep it that way until
-  the gap list (part 2) and the other missing features are done, then do part 3.
+- **The new UI is the page the board serves on `firmwareRewrite` (2026-11-27).** `npm run build:board` in
+  `webui/` gzips it into `index.html.gz` (about 104 KB, checked against the 145 KB budget); `release.yml`,
+  `compile-on-review.yml` and `flash-maslow.sh --fs` build it instead of the old UI, and the old UI no longer
+  ships. Decided 2026-11-27: this is what `Maslow-Main` should get when `firmwareRewrite` merges, so it's the
+  default now, ahead of the rest of part 2. **Firmware update from the new UI is still missing:** until it
+  lands, update by USB or `/flash-maslow`. The machines still run the old page until their filesystem is
+  updated (part 3).
 - **Tested on the Mini, from the dev server (2026-11-18):** belt labels, motor rings, command box, Save log, settings read
   and save, Set home, Settings › Home, delete, spindle on / off. **Not yet:** Continue from a changed
   line, Discard, the belt motor test, the fit check.
@@ -115,7 +119,8 @@ up in a new session, read "Where we are", "How to work on it" and "What we still
   dependency justifies its size. **No three.js in the page** (about 120 KB or more gzipped on its
   own): the 2D toolpath preview is a plain canvas or SVG, a 3D preview would be a small hand-written
   WebGL line viewer, and the setup line art is pre-rendered SVG (three.js only as our own export
-  tool), animated with CSS. A build check against the budget is still to add.
+  tool), animated with CSS. `npm run build:board` fails over the budget (2026-11-27). The budget is ours, not
+  the board's: the flash has 2 MB for files.
 
 ### The machine is the authority
 
@@ -544,15 +549,22 @@ they come up):
 | Settings › Network | After saving a new WiFi password, people don't know they have to restart the board: Restart now is usually below the fold | After a save that needs a restart, prompt for it (Restart now / Later), or scroll the Restart now button into view and highlight it |
 | Settings (phone) | The section pills scroll sideways with no sign there are more: Advanced is off screen at 375 px | Fade the right edge, or wrap the pills onto two rows |
 
-**3. Build and ship** (not started; waits until part 2 is done, decided 2026-11-20):
+**3. Build and ship** (**done on `firmwareRewrite`, 2026-11-27**, except firmware update in the new UI):
 
-- Gzip the Vite build into `index.html.gz` for `firmware/FluidNC/data/`.
-- Add the new UI to the CI build (`compile-on-review.yml` and `release.yml` run `gulp package`).
-- The current UI stays the release default until part 2 is done.
-- **Testing (decided):** on the test machines, the new UI replaces the UI file. It's a small team,
-  and firmware changes along the way are fine.
+- `npm run build:board` (`webui/scripts/gzip-board.mjs`) gzips the Vite build into `dist/index.html.gz` and
+  fails over 145 KB. It's in `firmware/FluidNC/data/`, the release asset and the `web-assets/` mirror.
+- `release.yml` and `flash-maslow.sh build --fs` build `webui/` instead of `gulp package`.
+  `compile-on-review.yml` builds `webui/` when the PR has it and the old UI otherwise (the workflow runs
+  from the default branch's copy, so it also builds older PRs). It only switches once it's on `Maslow-Main`.
+- **The old UI doesn't ship** (decided 2026-11-27): not in the data folder, not as a release asset. To go
+  back, build it (`cd ESP3D-WEBUI && npm run build:en`) and upload `dist/index.html.gz`, or install an
+  older release.
+- **Firmware update** (Settings) is still missing: until it lands, update by USB or `/flash-maslow`.
+- `?device=machine` isn't needed on the board: a production build served over http uses the machine
+  (`app.jsx`), and talks to the socket at `/` and to `/upload`, `/command`, `/files` at the page's own address.
+- **Putting it on a machine that has the old page** (a firmware update leaves the page alone):
   1. Rename `index.html.gz` to `index-old.html.gz` (flash has room).
-  2. Upload the new UI as `index.html.gz`.
+  2. Upload the new UI as `index.html.gz`, or install with `--fs` (which replaces the whole filesystem).
   3. To go back, rename the new one out of the way first (`index-new.html.gz`), then
      `index-old.html.gz` back to `index.html.gz`; a rename onto a taken name may fail.
   4. If the new page is too broken to use, `/?forcefallback=yes` opens FluidNC's built-in file
@@ -562,7 +574,7 @@ they come up):
      the simulator's stand-in has been tried so far. Check that it lands on the SD card, is chosen as the job file
      and isn't run, that the header says "Received … from Abundance", and that it's refused mid-job.
 
-  A firmware update leaves these files alone; uploading a filesystem image (`--fs`) replaces both.
+  A firmware update leaves these files alone; uploading a filesystem image (`--fs`) replaces them all.
   A second page isn't possible without a firmware change (the board downloads any file other than
   `index.html`), and isn't needed for now.
 
