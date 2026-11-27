@@ -558,6 +558,9 @@ they come up):
   4. If the new page is too broken to use, `/?forcefallback=yes` opens FluidNC's built-in file
      manager, or the rename works as a plain address:
      `/files?path=/&action=rename&filename=index.html.gz&newname=index-new.html.gz`.
+  5. **Once the new UI is at `maslow.local` on the Mini:** send a file from the real Abundance (#1166, PR #1172). Only
+     the simulator's stand-in has been tried so far. Check that it lands on the SD card, is chosen as the job file
+     and isn't run, that the header says "Received … from Abundance", and that it's refused mid-job.
 
   A firmware update leaves these files alone; uploading a filesystem image (`--fs`) replaces both.
   A second page isn't possible without a firmware change (the board downloads any file other than
