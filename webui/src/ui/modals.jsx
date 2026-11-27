@@ -4,6 +4,7 @@ import { ModePill, Conn, SpindleBtn, spindleLock } from "./parts.jsx";
 import { MACHINE_SETTINGS, settingError, effectiveWorkArea } from "../device/settings.js";
 import { AdvancedSection } from "./advanced.jsx";
 import { JobsSection } from "./jobs.jsx";
+import { DeviceSection } from "./device.jsx";
 import { WIFI_MODES, OTHER_WIFI_MODES, NET_SETTINGS, netError, netChanges, netWarnings } from "../device/network.js";
 
 // Pop-ups cover the panels only, so the top bar and Stop stay visible and clickable
@@ -90,10 +91,8 @@ export function Settings({ k, ctx, onClose, theme, setTheme, look, setLook, comp
   let body;
   if (!sec) body = <nav class="slist" aria-label="Settings sections">{SECTIONS.map(([id, n]) => <button type="button" onClick={() => setSec(id)}>{n}<span aria-hidden="true">›</span></button>)}</nav>;
   else if (sec === "state") body = <StateSection k={k} ctx={ctx} close={onClose} />;
-  else if (sec === "device") body = <><h4>Device</h4>
-    <NameRow ctx={ctx} busy={busy} />
-    <Row label="Firmware"><span class="mono">Simulated device</span><button class="btn ghost" type="button" disabled={busy}>Update firmware</button></Row>
-    <Row label="Restart" hint="Reconnects on its own when it's back."><button class="btn ghost" type="button" disabled={busy} onClick={() => { onClose(); ctx.send("reboot"); }}>Reboot device</button></Row></>;
+  else if (sec === "device") body = <DeviceSection ctx={ctx} name={<NameRow ctx={ctx} busy={busy} />}
+    restart={<Row label="Restart" hint="Reconnects on its own when it's back."><button class="btn ghost" type="button" disabled={busy} onClick={() => { onClose(); ctx.send("reboot"); }}>Reboot device</button></Row>} />;
   // Not the socket: the network settings go over HTTP, and they're how a board whose socket won't connect is fixed.
   // The section stays off until [ESP400] answers, so a board that can't be reached at all still can't be edited.
   else if (sec === "network") body = <NetworkSection ctx={ctx} busy={s.moving || s.mode === "Job"} close={onClose} />;

@@ -96,7 +96,7 @@ export function Phone({ k, ctx, onSettings, overlay }) {
   else body = <NextTab k={k} ctx={ctx} q={q} />;
   return <div class="phoneapp tabbed">
     <header class="p-head">
-      <AppHeader d={ctx.d} onSettings={onSettings} notice={ctx.notice} setNotice={ctx.setNotice} />
+      <AppHeader d={ctx.d} onSettings={onSettings} openSettings={ctx.openSettings} notice={ctx.notice} setNotice={ctx.setNotice} />
       <div class="p-top"><BackArrow buttons={q.buttons} /><ModePill s={s} /><span class="sub">{s.sub}</span></div>
       {setup ? <div class="p-prog"><span>{label}</span><Segs step={s.step} skipped={skipped} /></div>
         : <div class={`p-msg${s.alert || q.alert ? " alert" : ""}`}>{q.text || s.msg}</div>}

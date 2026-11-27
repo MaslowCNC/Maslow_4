@@ -1,0 +1,22 @@
+/* Settings › Device: updates and system status (ui/device.jsx) */
+.uprelease { display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--sep); border-radius: 10px; background: var(--sub); }
+.uphead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; }
+.uptag { font-size: 12px; color: var(--muted); }
+.uptag.new { color: var(--ready); font-weight: 600; }
+.upnotes { margin: 6px 0; white-space: pre-wrap; font: 12px/1.45 var(--font-mono); max-height: 220px; overflow: auto; }
+.upconfirm { display: grid; gap: 6px; padding: 10px 12px; border-radius: 8px; border: 1px solid color-mix(in srgb, var(--warn) 50%, transparent);
+  background: color-mix(in srgb, var(--warn) 12%, transparent); font-size: 13px; line-height: 1.45; }
+.upconfirm p { margin: 0; }
+.upfiles { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; font-size: 13px; }
+.okc { color: var(--ready); } .badc, .note.bad { color: var(--danger); }
+.netwarn.bad { background: color-mix(in srgb, var(--danger) 12%, transparent); border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
+.upprogress, .upresult { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; font-size: 14px; }
+.upresult { display: grid; gap: 6px; }
+.upresult.bad b { color: var(--danger); }
+.upprogress progress { flex: 1 1 160px; height: 10px; accent-color: var(--lilac); }
+.upstatus { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 0; font-size: 13px; }
+.upstatus dt { color: var(--muted); }
+.upstatus dd { margin: 0; overflow-wrap: anywhere; }
+/* The top bar's notice of a newer release (UpdateNotice) */
+.upnotice { border-color: var(--ready); }
+.upnotice .uplink { font: 600 11px var(--font-mono); padding: 0; text-decoration: underline; text-underline-offset: 2px; }

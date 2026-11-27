@@ -14,7 +14,8 @@ import { encoderTeethCheck, TEETH_PATH, EXTEND_PATH } from "./encoderteeth.js";
 import { readGcode, boundaryPath } from "../gcode/reader.js";
 import { MACHINE_SETTINGS, settingError } from "./settings.js";
 import { parseSettingsList, valueError, espSetCommand, withValues } from "./settingslist.js";
-import { FLASH_IDLE, flashActions, filesQuery, fileUrl, parentPath } from "./flashfiles.js";
+import { FLASH_IDLE, flashActions, filesQuery, fileUrl, parentPath, parseFileList, statusFailed } from "./flashfiles.js";
+import { UPDATE_IDLE, updateActions, parseFwVersion, RELEASES_URL } from "./update.js";
 import { NET_IDLE, parseNetSettings, parseNetStatus, parseApList, onFallbackHotspot, setCommand, netChanges } from "./network.js";
 
 // What the firmware's close codes mean (WSChannel.h). For these the page shows a notice and doesn't reconnect.
@@ -95,6 +96,8 @@ export function createMachine({ host = location.host } = {}) {
       extendUntilDone: "0 needs the Done extending firmware change. Until then, Extend stops at the distance set here."
     },
     machine: null,           // the machine's name from [ESP800], e.g. "Maslow Mini"; null until known
+    fwVersion: null,         // the firmware version from [ESP800], e.g. "v1.28.0-exp.1"; null until known
+    update: UPDATE_IDLE,     // check for updates, firmware update, system status (device/update.js)
     extendDist: null,        // Maslow_Extend_Dist, mm
     maslow: null, fluid: "", statusSeen: false,
     tool: "unknown", settingZ: false, zSetCount: 0, spindle: "off", error: null,   // tool: TOOL_STATES
@@ -255,13 +258,16 @@ export function createMachine({ host = location.host } = {}) {
   async function readMachine() {
     try {
       const r = await fetch(`/command?plain=${encodeURIComponent("[ESP800]")}`);
-      const tag = (await r.text()).match(/board:\s*([a-z0-9]+)/i)?.[1];
+      const text = await r.text();
+      const tag = text.match(/board:\s*([a-z0-9]+)/i)?.[1];
+      const fwVersion = parseFwVersion(text);
       const machine = MACHINES[tag] || (tag ? `Unknown board (${tag})` : "Unknown machine");
       const notYet = { ...s.notYet };
       for (const a of MINI_ONLY) {
         if (isMini(machine)) delete notYet[a]; else notYet[a] = SPINDLE_BOARD.includes(a) ? NO_SPINDLE_BOARD : NO_SPINDLE;
       }
-      set({ machine, notYet });
+      set({ machine, notYet, fwVersion });
+      update.updateConnected(fwVersion);   // the end of a restart after a firmware update
       checkEncoderTeeth(tag, s.connectId);
     } catch (e) {
       log(`Couldn't read which machine this is: ${e.message}`);
@@ -421,32 +427,111 @@ export function createMachine({ host = location.host } = {}) {
     if (!r.ok) throw new Error((await r.text().catch(() => "")).trim().slice(0, 120) || `HTTP ${r.status}`);
     return r.json();
   }
+  const flashIo = {
+    list: async (dir) => filesAnswer(await fetch(`/files?${filesQuery(dir)}`, { cache: "no-store" })),
+    act: async (query) => filesAnswer(await fetch(`/files?${query}`, { cache: "no-store" })),
+    // As BuildFileUploadFormData (files.js): the size first, so the board can check the whole file arrived
+    async upload(path, content) {
+      const blob = typeof content === "string" ? new Blob([content], { type: "text/plain" }) : content;
+      const dir = parentPath(path);
+      const form = new FormData();
+      form.append("path", dir === "/" ? "/" : `${dir}/`);
+      form.append(`${path}S`, String(blob.size));
+      form.append("myfile[]", blob, path);
+      return filesAnswer(await fetch(`/files?${filesQuery(dir)}`, { method: "POST", body: form }));
+    },
+    async read(path) {
+      const r = await fetch(fileUrl(path, FLASH_URL), { cache: "no-store" });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.text();
+    },
+    download(path, name) {
+      Object.assign(document.createElement("a"), { href: fileUrl(path, FLASH_URL), download: name }).click();
+    }
+  };
   const flash = flashActions({
     get: () => s.flash,
     set: (patch) => set({ flash: { ...s.flash, ...patch } }),
     log: (line) => { log(line); emit(); },
     lock: () => (!s.connected ? "Waiting for the device to answer." : s.readOnly ? "Another tab is driving the machine; this one can only look."
       : s.job ? "Not while a job runs." : s.motion || s.fluid === "Run" || s.fluid === "Jog" ? "Not while the machine moves." : null),
+    io: flashIo
+  });
+
+  // Firmware update, check for updates and system status (device/update.js). GitHub and its mirror are reached from
+  // this browser; the board only gets the files. A fetch that can't connect at all is "offline": the computer may be
+  // on the machine's hotspot, which has no internet.
+  async function web(url, opts) {
+    let r;
+    try {
+      r = await fetch(url, { cache: "no-store", ...opts });
+    } catch (e) {
+      throw { offline: true, message: e.message };
+    }
+    if (r.status === 403 || r.status === 429) throw new Error(`GitHub refused (HTTP ${r.status}). It allows 60 checks an hour from one address: try again later.`);
+    if (!r.ok) throw new Error(`HTTP ${r.status} from ${new URL(url).host}`);
+    return r;
+  }
+  const update = updateActions({
+    get: () => s.update,
+    set: (patch) => set({ update: { ...s.update, ...patch } }),
+    device: () => s,
+    log: (line) => { log(line); emit(); },
     io: {
-      list: async (dir) => filesAnswer(await fetch(`/files?${filesQuery(dir)}`, { cache: "no-store" })),
-      act: async (query) => filesAnswer(await fetch(`/files?${query}`, { cache: "no-store" })),
-      // As BuildFileUploadFormData (files.js): the size first, so the board can check the whole file arrived
-      async upload(path, content) {
-        const blob = typeof content === "string" ? new Blob([content], { type: "text/plain" }) : content;
-        const dir = parentPath(path);
+      releases: async () => (await web(RELEASES_URL, { headers: { Accept: "application/vnd.github+json" } })).json(),
+      fetchJson: async (url) => (await web(url)).json(),
+      async fetchBytes(url, onProgress) {
+        const r = await web(url);
+        const total = Number(r.headers.get("Content-Length")) || 0;
+        if (!r.body?.getReader) return new Uint8Array(await r.arrayBuffer());
+        const reader = r.body.getReader(), chunks = [];
+        let loaded = 0;
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          chunks.push(value);
+          loaded += value.length;
+          if (total) onProgress(loaded, total);
+        }
+        const out = new Uint8Array(loaded);
+        let at = 0;
+        for (const c of chunks) { out.set(c, at); at += c.length; }
+        return out;
+      },
+      // crypto.subtle only exists on https and localhost, so a page served by the board checks sizes only
+      async sha256(bytes) {
+        if (!globalThis.crypto?.subtle) return null;
+        const h = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+        return Array.from(h, (x) => x.toString(16).padStart(2, "0")).join("");
+      },
+      async uploadPage(blob) {
+        const j = await flashIo.upload("/index.html.gz", blob);
+        if (statusFailed(j?.status)) throw new Error(`The board didn't save the page: ${j.status}`);
+      },
+      // POST /updatefw, as the current UI's updatedlg.js. XMLHttpRequest, because fetch can't report upload progress.
+      // The board answers {"status":"3"} once the image is written and verified, then restarts.
+      uploadFirmware: (blob, onProgress) => new Promise((resolve, reject) => {
         const form = new FormData();
-        form.append("path", dir === "/" ? "/" : `${dir}/`);
-        form.append(`${path}S`, String(blob.size));
-        form.append("myfile[]", blob, path);
-        return filesAnswer(await fetch(`/files?${filesQuery(dir)}`, { method: "POST", body: form }));
-      },
-      async read(path) {
-        const r = await fetch(fileUrl(path, FLASH_URL), { cache: "no-store" });
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.text();
-      },
-      download(path, name) {
-        Object.assign(document.createElement("a"), { href: fileUrl(path, FLASH_URL), download: name }).click();
+        form.append("path", "/");
+        form.append("/firmware.binS", String(blob.size));
+        form.append("myfile[]", blob, "/firmware.bin");
+        const x = new XMLHttpRequest();
+        x.open("POST", "/updatefw");
+        x.upload.onprogress = (e) => { if (e.lengthComputable) onProgress(e.loaded, e.total); };
+        x.onload = () => {
+          let status = null;
+          try { status = JSON.parse(x.responseText).status; } catch { /* not JSON */ }
+          if (x.status === 200 && String(status) === "3") resolve();
+          else reject(new Error(x.status !== 200 ? `The board refused the firmware (HTTP ${x.status}: ${x.responseText.trim().slice(0, 120)})`
+            : "The board couldn't write the firmware. It keeps running the old one."));
+        };
+        x.onerror = () => reject(new Error("The connection to the board dropped during the upload. It keeps running the old firmware unless it restarts."));
+        x.send(form);
+      }),
+      async status() {
+        const [esp420, wifi, list] = await Promise.all([esp("[ESP420]"), esp("$wifi/status").catch(() => ""),
+          flashIo.list("/").then(parseFileList).catch(() => null)]);
+        return { esp420, wifi, flash: list && { total: list.total, free: list.free } };
       }
     }
   });
@@ -749,6 +834,8 @@ export function createMachine({ host = location.host } = {}) {
     if (action === "scanNetworks") { scanNetworks(); return; }
     if (action === "saveNetwork") { saveNetwork(payload); return; }
     if (action === "reboot") { reboot(); return; }
+    // Firmware update and system status are HTTP too; an install is refused in updateActions while it isn't safe
+    if (update[action]) return update[action](payload);
     // The board's files are HTTP too; changes are refused in flashActions while a job runs or nothing answers
     if (flash[action]) return flash[action](payload);
     if (!m) return;

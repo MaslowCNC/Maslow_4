@@ -41,6 +41,7 @@ export function SimPanel({ d, device }) {
           <button type="button" class="btn ghost" onClick={() => device.event("boardReset")} disabled={!d.connected}>Board resets</button>
           <button type="button" class="btn ghost" onClick={sendFromAbundance}>Send a file from Abundance</button>
           <button type="button" class="btn ghost" onClick={() => device.event("wrongTeeth")} disabled={!d.connected}>Connect with the wrong encoderTeeth</button>
+          <button type="button" class="btn ghost" onClick={() => device.event("toggleInternet")}>{d.internet === false ? "Give this computer internet" : "Take this computer off the internet (the hotspot)"}</button>
           <button type="button" class="btn ghost" onClick={() => device.event("toggleVertical")}>{d.frame?.vertical ? "Lay the frame flat" : "Stand the frame vertically"}</button>
         </div>
       </details>
