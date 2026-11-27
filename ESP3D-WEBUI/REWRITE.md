@@ -566,6 +566,7 @@ they come up):
 |---|---|---|
 | Settings › Network | After saving a new WiFi password, people don't know they have to restart the board: Restart now is usually below the fold | After a save that needs a restart, prompt for it (Restart now / Later), or scroll the Restart now button into view and highlight it |
 | Settings (phone) | The section pills scroll sideways with no sign there are more: Advanced is off screen at 375 px | **Done 2026-11-27:** a list of sections, then one section with ‹ All settings (the legacy look keeps the pills) |
+| Long actions (Apply tension, Find anchors, Retract, Extend, reading or uploading a file, Home Z, Remove tool) | Nothing on screen shows the action is still running, so a 30 s Apply tension or a slow file read looks stuck | An activity indicator in the top bar (and the phone's mode bar) while an operation runs: a spinner when the length is unknown, a progress bar when it's known (upload bytes, Find anchors point n of total once the firmware reports it). It follows the machine's state, so every connection sees it (added 2026-11-27) |
 
 **3. Build and ship** (**done on `firmwareRewrite`, 2026-11-27**, except firmware update in the new UI):
 
