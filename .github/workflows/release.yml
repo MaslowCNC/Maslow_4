@@ -106,26 +106,27 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-npm-embedded-
 
-      - name: Cache npm dependencies (ESP3D-WEBUI)
+      - name: Cache npm dependencies (webui)
         uses: actions/cache@v4
         with:
-          path: ESP3D-WEBUI/node_modules
-          key: ${{ runner.os }}-npm-esp3d-${{ hashFiles('ESP3D-WEBUI/package-lock.json') }}
+          path: webui/node_modules
+          key: ${{ runner.os }}-npm-webui-${{ hashFiles('webui/package-lock.json') }}
           restore-keys: |
-            ${{ runner.os }}-npm-esp3d-
+            ${{ runner.os }}-npm-webui-
 
       - name: Install PlatformIO
         run: |
           python -m pip install --upgrade pip
           pip install --upgrade platformio
 
-      - name: Install ESP3D-WEBUI dependencies
-        working-directory: ESP3D-WEBUI
-        run: npm install
+      - name: Install web UI dependencies
+        working-directory: webui
+        run: npm ci
 
-      - name: Build ESP3D-WEBUI
-        working-directory: ESP3D-WEBUI
-        run: npm run build:en
+      # Vite build gzipped to dist/index.html.gz; fails if it is over the 145 KB budget
+      - name: Build web UI
+        working-directory: webui
+        run: npm run build:board
 
       - name: Install embedded UI dependencies
         working-directory: firmware/embedded
@@ -136,7 +137,7 @@ jobs:
         run: python3 build.py
 
       - name: Sync built web UI into firmware data
-        run: cp ESP3D-WEBUI/dist/index.html.gz firmware/FluidNC/data/index.html.gz
+        run: cp webui/dist/index.html.gz firmware/FluidNC/data/index.html.gz
 
       - name: Build firmware
         working-directory: firmware
@@ -199,7 +200,7 @@ jobs:
             "$BUILD_DIR/littlefs.bin"
 
           cp "$HOME/.platformio/packages/framework-arduinoespressif32/tools/partitions/boot_app0.bin" "$STAGE_DIR/common/"
-          cp ESP3D-WEBUI/dist/index.html.gz "$STAGE_DIR/webui/index.html.gz"
+          cp webui/dist/index.html.gz "$STAGE_DIR/webui/index.html.gz"
           # The released maslow.yaml is the Maslow 4 template.  The firmware copies the template
           # for its own board (maslow-m4.yaml or maslow-mini.yaml) when no config file exists.
           if [ -f firmware/FluidNC/data/maslow-m4.yaml ]; then

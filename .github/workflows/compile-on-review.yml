@@ -62,13 +62,24 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-npm-embedded-
           
-    - name: Cache npm dependencies (ESP3D-WEBUI)
+    # The web UI the board serves: webui/ (Vite) where the PR has it, else the old ESP3D-WEBUI (gulp).
+    # This workflow runs from the default branch's copy, so it also builds PRs from before webui/ shipped.
+    - name: Pick web UI
+      id: ui
+      run: |
+        if [ -f webui/package.json ]; then
+          echo "dir=webui" >> $GITHUB_OUTPUT
+        else
+          echo "dir=ESP3D-WEBUI" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Cache npm dependencies (web UI)
       uses: actions/cache@v4
       with:
-        path: ESP3D-WEBUI/node_modules
-        key: ${{ runner.os }}-npm-esp3d-${{ hashFiles('ESP3D-WEBUI/package-lock.json') }}
+        path: ${{ steps.ui.outputs.dir }}/node_modules
+        key: ${{ runner.os }}-npm-${{ steps.ui.outputs.dir }}-${{ hashFiles(format('{0}/package-lock.json', steps.ui.outputs.dir)) }}
         restore-keys: |
-          ${{ runner.os }}-npm-esp3d-
+          ${{ runner.os }}-npm-${{ steps.ui.outputs.dir }}-
           
     - name: Install PlatformIO
       run: |
@@ -85,15 +96,20 @@ jobs:
         cd firmware/embedded
         python3 build.py
         
-    - name: Install npm dependencies (ESP3D-WEBUI)
+    - name: Install npm dependencies (web UI)
       run: |
-        cd ESP3D-WEBUI
+        cd ${{ steps.ui.outputs.dir }}
         npm install
         
-    - name: Build ESP3D-WEBUI
+    # webui: Vite build gzipped to dist/index.html.gz, failing over the 145 KB budget
+    - name: Build web UI
       run: |
-        cd ESP3D-WEBUI
-        npx gulp package --lang en
+        cd ${{ steps.ui.outputs.dir }}
+        if [ "${{ steps.ui.outputs.dir }}" = webui ]; then
+          npm run build:board
+        else
+          npx gulp package --lang en
+        fi
         
     - name: Build firmware
       run: |
@@ -106,12 +122,12 @@ jobs:
 
         cp firmware/.pio/build/wifi_s3/firmware.bin firmware-package/
         
-        # Verify ESP3D-WEBUI build output exists before copying
-        if [ ! -f ESP3D-WEBUI/dist/index.html.gz ]; then
-          echo "Error: ESP3D-WEBUI/dist/index.html.gz not found"
+        # Verify the web UI build output exists before copying
+        if [ ! -f ${{ steps.ui.outputs.dir }}/dist/index.html.gz ]; then
+          echo "Error: ${{ steps.ui.outputs.dir }}/dist/index.html.gz not found"
           exit 1
         fi
-        cp ESP3D-WEBUI/dist/index.html.gz firmware-package/
+        cp ${{ steps.ui.outputs.dir }}/dist/index.html.gz firmware-package/
         
         cat > firmware-package/README.txt << 'EOF'
         FluidNC Firmware Package
@@ -121,7 +137,7 @@ jobs:
 
         Contents:
         - firmware.bin: The main FluidNC firmware for ESP32-S3
-        - index.html.gz: The ESP3D web interface (compressed)
+        - index.html.gz: The Maslow web interface (compressed)
 
         Installation Instructions:
         1. Extract this entire folder to your desired location
@@ -148,14 +164,15 @@ jobs:
           const fileSizeInBytes = stats.size;
           const fileSizeInMB = (fileSizeInBytes / (1024*1024)).toFixed(2);
           
-          // Get ESP3D-WEBUI size
+          // Get the web UI size
+          const webuiDir = '${{ steps.ui.outputs.dir }}';
           let webuiSizeKB = 'N/A';
           try {
-            const webuiPath = 'ESP3D-WEBUI/dist/index.html.gz';
+            const webuiPath = `${webuiDir}/dist/index.html.gz`;
             const webuiStats = fs.statSync(webuiPath);
             webuiSizeKB = (webuiStats.size / 1024).toFixed(2);
           } catch (e) {
-            console.log('Could not read ESP3D-WEBUI size:', e.message);
+            console.log('Could not read web UI size:', e.message);
           }
           
           // Extract version number from version.cpp
@@ -212,7 +229,7 @@ jobs:
           
           const comment = `🤖 **Firmware & Web UI Compilation Complete** 🤖
           
-          ✅ Successfully compiled FluidNC firmware and ESP3D-WEBUI
+          ✅ Successfully compiled FluidNC firmware and the web UI (${webuiDir})
           
           **Firmware Build Details:**
           - Commit: \`${commitSha}\`

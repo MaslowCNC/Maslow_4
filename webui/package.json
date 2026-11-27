@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:board": "vite build && node scripts/gzip-board.mjs",
     "preview": "vite preview",
     "test": "node --test \"src/**/*.test.js\""
   },

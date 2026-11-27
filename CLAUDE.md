@@ -12,7 +12,9 @@ layer on top, plus the ESP3D-WEBUI browser UI that the machine serves itself.
   - `FluidNC/src/ProcessSettings.cpp`: where `$` commands are registered (Maslow ones near the end).
   - `FluidNC/data/`: the default filesystem (`maslow.yaml`, `index.html.gz`).
   - `FluidNC/test/`: googletest unit tests (`native` env).
-- `ESP3D-WEBUI/www/js/` holds the web UI (plain JS, built with gulp). Maslow logic is in `maslow.js`, `tablet.js`, `debugging.js`.
+- `webui/` is the web UI the board serves (Preact + Vite, one gzipped page, 145 KB budget). It imports
+  `machine.js` and `wscommands.js` from `ESP3D-WEBUI/www/js/`.
+- `ESP3D-WEBUI/www/js/` holds the old web UI (plain JS, built with gulp). Maslow logic is in `maslow.js`, `tablet.js`, `debugging.js`.
 - `docs/` holds the GitHub Pages site, including `calibration-simulation/` (the JS copy of the calibration math).
 - `scripts/` holds `flash-maslow.sh` (build + flash), `maslow_serial.py` (talk to a USB-connected machine),
   `report_monitor.mjs` (measure status-report size and drops over WiFi), and release tooling.
@@ -26,8 +28,10 @@ PlatformIO may live in a venv: use `pio` if it's on PATH, else `~/.platformio-ve
 scripts/flash-maslow.sh build            # firmware only
 scripts/flash-maslow.sh build --fs       # + web UI and filesystem image
 # firmware unit tests (pio test -e native) currently do not build on Linux: missing Queue.h in X86TestSupport
-cd ESP3D-WEBUI && npm ci && npm run build:en   # web UI -> dist/index.html.gz
-cd ESP3D-WEBUI && bun test               # web UI tests (www/js/tests, needs bun)
+cd webui && npm ci && npm run build:board      # web UI -> dist/index.html.gz, fails over 145 KB
+cd webui && node --test --test-force-exit "src/**/*.test.js"   # web UI tests
+cd ESP3D-WEBUI && npm ci && npm run build:en   # old web UI -> dist/index.html.gz
+cd ESP3D-WEBUI && bun test               # old web UI and machine.js tests (www/js/tests, needs bun)
 cd ESP3D-WEBUI && npm run dev            # UI at http://localhost:8484, proxied to maslow.local; rebuilds on refresh
 ```
 
