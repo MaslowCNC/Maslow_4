@@ -59,6 +59,15 @@ export function toolFields(ts, spindleSpeed) {
     spindle: ts === TS_RECOVERING ? "recovering" : ts === TS_NEEDS_HOMING ? "recoveryFailed" : spindleSpeed > 0 ? "on" : "off"
   };
 }
+// The SD card's space from its listing (GET /upload): the firmware sends total and used already written out
+// ("29.72 GB") and occupation as a whole percent. A card with no capacity (none in, or unreadable) gives null.
+export function sdSpace(j) {
+  const total = String(j?.total ?? "").trim(), used = String(j?.used ?? "").trim();
+  if (!total || /^0(\.0+)? ?B$/i.test(total)) return null;
+  const percent = Number(j.occupation);
+  return { total, used, percent: Number.isFinite(percent) ? Math.max(0, Math.min(100, percent)) : null };
+}
+
 // The firmware finished (or gave up) recovering from a spindle fault: TS left 7
 export const recoveryEnded = (before, ts) => before === TS_RECOVERING && ts != null && ts !== TS_RECOVERING;
 
@@ -111,18 +120,36 @@ export function createMachine({ host = location.host } = {}) {
     belts: [0, 0, 0, 0], motorCurrent: null,
     pos: { x: 0, y: 0, z: 0 }, wco: { x: 0, y: 0, z: 0 },
     files: [], log: [], pending: null,
+    sd: null,                // the SD card's space from its listing: { used, total, percent } (sdSpace), null until listed
+    upload: null,            // this page's upload in progress: { file, loaded, total } bytes
     net: NET_IDLE,           // the network settings (device/network.js), read when Settings › Network or Device opens
     flash: FLASH_IDLE        // the board's own files (device/flashfiles.js), read when Settings › Advanced › Files opens
   };
 
   // Files read from the SD card through the G-code reader (gcode/reader.js), each fetched once: url → Promise of
   // readGcode()'s result. Job progress and Trace boundary share them. A failed read is forgotten so it can be retried.
+  // onProgress(loaded, total) follows the download, for the activity indicator (total is 0 without a Content-Length).
   const readings = {};
-  function readFile(path) {
+  async function fetchText(url, onProgress) {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    if (!onProgress || !r.body?.getReader) return r.text();
+    const total = Number(r.headers.get("Content-Length")) || 0;
+    const reader = r.body.getReader(), dec = new TextDecoder();
+    let text = "", loaded = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      loaded += value.length;
+      text += dec.decode(value, { stream: true });
+      onProgress(loaded, total);
+    }
+    return text + dec.decode();
+  }
+  function readFile(path, onProgress) {
     const url = sdUrl(path);
     if (!readings[url]) {
-      readings[url] = fetch(url).then(r => r.ok ? r.text() : Promise.reject(new Error(`HTTP ${r.status}`)))
-        .then(readGcode);
+      readings[url] = fetchText(url, onProgress).then(readGcode);
       readings[url].catch(() => { delete readings[url]; });
     }
     return readings[url];
@@ -135,7 +162,14 @@ export function createMachine({ host = location.host } = {}) {
     chosen = file || null;
     if (!chosen) { set({ gcode: null }); return; }
     set({ gcode: { file, status: "reading" } });
-    readFile(file).then(
+    let shown = -1;   // the percent last shown, so a long read redraws the page once a percent, not once a chunk
+    const progress = (loaded, total) => {
+      const pct = total ? Math.floor(100 * loaded / total) : -1;
+      if (chosen !== file || s.gcode?.status !== "reading" || pct === shown) return;
+      shown = pct;
+      set({ gcode: { file, status: "reading", loaded, total } });
+    };
+    readFile(file, progress).then(
       (r) => { if (chosen === file) set({ gcode: { file, status: "ready", ...r } }); },
       (e) => {
         if (chosen !== file) return;
@@ -395,7 +429,7 @@ export function createMachine({ host = location.host } = {}) {
       const r = await fetch(`/upload?path=${encodeURIComponent("/")}`);
       const j = await r.json();
       const files = (j.files || []).filter(f => f.size !== "-1").map(f => ({ name: f.name, size: kb(Number(f.size)) }));
-      set({ files });
+      set({ files, sd: sdSpace(j) });
     } catch (e) {
       log(`Couldn't list the SD card: ${e.message}`);
       emit();
@@ -748,6 +782,16 @@ export function createMachine({ host = location.host } = {}) {
     connect();
   }
 
+  // A form POST that reports its upload's progress: XMLHttpRequest, because fetch can't
+  const postForm = (url, form, onProgress) => new Promise((resolve, reject) => {
+    const x = new XMLHttpRequest();
+    x.open("POST", url);
+    x.upload.onprogress = (e) => { if (e.lengthComputable && e.total) onProgress(e.loaded, e.total); };
+    x.onload = () => resolve({ ok: x.status >= 200 && x.status < 300, status: x.status });
+    x.onerror = () => reject(new Error("the connection to the board dropped"));
+    x.send(form);
+  });
+
   // Put a file on the SD card, the way the current UI does (POST /upload), and read it for the preview from this copy, so
   // the preview has it without fetching it back from the card. Resolves with { name, path }; rejects with
   // { reason, detail } (the Abundance receiver passes them on).
@@ -760,15 +804,19 @@ export function createMachine({ host = location.host } = {}) {
     form.append(`/${f.name}S`, String(f.size));
     form.append("myfile[]", f, `/${f.name}`);
     log(`Uploading ${f.name}`);
-    emit();
-    let r;
+    set({ upload: { file: f.name, loaded: 0, total: f.size } });
+    let r, shown = -1;
     try {
-      r = await fetch("/upload", { method: "POST", body: form });
+      r = await postForm("/upload", form, (loaded, total) => {
+        const pct = Math.floor(100 * loaded / total);
+        if (pct !== shown) { shown = pct; set({ upload: { file: f.name, loaded, total } }); }
+      });
     } catch (e) {
       log(`Upload of ${f.name} failed: ${e.message}`);
-      emit();
+      set({ upload: null });
       throw { reason: "failed", detail: e.message };
     }
+    set({ upload: null });
     if (!r.ok) {
       log(`Upload of ${f.name} failed: HTTP ${r.status}`);
       emit();

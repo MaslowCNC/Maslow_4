@@ -53,7 +53,7 @@ export function Desktop({ k, ctx, onSettings, overlay }) {
   return <div class="screen app">
     {/* One card on top: the app header, a thin line, then the setup guide or the mode bar */}
     <div class="topbox" style={`--tone:${isSetup(k) ? "var(--setup)" : s.tone}`}>
-      <AppHeader d={ctx.d} onSettings={onSettings} openSettings={ctx.openSettings} notice={ctx.notice} setNotice={ctx.setNotice} />
+      <AppHeader k={k} d={ctx.d} onSettings={onSettings} openSettings={ctx.openSettings} notice={ctx.notice} setNotice={ctx.setNotice} />
       <TopBar k={k} ctx={ctx} onSettings={onSettings} />
     </div>
     <div class="board layout6">

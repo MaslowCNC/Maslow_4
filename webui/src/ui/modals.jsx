@@ -1,4 +1,4 @@
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import { SCREENS } from "../flow/screens.js";
 import { ModePill, Conn, SpindleBtn, spindleLock } from "./parts.jsx";
 import { MACHINE_SETTINGS, settingError, effectiveWorkArea } from "../device/settings.js";
@@ -98,7 +98,8 @@ export function Settings({ k, ctx, onClose, theme, setTheme, look, setLook, comp
   if (!sec) body = <nav class="slist" aria-label="Settings sections">{SECTIONS.map(([id, n]) => <button type="button" onClick={() => setSec(id)}>{n}<span aria-hidden="true">›</span></button>)}</nav>;
   else if (sec === "state") body = <StateSection k={k} ctx={ctx} close={onClose} />;
   else if (sec === "device") body = <DeviceSection ctx={ctx} name={<NameRow ctx={ctx} busy={busy} />}
-    restart={<Row label="Restart" hint="Reconnects on its own when it's back."><button class="btn ghost" type="button" disabled={busy} onClick={() => { onClose(); ctx.send("reboot"); }}>Reboot device</button></Row>} />;
+    restart={<Row label="Restart" hint="Reconnects on its own when it's back."><button class="btn ghost" type="button" disabled={busy} onClick={() => { onClose(); ctx.send("reboot"); }}>Reboot device</button></Row>}
+    restartNeeded={<DeviceRestart ctx={ctx} close={onClose} busy={busy} />} />;
   // Not the socket: the network settings go over HTTP, and they're how a board whose socket won't connect is fixed.
   // The section stays off until [ESP400] answers, so a board that can't be reached at all still can't be edited.
   else if (sec === "network") body = <NetworkSection ctx={ctx} busy={s.moving || s.mode === "Job"} close={onClose} />;
@@ -297,12 +298,19 @@ function NetStatus({ net }) {
   </span>;
 }
 
-// After a save: the board keeps using the old settings until it restarts
+// After a save: the board keeps using the old settings until it restarts. Rather than a prompt after each save (each
+// setting saves on its own, so people often save two in a row, and a dismissed prompt is gone), Restart now stays
+// pinned to the bottom of the settings pane, highlighted, until the board restarts. It scrolls into view when it appears.
 function RestartNote({ ctx, close, net, busy }) {
+  const ref = useRef(null);
+  useEffect(() => { if (net.restartNeeded) ref.current?.scrollIntoView?.({ block: "nearest", behavior: "smooth" }); }, [net.restartNeeded]);
   if (!net.restartNeeded) return null;
-  return <div class="netnote"><p class="note" style="margin:0">Saved. The board uses the new settings after it restarts.</p>
+  return <div class="netnote restartbar" ref={ref} role="status"><p style="margin:0"><b>Saved.</b> The board uses the new network settings after it restarts.</p>
     <button class="btn" type="button" disabled={busy} onClick={() => { close(); ctx.send("reboot"); }}>Restart now</button></div>;
 }
+
+// Device: the name is a network setting, so saving it asks for the same restart
+const DeviceRestart = ({ ctx, close, busy }) => <RestartNote ctx={ctx} close={close} net={ctx.d.net || {}} busy={busy} />;
 
 // Each setting saves on its own, so changing one can't send another by accident. The WiFi network and its password
 // are one group: a new network needs its password.
@@ -426,5 +434,5 @@ function NameRow({ ctx, busy }) {
     <span class="note mono">{v || "?"}.local</span>
     <button class="btn ghost" type="button" disabled={off || !!err || name == null || v === cur} onClick={() => ctx.send("saveNetwork", { hostname: v })}>Save</button>
     {err && <span class="note" style="flex-basis:100%;color:var(--danger)">{err}</span>}</Row>
-    {net.restartNeeded && <p class="note" style="margin:0">Saved. The board uses the new name after it restarts (Restart, below).</p>}</>;
+    </>;
 }

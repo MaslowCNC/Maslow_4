@@ -258,6 +258,19 @@
   .spinbtn.on { background: var(--danger); border-color: var(--danger); color: #fff; }
   @keyframes spinpulse { 50% { opacity: .35; } }
   @media (prefers-reduced-motion: reduce) { .spindot { animation: none; } }
+  /* Something is running (flow/activity.js): a spinner, or a bar when its length is known. CSS only. */
+  .acttag { display: inline-flex; align-items: center; gap: 6px; padding: 1px 8px; border: 1px solid var(--setup); border-radius: 999px;
+    color: var(--text); font: 600 11px var(--font-mono); white-space: nowrap; min-width: 0; max-width: 100%; flex: none; }
+  .acttag.bare { border-color: transparent; padding: 0 4px; }
+  .actlabel { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .actspin { width: 12px; height: 12px; flex: none; border-radius: 50%; border: 2px solid color-mix(in srgb, var(--setup) 30%, transparent);
+    border-top-color: var(--setup); animation: actspin .9s linear infinite; }
+  .actbar { position: relative; width: 48px; height: 6px; flex: none; border-radius: 3px; overflow: hidden;
+    background: color-mix(in srgb, var(--setup) 25%, transparent); }
+  .actbar b { position: absolute; inset: 0 auto 0 0; background: var(--setup); transition: width .2s linear; }
+  @keyframes actspin { to { transform: rotate(360deg); } }
+  /* Without motion the spinner stands still as a ring with a gap; the label still says it's running */
+  @media (prefers-reduced-motion: reduce) { .actspin { animation: none; } }
   .mtest { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font: 12px var(--font-mono); }
   .mtest .ok { color: var(--ready); } .mtest .bad { color: var(--danger); }
   .mini .fname { font: 600 13px var(--font-mono); overflow-wrap: anywhere; }
@@ -375,6 +388,9 @@
   .aplist button[aria-pressed="true"] { border-color: var(--lilac); color: var(--lilac); }
   .aplist .apname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .netnote { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+  /* A save that needs a restart: pinned to the bottom of the settings pane, highlighted, until the board restarts */
+  .restartbar { position: sticky; bottom: 0; z-index: 2; justify-content: space-between; padding: 10px 12px; border-radius: 10px;
+    border: 1px solid var(--warn); background: color-mix(in srgb, var(--warn) 14%, var(--panel)); box-shadow: var(--shadow); }
   .modal.single { width: min(520px, 100%); height: auto; max-height: 100%; grid-template-columns: 1fr; grid-template-rows: auto 1fr auto; }
   .modal.single .mhead { grid-column: 1; }
   .modal .art { max-width: 260px; }

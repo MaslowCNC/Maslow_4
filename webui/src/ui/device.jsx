@@ -30,7 +30,7 @@ const date = (iso) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: 
 const ACTIVE = ["downloading", "uploading", "restarting"];
 const RELEASES_PAGE = `https://github.com/${REPO}/releases`;
 
-export function DeviceSection({ ctx, name, restart }) {
+export function DeviceSection({ ctx, name, restart, restartNeeded }) {
   const { d, send } = ctx;
   const u = d.update || {};
   const i = u.install;
@@ -46,7 +46,8 @@ export function DeviceSection({ ctx, name, restart }) {
     {i && <Progress i={i} send={send} />}
     {restart}
     <SystemStatus ctx={ctx} u={u} />
-    <p class="note" style="margin:0">Maslow 4 firmware: FluidNC with the Maslow layer, and this page. GPLv3.</p>
+    <p class="note credit" style="margin:0">Maslow 4, built on FluidNC and ESP3D-WebUI. Free software under the GPLv3 licence.</p>
+    {restartNeeded}
   </>;
 }
 

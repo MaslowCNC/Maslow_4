@@ -5,6 +5,7 @@ import { jobPlacement } from "../flow/fit.js";
 import { downloadLog } from "./logfile.js";
 import { adcToMilliamps } from "../device/jobrecord.js";
 import { STEPS, SCREENS, isSetup } from "../flow/screens.js";
+import { activity } from "../flow/activity.js";
 import { stepArt, visSvg, frameMap, toolpathSvg, toolpathView, workspaceCaption, currentColour, MAX_CURRENT_MA } from "../art.js";
 import { makeFrame, accuracyMap, safeRect, checkJob, startRing, TOLERANCE, SLED_MASS } from "../accuracy.js";
 import logo from "../assets/maslow-logo.webp";
@@ -314,10 +315,23 @@ export function JogPad({ k, d, send }) {
 const BELT_NAMES = ["TL", "TR", "BL", "BR"];
 // The app header, above the setup or mode bar on every screen: the Maslow logo, the machine this page is
 // connected to, the connection, and Settings. These live only here.
-export function AppHeader({ d, onSettings, openSettings, notice, setNotice }) {
+// The activity indicator: what's running (flow/activity.js), with a bar when its length is known and a spinner when it
+// isn't. `same` hides the label when the mode bar beside it already says it (the phone).
+export function Activity({ k, d, same }) {
+  const a = activity(k, d);
+  if (!a) return null;
+  const pct = a.frac == null ? null : Math.round(100 * a.frac);
+  const text = [!(same && a.label === same) && a.label, a.detail, pct != null && `${pct} %`].filter(Boolean).join(" · ");
+  return <span class={`acttag${text ? "" : " bare"}`} role="status" aria-label={`${a.label}${a.detail ? `, ${a.detail}` : ""}${pct != null ? `, ${pct} %` : ", running"}`} title={a.label}>
+    {pct == null ? <i class="actspin" aria-hidden="true" /> : <i class="actbar" aria-hidden="true"><b style={`width:${pct}%`} /></i>}
+    {text && <span class="actlabel">{text}</span>}</span>;
+}
+
+export function AppHeader({ k, d, onSettings, openSettings, notice, setNotice }) {
   return <header class="apphead">
     <img class="logo" src={logo} alt="Maslow" />
     <MachineTag d={d} />
+    {k && <Activity k={k} d={d} />}
     {d.spindle === "on" && <span class="spintag" role="status"><i class="spindot" aria-hidden="true" />Spindle running</span>}
     {notice && <span class={`noticetag${notice.bad ? " bad" : ""}`} role="status">{notice.text}
       <button type="button" aria-label="Dismiss" onClick={() => setNotice(null)}>×</button></span>}
@@ -434,5 +448,6 @@ export function FilesBody({ k, d, a, setA, send, mark, upload = false }) {
       </li>;
     })}</ul>
     {locked && <p class="note">You can't change or delete files during a job.</p>}
+    {d.sd && <p class="note sdspace" title="From the SD card's file list">SD card: {d.sd.used} used of {d.sd.total}{d.sd.percent != null && ` (${d.sd.percent} %)`}</p>}
   </>;
 }

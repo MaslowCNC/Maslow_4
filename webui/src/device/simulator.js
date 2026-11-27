@@ -27,6 +27,13 @@ const FILES = [
 
 const time = () => new Date().toTimeString().slice(0, 8);
 
+// The SD card's space, as machine.js reads it from the listing (sdSpace): an 8 GB card, the files plus 3 MB used
+const kbOf = (f) => parseFloat(f.size) || 0;
+export function simSd(files) {
+  const usedKb = 3 * 1024 + files.reduce((n, f) => n + kbOf(f), 0), totalKb = 7.4 * 1024 * 1024;
+  return { used: `${(usedKb / 1024).toFixed(2)} MB`, total: "7.40 GB", percent: Math.round(100 * usedKb / totalKb) };
+}
+
 // What the simulated board reports for its network ([ESP400], [ESP420]) and sees when it scans ([ESP410])
 const SIM_NET = { ssid: "Workshop", mode: "STA>AP", apSsid: "maslow", hostname: "maslow" };
 const SIM_APS = [
@@ -85,7 +92,8 @@ function initialState() {
     // sets with Set home XY and Set Z, so the work position is pos − wco (FluidNC's WPos = MPos − WCO).
     pos: { x: 0, y: 0, z: 0 },
     wco: { x: 0, y: 0, z: 0 },
-    files: FILES,
+    files: FILES, sd: simSd(FILES),
+    upload: null,                 // an upload in progress: { file, loaded, total } bytes
     log: [],
     incident: null,               // something the user must acknowledge first (flow/incidents.js)
     net: NET_IDLE,                // the network settings, as the machine adapter has them (device/network.js)
@@ -99,7 +107,7 @@ export function createSimulator() {
   let s = initialState();
   const listeners = new Set();
   const emit = () => listeners.forEach(fn => fn(s));
-  const set = (patch) => { s = { ...s, ...patch }; emit(); };
+  const set = (patch) => { s = { ...s, ...patch, ...(patch.files ? { sd: simSd(patch.files) } : {}) }; emit(); };
   const log = (...lines) => { s = { ...s, log: [...s.log, ...lines.map(l => `${time()} ${l}`)].slice(-200) }; };
   // Ask the tester what the device reports. Each option is [label, apply, tone].
   const ask = (title, detail, options) => set({ pending: { title, detail, options: options.map(([label, apply, tone]) => ({ label, apply, tone })) } });
@@ -496,9 +504,16 @@ export function createSimulator() {
     // The Set Z helper: work Z 0 at machine Z z, then Z lowered there (machine.js does it as two commands)
     lowerToWork({ z }) { log(`setWorkZero z=${z}`, `G53 G1 Z${z}`); set({ wco: { ...s.wco, z }, pos: { ...s.pos, z } }); },
     // The demo files aren't real, so each reads as a generated sample of its size; an uploaded file is read for real
+    // In a browser a demo file takes a moment to read, as one on the card would, so the activity indicator shows it
     chooseFile({ file }) {
       const f = s.files.find(x => x.name === file);
-      set({ gcode: f ? { file, status: "ready", ...(f.text != null ? readGcode(f.text) : readGcode(sampleGcode(f))) } : null });
+      const ready = () => set({ gcode: f ? { file, status: "ready", ...(f.text != null ? readGcode(f.text) : readGcode(sampleGcode(f))) } : null });
+      if (!f || f.text != null || typeof document === "undefined") return ready();
+      const bytes = Math.round(kbOf(f) * 1024);
+      set({ gcode: { file, status: "reading", loaded: 0, total: bytes } });
+      trickle(bytes, Math.min(3000, Math.max(800, bytes / 100)), (loaded, total) => {
+        if (s.gcode?.file === file && s.gcode.status === "reading") set({ gcode: { file, status: "reading", loaded, total } });
+      }).then(() => { if (s.gcode?.file === file && s.gcode.status === "reading") ready(); });
     },
     deleteFile({ name }) { log(`Deleted ${name}`); set({ files: s.files.filter(f => f.name !== name) }); },
     // A line typed in the command box: echo it and answer roughly as the firmware would. Nothing moves.
@@ -531,6 +546,10 @@ export function createSimulator() {
           if (!file) return resolve(null);
           const text = await file.text();
           const entry = { name: file.name, size: `${Math.max(1, Math.round(file.size / 1024))} KB`, text };
+          // Sent at about 100 KB/s, as over the board's WiFi, so the activity indicator's bar shows it
+          set({ upload: { file: file.name, loaded: 0, total: file.size } });
+          await trickle(file.size, Math.min(5000, Math.max(800, file.size / 100)), (loaded, total) => set({ upload: { file: file.name, loaded, total } }));
+          set({ upload: null });
           log(`Uploaded ${file.name} (kept in this page only)`);
           set({ files: [...s.files.filter(f => f.name !== file.name), entry] });
           if (s.gcode?.file === file.name) actions.chooseFile({ file: file.name });   // the same name again: show the new one
